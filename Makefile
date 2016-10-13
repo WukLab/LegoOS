@@ -1,0 +1,7 @@
+VERSION = 0
+PATCHLEVEL = 0
+SUBLEVEL = 1
+NAME = DisOS
+
+PHONY += help
+help:
