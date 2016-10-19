@@ -129,6 +129,7 @@ endef
 $(obj)/%.o: $(src)/%.S FORCE
 	$(call if_changed_rule,as_o_S)
 
+targets += $(real-objs-y) $(real-objs-m) $(lib-y)
 targets += $(extra-y) $(MAKECMDGOALS) $(always)
 
 # Linker scripts preprocessor (.lds.S -> .lds)

@@ -274,17 +274,18 @@ endif
 version_h := include/generated/version.h
 
 no-dot-config-targets := clean mrproper distclean \
-			 tags help% %docs check% \
-			 $(version_h) headers_% kernelversion
+			 cscope gtags TAGS tags help% %docs check% coccicheck \
+			 $(version_h) headers_% archheaders archscripts \
+			 kernelversion %src-pkg
 
 config-targets := 0
 mixed-targets  := 0
 dot-config     := 1
 
 ifneq ($(filter $(no-dot-config-targets), $(MAKECMDGOALS)),)
-        ifeq ($(filter-out $(no-dot-confog-targets), $(MAKECMDGOALS)),)
-                dot-config := 0
-        endif
+	ifeq ($(filter-out $(no-dot-config-targets), $(MAKECMDGOALS)),)
+		dot-config := 0
+	endif
 endif
 
 ifeq ($(KBUILD_EXTMOD),)
@@ -657,7 +658,7 @@ endif # CONFIG_MODULES
 MRPROPER_DIRS	+= include/config include/generated arch/*/include/generated
 MRPROPER_FILES	+= .config .config.old .version .old_version tags TAGS
 
-clean-dirs	:= $(addprefix _clean_, . $(vmImage-dirs))
+clean-dirs	:= $(addprefix _clean_, . $(vmImage-dirs) scripts/basic scripts/kconfig)
 
 PHONY += $(clean-dirs) clean archclean vmImageclean
 $(clean-dirs):
@@ -666,7 +667,7 @@ $(clean-dirs):
 vmImageclean:
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/link-vmImage.sh clean
 
-clean: archclean vmImageclean
+clean: $(clean-dirs) archclean vmImageclean
 
 PHONY += mrproper
 mrproper: clean
