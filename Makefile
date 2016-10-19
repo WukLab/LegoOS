@@ -227,7 +227,7 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -std=gnu89
+		   -std=gnu11
 
 KBUILD_AFLAGS	:= -D__ASSEMBLY__
 
@@ -236,7 +236,7 @@ KERNELRELEASE = $(shell cat include/config/kernel.release 2> /dev/null)
 KERNELVERSION = $(VERSION)$(if $(PATCHLEVEL),.$(PATCHLEVEL)$(if $(SUBLEVEL),.$(SUBLEVEL)))$(EXTRAVERSION)
 
 export AS LD CC CPP AR NM STRIP OBJCOPY OBJDUMP PERL PYTHON CHECK CHECKFLAGS
-export DISOS_INCLUDE KBUILD_CPPFLAGS KBUILD_CFLAGS KBUILD_AFLAGS
+export DISOS_INCLUDE KBUILD_CPPFLAGS KBUILD_CFLAGS KBUILD_AFLAGS NOSTDINC_FLAGS
 export VERSION PATCHLEVEL SUBLEVEL KERNELRELEASE KERNELVERSION
 export ARCH SRCARCH CONFIG_SHELL HOSTCC HOSTCFLAGS CROSS_COMPILE
 
@@ -358,6 +358,33 @@ ifeq ($(KBUILD_EXTMOD),)
 # To avoid any implicit rule to kick in, define an empty command
 $(KCONFIG_CONFIG) include/config/auto.conf.cmd: ;
 
+# It is important to know how Makefiles are remade and how 'include'
+# directive works. Here are some words form GNU Make Manual:
+#
+# If a Makefile can be remade from other files, you probably want make to
+# get an up-to-date version of the Makefile to read in. After reading in all
+# Makefiles, make will consider each as a goal target and attempt to update
+# it. If a Makefile has a rule which says how to update it(found either in
+# that very Makefile or in other one) or if an implicit rule applies to it,
+# it will be updated if necessary. After all Makefiles have been checked, if
+# any have actually been changed, make starts with a clean slate and reads all
+# the Makefiles again.
+#
+# If you know that one or more of your Makefiles can NOT be remade and you want
+# to keep make from performing an implicit rule search on them, perhaps for
+# effiency reasons, you can use any normal method of preventing implicit rule
+# look-up to do so. For example, you can write an explicit rule wuth the
+# Makefile as the target, and an empty recipe.
+#
+# '-q' and '-n' do not prevent updating of Makefiles, because an out-of-date
+# Makefile would result in the wrong output for other targets.
+###
+# Here, we have an explicit rule for included file include/config/auto.conf.
+# So before GNUmake read "auto.conf", it will checkout the dependencies of it.
+#
+# That is why in a clean tree, this target always got built even you invoke with
+# a non-exsit target, for example, "make ABCDEF".
+#
 # If .config is newer than include/config/auto.conf, someone tinkered
 # with it and forgot to run make oldconfig.
 # if auto.conf.cmd is missing then we are probably in a cleaned tree so
@@ -451,7 +478,7 @@ KBUILD_CFLAGS 	+= $(call cc-option, -femit-struct-debug-baseonly) \
 endif
 
 # arch Makefile may override CC so keep this after arch Makefile is included
-NOSTDINC_FLAGS += -nostdinc -isystem $(shell $(CC) -print-file-name=include)
+NOSTDINC_FLAGS += -nostdinc
 CHECKFLAGS     += $(NOSTDINC_FLAGS)
 
 KBUILD_CFLAGS   += $(call cc-option, -fno-var-tracking-assignments)
@@ -837,7 +864,6 @@ endif
 	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
 
 # read all saved command lines
-
 targets := $(wildcard $(sort $(targets)))
 cmd_files := $(wildcard .*.cmd $(foreach f,$(targets),$(dir $(f)).$(notdir $(f)).cmd))
 

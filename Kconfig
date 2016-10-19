@@ -1,7 +1,11 @@
-mainmenu "Disaggregated/$ARCH $KERNELVERSION Kernel Configuration"
+mainmenu "DisOS/$SRCARCH $KERNELVERSION Kernel Configuration"
 
 config SRCARCH
 	string
 	option env="SRCARCH"
+
+config KERNELVERSION
+	string
+	option env="KERNELVERSION"
 
 source "arch/$SRCARCH/Kconfig"
