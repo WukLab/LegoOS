@@ -1,0 +1,19 @@
+.*
+*.o
+*.i
+*.s
+*.bin
+*.elf
+
+#
+# Generated include files
+#
+include/generated/
+include/config
+arch/*/include/generated
+
+tags
+tags-e
+
+!.gitignore
+!.mailmap

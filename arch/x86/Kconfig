@@ -1,0 +1,37 @@
+config 64BIT
+	bool "64-bit kernel" if ARCH = "x86"
+	default ARCH != "i386"
+	---help---
+	Say yes to build a 64-bit kernel - formerly known as x86_64
+	Say no to build a 32-bit kernel - formely known as i386
+
+config X86_32
+	def_bool y
+	depends on !64BIT
+
+config X86_64
+	def_bool y
+	depends on 64BIT
+
+### Arch Settings
+config X86
+	def_bool y
+
+config OUTPUT_FORMAT
+	string
+	default "elf32-i386" if X86_32
+	default "elf64-x86-64" if X86_64
+
+config ARCH_DEFCONFIG
+	string
+	default "arch/x86/configs/i386_defconfig" if X86_32
+	default "arch/x86/configs/x86_64_defconfig" if X86_64
+
+config MMU
+	def_bool y
+
+config PGTABLE_LEVELS
+	int
+	default 4 if X86_64
+	default 3 if X86_PAE
+	default 2
