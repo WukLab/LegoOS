@@ -656,7 +656,7 @@ endif # CONFIG_MODULES
 # make distclean Remove editor backup files, patch leftover files and the like
 
 MRPROPER_DIRS	+= include/config include/generated arch/*/include/generated
-MRPROPER_FILES	+= .config .config.old .version .old_version tags TAGS
+MRPROPER_FILES	+= .config .config.old .version .old_version tags TAGS .vmImage.cmd
 
 clean-dirs	:= $(addprefix _clean_, . $(vmImage-dirs) scripts/basic scripts/kconfig)
 

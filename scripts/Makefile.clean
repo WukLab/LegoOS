@@ -32,37 +32,33 @@ subdir-ymn	:= $(addprefix $(obj)/,$(subdir-ymn))
 __clean-targets	:= $(filter-out %/, $(obj-y) $(lib-y) $(targets))
 __clean-targets += built-in.o
 
-__clean-files	:= $(extra-y) $(extra-m) $(extra-)			\
-		   $(always) $(__clean-targets) $(clean-files)		\
-		   $(host-progs)					\
-		   $(hostprogs-y) $(hostprogs-m) $(hostprogs-)		\
-		   $(hostlibs-y) $(hostlibs-m) $(hostlibs-)		\
+__clean-files	:= $(extra-y) $(extra-m) $(extra-) \
+		   $(always) $(__clean-targets) $(clean-files) \
+		   $(host-progs) \
+		   $(hostprogs-y) $(hostprogs-m) $(hostprogs-) \
+		   $(hostlibs-y) $(hostlibs-m) $(hostlibs-) \
 		   $(hostcxxlibs-y) $(hostcxxlibs-m)
 
+hostprogs-files	:= $(addsuffix -objs, $(hostprogs-y) $(hostprogs-m) $(hostprogs-))
+hostprogs-files	+= $(addsuffix -cxxobjs, $(hostprogs-y) $(hostprogs-m) $(hostprogs-))
+hostprogs-files	:= $(foreach f, $(hostprogs-files), $($(f)))
+__clean-files	+= $(hostprogs-files)
+
+#
+# Files that users want to keep
+#
 __clean-files   := $(filter-out $(no-clean-files), $(__clean-files))
 
-# clean-files is given relative to the current directory, unless it
-# starts with $(objtree)/ (which means "./", so do not add "./" unless
-# you want to delete a file from the toplevel object directory).
+__clean-files	:= $(addprefix $(obj)/, $(__clean-files))
+__clean-dirs	:= $(addprefix $(obj)/, $(__clean-dirs))
 
-__clean-files   := $(wildcard                                               \
-		   $(addprefix $(obj)/, $(filter-out $(objtree)/%, $(__clean-files))) \
-		   $(filter $(objtree)/%, $(__clean-files)))
-
-__clean-dirs    := $(wildcard                                               \
-		   $(addprefix $(obj)/, $(filter-out $(objtree)/%, $(clean-dirs)))    \
-		   $(filter $(objtree)/%, $(clean-dirs)))
-
-# cmd files
+# Clean .*.cmd files
 __clean-files	+= $(foreach f, $(__clean-files), $(dir $f).$(notdir $f).cmd)
-
-# ==========================================================================
 
 quiet_cmd_clean    = CLEAN   $(obj)
       cmd_clean    = rm -f $(__clean-files)
 quiet_cmd_cleandir = CLEAN   $(__clean-dirs)
       cmd_cleandir = rm -rf $(__clean-dirs)
-
 
 __clean: $(subdir-ymn)
 ifneq ($(strip $(__clean-files)),)
@@ -72,11 +68,6 @@ ifneq ($(strip $(__clean-dirs)),)
 	+$(call cmd,cleandir)
 endif
 	@:
-
-
-# ===========================================================================
-# Generic stuff
-# ===========================================================================
 
 # Descending
 # ---------------------------------------------------------------------------
