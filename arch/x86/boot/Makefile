@@ -1,9 +1,9 @@
-KBUILD_CFLAGS += -D__SETUP__
+KBUILD_CFLAGS := $(REALMODE_CFLAGS) -D__SETUP__
 KBUILD_AFLAGS := $(KBUILD_CFLAGS) -D__ASSEMBLY__
 
 targets	:= vmImage.bin setup.bin setup.elf bzImage
 
-setup-y := header.o
+setup-y := header.o main.o
 
 targets	+= $(setup-y)
 
