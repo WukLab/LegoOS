@@ -75,11 +75,17 @@ KBUILD_CFLAGS += -pipe
 KBUILD_CFLAGS += -Wno-sign-compare
 KBUILD_CFLAGS += -fno-asynchronous-unwind-tables
 
+core-y += arch/x86/kernel/
+
+boot = arch/x86/boot
+
 PHONY += bzImage
 all: bzImage
 
 KBUILD_IMAGE := $(boot)/bzImage
 
+# This is a phony bzImage target
+# The real one is in boot's Makefile
 bzImage: vmImage
 	$(Q)$(MAKE) $(build)=$(boot) $(KBUILD_IMAGE)
 	$(Q)mkdir -p $(objtree)/arch/$(UTS_MACHINE)/boot
@@ -92,6 +98,7 @@ install:
 archclean:
 	$(Q)rm -rf $(objtree)/arch/i386
 	$(Q)rm -rf $(objtree)/arch/x86_64
+	$(Q)$(MAKE) $(clean)=$(boot)
 
 define archhelp
   echo  '* bzImage      - Compressed kernel image (arch/x86/boot/bzImage)'

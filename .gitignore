@@ -12,6 +12,9 @@ include/generated/
 include/config
 arch/*/include/generated
 
+vmImage
+System.map
+
 tags
 tags-e
 
