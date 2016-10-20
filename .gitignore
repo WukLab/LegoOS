@@ -12,6 +12,8 @@ include/generated/
 include/config
 arch/*/include/generated
 
+arch/x86_64/
+
 vmImage
 System.map
 
