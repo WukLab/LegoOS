@@ -15,6 +15,7 @@ arch/x86_64/
 
 vmImage
 System.map
+bzImage
 
 tags
 tags-e
