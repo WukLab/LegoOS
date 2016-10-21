@@ -4,6 +4,9 @@
  * Parameters used by boot setup code
  */
 
+#ifndef _ASM_X86_BOOT_H_
+#define _ASM_X86_BOOT_H_
+
 /* Internal svga startup constants */
 #define NORMAL_VGA	0xffff		/* 80x25 mode */
 #define EXTENDED_VGA	0xfffe		/* 80x50 mode */
@@ -13,3 +16,6 @@
 #define LOAD_PHYSICAL_ADDR \
 	(CONFIG_PHYSICAL_START + CONFIG_PHYSICAL_ALIGN - 1) \
 	& ~(CONFIG_PHYSICAL_ALIGN - 1)
+
+
+#endif /* _ASM_X86_BOOT_H_ */

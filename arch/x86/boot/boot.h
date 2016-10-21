@@ -5,7 +5,8 @@
 #ifndef _X86_BOOT_BOOT_H_
 #define _X86_BOOT_BOOT_H_
 
-#if 0
+#include <disos/types.h>
+
 #ifndef __ASSEMBLY__
 struct biosregs {
 	union {
@@ -51,8 +52,6 @@ struct biosregs {
 /* bioscall.S */
 void intcall(unsigned char int_no, const struct biosregs *ireg, struct biosregs *oreg)
 __attribute__ ((regparm(3)));
-#endif
-
 #endif
 
 #endif /* _X86_BOOT_BOOT_H_ */
