@@ -141,7 +141,7 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/x86/ -e s/x86_64/x86/)
 # during compilation. Only gcc and related bin-utils executables
 # are prefixed with $(CROSS_COMPILE).
 # CROSS_COMPILE can be set on the command line
-# make CROSS_COMPILE=ia64-linux-
+# make CROSS_COMPILE=ia64-
 # Alternatively CROSS_COMPILE can be set in the environment.
 # A third alternative is to store a setting in .config so that plain
 # "make" in the configured kernel build directory always uses that.
@@ -235,7 +235,7 @@ KBUILD_AFLAGS	:= -D__ASSEMBLY__
 KERNELRELEASE = $(shell cat include/config/kernel.release 2> /dev/null)
 KERNELVERSION = $(VERSION)$(if $(PATCHLEVEL),.$(PATCHLEVEL)$(if $(SUBLEVEL),.$(SUBLEVEL)))$(EXTRAVERSION)
 
-export AS LD CC CPP AR NM STRIP OBJCOPY OBJDUMP PERL PYTHON CHECK CHECKFLAGS
+export MAKE AS LD CC CPP AR NM STRIP OBJCOPY OBJDUMP PERL PYTHON CHECK CHECKFLAGS
 export DISOS_INCLUDE KBUILD_CPPFLAGS KBUILD_CFLAGS KBUILD_AFLAGS NOSTDINC_FLAGS
 export VERSION PATCHLEVEL SUBLEVEL KERNELRELEASE KERNELVERSION
 export ARCH SRCARCH CONFIG_SHELL HOSTCC HOSTCFLAGS CROSS_COMPILE
@@ -620,7 +620,7 @@ prepare1: prepare2 $(version_h) include/generated/utsrelease.h \
 # All the preparing..
 # Top level Kbuild will be included here and it will build things prior
 # to any makefile is invoked.
-prepare:
+prepare: prepare1
 	$(Q)$(MAKE) $(build)=.
 
 # Generate some files
@@ -639,7 +639,7 @@ define filechk_utsrelease.h
 endef
 
 define filechk_version.h
-	(echo \#define LINUX_VERSION_CODE $(shell                         \
+	(echo \#define DISOS_VERSION_CODE $(shell                         \
 	expr $(VERSION) \* 65536 + 0$(PATCHLEVEL) \* 256 + 0$(SUBLEVEL)); \
 	echo '#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))';)
 endef

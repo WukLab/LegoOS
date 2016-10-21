@@ -18,6 +18,8 @@
 #define aligned_be64	__be64	__attribute__((aligned(8)))
 #define aligned_le64	__le64	__attribute__((aligned(8)))
 
+#ifndef __ASSEMBLY__
+
 /*
  * A dma_addr_t can hold any valid DMA address, i.e., any address returned
  * by the DMA API.
@@ -49,4 +51,5 @@ struct list_head {
 	struct list_head *next, *prev;
 };
 
+#endif /* __ASSEMBLY__ */
 #endif /* _DISOS_TYPES_H_ */

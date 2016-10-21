@@ -7,6 +7,8 @@
 
 #include <disos/types.h>
 
+#define STACK_SIZE	512
+
 #ifndef __ASSEMBLY__
 struct biosregs {
 	union {

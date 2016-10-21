@@ -6,7 +6,7 @@ targets	:= vmImage.bin setup.bin setup.elf bzImage
 #
 # The setup image
 #
-setup-y := header.o main.o bioscall.o tty.o printf.o
+setup-y := header.o main.o bioscall.o tty.o printf.o version.o
 
 targets	+= $(setup-y)
 
@@ -18,7 +18,7 @@ HOST_EXTRAFLAGS	+= -I$(srctree)/tools/include \
 		   -include include/generated/autoconf.h
 
 quiet_cmd_bzImage = BUILD   $@
-cmd_bzImage = $(obj)/tools/build $(obj)/setup.bin $(obj)/vmlinux.bin $@
+cmd_bzImage = $(obj)/tools/build $(obj)/setup.bin $(obj)/vmImage.bin $@
 
 $(obj)/bzImage: $(obj)/setup.bin $(obj)/vmImage.bin $(obj)/tools/build FORCE
 	$(call if_changed,bzImage)

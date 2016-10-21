@@ -13,6 +13,8 @@
 
 #define __BITS_PER_LONG_LONG    64
 
+#ifndef __ASSEMBLY__
+
 typedef signed char		s8;
 typedef unsigned char		u8;
 
@@ -36,5 +38,7 @@ typedef unsigned int		__u32;
 
 typedef signed long long	__s64;
 typedef unsigned long long	__u64;
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_TYPES_H_ */

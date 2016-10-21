@@ -76,9 +76,6 @@ if [ "${KBUILD_VERBOSE}" = "1" ]; then
 fi
 
 if [ "$1" == "${LD}" ]; then
-	info LD vmImage
-	vmImage_link vmImage
-
 	info GEN .version
 	if [ ! -r .version ]; then
 		rm -f .version
@@ -87,6 +84,11 @@ if [ "$1" == "${LD}" ]; then
 		mv .version .version.old
 		expr 0$(cat .version.old) + 1 >.version
 	fi
+
+	${MAKE} -f "${srctree}/scripts/Makefile.build" obj=init
+
+	info LD vmImage
+	vmImage_link vmImage
 
 	info SYSMAP System.map
 	mksysmap vmImage System.map
