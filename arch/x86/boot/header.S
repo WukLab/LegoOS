@@ -129,6 +129,18 @@ start_of_setup:
 	lretw
 
 1:
+	# Check the signature of the setup image
+	cmpl	$0x5a5aaa55, setup_sig
+	jne	setup_bad_signature
+
+	# zero the bss
+	movw	$__bss_start, %di
+	movw	$__bss_end, %cx
+	xorl	%eax, %eax
+	subw    %di, %cx
+	shrw    $2, %cx
+	rep; stosl
+
 	calll	main
 
 setup_bad_signature:

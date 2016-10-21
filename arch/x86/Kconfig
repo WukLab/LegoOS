@@ -35,3 +35,5 @@ config PGTABLE_LEVELS
 	default 4 if X86_64
 	default 3 if X86_PAE
 	default 2
+
+source "init/Kconfig"

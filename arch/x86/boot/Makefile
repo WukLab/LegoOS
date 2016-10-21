@@ -3,10 +3,16 @@ KBUILD_AFLAGS := $(KBUILD_CFLAGS) -D__ASSEMBLY__
 
 targets	:= vmImage.bin setup.bin setup.elf bzImage
 
-setup-y := header.o main.o
+#
+# The setup image
+#
+setup-y := header.o main.o bioscall.o tty.o printf.o
 
 targets	+= $(setup-y)
 
+#
+# The tool to concatenate all images
+#
 hostprogs-y	:= tools/build
 HOST_EXTRAFLAGS	+= -I$(srctree)/tools/include \
 		   -include include/generated/autoconf.h
