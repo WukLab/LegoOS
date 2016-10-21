@@ -11,22 +11,14 @@ ENTRY(_start)
 SECTIONS
 {
 	. = 0;
-	.bstext :
-	{
-		*(.bstext)
-	}
-	.bsdata :
-	{
-		*(.bsdata)
-	}
+	.bstext :	{ *(.bstext) }
+	.bsdata :	{ *(.bsdata) }
 
 	. = 495;
-	.header :
-	{
-		*(.header)
-	}
-	.entrytext :
-	{
-		*(.entrytext)
-	}
+	.header :	{ *(.header) }
+	.entrytext :	{ *(.entrytext) }
+
+	/DISCARD/ :	{ *(.note*) }
+	/DISCARD/ :	{ *(.eh_frame) }
+	/DISCARD/ :	{ *(.comment) }
 }
