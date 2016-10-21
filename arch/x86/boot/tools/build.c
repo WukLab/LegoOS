@@ -11,11 +11,54 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+
+static inline uint16_t __get_unaligned_le16(const uint8_t *p)
+{
+	return p[0] | p[1] << 8;
+}
+
+static inline uint32_t __get_unaligned_le32(const uint8_t *p)
+{
+	return p[0] | p[1] << 8 | p[2] << 16 | p[3] << 24;
+}
+
+static inline void __put_unaligned_le16(uint16_t val, uint8_t *p)
+{
+	*p++ = val;
+	*p++ = val >> 8;
+}
+
+static inline void __put_unaligned_le32(uint32_t val, uint8_t *p)
+{
+	__put_unaligned_le16(val >> 16, p + 2);
+	__put_unaligned_le16(val, p);
+}
+
+static inline uint16_t get_unaligned_le16(const void *p)
+{
+	return __get_unaligned_le16((const uint8_t *)p);
+}
+
+static inline uint32_t get_unaligned_le32(const void *p)
+{
+	return __get_unaligned_le32((const uint8_t *)p);
+}
+
+static inline void put_unaligned_le16(uint16_t val, void *p)
+{
+	__put_unaligned_le16(val, p);
+}
+
+static inline void put_unaligned_le32(uint32_t val, void *p)
+{
+	__put_unaligned_le32(val, p);
+}
 
 typedef unsigned char  u8;
 typedef unsigned short u16;
@@ -24,6 +67,8 @@ typedef unsigned int   u32;
 /* Minimal number of setup sectors */
 #define SETUP_SECT_MIN 5
 #define SETUP_SECT_MAX 64
+
+u8 buf[SETUP_SECT_MAX * 512];
 
 static const u32 crctab32[] = {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419,
@@ -96,6 +141,7 @@ static void die(const char * str, ...)
 {
 	va_list args;
 	va_start(args, str);
+	fputs("\033[31mBUILD error:\033[0m ", stderr);
 	vfprintf(stderr, str, args);
 	fputc('\n', stderr);
 	exit(1);
@@ -106,9 +152,19 @@ static void usage(void)
 	die("Usage: build setup system image");
 }
 
+#define DEFAULT_MAJOR_ROOT 0
+#define DEFAULT_MINOR_ROOT 0
+#define DEFAULT_ROOT_DEV (DEFAULT_MAJOR_ROOT << 8 | DEFAULT_MINOR_ROOT)
+
 int main(int argc, char **argv)
 {
+	unsigned int i, sz, setup_sectors;
+	int c;
+	u32 sys_size;
+	void *kernel;
+	struct stat sb;
 	FILE *file, *dest;
+	int fd;
 	u32 crc = 0xffffffffUL;
 
 	if (argc != 4)
@@ -121,6 +177,76 @@ int main(int argc, char **argv)
 	file = fopen(argv[1], "r");
 	if (!file)
 		die("Unable to open '%s'", argv[1]);
+
+	c = fread(buf, 1, sizeof(buf), file);
+	if (ferror(file))
+		die("read-error on 'setup'");
+	if (c < 1024)
+		die("The setup image must be at least 1024 bytes, which is %d bytes now", c);
+	if (get_unaligned_le16(&buf[510]) != 0xAA55)
+		die("Boot block hasn't got boot flag (0xAA55)");
+	fclose(file);
+
+	/* Pad unused space with zeros */
+	setup_sectors = (c + 511) / 512;
+	if (setup_sectors < SETUP_SECT_MIN)
+		setup_sectors = SETUP_SECT_MIN;
+	i = setup_sectors * 512;
+	memset(buf+c, 0, i-c);
+
+	/* Set the default root device */
+	put_unaligned_le16(DEFAULT_ROOT_DEV, &buf[508]);
+
+	printf("Setup is %d bytes (padded to %d bytes).\n", c, i);
+
+	/* Open and stat the kernel file */
+	fd = open(argv[2], O_RDONLY);
+	if (fd < 0)
+		die("Unable to open `%s': %m", argv[2]);
+
+	if (fstat(fd, &sb))
+		die("Unable to stat `%s': %m", argv[2]);
+	sz = sb.st_size;
+	printf("System is %d kB\n", (sz + 1023) / 1024);
+
+	kernel = mmap(NULL, sz, PROT_READ, MAP_SHARED, fd, 0);
+	if (kernel == MAP_FAILED)
+		die("Unable to mmap '%s': %m", argv[2]);
+
+	/* Number of 16-byte paragraphs, including space for a 4-byte CRC */
+	sys_size = (sz + 15 + 4) / 16;
+
+	/* Patch the setup code with the appropriate size parameters */
+	buf[0x1f1] = setup_sectors - 1;
+	put_unaligned_le32(sys_size, &buf[0x1f4]);
+
+	crc = partial_crc32(buf, i, crc);
+	if (fwrite(buf, 1, i, dest) != i)
+		die("Writing setup failed");
+
+	/* Copy the kernel code */
+	crc = partial_crc32(kernel, sz, crc);
+	if (fwrite(kernel, 1, sz, dest) != sz)
+		die("Writing kernel failed");
+
+	/* Add padding leaving 4 bytes for the checksum */
+	while (sz++ < (sys_size*16) - 4) {
+		crc = partial_crc32_one('\0', crc);
+		if (fwrite("\0", 1, 1, dest) != 1)
+			die("Writing padding failed");
+	}
+
+	/* Write the CRC */
+	printf("CRC %x\n", crc);
+	put_unaligned_le32(crc, buf);
+	if (fwrite(buf, 1, 4, dest) != 4)
+		die("Writing CRC failed");
+
+	/* Catch any delayed write failures */
+	if (fclose(dest))
+		die("Writing image failed");
+
+	close(fd);
 
 	return 0;
 }
