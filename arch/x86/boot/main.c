@@ -7,7 +7,10 @@
 #include <asm/boot.h>
 #include <asm/bootparam.h>
 
+#include "boot.h"
+#include "string.h"
+
 void main(void)
 {
-
+	printf("%s\n", kernel_version);
 }
