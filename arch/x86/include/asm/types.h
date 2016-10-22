@@ -15,6 +15,18 @@
 
 #ifndef __ASSEMBLY__
 
+/*
+ * 64 bit architectures use "unsigned long" size_t.
+ * 32 bit architectures use "unsigned int" size_t,
+ */
+#ifdef CONFIG_X86_64
+typedef unsigned long		size_t;
+typedef long			ssize_t;
+#else
+typedef unsigned int		size_t;
+typedef int			ssize_t;
+#endif
+
 typedef signed char		s8;
 typedef unsigned char		u8;
 

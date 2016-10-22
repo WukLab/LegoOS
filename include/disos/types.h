@@ -20,6 +20,10 @@
 
 #ifndef __ASSEMBLY__
 
+#include <disos/stddef.h>
+
+typedef int bool;
+
 /*
  * A dma_addr_t can hold any valid DMA address, i.e., any address returned
  * by the DMA API.
