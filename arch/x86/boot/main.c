@@ -58,6 +58,7 @@ void main(void)
 	printf("es = 0x%x ", es());
 	printf("ds = 0x%x ", ds());
 	printf("fs = 0x%x ", fs());
+	printf("Comman Line: %s", boot_params.hdr.cmd_line_ptr);
 
 	die();
 }
