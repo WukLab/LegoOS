@@ -296,21 +296,19 @@ setup_bad_signature:
 setup_print:
         lodsb
         andb    %al, %al
-        jz      setup_die
+        jz      die
         movb    $0xe, %ah
         movw    $7, %bx
         int     $0x10
         jmp     setup_print
 
-setup_die:
-	# Allow the user to press a key, then reboot
-	xorw	%ax, %ax
-	int	$0x16
-	int	$0x19
+	.globl	die
+	.type	die, @function
+die:
+	hlt
+	jmp	die
 
-	# int 0x19 should never return.
-	# In case, invoke BIOS reset vector
-	ljmp	$0xf000,$0xfff0
+	.size	die, .-die
 
         .section ".entrydata", "a"
 setup_msg_sig:

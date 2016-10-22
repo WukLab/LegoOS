@@ -7,10 +7,18 @@
 
 #define STACK_SIZE	512
 
+/* Useful macros */
+#define BUILD_BUG_ON(condition)	((void)sizeof(char[1 - 2*!!(condition)]))
+
+#define ARRAY_SIZE(x)		(sizeof(x) / sizeof(*(x)))
+
 #ifndef __ASSEMBLY__
 
 #include <stdarg.h>
 #include <disos/types.h>
+
+extern struct setup_header hdr;
+extern struct boot_params boot_params;
 
 static inline int isdigit(int ch)
 {
@@ -223,6 +231,9 @@ struct biosregs {
 		};
 	};
 };
+
+/* header.S */
+void __attribute__((noreturn)) die(void);
 
 /* bioscall.S */
 void intcall(unsigned char int_no, const struct biosregs *ireg, struct biosregs *oreg)

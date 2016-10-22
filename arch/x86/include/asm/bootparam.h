@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
  *
- * The so called zero-page
+ * The so-called zeropage
  */
 
 #ifndef _ASM_X86_BOOTPARAM_H_
@@ -112,6 +112,8 @@ struct efi_info {
 
 /* The so-called "zeropage" */
 struct boot_params {
+	struct setup_header	hdr;
+	__u8 pad[4096-sizeof(struct setup_header)];
 } __attribute__((packed));
 
 #endif /* __ASSEMBLY__ */
