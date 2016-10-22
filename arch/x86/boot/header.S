@@ -185,7 +185,7 @@ initrd_addr_max: .long 0x7fffffff
 kernel_alignment:  .long 0x100000	#physical addr alignment
 					#required for protected mode
 					#kernel
-relocatable_kernel:     .byte 0
+relocatable_kernel:     .byte 1
 #define MIN_KERNEL_ALIGN_LG2	21
 min_alignment:		.byte MIN_KERNEL_ALIGN_LG2	# minimum alignment
 
@@ -215,7 +215,7 @@ setup_data:		.quad 0			# 64-bit physical pointer to
 						# single linked list of
 						# struct setup_data
 
-pref_address:		.quad 0x100000		# preferred load addr
+pref_address:		.quad 0x1000000		# preferred load addr
 
 #define VO__text 0
 #define VO__end  1

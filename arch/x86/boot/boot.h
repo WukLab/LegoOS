@@ -80,6 +80,20 @@ static inline void io_delay(void)
 
 /* These functions are used to reference data in other segments. */
 
+static inline u16 cs(void)
+{
+	u16 seg;
+	asm("movw %%cs,%0" : "=rm" (seg));
+	return seg;
+}
+
+static inline u16 es(void)
+{
+	u16 seg;
+	asm("movw %%es,%0" : "=rm" (seg));
+	return seg;
+}
+
 static inline u16 ds(void)
 {
 	u16 seg;

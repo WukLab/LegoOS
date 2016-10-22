@@ -54,7 +54,10 @@ void main(void)
 	copy_boot_params();
 
 	printf("%s\n", kernel_version);
-
+	printf("cs = 0x%x ", cs());
+	printf("es = 0x%x ", es());
+	printf("ds = 0x%x ", ds());
+	printf("fs = 0x%x ", fs());
 
 	die();
 }
