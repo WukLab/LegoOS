@@ -18,6 +18,28 @@
 #include <disos/types.h>
 #include <asm/bootparam.h>
 
+/* Heap -- available for dynamic lists. */
+extern char __end[];
+extern char *HEAP;
+extern char *heap_end;
+#define RESET_HEAP() ((void *)( HEAP = __end ))
+static inline char *__get_heap(size_t s, size_t a, size_t n)
+{
+	char *tmp;
+
+	HEAP = (char *)(((size_t)HEAP+(a-1)) & ~(a-1));
+	tmp = HEAP;
+	HEAP += s*n;
+	return tmp;
+}
+#define GET_HEAP(type, n) \
+	((type *)__get_heap(sizeof(type),__alignof__(type),(n)))
+
+static inline bool heap_free(size_t n)
+{
+	return (int)(heap_end-HEAP) >= (int)n;
+}
+
 extern struct setup_header hdr;
 extern struct boot_params boot_params;
 
@@ -276,7 +298,7 @@ static inline void show_cmdline(void)
 {
 	unsigned long cmd_line_ptr = boot_params.hdr.cmd_line_ptr;
 
-	if (cmd_line_ptr >= 0x10000)
+	if (cmd_line_ptr >= 0x100000)
 		return;	/* inaccessible */
 	__show_cmdline(cmd_line_ptr);
 }

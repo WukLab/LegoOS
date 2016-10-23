@@ -15,6 +15,9 @@ int early_serial_base;
 
 struct boot_params boot_params __attribute__((aligned(16)));
 
+char *HEAP = __end;
+char *heap_end = __end;		/* Default end of heap = no heap */
+
 /*
  * Copy the header into the boot parameter block.  Since this
  * screws up the old-style command line protocol, adjust by
@@ -50,6 +53,61 @@ static void copy_boot_params(void)
 	}
 }
 
+/*
+ * Query the keyboard lock status as given by the BIOS, and
+ * set the keyboard repeat rate to maximum.  Unclear why the latter
+ * is done here; this might be possible to kill off as stale code.
+ */
+static void keyboard_init(void)
+{
+	struct biosregs ireg, oreg;
+	initregs(&ireg);
+
+	ireg.ah = 0x02;		/* Get keyboard status */
+	intcall(0x16, &ireg, &oreg);
+	boot_params.kbd_status = oreg.al;
+
+	ireg.ax = 0x0305;	/* Set keyboard repeat rate */
+	intcall(0x16, &ireg, NULL);
+}
+
+/*
+ * Tell the BIOS what CPU mode we intend to run in.
+ */
+static void set_bios_mode(void)
+{
+#ifdef CONFIG_X86_64
+	struct biosregs ireg;
+
+	initregs(&ireg);
+	ireg.ax = 0xec00;
+	ireg.bx = 2;
+	intcall(0x15, &ireg, NULL);
+#endif
+}
+
+static void init_heap(void)
+{
+	char *stack_end;
+
+	if (boot_params.hdr.loadflags & CAN_USE_HEAP) {
+		asm("leal %P1(%%esp),%0"
+		    : "=r" (stack_end) : "i" (-STACK_SIZE));
+
+		heap_end = (char *)
+			((size_t)boot_params.hdr.heap_end_ptr + 0x200);
+		if (heap_end > stack_end)
+			heap_end = stack_end;
+
+		printf("HEAP: 0x%x  HEAP_END: 0x%x  STACK_END: 0x%x  STACK_SIZE: 0x%x\n",
+			HEAP, heap_end, stack_end, STACK_SIZE);
+	} else {
+		/* Boot protocol 2.00 only, no heap available */
+		puts("WARNING: Ancient bootloader, some functionality "
+		     "may be limited!\n");
+	}
+}
+
 void main(void)
 {
 	/* Copy the boot header into the 'zeropage' */
@@ -67,6 +125,15 @@ void main(void)
 	console_init();
 	if (cmdline_find_option_bool("debug"))
 		puts("early console in setup code\n");
+
+	/* End of heap check */
+	init_heap();
+
+	/* Tell the BIOS what CPU mode we intend to run in. */
+	set_bios_mode();
+
+	/* Set keyboard repeat rate (why?) and query the lock flags */
+	keyboard_init();
 
 	die();
 }

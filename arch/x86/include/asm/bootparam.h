@@ -113,7 +113,8 @@ struct efi_info {
 /* The so-called "zeropage" */
 struct boot_params {
 	struct setup_header	hdr;
-	__u8 pad[4096-sizeof(struct setup_header)];
+	__u8 kbd_status;				/* 0x1eb */
+	__u8 pad[4096-sizeof(struct setup_header)-1];
 } __attribute__((packed));
 
 #endif /* __ASSEMBLY__ */
