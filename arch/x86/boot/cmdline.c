@@ -16,6 +16,7 @@ void __show_cmdline(unsigned long cmdline_ptr)
 	while (cptr < 0x10000 && (c = rdfs8(cptr++))) {
 		putchar(c);
 	}
+	putchar('\n');
 }
 
 static inline int myisspace(u8 c)

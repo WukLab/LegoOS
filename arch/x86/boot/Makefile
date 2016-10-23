@@ -1,5 +1,18 @@
+#
+# Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
+#
+# THE last Makefile, I promise.
+#
+
+# If you want to preset the SVGA mode, uncomment the next line and
+# set SVGA_MODE to whatever number you want.
+# Set it to -DSVGA_MODE=NORMAL_VGA if you just want the EGA/VGA mode.
+# The number is the same as you would ordinarily press at bootup.
+# Just search header.S for SVGA_MODE
+SVGA_MODE	:= -DSVGA_MODE=NORMAL_VGA
+
 KBUILD_CFLAGS := $(REALMODE_CFLAGS) -D__SETUP__
-KBUILD_AFLAGS := $(KBUILD_CFLAGS) -D__ASSEMBLY__
+KBUILD_AFLAGS := $(KBUILD_CFLAGS) -D__ASSEMBLY__ $(SVGA_MODE)
 
 targets	:= vmImage.bin setup.bin setup.elf bzImage
 
@@ -7,7 +20,16 @@ targets	:= vmImage.bin setup.bin setup.elf bzImage
 # The setup image
 #
 setup-y := header.o main.o bioscall.o tty.o printf.o version.o regs.o string.o \
-           early_serial_console.o cmdline.o
+           early_serial_console.o cmdline.o memory.o copy.o
+
+# The link order of the video-*.o modules can matter.  In particular,
+# video-vga.o *must* be listed first, followed by video-vesa.o.
+# Hardware-specific drivers should follow in the order they should be
+# probed, and video-bios.o should typically be last.
+setup-y += video.o video-mode.o
+setup-y += video-vga.o
+setup-y += video-vesa.o
+setup-y += video-bios.o
 
 targets	+= $(setup-y)
 

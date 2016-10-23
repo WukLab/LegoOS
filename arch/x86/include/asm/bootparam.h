@@ -35,7 +35,9 @@
 
 #ifndef __ASSEMBLY__
 
+#include <asm/e820.h>
 #include <disos/types.h>
+#include <disos/screen_info.h>
 
 /* extensible setup data list node */
 struct setup_data {
@@ -91,30 +93,14 @@ struct sys_desc_table {
 	__u8  table[14];
 };
 
-/* Gleaned from OFW's set-parameters in cpu/x86/pc/linux.fth */
-struct olpc_ofw_header {
-	__u32 ofw_magic;	/* OFW signature */
-	__u32 ofw_version;
-	__u32 cif_handler;	/* callback into OFW */
-	__u32 irq_desc_table;
-} __attribute__((packed));
-
-struct efi_info {
-	__u32 efi_loader_signature;
-	__u32 efi_systab;
-	__u32 efi_memdesc_size;
-	__u32 efi_memdesc_version;
-	__u32 efi_memmap;
-	__u32 efi_memmap_size;
-	__u32 efi_systab_hi;
-	__u32 efi_memmap_hi;
-};
-
 /* The so-called "zeropage" */
 struct boot_params {
-	struct setup_header	hdr;
-	__u8 kbd_status;				/* 0x1eb */
-	__u8 pad[4096-sizeof(struct setup_header)-1];
+	struct screen_info screen_info;
+	struct setup_header hdr;
+	__u8 kbd_status;
+	__u32 alt_mem_k;
+	__u8 e820_entries;
+	struct e820entry e820_map[E820MAX];
 } __attribute__((packed));
 
 #endif /* __ASSEMBLY__ */

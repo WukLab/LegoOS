@@ -32,7 +32,7 @@ static void copy_boot_params(void)
 	const struct old_cmdline * const oldcmd =
 		(const struct old_cmdline *)OLD_CL_ADDRESS;
 
-	BUILD_BUG_ON(sizeof(boot_params) != 4096);
+	//BUILD_BUG_ON(sizeof(boot_params) != 4096);
 	memcpy(&boot_params.hdr, &hdr, sizeof(hdr));
 
 	if (!boot_params.hdr.cmd_line_ptr &&
@@ -132,8 +132,14 @@ void main(void)
 	/* Tell the BIOS what CPU mode we intend to run in. */
 	set_bios_mode();
 
+	/* Detect memory layout */
+	detect_memory();
+
 	/* Set keyboard repeat rate (why?) and query the lock flags */
 	keyboard_init();
+
+	/* Set the video mode */
+	set_video();
 
 	die();
 }

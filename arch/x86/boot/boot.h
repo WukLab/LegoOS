@@ -337,8 +337,29 @@ size_t strlen(const char *s);
 extern int early_serial_base;
 void console_init(void);
 
+/* memory.c */
+int detect_memory(void);
+
+/* version.c */
 extern const char kernel_version[];
 
-#endif
+/* video.c */
+void set_video(void);
+
+/* video-mode.c */
+int set_mode(u16 mode);
+int mode_defined(u16 mode);
+void probe_cards(int unsafe);
+
+/* video-vesa.c */
+void vesa_store_edid(void);
+
+/* copy.S */
+void copy_to_fs(addr_t dst, void *src, size_t len);
+void *copy_from_fs(void *dst, addr_t src, size_t len);
+void copy_to_gs(addr_t dst, void *src, size_t len);
+void *copy_from_gs(void *dst, addr_t src, size_t len);
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* _X86_BOOT_BOOT_H_ */
