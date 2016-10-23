@@ -11,6 +11,8 @@
 #include "boot.h"
 #include "string.h"
 
+int early_serial_base;
+
 struct boot_params boot_params __attribute__((aligned(16)));
 
 /*
@@ -58,7 +60,13 @@ void main(void)
 	printf("es = 0x%x ", es());
 	printf("ds = 0x%x ", ds());
 	printf("fs = 0x%x ", fs());
-	printf("Comman Line: %s", boot_params.hdr.cmd_line_ptr);
+
+	show_cmdline();
+
+	/* Initialize the early-boot console */
+	console_init();
+	if (cmdline_find_option_bool("debug"))
+		puts("early console in setup code\n");
 
 	die();
 }

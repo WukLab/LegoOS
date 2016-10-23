@@ -16,6 +16,7 @@
 
 #include <stdarg.h>
 #include <disos/types.h>
+#include <asm/bootparam.h>
 
 extern struct setup_header hdr;
 extern struct boot_params boot_params;
@@ -246,6 +247,40 @@ struct biosregs {
 	};
 };
 
+/* cmdline.c */
+int __cmdline_find_option(unsigned long cmdline_ptr, const char *option, char *buffer, int bufsize);
+int __cmdline_find_option_bool(unsigned long cmdline_ptr, const char *option);
+void __show_cmdline(unsigned long cmdline_ptr);
+
+static inline int cmdline_find_option(const char *option, char *buffer, int bufsize)
+{
+	unsigned long cmd_line_ptr = boot_params.hdr.cmd_line_ptr;
+
+	if (cmd_line_ptr >= 0x100000)
+		return -1;      /* inaccessible */
+
+	return __cmdline_find_option(cmd_line_ptr, option, buffer, bufsize);
+}
+
+static inline int cmdline_find_option_bool(const char *option)
+{
+	unsigned long cmd_line_ptr = boot_params.hdr.cmd_line_ptr;
+
+	if (cmd_line_ptr >= 0x100000)
+		return -1;      /* inaccessible */
+
+	return __cmdline_find_option_bool(cmd_line_ptr, option);
+}
+
+static inline void show_cmdline(void)
+{
+	unsigned long cmd_line_ptr = boot_params.hdr.cmd_line_ptr;
+
+	if (cmd_line_ptr >= 0x10000)
+		return;	/* inaccessible */
+	__show_cmdline(cmd_line_ptr);
+}
+
 /* header.S */
 void __attribute__((noreturn)) die(void);
 
@@ -275,6 +310,10 @@ size_t strnlen(const char *s, size_t maxlen);
 unsigned int atou(const char *s);
 unsigned long long simple_strtoull(const char *cp, char **endp, unsigned int base);
 size_t strlen(const char *s);
+
+/* early_serial_console.c */
+extern int early_serial_base;
+void console_init(void);
 
 extern const char kernel_version[];
 

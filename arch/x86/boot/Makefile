@@ -6,7 +6,8 @@ targets	:= vmImage.bin setup.bin setup.elf bzImage
 #
 # The setup image
 #
-setup-y := header.o main.o bioscall.o tty.o printf.o version.o regs.o string.o
+setup-y := header.o main.o bioscall.o tty.o printf.o version.o regs.o string.o \
+           early_serial_console.o cmdline.o
 
 targets	+= $(setup-y)
 
