@@ -360,6 +360,15 @@ void *copy_from_fs(void *dst, addr_t src, size_t len);
 void copy_to_gs(addr_t dst, void *src, size_t len);
 void *copy_from_gs(void *dst, addr_t src, size_t len);
 
+/* a20.c */
+int enable_a20(void);
+
+/* pm.c */
+void __attribute__((noreturn)) go_to_protected_mode(void);
+
+/* pmjump.S */
+void __attribute__((noreturn)) protected_mode_jump(u32 entrypoint, u32 bootparams);
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _X86_BOOT_BOOT_H_ */

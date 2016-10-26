@@ -141,5 +141,9 @@ void main(void)
 	/* Set the video mode */
 	set_video();
 
-	die();
+	/*
+	 * Go to protected mode,
+	 * never return
+	 */
+	go_to_protected_mode();
 }

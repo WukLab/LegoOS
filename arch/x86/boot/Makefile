@@ -20,7 +20,7 @@ targets	:= vmImage.bin setup.bin setup.elf bzImage
 # The setup image
 #
 setup-y := header.o main.o bioscall.o tty.o printf.o version.o regs.o string.o \
-           early_serial_console.o cmdline.o memory.o copy.o
+           early_serial_console.o cmdline.o memory.o copy.o a20.o pm.o pmjump.o
 
 # The link order of the video-*.o modules can matter.  In particular,
 # video-vga.o *must* be listed first, followed by video-vesa.o.
