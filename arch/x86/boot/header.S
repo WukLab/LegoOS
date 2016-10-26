@@ -107,7 +107,7 @@ _start:
 
 		# Part 2 of the bootparam.header
 		.ascii "HdrS"				# header signature
-		.word	0x020d				# header version number
+		.word	0x020a				# header version number
 
 		.globl realmode_swtch
 realmode_swtch:	.word	0, 0		# default_switch, SETUPSEG
@@ -182,10 +182,10 @@ initrd_addr_max: .long 0x7fffffff
 					# but leave it at 2 GB to avoid
 					# possible bootloader bugs.
 
-kernel_alignment:  .long 0x1000000	#physical addr alignment
+kernel_alignment:  .long 0x100000	#physical addr alignment
 					#required for protected mode
 					#kernel
-relocatable_kernel:     .byte 1
+relocatable_kernel:     .byte 0
 #define MIN_KERNEL_ALIGN_LG2	21
 min_alignment:		.byte MIN_KERNEL_ALIGN_LG2	# minimum alignment
 
@@ -215,7 +215,7 @@ setup_data:		.quad 0			# 64-bit physical pointer to
 						# single linked list of
 						# struct setup_data
 
-pref_address:		.quad 0x1000000		# preferred load addr
+pref_address:		.quad 0x100000		# preferred load addr
 
 #define VO__text 0
 #define VO__end  1
