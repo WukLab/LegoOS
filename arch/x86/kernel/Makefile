@@ -1,3 +1,3 @@
 extra-y += vmImage.lds
 
-obj-y := dummy.o
+obj-y := head_64.o

@@ -218,7 +218,8 @@ CHECKFLAGS	= -D__Sandix__ -DSandix -D__STDC__ -Dunix -D__unix__ \
 
 DISOS_INCLUDE	:= -I$(srctree)/arch/$(SRCARCH)/include \
                    $(if $(KBUILD_SRC), -I$(srctree)/include) \
-		   -I$(objtree)/include
+		   -I$(objtree)/include \
+		   -include $(srctree)/include/disos/kconfig.h
 
 KBUILD_CPPFLAGS = -D__KERNEL__
 NOSTDINC_FLAGS	=
