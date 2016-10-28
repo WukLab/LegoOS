@@ -23,13 +23,19 @@
 	.section ".text32","ax"
 GLOBAL(longmode_jump)
 	/*
+	 * the physical address where setup
+	 * was loaded by bootloader.
+	 */
+	leal	0(%esi), %ebp
+
+	/*
 	 * Load new GDT with the 64bit segments using 32bit descriptor.
 	 * These descriptors has .L = 1, indicates that these segments
 	 * contains native 64-bit code.
 	 */
-	movl	$gdt, %eax
-	movl	%eax, gdt+2
-	lgdt	gdt
+	leal	gdt(%ebp), %eax
+	movl	%eax, gdt+2(%ebp)
+	lgdt	gdt(%ebp)
 
 	/*
 	 * Enable PAE mode
@@ -50,19 +56,19 @@ GLOBAL(longmode_jump)
 	 */
 
 	/* Clear pagetables */
-	movl	$pgtable, %edi
+	leal	pgtable(%ebp), %edi
 	xorl	%eax, %eax
 	movl	$((NR_PGTABLE * 4096) / 4), %ecx
 	rep
 	stosl
 
 	/* Build Level 4 */
-	movl	$pgtable, %edi
+	leal	pgtable + 0(%ebp), %edi
 	leal	0x1007(%edi), %eax
 	movl	%eax, 0(%edi)
 
 	/* Build Level 3 */
-	movl	$pgtable + 0x1000, %edi
+	leal	pgtable + 0x1000(%ebp), %edi
 	leal	0x1007(%edi), %eax
 	movl	$4, %ecx
 1:	movl	%eax, 0x00(%edi)
@@ -72,7 +78,7 @@ GLOBAL(longmode_jump)
 	jnz	1b
 
 	/* Build Level 2 */
-	movl	$pgtable + 0x2000, %edi
+	leal	pgtable + 0x2000(%ebx), %edi
 	movl	$0x00000183, %eax
 	movl	$2048, %ecx
 1:	movl	%eax, 0(%edi)
@@ -82,7 +88,7 @@ GLOBAL(longmode_jump)
 	jnz	1b
 
 	/* Enable the boot page tables */
-	movl	$pgtable, %eax
+	leal	pgtable(%ebp), %eax
 	movl	%eax, %cr3
 
 	/*

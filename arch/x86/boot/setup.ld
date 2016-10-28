@@ -43,9 +43,12 @@ SECTIONS
 	. = ALIGN(16);
 	.bss		: {
 		__bss_start = .;
-		*(.bss)
+		*(.bss*)
 		__bss_end = .;
 	}
+
+	. = ALIGN(4096);
+	.pgtable	: { *(.pgtable) }
 
 	. = ALIGN(16);
 	__end = .;
