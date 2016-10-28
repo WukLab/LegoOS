@@ -54,16 +54,11 @@ GLOBAL(in_pm32)
 	# Set up TR to make Intel VT happy
 	ltr	%di
 
-	# Clear registers to allow for future extensions to the
-	# 32-bit boot protocol
-	xorl	%ecx, %ecx
-	xorl	%edx, %edx
-	xorl	%ebx, %ebx
-	xorl	%ebp, %ebp
-	xorl	%edi, %edi
-
 	# Set up LDTR to make Intel VT happy
 	lldt	%cx
 
-	jmpl	*%eax			# Jump to the 32-bit entrypoint
+	movl	%eax, %edx		# Save the jump address to %edx
+					# %esi still points to bootparam
+
+	calll	longmode_jump		# Jump to IA-32e longmode
 ENDPROC(in_pm32)

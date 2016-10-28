@@ -12,7 +12,7 @@
 OUTPUT_FORMAT(CONFIG_OUTPUT_FORMAT, CONFIG_OUTPUT_FORMAT, CONFIG_OUTPUT_FORMAT)
 
 #ifdef CONFIG_X86_64
-ENTRY(startup_32)
+ENTRY(startup_64)
 OUTPUT_ARCH(i386:x86-64)
 # define LOAD_OFFSET	__START_KERNEL_map
 #else
@@ -23,6 +23,12 @@ OUTPUT_ARCH(i386)
 
 SECTIONS {
 	. = LOAD_OFFSET + CONFIG_PHYSICAL_START;
+
+#ifdef CONFIG_X86_64
+	phys_startup_64 = ABSOLUTE(startup_64 - LOAD_OFFSET);
+#else
+	phys_startup_32 = ABSOLUTE(startup_32 - LOAD_OFFSET);
+#endif
 
 	.text : {
 		_text = .;
