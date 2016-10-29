@@ -1,4 +1,4 @@
-vmlinux.bin
-vmlinux.lds
+vmImage.bin
+vmImage.lds
 mkpiggy
 piggy.S
