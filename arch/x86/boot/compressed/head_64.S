@@ -144,7 +144,9 @@ ENTRY(startup_64)
 	movl	%eax, %fs
 	movl	%eax, %gs
 
-	jmp	*%rdx
+1:
+	hlt
+	jmp	1b
 
 	.data
 gdt:
