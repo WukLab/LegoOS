@@ -38,11 +38,26 @@ config PGTABLE_LEVELS
 
 config PHYSICAL_START
 	hex "Physical address where the kernel is loaded" if EXPERT
-	default "0x100000"
+	default "0x1000000"
 	---help---
 	  This gives the physical address where the kernel is loaded.
 	  Our kernel image will run from here. Note that this is the
 	  64-bit kernel. The 16-bit real-mode kernel is loaded under
 	  1MB limit.
+
+config PHYSICAL_ALIGN
+	hex "Alignment value to which kernel should be aligned"
+	default "0x200000"
+	range 0x2000 0x1000000 if X86_32
+	range 0x200000 0x1000000 if X86_64
+	---help---
+	  This value puts the alignment restrictions on physical address
+	  where kernel is loaded and run from. Kernel is compiled for an
+	  address which meets above alignment restriction.
+
+	  On 32-bit this value must be a multiple of 0x2000. On 64-bit
+	  this value must be a multiple of 0x200000.
+
+	  Don't change this unless you know what you are doing.
 
 source "init/Kconfig"

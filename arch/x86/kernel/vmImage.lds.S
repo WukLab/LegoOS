@@ -55,6 +55,11 @@ SECTIONS {
 		_edata = .;
 	}
 
+	.signature : {
+		kernel_signature = .;
+		LONG(0x5a5aaa55)
+	}
+
 	.bss : {
 		__bss_start = .;
 		*(.bss*)

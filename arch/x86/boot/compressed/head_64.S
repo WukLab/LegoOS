@@ -144,6 +144,19 @@ ENTRY(startup_64)
 	movl	%eax, %fs
 	movl	%eax, %gs
 
+	movq	%rsi, %rax
+
+	movq	$_ekernel, %rcx
+	subq	$_kernel, %rcx
+	shrq	$3, %rcx
+	incq	%rcx
+	leaq	_kernel(%rbp), %rsi
+	movq	$CONFIG_PHYSICAL_START, %rdi
+	rep
+	movsq
+
+	movq	%rax, %rsi
+
 1:
 	hlt
 	jmp	1b

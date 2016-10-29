@@ -182,9 +182,9 @@ initrd_addr_max: .long 0x7fffffff
 					# but leave it at 2 GB to avoid
 					# possible bootloader bugs.
 
-kernel_alignment:  .long 0x100000	#physical addr alignment
-					#required for protected mode
-					#kernel
+kernel_alignment:  .long CONFIG_PHYSICAL_ALIGN	#physical addr alignment
+						#required for protected mode
+						#kernel
 relocatable_kernel:     .byte 0
 #define MIN_KERNEL_ALIGN_LG2	21
 min_alignment:		.byte MIN_KERNEL_ALIGN_LG2	# minimum alignment
