@@ -26,7 +26,7 @@ GLOBAL(longmode_jump)
 	 * the physical address where setup
 	 * was loaded by bootloader.
 	 */
-	leal	0(%esi), %ebp
+	movl	0(%esi), %ebp
 
 	/*
 	 * Load new GDT with the 64bit segments using 32bit descriptor.
