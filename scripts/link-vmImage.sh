@@ -92,12 +92,6 @@ if [ "$1" == "${LD}" ]; then
 
 	info SYSMAP System.map
 	mksysmap vmImage System.map
-
-	#
-	# Make a copy to boot directory
-	#
-	cp vmImage arch/${SRCARCH}/boot/
-	cp System.map arch/${SRCARCH}/boot/
 fi
 
 if [ "$1" == "clean" ]; then

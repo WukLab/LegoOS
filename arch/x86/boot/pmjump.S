@@ -65,8 +65,9 @@ GLOBAL(in_pm32)
 	# Set up LDTR to make Intel VT happy
 	lldt	%cx
 
-	movl	%eax, %edx		# Save the jump address to %edx
-					# %esi still points to bootparam
-
-	calll	longmode_jump		# Jump to IA-32e longmode
+	#
+	# Jump to protected-mode kernel, 0x100000
+	# which is the compressed/head_$(BITS).o
+	#
+	jmp	*%eax
 ENDPROC(in_pm32)

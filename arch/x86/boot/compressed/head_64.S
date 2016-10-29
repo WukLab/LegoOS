@@ -1,13 +1,8 @@
 /*
  * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
  *
- * We enter in protected-mode, which is the IA-32 mode. Do the necessary
- * preparation then jump to IA-32e mode. After all, jump to the 64-bit
- * kernel entry point.
- *
  * Note that:
  *	%esi points to the bootparam structure.
- *	%edx points to the kernel entry point.
  */
 
 #include <asm/msr.h>
@@ -20,13 +15,23 @@
 
 	.text
 	.code32
-	.section ".text32","ax"
-GLOBAL(longmode_jump)
+	.section ".head.text","ax"
+GLOBAL(startup_32)
+	cld
+	cli
+
 	/*
-	 * the physical address where setup
-	 * was loaded by bootloader.
+	 * Get the address where we are loaded
+	 * well, it is 0x100000 that we are talking about.
 	 */
-	movl	0(%esi), %ebp
+	call	1f
+1:	popl	%ebp
+	subl	$1b, %ebp
+
+	/* Setup a mini stack */
+	movl	$boot_stack_end, %eax
+	addl	%ebp, %eax
+	movl	%eax, %esp
 
 	/*
 	 * Load new GDT with the 64bit segments using 32bit descriptor.
@@ -117,7 +122,7 @@ GLOBAL(longmode_jump)
 	 * used to perform that far jump.
 	 */
 	pushl	$__KERNEL_CS
-	movl	$startup_64, %eax
+	leal	startup_64(%ebp), %eax
 	pushl	%eax
 
 	/* Enter paged protected Mode, activating Long Mode */
@@ -126,9 +131,10 @@ GLOBAL(longmode_jump)
 
 	/* Jump from 32bit compatibility mode into 64bit mode. */
 	lret
-ENDPROC(longmode_jump)
+ENDPROC(startup_32)
 
 	.code64
+	.org 0x200
 ENTRY(startup_64)
 	/* Setup data segments. */
 	xorl	%eax, %eax
@@ -151,6 +157,14 @@ gdt:
 	.quad	0x0080890000000000	/* TS descriptor	4	*/
 	.quad   0x0000000000000000	/* TS continued		5	*/
 gdt_end:
+
+	.bss
+	.balign 4
+boot_heap:
+	.fill 0x1000, 1, 0
+boot_stack:
+	.fill 0x1000, 1, 0
+boot_stack_end:
 
 	.section ".pgtable","a",@nobits
 	.balign 4096

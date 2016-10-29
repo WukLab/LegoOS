@@ -84,8 +84,9 @@ all: bzImage
 
 KBUILD_IMAGE := $(boot)/bzImage
 
-# This is a phony bzImage target
-# The real one is in boot's Makefile
+#
+# This vmImage is under top directory, and is the original kernel.
+#
 bzImage: vmImage
 	$(Q)$(MAKE) $(build)=$(boot) $(KBUILD_IMAGE)
 	$(Q)mkdir -p $(objtree)/arch/$(UTS_MACHINE)/boot

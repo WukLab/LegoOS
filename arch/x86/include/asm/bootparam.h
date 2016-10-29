@@ -95,12 +95,6 @@ struct sys_desc_table {
 
 /* The so-called "zeropage" */
 struct boot_params {
-	/*
-	 * Base physical address where setup was loaded
-	 * Basically, it equals (ds() << 4)
-	 * Used by pmjump_64 to calculate physical address.
-	 */
-	__u32 setup_base_addr;
 	struct screen_info screen_info;
 	struct setup_header hdr;
 	__u8 kbd_status;

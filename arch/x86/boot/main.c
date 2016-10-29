@@ -112,7 +112,6 @@ void main(void)
 {
 	/* Copy the boot header into the 'zeropage' */
 	copy_boot_params();
-	boot_params.setup_base_addr = ds() << 4;
 
 	printf("%s\n", kernel_version);
 	printf("cs = 0x%x ", cs());

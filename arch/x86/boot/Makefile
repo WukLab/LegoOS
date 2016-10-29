@@ -16,12 +16,14 @@ KBUILD_AFLAGS := $(KBUILD_CFLAGS) -D__ASSEMBLY__ $(SVGA_MODE)
 
 targets	:= vmImage.bin setup.bin setup.elf bzImage
 
+# Let clean descend into
+subdir- := compressed
+
 #
 # The setup image
 #
 setup-y := header.o main.o bioscall.o tty.o printf.o version.o regs.o string.o \
-           early_serial_console.o cmdline.o memory.o copy.o a20.o pm.o pmjump.o \
-	   pmjump_64.o
+           early_serial_console.o cmdline.o memory.o copy.o a20.o pm.o pmjump.o
 
 # The link order of the video-*.o modules can matter.  In particular,
 # video-vga.o *must* be listed first, followed by video-vesa.o.
@@ -48,9 +50,17 @@ $(obj)/bzImage: $(obj)/setup.bin $(obj)/vmImage.bin $(obj)/tools/build FORCE
 	$(call if_changed,bzImage)
 	@echo 'Kernel: $@ is ready' ' (#'`cat .version`')'
 
+#
+# This vmImage.bin has
+# 1) compressed/head_$(BITS).o
+# 2) original stripped vmImage kernel
+#
 OBJCOPYFLAGS_vmImage.bin := -O binary -R .note -R .comment -S
-$(obj)/vmImage.bin: $(obj)/vmImage FORCE
+$(obj)/vmImage.bin: $(obj)/compressed/vmImage FORCE
 	$(call if_changed,objcopy)
+
+$(obj)/compressed/vmImage: FORCE
+	$(Q)$(MAKE) $(build)=$(obj)/compressed $@
 
 AFLAGS_header.o += -I$(objtree)/$(obj)
 $(obj)/header.o:

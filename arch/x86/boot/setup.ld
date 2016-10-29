@@ -56,4 +56,6 @@ SECTIONS
 	/DISCARD/	: { *(.note*) }
 	/DISCARD/	: { *(.eh_frame) }
 	/DISCARD/	: { *(.comment) }
+
+	. = ASSERT(__end <= 0x8000, "Setup too big");
 }
