@@ -10,6 +10,6 @@
 	.section ".head.text","ax"
 	.code64
 ENTRY(startup_64)
-	movq	$1024, %rax
 1:
-	movq	$1b, %rbx
+	hlt
+	jmp	1b

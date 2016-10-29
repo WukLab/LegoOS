@@ -144,8 +144,10 @@ ENTRY(startup_64)
 	movl	%eax, %fs
 	movl	%eax, %gs
 
-	movq	%rsi, %rax
+	/* Save real-mode bootparam ptr */
+	pushq	%rsi
 
+	/* Copy kernel to CONFIG_PHYSICAL_START */
 	movq	$_ekernel, %rcx
 	subq	$_kernel, %rcx
 	shrq	$3, %rcx
@@ -155,11 +157,15 @@ ENTRY(startup_64)
 	rep
 	movsq
 
-	movq	%rax, %rsi
+	/* Restore real-mode bootparam ptr */
+	popq	%rsi
 
-1:
-	hlt
-	jmp	1b
+	/*
+	 * Jump to kernel
+	 * arch/x86/kernel/head_64.S
+	 */
+	movq	$CONFIG_PHYSICAL_START, %rax
+	jmpq	*%rax
 
 	.data
 gdt:
