@@ -33,4 +33,13 @@
 #define __init_task_data	__section(.data..init_task)
 #define __lockfunc		__section(.spinlock.text)
 
+/*
+ * When used with Link Time Optimization, gcc can optimize away C functions or
+ * variables which are referenced only from assembly code.  __visible tells the
+ * optimizer that something else uses this function or variable, thus preventing
+ * this.
+ */
+#define __visible		__attribute__((externally_visible))
+
+
 #endif /* _DISOS_COMPILER_H_ */

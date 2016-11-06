@@ -43,16 +43,32 @@ SECTIONS {
 		_etext = .;
 	}
 
+	. = ALIGN(PAGE_SIZE);
 	.rodata : {
 		_srodata = .;
 		*(.rodata*)
 		_erodata = .;
 	}
 
+	. = ALIGN(PAGE_SIZE);
 	.data : {
 		_sdata = .;
 		*(.data*)
 		_edata = .;
+	}
+
+	. = ALIGN(PAGE_SIZE);
+	.init.text : {
+		_sinittext = .;
+		*(.init.text)
+		_einittext = .;
+	}
+
+	. = ALIGN(16);
+	.init.data : {
+		_sinitdata = .;
+		*(.init.data)
+		_einitdata = .;
 	}
 
 	.signature : {
@@ -60,6 +76,7 @@ SECTIONS {
 		LONG(0x5a5aaa55)
 	}
 
+	. = ALIGN(PAGE_SIZE);
 	.bss : {
 		__bss_start = .;
 		*(.bss*)
