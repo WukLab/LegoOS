@@ -1,7 +1,12 @@
 /*
  * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
  *
- * ld script for the x86 kernel.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * vmImage.lds.S: ld script for the x86 kernel.
  */
 
 #include <asm/page.h>
@@ -20,6 +25,8 @@ ENTRY(startup_32)
 OUTPUT_ARCH(i386)
 # define LOAD_OFFSET	__PAGE_OFFSET
 #endif
+
+#define L1_CACHE_BYTES 64
 
 SECTIONS {
 	. = LOAD_OFFSET + CONFIG_PHYSICAL_START;
@@ -53,6 +60,28 @@ SECTIONS {
 	. = ALIGN(PAGE_SIZE);
 	.data : {
 		_sdata = .;
+
+		/*
+		 * the init task, which needs to be aligned
+		 * with THREAD_SIZE (16KB in 64bit)
+		 */
+		. = ALIGN(THREAD_SIZE);
+		*(.data..init_task)
+
+		/* __read_mostly */
+		. = ALIGN(L1_CACHE_BYTES);
+		*(.data..read_mostly)
+		. = ALIGN(L1_CACHE_BYTES);
+
+		. = ALIGN(L1_CACHE_BYTES);
+		*(.data)
+		. = ALIGN(L1_CACHE_BYTES);
+
+		/* WARN_ONCE etc. */
+		. = ALIGN(L1_CACHE_BYTES);
+		*(.data..unlikely)
+		. = ALIGN(L1_CACHE_BYTES);
+
 		*(.data*)
 		_edata = .;
 	}

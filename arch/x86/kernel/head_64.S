@@ -1,5 +1,10 @@
 /*
  * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #include <asm/msr.h>
@@ -190,6 +195,10 @@ ENTRY(secondary_startup_64)
 	 */
 	movq	%rsi, %rdi
 
+1:
+	hlt
+	jmp	1b
+
 	/*
 	 * Finally jump to run C code and to be on real kernel address
 	 * Since we are running on identity-mapped space we have to jump
@@ -219,9 +228,8 @@ ENTRY(secondary_startup_64)
 GLOBAL(initial_code)
 	.quad	x86_64_start_kernel
 GLOBAL(stack_start)
-	.quad	10000
+	.quad	init_thread_union+THREAD_SIZE-8
 	.word	0
-
 
 #define NEXT_PAGE(name) \
 	.balign	PAGE_SIZE; \

@@ -1,4 +1,4 @@
-obj-y := main.o version.o
+obj-y := main.o version.o init_task.o
 
 # dependencies on generated files need to be listed explicitly
 $(obj)/version.o: include/generated/compile.h
