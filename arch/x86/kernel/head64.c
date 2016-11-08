@@ -11,10 +11,11 @@
 
 #include <disos/linkage.h>
 #include <disos/compiler.h>
+#include <disos/start_kernel.h>
 
 pmdval_t early_pmd_flags = __PAGE_KERNEL_LARGE & ~(_PAGE_GLOBAL | _PAGE_NX);
 
 asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data)
 {
-
+	start_kernel();
 }

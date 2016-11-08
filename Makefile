@@ -545,9 +545,9 @@ export MODLIB
 ifeq ($(KBUILD_EXTMOD),)
 # Objects that will be linked into final vmImage
 init-y		:= init/
-cory-y		:= kernel/
-drivers-y	:= drivers/
-libs-y		:= lib/
+core-y		+= kernel/
+drivers-y	+= drivers/
+libs-y		+= lib/
 
 vmImage-dirs	:= $(patsubst %/,%,$(filter %/, $(init-y) $(core-y) $(drivers-y) $(libs-y)))
 init-y		:= $(patsubst %/, %/built-in.o, $(init-y))

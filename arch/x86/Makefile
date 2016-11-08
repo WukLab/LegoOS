@@ -75,7 +75,9 @@ KBUILD_CFLAGS += -pipe
 KBUILD_CFLAGS += -Wno-sign-compare
 KBUILD_CFLAGS += -fno-asynchronous-unwind-tables
 
-core-y += arch/x86/kernel/
+core-y		:= arch/x86/kernel/
+drivers-y	:=
+libs-y		:=
 
 boot = arch/x86/boot
 

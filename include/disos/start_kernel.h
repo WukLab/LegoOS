@@ -7,14 +7,15 @@
  * (at your option) any later version.
  */
 
-#include <disos/panic.h>
-#include <disos/linkage.h>
+#ifndef _DISOS_START_KERNEL_H_
+#define _DISOS_START_KERNEL_H_
 
-asmlinkage void __init start_kernel(void)
-{
-	asm (
-		"1: hlt\n"
-		"jmp 1b\n"
-	);
-	panic("End");
-}
+#include <disos/linkage.h>
+#include <disos/compiler.h>
+
+/* Define the prototype for start_kernel here, rather than cluttering
+   up something else. */
+
+asmlinkage void __init start_kernel(void);
+
+#endif /* _DISOS_START_KERNEL_H_ */

@@ -7,14 +7,9 @@
  * (at your option) any later version.
  */
 
-#include <disos/panic.h>
-#include <disos/linkage.h>
+#ifndef _DISOS_PANIC_H_
+#define _DISOS_PANIC_H_
 
-asmlinkage void __init start_kernel(void)
-{
-	asm (
-		"1: hlt\n"
-		"jmp 1b\n"
-	);
-	panic("End");
-}
+void panic(const char *fmt, ...);
+
+#endif /* _DISOS_PANIC_H_ */

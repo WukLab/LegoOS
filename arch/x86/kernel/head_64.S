@@ -195,10 +195,6 @@ ENTRY(secondary_startup_64)
 	 */
 	movq	%rsi, %rdi
 
-1:
-	hlt
-	jmp	1b
-
 	/*
 	 * Finally jump to run C code and to be on real kernel address
 	 * Since we are running on identity-mapped space we have to jump
@@ -305,6 +301,7 @@ NEXT_PAGE(level1_fixmap_pgt)
 	.globl early_gdt_descr
 early_gdt_descr:
 	.word	GDT_ENTRIES*8-1
+	.quad	gdt_page
 
 ENTRY(phys_base)
 	/* This must match the first entry in level2_kernel_pgt */
