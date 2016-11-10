@@ -10,6 +10,7 @@
 #ifndef _DISOS_BUG_H_
 #define _DISOS_BUG_H_
 
+#include <disos/printk.h>
 #include <disos/compiler.h>
 
 /* Force a compilation error if a constant expression is not a power of 2 */

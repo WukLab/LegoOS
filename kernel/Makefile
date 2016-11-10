@@ -1,1 +1,1 @@
-obj-y := panic.o
+obj-y := panic.o printk.o
