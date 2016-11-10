@@ -167,4 +167,50 @@ __label__ __here;						\
 	(type *)( (char *)__ptr - offsetof(type,member) );	\
 })
 
+/*
+ * do_div() is NOT a C function. It wants to return
+ * two values (the quotient and the remainder), but
+ * since that doesn't work very well in C, what it
+ * does is:
+ *
+ * - modifies the 64-bit dividend _in_place_
+ * - returns the 32-bit remainder
+ */
+#define do_div(n,base) ({					\
+	u32 __base = (base);					\
+	u32 __rem;						\
+	__rem = ((u64)(n)) % __base;				\
+	(n) = ((u64)(n)) / __base;				\
+	__rem;							\
+ })
+
+/*
+ * lib/hexdump.c
+ */
+extern int hex_to_bin(char ch);
+extern int hex2bin(unsigned char *dst, const char *src, size_t count);
+extern char *bin2hex(char *dst, const void *src, size_t count);
+
+extern const char hex_asc[];
+extern const char hex_asc_upper[];
+
+#define hex_asc_lo(x)		hex_asc[((x) & 0x0f)]
+#define hex_asc_hi(x)		hex_asc[((x) & 0xf0) >> 4]
+#define hex_asc_upper_lo(x)	hex_asc_upper[((x) & 0x0f)]
+#define hex_asc_upper_hi(x)	hex_asc_upper[((x) & 0xf0) >> 4]
+
+static inline char *hex_byte_pack(char *buf, unsigned char byte)
+{
+	*buf++ = hex_asc_hi(byte);
+	*buf++ = hex_asc_lo(byte);
+	return buf;
+}
+
+static inline char *hex_byte_pack_upper(char *buf, unsigned char byte)
+{
+	*buf++ = hex_asc_upper_hi(byte);
+	*buf++ = hex_asc_upper_lo(byte);
+	return buf;
+}
+
 #endif /* _DISOS_KERNEL_H_ */
