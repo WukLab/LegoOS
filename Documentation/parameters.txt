@@ -1,0 +1,30 @@
+DisOS parameters
+
+	earlyprintk=	[X86]
+			earlyprintk=serial[,ttySn[,baudrate]]
+			earlyprintk=serial[,0x...[,baudrate]]
+			earlyprintk=ttySn[,baudrate]
+			earlyprintk=dbgp[debugController#]
+			earlyprintk=pciserial,bus:device.function[,baudrate]
+
+			earlyprintk is useful when the kernel crashes before
+			the normal console is initialized. It is not enabled by
+			default because it has some cosmetic problems.
+
+			Append ",keep" to not disable it when the real console
+			takes over.
+
+			Only one of vga, efi, serial, or usb debug port can
+			be used at a time.
+
+			Currently only ttyS0 and ttyS1 may be specified by
+			name.  Other I/O ports may be explicitly specified
+			on some architectures (x86 and arm at least) by
+			replacing ttySn with an I/O port address, like this:
+				earlyprintk=serial,0x1008,115200
+			You can find the port for a given device in
+			/proc/tty/driver/serial:
+				2: uart:ST16650V2 port:00001008 irq:18 ...
+
+			Interaction with the standard serial driver is not
+			very good.
