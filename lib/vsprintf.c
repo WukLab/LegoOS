@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <disos/ctype.h>
 #include <disos/kernel.h>
 
 /**

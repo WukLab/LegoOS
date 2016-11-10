@@ -1,1 +1,1 @@
-obj-y := vsprintf.o
+obj-y := vsprintf.o ctype.o
