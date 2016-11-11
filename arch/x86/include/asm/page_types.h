@@ -5,8 +5,8 @@
 #ifndef _ASM_X86_PAGE_TYPES_H_
 #define _ASM_X86_PAGE_TYPES_H_
 
-#include <disos/const.h>
-#include <disos/types.h>
+#include <lego/const.h>
+#include <lego/types.h>
 
 #define PAGE_SHIFT		12
 #define PAGE_SIZE		(_AC(1,UL) << PAGE_SHIFT)

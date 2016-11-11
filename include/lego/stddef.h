@@ -7,10 +7,10 @@
  * (at your option) any later version.
  */
 
-#ifndef _DISOS_STDDEF_H_
-#define _DISOS_STDDEF_H_
+#ifndef _LEGO_STDDEF_H_
+#define _LEGO_STDDEF_H_
 
-#include <disos/compiler.h>
+#include <lego/compiler.h>
 
 #undef  NULL
 #define NULL ((void *)0)
@@ -36,4 +36,4 @@ enum {
 #define offsetofend(TYPE, MEMBER) \
 	(offsetof(TYPE, MEMBER)	+ sizeof(((TYPE *)0)->MEMBER))
 
-#endif /* _DISOS_STDDEF_H_ */
+#endif /* _LEGO_STDDEF_H_ */

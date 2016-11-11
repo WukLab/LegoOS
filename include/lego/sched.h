@@ -4,8 +4,8 @@
  * Task/Process Management Definitions and Helpers
  */
 
-#ifndef _DISOS_SCHED_H_
-#define _DISOS_SCHED_H_
+#ifndef _LEGO_SCHED_H_
+#define _LEGO_SCHED_H_
 
 #include <asm/page.h>
 #include <asm/thread_info.h>
@@ -32,4 +32,4 @@ union thread_union {
 extern union thread_union init_thread_union;
 extern struct task_struct init_task;
 
-#endif /* _DISOS_SCHED_H_ */
+#endif /* _LEGO_SCHED_H_ */

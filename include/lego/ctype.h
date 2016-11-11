@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#ifndef _DISOS_CTYPE_H_
-#define _DISOS_CTYPE_H_
+#ifndef _LEGO_CTYPE_H_
+#define _LEGO_CTYPE_H_
 
 /*
  * NOTE! This ctype does not handle EOF like the standard C
@@ -79,4 +79,4 @@ static inline int isodigit(const char c)
 	return c >= '0' && c <= '7';
 }
 
-#endif /* _DISOS_CTYPE_H_ */
+#endif /* _LEGO_CTYPE_H_ */

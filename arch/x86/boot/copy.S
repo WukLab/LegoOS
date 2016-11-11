@@ -4,7 +4,7 @@
  * Memory copy routines
  */
 
-#include <disos/linkage.h>
+#include <lego/linkage.h>
 
 	.code16
 	.text

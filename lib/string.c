@@ -7,10 +7,10 @@
  * (at your option) any later version.
  */
 
-#include <disos/types.h>
-#include <disos/ctype.h>
-#include <disos/stddef.h>
-#include <disos/string.h>
+#include <lego/types.h>
+#include <lego/ctype.h>
+#include <lego/stddef.h>
+#include <lego/string.h>
 
 #ifndef __HAVE_ARCH_STRNCASECMP
 /**

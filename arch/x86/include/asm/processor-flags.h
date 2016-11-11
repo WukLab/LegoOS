@@ -7,7 +7,7 @@
 #ifndef _ASM_X86_PROCESSOR_FLAGS_H_
 #define _ASM_X86_PROCESSOR_FLAGS_H_
 
-#include <disos/const.h>
+#include <lego/const.h>
 
 /*
  * EFLAGS bits

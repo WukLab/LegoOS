@@ -4,8 +4,8 @@
  * Macros for dealing with constants.
  */
 
-#ifndef _DISOS_CONST_H_
-#define _DISOS_CONST_H_
+#ifndef _LEGO_CONST_H_
+#define _LEGO_CONST_H_
 
 /*
  * Some constant macros are used in both assembler and
@@ -29,4 +29,4 @@
 #define _BITUL(x)	(_AC(1,UL) << (x))
 #define _BITULL(x)	(_AC(1,ULL) << (x))
 
-#endif /* _DISOS_CONST_H_ */
+#endif /* _LEGO_CONST_H_ */

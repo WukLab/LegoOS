@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#include <disos/panic.h>
-#include <disos/linkage.h>
+#include <lego/panic.h>
+#include <lego/linkage.h>
 
 asmlinkage void __init start_kernel(void)
 {

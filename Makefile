@@ -216,10 +216,10 @@ INSTALLKERNEL	= installkernel
 CHECKFLAGS	= -D__Sandix__ -DSandix -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void
 
-DISOS_INCLUDE	:= -I$(srctree)/arch/$(SRCARCH)/include \
+LEGO_INCLUDE	:= -I$(srctree)/arch/$(SRCARCH)/include \
                    $(if $(KBUILD_SRC), -I$(srctree)/include) \
 		   -I$(objtree)/include \
-		   -include $(srctree)/include/disos/kconfig.h
+		   -include $(srctree)/include/lego/kconfig.h
 
 KBUILD_CPPFLAGS = -D__KERNEL__
 NOSTDINC_FLAGS	=
@@ -238,7 +238,7 @@ KERNELRELEASE = $(shell cat include/config/kernel.release 2> /dev/null)
 KERNELVERSION = $(VERSION)$(if $(PATCHLEVEL),.$(PATCHLEVEL)$(if $(SUBLEVEL),.$(SUBLEVEL)))$(EXTRAVERSION)
 
 export MAKE AS LD CC CPP AR NM STRIP OBJCOPY OBJDUMP PERL PYTHON CHECK INSTALLKERNEL CHECKFLAGS
-export DISOS_INCLUDE KBUILD_CPPFLAGS KBUILD_CFLAGS KBUILD_AFLAGS NOSTDINC_FLAGS
+export LEGO_INCLUDE KBUILD_CPPFLAGS KBUILD_CFLAGS KBUILD_AFLAGS NOSTDINC_FLAGS
 export VERSION PATCHLEVEL SUBLEVEL KERNELRELEASE KERNELVERSION
 export ARCH SRCARCH UTS_MACHINE CONFIG_SHELL HOSTCC HOSTCFLAGS CROSS_COMPILE
 
@@ -641,7 +641,7 @@ define filechk_utsrelease.h
 endef
 
 define filechk_version.h
-	(echo \#define DISOS_VERSION_CODE $(shell                         \
+	(echo \#define LEGO_VERSION_CODE $(shell                         \
 	expr $(VERSION) \* 65536 + 0$(PATCHLEVEL) \* 256 + 0$(SUBLEVEL)); \
 	echo '#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))';)
 endef

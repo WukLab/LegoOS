@@ -27,15 +27,15 @@ if [ -x /sbin/${INSTALLKERNEL} ]; then exec /sbin/${INSTALLKERNEL} "$@"; fi
 
 # Default install - same as make zlilo
 
-if [ -f $4/vmImage-DisOS ]; then
-	mv $4/vmImage-DisOS $4/vmImage-DisOS.old
+if [ -f $4/vmImage-LegoOS ]; then
+	mv $4/vmImage-LegoOS $4/vmImage-LegoOS.old
 fi
 
 if [ -f $4/System.map ]; then
 	mv $4/System.map $4/System.old
 fi
 
-cat $2 > $4/vmImage-DisOS
+cat $2 > $4/vmImage-LegoOS
 cp $3 $4/System.map
 
 if [ -x /sbin/lilo ]; then

@@ -7,11 +7,11 @@
  * (at your option) any later version.
  */
 
-#ifndef _DISOS_STRING_H_
-#define _DISOS_STRING_H_
+#ifndef _LEGO_STRING_H_
+#define _LEGO_STRING_H_
 
-#include <disos/types.h>
-#include <disos/compiler.h>
+#include <lego/types.h>
+#include <lego/compiler.h>
 
 #ifndef __HAVE_ARCH_STRCPY
 extern char * strcpy(char *,const char *);
@@ -93,4 +93,4 @@ extern void * memmove(void *,const void *,size_t);
 extern int memcmp(const void *,const void *,size_t);
 #endif
 
-#endif /* _DISOS_STRING_H_ */
+#endif /* _LEGO_STRING_H_ */

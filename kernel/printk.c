@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-#include <disos/printk.h>
+#include <lego/printk.h>
 
 asmlinkage __printf(1, 2)
 int printk(const char *fmt, ...)

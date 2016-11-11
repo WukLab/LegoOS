@@ -7,9 +7,9 @@
  * (at your option) any later version.
  */
 
-#ifndef _DISOS_PANIC_H_
-#define _DISOS_PANIC_H_
+#ifndef _LEGO_PANIC_H_
+#define _LEGO_PANIC_H_
 
 void panic(const char *fmt, ...);
 
-#endif /* _DISOS_PANIC_H_ */
+#endif /* _LEGO_PANIC_H_ */

@@ -36,8 +36,8 @@
 #ifndef __ASSEMBLY__
 
 #include <asm/e820.h>
-#include <disos/types.h>
-#include <disos/screen_info.h>
+#include <lego/types.h>
+#include <lego/screen_info.h>
 
 /* extensible setup data list node */
 struct setup_data {

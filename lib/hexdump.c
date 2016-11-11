@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#include <disos/ctype.h>
-#include <disos/kernel.h>
+#include <lego/ctype.h>
+#include <lego/kernel.h>
 
 const char hex_asc[] = "0123456789abcdef";
 const char hex_asc_upper[] = "0123456789ABCDEF";

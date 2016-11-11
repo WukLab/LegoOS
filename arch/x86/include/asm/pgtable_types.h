@@ -7,7 +7,7 @@
 #ifndef _ASM_X86_PGTABLE_TYPES_H_
 #define _ASM_X86_PGTABLE_TYPES_H_
 
-#include <disos/const.h>
+#include <lego/const.h>
 
 #define _PAGE_BIT_PRESENT	0	/* is present */
 #define _PAGE_BIT_RW		1	/* writeable */

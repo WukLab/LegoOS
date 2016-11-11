@@ -4,7 +4,7 @@
  * Very basic string functions
  */
 
-#include <disos/types.h>
+#include <lego/types.h>
 #include "boot.h"
 
 int memcmp(const void *s1, const void *s2, size_t len)

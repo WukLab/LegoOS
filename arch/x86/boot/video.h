@@ -7,7 +7,7 @@
 
 #include "boot.h"
 #include <asm/boot.h>
-#include <disos/types.h>
+#include <lego/types.h>
 
 /*
  * This code uses an extended set of video mode numbers. These include:

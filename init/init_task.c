@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-#include <disos/sched.h>
+#include <lego/sched.h>
 
 #define INIT_TASK(task)							\
 {									\

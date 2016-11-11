@@ -11,10 +11,10 @@
  * Variable Argument Manipulation API
  */
 
-#ifndef _DISOS_STDARG_H_
-#define _DISOS_STDARG_H_
+#ifndef _LEGO_STDARG_H_
+#define _LEGO_STDARG_H_
 
-#include <disos/stddef.h>
+#include <lego/stddef.h>
 
 #define __STACK_ALIGN		sizeof(long)
 #define __va_rounded_size(TYPE) \
@@ -34,4 +34,4 @@ typedef char *va_list;
 #define va_end(AP)		(AP) = NULL
 #define va_copy(DEST, SRC)	(DEST) = (SRC)
 
-#endif /* _DISOS_STDARG_H_ */
+#endif /* _LEGO_STDARG_H_ */

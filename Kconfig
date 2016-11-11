@@ -1,4 +1,4 @@
-mainmenu "DisOS/$ARCH $KERNELVERSION Kernel Configuration"
+mainmenu "LegoOS/$ARCH $KERNELVERSION Kernel Configuration"
 
 config SRCARCH
 	string

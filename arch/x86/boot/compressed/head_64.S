@@ -9,7 +9,7 @@
 #include <asm/boot.h>
 #include <asm/segment.h>
 #include <asm/processor-flags.h>
-#include <disos/linkage.h>
+#include <lego/linkage.h>
 
 #define NR_PGTABLE 6
 

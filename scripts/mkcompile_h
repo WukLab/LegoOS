@@ -43,14 +43,14 @@ else
 	TIMESTAMP=$KBUILD_BUILD_TIMESTAMP
 fi
 if test -z "$KBUILD_BUILD_USER"; then
-	DISOS_COMPILE_BY=$(whoami | sed 's/\\/\\\\/')
+	LEGO_COMPILE_BY=$(whoami | sed 's/\\/\\\\/')
 else
-	DISOS_COMPILE_BY=$KBUILD_BUILD_USER
+	LEGO_COMPILE_BY=$KBUILD_BUILD_USER
 fi
 if test -z "$KBUILD_BUILD_HOST"; then
-	DISOS_COMPILE_HOST=`hostname`
+	LEGO_COMPILE_HOST=`hostname`
 else
-	DISOS_COMPILE_HOST=$KBUILD_BUILD_HOST
+	LEGO_COMPILE_HOST=$KBUILD_BUILD_HOST
 fi
 
 UTS_VERSION="#$VERSION"
@@ -73,10 +73,10 @@ UTS_TRUNCATE="cut -b -$UTS_LEN"
 
   echo \#define UTS_VERSION \"`echo $UTS_VERSION | $UTS_TRUNCATE`\"
 
-  echo \#define DISOS_COMPILE_BY \"`echo $DISOS_COMPILE_BY | $UTS_TRUNCATE`\"
-  echo \#define DISOS_COMPILE_HOST \"`echo $DISOS_COMPILE_HOST | $UTS_TRUNCATE`\"
+  echo \#define LEGO_COMPILE_BY \"`echo $LEGO_COMPILE_BY | $UTS_TRUNCATE`\"
+  echo \#define LEGO_COMPILE_HOST \"`echo $LEGO_COMPILE_HOST | $UTS_TRUNCATE`\"
 
-  echo \#define DISOS_COMPILER \"`$CC -v 2>&1 | grep ' version '`\"
+  echo \#define LEGO_COMPILER \"`$CC -v 2>&1 | grep ' version '`\"
 ) > .tmpcompile
 
 # Only replace the real compile.h if the new one is different,

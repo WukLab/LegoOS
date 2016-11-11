@@ -8,7 +8,7 @@ Build to another directory, e.g. if you want to compile all files into a
 directory named build/ under current source tree, you can:
   ```
   $ pwd
-  /../DisOS
+  /../LegoOS
   $ make config O=build		# this will put .config into build/
   $ make all O=build
   ```

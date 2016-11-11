@@ -5,8 +5,8 @@
  * Though, I would say typedef is evil.
  */
 
-#ifndef _DISOS_TYPES_H_
-#define _DISOS_TYPES_H_
+#ifndef _LEGO_TYPES_H_
+#define _LEGO_TYPES_H_
 
 #include <asm/types.h>
 
@@ -20,7 +20,7 @@
 
 #ifndef __ASSEMBLY__
 
-#include <disos/stddef.h>
+#include <lego/stddef.h>
 
 typedef int bool;
 
@@ -56,4 +56,4 @@ struct list_head {
 };
 
 #endif /* __ASSEMBLY__ */
-#endif /* _DISOS_TYPES_H_ */
+#endif /* _LEGO_TYPES_H_ */

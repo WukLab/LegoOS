@@ -56,7 +56,7 @@
 
 #ifndef __ASSEMBLY__
 
-#include <disos/types.h>
+#include <lego/types.h>
 struct e820entry {
 	__u64 addr;	/* start of memory segment */
 	__u64 size;	/* size of memory segment */

@@ -5,8 +5,8 @@
  * sanitary checking and initilization, then jumps to main() of setup.
  *
  * To fit with GRUB2+linux+x86 boot protocol, we have to have these stuff here.
- * With this promise, we can install DisOS image into /boot/ and add an entry
- * to GRUB2 config file, then GRUB2 can boot DisOS just like booting a linux.
+ * With this promise, we can install LegoOS image into /boot/ and add an entry
+ * to GRUB2 config file, then GRUB2 can boot LegoOS just like booting a linux.
  * Besides, GRUB2 can pass command line parameters, initrd ptr and so on to us.
  */
 
@@ -227,7 +227,7 @@ handover_offset:	.long 0			# Filled in by build.c
 
 /*
  * Assume we are loaded by GRUB2. The related code how grub will load
- * DisOS is in [grub-core/loader/i386/pc/linux.c] of grub source code tree.
+ * LegoOS is in [grub-core/loader/i386/pc/linux.c] of grub source code tree.
  *
  * Normally,
  *	gs = fs = es = ds = ss = Segment

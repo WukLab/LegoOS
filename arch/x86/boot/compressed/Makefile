@@ -1,4 +1,4 @@
-KBUILD_CFLAGS := -m$(BITS) -D__KERNEL__ $(DISOS_INCLUDE) -O2
+KBUILD_CFLAGS := -m$(BITS) -D__KERNEL__ $(LEGO_INCLUDE) -O2
 KBUILD_CFLAGS += -fno-strict-aliasing
 cflags-$(CONFIG_X86_32) := -march=i386
 cflags-$(CONFIG_X86_64) := -mcmodel=small

@@ -7,5 +7,5 @@
 #include <generated/compile.h>
 
 const char kernel_version[] = 
-	UTS_RELEASE " (" DISOS_COMPILE_BY "@" DISOS_COMPILE_HOST ") "
+	UTS_RELEASE " (" LEGO_COMPILE_BY "@" LEGO_COMPILE_HOST ") "
 	UTS_VERSION;

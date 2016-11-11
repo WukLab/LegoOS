@@ -7,14 +7,14 @@
  * (at your option) any later version.
  */
 
-#ifndef _DISOS_PRINTK_H_
-#define _DISOS_PRINTK_H_
+#ifndef _LEGO_PRINTK_H_
+#define _LEGO_PRINTK_H_
 
-#include <disos/stdarg.h>
-#include <disos/linkage.h>
-#include <disos/compiler.h>
+#include <lego/stdarg.h>
+#include <lego/linkage.h>
+#include <lego/compiler.h>
 
 asmlinkage __printf(1, 2)
 int printk(const char *fmt, ...);
 
-#endif /* _DISOS_PRINTK_H_ */
+#endif /* _LEGO_PRINTK_H_ */

@@ -12,8 +12,8 @@
 #include <asm/pgtable.h>
 #include <asm/segment.h>
 #include <asm/processor-flags.h>
-#include <disos/linkage.h>
-#include <disos/compiler.h>
+#include <lego/linkage.h>
+#include <lego/compiler.h>
 
 #define pud_index(x)	(((x) >> PUD_SHIFT) & (PTRS_PER_PUD-1))
 

@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
  *
- * This file is included by all DisOS source files.
+ * This file is included by all LegoOS source files.
  * Because it is passed as a parameter into GCC.
  */
 
-#ifndef _DISOS_KCONFIG_H_
-#define _DISOS_KCONFIG_H_
+#ifndef _LEGO_KCONFIG_H_
+#define _LEGO_KCONFIG_H_
 
 #include <generated/autoconf.h>
 
@@ -58,4 +58,4 @@
 #define IS_ENABLED(option) \
 	(IS_BUILTIN(option) || IS_MODULE(option))
 
-#endif /* _DISOS_KCONFIG_H_ */
+#endif /* _LEGO_KCONFIG_H_ */

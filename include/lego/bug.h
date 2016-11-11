@@ -7,11 +7,11 @@
  * (at your option) any later version.
  */
 
-#ifndef _DISOS_BUG_H_
-#define _DISOS_BUG_H_
+#ifndef _LEGO_BUG_H_
+#define _LEGO_BUG_H_
 
-#include <disos/printk.h>
-#include <disos/compiler.h>
+#include <lego/printk.h>
+#include <lego/compiler.h>
 
 /* Force a compilation error if a constant expression is not a power of 2 */
 #define BUILD_BUG_ON_NOT_POWER_OF_2(n)			\
@@ -157,4 +157,4 @@ do {								\
 	unlikely(__ret_warn_once);				\
 })
 
-#endif /* _DISOS_BUG_H_ */
+#endif /* _LEGO_BUG_H_ */

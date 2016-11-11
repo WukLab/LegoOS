@@ -2,10 +2,10 @@
  * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
  */
 
-#ifndef _DISOS_LINKAGE_H_
-#define _DISOS_LINKAGE_H_
+#ifndef _LEGO_LINKAGE_H_
+#define _LEGO_LINKAGE_H_
 
-#include <disos/compiler.h>
+#include <lego/compiler.h>
 #include <asm/linkage.h>
 
 /* Some toolchains use other characters (e.g. '`') to mark new line in macro */
@@ -77,4 +77,4 @@
 
 #endif /* __ASSEMBLY__ */
 
-#endif /* _DISOS_LINKAGE_H_ */
+#endif /* _LEGO_LINKAGE_H_ */

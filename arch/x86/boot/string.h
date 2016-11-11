@@ -1,5 +1,5 @@
-#ifndef _DISOS_BOOT_STRING_H_
-#define _DISOS_BOOT_STRING_H_
+#ifndef _LEGO_BOOT_STRING_H_
+#define _LEGO_BOOT_STRING_H_
 
 /*
  * Access builtin version by default. If one needs to use optimized version,
@@ -9,4 +9,4 @@
 #define memset(d,c,l) __builtin_memset(d,c,l)
 #define memcmp	__builtin_memcmp
 
-#endif /* _DISOS_BOOT_STRING_H_ */
+#endif /* _LEGO_BOOT_STRING_H_ */

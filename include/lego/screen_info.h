@@ -5,10 +5,10 @@
  * So we can use the screen smoothly. ..but forget about desktop
  */
 
-#ifndef _DISOS_SCREEN_INFO_H_
-#define _DISOS_SCREEN_INFO_H_
+#ifndef _LEGO_SCREEN_INFO_H_
+#define _LEGO_SCREEN_INFO_H_
 
-#include <disos/types.h>
+#include <lego/types.h>
 
 /*
  * These are set up by the setup-routine at boot-time:
@@ -79,4 +79,4 @@ struct screen_info {
 #define VIDEO_CAPABILITY_SKIP_QUIRKS	(1 << 0)
 #define VIDEO_CAPABILITY_64BIT_BASE	(1 << 1)	/* Frame buffer base is 64-bit */
 
-#endif /* _DISOS_SCREEN_INFO_H_ */
+#endif /* _LEGO_SCREEN_INFO_H_ */

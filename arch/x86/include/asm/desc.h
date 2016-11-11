@@ -16,7 +16,7 @@
 
 #include <asm/page.h>
 #include <asm/segment.h>
-#include <disos/types.h>
+#include <lego/types.h>
 
 /* 8 byte segment descriptor */
 struct desc_struct {

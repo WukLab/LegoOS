@@ -1,4 +1,4 @@
-DisOS parameters
+LegoOS parameters
 
 	earlyprintk=	[X86]
 			earlyprintk=serial[,ttySn[,baudrate]]

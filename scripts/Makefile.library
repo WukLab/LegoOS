@@ -124,13 +124,13 @@ __a_flags	= $(call flags,_a_flags)
 __cpp_flags     = $(call flags,_cpp_flags)
 endif
 
-c_flags        = -Wp,-MD,$(depfile) $(NOSTDINC_FLAGS) $(DISOS_INCLUDE)    \
+c_flags        = -Wp,-MD,$(depfile) $(NOSTDINC_FLAGS) $(LEGO_INCLUDE)    \
 		 $(__c_flags)
 
-a_flags        = -Wp,-MD,$(depfile) $(NOSTDINC_FLAGS) $(DISOS_INCLUDE)    \
+a_flags        = -Wp,-MD,$(depfile) $(NOSTDINC_FLAGS) $(LEGO_INCLUDE)    \
 		 $(__a_flags)
 
-cpp_flags      = -Wp,-MD,$(depfile) $(NOSTDINC_FLAGS) $(DISOS_INCLUDE)    \
+cpp_flags      = -Wp,-MD,$(depfile) $(NOSTDINC_FLAGS) $(LEGO_INCLUDE)    \
 		 $(__cpp_flags)
 
 ld_flags       = $(LDFLAGS)

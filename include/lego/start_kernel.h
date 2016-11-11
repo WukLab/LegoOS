@@ -7,15 +7,15 @@
  * (at your option) any later version.
  */
 
-#ifndef _DISOS_START_KERNEL_H_
-#define _DISOS_START_KERNEL_H_
+#ifndef _LEGO_START_KERNEL_H_
+#define _LEGO_START_KERNEL_H_
 
-#include <disos/linkage.h>
-#include <disos/compiler.h>
+#include <lego/linkage.h>
+#include <lego/compiler.h>
 
 /* Define the prototype for start_kernel here, rather than cluttering
    up something else. */
 
 asmlinkage void __init start_kernel(void);
 
-#endif /* _DISOS_START_KERNEL_H_ */
+#endif /* _LEGO_START_KERNEL_H_ */

@@ -7,10 +7,10 @@
  * (at your option) any later version.
  */
 
-#ifndef _DISOS_COMPILER_H_
-#define _DISOS_COMPILER_H_
+#ifndef _LEGO_COMPILER_H_
+#define _LEGO_COMPILER_H_
 
-#include <disos/types.h>
+#include <lego/types.h>
 
 #ifndef __GNUC__
 # error Please use GCC
@@ -274,4 +274,4 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
 	compiletime_assert(__native_word(t),				\
 		"Need native word sized stores/loads for atomicity.")
 
-#endif /* _DISOS_COMPILER_H_ */
+#endif /* _LEGO_COMPILER_H_ */

@@ -7,13 +7,13 @@
  * (at your option) any later version.
  */
 
-#ifndef _DISOS_KERNEL_H_
-#define _DISOS_KERNEL_H_
+#ifndef _LEGO_KERNEL_H_
+#define _LEGO_KERNEL_H_
 
-#include <disos/types.h>
-#include <disos/stdarg.h>
-#include <disos/stddef.h>
-#include <disos/compiler.h>
+#include <lego/types.h>
+#include <lego/stdarg.h>
+#include <lego/stddef.h>
+#include <lego/compiler.h>
 
 #define USHRT_MAX		((u16)(~0U))
 #define SHRT_MAX		((s16)(USHRT_MAX>>1))
@@ -213,4 +213,4 @@ static inline char *hex_byte_pack_upper(char *buf, unsigned char byte)
 	return buf;
 }
 
-#endif /* _DISOS_KERNEL_H_ */
+#endif /* _LEGO_KERNEL_H_ */

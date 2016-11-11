@@ -10,7 +10,7 @@
 #ifndef _ASM_X86_SEGMENT_H_
 #define _ASM_X86_SEGMENT_H_
 
-#include <disos/const.h>
+#include <lego/const.h>
 
 /*
  * Constructor for a conventional segment GDT (or LDT) entry.

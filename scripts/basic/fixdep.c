@@ -343,7 +343,7 @@ static void parse_dep_file(void *map, size_t len)
 			/* Ignore certain dependencies */
 			if (strrcmp(s, "include/generated/autoconf.h") &&
 			    strrcmp(s, "include/generated/autoksyms.h") &&
-			    strrcmp(s, "include/disos/kconfig.h") &&
+			    strrcmp(s, "include/lego/kconfig.h") &&
 			    strrcmp(s, ".ver")) {
 				/*
 				 * Do not list the source file as dependency,

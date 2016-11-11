@@ -9,10 +9,10 @@
 
 #include <asm/page.h>
 
-#include <disos/bug.h>
-#include <disos/ctype.h>
-#include <disos/string.h>
-#include <disos/kernel.h>
+#include <lego/bug.h>
+#include <lego/ctype.h>
+#include <lego/string.h>
+#include <lego/kernel.h>
 
 static __noinline_for_stack
 int skip_atoi(const char **s)

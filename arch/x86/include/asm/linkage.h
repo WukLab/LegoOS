@@ -1,7 +1,7 @@
 #ifndef _ASM_X86_LINKAGE_H_
 #define _ASM_X86_LINKAGE_H_
 
-#include <disos/stringify.h>
+#include <lego/stringify.h>
 
 #ifdef CONFIG_X86_32
 #define asmlinkage CPP_ASMLINKAGE __attribute__((regparm(0)))

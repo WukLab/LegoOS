@@ -7,7 +7,7 @@
 #include <asm/boot.h>
 #include <asm/segment.h>
 #include <asm/processor-flags.h>
-#include <disos/linkage.h>
+#include <lego/linkage.h>
 
 	.text
 	.code16

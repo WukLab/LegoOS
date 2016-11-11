@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-#include <disos/ctype.h>
+#include <lego/ctype.h>
 
 const unsigned char _ctype[] = {
 _C,_C,_C,_C,_C,_C,_C,_C,				/* 0-7 */
