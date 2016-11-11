@@ -7,10 +7,22 @@
  * (at your option) any later version.
  */
 
+#include <lego/kernel.h>
 #include <lego/printk.h>
+#include <lego/linkage.h>
+
+#define KMBUF_LEN 1024
+static unsigned char KMBUF[KMBUF_LEN];
 
 asmlinkage __printf(1, 2)
 int printk(const char *fmt, ...)
 {
-	return 0;
+	va_list args;
+	int len;
+
+	va_start(args, fmt);
+	len = vsnprintf(KMBUF, KMBUF_LEN, fmt, args);
+	va_end(args);
+
+	return len;
 }
