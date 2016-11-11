@@ -34,11 +34,11 @@ ENTRY(startup_64)
 	 * %rsi holds a physical pointer to bootparam structure
 	 */
 
-	leaq	_text(%rip), %rbp
-	subq	$_text - __START_KERNEL_map, %rbp
+	leaq	__text(%rip), %rbp
+	subq	$__text - __START_KERNEL_map, %rbp
 
 	/*
-	 * If not relocatable, %rbp = _text
+	 * If not relocatable, %rbp = __text
 	 * Fixup the physical addresses in the page table
 	 */
 	addq	%rbp, early_level4_pgt + (L4_START_KERNEL*8)(%rip)
@@ -54,7 +54,7 @@ ENTRY(startup_64)
 	 * creates a bunch of nonsense entries but that is fine --
 	 * it avoids problems around wraparound.
 	 */
-	leaq	_text(%rip), %rdi
+	leaq	__text(%rip), %rdi
 	leaq	early_level4_pgt(%rip), %rbx
 
 	movq	%rdi, %rax
@@ -77,7 +77,7 @@ ENTRY(startup_64)
 	movq	%rdi, %rax
 	shrq	$PMD_SHIFT, %rdi
 	addq	$(__PAGE_KERNEL_LARGE_EXEC & ~_PAGE_GLOBAL), %rax
-	leaq	(_end - 1)(%rip), %rcx
+	leaq	(__end - 1)(%rip), %rcx
 	shrq	$PMD_SHIFT, %rcx
 	subq	%rdi, %rcx
 	incl	%ecx

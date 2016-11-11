@@ -38,28 +38,28 @@ SECTIONS {
 #endif
 
 	.text : {
-		_text = .;
+		__text = .;
 
 		/* Bootstrapping code */
 		*(.head.text)
 		. = ALIGN(8);
 
 		/* Whole story */
-		_stext = .;
+		__stext = .;
 		*(.text*)
-		_etext = .;
+		__etext = .;
 	}
 
 	. = ALIGN(PAGE_SIZE);
 	.rodata : {
-		_srodata = .;
+		__srodata = .;
 		*(.rodata*)
-		_erodata = .;
+		__erodata = .;
 	}
 
 	. = ALIGN(PAGE_SIZE);
 	.data : {
-		_sdata = .;
+		__sdata = .;
 
 		/*
 		 * the init task, which needs to be aligned
@@ -83,21 +83,21 @@ SECTIONS {
 		. = ALIGN(L1_CACHE_BYTES);
 
 		*(.data*)
-		_edata = .;
+		__edata = .;
 	}
 
 	. = ALIGN(PAGE_SIZE);
 	.init.text : {
-		_sinittext = .;
+		__sinittext = .;
 		*(.init.text)
-		_einittext = .;
+		__einittext = .;
 	}
 
 	. = ALIGN(16);
 	.init.data : {
-		_sinitdata = .;
+		__sinitdata = .;
 		*(.init.data)
-		_einitdata = .;
+		__einitdata = .;
 	}
 
 	.signature : {
@@ -112,5 +112,5 @@ SECTIONS {
 		__bss_end = .;
 	}
 
-	_end = .;
+	__end = .;
 }
