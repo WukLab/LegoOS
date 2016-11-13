@@ -20,5 +20,12 @@ bzImage
 tags
 tags-e
 
+#
+# Usually I will mkdir build/
+# make config O=build
+# make O=build
+#
+build/
+
 !.gitignore
 !.mailmap

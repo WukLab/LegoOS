@@ -7,12 +7,11 @@
  * (at your option) any later version.
  */
 
-#include <lego/tty.h>
+#ifndef _LEGO_TERMIOS_H_
+#define _LEGO_TERMIOS_H_
 
-static const struct tty_operations serial_ops = {
-	.write	= NULL,
+struct termios {
+
 };
 
-struct tty_driver serial_driver = {
-	.ops	= &serial_ops,
-};
+#endif /* _LEGO_TERMIOS_H_ */
