@@ -10,7 +10,7 @@
 #include <lego/tty.h>
 #include <lego/panic.h>
 #include <lego/kernel.h>
-#include <lego/linkage.h>
+#include <lego/start_kernel.h>
 
 static void hlt(void)
 {
@@ -22,9 +22,13 @@ static void hlt(void)
 
 asmlinkage void __init start_kernel(void)
 {
+	/* Prepare output first */
 	tty_init();
 
 	printk("Welcome to: %s",lego_banner);
+
+	/* Architecture-Specific Initialization */
+	setup_arch();
 
 	hlt();
 }

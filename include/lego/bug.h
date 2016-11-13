@@ -10,8 +10,8 @@
 #ifndef _LEGO_BUG_H_
 #define _LEGO_BUG_H_
 
+#include <lego/panic.h>
 #include <lego/printk.h>
-#include <lego/compiler.h>
 
 /* Force a compilation error if a constant expression is not a power of 2 */
 #define BUILD_BUG_ON_NOT_POWER_OF_2(n)			\

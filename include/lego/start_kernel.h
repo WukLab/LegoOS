@@ -13,9 +13,13 @@
 #include <lego/linkage.h>
 #include <lego/compiler.h>
 
-/* Define the prototype for start_kernel here, rather than cluttering
-   up something else. */
-
+/*
+ * Define the prototype for start_kernel here,
+ * rather than cluttering up something else.
+ */
 asmlinkage void __init start_kernel(void);
+
+/* And the architecture-specific initialization hook */
+void __init setup_arch(void);
 
 #endif /* _LEGO_START_KERNEL_H_ */

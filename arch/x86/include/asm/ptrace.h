@@ -10,6 +10,8 @@
 #ifndef _ASM_X86_PTRACE_H_
 #define _ASM_X86_PTRACE_H_
 
+#ifndef __ASSEMBLY__
+
 struct pt_regs {
 	/*
 	 * C ABI says these regs are callee-preserved.
@@ -52,6 +54,8 @@ struct pt_regs {
 	unsigned long ss;
 
 	/* top of stack page */
-}
+};
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_PTRACE_H_ */

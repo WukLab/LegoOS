@@ -7,12 +7,14 @@
  * (at your option) any later version.
  */
 
-/*
- * Definitions for 16-bit setup code.
- */
-
 #ifndef _ASM_X86_SETUP_H_
 #define _ASM_X86_SETUP_H_
+
+/*
+ * Definitions used by 16-bit setup image
+ */
+
+#include <lego/compiler.h>
 
 #define COMMAND_LINE_SIZE	2048
 

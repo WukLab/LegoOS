@@ -9,6 +9,7 @@
 
 #include <asm/desc.h>
 #include <asm/page.h>
+#include <asm/traps.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
 
@@ -28,3 +29,8 @@ struct gdt_page gdt_page = { .gdt = {
 	[GDT_ENTRY_DEFAULT_USER_DS]	= GDT_ENTRY_INIT(0xc0f3, 0, 0xfffff),
 	[GDT_ENTRY_DEFAULT_USER_CS]	= GDT_ENTRY_INIT(0xa0fb, 0, 0xfffff),
 } };
+
+void __init setup_arch(void)
+{
+	trap_init();
+}
