@@ -7,10 +7,80 @@
  * (at your option) any later version.
  */
 
+#include <asm/io.h>
+#include <asm/asm.h>
+
 #include <lego/tty.h>
 
+/* ttyS0 */
+#define DEFAULT_SERIAL_PORT 0x3f8
+static unsigned long serial_base = DEFAULT_SERIAL_PORT;
+
+#define DEFAULT_BAUD	9600
+#define DLAB		0x80
+#define XMTRDY          0x20
+
+#define TXR             0       /*  Transmit register (WRITE) */
+#define RXR             0       /*  Receive register  (READ)  */
+#define IER             1       /*  Interrupt Enable          */
+#define IIR             2       /*  Interrupt ID              */
+#define FCR             2       /*  FIFO control              */
+#define LCR             3       /*  Line control              */
+#define MCR             4       /*  Modem control             */
+#define LSR             5       /*  Line Status               */
+#define MSR             6       /*  Modem Status              */
+#define DLL             0       /*  Divisor Latch Low         */
+#define DLH             1       /*  Divisor latch High        */
+
+static void serial_init_hw(int port, int baud)
+{
+	unsigned char c;
+	unsigned divisor;
+
+	outb(0x3, port + LCR);	/* 8n1 */
+	outb(0, port + IER);	/* no interrupt */
+	outb(0, port + FCR);	/* no fifo */
+	outb(0x3, port + MCR);	/* DTR + RTS */
+
+	divisor	= 115200 / baud;
+	c = inb(port + LCR);
+	outb(c | DLAB, port + LCR);
+	outb(divisor & 0xff, port + DLL);
+	outb((divisor >> 8) & 0xff, port + DLH);
+	outb(c & ~DLAB, port + LCR);
+
+	serial_base = port;
+}
+
+void serial_init(void)
+{
+	serial_init_hw(DEFAULT_SERIAL_PORT, DEFAULT_BAUD);
+}
+
+static int serial_putchar(struct tty_struct *tty, unsigned char ch)
+{
+	unsigned int timeout = 0xffff;
+
+	while ((inb(serial_base + LSR) & XMTRDY) == 0 && --timeout)
+		cpu_relax();
+	outb(ch, serial_base + TXR);
+	return timeout ? 1 : 0;
+}
+
+static int serial_write(struct tty_struct *tty,
+			const unsigned char *buf, int count)
+{
+	int c = 0;
+        while (*buf && count-- > 0) {
+		c += serial_putchar(tty, *buf);
+		buf++;
+	}
+	return c;
+}
+
 static const struct tty_operations serial_ops = {
-	.write	= NULL,
+	.write	= serial_write,
+	.put_char = serial_putchar,
 };
 
 struct tty_driver serial_driver = {

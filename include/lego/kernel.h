@@ -13,6 +13,7 @@
 #include <lego/types.h>
 #include <lego/stdarg.h>
 #include <lego/stddef.h>
+#include <lego/printk.h>
 #include <lego/compiler.h>
 
 #define USHRT_MAX		((u16)(~0U))

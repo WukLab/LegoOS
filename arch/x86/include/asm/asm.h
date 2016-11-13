@@ -7,13 +7,20 @@
  * (at your option) any later version.
  */
 
-#include <lego/tty.h>
+#ifndef _ASM_X86_ASM_H_
+#define _ASM_X86_ASM_H_
 
-void tty_init(void)
+#include <lego/compiler.h>
+
+/* REP NOP (PAUSE) is a good thing to insert into busy-wait loops. */
+static __always_inline void rep_nop(void)
 {
-	serial_init();
+	asm volatile("rep; nop" ::: "memory");
 }
 
-struct tty_struct default_tty_struct = {
+static __always_inline void cpu_relax(void)
+{
+	rep_nop();
+}
 
-};
+#endif /* _ASM_X86_ASM_H_ */

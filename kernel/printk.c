@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/tty.h>
 #include <lego/kernel.h>
 #include <lego/printk.h>
 #include <lego/linkage.h>
@@ -23,6 +24,8 @@ int printk(const char *fmt, ...)
 	va_start(args, fmt);
 	len = vsnprintf(KMBUF, KMBUF_LEN, fmt, args);
 	va_end(args);
+
+	serial_driver.ops->write(NULL, KMBUF, len);
 
 	return len;
 }

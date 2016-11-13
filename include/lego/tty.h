@@ -154,4 +154,7 @@ extern struct tty_ldisc n_tty;
 extern struct tty_driver vt_driver;
 extern struct tty_driver serial_driver;
 
+void tty_init(void);
+void serial_init(void);
+
 #endif /* _LEGO_TTY_H_ */

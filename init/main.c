@@ -7,14 +7,22 @@
  * (at your option) any later version.
  */
 
+#include <lego/tty.h>
 #include <lego/panic.h>
+#include <lego/kernel.h>
 #include <lego/linkage.h>
 
-asmlinkage void __init start_kernel(void)
+static void hlt(void)
 {
 	asm (
 		"1: hlt\n"
 		"jmp 1b\n"
 	);
-	panic("End");
+}
+
+asmlinkage void __init start_kernel(void)
+{
+	tty_init();
+
+	hlt();
 }
