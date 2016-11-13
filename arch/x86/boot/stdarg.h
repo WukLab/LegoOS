@@ -11,8 +11,8 @@
  * Variable Argument Manipulation API
  */
 
-#ifndef _LEGO_STDARG_H_
-#define _LEGO_STDARG_H_
+#ifndef _BOOT_STDARG_H_
+#define _BOOT_STDARG_H_
 
 #include <lego/stddef.h>
 
@@ -34,4 +34,4 @@ typedef char *va_list;
 #define va_end(AP)		(AP) = NULL
 #define va_copy(DEST, SRC)	(DEST) = (SRC)
 
-#endif /* _LEGO_STDARG_H_ */
+#endif /* _BOOT_STDARG_H_ */

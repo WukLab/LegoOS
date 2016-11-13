@@ -10,7 +10,7 @@
 #ifndef _LEGO_PRINTK_H_
 #define _LEGO_PRINTK_H_
 
-#include <lego/stdarg.h>
+#include <stdarg.h>
 #include <lego/linkage.h>
 #include <lego/compiler.h>
 

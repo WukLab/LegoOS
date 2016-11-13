@@ -10,8 +10,8 @@
 #ifndef _LEGO_KERNEL_H_
 #define _LEGO_KERNEL_H_
 
+#include <stdarg.h>
 #include <lego/types.h>
-#include <lego/stdarg.h>
 #include <lego/stddef.h>
 #include <lego/printk.h>
 #include <lego/compiler.h>
@@ -234,5 +234,11 @@ int scnprintf(char *buf, size_t size, const char *fmt, ...);
 
 __printf(3, 0)
 int vscnprintf(char *buf, size_t size, const char *fmt, va_list args);
+
+/*
+ * init/version.c
+ */
+extern const char lego_banner[];
+extern const char lego_proc_banner[];
 
 #endif /* _LEGO_KERNEL_H_ */

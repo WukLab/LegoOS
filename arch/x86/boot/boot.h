@@ -14,8 +14,8 @@
 
 #ifndef __ASSEMBLY__
 
+#include "stdarg.h"
 #include <lego/types.h>
-#include <lego/stdarg.h>
 #include <asm/bootparam.h>
 
 /* Heap -- available for dynamic lists. */

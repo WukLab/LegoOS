@@ -7,10 +7,29 @@
  * (at your option) any later version.
  */
 
+/*
+ * VT102 Emulation
+ */
+
 #include <lego/tty.h>
 
+void vt_init(void)
+{
+}
+
+static int vt_putchar(struct tty_struct *tty, unsigned char ch)
+{
+	return 0;
+}
+
+static int vt_write(struct tty_struct *tty, const unsigned char *buf, int count)
+{
+	return 0;
+}
+
 static const struct tty_operations vt_ops = {
-	.write	= NULL,
+	.write	= vt_write,
+	.put_char = vt_putchar,
 };
 
 struct tty_driver vt_driver = {

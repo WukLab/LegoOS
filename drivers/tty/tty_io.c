@@ -11,6 +11,7 @@
 
 void tty_init(void)
 {
+	vt_init();
 	serial_init();
 }
 

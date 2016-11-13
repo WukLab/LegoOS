@@ -24,5 +24,7 @@ asmlinkage void __init start_kernel(void)
 {
 	tty_init();
 
+	printk("Welcome to: %s",lego_banner);
+
 	hlt();
 }
