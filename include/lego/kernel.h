@@ -12,6 +12,7 @@
 
 #include <stdarg.h>
 #include <lego/types.h>
+#include <lego/panic.h>
 #include <lego/stddef.h>
 #include <lego/printk.h>
 #include <lego/compiler.h>

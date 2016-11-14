@@ -10,6 +10,100 @@
 #ifndef _ASM_X86_MSR_H_
 #define _ASM_X86_MSR_H_
 
+#ifndef __ASSEMBLY__
+
+/*
+ * both i386 and x86_64 returns 64-bit value in edx:eax, but gcc's "A" constraint
+ * has different meanings. For i386, "A" means exactly edx:eax, while for x86_64
+ * it doesn't mean rdx:rax or edx:eax. Instead, it means rax *or* rdx. See:
+ * [https://gcc.gnu.org/onlinedocs/gcc/Machine-Constraints.html#Machine-Constraints]
+ */
+#ifdef CONFIG_X86_32
+#define DECLARE_ARGS(val, low, high)	unsigned long long val
+#define EAX_EDX_VAL(val, low, high)	(val)
+#define EAX_EDX_RET(val, low, high)	"=A" (val)
+#else
+#define DECLARE_ARGS(val, low, high)	unsigned long low, high
+#define EAX_EDX_VAL(val, low, high)	((low) | (high) << 32)
+#define EAX_EDX_RET(val, low, high)	"=a" (low), "=d" (high)
+#endif
+
+static inline unsigned long long native_read_msr(unsigned int msr)
+{
+	DECLARE_ARGS(val, low, high);
+	asm volatile (
+		"rdmsr"
+		: EAX_EDX_RET(val, low, high)
+		: "c" (msr)
+	);
+	return EAX_EDX_VAL(val, low, high);
+}
+
+static inline void native_write_msr(unsigned int msr, unsigned int low,
+				    unsigned int high)
+{
+	asm volatile (
+		"wrmsr"
+		:
+		: "c" (msr), "a" (low), "d" (high)
+		: "memory"
+	);
+}
+
+/**
+ * rdtsc() - returns the current TSC without ordering constraints
+ *
+ * rdtsc() returns the result of RDTSC as a 64-bit integer.  The
+ * only ordering constraint it supplies is the ordering implied by
+ * "asm volatile": it will put the RDTSC in the place you expect.  The
+ * CPU can and will speculatively execute that RDTSC, though, so the
+ * results can be non-monotonic if compared on different CPUs.
+ */
+static inline unsigned long long rdtsc(void)
+{
+	DECLARE_ARGS(val, low, high);
+	asm volatile (
+		"rdtsc"
+		: EAX_EDX_RET(val, low, high)
+	);
+	return EAX_EDX_VAL(val, low, high);
+}
+
+/*
+ * Access to Machine Specific Register (MSR)
+ *
+ * NOTE: The rd* operations modify the parameters directly without
+ * using pointer indirection, this allows gcc to optimize better.
+ */
+
+/*
+ * WARNING: No exception handling
+ */
+
+#define rdmsr(msr, low, high)					\
+do {								\
+	unsigned long long __val = native_read_msr((msr));	\
+	(low) = (unsigned int)__val;				\
+	(high) = (unsigned int)(__val >> 32);			\
+} while (0)
+
+#define rdmsrl(msr, val)					\
+do {								\
+	(val) = native_read_msr((msr));				\
+} while (0)
+
+static inline void wrmsr(unsigned int msr, unsigned int low, unsigned int high)
+{
+	native_write_msr(msr, low, high);
+}
+
+static inline void wrmsrl(unsigned int msr, unsigned long long val)
+{
+	native_write_msr(msr, (unsigned int)val, (unsigned int)(val >> 32));
+}
+
+#endif /* __ASSEMBLY__ */
+
 /* x86-64 specific MSRs */
 #define MSR_EFER		0xc0000080 /* extended feature register */
 #define MSR_STAR		0xc0000081 /* legacy mode SYSCALL target */

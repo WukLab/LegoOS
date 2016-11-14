@@ -8,6 +8,7 @@
 #define _LEGO_SCHED_H_
 
 #include <asm/page.h>
+#include <asm/ptrace.h>
 #include <asm/thread_info.h>
 
 /* Task command name length */
@@ -31,5 +32,7 @@ union thread_union {
 
 extern union thread_union init_thread_union;
 extern struct task_struct init_task;
+
+extern void show_regs(struct pt_regs *regs);
 
 #endif /* _LEGO_SCHED_H_ */
