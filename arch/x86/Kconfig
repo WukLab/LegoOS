@@ -61,3 +61,96 @@ config PHYSICAL_ALIGN
 	  Don't change this unless you know what you are doing.
 
 source "init/Kconfig"
+
+config HPET_TIMER
+	def_bool X86_64
+	prompt "HPET Timer Support" if X86_32
+	---help---
+	  Use the IA-PC HPET (High Precision Event Timer) to manage
+	  time in preference to the PIT and RTC, if a HPET is
+	  present.
+	  HPET is the next generation timer replacing legacy 8254s.
+	  The HPET provides a stable time base on SMP
+	  systems, unlike the TSC, but it is more expensive to access,
+	  as it is off-chip.  The interface used is documented
+	  in the HPET spec, revision 1.
+
+	  You can safely choose Y here.  However, HPET will only be
+	  activated if the platform and the BIOS support this feature.
+	  Otherwise the 8254 will be used for timing services.
+
+	  Choose N to continue using the legacy 8254 timer.
+
+config X86_UP_APIC
+	bool "Local APIC support on uniprocessors" if !PCI_MSI
+	default PCI_MSI
+	depends on X86_32 && !SMP && !X86_32_NON_STANDARD
+	---help---
+	  A local APIC (Advanced Programmable Interrupt Controller) is an
+	  integrated interrupt controller in the CPU. If you have a single-CPU
+	  system which has a processor with a local APIC, you can say Y here to
+	  enable and use it. If you say Y here even though your machine doesn't
+	  have a local APIC, then the kernel will still run with no slowdown at
+	  all. The local APIC supports CPU-generated self-interrupts (timer,
+	  performance counters), and the NMI watchdog which detects hard
+	  lockups.
+
+config X86_UP_IOAPIC
+	bool "IO-APIC support on uniprocessors"
+	depends on X86_UP_APIC
+	---help---
+	  An IO-APIC (I/O Advanced Programmable Interrupt Controller) is an
+	  SMP-capable replacement for PC-style interrupt controllers. Most
+	  SMP systems and many recent uniprocessor systems have one.
+
+	  If you have a single-CPU system with an IO-APIC, you can say Y here
+	  to use it. If you say Y here even though your machine doesn't have
+	  an IO-APIC, then the kernel will still run with no slowdown at all.
+
+config X86_LOCAL_APIC
+	def_bool y
+	depends on X86_64 || SMP || X86_32_NON_STANDARD || X86_UP_APIC || PCI_MSI
+	select IRQ_DOMAIN_HIERARCHY
+	select PCI_MSI_IRQ_DOMAIN if PCI_MSI
+
+config X86_IO_APIC
+	def_bool y
+	depends on X86_LOCAL_APIC || X86_UP_IOAPIC
+
+config ARCH_PHYS_ADDR_T_64BIT
+	def_bool y
+	depends on X86_64
+
+config ARCH_DMA_ADDR_T_64BIT
+	def_bool y
+	depends on X86_64
+
+config CMDLINE_BOOL
+	bool "Built-in kernel command line"
+	---help---
+	  Allow for specifying boot arguments to the kernel at
+	  build time.  On some systems (e.g. embedded ones), it is
+	  necessary or convenient to provide some or all of the
+	  kernel boot arguments with the kernel itself (that is,
+	  to not rely on the boot loader to provide them.)
+
+	  To compile command line arguments into the kernel,
+	  set this option to 'Y', then fill in the
+	  boot arguments in CONFIG_CMDLINE.
+
+	  Systems with fully functional boot loaders (i.e. non-embedded)
+	  should leave this option set to 'N'.
+
+config CMDLINE
+	string "Built-in kernel command string"
+	depends on CMDLINE_BOOL
+	default ""
+	---help---
+	  Enter arguments here that should be compiled into the kernel
+	  image and used at boot time.  If the boot loader provides a
+	  command line at boot time, it is appended to this string to
+	  form the full kernel command line, when the system boots.
+
+	  In most cases, the command line (whether built-in or provided
+	  by the boot loader) should specify the device for the root
+	  file system.
