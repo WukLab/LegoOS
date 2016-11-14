@@ -8,6 +8,7 @@
  */
 
 #include <lego/tty.h>
+#include <lego/irq.h>
 #include <lego/panic.h>
 #include <lego/kernel.h>
 #include <lego/start_kernel.h>
@@ -22,10 +23,12 @@ static void hlt(void)
 
 asmlinkage void __init start_kernel(void)
 {
+	local_irq_disable();
+
 	/* Prepare output first */
 	tty_init();
 
-	printk("Welcome to: %s",lego_banner);
+	printk("Welcome to: %s", lego_banner);
 
 	/* Architecture-Specific Initialization */
 	setup_arch();
