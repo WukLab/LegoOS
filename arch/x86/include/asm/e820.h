@@ -82,6 +82,8 @@ struct e820map {
 #define BIOS_ROM_BASE		0xffe00000
 #define BIOS_ROM_END		0xffffffff
 
+void __init setup_physical_memory(void);
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_E820_H_ */

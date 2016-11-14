@@ -54,4 +54,7 @@
 
 #define __START_KERNEL		(__START_KERNEL_map + __PHYSICAL_START)
 
+#define __va(x)	((void *)((unsigned long)(x) + __START_KERNEL_map))
+#define __pa(x)	((unsigned long)((unsigned long)x - __START_KERNEL_map))
+
 #endif /* _ASM_X86_PAGE_TYPES_H_ */

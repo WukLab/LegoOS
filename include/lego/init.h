@@ -7,19 +7,14 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_START_KERNEL_H_
-#define _LEGO_START_KERNEL_H_
+#ifndef _LEGO_INIT_H_
+#define _LEGO_INIT_H_
 
 #include <lego/linkage.h>
 #include <lego/compiler.h>
 
-/*
- * Define the prototype for start_kernel here,
- * rather than cluttering up something else.
- */
+extern char __initdata boot_command_line[];
+
 asmlinkage void __init start_kernel(void);
 
-/* And the architecture-specific initialization hook */
-void __init setup_arch(void);
-
-#endif /* _LEGO_START_KERNEL_H_ */
+#endif /* _LEGO_INIT_H_ */

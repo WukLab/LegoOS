@@ -11,15 +11,27 @@
 #define _ASM_X86_SETUP_H_
 
 /*
- * Definitions used by 16-bit setup image
+ * The setup.h is used by both 16-bit setup kernel image
+ * and the setup.c in 64-bit kernel.
  */
-
-#include <lego/compiler.h>
 
 #define COMMAND_LINE_SIZE	2048
 
 #define OLD_CL_MAGIC		0xA33F
 #define OLD_CL_ADDRESS		0x020	/* Relative to real mode data */
 #define NEW_CL_POINTER		0x228	/* Relative to real mode data */
+
+#ifndef __ASSEMBLY__
+
+#include <asm/bootparam.h>
+#include <lego/linkage.h>
+#include <lego/compiler.h>
+
+extern struct boot_params boot_params;
+
+void __init setup_arch(void);
+asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data);
+
+#endif /* __ASSEMBLY */
 
 #endif /* _ASM_X86_SETUP_H_ */

@@ -7,11 +7,16 @@
  * (at your option) any later version.
  */
 
+#include <asm/page.h>
+#include <asm/setup.h>
+
 #include <lego/tty.h>
 #include <lego/irq.h>
-#include <lego/panic.h>
+#include <lego/init.h>
 #include <lego/kernel.h>
-#include <lego/start_kernel.h>
+
+/* Untouched command line saved by arch-specific code. */
+char __initdata boot_command_line[COMMAND_LINE_SIZE];
 
 static void hlt(void)
 {
@@ -28,7 +33,8 @@ asmlinkage void __init start_kernel(void)
 	/* Prepare output first */
 	tty_init();
 
-	printk("Welcome to: %s", lego_banner);
+	pr_info("%s", lego_banner);
+	pr_info("Command line: %s\n", boot_command_line);
 
 	/* Architecture-Specific Initialization */
 	setup_arch();

@@ -5,3 +5,4 @@ obj-y += entry_64.o
 obj-y += process_64.o
 obj-y += setup.o
 obj-y += traps.o
+obj-y += e820.o

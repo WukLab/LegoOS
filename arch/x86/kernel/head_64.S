@@ -38,7 +38,7 @@ ENTRY(startup_64)
 	subq	$__text - __START_KERNEL_map, %rbp
 
 	/*
-	 * If not relocatable, %rbp = __text
+	 * If not relocatable, %rbp = 0
 	 * Fixup the physical addresses in the page table
 	 */
 	addq	%rbp, early_level4_pgt + (L4_START_KERNEL*8)(%rip)
@@ -249,21 +249,7 @@ NEXT_PAGE(early_dynamic_pgts)
 
 	.data
 NEXT_PAGE(init_level4_pgt)
-	.quad   level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE
-	.org    init_level4_pgt + L4_PAGE_OFFSET*8, 0
-	.quad   level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE
-	.org    init_level4_pgt + L4_START_KERNEL*8, 0
-	/* (2^48-(2*1024*1024*1024))/(2^39) = 511 */
-	.quad   level3_kernel_pgt - __START_KERNEL_map + _PAGE_TABLE
-
-NEXT_PAGE(level3_ident_pgt)
-	.quad	level2_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE
-	.fill	511, 8, 0
-NEXT_PAGE(level2_ident_pgt)
-	/* Since I easily can, map the first 1G.
-	 * Don't set NX because code runs from these pages.
-	 */
-	PMDS(0, __PAGE_KERNEL_IDENT_LARGE_EXEC, PTRS_PER_PMD)
+	.fill	512,8,0
 
 NEXT_PAGE(level3_kernel_pgt)
 	.fill	L3_START_KERNEL,8,0

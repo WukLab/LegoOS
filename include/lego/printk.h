@@ -17,6 +17,58 @@
 asmlinkage __printf(1, 2)
 int printk(const char *fmt, ...);
 
+#ifndef pr_fmt
+#define pr_fmt(fmt) fmt
+#endif
+
+#define pr_emerg(fmt, ...)					\
+	printk(KERN_EMERG pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_alert(fmt, ...)					\
+	printk(KERN_ALERT pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_crit(fmt, ...)					\
+	printk(KERN_CRIT pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_err(fmt, ...)					\
+	printk(KERN_ERR pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_warn(fmt, ...)					\
+	printk(KERN_WARNING pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_notice(fmt, ...)					\
+	printk(KERN_NOTICE pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_info(fmt, ...)					\
+	printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_debug(fmt, ...)					\
+	printk(KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_cont(fmt,...)					\
+	printk(KERN_CONT pr_fmt(fmt), ##__VA_ARGS__)
+
+/*
+ * printk_once pr_xxx_once: print message only once
+ */
+
+#define printk_once(fmt, ...)					\
+({								\
+	static bool __print_once __read_mostly;			\
+								\
+	if (!__print_once) {					\
+		__print_once = true;				\
+		printk(fmt, ##__VA_ARGS__);			\
+	}							\
+})
+
+#define pr_emerg_once(fmt, ...)					\
+	printk_once(KERN_EMERG pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_alert_once(fmt, ...)					\
+	printk_once(KERN_ALERT pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_crit_once(fmt, ...)					\
+	printk_once(KERN_CRIT pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_err_once(fmt, ...)					\
+	printk_once(KERN_ERR pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_warn_once(fmt, ...)					\
+	printk_once(KERN_WARN pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_notice_once(fmt, ...)				\
+	printk_once(KERN_NOTICE pr_fmt(fmt), ##__VA_ARGS__)
+#define pr_info_once(fmt, ...)					\
+	printk_once(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
+
 #define KERN_SOH	"\001"		/* ASCII Start Of Header */
 #define KERN_SOH_ASCII	'\001'
 

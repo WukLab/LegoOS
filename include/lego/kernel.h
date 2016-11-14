@@ -237,6 +237,13 @@ __printf(3, 0)
 int vscnprintf(char *buf, size_t size, const char *fmt, va_list args);
 
 /*
+ * lib/sort.c
+ */
+void sort(void *base, size_t num, size_t size,
+	  int (*cmp_func)(const void *, const void *),
+	  void (*swap_func)(void *, void *, int size));
+
+/*
  * init/version.c
  */
 extern const char lego_banner[];

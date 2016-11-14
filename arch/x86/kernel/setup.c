@@ -7,11 +7,18 @@
  * (at your option) any later version.
  */
 
+#include <asm/e820.h>
 #include <asm/desc.h>
 #include <asm/page.h>
 #include <asm/traps.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
+#include <asm/bootparam.h>
+
+#include <lego/kernel.h>
+
+/* Data that was collected by real-mode kernel */
+struct boot_params boot_params;
 
 struct gdt_page gdt_page = { .gdt = {
 	/*
@@ -33,4 +40,5 @@ struct gdt_page gdt_page = { .gdt = {
 void __init setup_arch(void)
 {
 	trap_init();
+	setup_physical_memory();
 }
