@@ -7,18 +7,14 @@
  * (at your option) any later version.
  */
 
+#include <asm/traps.h>
+#include <asm/ptrace.h>
+
+#include <lego/panic.h>
+#include <lego/printk.h>
 #include <lego/kernel.h>
 
-void panic(const char *fmt, ...)
+dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 {
-	char buf[1024];
-	va_list args;
-
-	va_start(args, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
-
-	printk("Kernel Panic: %s", buf);
-
-	for(;;);
+	panic("page fault");
 }

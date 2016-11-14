@@ -7,6 +7,29 @@
  * (at your option) any later version.
  */
 
+/*
+ x86-64 ABI:
+ -------------------------------------
+  arguments           |  callee-saved      | extra caller-saved | return
+ [callee-clobbered]   |                    | [callee-clobbered] |
+ ---------------------------------------------------------------------------
+ rdi rsi rdx rcx r8-9 | rbx rbp [*] r12-15 | r10-11             | rax, rdx [**]
+
+ ( rsp is obviously invariant across normal function calls. (gcc can 'merge'
+   functions when it sees tail-call optimization possibilities) rflags is
+   clobbered. Leftover arguments are passed over the stack frame.)
+
+ [*]  In the frame-pointers case rbp is fixed to the stack frame.
+
+ [**] for struct return values wider than 64 bits the return convention is a
+      bit more complex: up to 128 bits width we return small structures
+      straight in rax, rdx. For structures larger than that (3 words or
+      larger) the caller puts a pointer to an on-stack return struct
+      [allocated in the caller's stack frame] into the first argument - i.e.
+      into rdi. All other arguments shift up by one in this case.
+      Fortunately this case is rare in the kernel.
+*/
+
 #include <asm/ptrace.h>
 
 #include <lego/linkage.h>
@@ -16,6 +39,54 @@ ENTRY(\sym)
 	.ifeq \has_error_code
 	pushq	$-1			/* ORIG_RAX: no syscall to restart */
 	.endif
+
+	/* Save all */
+	pushq	%rdi
+	pushq	%rsi
+	pushq	%rdx
+	pushq	%rcx
+	pushq	%rax
+	pushq	%r8
+	pushq	%r9
+	pushq	%r10
+	pushq	%r11
+	pushq	%rbx
+	pushq	%rbp
+	pushq	%r12
+	pushq	%r13
+	pushq	%r14
+	pushq	%r15
+
+	movq	%rsp, %rdi		/* pt_regs pointer */
+
+	.if \has_error_code
+	movq	ORIG_RAX(%rsp), %rsi	/* get error code */
+	movq	$-1, ORIG_RAX(%rsp)	/* no syscall to restart */
+	.else
+	xorl	%esi, %esi		/* no error code */
+	.endif
+
+	call	\do_sym
+
+	/* Restore all */
+	popq	%r15
+	popq	%r14
+	popq	%r13
+	popq	%r12
+	popq	%rbp
+	popq	%rbx
+	popq	%r11
+	popq	%r10
+	popq	%r9
+	popq	%r8
+	popq	%rax
+	popq	%rcx
+	popq	%rdx
+	popq	%rsi
+	popq	%rdi
+	addq	$8, %rsp		/* orig_ax */
+
+	iretq
 END(\sym)
 .endm
 
