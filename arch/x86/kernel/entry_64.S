@@ -8,27 +8,27 @@
  */
 
 /*
- x86-64 ABI:
- -------------------------------------
-  arguments           |  callee-saved      | extra caller-saved | return
- [callee-clobbered]   |                    | [callee-clobbered] |
- ---------------------------------------------------------------------------
- rdi rsi rdx rcx r8-9 | rbx rbp [*] r12-15 | r10-11             | rax, rdx [**]
-
- ( rsp is obviously invariant across normal function calls. (gcc can 'merge'
-   functions when it sees tail-call optimization possibilities) rflags is
-   clobbered. Leftover arguments are passed over the stack frame.)
-
- [*]  In the frame-pointers case rbp is fixed to the stack frame.
-
- [**] for struct return values wider than 64 bits the return convention is a
-      bit more complex: up to 128 bits width we return small structures
-      straight in rax, rdx. For structures larger than that (3 words or
-      larger) the caller puts a pointer to an on-stack return struct
-      [allocated in the caller's stack frame] into the first argument - i.e.
-      into rdi. All other arguments shift up by one in this case.
-      Fortunately this case is rare in the kernel.
-*/
+ * x86-64 ABI:
+ * ---------------------------------------------------------------------------
+ * arguments           |  callee-saved      | extra caller-saved | return
+ * [callee-clobbered]   |                    | [callee-clobbered] |
+ * ---------------------------------------------------------------------------
+ * rdi rsi rdx rcx r8-9 | rbx rbp [*] r12-15 | r10-11             | rax, rdx [**]
+ *
+ * ( rsp is obviously invariant across normal function calls. (gcc can 'merge'
+ * functions when it sees tail-call optimization possibilities) rflags is
+ * clobbered. Leftover arguments are passed over the stack frame.)
+ *
+ * [*]  In the frame-pointers case rbp is fixed to the stack frame.
+ *
+ * [**] For struct return values wider than 64 bits the return convention is a
+ *	bit more complex: up to 128 bits width we return small structures
+ *	straight in rax, rdx. For structures larger than that (3 words or
+ *	larger) the caller puts a pointer to an on-stack return struct
+ *	[allocated in the caller's stack frame] into the first argument - i.e.
+ *	into rdi. All other arguments shift up by one in this case.
+ *	Fortunately this case is rare in the kernel.
+ */
 
 #include <asm/ptrace.h>
 
