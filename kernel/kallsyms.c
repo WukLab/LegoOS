@@ -10,6 +10,7 @@
 #include <lego/types.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
+#include <lego/kconfig.h>
 #include <lego/sections.h>
 #include <lego/kallsyms.h>
 
@@ -57,11 +58,73 @@ static inline int is_ksym_addr(unsigned long addr)
 	return is_kernel_inittext(addr) || is_kernel_text(addr);
 }
 
+static unsigned long kallsyms_sym_address(int idx)
+{
+	if (!IS_ENABLED(CONFIG_KALLSYMS_BASE_RELATIVE))
+		return kallsyms_addresses[idx];
+
+	/* values are unsigned offsets if --absolute-percpu is not in effect */
+	if (!IS_ENABLED(CONFIG_KALLSYMS_ABSOLUTE_PERCPU))
+		return kallsyms_relative_base + (u32)kallsyms_offsets[idx];
+
+	/* ...otherwise, positive offsets are absolute values */
+	if (kallsyms_offsets[idx] >= 0)
+		return kallsyms_offsets[idx];
+
+	/* ...and negative offsets are relative to kallsyms_relative_base - 1 */
+	return kallsyms_relative_base - 1 - kallsyms_offsets[idx];
+}
+
 static unsigned long get_symbol_pos(unsigned long addr,
 				    unsigned long *symbolsize,
 				    unsigned long *offset)
 {
-	return 0;
+	unsigned long symbol_start = 0, symbol_end = 0;
+	unsigned long i, low, high, mid;
+
+	/* Do a binary search on the sorted kallsyms_addresses array. */
+	low = 0;
+	high = kallsyms_num_syms;
+
+	while (high - low > 1) {
+		mid = low + (high - low) / 2;
+		if (kallsyms_sym_address(mid) <= addr)
+			low = mid;
+		else
+			high = mid;
+	}
+
+	/*
+	 * Search for the first aliased symbol. Aliased
+	 * symbols are symbols with the same address.
+	 */
+	while (low && kallsyms_sym_address(low-1) == kallsyms_sym_address(low))
+		--low;
+
+	symbol_start = kallsyms_sym_address(low);
+
+	/* Search for next non-aliased symbol. */
+	for (i = low + 1; i < kallsyms_num_syms; i++) {
+		if (kallsyms_sym_address(i) > symbol_start) {
+			symbol_end = kallsyms_sym_address(i);
+			break;
+		}
+	}
+
+	/* If we found no next symbol, we use the end of the section. */
+	if (!symbol_end) {
+		if (is_kernel_inittext(addr))
+			symbol_end = (unsigned long)__einittext;
+		else
+			symbol_end = (unsigned long)__etext;
+	}
+
+	if (symbolsize)
+		*symbolsize = symbol_end - symbol_start;
+	if (offset)
+		*offset = addr - symbol_start;
+
+	return low;
 }
 
 /*
@@ -217,3 +280,23 @@ int sprint_symbol_no_offset(char *buffer, unsigned long address)
 {
 	return __sprint_symbol(buffer, address, 0, 0);
 }
+
+/**
+ * sprint_backtrace - Look up a backtrace symbol and return it in a text buffer
+ * @buffer: buffer to be stored
+ * @address: address to lookup
+ *
+ * This function is for stack backtrace and does the same thing as
+ * sprint_symbol() but with modified/decreased @address. If there is a
+ * tail-call to the function marked "noreturn", gcc optimized out code after
+ * the call so that the stack-saved return address could point outside of the
+ * caller. This function ensures that kallsyms will find the original caller
+ * by decreasing @address.
+ *
+ * This function returns the number of bytes stored in @buffer.
+ */
+int sprint_backtrace(char *buffer, unsigned long address)
+{
+	return __sprint_symbol(buffer, address, -1, 1);
+}
+

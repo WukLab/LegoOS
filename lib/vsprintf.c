@@ -13,6 +13,7 @@
 #include <lego/ctype.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
+#include <lego/kallsyms.h>
 
 static __noinline_for_stack
 int skip_atoi(const char **s)
@@ -541,6 +542,47 @@ char *mac_address_string(char *buf, char *end, u8 *addr,
 	return string(buf, end, mac_addr, spec);
 }
 
+static __noinline_for_stack __used
+char *special_hex_number(char *buf, char *end, unsigned long long num, int size)
+{
+	struct printf_spec spec;
+
+	spec.type = FORMAT_TYPE_PTR;
+	spec.field_width = 2 + 2 * size;	/* 0x + hex */
+	spec.flags = SPECIAL | SMALL | ZEROPAD;
+	spec.base = 16;
+	spec.precision = -1;
+
+	return number(buf, end, num, spec);
+}
+
+static __noinline_for_stack
+char *symbol_string(char *buf, char *end, void *ptr,
+		    struct printf_spec spec, const char *fmt)
+{
+	unsigned long value;
+#ifdef CONFIG_KALLSYMS
+	char sym[KSYM_SYMBOL_LEN];
+#endif
+
+	if (fmt[1] == 'R')
+		ptr = __builtin_extract_return_addr(ptr);
+	value = (unsigned long)ptr;
+
+#ifdef CONFIG_KALLSYMS
+	if (*fmt == 'B')
+		sprint_backtrace(sym, value);
+	else if (*fmt != 'f' && *fmt != 's')
+		sprint_symbol(sym, value);
+	else
+		sprint_symbol_no_offset(sym, value);
+
+	return string(buf, end, sym, spec);
+#else
+	return special_hex_number(buf, end, value, sizeof(void *));
+#endif
+}
+
 /*
  * Show a '%p' thing.  A kernel extension is that the '%p' is followed
  * by an extra set of alphanumeric characters that are extended format
@@ -656,6 +698,12 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 	}
 
 	switch (*fmt) {
+	case 'F':
+	case 'f':
+	case 'S':
+	case 's':
+	case 'B':
+		return symbol_string(buf, end, ptr, spec, fmt);
 	case 'h':
 		return hex_string(buf, end, ptr, spec, fmt);
 	case 'b':

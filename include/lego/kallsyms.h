@@ -17,4 +17,8 @@
 			 2*(BITS_PER_LONG*3/10) + 1)
 
 
+int sprint_symbol(char *buffer, unsigned long address);
+int sprint_symbol_no_offset(char *buffer, unsigned long address);
+int sprint_backtrace(char *buffer, unsigned long address);
+
 #endif /* _LEGO_KALLSYMS_H_ */
