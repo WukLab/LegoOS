@@ -59,7 +59,7 @@ vmImage_link()
 #   w - local weak symbols
 mksysmap()
 {
-	$NM -n $1 > $2
+	$NM -n $1 | grep -v '\( [aNUw] \)\|\(__crc_\)\|\( \$[adt]\)\|\( .L\)' > $2
 }
 
 cleanup()
