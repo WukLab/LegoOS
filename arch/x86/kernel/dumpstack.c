@@ -10,7 +10,24 @@
 #include <asm/asm.h>
 #include <asm/msr.h>
 #include <asm/ptrace.h>
+
+#include <lego/sched.h>
 #include <lego/kernel.h>
+
+void show_call_trace(void)
+{
+}
+
+void show_stack(struct task_struct *tsk, struct pt_regs *regs,
+		unsigned long *sp)
+{
+
+}
+
+void show_code(void)
+{
+
+}
 
 static void __show_regs(struct pt_regs *regs, int all)
 {
@@ -62,4 +79,6 @@ static void __show_regs(struct pt_regs *regs, int all)
 void show_regs(struct pt_regs *regs)
 {
 	__show_regs(regs, 1);
+
+	show_stack(NULL, regs, NULL);
 }
