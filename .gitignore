@@ -20,6 +20,8 @@ bzImage
 tags
 tags-e
 
+scripts/kallsyms
+
 #
 # Usually I will mkdir build/
 # make config O=build
