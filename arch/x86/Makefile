@@ -1,8 +1,4 @@
-ifeq ($(CONFIG_X86_64),y)
 KBUILD_DEFCONFIG := x86_64_defconfig
-else
-KBUILD_DEFCONFIG := i386_defconfig
-endif
 
 CODE16GCC_CFLAGS := -m32 -Wa,$(srctree)/arch/x86/boot/code16gcc.h
 M16_CFLAGS	 := $(call cc-option, -m16, $(CODE16GCC_CFLAGS))
