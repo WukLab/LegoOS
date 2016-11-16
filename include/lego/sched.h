@@ -9,6 +9,7 @@
 
 #include <asm/page.h>
 #include <asm/ptrace.h>
+#include <asm/current.h>
 #include <asm/thread_info.h>
 
 /* Task command name length */
@@ -40,5 +41,10 @@ extern union thread_union init_thread_union;
 extern struct task_struct init_task;
 
 extern void show_regs(struct pt_regs *regs);
+
+static inline void *task_stack_page(const struct task_struct *task)
+{
+	return task->stack;
+}
 
 #endif /* _LEGO_SCHED_H_ */

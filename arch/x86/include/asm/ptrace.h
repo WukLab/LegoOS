@@ -83,6 +83,12 @@ struct pt_regs {
 	/* top of stack page */
 };
 
+static inline unsigned long
+kernel_stack_pointer(struct pt_regs *regs)
+{
+	return regs->sp;
+}
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_PTRACE_H_ */

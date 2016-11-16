@@ -41,6 +41,9 @@
 #endif
 
 #ifndef __ASSEMBLY__
+
+#include <asm/page.h>
+
 struct task_struct;
 
 struct thread_info {
@@ -49,7 +52,28 @@ struct thread_info {
 	__u32			status;
 	__u32			cpu;
 };
-#endif
+
+static inline struct thread_info *current_thread_info(void)
+{
+	struct thread_info *ti;
+	asm volatile (
+		"andq %%rsp, %0"
+		: "=r" (ti)
+		: "0" (~((unsigned long)THREAD_SIZE-1))
+	);
+	return ti;
+}
+
+static inline unsigned long current_stack_pointer(void)
+{
+	unsigned long sp;
+	asm volatile (
+		"movq %%rsp, %0"
+		: "=g" (sp)
+	);
+	return sp;
+}
+#endif /* __ASSEMBLY__ */
 
 #define INIT_THREAD_INFO(tsk)	\
 {				\
@@ -60,6 +84,5 @@ struct thread_info {
 
 #define init_thread_info	(init_thread_union.thread_info)
 #define init_stack		(init_thread_union.stack)
-
 
 #endif /* _ASM_X86_THREAD_INFO_H_ */

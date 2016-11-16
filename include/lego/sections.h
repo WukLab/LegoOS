@@ -25,4 +25,34 @@ extern char __sinitdata[], __einitdata[];
 extern char __bss_start[], __bss_end[];
 extern char __end[];
 
+static inline int init_kernel_text(unsigned long addr)
+{
+	if (addr >= (unsigned long)__sinittext &&
+	    addr < (unsigned long)__einittext)
+		return 1;
+	return 0;
+}
+
+static inline int core_kernel_text(unsigned long addr)
+{
+	if (addr >= (unsigned long)__stext &&
+	    addr < (unsigned long)__etext)
+		return 1;
+	return 0;
+}
+
+static inline int __kernel_text_address(unsigned long addr)
+{
+	if (core_kernel_text(addr))
+		return 1;
+
+	/*
+	 * There might be init symbols in saved stacktraces.
+	 * Give those symbols a chance to be printed in backtraces:
+	 */
+	if (init_kernel_text(addr))
+		return 1;
+	return 0;
+}
+
 #endif /* _LEGO_SECTIONS_H_ */

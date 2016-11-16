@@ -11,10 +11,12 @@
 #define _LEGO_KERNEL_H_
 
 #include <stdarg.h>
+#include <lego/errno.h>
 #include <lego/types.h>
 #include <lego/panic.h>
 #include <lego/stddef.h>
 #include <lego/printk.h>
+#include <lego/sections.h>
 #include <lego/compiler.h>
 
 #define USHRT_MAX		((u16)(~0U))
