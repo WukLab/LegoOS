@@ -30,6 +30,12 @@ union thread_union {
 	unsigned long stack[THREAD_SIZE/sizeof(long)];
 };
 
+static inline int kstack_end(void *addr)
+{
+	/* Reliable end of stack detection: */
+	return !(((unsigned long)addr+sizeof(void*)-1) & (THREAD_SIZE-sizeof(void*)));
+}
+
 extern union thread_union init_thread_union;
 extern struct task_struct init_task;
 

@@ -9,24 +9,97 @@
 
 #include <asm/asm.h>
 #include <asm/msr.h>
+#include <asm/page.h>
 #include <asm/ptrace.h>
 
 #include <lego/sched.h>
 #include <lego/kernel.h>
+#include <lego/string.h>
 
-void show_call_trace(void)
+/**
+ * Safely attempt to read from a location, protect from page-fault
+ * @addr: address to read from
+ * @retval: read into this variable
+ *
+ * Returns 0 on success, or -EFAULT.
+ */
+#define probe_kernel_address(addr, retval)		\
+	probe_kernel_read(&retval, addr, sizeof(retval))
+
+static inline long probe_kernel_read(void *dst, const void *src, size_t size)
+{
+	memcpy(dst, src, size);
+	return 0;
+}
+
+static inline unsigned long *
+get_stack_pointer(struct task_struct *task, struct pt_regs *regs)
+{
+	return (unsigned long *)regs->sp;
+}
+
+void show_call_trace(struct task_struct *task, struct pt_regs *regs)
 {
 }
 
-void show_stack(struct task_struct *tsk, struct pt_regs *regs,
-		unsigned long *sp)
-{
+#define STACKSLOTS_PER_LINE	4
+#define STACK_LINES		3
+#define kstack_depth_to_print	(STACK_LINES * STACKSLOTS_PER_LINE)
 
+void show_stack(struct task_struct *task, struct pt_regs *regs)
+{
+	int i;
+	unsigned long *stack;
+
+	stack = get_stack_pointer(task, regs);
+	for (i = 0; i < kstack_depth_to_print; i++) {
+		unsigned long word;
+
+		if (kstack_end(stack))
+			break;
+
+		probe_kernel_address(stack, word);
+		if ((i % STACKSLOTS_PER_LINE) == 0) {
+			if (i != 0)
+				pr_cont("\n");
+			pr_cont("%016lx", word);
+		} else
+			pr_cont(" %016lx", word);
+
+		stack++;
+	}
+	pr_cont("\n");
 }
 
-void show_code(void)
-{
+#define CODE_BYTES		32
+#define CODE_PROLOGUE_BYTES	24
 
+void show_code(struct pt_regs *regs)
+{
+	unsigned int code_prologue = CODE_PROLOGUE_BYTES;
+	unsigned int code_len = CODE_BYTES;
+	unsigned char c;
+	u8 *ip;
+	int i;
+
+	ip = (u8 *)regs->ip - code_prologue;
+	if (ip < (u8 *)START_KERNEL || probe_kernel_address(ip, c)) {
+		/* try starting at IP */
+		ip = (u8 *)regs->ip;
+		code_len = code_len - code_prologue + 1;
+	}
+
+	for (i = 0; i < code_len; i++, ip++) {
+		if (ip < (u8 *)START_KERNEL || probe_kernel_address(ip, c)) {
+			pr_cont(" Bad RIP value.");
+			break;
+		}
+		if (ip == (u8 *)regs->ip)
+			pr_cont("<%02x> ", c);
+		else
+			pr_cont("%02x ", c);
+	}
+	pr_cont("\n");
 }
 
 static void __show_regs(struct pt_regs *regs, int all)
@@ -80,5 +153,12 @@ void show_regs(struct pt_regs *regs)
 {
 	__show_regs(regs, 1);
 
-	show_stack(NULL, regs, NULL);
+	printk(KERN_DEFAULT "Stack:\n");
+	show_stack(NULL, regs);
+
+	printk(KERN_DEFAULT "Call Trace:\n");
+	show_call_trace(NULL, regs);
+
+	printk(KERN_DEFAULT "Code: ");
+	show_code(regs);
 }
