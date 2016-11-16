@@ -15,9 +15,11 @@
 #include <asm/stacktrace.h>
 
 #include <lego/bug.h>
+#include <lego/smp.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
+#include <lego/utsname.h>
 
 static char *exception_stack_names[N_EXCEPTION_STACKS] = {
 		[ DOUBLEFAULT_STACK-1	]	= "#DF",
@@ -26,7 +28,7 @@ static char *exception_stack_names[N_EXCEPTION_STACKS] = {
 		[ MCE_STACK-1		]	= "#MC",
 };
 
-void stack_type_str(enum stack_type type, const char **begin, const char **end)
+static void stack_type_str(enum stack_type type, const char **begin, const char **end)
 {
 	BUILD_BUG_ON(N_EXCEPTION_STACKS != 4);
 
@@ -117,13 +119,6 @@ unknown:
 	return -EINVAL;
 }
 
-static void printk_stack_address(unsigned long address, int reliable)
-{
-	printk("[<%p>] %s%pB\n",
-		(void *)address, reliable ? "" : "? ",
-		(void *)address);
-}
-
 /**
  * Safely attempt to read from a location, protect from page-fault
  * @addr: address to read from
@@ -140,7 +135,7 @@ static inline long probe_kernel_read(void *dst, const void *src, size_t size)
 	return 0;
 }
 
-void show_call_trace(struct task_struct *task, struct pt_regs *regs)
+static void show_call_trace(struct task_struct *task, struct pt_regs *regs)
 {
 	unsigned long *stack;
 	struct unwind_state state;
@@ -199,16 +194,9 @@ void show_call_trace(struct task_struct *task, struct pt_regs *regs)
 			if (stack == ret_addr_p)
 				reliable = 1;
 
-			/*
-			 * When function graph tracing is enabled for a
-			 * function, its return address on the stack is
-			 * replaced with the address of an ftrace handler
-			 * (return_to_handler).  In that case, before printing
-			 * the "real" address, we want to print the handler
-			 * address as an "unreliable" hint that function graph
-			 * tracing was involved.
-			 */
-			printk_stack_address(addr, reliable);
+			printk("[<%p>] %s%pB\n",
+				(void *)addr, reliable ? "" : "? ",
+				(void *)addr);
 
 			if (!reliable)
 				continue;
@@ -230,7 +218,7 @@ void show_call_trace(struct task_struct *task, struct pt_regs *regs)
 #define STACK_LINES		3
 #define kstack_depth_to_print	(STACK_LINES * STACKSLOTS_PER_LINE)
 
-void show_stack(struct task_struct *task, struct pt_regs *regs)
+static void show_stack_content(struct task_struct *task, struct pt_regs *regs)
 {
 	int i;
 	unsigned long *stack;
@@ -258,7 +246,7 @@ void show_stack(struct task_struct *task, struct pt_regs *regs)
 #define CODE_BYTES		32
 #define CODE_PROLOGUE_BYTES	24
 
-void show_code(struct pt_regs *regs)
+static void show_code(struct pt_regs *regs)
 {
 	unsigned int code_prologue = CODE_PROLOGUE_BYTES;
 	unsigned int code_len = CODE_BYTES;
@@ -333,18 +321,28 @@ static void __show_regs(struct pt_regs *regs, int all)
 			cr4);
 }
 
+static void show_general_task_info(struct task_struct *task)
+{
+	pr_info("CPU: %d PID: %d Comm: %.16s %s %.*s\n",
+		smp_processor_id(), current->pid, current->comm,
+		utsname.release,
+		(int)strcspn(utsname.version, " "),
+		utsname.version);
+}
+
 void show_regs(struct pt_regs *regs)
 {
 	struct task_struct *task = current;
 
+	show_general_task_info(task);
 	__show_regs(regs, 1);
 
-	printk(KERN_DEFAULT "Stack:\n");
-	show_stack(task, regs);
+	pr_info("Stack:\n");
+	show_stack_content(task, regs);
 
-	printk(KERN_DEFAULT "Call Trace:\n");
+	pr_info("Call Trace:\n");
 	show_call_trace(task, regs);
 
-	printk(KERN_DEFAULT "Code: ");
+	pr_info("Code: ");
 	show_code(regs);
 }

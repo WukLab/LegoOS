@@ -12,6 +12,8 @@
 #include <asm/current.h>
 #include <asm/thread_info.h>
 
+#include <lego/types.h>
+
 /* Task command name length */
 #define TASK_COMM_LEN 16
 
@@ -24,6 +26,8 @@ struct task_struct {
 
 	char comm[TASK_COMM_LEN];
 
+	pid_t pid;
+	pid_t tgid;
 };
 
 union thread_union {

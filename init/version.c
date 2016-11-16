@@ -7,8 +7,18 @@
  * (at your option) any later version.
  */
 
+#include <lego/utsname.h>
 #include <generated/compile.h>
 #include <generated/utsrelease.h>
+
+struct utsname utsname = {
+	.sysname	= UTS_SYSNAME,
+	.nodename	= UTS_NODENAME,
+	.release	= UTS_RELEASE,
+	.version	= UTS_VERSION,
+	.machine	= UTS_MACHINE,
+	.domainname	= UTS_DOMAINNAME,
+};
 
 /* FIXED STRINGS! Don't touch! */
 const char lego_banner[] =
