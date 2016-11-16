@@ -80,8 +80,11 @@ config FRAME_POINTER
 	default y
 	help
 	  If you say Y here the resulting kernel image will be slightly
-	  larger and slower, but it gives very useful debugging information
+	  larger and slower, but it gives _very_ useful debugging information
 	  in case of kernel bugs. (precise oopses/stacktraces/warnings)
+
+	  Enable this if you are hacking the kernel. :)
+
 
 config KALLSYMS
 	 bool "Load all symbols for debugging/ksymoops" if EXPERT

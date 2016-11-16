@@ -37,6 +37,21 @@
 #define THREAD_SIZE		(PAGE_SIZE << THREAD_SIZE_ORDER)
 #define CURRENT_MASK		(~(THREAD_SIZE - 1))
 
+#define EXCEPTION_STACK_ORDER	(0)
+#define EXCEPTION_STKSZ		(PAGE_SIZE << EXCEPTION_STACK_ORDER)
+
+#define DEBUG_STACK_ORDER	(EXCEPTION_STACK_ORDER + 1)
+#define DEBUG_STKSZ		(PAGE_SIZE << DEBUG_STACK_ORDER)
+
+#define IRQ_STACK_ORDER		(2)
+#define IRQ_STACK_SIZE		(PAGE_SIZE << IRQ_STACK_ORDER)
+
+#define DOUBLEFAULT_STACK	1
+#define NMI_STACK		2
+#define DEBUG_STACK		3
+#define MCE_STACK		4
+#define N_EXCEPTION_STACKS	4  /* hw limit: 7 */
+
 /*
  * Set __PAGE_OFFSET to the most negative possible address +
  * PGDIR_SIZE*16 (pgd slot 272).  The gap is to allow a space for a
