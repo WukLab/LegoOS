@@ -7,9 +7,11 @@
  * (at your option) any later version.
  */
 
+#include <asm/asm.h>
 #include <asm/page.h>
 #include <asm/setup.h>
 
+#include <lego/bug.h>
 #include <lego/tty.h>
 #include <lego/irq.h>
 #include <lego/init.h>
@@ -17,14 +19,6 @@
 
 /* Untouched command line saved by arch-specific code. */
 char __initdata boot_command_line[COMMAND_LINE_SIZE];
-
-static void hlt(void)
-{
-	asm (
-		"1: hlt\n"
-		"jmp 1b\n"
-	);
-}
 
 asmlinkage void __init start_kernel(void)
 {
@@ -39,5 +33,5 @@ asmlinkage void __init start_kernel(void)
 	/* Architecture-Specific Initialization */
 	setup_arch();
 
-	hlt();
+	BUG();
 }

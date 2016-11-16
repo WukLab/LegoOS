@@ -46,7 +46,11 @@ get_frame_pointer(struct task_struct *task, struct pt_regs *regs)
 {
 	if (regs)
 		return (unsigned long *)regs->bp;
-	/* TODO: use task */
+
+	if (task == current)
+		return	__builtin_frame_address(0);
+
+	/*TODO*/
 	return NULL;
 }
 #else
@@ -62,7 +66,11 @@ get_stack_pointer(struct task_struct *task, struct pt_regs *regs)
 {
 	if (regs)
 		return (unsigned long *)kernel_stack_pointer(regs);
-	/* TODO: use task */
+
+	if (task == current)
+		return __builtin_frame_address(0);
+
+	/*TODO*/
 	return NULL;
 }
 

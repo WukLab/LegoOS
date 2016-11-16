@@ -135,12 +135,14 @@ static inline long probe_kernel_read(void *dst, const void *src, size_t size)
 	return 0;
 }
 
-static void show_call_trace(struct task_struct *task, struct pt_regs *regs)
+void show_call_trace(struct task_struct *task, struct pt_regs *regs)
 {
 	unsigned long *stack;
 	struct unwind_state state;
 	struct stack_info stack_info = {0};
 	unsigned long visit_mask = 0;
+
+	pr_info("Call Trace:\n");
 
 	stack = get_stack_pointer(task, regs);
 
@@ -218,10 +220,12 @@ static void show_call_trace(struct task_struct *task, struct pt_regs *regs)
 #define STACK_LINES		3
 #define kstack_depth_to_print	(STACK_LINES * STACKSLOTS_PER_LINE)
 
-static void show_stack_content(struct task_struct *task, struct pt_regs *regs)
+void show_stack_content(struct task_struct *task, struct pt_regs *regs)
 {
 	int i;
 	unsigned long *stack;
+
+	pr_info("Stack:\n");
 
 	stack = get_stack_pointer(task, regs);
 	for (i = 0; i < kstack_depth_to_print; i++) {
@@ -243,8 +247,8 @@ static void show_stack_content(struct task_struct *task, struct pt_regs *regs)
 	pr_cont("\n");
 }
 
-#define CODE_BYTES		32
-#define CODE_PROLOGUE_BYTES	24
+#define CODE_BYTES		64
+#define CODE_PROLOGUE_BYTES	43
 
 static void show_code(struct pt_regs *regs)
 {
@@ -254,6 +258,7 @@ static void show_code(struct pt_regs *regs)
 	u8 *ip;
 	int i;
 
+	pr_info("Code: ");
 	ip = (u8 *)regs->ip - code_prologue;
 	if (ip < (u8 *)START_KERNEL || probe_kernel_address(ip, c)) {
 		/* try starting at IP */
@@ -321,7 +326,7 @@ static void __show_regs(struct pt_regs *regs, int all)
 			cr4);
 }
 
-static void show_general_task_info(struct task_struct *task)
+void show_general_task_info(struct task_struct *task)
 {
 	pr_info("CPU: %d PID: %d Comm: %.16s %s %.*s\n",
 		smp_processor_id(), current->pid, current->comm,
@@ -330,19 +335,18 @@ static void show_general_task_info(struct task_struct *task)
 		utsname.version);
 }
 
+/* Both task and regs can be NULL */
 void show_regs(struct pt_regs *regs)
 {
 	struct task_struct *task = current;
 
 	show_general_task_info(task);
+
 	__show_regs(regs, 1);
 
-	pr_info("Stack:\n");
-	show_stack_content(task, regs);
+	show_stack_content(current, regs);
 
-	pr_info("Call Trace:\n");
-	show_call_trace(task, regs);
+	show_call_trace(current, regs);
 
-	pr_info("Code: ");
 	show_code(regs);
 }

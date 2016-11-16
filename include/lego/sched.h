@@ -1,7 +1,10 @@
 /*
  * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
  *
- * Task/Process Management Definitions and Helpers
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #ifndef _LEGO_SCHED_H_
@@ -44,7 +47,17 @@ static inline int kstack_end(void *addr)
 extern union thread_union init_thread_union;
 extern struct task_struct init_task;
 
-extern void show_regs(struct pt_regs *regs);
+void show_call_trace(struct task_struct *task, struct pt_regs *regs);
+void show_stack_content(struct task_struct *task, struct pt_regs *regs);
+void show_general_task_info(struct task_struct *task);
+void show_regs(struct pt_regs *regs);
+
+static inline void dump_stack(void)
+{
+	show_general_task_info(current);
+	show_stack_content(current, NULL);
+	show_call_trace(current, NULL);
+}
 
 static inline void *task_stack_page(const struct task_struct *task)
 {

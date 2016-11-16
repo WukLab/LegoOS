@@ -12,6 +12,14 @@
 
 #include <lego/compiler.h>
 
+static inline void hlt(void)
+{
+	asm volatile (
+		"1: hlt\n\t"
+		"jmp 1b\n\t"
+	);
+}
+
 /* REP NOP (PAUSE) is a good thing to insert into busy-wait loops. */
 static inline void rep_nop(void)
 {

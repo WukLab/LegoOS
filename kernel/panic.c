@@ -7,6 +7,8 @@
  * (at your option) any later version.
  */
 
+#include <asm/asm.h>
+#include <lego/sched.h>
 #include <lego/kernel.h>
 
 void panic(const char *fmt, ...)
@@ -18,7 +20,9 @@ void panic(const char *fmt, ...)
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 
-	printk("Kernel Panic: %s", buf);
+	pr_emerg("Kernel Panic - : %s\n", buf);
+	dump_stack();
+	pr_emerg("---[ end Kernel panic - not syncing: %s\n", buf);
 
-	for(;;);
+	hlt();
 }

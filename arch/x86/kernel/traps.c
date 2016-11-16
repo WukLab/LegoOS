@@ -59,49 +59,55 @@ DO_ERROR_TRAP("coprocessor segment overrun", coprocessor_segment_overrun, X86_TR
 dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 {
 	show_regs(regs);
-	panic("#GP");
+	printk("#GP");
 }
 
 dotraplinkage void do_nmi(struct pt_regs *regs, long error_code)
 {
 	show_regs(regs);
-	panic("NMI");
+	printk("NMI");
 }
 
 dotraplinkage void do_device_not_available(struct pt_regs *regs, long error_code)
 {
 	show_regs(regs);
-	panic("Device Not Avaliable");
+	printk("Device Not Avaliable");
 }
 
 dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code)
 {
 	show_regs(regs);
-	panic("Double Fault");
+	printk("Double Fault");
 }
 
 dotraplinkage void do_spurious_interrupt_bug(struct pt_regs *regs, long error_code)
 {
 	show_regs(regs);
-	panic("Spurious Interrupt Bug");
+	printk("Spurious Interrupt Bug");
 }
 
 dotraplinkage void do_coprocessor_error(struct pt_regs *regs, long error_code)
 {
 	show_regs(regs);
-	panic("X87 Coprocessor Error");
+	printk("X87 Coprocessor Error");
 }
 
 dotraplinkage void do_machine_check(struct pt_regs *regs, long error_code)
 {
 	show_regs(regs);
-	panic("Machine Check");
+	printk("Machine Check");
 }
 
 dotraplinkage void do_virtualization_exception(struct pt_regs *regs, long error_code)
 {
 	show_regs(regs);
-	panic("Virtualization Exception");
+	printk("Virtualization Exception");
+}
+
+dotraplinkage void do_reserved(struct pt_regs *regs, long error_code)
+{
+	show_regs(regs);
+	printk("Reserved Interrupt");
 }
 
 void __init trap_init(void)
