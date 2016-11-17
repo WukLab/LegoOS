@@ -40,7 +40,9 @@ struct gdt_page gdt_page = { .gdt = {
 
 void __init setup_arch(void)
 {
+	early_cpu_init();
 	setup_physical_memory();
 	trap_init();
+
 	cpu_init();
 }

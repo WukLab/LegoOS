@@ -16,6 +16,7 @@
 
 #include <asm/page.h>
 #include <asm/segment.h>
+#include <asm/processor.h>
 #include <asm/irq_vectors.h>
 
 #include <lego/bug.h>
@@ -105,6 +106,11 @@ struct gdt_page {
 } __attribute__((aligned(PAGE_SIZE)));
 
 extern struct gdt_page gdt_page;
+
+static inline struct desc_struct *get_cpu_gdt_table(unsigned int cpu)
+{
+	return gdt_page.gdt;
+}
 
 #ifdef CONFIG_X86_64
 static inline void pack_gate(gate_desc *gate, unsigned type, unsigned long func,
@@ -208,6 +214,26 @@ static inline void set_tssldt_descriptor(void *d, unsigned long addr,
 	pack_descriptor((struct desc_struct *)d, addr, size, 0x80 | type, 0);
 #endif
 }
+
+static inline void __set_tss_desc(unsigned cpu, unsigned int entry, void *addr)
+{
+	struct desc_struct *d = get_cpu_gdt_table(cpu);
+	tss_desc tss;
+
+	/*
+	 * sizeof(unsigned long) coming from an extra "long" at the end
+	 * of the iobitmap. See tss_struct definition in processor.h
+	 *
+	 * -1? seg base+limit should be pointing to the address of the
+	 * last valid byte
+	 */
+	set_tssldt_descriptor(&tss, (unsigned long)addr, DESC_TSS,
+			      IO_BITMAP_OFFSET + IO_BITMAP_BYTES +
+			      sizeof(unsigned long) - 1);
+	write_gdt_entry(d, entry, &tss, DESC_TSS);
+}
+
+#define set_tss_desc(cpu, addr) __set_tss_desc(cpu, GDT_ENTRY_TSS, addr)
 
 extern gate_desc idt_table[NR_VECTORS];
 

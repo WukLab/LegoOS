@@ -9,10 +9,13 @@
 
 #include <asm/asm.h>
 #include <asm/page.h>
+#include <asm/desc.h>
 #include <asm/pgtable.h>
 #include <asm/processor.h>
 
+#include <lego/smp.h>
 #include <lego/ctype.h>
+#include <lego/sched.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
 
@@ -270,7 +273,11 @@ static void print_cpu_info(struct cpu_info *c)
 
 }
 
-void __init cpu_init(void)
+/*
+ * Detect CPU type and save basic information
+ * about underlying CPU.
+ */
+void __init early_cpu_init(void)
 {
 	const struct cpu_vendor *const *v;
 	struct cpu_info *c = &default_cpu_info;
@@ -292,4 +299,37 @@ void __init cpu_init(void)
 	cpu_detect_tlb(c);
 
 	print_cpu_info(c);
+}
+
+/*
+ * cpu_init() initializes state that is per-CPU. Some data is already
+ * initialized (naturally) in the bootstrap process, such as the GDT
+ * and IDT. We reload them nevertheless, this function acts as a
+ * 'CPU state barrier', nothing should get across.
+ */
+void cpu_init(void)
+{
+	int i;
+	int cpu = smp_processor_id();
+	struct tss_struct *tss;
+
+	/* TODO: per-cpu tss */
+	tss = &cpu_tss;
+
+	tss->x86_tss.io_bitmap_base = offsetof(struct tss_struct, io_bitmap);
+
+	/*
+	 * <= is required because the CPU will access up to
+	 * 8 bits beyond the end of the IO permission bitmap.
+	 */
+	for (i = 0; i <= IO_BITMAP_LONGS; i++)
+		tss->io_bitmap[i] = ~0UL;
+
+	load_sp0(tss, &current->thread);
+
+	/* Save the descriptor into the GDT table first */
+	set_tss_desc(cpu, tss);
+
+	/* Then setup the TR register to point to TSS segment */
+	load_tr_desc();
 }
