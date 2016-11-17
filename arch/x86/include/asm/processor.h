@@ -145,4 +145,6 @@ static inline unsigned long current_top_of_stack(void)
 
 #define task_pt_regs(tsk)	((struct pt_regs *)(tsk)->thread.sp0 - 1)
 
+void cpu_init(void);
+
 #endif /* _ASM_X86_PROCESSOR_H_ */

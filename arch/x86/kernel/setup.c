@@ -13,6 +13,7 @@
 #include <asm/traps.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
+#include <asm/processor.h>
 #include <asm/bootparam.h>
 
 #include <lego/kernel.h>
@@ -39,6 +40,7 @@ struct gdt_page gdt_page = { .gdt = {
 
 void __init setup_arch(void)
 {
-	trap_init();
 	setup_physical_memory();
+	trap_init();
+	cpu_init();
 }

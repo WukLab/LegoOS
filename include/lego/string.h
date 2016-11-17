@@ -16,11 +16,17 @@
 #ifndef __HAVE_ARCH_STRCPY
 extern char * strcpy(char *,const char *);
 #endif
+#ifndef __HAVE_ARCH_STRLCPY
+extern size_t strlcpy(char *dest, const char *src, size_t size);
+#endif
 #ifndef __HAVE_ARCH_STRNCPY
 extern char * strncpy(char *,const char *, size_t);
 #endif
 #ifndef __HAVE_ARCH_STRCAT
 extern char * strcat(char *, const char *);
+#endif
+#ifndef __HAVE_ARCH_STRLCAT
+extern size_t strlcat(char *dest, const char *src, size_t count);
 #endif
 #ifndef __HAVE_ARCH_STRNCAT
 extern char * strncat(char *, const char *, size_t);
