@@ -16,7 +16,16 @@
 #include <lego/string.h>
 #include <lego/kernel.h>
 
-struct x86_cpuinfo x86_cpuinfo __read_mostly;
+/* Everything about CPU, filled at early boot */
+static struct cpu_info default_cpu_info __read_mostly;
+
+static const struct cpu_vendor default_cpu = {
+	.c_init		= NULL,
+	.c_vendor	= "Unknown",
+	.c_x86_vendor	= X86_VENDOR_UNKNOWN,
+};
+
+static const struct cpu_vendor *this_cpu = &default_cpu;
 
 static unsigned int x86_family(unsigned int sig)
 {
@@ -49,7 +58,7 @@ static unsigned int x86_stepping(unsigned int sig)
 	return sig & 0xf;
 }
 
-static void get_x86_cpuinfo(struct x86_cpuinfo *c)
+static void get_basic_cpu_info(struct cpu_info *c)
 {
 	c->x86_clflush_size = 64;
 	c->x86_phys_bits = 36;
@@ -82,7 +91,34 @@ static void get_x86_cpuinfo(struct x86_cpuinfo *c)
 	}
 }
 
-static void get_x86_cpu_capability(struct x86_cpuinfo *c)
+static const struct cpu_vendor *cpu_vendors[X86_VENDOR_NUM] = {};
+
+static void get_cpu_vendor(struct cpu_info *c)
+{
+	char *v = c->x86_vendor_id;
+	int i;
+
+	for (i = 0; i < X86_VENDOR_NUM; i++) {
+		if (!cpu_vendors[i])
+			break;
+
+		if (!strcmp(v, cpu_vendors[i]->c_ident[0]) ||
+		    (cpu_vendors[i]->c_ident[1] &&
+		     !strcmp(v, cpu_vendors[i]->c_ident[1]))) {
+
+			this_cpu = cpu_vendors[i];
+			c->x86_vendor = this_cpu->c_x86_vendor;
+			return;
+		}
+	}
+
+	printk(KERN_ERR "CPU: vendor_id '%s' unknown, using generic init.\n" \
+			"CPU: Your system may be unstable.\n", v);
+	c->x86_vendor = X86_VENDOR_UNKNOWN;
+	this_cpu = &default_cpu;
+}
+
+static void get_cpufeatures(struct cpu_info *c)
 {
 	u32 eax, ebx, ecx, edx;
 
@@ -153,7 +189,7 @@ static void get_x86_cpu_capability(struct x86_cpuinfo *c)
 		c->x86_capability[CPUID_8000_000A_EDX] = cpuid_edx(0x8000000a);
 }
 
-static void get_model_name(struct x86_cpuinfo *c)
+static void get_model_name(struct cpu_info *c)
 {
 	unsigned int *v;
 	char *p, *q, *s;
@@ -184,8 +220,20 @@ static void get_model_name(struct x86_cpuinfo *c)
 	*(s + 1) = '\0';
 }
 
-static void print_cpuinfo(struct x86_cpuinfo *c)
+static void print_cpu_info(struct cpu_info *c)
 {
+	const char *vendor = NULL;
+
+	if (c->x86_vendor < X86_VENDOR_NUM) {
+		vendor = this_cpu->c_vendor;
+	} else {
+		if (c->cpuid_level >= 0)
+			vendor = c->x86_vendor_id;
+	}
+
+	if (vendor && !strstr(c->x86_model_id, vendor))
+		printk(KERN_INFO "%s ", vendor);
+
 	if (c->x86_model_id[0])
 		printk(KERN_INFO "%s", c->x86_model_id);
 	else
@@ -200,13 +248,25 @@ static void print_cpuinfo(struct x86_cpuinfo *c)
 
 }
 
-void cpu_init(void)
+void __init cpu_init(void)
 {
-	struct x86_cpuinfo *c = &x86_cpuinfo;
+	const struct cpu_vendor *const *v;
+	struct cpu_info *c = &default_cpu_info;
+	int count = 0;
 
-	get_x86_cpuinfo(c);
-	get_x86_cpu_capability(c);
+	for (v = __x86_cpu_vendor_start; v < __x86_cpu_vendor_end; v++) {
+		const struct cpu_vendor *cpuvendor = *v;
+
+		if (count >= X86_VENDOR_NUM)
+			break;
+		cpu_vendors[count] = cpuvendor;
+		count++;
+	}
+
+	get_basic_cpu_info(c);
+	get_cpu_vendor(c);
+	get_cpufeatures(c);
 	get_model_name(c);
 
-	print_cpuinfo(c);
+	print_cpu_info(c);
 }

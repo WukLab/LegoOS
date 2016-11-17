@@ -8,7 +8,7 @@ obj-y += dumpstack.o
 obj-y += setup.o
 obj-y += traps.o
 obj-y += e820.o
-obj-y += cpu.o
+obj-y += cpu.o cpu_intel.o
 
 #
 # Always a good idea to enable CONFIG_FRAME_POINTER

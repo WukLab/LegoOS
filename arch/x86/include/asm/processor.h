@@ -16,7 +16,13 @@
 
 #include <lego/kernel.h>
 
-struct x86_cpuinfo {
+/**
+ * struct cpu_info
+ *
+ * Everything you want to know about your CPU.
+ * It is filled at early boot stage.
+ */
+struct cpu_info {
 	__u8			x86;		/* CPU family */
 	__u8			x86_vendor;	/* CPU vendor */
 	__u8			x86_model;
@@ -59,8 +65,46 @@ struct x86_cpuinfo {
 	u16			cpu_index;
 };
 
-extern struct x86_cpuinfo x86_cpuinfo;
+#define X86_VENDOR_INTEL	0
+#define X86_VENDOR_CYRIX	1
+#define X86_VENDOR_AMD		2
+#define X86_VENDOR_UMC		3
+#define X86_VENDOR_CENTAUR	5
+#define X86_VENDOR_TRANSMETA	7
+#define X86_VENDOR_NSC		8
+#define X86_VENDOR_NUM		9
 
+#define X86_VENDOR_UNKNOWN	0xff
+
+/*
+ * X86 Vendor Hooks
+ * - Intel (suppoted)
+ * - and many others (no)
+ */
+struct cpu_vendor {
+	const char	*c_vendor;
+	/* some have two possibilities for cpuid string */
+	const char	*c_ident[2];
+	void            (*c_early_init)(struct cpu_info *);
+	void		(*c_bsp_init)(struct cpu_info *);
+	void		(*c_init)(struct cpu_info *);
+	void		(*c_identify)(struct cpu_info *);
+	void		(*c_detect_tlb)(struct cpu_info *);
+	void		(*c_bsp_resume)(struct cpu_info *);
+	int		c_x86_vendor;
+};
+
+#define cpu_vendor_register(cpu_vendorX) \
+	static const struct cpu_vendor *const __cpu_vendor_##cpu_vendorX __used \
+	__attribute__((__section__(".x86_cpu_vendor.init"))) = \
+	&cpu_vendorX;
+
+extern const struct cpu_vendor *const __x86_cpu_vendor_start[];
+extern const struct cpu_vendor *const __x86_cpu_vendor_end[];
+
+/*
+ * x86-64 hardware TSS structure
+ */
 struct x86_hw_tss {
 	u32			reserved1;
 	u64			sp0;

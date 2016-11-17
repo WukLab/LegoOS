@@ -96,6 +96,12 @@ SECTIONS {
 		__edata = .;
 	}
 
+	/*
+	 * init part can be freed and reused later
+	 */
+
+	__sinit = .;
+
 	. = ALIGN(PAGE_SIZE);
 	.init.text : {
 		__sinittext = .;
@@ -109,6 +115,14 @@ SECTIONS {
 		*(.init.data)
 		__einitdata = .;
 	}
+
+	.x86_cpu_vendor.init : {
+		__x86_cpu_vendor_start = .;
+		*(.x86_cpu_vendor.init)
+		__x86_cpu_vendor_end = .;
+	}
+
+	__einit = .;
 
 	.signature : {
 		kernel_signature = .;
