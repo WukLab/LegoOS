@@ -220,6 +220,28 @@ static void get_model_name(struct cpu_info *c)
 	*(s + 1) = '\0';
 }
 
+u16 __read_mostly tlb_lli_4k[NR_INFO];
+u16 __read_mostly tlb_lli_2m[NR_INFO];
+u16 __read_mostly tlb_lli_4m[NR_INFO];
+u16 __read_mostly tlb_lld_4k[NR_INFO];
+u16 __read_mostly tlb_lld_2m[NR_INFO];
+u16 __read_mostly tlb_lld_4m[NR_INFO];
+u16 __read_mostly tlb_lld_1g[NR_INFO];
+
+static void cpu_detect_tlb(struct cpu_info *c)
+{
+	if (this_cpu->c_detect_tlb)
+		this_cpu->c_detect_tlb(c);
+
+	pr_info("Last level iTLB entries: 4KB %d, 2MB %d, 4MB %d\n",
+		tlb_lli_4k[ENTRIES], tlb_lli_2m[ENTRIES],
+		tlb_lli_4m[ENTRIES]);
+
+	pr_info("Last level dTLB entries: 4KB %d, 2MB %d, 4MB %d, 1GB %d\n",
+		tlb_lld_4k[ENTRIES], tlb_lld_2m[ENTRIES],
+		tlb_lld_4m[ENTRIES], tlb_lld_1g[ENTRIES]);
+}
+
 static void print_cpu_info(struct cpu_info *c)
 {
 	const char *vendor = NULL;
@@ -267,6 +289,7 @@ void __init cpu_init(void)
 	get_cpu_vendor(c);
 	get_cpufeatures(c);
 	get_model_name(c);
+	cpu_detect_tlb(c);
 
 	print_cpu_info(c);
 }

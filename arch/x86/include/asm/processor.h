@@ -102,6 +102,27 @@ struct cpu_vendor {
 extern const struct cpu_vendor *const __x86_cpu_vendor_start[];
 extern const struct cpu_vendor *const __x86_cpu_vendor_end[];
 
+struct _tlb_table {
+	unsigned char descriptor;
+	char tlb_type;
+	unsigned int entries;
+	/* unsigned int ways; */
+	char info[128];
+};
+
+enum tlb_infos {
+	ENTRIES,
+	NR_INFO
+};
+
+extern u16 __read_mostly tlb_lli_4k[NR_INFO];
+extern u16 __read_mostly tlb_lli_2m[NR_INFO];
+extern u16 __read_mostly tlb_lli_4m[NR_INFO];
+extern u16 __read_mostly tlb_lld_4k[NR_INFO];
+extern u16 __read_mostly tlb_lld_2m[NR_INFO];
+extern u16 __read_mostly tlb_lld_4m[NR_INFO];
+extern u16 __read_mostly tlb_lld_1g[NR_INFO];
+
 /*
  * x86-64 hardware TSS structure
  */
