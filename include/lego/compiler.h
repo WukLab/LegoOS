@@ -10,6 +10,7 @@
 #ifndef _LEGO_COMPILER_H_
 #define _LEGO_COMPILER_H_
 
+#include <asm/cache.h>
 #include <lego/types.h>
 
 #ifndef __GNUC__
@@ -39,6 +40,17 @@
 #define __read_mostly		__section(.data..read_mostly)
 #define __init_task_data	__section(.data..init_task)
 #define __lockfunc		__section(.spinlock.text)
+
+/*
+ * ____cacheline_aligned just make the marked data cache line aligned
+ * __cacheline_aligned will also put the data into a specific section
+ */
+#define ____cacheline_aligned					\
+	__attribute__((__aligned__(L1_CACHE_BYTES)))
+
+#define __cacheline_aligned					\
+	__attribute__((__aligned__(SMP_CACHE_BYTES),		\
+	__section__(".data..cacheline_aligned")))
 
 /*
  * When used with Link Time Optimization, gcc can optimize away C functions or

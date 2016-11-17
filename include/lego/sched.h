@@ -13,6 +13,7 @@
 #include <asm/page.h>
 #include <asm/ptrace.h>
 #include <asm/current.h>
+#include <asm/processor.h>
 #include <asm/thread_info.h>
 
 #include <lego/types.h>
@@ -31,6 +32,8 @@ struct task_struct {
 
 	pid_t pid;
 	pid_t tgid;
+
+	struct thread_struct thread;
 };
 
 union thread_union {
