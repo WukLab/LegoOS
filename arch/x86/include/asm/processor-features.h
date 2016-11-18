@@ -339,4 +339,18 @@ enum cpuid_leafs
 #define X86_BUG_SWAPGS_FENCE	X86_BUG(11) /* SWAPGS without input dep on GS */
 #define X86_BUG_MONITOR		X86_BUG(12) /* IPI required to wake up remote CPU */
 
+#include <lego/bitops.h>
+#include <lego/compiler.h>
+
+extern struct cpu_info default_cpu_info __read_mostly;
+
+/*
+ * CPU capability helpers
+ */
+#define cpu_has_cap(c, bit)	test_bit(bit, (unsigned long *)(c)->x86_capability)
+#define cpu_set_cap(c, bit)	set_bit(bit, (unsigned long *)(c)->x86_capability)
+#define cpu_clear_cap(c, bit)	clear_bit(bit, (unsigned long *)(c)->x86_capability)
+
+#define cpu_has(bit)		cpu_has_cap(&default_cpu_info, bit)
+
 #endif /* _ASM_X86_PROCESSOR_FEATURES_H_ */
