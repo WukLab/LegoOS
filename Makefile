@@ -697,6 +697,10 @@ vmImageclean:
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/link-vmImage.sh clean
 
 clean: $(clean-dirs) archclean vmImageclean
+	@find $(srctree) \
+		\( -name '.*.cmd' -o -name '*.o' \) \
+		-type f -print | xargs rm -f
+
 
 PHONY += mrproper
 mrproper: clean
