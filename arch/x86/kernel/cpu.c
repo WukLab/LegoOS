@@ -20,7 +20,7 @@
 #include <lego/kernel.h>
 
 /* Everything about CPU, filled at early boot */
-static struct cpu_info default_cpu_info __read_mostly;
+struct cpu_info default_cpu_info __read_mostly;
 
 static const struct cpu_vendor default_cpu = {
 	.c_init		= NULL,

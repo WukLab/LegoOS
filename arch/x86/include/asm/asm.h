@@ -12,6 +12,12 @@
 
 #include <lego/compiler.h>
 
+#ifdef CONFIG_SMP
+# define LOCK_PREFIX "lock; "
+#else
+# define LOCK_PREFIX ""
+#endif
+
 static inline void swapgs(void)
 {
 	asm volatile("swapgs" ::: "memory");

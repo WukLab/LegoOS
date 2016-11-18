@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <asm/apic.h>
 #include <asm/e820.h>
 #include <asm/desc.h>
 #include <asm/page.h>
@@ -42,6 +43,7 @@ void __init setup_arch(void)
 {
 	early_cpu_init();
 	setup_physical_memory();
+	check_x2apic();
 	trap_init();
 
 	cpu_init();

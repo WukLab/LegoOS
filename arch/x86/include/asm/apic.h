@@ -10,7 +10,11 @@
 #ifndef _ASM_X86_APIC_H_
 #define _ASM_X86_APIC_H_
 
+#include <asm/msr.h>
+#include <asm/processor.h>
+
 #include <lego/types.h>
+#include <lego/compiler.h>
 
 #define IO_APIC_DEFAULT_PHYS_BASE	0xfec00000
 #define	APIC_DEFAULT_PHYS_BASE		0xfee00000
@@ -439,5 +443,35 @@ enum ioapic_irq_destination_types {
 struct apic {
 	const char *name;
 };
+
+static inline int apic_is_x2apic_enabled(void)
+{
+	u64 msr;
+
+	rdmsrl(MSR_IA32_APICBASE, msr);
+	return msr & X2APIC_ENABLE;
+}
+
+#ifdef CONFIG_X86_X2APIC
+extern int x2apic_mode;
+extern int x2apic_phys;
+
+void __init check_x2apic(void);
+
+static inline int x2apic_enabled(void)
+{
+	return cpu_has(X86_FEATURE_X2APIC) && apic_is_x2apic_enabled();
+}
+
+static inline int x2apic_supported(void)
+{
+	return cpu_has(X86_FEATURE_X2APIC);
+}
+#else
+static inline void check_x2apic(void) { }
+static inline void x2apic_setup(void) { }
+static inline int x2apic_enabled(void) { return 0; }
+static inline int x2apic_supported(void) { return 0; }
+#endif /* CONFIG_X86_X2APIC */
 
 #endif /* _ASM_X86_APIC_H_ */

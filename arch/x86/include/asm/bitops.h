@@ -20,12 +20,16 @@
 #ifndef _ASM_X86_BITOPS_H_
 #define _ASM_X86_BITOPS_H_
 
-#ifndef _LEGO_BITOPS_H_
-# error Please use <lego/bitops.h> instead
-#endif
-
 #include <asm/asm.h>
 #include <lego/compiler.h>
+
+#if BITS_PER_LONG == 32
+# define _BITOPS_LONG_SHIFT 5
+#elif BITS_PER_LONG == 64
+# define _BITOPS_LONG_SHIFT 6
+#else
+# error "Unexpected BITS_PER_LONG"
+#endif
 
 #define BITOP_ADDR(x) "+m" (*(volatile long *) (x))
 
@@ -77,7 +81,7 @@ set_bit(long nr, volatile unsigned long *addr)
  */
 static __always_inline void __set_bit(long nr, volatile unsigned long *addr)
 {
-	asm volatile("bts %1,%0" : addr : "ir" (nr) : "memory");
+	asm volatile("bts %1,%0" : BITOP_ADDR(addr) : "ir" (nr) : "memory");
 }
 
 /**
@@ -293,5 +297,35 @@ static __always_inline int fls64(__u64 x)
 	    : "rm" (x));
 	return bitpos + 1;
 }
+
+static __always_inline bool
+constant_test_bit(long nr, const volatile unsigned long *addr)
+{
+	return ((1UL << (nr & (BITS_PER_LONG-1))) &
+		(addr[nr >> _BITOPS_LONG_SHIFT])) != 0;
+}
+
+static __always_inline bool
+variable_test_bit(int nr, const volatile unsigned long * addr)
+{
+	int oldbit;
+
+	asm volatile("bt %2,%1\n\t"
+		     "sbb %0,%0"
+		     : "=r" (oldbit)
+		     : "m" (*(unsigned long *)addr), "Ir" (nr));
+
+	return oldbit;
+}
+
+/**
+ * test_bit - Determine whether a bit is set
+ * @nr: bit number to test
+ * @addr: Address to start counting from
+ */
+#define test_bit(nr, addr)			\
+	(__builtin_constant_p((nr))		\
+	 ? constant_test_bit((nr), (addr))	\
+	 : variable_test_bit((nr), (addr)))
 
 #endif /* _ASM_X86_BITOPS_H_ */

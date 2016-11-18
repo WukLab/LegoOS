@@ -93,7 +93,8 @@ config X86_IO_APIC
 
 config X86_X2APIC
 	bool "Support x2apic"
-	depends on X86_LOCAL_APIC && X86_64 && (IRQ_REMAP || HYPERVISOR_GUEST)
+	default y
+	depends on X86_LOCAL_APIC && X86_64
 	---help---
 	  This enables x2apic support on CPUs that have this feature.
 

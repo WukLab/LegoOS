@@ -7,13 +7,13 @@
  * (at your option) any later version.
  */
 
-#ifndef _ASM_X86_BITOPS_H_
-#define _ASM_X86_BITOPS_H_
+#ifndef _LEGO_BITOPS_H_
+#define _LEGO_BITOPS_H_
+
+#include <asm/bitops.h>
 
 #include <lego/types.h>
 #include <lego/kernel.h>
-
-#include <asm/bitops.h>
 
 #define BIT(nr)			(1UL << (nr))
 #define BIT_ULL(nr)		(1ULL << (nr))
@@ -139,4 +139,4 @@ static inline __s64 sign_extend64(__u64 value, int index)
 	return (__s64)(value << shift) >> shift;
 }
 
-#endif /* _ASM_X86_BITOPS_H_ */
+#endif /* _LEGO_BITOPS_H_ */
