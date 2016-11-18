@@ -10,7 +10,8 @@ obj-y += traps.o
 obj-y += e820.o
 obj-y += cpu.o cpu_intel.o
 obj-y += smp.o
-obj-y += apic/
+obj-y += ipi.o
+obj-y += apic.o io_apic.o
 
 #
 # Always a good idea to enable CONFIG_FRAME_POINTER

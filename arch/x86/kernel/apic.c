@@ -25,6 +25,27 @@ enum {
 };
 static int x2apic_state;
 
+static void __x2apic_enable(void)
+{
+	u64 msr;
+
+	rdmsrl(MSR_IA32_APICBASE, msr);
+	if (msr & X2APIC_ENABLE)
+		return;
+	wrmsrl(MSR_IA32_APICBASE, msr | X2APIC_ENABLE);
+	printk(KERN_INFO "x2apic enabled\n");
+}
+
+static __init void x2apic_enable(void)
+{
+	if (x2apic_state != X2APIC_OFF)
+		return;
+
+	x2apic_mode = 1;
+	x2apic_state = X2APIC_ON;
+	__x2apic_enable();
+}
+
 void __init check_x2apic(void)
 {
 	u64 msr;
@@ -39,5 +60,11 @@ void __init check_x2apic(void)
 		pr_info("x2apic: not supported by CPU\n");
 		x2apic_state = X2APIC_DISABLED;
 	}
+
+	x2apic_enable();
+	if (x2apic_enabled())
+		pr_info("x2apic on");
+	else
+		pr_info("x2apic off");
 }
 #endif

@@ -444,6 +444,12 @@ struct apic {
 	const char *name;
 };
 
+#ifdef CONFIG_X86_X2APIC
+extern int x2apic_mode;
+extern int x2apic_phys;
+
+void __init check_x2apic(void);
+
 static inline int apic_is_x2apic_enabled(void)
 {
 	u64 msr;
@@ -451,12 +457,6 @@ static inline int apic_is_x2apic_enabled(void)
 	rdmsrl(MSR_IA32_APICBASE, msr);
 	return msr & X2APIC_ENABLE;
 }
-
-#ifdef CONFIG_X86_X2APIC
-extern int x2apic_mode;
-extern int x2apic_phys;
-
-void __init check_x2apic(void);
 
 static inline int x2apic_enabled(void)
 {
