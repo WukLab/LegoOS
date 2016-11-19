@@ -42,9 +42,17 @@ struct gdt_page gdt_page = { .gdt = {
 void __init setup_arch(void)
 {
 	early_cpu_init();
-	setup_physical_memory();
-	check_x2apic();
-	trap_init();
 
+	/* Parse e820 table */
+	setup_physical_memory();
+
+	check_x2apic();
+	setup_apic_driver();
+
+	/*
+	 * Load interrupt handlers
+	 * and init everthing about BSP
+	 */
+	trap_init();
 	cpu_init();
 }

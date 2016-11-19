@@ -442,7 +442,89 @@ enum ioapic_irq_destination_types {
 
 struct apic {
 	const char *name;
+
+	int (*probe)(void);
+
+	/* ipi */
+	void (*send_IPI)(int cpu, int vector);
+	void (*send_IPI_allbutself)(int vector);
+	void (*send_IPI_all)(int vector);
+	void (*send_IPI_self)(int vector);
+
+	/* wakeup_secondary_cpu */
+	int (*wakeup_secondary_cpu)(int apicid, unsigned long start_eip);
+
+	void (*inquire_remote_apic)(int apicid);
+
+	/* apic ops */
+	u32 (*read)(u32 reg);
+	void (*write)(u32 reg, u32 v);
+	/*
+	 * ->eoi_write() has the same signature as ->write().
+	 *
+	 * Drivers can support both ->eoi_write() and ->write() by passing the same
+	 * callback value. Kernel can override ->eoi_write() and fall back
+	 * on write for EOI.
+	 */
+	void (*eoi_write)(u32 reg, u32 v);
+	u64 (*icr_read)(void);
+	void (*icr_write)(u32 low, u32 high);
+	void (*wait_icr_idle)(void);
+	u32 (*safe_wait_icr_idle)(void);
+
 };
+
+/*
+ * Pointer to the local APIC driver in use on this system (there's
+ * always just one such driver in use - the kernel decides via an
+ * early probing process which one it picks - and then sticks to it):
+ */
+extern struct apic *apic;
+
+/*
+ * APIC drivers are probed based on how they are listed in the .apicdrivers
+ * section. So the order is important and enforced by the ordering
+ * of different apic driver files in the Makefile.
+ *
+ * For the files having two apic drivers, we use apic_drivers()
+ * to enforce the order with in them.
+ */
+#define apic_driver(sym)						\
+	static const struct apic *__apicdrivers_##sym __used		\
+	__aligned(sizeof(struct apic *))				\
+	__section(.apicdrivers) = { &sym }
+
+#define apic_drivers(sym1, sym2)					\
+	static struct apic *__apicdrivers_##sym1##sym2[2] __used	\
+	__aligned(sizeof(struct apic *))				\
+	__section(.apicdrivers) = { &sym1, &sym2 }
+
+extern struct apic *__apicdrivers[], *__apicdrivers_end[];
+
+static inline void native_apic_msr_write(u32 reg, u32 v)
+{
+	if (reg == APIC_DFR || reg == APIC_ID || reg == APIC_LDR ||
+	    reg == APIC_LVR)
+		return;
+
+	wrmsr(APIC_BASE_MSR + (reg >> 4), v, 0);
+}
+
+static inline void native_apic_msr_eoi_write(u32 reg, u32 v)
+{
+	wrmsr(APIC_BASE_MSR + (APIC_EOI >> 4), APIC_EOI_ACK, 0);
+}
+
+static inline u32 native_apic_msr_read(u32 reg)
+{
+	u64 msr;
+
+	if (reg == APIC_DFR)
+		return -1;
+
+	rdmsrl(APIC_BASE_MSR + (reg >> 4), msr);
+	return (u32)msr;
+}
 
 #ifdef CONFIG_X86_X2APIC
 extern int x2apic_mode;
@@ -473,5 +555,7 @@ static inline void x2apic_setup(void) { }
 static inline int x2apic_enabled(void) { return 0; }
 static inline int x2apic_supported(void) { return 0; }
 #endif /* CONFIG_X86_X2APIC */
+
+void __init setup_apic_driver(void);
 
 #endif /* _ASM_X86_APIC_H_ */

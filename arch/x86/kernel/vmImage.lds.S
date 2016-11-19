@@ -109,17 +109,25 @@ SECTIONS {
 		__einittext = .;
 	}
 
-	. = ALIGN(16);
+	. = ALIGN(L1_CACHE_BYTES);
 	.init.data : {
 		__sinitdata = .;
 		*(.init.data)
 		__einitdata = .;
 	}
 
+	. = ALIGN(L1_CACHE_BYTES);
 	.x86_cpu_vendor.init : {
 		__x86_cpu_vendor_start = .;
 		*(.x86_cpu_vendor.init)
 		__x86_cpu_vendor_end = .;
+	}
+
+	. = ALIGN(L1_CACHE_BYTES);
+	.apicdrivers : {
+		__apicdrivers = .;
+		*(.apicdrivers);
+		__apicdrivers_end = .;
 	}
 
 	__einit = .;
