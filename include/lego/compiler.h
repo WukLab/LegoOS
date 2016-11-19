@@ -41,6 +41,9 @@
 #define __init_task_data	__section(.data..init_task)
 #define __lockfunc		__section(.spinlock.text)
 
+#define __page_aligned_data	__section(.data..page_aligned) __aligned(PAGE_SIZE)
+#define __page_aligned_bss	__section(.bss..page_aligned) __aligned(PAGE_SIZE)
+
 /*
  * ____cacheline_aligned just make the marked data cache line aligned
  * __cacheline_aligned will also put the data into a specific section

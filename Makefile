@@ -544,8 +544,9 @@ export MODLIB
 
 ifeq ($(KBUILD_EXTMOD),)
 # Objects that will be linked into final vmImage
+# These variables are initialized in arch Makefile
 init-y		:= init/
-core-y		+= kernel/
+core-y		+= kernel/ mm/
 drivers-y	+= drivers/
 libs-y		+= lib/
 

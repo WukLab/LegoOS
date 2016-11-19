@@ -305,6 +305,18 @@ static inline pteval_t pte_flags(pte_t pte)
 	return native_pte_val(pte) & PTE_FLAGS_MASK;
 }
 
+#define pgd_val(x)	native_pgd_val(x)
+#define __pgd(x)	native_make_pgd(x)
+
+#define pud_val(x)	native_pud_val(x)
+#define __pud(x)	native_make_pud(x)
+
+#define pmd_val(x)	native_pmd_val(x)
+#define __pmd(x)	native_make_pmd(x)
+
+#define pte_val(x)	native_pte_val(x)
+#define __pte(x)	native_make_pte(x)
+
 #define pgprot_val(x)	((x).pgprot)
 #define __pgprot(x)	((pgprot_t) { (x) } )
 

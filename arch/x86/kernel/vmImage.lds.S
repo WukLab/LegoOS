@@ -70,28 +70,31 @@ SECTIONS {
 		*(.data..init_task)
 
 		/*
+		 * __page_aligned_data
+		 */
+		. = ALIGN(PAGE_SIZE);
+		*(.data..page_aligned)
+
+		/*
 		 * __read_mostly
 		 */
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data..read_mostly)
-		. = ALIGN(L1_CACHE_BYTES);
 
 		/*
 		 * __cacheline_aligned
 		 */
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data..cacheline_aligned)
-		. = ALIGN(L1_CACHE_BYTES);
 
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data)
-		. = ALIGN(L1_CACHE_BYTES);
 
 		/* WARN_ONCE etc. */
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data..unlikely)
-		. = ALIGN(L1_CACHE_BYTES);
 
+		. = ALIGN(L1_CACHE_BYTES);
 		*(.data*)
 		__edata = .;
 	}
@@ -140,6 +143,7 @@ SECTIONS {
 	. = ALIGN(PAGE_SIZE);
 	.bss : {
 		__bss_start = .;
+		*(.bss..page_aligned)
 		*(.bss*)
 		__bss_end = .;
 	}

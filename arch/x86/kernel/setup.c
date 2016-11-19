@@ -18,6 +18,7 @@
 #include <asm/bootparam.h>
 
 #include <lego/kernel.h>
+#include <lego/early_ioremap.h>
 
 /* Data that was collected by real-mode kernel */
 struct boot_params boot_params;
@@ -42,6 +43,7 @@ struct gdt_page gdt_page = { .gdt = {
 void __init setup_arch(void)
 {
 	early_cpu_init();
+	early_ioremap_init();
 
 	/* Parse e820 table */
 	setup_physical_memory();
