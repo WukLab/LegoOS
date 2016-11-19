@@ -17,6 +17,7 @@
 #include <lego/init.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
+#include <lego/cpumask.h>
 
 /* Builtin command line from kconfig */
 #ifdef CONFIG_CMDLINE_BOOL
@@ -32,6 +33,8 @@ static char command_line[COMMAND_LINE_SIZE];
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
+
+	boot_cpumask_init();
 
 	/* Prepare output first */
 	tty_init();

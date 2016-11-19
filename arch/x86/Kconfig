@@ -62,24 +62,45 @@ config PHYSICAL_ALIGN
 
 source "init/Kconfig"
 
-config HPET_TIMER
-	def_bool X86_64
-	prompt "HPET Timer Support" if X86_32
+menu "Processor type and features"
+
+config SMP
+	bool "Symmetric multi-processing support"
 	---help---
-	  Use the IA-PC HPET (High Precision Event Timer) to manage
-	  time in preference to the PIT and RTC, if a HPET is
-	  present.
-	  HPET is the next generation timer replacing legacy 8254s.
-	  The HPET provides a stable time base on SMP
-	  systems, unlike the TSC, but it is more expensive to access,
-	  as it is off-chip.  The interface used is documented
-	  in the HPET spec, revision 1.
+	  This enables support for systems with more than one CPU. If you have
+	  a system with only one CPU, say N. If you have a system with more
+	  than one CPU, say Y.
 
-	  You can safely choose Y here.  However, HPET will only be
-	  activated if the platform and the BIOS support this feature.
-	  Otherwise the 8254 will be used for timing services.
+	  If you say N here, the kernel will run on uni- and multiprocessor
+	  machines, but will use only one CPU of a multiprocessor machine. If
+	  you say Y here, the kernel will run on many, but not all,
+	  uniprocessor machines. On a uniprocessor machine, the kernel
+	  will run faster if you say N here.
 
-	  Choose N to continue using the legacy 8254 timer.
+	  See also <file:Documentation/x86/i386/IO-APIC.txt>,
+	  <file:Documentation/nmi_watchdog.txt> and the SMP-HOWTO available at
+	  <http://www.tldp.org/docs.html#howto>.
+
+	  If you don't know what to do here, say N.
+
+config MAXSMP
+	bool "Enable Maximum number of SMP Processors and NUMA Nodes"
+	depends on X86_64 && SMP
+	---help---
+	  Enable maximum number of CPUS and NUMA Nodes for this architecture.
+	  If unsure, say N.
+
+config NR_CPUS
+	int "Maximum number of CPUs" if SMP && !MAXSMP
+	default "1" if !SMP
+	default "8192" if MAXSMP
+	default "64" if SMP
+	---help---
+	  This allows you to specify the maximum number of CPUs which this
+	  kernel will support.
+
+	  This is purely to save memory - each supported CPU adds
+	  approximately eight kilobytes to the kernel image.
 
 config X86_LOCAL_APIC
 	def_bool y
@@ -118,3 +139,24 @@ config ARCH_PHYS_ADDR_T_64BIT
 config ARCH_DMA_ADDR_T_64BIT
 	def_bool y
 	depends on X86_64
+
+config HPET_TIMER
+	def_bool X86_64
+	prompt "HPET Timer Support" if X86_32
+	---help---
+	  Use the IA-PC HPET (High Precision Event Timer) to manage
+	  time in preference to the PIT and RTC, if a HPET is
+	  present.
+	  HPET is the next generation timer replacing legacy 8254s.
+	  The HPET provides a stable time base on SMP
+	  systems, unlike the TSC, but it is more expensive to access,
+	  as it is off-chip.  The interface used is documented
+	  in the HPET spec, revision 1.
+
+	  You can safely choose Y here.  However, HPET will only be
+	  activated if the platform and the BIOS support this feature.
+	  Otherwise the 8254 will be used for timing services.
+
+	  Choose N to continue using the legacy 8254 timer.
+
+endmenu

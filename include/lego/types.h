@@ -15,13 +15,24 @@
 #define BITS_PER_LONG		__BITS_PER_LONG
 #define BITS_PER_LONG_LONG	__BITS_PER_LONG_LONG
 
+#define BIT(nr)			(1UL << (nr))
+#define BIT_ULL(nr)		(1ULL << (nr))
+#define BIT_MASK(nr)		(1UL << ((nr) % BITS_PER_LONG))
+#define BIT_WORD(nr)		((nr) / BITS_PER_LONG)
+#define BIT_ULL_MASK(nr)	(1ULL << ((nr) % BITS_PER_LONG_LONG))
+#define BIT_ULL_WORD(nr)	((nr) / BITS_PER_LONG_LONG)
+#define BITS_PER_BYTE		8
+#define BITS_TO_LONGS(nr)	DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
+
+#define DECLARE_BITMAP(name,bits) \
+	unsigned long name[BITS_TO_LONGS(bits)]
+
 /* Special 64bit data type that is 8-byte aligned */
 #define aligned_u64	__u64	__attribute__((aligned(8)))
 #define aligned_be64	__be64	__attribute__((aligned(8)))
 #define aligned_le64	__le64	__attribute__((aligned(8)))
 
 #ifndef __ASSEMBLY__
-
 #include <lego/stddef.h>
 
 typedef int bool;
