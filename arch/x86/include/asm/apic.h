@@ -150,7 +150,7 @@
 #define		APIC_EILVT_MSG_EXT	0x7
 #define		APIC_EILVT_MASKED	(1 << 16)
 
-#define APIC_BASE (fix_to_virt(FIX_APIC_BASE))
+#define APIC_BASE	(fix_to_virt(FIX_APIC_BASE))
 #define APIC_BASE_MSR	0x800
 #define XAPIC_ENABLE	(1UL << 11)
 #define X2APIC_ENABLE	(1UL << 10)
@@ -565,5 +565,60 @@ static inline int x2apic_supported(void) { return 0; }
 #endif /* CONFIG_X86_X2APIC */
 
 void __init setup_apic_driver(void);
+
+void native_apic_wait_icr_idle(void);
+u32 native_safe_apic_wait_icr_idle(void);
+void native_apic_icr_write(u32 low, u32 id);
+u64 native_apic_icr_read(void);
+
+#ifdef CONFIG_X86_LOCAL_APIC
+
+static inline u32 apic_read(u32 reg)
+{
+	return apic->read(reg);
+}
+
+static inline void apic_write(u32 reg, u32 val)
+{
+	apic->write(reg, val);
+}
+
+static inline void apic_eoi(void)
+{
+	apic->eoi_write(APIC_EOI, APIC_EOI_ACK);
+}
+
+static inline u64 apic_icr_read(void)
+{
+	return apic->icr_read();
+}
+
+static inline void apic_icr_write(u32 low, u32 high)
+{
+	apic->icr_write(low, high);
+}
+
+static inline void apic_wait_icr_idle(void)
+{
+	apic->wait_icr_idle();
+}
+
+static inline u32 safe_apic_wait_icr_idle(void)
+{
+	return apic->safe_wait_icr_idle();
+}
+
+extern void __init apic_set_eoi_write(void (*eoi_write)(u32 reg, u32 v));
+
+#else
+static inline u32 apic_read(u32 reg) { return 0; }
+static inline void apic_write(u32 reg, u32 val) { }
+static inline void apic_eoi(void) { }
+static inline u64 apic_icr_read(void) { return 0; }
+static inline void apic_icr_write(u32 low, u32 high) { }
+static inline void apic_wait_icr_idle(void) { }
+static inline u32 safe_apic_wait_icr_idle(void) { return 0; }
+static inline void apic_set_eoi_write(void (*eoi_write)(u32 reg, u32 v)) {}
+#endif  /* CONFIG_X86_LOCAL_APIC */
 
 #endif /* _ASM_X86_APIC_H_ */

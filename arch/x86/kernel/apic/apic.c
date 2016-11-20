@@ -11,6 +11,7 @@
 #include <asm/apic.h>
 #include <asm/processor.h>
 
+#include <lego/irq.h>
 #include <lego/kernel.h>
 #include <lego/bitops.h>
 
@@ -53,3 +54,46 @@ void __init setup_apic_driver(void)
 	}
 	panic("APIC: no driver found");
 }
+
+void native_apic_icr_write(u32 low, u32 id)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	apic_write(APIC_ICR2, SET_APIC_DEST_FIELD(id));
+	apic_write(APIC_ICR, low);
+	local_irq_restore(flags);
+}
+
+u64 native_apic_icr_read(void)
+{
+	u32 icr1, icr2;
+
+	icr2 = apic_read(APIC_ICR2);
+	icr1 = apic_read(APIC_ICR);
+
+	return icr1 | ((u64)icr2 << 32);
+}
+
+void native_apic_wait_icr_idle(void)
+{
+	while (apic_read(APIC_ICR) & APIC_ICR_BUSY)
+		cpu_relax();
+}
+
+u32 native_safe_apic_wait_icr_idle(void)
+{
+	u32 send_status;
+	int timeout;
+
+	timeout = 0;
+	do {
+		send_status = apic_read(APIC_ICR) & APIC_ICR_BUSY;
+		if (!send_status)
+			break;
+		//udelay(100);
+	} while (timeout++ < 1000);
+
+	return send_status;
+}
+

@@ -9,10 +9,22 @@
 
 #include <asm/asm.h>
 #include <asm/apic.h>
+#include <asm/fixmap.h>
 #include <asm/processor.h>
 
 #include <lego/kernel.h>
 #include <lego/bitops.h>
+
+static u32 native_apic_mem_read(u32 reg)
+{
+	return *((volatile u32 *)(APIC_BASE + reg));
+}
+
+static inline void native_apic_mem_write(u32 reg, u32 v)
+{
+	volatile u32 *addr = (volatile u32 *)(APIC_BASE + reg);
+	*addr = v;
+}
 
 static int default_apic_id_valid(int apicid)
 {
@@ -52,6 +64,7 @@ static struct apic apic_flat = {
 	.send_IPI_allbutself		= flat_send_IPI_allbutself,
 	.send_IPI_all			= flat_send_IPI_all,
 	.send_IPI_self			= apic_send_IPI_self,
+*/
 
 	.read				= native_apic_mem_read,
 	.write				= native_apic_mem_write,
@@ -60,7 +73,6 @@ static struct apic apic_flat = {
 	.icr_write			= native_apic_icr_write,
 	.wait_icr_idle			= native_apic_wait_icr_idle,
 	.safe_wait_icr_idle		= native_safe_apic_wait_icr_idle,
-*/
 };
 
 static int physflat_probe(void)
@@ -91,6 +103,7 @@ static struct apic apic_physflat = {
 	.send_IPI_allbutself		= physflat_send_IPI_allbutself,
 	.send_IPI_all			= physflat_send_IPI_all,
 	.send_IPI_self			= apic_send_IPI_self,
+*/
 
 	.read				= native_apic_mem_read,
 	.write				= native_apic_mem_write,
@@ -99,7 +112,6 @@ static struct apic apic_physflat = {
 	.icr_write			= native_apic_icr_write,
 	.wait_icr_idle			= native_apic_wait_icr_idle,
 	.safe_wait_icr_idle		= native_safe_apic_wait_icr_idle,
-*/
 };
 
 struct apic *apic __read_mostly = &apic_flat;

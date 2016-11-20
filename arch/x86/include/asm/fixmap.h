@@ -11,8 +11,9 @@
 #define _ASM_X86_FIXMAP_H_
 
 #include <asm/page.h>
-#include <asm/pgtable.h>
 #include <asm/apic.h>
+#include <asm/pgtable.h>
+
 #include <lego/bug.h>
 #include <lego/types.h>
 
