@@ -8,22 +8,20 @@
  */
 
 #include <asm/asm.h>
+#include <asm/ipi.h>
 #include <asm/apic.h>
 #include <asm/fixmap.h>
 #include <asm/processor.h>
 
+#include <lego/irq.h>
+#include <lego/smp.h>
 #include <lego/kernel.h>
 #include <lego/bitops.h>
 
-static u32 native_apic_mem_read(u32 reg)
+/* Same for both flat and physical. */
+static void default_apic_send_IPI_self(int vector)
 {
-	return *((volatile u32 *)(APIC_BASE + reg));
-}
-
-static inline void native_apic_mem_write(u32 reg, u32 v)
-{
-	volatile u32 *addr = (volatile u32 *)(APIC_BASE + reg);
-	*addr = v;
+	__default_send_IPI_shortcut(APIC_DEST_SELF, vector, APIC_DEST_PHYSICAL);
 }
 
 static int default_apic_id_valid(int apicid)
@@ -41,6 +39,67 @@ static unsigned long set_apic_id(unsigned int id)
 	return (id & 0xFF) << 24;
 }
 
+static void _flat_send_IPI_mask(unsigned long mask, int vector)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	__default_send_IPI_dest_field(mask, vector, apic->dest_logical);
+	local_irq_restore(flags);
+}
+
+static void flat_send_IPI_mask(const struct cpumask *cpumask, int vector)
+{
+	unsigned long mask = cpumask_bits(cpumask)[0];
+
+	_flat_send_IPI_mask(mask, vector);
+}
+
+static void
+flat_send_IPI_mask_allbutself(const struct cpumask *cpumask, int vector)
+{
+	unsigned long mask = cpumask_bits(cpumask)[0];
+	int cpu = smp_processor_id();
+
+	if (cpu < BITS_PER_LONG)
+		clear_bit(cpu, &mask);
+
+	_flat_send_IPI_mask(mask, vector);
+}
+
+static void flat_send_IPI_allbutself(int vector)
+{
+	int cpu = smp_processor_id();
+#ifdef	CONFIG_HOTPLUG_CPU
+	int hotplug = 1;
+#else
+	int hotplug = 0;
+#endif
+	if (hotplug || vector == NMI_VECTOR) {
+		if (!cpumask_equal(cpu_online_mask, cpumask_of(cpu))) {
+			unsigned long mask = cpumask_bits(cpu_online_mask)[0];
+
+			if (cpu < BITS_PER_LONG)
+				clear_bit(cpu, &mask);
+
+			_flat_send_IPI_mask(mask, vector);
+		}
+	} else if (num_online_cpus() > 1) {
+		__default_send_IPI_shortcut(APIC_DEST_ALLBUT,
+					    vector, apic->dest_logical);
+	}
+}
+
+static void flat_send_IPI_all(int vector)
+{
+	if (vector == NMI_VECTOR) {
+		flat_send_IPI_mask(cpu_online_mask, vector);
+	} else {
+		__default_send_IPI_shortcut(APIC_DEST_ALLINC,
+					    vector, apic->dest_logical);
+	}
+}
+
 static int flat_probe(void)
 {
 	return 1;
@@ -54,17 +113,17 @@ static struct apic apic_flat = {
 	.irq_delivery_mode		= dest_LowestPrio,
 	.irq_dest_mode			= 1, /* Logical */
 
+	.dest_logical			= APIC_DEST_LOGICAL,
+
 	.get_apic_id			= flat_get_apic_id,
 	.set_apic_id			= set_apic_id,
 
-/*
 	.send_IPI			= default_send_IPI_single,
 	.send_IPI_mask			= flat_send_IPI_mask,
 	.send_IPI_mask_allbutself	= flat_send_IPI_mask_allbutself,
 	.send_IPI_allbutself		= flat_send_IPI_allbutself,
 	.send_IPI_all			= flat_send_IPI_all,
-	.send_IPI_self			= apic_send_IPI_self,
-*/
+	.send_IPI_self			= default_apic_send_IPI_self,
 
 	.read				= native_apic_mem_read,
 	.write				= native_apic_mem_write,
@@ -74,6 +133,16 @@ static struct apic apic_flat = {
 	.wait_icr_idle			= native_apic_wait_icr_idle,
 	.safe_wait_icr_idle		= native_safe_apic_wait_icr_idle,
 };
+
+static void physflat_send_IPI_allbutself(int vector)
+{
+	default_send_IPI_mask_allbutself_phys(cpu_online_mask, vector);
+}
+
+static void physflat_send_IPI_all(int vector)
+{
+	default_send_IPI_mask_sequence_phys(cpu_online_mask, vector);
+}
 
 static int physflat_probe(void)
 {
@@ -93,17 +162,17 @@ static struct apic apic_physflat = {
 	.irq_delivery_mode		= dest_Fixed,
 	.irq_dest_mode			= 0, /* Logical */
 
+	.dest_logical			= 0,
+
 	.get_apic_id			= flat_get_apic_id,
 	.set_apic_id			= set_apic_id,
 
-/*
 	.send_IPI			= default_send_IPI_single_phys,
 	.send_IPI_mask			= default_send_IPI_mask_sequence_phys,
 	.send_IPI_mask_allbutself	= default_send_IPI_mask_allbutself_phys,
 	.send_IPI_allbutself		= physflat_send_IPI_allbutself,
 	.send_IPI_all			= physflat_send_IPI_all,
-	.send_IPI_self			= apic_send_IPI_self,
-*/
+	.send_IPI_self			= default_apic_send_IPI_self,
 
 	.read				= native_apic_mem_read,
 	.write				= native_apic_mem_write,
