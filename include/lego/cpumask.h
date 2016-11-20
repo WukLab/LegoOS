@@ -12,6 +12,7 @@
 
 #include <lego/types.h>
 #include <lego/bitops.h>
+#include <lego/bitmap.h>
 
 /*
  * 64 by default
@@ -23,6 +24,29 @@
 typedef struct cpumask {
 	DECLARE_BITMAP(bits, NR_CPUS);
 } cpumask_t;
+
+/*
+ * Special-case data structure for "single bit set only" constant CPU masks.
+ *
+ * We pre-generate all the 64 (or 32) possible bit positions, with enough
+ * padding to the left and the right, and return the constant pointer
+ * appropriately offset.
+ */
+extern const unsigned long
+	cpu_bit_bitmap[BITS_PER_LONG+1][BITS_TO_LONGS(NR_CPUS)];
+
+static inline const struct cpumask *get_cpu_mask(unsigned int cpu)
+{
+	const unsigned long *p = cpu_bit_bitmap[1 + cpu % BITS_PER_LONG];
+	p -= cpu / BITS_PER_LONG;
+	return (struct cpumask *)(p);
+}
+
+/**
+ * cpumask_of - the cpumask containing just a given cpu
+ * @cpu: the cpu (<= nr_cpu_ids)
+ */
+#define cpumask_of(cpu) (get_cpu_mask(cpu))
 
 /**
  * cpumask_bits - get the bits in a cpumask
@@ -328,6 +352,27 @@ set_cpu_active(unsigned int cpu, bool active)
 		cpumask_set_cpu(cpu, &__cpu_active_mask);
 	else
 		cpumask_clear_cpu(cpu, &__cpu_active_mask);
+}
+
+/**
+ * cpumask_weight - Count of bits in *srcp
+ * @srcp: the cpumask to count bits (< nr_cpu_ids) in.
+ */
+static inline unsigned int cpumask_weight(const struct cpumask *srcp)
+{
+	return bitmap_weight(cpumask_bits(srcp), nr_cpumask_bits);
+}
+
+/**
+ * cpumask_equal - *src1p == *src2p
+ * @src1p: the first input
+ * @src2p: the second input
+ */
+static inline bool cpumask_equal(const struct cpumask *src1p,
+				const struct cpumask *src2p)
+{
+	return bitmap_equal(cpumask_bits(src1p), cpumask_bits(src2p),
+						 nr_cpumask_bits);
 }
 
 void __init boot_cpumask_init(void);

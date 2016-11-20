@@ -8,7 +8,7 @@
  */
 
 /*
- * Bit operations and Bitmap operations
+ * Bit operations
  */
 
 #ifndef _LEGO_BITOPS_H_
@@ -18,6 +18,7 @@
 
 #include <lego/types.h>
 #include <lego/kernel.h>
+#include <lego/hweight.h>
 
 #define BITMAP_FIRST_WORD_MASK(start) (~0UL << ((start) & (BITS_PER_LONG - 1)))
 #define BITMAP_LAST_WORD_MASK(nbits) (~0UL >> (-(nbits) & (BITS_PER_LONG - 1)))
@@ -32,6 +33,11 @@
 
 #define GENMASK_ULL(h, l) \
 	(((~0ULL) << (l)) & (~0ULL >> (BITS_PER_LONG_LONG - 1 - (h))))
+
+static __always_inline unsigned long hweight_long(unsigned long w)
+{
+	return sizeof(w) == 4 ? hweight32(w) : hweight64(w);
+}
 
 /**
  * rol64 - rotate a 64-bit value left
@@ -192,4 +198,5 @@ extern unsigned long find_first_zero_bit(const unsigned long *addr,
  */
 extern unsigned long find_last_bit(const unsigned long *addr,
 				   unsigned long size);
+
 #endif /* _LEGO_BITOPS_H_ */
