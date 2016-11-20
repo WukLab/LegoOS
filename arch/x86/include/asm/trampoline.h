@@ -7,7 +7,12 @@
  * (at your option) any later version.
  */
 
-#include <asm/ipi.h>
-#include <asm/apic.h>
+#ifndef _ASM_X86_TRAMPOLINE_H_
+#define _ASM_X86_TRAMPOLINE_H_
 
-#include <lego/kernel.h>
+void __init copy_trampoline(void);
+
+extern unsigned int trampoline_start;
+extern unsigned int trampoline_end;
+
+#endif /* _ASM_X86_TRAMPOLINE_H_ */

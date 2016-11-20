@@ -106,6 +106,7 @@ struct boot_params {
 	__u32 alt_mem_k;
 	__u8 e820_entries;
 	struct e820entry e820_map[E820MAX];
+	__u32 trampoline_base;
 } __attribute__((packed));
 
 #endif /* __ASSEMBLY__ */

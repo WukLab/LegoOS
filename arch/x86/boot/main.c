@@ -113,6 +113,14 @@ void main(void)
 	/* Copy the boot header into the 'zeropage' */
 	copy_boot_params();
 
+	/*
+	 * For simplicity, the trampoline code will be loaded
+	 * into the setup area by kernel later. Just do the
+	 * override, everything below 1MB will be safe during
+	 * the real trampoline cooy.
+	 */
+	boot_params.trampoline_base = (__u32)(cs() << 4);
+
 	printf("%s\n", kernel_version);
 	printf("cs = 0x%x ", cs());
 	printf("es = 0x%x ", es());

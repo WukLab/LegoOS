@@ -7,7 +7,17 @@
  * (at your option) any later version.
  */
 
-#include <asm/ipi.h>
-#include <asm/apic.h>
+#include <asm/page.h>
+#include <asm/pgtable.h>
+#include <lego/linkage.h>
 
-#include <lego/kernel.h>
+	.section ".init.data", "aw", @progbits
+	.code16
+GLOBAL(trampoline_start)
+1:
+	xor	%ax, %ax
+	hlt
+	jmp	1b
+
+	.align PAGE_SIZE
+GLOBAL(trampoline_end)

@@ -12,6 +12,7 @@
 
 #include <asm/cache.h>
 #include <lego/types.h>
+#include <lego/linkage.h>
 
 #ifndef __GNUC__
 # error Please use GCC
@@ -40,9 +41,6 @@
 #define __read_mostly		__section(.data..read_mostly)
 #define __init_task_data	__section(.data..init_task)
 #define __lockfunc		__section(.spinlock.text)
-
-#define __page_aligned_data	__section(.data..page_aligned) __aligned(PAGE_SIZE)
-#define __page_aligned_bss	__section(.bss..page_aligned) __aligned(PAGE_SIZE)
 
 /*
  * ____cacheline_aligned just make the marked data cache line aligned

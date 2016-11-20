@@ -10,6 +10,8 @@ obj-y += traps.o
 obj-y += e820.o
 obj-y += cpu.o cpu_intel.o
 obj-y += smp.o
+obj-y += smpboot.o
+obj-y += trampoline.o
 obj-y += apic/
 
 #
