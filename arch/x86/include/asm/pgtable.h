@@ -146,5 +146,8 @@ static inline pmd_t pfn_pmd(unsigned long page_nr, pgprot_t pgprot)
 		     pgprot_val(pgprot));
 }
 
+/* Install a pte for a particular vaddr in kernel space. */
+void set_pte_vaddr(unsigned long vaddr, pte_t pte);
+
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_PGTABLE_H_ */

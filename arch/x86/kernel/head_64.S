@@ -257,6 +257,16 @@ NEXT_PAGE(early_dynamic_pgts)
 NEXT_PAGE(init_level4_pgt)
 	.fill	512,8,0
 
+/*
+ * 0-510:	.fill L3_START_KERNEL
+ * 511:		0xffffffff80000000 - 0xffffffffbffffff
+ * 522:		0xffffffffc0000000 - 0xfffffffffffffff
+ *
+ * 511, which is level2_kernel_pgt, is for kernel code+data+bss
+ * 522, which is level2_fixmap_pgt, is for fixmap + early_ioremap
+ *
+ * Check early_ioremap_init() for more explanations.
+ */
 NEXT_PAGE(level3_kernel_pgt)
 	.fill	L3_START_KERNEL,8,0
 	/* (2^48-(2*1024*1024*1024)-((2^39)*511))/(2^30) = 510 */
@@ -277,11 +287,19 @@ NEXT_PAGE(level2_kernel_pgt)
 	PMDS(0, __PAGE_KERNEL_LARGE_EXEC,
 		KERNEL_IMAGE_SIZE/PMD_SIZE)
 
+/*
+ * We will have a bm_pte[] array for early_ioremap, which will
+ * be initilized in early_ioremap_init(), so here we do not
+ * need to allocate the L1 pgtable for it. But for the permanent
+ * fixmap entries, we need to provide a L1 pgtable, which will
+ * be the level1_fixmap_pgt.
+ *
+ * Also because the FIXADDR_TOP is 0xfffffffffffff000 now,
+ * hence we need the last PMD entry:
+ */
 NEXT_PAGE(level2_fixmap_pgt)
-	.fill	506,8,0
+	.fill	511,8,0
 	.quad	level1_fixmap_pgt - __START_KERNEL_map + _PAGE_TABLE
-	/* 8MB reserved for vsyscalls + a 2MB hole = 4 + 1 entries */
-	.fill	5,8,0
 
 NEXT_PAGE(level1_fixmap_pgt)
 	.fill	512,8,0

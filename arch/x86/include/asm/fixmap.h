@@ -33,6 +33,7 @@
  * TLB entries of such buffers will not be flushed across task switches.
  */
 enum fixed_addresses {
+	FIX_SAFETY_HOLE,
 #ifdef CONFIG_X86_LOCAL_APIC
 	FIX_APIC_BASE,	/* local (CPU) APIC) -- required for SMP or not */
 #endif
@@ -49,7 +50,7 @@ enum fixed_addresses {
 	 * before ioremap() is functional.
 	 *
 	 * If necessary we round it up to the next 512 pages boundary so
-	 * that we can have a single pgd entry and a single pte table:
+	 * that we can have a single PMD entry and a single pte table:
 	 */
 #define NR_FIX_BTMAPS		64
 #define FIX_BTMAPS_SLOTS	8
@@ -89,7 +90,21 @@ static inline unsigned long virt_to_fix(const unsigned long vaddr)
 	return __virt_to_fix(vaddr);
 }
 
+/*
+ * Set the permanent fixmap mappings only!
+ * idx range: (FIX_SAFETY_HOLE, __end_of_permanent_fixed_addresses)
+ *
+ * These permanent fixmap address use level1_fixmap_pgt in head_64.S
+ */
 void __set_fixmap(enum fixed_addresses idx, phys_addr_t phys, pgprot_t flags);
+
+/*
+ * All fixmap entries after permanent fixed address, which are used
+ * to do early ioremap, these ioremap address use bm_pte[] page, which
+ * is different from the level1_fixmap_pgt.
+ */
+void __early_ioremap_set_fixmap(enum fixed_addresses idx,
+				phys_addr_t phys, pgprot_t flags);
 
 /* Return a pointer with offset calculated */
 #define __set_fixmap_offset(idx, phys, flags)				\

@@ -12,6 +12,7 @@
 #include <asm/desc.h>
 #include <asm/page.h>
 #include <asm/traps.h>
+#include <asm/fixmap.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
 #include <asm/processor.h>
@@ -39,6 +40,21 @@ struct gdt_page gdt_page = { .gdt = {
 	[GDT_ENTRY_DEFAULT_USER_DS]	= GDT_ENTRY_INIT(0xc0f3, 0, 0xfffff),
 	[GDT_ENTRY_DEFAULT_USER_CS]	= GDT_ENTRY_INIT(0xa0fb, 0, 0xfffff),
 } };
+
+static void __used test_fixmap(void)
+{
+	void *p;
+	char c;
+
+	set_fixmap(FIX_APIC_BASE, 0x100000);
+	p = (void *)fix_to_virt(FIX_APIC_BASE);
+	c = *(char *)p;
+	printk("%#lx %x\n", fix_to_virt(FIX_APIC_BASE), c);
+	
+	p = early_ioremap(0x100000, 0x100);
+	c = *(char *)p;
+	printk("%p %x\n", p, c);
+}
 
 void __init setup_arch(void)
 {

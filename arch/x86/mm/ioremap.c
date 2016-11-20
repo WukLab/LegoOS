@@ -18,7 +18,7 @@
 /*
  * For early_ioremap/unmap
  * we have 512 temporaty boot-time mappings, which will use
- * just one PMD entry.
+ * just one PMD entry, this is different from the level1_fixmap_pgt.
  */
 static pte_t bm_pte[PAGE_SIZE/sizeof(pte_t)] __page_aligned_bss;
 
@@ -43,22 +43,61 @@ bool __init is_early_ioremap_ptep(pte_t *ptep)
 	return ptep >= &bm_pte[0] && ptep < &bm_pte[PAGE_SIZE/sizeof(pte_t)];
 }
 
-void __init __set_fixmap(enum fixed_addresses idx,
-			 phys_addr_t phys, pgprot_t flags)
+void __init __early_ioremap_set_fixmap(enum fixed_addresses idx,
+				       phys_addr_t phys,
+				       pgprot_t flags)
 {
 	unsigned long addr = __fix_to_virt(idx);
-	pte_t *pte;
+	pte_t *ptep;
+
+	if (idx <= __end_of_permanent_fixed_addresses) {
+		panic("Use __set_fixmap for permanent fixmap");
+		return;
+	}
 
 	if (idx >= __end_of_fixed_addresses) {
 		BUG();
 		return;
 	}
-	pte = early_ioremap_pte(addr);
+
+	ptep = early_ioremap_pte(addr);
 
 	if (pgprot_val(flags))
-		pte_set(pte, pfn_pte(phys >> PAGE_SHIFT, flags));
+		pte_set(ptep, pfn_pte(phys >> PAGE_SHIFT, flags));
 	else
-		pte_clear(pte);
+		pte_clear(ptep);
+}
+
+static void __init __set_fixmap_pte(unsigned long addr, pte_t pte)
+{
+	/*
+	 * Don't assume we're using swapper_pg_dir at this point
+	 * And we are guaranteed that all levels of page table will
+	 * exist (because of head_64.S and some BUILD_BUG_ON check below)
+	 */
+	pgd_t *base = __va(read_cr3());
+	pgd_t *pgd = &base[pgd_index(addr)];
+	pud_t *pud = pud_offset(pgd, addr);
+	pmd_t *pmd = pmd_offset(pud, addr);
+	pte_t *ptep = pte_offset_kernel(pmd, addr);
+
+	pte_set(ptep, pte);
+}
+
+/*
+ * Used by permanent fixmap only
+ */
+void __init __set_fixmap(enum fixed_addresses idx, phys_addr_t phys,
+		         pgprot_t flags)
+{
+	unsigned long address = __fix_to_virt(idx);
+	pte_t pte = pfn_pte(phys >> PAGE_SHIFT, flags);
+
+	if (idx >= __end_of_permanent_fixed_addresses) {
+		BUG();
+		return;
+	}
+	__set_fixmap_pte(address, pte);
 }
 
 /*
@@ -67,8 +106,27 @@ void __init __set_fixmap(enum fixed_addresses idx,
  */
 void __init early_ioremap_init(void)
 {
-
 	pmd_t *pmd;
+
+	/*
+	 * In head_64.S, we only have one level1_fixmap_pgt
+	 * installed at PMD (level2_fixmap_pgt). So the size
+	 * of permanent fixed address is limited to PMD_SIZE:
+	 */
+	BUILD_BUG_ON(__fix_to_virt(__end_of_permanent_fixed_addresses)
+		< (~0UL - PMD_SIZE));
+
+	/*
+	 * If head_64.S, the level3_kernel_pgt's entry 511 is
+	 * used for map kernel code+data+bss, and the entry 512
+	 * is used for fixmap.
+	 *
+	 * Hence the minimum address of fixmap can NOT be lower
+	 * than the range mapped by entry 512, which is the size
+	 * that a PUD can map (PUD_SIZE):
+	 */
+	BUILD_BUG_ON(__fix_to_virt(__end_of_fixed_addresses)
+			< (~0UL - PUD_SIZE));
 
 	/* Must be PMD aligned */
 	BUILD_BUG_ON((fix_to_virt(0) + PAGE_SIZE) & ((1 << PMD_SHIFT) - 1));
@@ -85,6 +143,8 @@ void __init early_ioremap_init(void)
 	 * Those boot-time slots are not calculated here.
 	 */
 	pr_info("fixmap: [%#lx - %#lx]\n", FIXADDR_START, FIXADDR_TOP);
+	pr_info("early_ioremap: [%#lx - %#lx]\n",
+		fix_to_virt(FIX_BTMAP_BEGIN), fix_to_virt(FIX_BTMAP_END));
 
 	/* Generic early ioremap setup */
 	early_ioremap_setup();

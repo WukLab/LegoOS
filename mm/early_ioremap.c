@@ -85,7 +85,7 @@ __early_ioremap(resource_size_t phys_addr, unsigned long size, pgprot_t prot)
 	 */
 	idx = FIX_BTMAP_BEGIN - NR_FIX_BTMAPS*slot;
 	while (nrpages > 0) {
-		__set_fixmap(idx, phys_addr, prot);
+		__early_ioremap_set_fixmap(idx, phys_addr, prot);
 		phys_addr += PAGE_SIZE;
 		--idx;
 		--nrpages;
@@ -136,7 +136,8 @@ void __init early_iounmap(void *addr, unsigned long size)
 
 	idx = FIX_BTMAP_BEGIN - NR_FIX_BTMAPS*slot;
 	while (nrpages > 0) {
-		clear_fixmap(idx);
+		/* clear */
+		__early_ioremap_set_fixmap(idx, 0, __pgprot(0));
 		--idx;
 		--nrpages;
 	}
