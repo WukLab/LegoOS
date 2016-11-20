@@ -444,6 +444,14 @@ struct apic {
 	const char *name;
 
 	int (*probe)(void);
+	int (*apic_id_valid)(int apicid);
+	int (*apic_id_registered)(void);
+
+	int irq_delivery_mode;
+	int irq_dest_mode;
+
+	unsigned int (*get_apic_id)(unsigned long x);
+	unsigned long (*set_apic_id)(unsigned int id);
 
 	/* ipi */
 	void (*send_IPI)(int cpu, int vector);

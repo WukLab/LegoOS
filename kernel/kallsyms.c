@@ -14,6 +14,12 @@
 #include <lego/sections.h>
 #include <lego/kallsyms.h>
 
+#ifdef CONFIG_KALLSYMS_ALL
+#define all_var 1
+#else
+#define all_var 0
+#endif
+
 /*
  * These will be re-linked against their real values
  * during the second link stage.
@@ -37,6 +43,13 @@ extern const u16 kallsyms_token_index[] __weak;
 
 extern const unsigned long kallsyms_markers[] __weak;
 
+static inline int is_kernel(unsigned long addr)
+{
+	if (addr >= (unsigned long)__stext && addr <= (unsigned long)__end)
+		return 1;
+	return 0;
+}
+
 static inline int is_kernel_inittext(unsigned long addr)
 {
 	if (addr >= (unsigned long)__sinittext &&
@@ -55,6 +68,9 @@ static inline int is_kernel_text(unsigned long addr)
 
 static inline int is_ksym_addr(unsigned long addr)
 {
+	if (all_var)
+		return is_kernel(addr);
+
 	return is_kernel_inittext(addr) || is_kernel_text(addr);
 }
 
@@ -115,6 +131,8 @@ static unsigned long get_symbol_pos(unsigned long addr,
 	if (!symbol_end) {
 		if (is_kernel_inittext(addr))
 			symbol_end = (unsigned long)__einittext;
+		else if (all_var)
+			symbol_end = (unsigned long)__end;
 		else
 			symbol_end = (unsigned long)__etext;
 	}
