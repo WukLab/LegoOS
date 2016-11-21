@@ -42,6 +42,10 @@ struct gdt_page gdt_page = { .gdt = {
 	[GDT_ENTRY_DEFAULT_USER_CS]	= GDT_ENTRY_INIT(0xa0fb, 0, 0xfffff),
 } };
 
+/*
+ * setup_arch
+ * x86-64 specific initiliazation
+ */
 void __init setup_arch(void)
 {
 	early_cpu_init();
@@ -50,15 +54,16 @@ void __init setup_arch(void)
 	/* Parse e820 table */
 	setup_physical_memory();
 
-	check_x2apic();
-	setup_apic_driver();
-
 	/*
 	 * Load interrupt handlers
 	 * and init everthing about BSP
 	 */
 	trap_init();
 	cpu_init();
+
+	check_x2apic();
+	setup_apic_driver();
+	init_apic_mappings();
 
 	copy_trampoline();
 }

@@ -12,6 +12,7 @@ obj-y += cpu.o cpu_intel.o
 obj-y += smp.o
 obj-y += smpboot.o
 obj-y += trampoline.o
+obj-y += acpi_boot.o
 obj-y += apic/
 
 #

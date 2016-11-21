@@ -429,8 +429,6 @@ u32 native_safe_apic_wait_icr_idle(void);
 void native_apic_icr_write(u32 low, u32 id);
 u64 native_apic_icr_read(void);
 
-#ifdef CONFIG_X86_LOCAL_APIC
-
 static inline u32 apic_read(u32 reg)
 {
 	return apic->read(reg);
@@ -466,17 +464,8 @@ static inline u32 safe_apic_wait_icr_idle(void)
 	return apic->safe_wait_icr_idle();
 }
 
-extern void __init apic_set_eoi_write(void (*eoi_write)(u32 reg, u32 v));
+void __init apic_set_eoi_write(void (*eoi_write)(u32 reg, u32 v));
 
-#else
-static inline u32 apic_read(u32 reg) { return 0; }
-static inline void apic_write(u32 reg, u32 val) { }
-static inline void apic_eoi(void) { }
-static inline u64 apic_icr_read(void) { return 0; }
-static inline void apic_icr_write(u32 low, u32 high) { }
-static inline void apic_wait_icr_idle(void) { }
-static inline u32 safe_apic_wait_icr_idle(void) { return 0; }
-static inline void apic_set_eoi_write(void (*eoi_write)(u32 reg, u32 v)) {}
-#endif  /* CONFIG_X86_LOCAL_APIC */
+void __init init_apic_mappings(void);
 
 #endif /* _ASM_X86_APIC_H_ */

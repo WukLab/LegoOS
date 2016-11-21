@@ -15,6 +15,8 @@
 #include <lego/kernel.h>
 #include <lego/bitops.h>
 
+unsigned long apic_phys;
+
 #ifdef CONFIG_X86_X2APIC
 void __init x2apic_enable(void)
 {
@@ -97,3 +99,19 @@ u32 native_safe_apic_wait_icr_idle(void)
 	return send_status;
 }
 
+/**
+ * lapic_get_maxlvt
+ * Get the maximum number of local vector table entries
+ */
+int lapic_get_maxlvt(void)
+{
+	unsigned int v;
+
+	v = apic_read(APIC_LVR);
+	return GET_APIC_MAXLVT(v);
+}
+
+void __init init_apic_mappings(void)
+{
+
+}
