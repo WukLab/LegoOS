@@ -17,8 +17,6 @@
 #include <lego/kernel.h>
 #include <lego/early_ioremap.h>
 
-#include "acpi.h"
-
 #define ACPI_MAX_TABLES 128
 static struct acpi_table_desc initial_tables[ACPI_MAX_TABLES] __initdata;
 
@@ -63,8 +61,7 @@ static void acpi_tb_print_table_header(unsigned long address, struct acpi_table_
 		pr_info("%-4.4s 0x%8.8X%8.8X %06X\n",
 			header->signature, ACPI_FORMAT_UINT64(address),
 			header->length);
-	} else if (!strncmp(header->signature, ACPI_SIG_RSDP, 8)) {
-
+	} else if (ACPI_VALIDATE_RSDP_SIG(header->signature)) {
 		/* RSDP has no common fields */
 		memcpy(local_header.oem_id,
 			((struct acpi_table_rsdp *)header)->oem_id,
