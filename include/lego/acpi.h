@@ -17,29 +17,28 @@
  * file. Useful because they make it more difficult to inadvertently type in
  * the wrong signature.
  */
-#define ACPI_SIG_RSDP	"RSD PTR " /* Root System Description Pointer */
-#define ACPI_SIG_DSDT	"DSDT"	/* Differentiated System Description Table */
-#define ACPI_SIG_FADT	"FACP"	/* Fixed ACPI Description Table */
-#define ACPI_SIG_FACS	"FACS"	/* Firmware ACPI Control Structure */
-#define ACPI_SIG_OSDT	"OSDT"	/* Override System Description Table */
-#define ACPI_SIG_PSDT	"PSDT"	/* Persistent System Description Table */
-#define ACPI_SIG_RSDT	"RSDT"	/* Root System Description Table */
-#define ACPI_SIG_XSDT	"XSDT"	/* Extended  System Description Table */
-#define ACPI_SIG_SSDT	"SSDT"	/* Secondary System Description Table */
-#define ACPI_RSDP_NAME	"RSDP"	/* Short name for RSDP, not signature */
-#define ACPI_SIG_BERT	"BERT"	/* Boot Error Record Table */
-#define ACPI_SIG_CPEP	"CPEP"	/* Corrected Platform Error Polling table */
-#define ACPI_SIG_ECDT	"ECDT"	/* Embedded Controller Boot Resources Table */
-#define ACPI_SIG_EINJ	"EINJ"	/* Error Injection table */
-#define ACPI_SIG_ERST	"ERST"	/* Error Record Serialization Table */
-#define ACPI_SIG_HEST	"HEST"	/* Hardware Error Source Table */
-#define ACPI_SIG_MADT	"APIC"	/* Multiple APIC Description Table */
-#define ACPI_SIG_MSCT	"MSCT"	/* Maximum System Characteristics Table */
-#define ACPI_SIG_SBST	"SBST"	/* Smart Battery Specification Table */
-#define ACPI_SIG_SLIT	"SLIT"	/* System Locality Distance Information Table */
-#define ACPI_SIG_SRAT	"SRAT"	/* System Resource Affinity Table */
-#define ACPI_SIG_NFIT	"NFIT"	/* NVDIMM Firmware Interface Table */
-
+#define ACPI_SIG_RSDP	"RSD PTR "	/* Root System Description Pointer */
+#define ACPI_SIG_DSDT	"DSDT"		/* Differentiated System Description Table */
+#define ACPI_SIG_FADT	"FACP"		/* Fixed ACPI Description Table */
+#define ACPI_SIG_FACS	"FACS"		/* Firmware ACPI Control Structure */
+#define ACPI_SIG_OSDT	"OSDT"		/* Override System Description Table */
+#define ACPI_SIG_PSDT	"PSDT"		/* Persistent System Description Table */
+#define ACPI_SIG_RSDT	"RSDT"		/* Root System Description Table */
+#define ACPI_SIG_XSDT	"XSDT"		/* Extended  System Description Table */
+#define ACPI_SIG_SSDT	"SSDT"		/* Secondary System Description Table */
+#define ACPI_RSDP_NAME	"RSDP"		/* Short name for RSDP, not signature */
+#define ACPI_SIG_BERT	"BERT"		/* Boot Error Record Table */
+#define ACPI_SIG_CPEP	"CPEP"		/* Corrected Platform Error Polling table */
+#define ACPI_SIG_ECDT	"ECDT"		/* Embedded Controller Boot Resources Table */
+#define ACPI_SIG_EINJ	"EINJ"		/* Error Injection table */
+#define ACPI_SIG_ERST	"ERST"		/* Error Record Serialization Table */
+#define ACPI_SIG_HEST	"HEST"		/* Hardware Error Source Table */
+#define ACPI_SIG_MADT	"APIC"		/* Multiple APIC Description Table */
+#define ACPI_SIG_MSCT	"MSCT"		/* Maximum System Characteristics Table */
+#define ACPI_SIG_SBST	"SBST"		/* Smart Battery Specification Table */
+#define ACPI_SIG_SLIT	"SLIT"		/* System Locality Distance Information Table */
+#define ACPI_SIG_SRAT	"SRAT"		/* System Resource Affinity Table */
+#define ACPI_SIG_NFIT	"NFIT"		/* NVDIMM Firmware Interface Table */
 
 #define ACPI_NAME_SIZE		4
 #define ACPI_OEM_ID_SIZE	6
@@ -112,12 +111,6 @@ struct acpi_table_madt {
 	struct acpi_table_header header;	/* Common ACPI table header */
 	u32 address;				/* Physical address of local APIC */
 	u32 flags;
-};
-
-/* Internal table-related structures */
-union acpi_name_union {
-	u32 integer;
-	char ascii[4];
 };
 
 /* Values for MADT subtable type in struct acpi_subtable_header */
@@ -348,8 +341,14 @@ struct acpi_madt_generic_translator {
 #define ACPI_MADT_TRIGGER_LEVEL           (3<<2)
 
 /*
- * Internal Representations
+ * LegoOS Internal Representations
  */
+
+/* Internal table-related structures */
+union acpi_name_union {
+	u32 integer;
+	char ascii[4];
+};
 
 /* Internal ACPI Table Descriptor. One per ACPI table. */
 struct acpi_table_desc {
@@ -361,5 +360,7 @@ struct acpi_table_desc {
 	u8 owner_id;
 	u8 flags;
 };
+
+void __init acpi_table_init(void);
 
 #endif /* _LEGO_ACPI_H_ */

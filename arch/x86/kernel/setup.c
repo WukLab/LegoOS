@@ -19,6 +19,7 @@
 #include <asm/bootparam.h>
 #include <asm/trampoline.h>
 
+#include <lego/acpi.h>
 #include <lego/kernel.h>
 #include <lego/early_ioremap.h>
 
@@ -60,6 +61,8 @@ void __init setup_arch(void)
 	 */
 	trap_init();
 	cpu_init();
+
+	acpi_table_init();
 
 	check_x2apic();
 	setup_apic_driver();
