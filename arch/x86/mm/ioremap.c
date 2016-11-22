@@ -11,6 +11,7 @@
 #include <asm/page.h>
 #include <asm/fixmap.h>
 #include <asm/pgtable.h>
+#include <asm/tlbflush.h>
 
 #include <lego/kernel.h>
 #include <lego/string.h>
@@ -70,6 +71,8 @@ void __init __early_ioremap_set_fixmap(enum fixed_addresses idx,
 		pte_set(ptep, pfn_pte(phys >> PAGE_SHIFT, flags));
 	else
 		pte_clear(ptep);
+
+	__flush_tlb_one(addr);
 }
 
 static void __init __set_fixmap_pte(unsigned long addr, pte_t pte)
@@ -89,6 +92,8 @@ static void __init __set_fixmap_pte(unsigned long addr, pte_t pte)
 		ptep, addr, pte_val(pte) & PTE_PFN_MASK);
 
 	pte_set(ptep, pte);
+
+	__flush_tlb_one(addr);
 }
 
 /*
