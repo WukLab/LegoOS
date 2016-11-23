@@ -64,8 +64,9 @@ void __init __early_ioremap_set_fixmap(enum fixed_addresses idx,
 
 	ptep = early_ioremap_pte(addr);
 
-	pr_debug("__early_ioremap_set_fixmap(%pS): %#lx -> %#lx\n",
-		ptep, addr, phys & PTE_PFN_MASK);
+	if (early_ioremap_debug)
+		pr_debug("__early_ioremap_set_fixmap(%pS): %#lx -> %#lx\n",
+			ptep, addr, phys & PTE_PFN_MASK);
 
 	if (pgprot_val(flags))
 		pte_set(ptep, pfn_pte(phys >> PAGE_SHIFT, flags));
@@ -88,8 +89,9 @@ static void __init __set_fixmap_pte(unsigned long addr, pte_t pte)
 	pmd_t *pmd = pmd_offset(pud, addr);
 	pte_t *ptep = pte_offset_kernel(pmd, addr);
 
-	pr_debug("__set_fixmap_pte(%pS): %#lx -> %#lx\n",
-		ptep, addr, pte_val(pte) & PTE_PFN_MASK);
+	if (early_ioremap_debug)
+		pr_debug("__set_fixmap_pte(%pS): %#lx -> %#lx\n",
+			ptep, addr, pte_val(pte) & PTE_PFN_MASK);
 
 	pte_set(ptep, pte);
 

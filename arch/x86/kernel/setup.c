@@ -62,7 +62,12 @@ void __init setup_arch(void)
 	trap_init();
 	cpu_init();
 
+	/*
+	 * Map all ACPI tables
+	 * and find possible SMP settings
+	 */
 	acpi_table_init();
+	acpi_boot_parse_tables();
 
 	check_x2apic();
 	setup_apic_driver();

@@ -408,6 +408,15 @@ struct acpi_table_desc {
 #define ACPI_HIDWORD(integer64)         ((u32)(((u64)(integer64)) >> 32))
 #define ACPI_FORMAT_UINT64(i)           ACPI_HIDWORD(i), ACPI_LODWORD(i)
 
+typedef int (*acpi_table_handler)(struct acpi_table_header *table);
+
+int __init acpi_parse_table(char *signature, acpi_table_handler handler);
+
+/* Initializing all ACPI tables */
 void __init acpi_table_init(void);
+void __init acpi_unmap_tables(void);
+
+/* Arch-Specific boot-time table parsing */
+void __init acpi_boot_parse_tables(void);
 
 #endif /* _LEGO_ACPI_H_ */

@@ -30,4 +30,6 @@ void early_ioremap_setup(void);
 /* Early copy from unmapped memory to kernel mapped memory */
 void copy_from_early_mem(void *dest, phys_addr_t src, unsigned long size);
 
+extern int early_ioremap_debug;
+
 #endif /* _LEGO_EARLY_IOREMAP_H_ */
