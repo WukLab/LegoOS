@@ -12,6 +12,7 @@
 #include <asm/asm.h>
 #include <asm/apic.h>
 #include <asm/processor.h>
+#include <asm/irq_vectors.h>
 
 #include <lego/acpi.h>
 #include <lego/string.h>
@@ -176,8 +177,61 @@ acpi_parse_lapic_nmi(struct acpi_subtable_header * header, const unsigned long e
 	return 0;
 }
 
+static int __init
+acpi_parse_ioapic(struct acpi_subtable_header * header, const unsigned long end)
+{
+	struct acpi_madt_io_apic *ioapic = NULL;
+
+	ioapic = (struct acpi_madt_io_apic *)header;
+
+	if (BAD_MADT_ENTRY(ioapic, end))
+		return -EINVAL;
+
+	acpi_table_print_madt_entry(header);
+
+	//mp_register_ioapic(ioapic->id, ioapic->address, ioapic->global_irq_base, &cfg);
+
+	return 0;
+}
+
+static int __init
+acpi_parse_nmi_src(struct acpi_subtable_header * header, const unsigned long end)
+{
+	struct acpi_madt_nmi_source *nmi_src = NULL;
+
+	nmi_src = (struct acpi_madt_nmi_source *)header;
+
+	if (BAD_MADT_ENTRY(nmi_src, end))
+		return -EINVAL;
+
+	acpi_table_print_madt_entry(header);
+
+	return 0;
+}
+
 static int __init acpi_parse_madt_ioapic_entries(void)
 {
+	int count;
+
+	count = acpi_table_parse_madt(ACPI_MADT_TYPE_IO_APIC, acpi_parse_ioapic,
+				      MAX_IO_APICS);
+	if (!count) {
+		pr_err("No IOAPIC entries present\n");
+		return -ENODEV;
+	} else if (count < 0) {
+		pr_err("Error parsing IOAPIC entry\n");
+		return count;
+	}
+
+	/* Fill in identity legacy mappings where no override */
+	//mp_config_acpi_legacy_irqs();
+
+	count = acpi_table_parse_madt(ACPI_MADT_TYPE_NMI_SOURCE,
+				      acpi_parse_nmi_src, NR_IRQS);
+	if (count < 0) {
+		pr_err("Error parsing NMI SRC entry\n");
+		return count;
+	}
 	return 0;
 }
 
