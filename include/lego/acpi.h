@@ -408,8 +408,26 @@ struct acpi_table_desc {
 #define ACPI_HIDWORD(integer64)         ((u32)(((u64)(integer64)) >> 32))
 #define ACPI_FORMAT_UINT64(i)           ACPI_HIDWORD(i), ACPI_LODWORD(i)
 
+typedef int (*acpi_table_entry_handler)(struct acpi_subtable_header *header,
+				        const unsigned long end);
 typedef int (*acpi_table_handler)(struct acpi_table_header *table);
 
+struct acpi_subtable_proc {
+	int id;
+	acpi_table_entry_handler handler;
+	int count;
+};
+
+int __init
+acpi_table_parse_entries_array(char *id,
+			 unsigned long table_size,
+			 struct acpi_subtable_proc *proc, int proc_num,
+			 unsigned int max_entries);
+
+void __init acpi_table_print_madt_entry(struct acpi_subtable_header *header);
+int __init acpi_table_parse_madt(enum acpi_madt_type id,
+				 acpi_table_entry_handler handler,
+				 unsigned int max_entries);
 int __init acpi_parse_table(char *signature, acpi_table_handler handler);
 
 /* Initializing all ACPI tables */
@@ -418,5 +436,9 @@ void __init acpi_unmap_tables(void);
 
 /* Arch-Specific boot-time table parsing */
 void __init acpi_boot_parse_tables(void);
+
+#define BAD_MADT_ENTRY(entry, end) (					    \
+		(!entry) || (unsigned long)entry + sizeof(*entry) > end ||  \
+		((struct acpi_subtable_header *)entry)->length < sizeof(*entry))
 
 #endif /* _LEGO_ACPI_H_ */
