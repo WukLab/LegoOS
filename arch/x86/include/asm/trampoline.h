@@ -10,7 +10,7 @@
 #ifndef _ASM_X86_TRAMPOLINE_H_
 #define _ASM_X86_TRAMPOLINE_H_
 
-void __init copy_trampoline(void);
+void __init copy_trampoline_code(void);
 
 extern unsigned int trampoline_start;
 extern unsigned int trampoline_end;

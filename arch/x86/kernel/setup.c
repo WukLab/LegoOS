@@ -20,6 +20,7 @@
 #include <asm/bootparam.h>
 #include <asm/trampoline.h>
 
+#include <lego/smp.h>
 #include <lego/acpi.h>
 #include <lego/kernel.h>
 #include <lego/nodemask.h>
@@ -78,12 +79,28 @@ void __init setup_arch(void)
 	acpi_table_init();
 	acpi_boot_parse_tables();
 
-	/* Find and init NUMA settings */
+	/*
+	 * Find and init NUMA from ACPI
+	 * All NUMA related initilization can proceed
+	 * after this call:
+	 */
 	acpi_boot_numa_init();
 
+	/* APIC's final init */
 	init_apic_mappings();
 
+	/*
+	 * Gosh, say goodbye to ACPI and APIC table parsing
+	 * Welcome to the world of Operating System. Init the
+	 * CPU id and Node id mapping:
+	 */
 	init_cpu_to_node();
 
-	copy_trampoline();
+	/*
+	 * Prepare trampoline for APs
+	 * and then boot them up
+	 */
+	copy_trampoline_code();
+
+	native_cpu_up(1);
 }

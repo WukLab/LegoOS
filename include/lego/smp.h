@@ -12,4 +12,6 @@
 
 #define smp_processor_id()	0
 
+int native_cpu_up(int cpu);
+
 #endif /* _LEGO_SMP_H_ */
