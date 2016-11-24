@@ -68,8 +68,8 @@ acpi_parse_sapic(struct acpi_subtable_header *header, const unsigned long end)
 
 	acpi_table_print_madt_entry(header);
 
-	acpi_register_lapic((processor->id << 8) | processor->eid,/* APIC ID */
-			    processor->processor_id, /* ACPI ID */
+	acpi_register_lapic((processor->id << 8) | processor->eid,	/* APIC ID */
+			    processor->processor_id,			/* ACPI ID */
 			    processor->lapic_flags & ACPI_MADT_ENABLED);
 
 	return 0;
@@ -98,8 +98,8 @@ acpi_parse_lapic(struct acpi_subtable_header * header, const unsigned long end)
 	 * to not preallocating memory for all NR_CPUS
 	 * when we use CPU hotplug.
 	 */
-	acpi_register_lapic(processor->id,	/* APIC ID */
-			    processor->processor_id, /* ACPI ID */
+	acpi_register_lapic(processor->id,			/* APIC ID */
+			    processor->processor_id,		/* ACPI ID */
 			    processor->lapic_flags & ACPI_MADT_ENABLED);
 
 	return 0;
@@ -314,11 +314,48 @@ static void __init acpi_boot_parse_madt(void)
 		pr_info("Using ACPI for processor (LAPIC) configuration\n");
 }
 
+u8 hpet_blockid;
+unsigned long hpet_address;
+
+static int __init acpi_parse_hpet(struct acpi_table_header *table)
+{
+	struct acpi_table_hpet *hpet_tbl = (struct acpi_table_hpet *)table;
+
+	if (hpet_tbl->address.space_id != 0) {
+		pr_err("HPET timers must be located in memory.\n");
+		return -1;
+	}
+
+	hpet_address = hpet_tbl->address.address;
+	hpet_blockid = hpet_tbl->sequence;
+
+	/*
+	 * Some broken BIOSes advertise HPET at 0x0. We really do not
+	 * want to allocate a resource there.
+	 */
+	if (!hpet_address) {
+		pr_err("HPET id: %#x base: %#lx is invalid\n",
+			hpet_tbl->id, hpet_address);
+		return 0;
+	}
+
+	pr_info("HPET id: %#x base: %#lx\n", hpet_tbl->id, hpet_address);
+
+	return 0;
+}
+
+static void __init acpi_boot_parse_hpet(void)
+{
+	acpi_parse_table(ACPI_SIG_HPET, acpi_parse_hpet);
+}
+
 /*
  * Parse ACPI tables one-by-one
  * - MADT: Multiple APIC Description Table
+ * - HPET: High Precision Event Timer
  */
 void __init acpi_boot_parse_tables(void)
 {
 	acpi_boot_parse_madt();
+	acpi_boot_parse_hpet();
 }

@@ -12,7 +12,9 @@ obj-y += cpu.o cpu_intel.o
 obj-y += smp.o
 obj-y += smpboot.o
 obj-y += trampoline.o
-obj-y += acpi_boot.o
+
+# ACPI APIC.. is this annoying?
+obj-y += acpi/
 obj-y += apic/
 
 #

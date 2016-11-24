@@ -39,6 +39,7 @@
 #define ACPI_SIG_SLIT	"SLIT"		/* System Locality Distance Information Table */
 #define ACPI_SIG_SRAT	"SRAT"		/* System Resource Affinity Table */
 #define ACPI_SIG_NFIT	"NFIT"		/* NVDIMM Firmware Interface Table */
+#define ACPI_SIG_HPET	"HPET"		/* High Precision Event Timer table */
 
 #define ACPI_NAME_SIZE		4
 #define ACPI_OEM_ID_SIZE	6
@@ -94,6 +95,38 @@ struct acpi_table_xsdt {
 
 #define ACPI_RSDT_ENTRY_SIZE        (sizeof (u32))
 #define ACPI_XSDT_ENTRY_SIZE        (sizeof (u64))
+
+/*
+ * GAS - Generic Address Structure (ACPI 2.0+)
+ *
+ * Note: Since this structure is used in the ACPI tables, it is byte aligned.
+ * If misaligned access is not supported by the hardware, accesses to the
+ * 64-bit Address field must be performed with care.
+ */
+struct acpi_generic_address {
+	u8 space_id;		/* Address space where struct or register exists */
+	u8 bit_width;		/* Size in bits of given register */
+	u8 bit_offset;		/* Bit offset within the register */
+	u8 access_width;	/* Minimum Access size (ACPI 3.0) */
+	u64 address;		/* 64-bit address of struct or register */
+};
+
+
+/*
+ * HPET - High Precision Event Timer table
+ *        Version 1
+ *
+ * Conforms to "IA-PC HPET (High Precision Event Timers) Specification",
+ * Version 1.0a, October 2004
+ */
+struct acpi_table_hpet {
+	struct acpi_table_header header;	/* Common ACPI table header */
+	u32 id;					/* Hardware ID of event timer block */
+	struct acpi_generic_address address;	/* Address of event timer block */
+	u8 sequence;				/* HPET sequence number */
+	u16 minimum_tick;			/* Main counter min tick, periodic mode */
+	u8 flags;
+};
 
 /**
  * MADT
