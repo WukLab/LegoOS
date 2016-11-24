@@ -76,6 +76,9 @@ void __init setup_arch(void)
 	acpi_table_init();
 	acpi_boot_parse_tables();
 
+	/* Find and init NUMA settings */
+	acpi_boot_numa_init();
+
 	init_apic_mappings();
 
 	copy_trampoline();

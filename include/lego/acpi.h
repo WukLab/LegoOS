@@ -470,6 +470,9 @@ void __init acpi_unmap_tables(void);
 /* Arch-Specific boot-time table parsing */
 void __init acpi_boot_parse_tables(void);
 
+/* Arch-Specific boot-time NUMA setup */
+void __init acpi_boot_numa_init(void);
+
 #define BAD_MADT_ENTRY(entry, end) (					    \
 		(!entry) || (unsigned long)entry + sizeof(*entry) > end ||  \
 		((struct acpi_subtable_header *)entry)->length < sizeof(*entry))

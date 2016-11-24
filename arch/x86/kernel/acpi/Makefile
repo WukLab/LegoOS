@@ -3,3 +3,4 @@
 #
 
 obj-y := boot.o
+obj-y += numa.o

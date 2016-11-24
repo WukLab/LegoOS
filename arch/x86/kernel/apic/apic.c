@@ -7,6 +7,8 @@
  * (at your option) any later version.
  */
 
+#define pr_fmt(fmt) "APIC: " fmt
+
 #include <asm/asm.h>
 #include <asm/apic.h>
 #include <asm/processor.h>
@@ -25,9 +27,7 @@ u8 boot_cpu_apic_version;
 /* The highest APIC ID seen during enumaration */
 unsigned int max_physical_apicid;
 
-unsigned long mp_lapic_addr;
-
-unsigned long apic_phys;
+static unsigned long mp_lapic_addr;
 
 #ifdef CONFIG_X86_X2APIC
 int x2apic_mode;
@@ -62,7 +62,7 @@ void __init setup_apic_driver(void)
 		if ((*drv)->probe && (*drv)->probe()) {
 			if (apic != *drv) {
 				apic = *drv;
-				pr_info("Switched APIC routing to %s.\n",
+				pr_info("Switched APIC routing to %s\n",
 					apic->name);
 			}
 			return;
@@ -175,8 +175,7 @@ int apic_register_new_cpu(int apicid, int enabled)
 	 */
 	if (!boot_cpu_detected && nr_cpus >= nr_cpu_ids - 1 &&
 	    apicid != boot_cpu_physical_apicid) {
-		pr_warn(
-			"APIC: NR_CPUS/possible_cpus limit of %i almost"
+		pr_warn("NR_CPUS/possible_cpus limit of %i almost"
 			" reached. Keeping one slot for boot cpu."
 			"  Processor 0x%x ignored.\n", nr_cpu_ids, apicid);
 		return -ENODEV;
@@ -184,9 +183,9 @@ int apic_register_new_cpu(int apicid, int enabled)
 
 	if (nr_cpus >= nr_cpu_ids) {
 		if (enabled) {
-			pr_warn("APIC: NR_CPUS/possible_cpus limit of %i "
-				   "reached. Processor 0x%x ignored.\n",
-				   nr_cpu_ids, apicid);
+			pr_warn("NR_CPUS/possible_cpus limit of %i "
+				"reached. Processor 0x%x ignored.\n",
+				nr_cpu_ids, apicid);
 		}
 		return -EINVAL;
 	}
@@ -206,7 +205,7 @@ int apic_register_new_cpu(int apicid, int enabled)
 	} else {
 		cpu = allocate_logical_cpuid(apicid);
 		if (cpu < 0) {
-			pr_warn("APIC: fail to allocate logical cpuid\n");
+			pr_warn("fail to allocate logical cpuid\n");
 			return -EINVAL;
 		}
 	}
@@ -242,7 +241,7 @@ void __init register_lapic_address(unsigned long address)
 
 	if (!x2apic_mode) {
 		set_fixmap(FIX_APIC_BASE, address);
-		pr_info("Mapped APIC to %16lx (%16lx)\n", APIC_BASE, address);
+		pr_info("Mapped APIC to %#16lx (%#16lx)\n", APIC_BASE, address);
 	}
 	if (boot_cpu_physical_apicid == -1U) {
 		boot_cpu_physical_apicid  = read_apic_id();
@@ -252,5 +251,15 @@ void __init register_lapic_address(unsigned long address)
 
 void __init init_apic_mappings(void)
 {
+	int new_apicid;
 
+	/*
+	 * Fetch the APIC ID of the BSP in case we have a
+	 * default configuration (or the MP table is broken).
+	 */
+	new_apicid = read_apic_id();
+	if (boot_cpu_physical_apicid != new_apicid) {
+		boot_cpu_physical_apicid = new_apicid;
+		boot_cpu_apic_version = GET_APIC_VERSION(apic_read(APIC_LVR));
+	}
 }
