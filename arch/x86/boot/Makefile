@@ -48,7 +48,7 @@ cmd_bzImage = $(obj)/tools/build $(obj)/setup.bin $(obj)/vmImage.bin $@
 
 $(obj)/bzImage: $(obj)/setup.bin $(obj)/vmImage.bin $(obj)/tools/build FORCE
 	$(call if_changed,bzImage)
-	@echo '\033[32mLegoOS Kernel: $@ is ready' ' (#'`cat .version`')\033[0m'
+	@echo -e '\033[34mLegoOS Kernel: $@ is ready' ' (#'`cat .version`')\033[0m'
 
 #
 # This vmImage.bin has

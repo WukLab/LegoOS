@@ -1,4 +1,5 @@
 obj-y := main.o version.o init_task.o
+obj-y += calibrate.o
 
 # dependencies on generated files need to be listed explicitly
 $(obj)/version.o: include/generated/compile.h

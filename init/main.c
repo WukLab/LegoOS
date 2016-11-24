@@ -20,6 +20,12 @@
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
 
+/*
+ * This should be approx 2 Bo*oMips to start (note initial shift), and will
+ * still work even if initially too large, it will just take slightly longer
+ */
+unsigned long loops_per_jiffy = (1<<12);
+
 /* Builtin command line from kconfig */
 #ifdef CONFIG_CMDLINE_BOOL
 static char __initdata builtin_cmdline[COMMAND_LINE_SIZE] = CONFIG_CMDLINE;
