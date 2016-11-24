@@ -63,14 +63,19 @@ void __init setup_arch(void)
 	cpu_init();
 
 	/*
+	 * Before parsing ACPI tables,
+	 * set default APIC driver first
+	 */
+	check_x2apic();
+	setup_apic_driver();
+
+	/*
 	 * Map all ACPI tables
 	 * and find possible SMP settings
 	 */
 	acpi_table_init();
 	acpi_boot_parse_tables();
 
-	check_x2apic();
-	setup_apic_driver();
 	init_apic_mappings();
 
 	copy_trampoline();

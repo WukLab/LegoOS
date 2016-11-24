@@ -7,6 +7,11 @@
  * (at your option) any later version.
  */
 
+/*
+ * Process ACPI tables, namely MADT and HPET,
+ * to get hardware SMP configurations.
+ */
+
 #define pr_fmt(fmt) "ACPI: " fmt
 
 #include <asm/asm.h>
@@ -33,10 +38,18 @@ u64 acpi_lapic_addr = APIC_DEFAULT_PHYS_BASE;
  */
 static int acpi_register_lapic(int id, u32 acpiid, u8 enabled)
 {
-	return 0;
+	int cpu;
+
+	if (id >= MAX_LOCAL_APIC) {
+		pr_err("Skipped apicid: %d\n", id);
+		return -EINVAL;
+	}
+
+	cpu = apic_register_new_cpu(id, enabled);
+	return cpu;
 }
 
-static int __init acpi_parse_madt_handler(struct acpi_table_header *table)
+static int __init acpi_parse_madt(struct acpi_table_header *table)
 {
 	struct acpi_table_madt *madt;
 
@@ -48,6 +61,7 @@ static int __init acpi_parse_madt_handler(struct acpi_table_header *table)
 		return -ENODEV;
 
 	if (madt->address) {
+		/* Maybe overrided later by subtable */
 		acpi_lapic_addr = (u64) madt->address;
 		pr_info("Local APIC address %#x\n",
 			madt->address);
@@ -283,8 +297,47 @@ static int __init acpi_parse_madt_lapic_entries(void)
 	return 0;
 }
 
+static int __init
+acpi_parse_lapic_addr_ovr(struct acpi_subtable_header * header,
+			  const unsigned long end)
+{
+	struct acpi_madt_local_apic_override *lapic_addr_ovr = NULL;
+
+	lapic_addr_ovr = (struct acpi_madt_local_apic_override *)header;
+
+	if (BAD_MADT_ENTRY(lapic_addr_ovr, end))
+		return -EINVAL;
+
+	acpi_table_print_madt_entry(header);
+
+	/* Override the default address */
+	acpi_lapic_addr = lapic_addr_ovr->address;
+	pr_info("Local APIC address overrided to %#llx\n", acpi_lapic_addr);
+
+	return 0;
+}
+
+static int __init acpi_parse_madt_lapic_addr_ovr(void)
+{
+	int count;
+
+	/*
+	 * Note that the LAPIC address is obtained from the MADT (32-bit value)
+	 * and (optionally) overridden by a LAPIC_ADDR_OVR entry (64-bit value).
+	 */
+	count = acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_APIC_OVERRIDE,
+				      acpi_parse_lapic_addr_ovr, 0);
+	if (count < 0) {
+		pr_err("Error parsing LAPIC address override entry\n");
+		return count;
+	}
+
+	return count;
+}
+
 /**
  * acpi_boot_parse_madt
+ *
  * Process the Multiple APIC Description Table,
  * find all possible APIC and IO-APIC settings.
  */
@@ -292,9 +345,15 @@ static void __init acpi_boot_parse_madt(void)
 {
 	int ret;
 
-	ret = acpi_parse_table(ACPI_SIG_MADT, acpi_parse_madt_handler);
+	ret = acpi_parse_table(ACPI_SIG_MADT, acpi_parse_madt);
 	if (ret)
 		return;
+
+	/* Find possible override */
+	acpi_parse_madt_lapic_addr_ovr();
+
+	/* Now register the lapic base address */
+	register_lapic_address(acpi_lapic_addr);
 
 	ret = acpi_parse_madt_lapic_entries();
 	if (!ret)

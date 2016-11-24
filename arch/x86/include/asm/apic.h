@@ -416,6 +416,7 @@ static inline int x2apic_supported(void)
 	return cpu_has(X86_FEATURE_X2APIC);
 }
 #else
+#define x2apic_mode 0
 static inline void check_x2apic(void) { }
 static inline void x2apic_setup(void) { }
 static inline int x2apic_enabled(void) { return 0; }
@@ -464,8 +465,22 @@ static inline u32 safe_apic_wait_icr_idle(void)
 	return apic->safe_wait_icr_idle();
 }
 
+static inline unsigned int read_apic_id(void)
+{
+	unsigned int reg;
+
+	reg = apic_read(APIC_ID);
+
+	return apic->get_apic_id(reg);
+}
+
+
 void __init apic_set_eoi_write(void (*eoi_write)(u32 reg, u32 v));
 
 void __init init_apic_mappings(void);
+
+void __init register_lapic_address(unsigned long address);
+
+int apic_register_new_cpu(int apicid, int enabled);
 
 #endif /* _ASM_X86_APIC_H_ */
