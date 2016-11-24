@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <asm/numa.h>
 #include <asm/apic.h>
 #include <asm/e820.h>
 #include <asm/desc.h>
@@ -21,6 +22,7 @@
 
 #include <lego/acpi.h>
 #include <lego/kernel.h>
+#include <lego/nodemask.h>
 #include <lego/early_ioremap.h>
 
 /* Data that was collected by real-mode kernel */
@@ -80,6 +82,8 @@ void __init setup_arch(void)
 	acpi_boot_numa_init();
 
 	init_apic_mappings();
+
+	init_cpu_to_node();
 
 	copy_trampoline();
 }

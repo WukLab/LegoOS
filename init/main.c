@@ -9,6 +9,7 @@
 
 #include <asm/asm.h>
 #include <asm/page.h>
+#include <asm/numa.h>
 #include <asm/setup.h>
 
 #include <lego/bug.h>

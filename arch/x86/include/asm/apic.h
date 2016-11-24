@@ -481,6 +481,7 @@ void __init init_apic_mappings(void);
 
 void __init register_lapic_address(unsigned long address);
 
+int cpu_to_apicid(int cpu);
 int apic_register_new_cpu(int apicid, int enabled);
 
 #endif /* _ASM_X86_APIC_H_ */

@@ -131,6 +131,12 @@ static int cpuid_to_apicid[] = {
 /* Present physical APIC IDs */
 static DECLARE_BITMAP(phys_apicid_present_map, MAX_LOCAL_APIC);
 
+int cpu_to_apicid(int cpu)
+{
+	BUG_ON(cpu >= NR_CPUS);
+	return cpuid_to_apicid[cpu];
+}
+
 static int allocate_logical_cpuid(int apicid)
 {
 	int i;

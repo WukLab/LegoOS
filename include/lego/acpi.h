@@ -10,6 +10,7 @@
 #ifndef _LEGO_ACPI_H_
 #define _LEGO_ACPI_H_
 
+#include <lego/numa.h>
 #include <lego/types.h>
 
 /*
@@ -45,10 +46,12 @@
 #define ACPI_OEM_ID_SIZE	6
 #define ACPI_OEM_TABLE_ID_SIZE	8
 
-/**
- * Master ACPI Table Header
- * This common header is used by all ACPI tables except the RSDP and FACS.
- */
+/*******************************************************************************
+ *
+ * Master ACPI Table Header. This common header is used by all ACPI tables
+ * except the RSDP and FACS.
+ *
+ ******************************************************************************/
 struct acpi_table_header {
 	char signature[ACPI_NAME_SIZE];			/* ASCII table signature */
 	u32 length;					/* Length of table in bytes, including this header */
@@ -61,11 +64,12 @@ struct acpi_table_header {
 	u32 asl_compiler_revision;			/* ASL compiler version */
 };
 
-/**
- * RSDP
- * Root System Description Pointer (Signature is "RSD PTR ")
- * Version 2
- */
+/*******************************************************************************
+ *
+ * RSDP - Root System Description Pointer (Signature is "RSD PTR ")
+ *        Version 2
+ *
+ ******************************************************************************/
 struct acpi_table_rsdp {
 	char signature[8];			/* ACPI signature, contains "RSD PTR " */
 	u8 checksum;				/* ACPI 1.0 checksum */
@@ -78,11 +82,12 @@ struct acpi_table_rsdp {
 	u8 reserved[3];				/* Reserved, must be zero */
 };
 
-/**
- * RSDT/XSDT
- * Root System Description Tables
- * Version 1 (both)
- */
+/*******************************************************************************
+ *
+ * RSDT/XSDT - Root System Description Tables
+ *             Version 1 (both)
+ *
+ ******************************************************************************/
 struct acpi_table_rsdt {
 	struct acpi_table_header header;	/* Common ACPI table header */
 	u32 table_offset_entry[1];		/* Array of pointers to ACPI tables */
@@ -96,13 +101,15 @@ struct acpi_table_xsdt {
 #define ACPI_RSDT_ENTRY_SIZE        (sizeof (u32))
 #define ACPI_XSDT_ENTRY_SIZE        (sizeof (u64))
 
-/*
+/*******************************************************************************
+ *
  * GAS - Generic Address Structure (ACPI 2.0+)
  *
  * Note: Since this structure is used in the ACPI tables, it is byte aligned.
  * If misaligned access is not supported by the hardware, accesses to the
  * 64-bit Address field must be performed with care.
- */
+ *
+ ******************************************************************************/
 struct acpi_generic_address {
 	u8 space_id;		/* Address space where struct or register exists */
 	u8 bit_width;		/* Size in bits of given register */
@@ -111,14 +118,15 @@ struct acpi_generic_address {
 	u64 address;		/* 64-bit address of struct or register */
 };
 
-
-/*
+/*******************************************************************************
+ *
  * HPET - High Precision Event Timer table
  *        Version 1
  *
  * Conforms to "IA-PC HPET (High Precision Event Timers) Specification",
  * Version 1.0a, October 2004
- */
+ *
+ ******************************************************************************/
 struct acpi_table_hpet {
 	struct acpi_table_header header;	/* Common ACPI table header */
 	u32 id;					/* Hardware ID of event timer block */
@@ -140,6 +148,12 @@ struct acpi_subtable_header {
 	u8 length;
 };
 
+/*******************************************************************************
+ *
+ * MADT - Multiple APIC Description Table
+ *        Version 3
+ *
+ ******************************************************************************/
 struct acpi_table_madt {
 	struct acpi_table_header header;	/* Common ACPI table header */
 	u32 address;				/* Physical address of local APIC */
@@ -373,6 +387,100 @@ struct acpi_madt_generic_translator {
 #define ACPI_MADT_TRIGGER_RESERVED        (2<<2)
 #define ACPI_MADT_TRIGGER_LEVEL           (3<<2)
 
+/*******************************************************************************
+ *
+ * SLIT - System Locality Distance Information Table
+ *        Version 1
+ *
+ ******************************************************************************/
+struct acpi_table_slit {
+	struct acpi_table_header header;	/* Common ACPI table header */
+	u64 locality_count;
+	u8 entry[1];				/* Real size = localities^2 */
+};
+
+/*******************************************************************************
+ *
+ * SRAT - System Resource Affinity Table
+ *        Version 3
+ *
+ ******************************************************************************/
+struct acpi_table_srat {
+	struct acpi_table_header header;	/* Common ACPI table header */
+	u32 table_revision;			/* Must be value '1' */
+	u64 reserved;				/* Reserved, must be zero */
+};
+
+/* Values for subtable type in struct acpi_subtable_header */
+enum acpi_srat_type {
+	ACPI_SRAT_TYPE_CPU_AFFINITY = 0,
+	ACPI_SRAT_TYPE_MEMORY_AFFINITY = 1,
+	ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY = 2,
+	ACPI_SRAT_TYPE_GICC_AFFINITY = 3,
+	ACPI_SRAT_TYPE_RESERVED = 4		/* 4 and greater are reserved */
+};
+
+/*
+ * SRAT Subtables, correspond to Type in struct acpi_subtable_header
+ */
+
+/* 0: Processor Local APIC/SAPIC Affinity */
+struct acpi_srat_cpu_affinity {
+	struct acpi_subtable_header header;
+	u8 proximity_domain_lo;
+	u8 apic_id;
+	u32 flags;
+	u8 local_sapic_eid;
+	u8 proximity_domain_hi[3];
+	u32 clock_domain;
+};
+
+/* Flags */
+#define ACPI_SRAT_CPU_USE_AFFINITY  (1)		/* 00: Use affinity structure */
+
+/* 1: Memory Affinity */
+struct acpi_srat_mem_affinity {
+	struct acpi_subtable_header header;
+	u32 proximity_domain;
+	u16 reserved;
+	u64 base_address;
+	u64 length;
+	u32 reserved1;
+	u32 flags;
+	u64 reserved2;
+};
+
+/* Flags */
+#define ACPI_SRAT_MEM_ENABLED       (1)		/* 00: Use affinity structure */
+#define ACPI_SRAT_MEM_HOT_PLUGGABLE (1<<1)	/* 01: Memory region is hot pluggable */
+#define ACPI_SRAT_MEM_NON_VOLATILE  (1<<2)	/* 02: Memory region is non-volatile */
+
+/* 2: Processor Local X2_APIC Affinity (ACPI 4.0) */
+struct acpi_srat_x2apic_cpu_affinity {
+	struct acpi_subtable_header header;
+	u16 reserved;
+	u32 proximity_domain;
+	u32 apic_id;
+	u32 flags;
+	u32 clock_domain;
+	u32 reserved2;
+};
+
+/* Flags for struct acpi_srat_cpu_affinity and struct acpi_srat_x2apic_cpu_affinity */
+#define ACPI_SRAT_CPU_ENABLED       (1)		/* 00: Use affinity structure */
+
+/* 3: GICC Affinity (ACPI 5.1) */
+struct acpi_srat_gicc_affinity {
+	struct acpi_subtable_header header;
+	u32 proximity_domain;
+	u32 acpi_processor_uid;
+	u32 flags;
+	u32 clock_domain;
+};
+
+/* Flags for struct acpi_srat_gicc_affinity */
+#define ACPI_SRAT_GICC_ENABLED     (1)		/* 00: Use affinity structure */
+
 /*
  * LegoOS Internal Representations
  */
@@ -441,6 +549,14 @@ struct acpi_table_desc {
 #define ACPI_HIDWORD(integer64)         ((u32)(((u64)(integer64)) >> 32))
 #define ACPI_FORMAT_UINT64(i)           ACPI_HIDWORD(i), ACPI_LODWORD(i)
 
+/* Proximity bitmap length */
+#if MAX_NUMNODES > 256
+# define MAX_PXM_DOMAINS	MAX_NUMNODES
+#else
+/* Old pxm spec is defined 8 bit */
+# define MAX_PXM_DOMAINS	(256)
+#endif
+
 typedef int (*acpi_table_entry_handler)(struct acpi_subtable_header *header,
 				        const unsigned long end);
 typedef int (*acpi_table_handler)(struct acpi_table_header *table);
@@ -458,9 +574,23 @@ acpi_table_parse_entries_array(char *id,
 			 unsigned int max_entries);
 
 void __init acpi_table_print_madt_entry(struct acpi_subtable_header *header);
+void __init acpi_table_print_srat_entry(struct acpi_subtable_header *header);
+
+int __init acpi_table_parse_entries(char *id, unsigned long table_size, int entry_id,
+			 acpi_table_entry_handler handler, unsigned int max_entries);
+
 int __init acpi_table_parse_madt(enum acpi_madt_type id,
 				 acpi_table_entry_handler handler,
 				 unsigned int max_entries);
+
+int __init acpi_table_parse_srat(enum acpi_srat_type id,
+				 acpi_table_entry_handler handler,
+				 unsigned int max_entries);
+
+int pxm_to_node(int pxm);
+int node_to_pxm(int node);
+int acpi_map_pxm_to_node(int pxm);
+
 int __init acpi_parse_table(char *signature, acpi_table_handler handler);
 
 /* Initializing all ACPI tables */
