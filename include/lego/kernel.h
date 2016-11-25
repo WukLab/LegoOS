@@ -11,6 +11,7 @@
 #define _LEGO_KERNEL_H_
 
 #include <stdarg.h>
+#include <lego/err.h>
 #include <lego/errno.h>
 #include <lego/types.h>
 #include <lego/panic.h>

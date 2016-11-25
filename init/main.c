@@ -56,7 +56,7 @@ asmlinkage void __init start_kernel(void)
 	}
 #endif
 	strlcpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
-	pr_info("\tCommand line: %s\n", command_line);
+	pr_info("Command line: %s\n", command_line);
 
 	/* Architecture-Specific Initialization */
 	setup_arch();

@@ -41,4 +41,3 @@ void __init vt_init(void)
 {
 	vt_tty_struct.termios = tty_std_termios;
 }
-
