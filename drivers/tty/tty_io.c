@@ -8,13 +8,107 @@
  */
 
 #include <lego/tty.h>
+#include <lego/errno.h>
+#include <lego/kernel.h>
+#include <lego/termios.h>
 
-void tty_init(void)
+struct termios tty_std_termios = {
+	.c_iflag = ICRNL | IXON,
+	.c_oflag = OPOST | ONLCR,
+	.c_cflag = B38400 | CS8 | CREAD | HUPCL,
+	.c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK |
+		   ECHOCTL | ECHOKE | IEXTEN,
+	.c_cc = INIT_C_CC,
+	.c_ispeed = 38400,
+	.c_ospeed = 38400,
+	/* .c_line = N_TTY, */
+};
+
+static struct tty_struct *get_default_tty_struct(void)
+{
+	return &serial_tty_struct;
+}
+
+/**
+ * tty_write_room		-	write queue space
+ * @tty: terminal
+ *
+ * Return the number of bytes that can be queued to this device
+ * at the present time. The result should be treated as a guarantee
+ * and the driver cannot offer a value it later shrinks by more than
+ * the number of bytes written. If no method is provided 2K is always
+ * returned and data may be lost as there will be no flow control.
+ */
+int tty_write_room(struct tty_struct *tty)
+{
+	if (tty->ops->write_room)
+		return tty->ops->write_room(tty);
+	return 2048;
+}
+
+/**
+ * tty_put_char	-	write one character to a tty
+ * @tty: tty
+ * @ch: character
+ *
+ * Write one byte to the tty using the provided put_char method
+ * if present. Return the number of characters successfully output
+ *
+ * Note: the specific put_char operation in the driver layer may go
+ * away soon. Don't call it directly, use this method
+ */
+int tty_put_char(struct tty_struct *tty, unsigned char ch)
+{
+	if (tty->ops->put_char)
+		return tty->ops->put_char(tty, ch);
+	return tty->ops->write(tty, &ch, 1);
+}
+
+/**
+ * tty_write	-	Write method for tty device
+ * @buf: user data to write
+ * @count: bytes to write
+ *
+ * Write data to a tty device via the line discipline
+ */
+ssize_t tty_write(const char *buf, size_t count)
+{
+	struct tty_struct *tty;
+	struct tty_ldisc *ldisc;
+	ssize_t ret;
+
+	tty = get_default_tty_struct();
+	if (!tty || !tty->ops->write)
+		return -EIO;
+
+	ldisc = tty->ldisc;
+	if (!ldisc || !ldisc->ops->write)
+		return -EIO;
+
+	ret = ldisc->ops->write(tty, buf, count);
+	return ret;
+}
+
+struct tty_struct serial_tty_struct = {
+	.driver		= &serial_tty_driver,
+	.ops		= &serial_tty_ops,
+	.ldisc		= &n_tty,
+	.ldisc_data	= &serial_ldisc_data,
+};
+
+struct tty_struct vt_tty_struct = {
+	.driver		= &vt_tty_driver,
+	.ops		= &vt_tty_ops,
+	.ldisc		= &n_tty,
+	.ldisc_data	= &vt_ldisc_data,
+};
+
+/*
+ * Prepare TTY layer
+ * Afterwards, terminal and serial are ready to use
+ */
+void __init tty_init(void)
 {
 	vt_init();
 	serial_init();
 }
-
-struct tty_struct default_tty_struct = {
-
-};

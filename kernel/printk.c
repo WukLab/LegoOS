@@ -20,12 +20,12 @@ int printk(const char *fmt, ...)
 {
 	va_list args;
 	int len;
+	ssize_t ret;
 
 	va_start(args, fmt);
 	len = vsnprintf(KMBUF, KMBUF_LEN, fmt, args);
 	va_end(args);
 
-	serial_driver.ops->write(NULL, KMBUF, len);
-
-	return len;
+	ret = tty_write(KMBUF, len);
+	return ret;
 }

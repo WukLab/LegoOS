@@ -11,6 +11,7 @@
 #define _LEGO_TTY_H_
 
 #include <lego/types.h>
+#include <lego/mutex.h>
 #include <lego/termios.h>
 
 struct tty_struct;
@@ -39,10 +40,32 @@ struct tty_struct;
  *
  *	Note: Do not call this function directly, call tty_put_char
  *
+ * void (*flush_chars)(struct tty_struct *tty);
+ *
+ * 	This routine is called by the kernel after it has written a
+ * 	series of characters to the tty device using put_char().  
+ *
+ *	Optional:
+ *
+ *	Note: Do not call this function directly, call tty_driver_flush_chars
+ * 
+ * int  (*write_room)(struct tty_struct *tty);
+ *
+ * 	This routine returns the numbers of characters the tty driver
+ * 	will accept for queuing to be written.  This number is subject
+ * 	to change as output buffers get emptied, or if the output flow
+ *	control is acted.
+ *
+ *	Required if write method is provided else not needed.
+ *
+ *	Note: Do not call this function directly, call tty_write_room
+ * 
  */
 struct tty_operations {
 	int (*write)(struct tty_struct *tty, const unsigned char *buf, int count);
 	int (*put_char)(struct tty_struct *tty, unsigned char ch);
+	void (*flush_chars)(struct tty_struct *tty);
+	int  (*write_room)(struct tty_struct *tty);
 };
 
 /**
@@ -53,7 +76,6 @@ struct tty_operations {
  * @major:		Major number of this tty driver
  * @minor_start:	Starting minor number of this tty driver
  * @num:		Number of devices allocated
- * @init_termios:	Termios of this driver
  * @ops:		Hardware-operations of this tty driver
  *
  * The driver's job is to format data that is sent to it in a manner that the
@@ -66,7 +88,6 @@ struct tty_driver {
 	unsigned int			major;
 	unsigned int			minor_start;
 	unsigned int			num;
-	struct termios			init_termios;
 	const struct tty_operations	*ops;
 };
 
@@ -129,6 +150,17 @@ struct tty_ldisc_operations {
 	void (*write_wakeup)(struct tty_struct *);
 };
 
+/*
+ * N_TTY Line Discipline specific data
+ */
+struct n_tty_data {
+	/* protected by output_lock */
+	unsigned int		column;
+	unsigned int		canon_column;
+
+	struct mutex		output_lock;
+};
+
 struct tty_ldisc {
 	const char *name;
 	struct tty_ldisc_operations	*ops;
@@ -141,21 +173,36 @@ struct tty_struct {
 	void				*driver_data;
 	struct tty_ldisc		*ldisc;
 	void				*ldisc_data;
+	struct termios			termios;
 };
 
-/*
- * The default tty struct
- * The default line discipline
- */
-extern struct tty_struct default_tty_struct;
+/* The default line discipline: N_TTY */
 extern struct tty_ldisc n_tty;
 
-/* drivers/tty/serial and drivers/tty/vt */
-extern struct tty_driver vt_driver;
-extern struct tty_driver serial_driver;
+/* The Virtual Terminal tty */
+extern struct tty_struct vt_tty_struct;
+extern struct tty_driver vt_tty_driver;
+extern struct n_tty_data vt_ldisc_data;
+extern const struct tty_operations vt_tty_ops;
 
-void tty_init(void);
-void vt_init(void);
-void serial_init(void);
+/* The Serial tty */
+extern struct tty_struct serial_tty_struct;
+extern struct tty_driver serial_tty_driver;
+extern struct n_tty_data serial_ldisc_data;
+extern const struct tty_operations serial_tty_ops;
+
+/* The Standard termios */
+extern struct termios tty_std_termios;
+
+void __init tty_init(void);
+void __init vt_init(void);
+void __init serial_init(void);
+
+/*
+ * TTY APIs
+ */
+int tty_write_room(struct tty_struct *tty);
+int tty_put_char(struct tty_struct *tty, unsigned char ch);
+ssize_t tty_write(const char *buf, size_t count);
 
 #endif /* _LEGO_TTY_H_ */

@@ -12,10 +12,9 @@
  */
 
 #include <lego/tty.h>
-
-void vt_init(void)
-{
-}
+#include <lego/errno.h>
+#include <lego/kernel.h>
+#include <lego/termios.h>
 
 static int vt_putchar(struct tty_struct *tty, unsigned char ch)
 {
@@ -27,11 +26,19 @@ static int vt_write(struct tty_struct *tty, const unsigned char *buf, int count)
 	return 0;
 }
 
-static const struct tty_operations vt_ops = {
+const struct tty_operations vt_tty_ops = {
 	.write	= vt_write,
 	.put_char = vt_putchar,
 };
 
-struct tty_driver vt_driver = {
-	.ops	= &vt_ops,
+struct tty_driver vt_tty_driver = {
+	.ops	= &vt_tty_ops,
 };
+
+struct n_tty_data vt_ldisc_data;
+
+void __init vt_init(void)
+{
+	vt_tty_struct.termios = tty_std_termios;
+}
+
