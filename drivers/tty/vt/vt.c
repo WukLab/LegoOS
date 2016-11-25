@@ -12,9 +12,9 @@
  */
 
 #include <lego/tty.h>
-#include <lego/errno.h>
 #include <lego/kernel.h>
 #include <lego/termios.h>
+#include <lego/console.h>
 
 static int vt_putchar(struct tty_struct *tty, unsigned char ch)
 {
