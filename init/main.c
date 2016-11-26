@@ -20,6 +20,9 @@
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
 
+/* Screen information used by kernel */
+struct screen_info screen_info;
+
 /*
  * This should be approx 2 Bo*oMips to start (note initial shift), and will
  * still work even if initially too large, it will just take slightly longer

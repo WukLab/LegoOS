@@ -16,6 +16,7 @@
 #include <lego/string.h>
 #include <lego/linkage.h>
 #include <lego/sections.h>
+#include <lego/screen_info.h>
 
 extern pgd_t early_level4_pgt[PTRS_PER_PGD];
 pmdval_t early_pmd_flags = __PAGE_KERNEL_LARGE & ~(_PAGE_GLOBAL | _PAGE_NX);
@@ -51,6 +52,12 @@ static void __init copy_bootdata(char *real_mode_data)
 	}
 }
 
+/* Save screen info to another place */
+static void __init copy_screen_info(void)
+{
+	screen_info = boot_params.screen_info;
+}
+
 /*
  * This is called from the assembly head code
  * Do some architecture setup and then jump to generic start kernel
@@ -61,7 +68,7 @@ asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data)
 
 	clear_bss();
 	copy_bootdata(__va(real_mode_data));
+	copy_screen_info();
 
-	/* Call into real start kernel... */
 	start_kernel();
 }

@@ -54,6 +54,8 @@ struct screen_info {
 	__u8  _reserved[2];	/* 0x3e */
 } __attribute__((packed));
 
+extern struct screen_info screen_info;
+
 #define VIDEO_TYPE_MDA		0x10	/* Monochrome Text Display	*/
 #define VIDEO_TYPE_CGA		0x11	/* CGA Display 			*/
 #define VIDEO_TYPE_EGAM		0x20	/* EGA/VGA in Monochrome Mode	*/
@@ -78,5 +80,38 @@ struct screen_info {
 
 #define VIDEO_CAPABILITY_SKIP_QUIRKS	(1 << 0)
 #define VIDEO_CAPABILITY_64BIT_BASE	(1 << 1)	/* Frame buffer base is 64-bit */
+
+/*
+ * Wrappers for reading and writing to screen memory:
+ */
+#define scr_writew(val, addr)	(*(addr) = (val))
+#define scr_readw(addr)		(*(addr))
+
+static inline void scr_memsetw(u16 *s, u16 c, unsigned int count)
+{
+	count /= 2;
+	while (count--)
+		scr_writew(c, s++);
+}
+
+static inline void scr_memcpyw(u16 *d, const u16 *s, unsigned int count)
+{
+	count /= 2;
+	while (count--)
+		scr_writew(scr_readw(s++), d++);
+}
+
+static inline void scr_memmovew(u16 *d, const u16 *s, unsigned int count)
+{
+	if (d < s)
+		scr_memcpyw(d, s, count);
+	else {
+		count /= 2;
+		d += count;
+		s += count;
+		while (count--)
+			scr_writew(scr_readw(--s), --d);
+	}
+}
 
 #endif /* _LEGO_SCREEN_INFO_H_ */

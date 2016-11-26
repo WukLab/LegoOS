@@ -22,12 +22,29 @@
  * This is the real-world where hardware are made from different vendors.
  */
 
+struct console_struct;
+
 struct console_driver {
-
+	void (*con_startup)(void);
+	void (*con_init)(struct console_struct *, int);
+	void (*con_putc)(struct console_struct *, int);
+	void (*con_puts)(struct console_struct *, int);
 };
 
+/*
+ * struct console_struct
+ * Describes a console's attributes and operations
+ */
 struct console_struct {
-
+	const char *name;
+	unsigned int cols;
+	unsigned int rows;
+	unsigned int row_size;
+	const struct console_driver *driver;
 };
+
+extern struct console_struct *console;
+extern struct console_struct vga_console;
+extern struct console_struct dummy_console;
 
 #endif /* _LEGO_CONSOLE_H_ */

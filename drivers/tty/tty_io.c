@@ -11,6 +11,7 @@
 #include <lego/errno.h>
 #include <lego/kernel.h>
 #include <lego/termios.h>
+#include <lego/console.h>
 
 struct termios tty_std_termios = {
 	.c_iflag = ICRNL | IXON,
@@ -98,6 +99,8 @@ struct tty_struct serial_tty_struct = {
 
 struct tty_struct vt_tty_struct = {
 	.driver		= &vt_tty_driver,
+	/* VGA is the default console */
+	.driver_data	= &vga_console,
 	.ops		= &vt_tty_ops,
 	.ldisc		= &n_tty,
 	.ldisc_data	= &vt_ldisc_data,
