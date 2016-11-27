@@ -66,6 +66,7 @@ menu "Processor type and features"
 
 config SMP
 	bool "Symmetric multi-processing support"
+	default y
 	---help---
 	  This enables support for systems with more than one CPU. If you have
 	  a system with only one CPU, say N. If you have a system with more
@@ -188,3 +189,5 @@ config HPET_TIMER
 	  Choose N to continue using the legacy 8254 timer.
 
 endmenu
+
+source "drivers/Kconfig"
