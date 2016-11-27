@@ -81,11 +81,10 @@ extern struct screen_info screen_info;
 #define VIDEO_CAPABILITY_SKIP_QUIRKS	(1 << 0)
 #define VIDEO_CAPABILITY_64BIT_BASE	(1 << 1)	/* Frame buffer base is 64-bit */
 
-/*
- * Wrappers for reading and writing to screen memory:
- */
-#define scr_writew(val, addr)	(*(addr) = (val))
-#define scr_readw(addr)		(*(addr))
+#define scr_writeb(value, addr)	(*(u8 *)(addr) = (u8)(value))
+#define scr_writew(value, addr)	(*(u16 *)(addr) = (u16)(value))
+#define scr_readb(addr)		(*(u8 *)(addr))
+#define scr_readw(addr)		(*(u16 *)(addr))
 
 static inline void scr_memsetw(u16 *s, u16 c, unsigned int count)
 {

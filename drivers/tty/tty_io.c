@@ -27,7 +27,11 @@ struct termios tty_std_termios = {
 
 static struct tty_struct *get_default_tty_struct(void)
 {
+#if 0
 	return &serial_tty_struct;
+#else
+	return &vt_tty_struct;
+#endif
 }
 
 /**
