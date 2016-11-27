@@ -25,15 +25,6 @@ struct termios tty_std_termios = {
 	/* .c_line = N_TTY, */
 };
 
-static struct tty_struct *get_default_tty_struct(void)
-{
-#if 0
-	return &serial_tty_struct;
-#else
-	return &vt_tty_struct;
-#endif
-}
-
 /**
  * tty_write_room		-	write queue space
  * @tty: terminal
@@ -69,6 +60,25 @@ int tty_put_char(struct tty_struct *tty, unsigned char ch)
 	return tty->ops->write(tty, &ch, 1);
 }
 
+static inline ssize_t __tty_write(struct tty_struct *tty,
+				  const char *buf, size_t count)
+{
+	struct tty_ldisc *ldisc;
+	ssize_t ret;
+
+	ldisc = tty->ldisc;
+	if (!ldisc || !ldisc->ops->write)
+		return -EIO;
+
+	ret = ldisc->ops->write(tty, buf, count);
+	return ret;
+}
+
+struct tty_struct *tty_map[2] = {
+	[0] = &serial_tty_struct,
+	[1] = &vt_tty_struct,
+};
+
 /**
  * tty_write	-	Write method for tty device
  * @buf: user data to write
@@ -81,16 +91,17 @@ ssize_t tty_write(const char *buf, size_t count)
 	struct tty_struct *tty;
 	struct tty_ldisc *ldisc;
 	ssize_t ret;
+	int i;
 
-	tty = get_default_tty_struct();
-	if (!tty || !tty->ops->write)
-		return -EIO;
-
-	ldisc = tty->ldisc;
-	if (!ldisc || !ldisc->ops->write)
-		return -EIO;
-
-	ret = ldisc->ops->write(tty, buf, count);
+	/*
+	 * TODO
+	 */
+	for (i = 0; i < 2; i++) {
+		tty = tty_map[i];
+		if (!tty || !tty->ops->write)
+			return -EIO;
+		ret = __tty_write(tty, buf, count);
+	}
 	return ret;
 }
 
