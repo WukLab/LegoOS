@@ -89,7 +89,6 @@ struct tty_struct *tty_map[2] = {
 ssize_t tty_write(const char *buf, size_t count)
 {
 	struct tty_struct *tty;
-	struct tty_ldisc *ldisc;
 	ssize_t ret;
 	int i;
 
