@@ -16,6 +16,7 @@
 #include <lego/tty.h>
 #include <lego/irq.h>
 #include <lego/init.h>
+#include <lego/list.h>
 #include <lego/string.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>

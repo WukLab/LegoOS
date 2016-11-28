@@ -10,4 +10,6 @@
 #ifndef _LEGO_SPINLOCK_H_
 #define _LEGO_SPINLOCK_H_
 
+#include <asm/spinlock.h>
+
 #endif /* _LEGO_SPINLOCK_H_ */
