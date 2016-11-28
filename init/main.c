@@ -21,6 +21,7 @@
 #include <lego/atomic.h>
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
+#include <lego/spinlock.h>
 
 /* Screen information used by kernel */
 struct screen_info screen_info;
