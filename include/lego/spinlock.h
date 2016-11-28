@@ -20,14 +20,12 @@ typedef struct spinlock {
 	arch_spinlock_t arch_lock;
 } spinlock_t;
 
-#define __SPIN_LOCK_INIT(x)				\
+#define __SPIN_LOCK_UNLOCKED(x)				\
 {							\
 	.arch_lock = __ARCH_SPIN_LOCK_UNLOCKED,		\
 }
 
-#define __SPIN_LOCK_UNLOCKED(x)	(spinlock_t) __SPIN_LOCK_INIT(x)
-
-#define DEFINE_SPINLOCK(x)	spinlock_t x = __SPIN_LOCK_UNLOCKED(x)
+#define DEFINE_SPINLOCK(x) spinlock_t x = __SPIN_LOCK_UNLOCKED(x)
 
 #define spin_lock_init(lock)				\
 	do {						\
