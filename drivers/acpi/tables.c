@@ -17,21 +17,62 @@
 #include <lego/kernel.h>
 #include <lego/early_ioremap.h>
 
+/*
+ * Note:
+ * This is a internal array for ACPI tables.
+ * This array only store the physical and length of each ACPI table.
+ * Nothing is mapped at normal. Tables will be mapped only after you
+ * call acpi_get_and_map_table() and unmapped by calling acpi_unmap_table()
+ *
+ * We do this because early_ioremap slots are limited.
+ */
 #define ACPI_MAX_TABLES 128
 static int nr_acpi_tables = 0;
 static struct acpi_table_desc acpi_tables[ACPI_MAX_TABLES] __initdata;
 
-static void __init acpi_get_table(char *signature, struct acpi_table_header **h)
+/*
+ * Find a table via signature
+ * Map the table and return the mapped address if found
+ */
+static void __init acpi_get_and_map_table(char *signature,
+					  struct acpi_table_header **h)
 {
 	struct acpi_table_desc *desc;
+	void *p;
 	int i;
 
 	*h = NULL;
 	for (i = 0; i < nr_acpi_tables; i++) {
 		desc = &acpi_tables[i];
 		if (!strncmp(desc->signature.ascii, signature, 4)) {
-			*h = desc->pointer;
-			break;
+			BUG_ON(desc->pointer);
+			p = early_ioremap(desc->address, desc->length);
+			if (!p) {
+				pr_info("fail to map acpi_table[%d]\n", i);
+				return;
+			}
+			desc->pointer = p;
+			*h = p;
+		}
+	}
+}
+
+/*
+ * Unmap a previous mapped ACPI table
+ * It is BUG if you can this without a proceeding map
+ */
+static void __init acpi_unmap_table(char *signature)
+{
+	struct acpi_table_desc *desc;
+	int i;
+
+	for (i = 0; i < nr_acpi_tables; i++) {
+		desc = &acpi_tables[i];
+		if (!strncmp(desc->signature.ascii, signature, 4)) {
+			BUG_ON(!desc->pointer);
+			early_iounmap(desc->pointer, desc->length);
+			desc->pointer = NULL;
+			return;
 		}
 	}
 }
@@ -121,19 +162,21 @@ acpi_table_parse_entries_array(char *id, unsigned long table_size,
 			       struct acpi_subtable_proc *proc, int proc_num,
 			       unsigned int max_entries)
 {
-	struct acpi_table_header *header;
+	struct acpi_table_header *h;
 	int count;
 
 	if (!id)
 		return -EINVAL;
 
-	acpi_get_table(id, &header);
-	if (!header) {
+	acpi_get_and_map_table(id, &h);
+	if (!h) {
 		pr_warn("%4.4s not present\n", id);
 		return -ENODEV;
 	}
 
-	count = acpi_parse_entries_array(id, table_size, header, proc, proc_num, max_entries);
+	count = acpi_parse_entries_array(id, table_size, h, proc, proc_num, max_entries);
+	acpi_unmap_table(id);
+
 	return count;
 }
 
@@ -157,15 +200,16 @@ acpi_table_parse_entries(char *id, unsigned long table_size, int entry_id,
  */
 int __init acpi_parse_table(char *signature, acpi_table_handler handler)
 {
-	struct acpi_table_header *header;
+	struct acpi_table_header *h;
 
 	if (!signature || !handler)
 		return -EINVAL;
 
-	acpi_get_table(signature, &header);
-	if (header)
-		handler(header);
-	else
+	acpi_get_and_map_table(signature, &h);
+	if (h) {
+		handler(h);
+		acpi_unmap_table(signature);
+	} else
 		return -ENODEV;
 
 	return 0;
@@ -267,8 +311,11 @@ acpi_tb_print_table_header(unsigned long address, struct acpi_table_header *head
 }
 
 /*
- * Map the whole table and construct a internal table descriptor
- * which will be installed into the acpi_tables[] array.
+ * Save table information to the acpi_tables[] array.
+ *
+ * FAT NOTE: we can *not* map the entire table here, since we have
+ * limited early_ioremap slots. In some server machines, mostly it
+ * is not enough to support large ACPI tables.
  */
 static int __init acpi_tb_install(unsigned long address)
 {
@@ -290,12 +337,6 @@ static int __init acpi_tb_install(unsigned long address)
 	/* Unmap header */
 	early_iounmap(header, sizeof(*header));
 
-	/* Map whole table */
-	header = early_ioremap(address, desc.length);
-	if (!header)
-		return -ENOMEM;
-
-	desc.pointer = header;
 	acpi_tables[nr_acpi_tables++] = desc;
 	BUG_ON(nr_acpi_tables > ACPI_MAX_TABLES);
 
@@ -338,8 +379,8 @@ static int __init acpi_tb_parse_root_table(unsigned long rsdp_address)
 	early_iounmap(rsdp, sizeof(struct acpi_table_rsdp));
 
 	/*
-	 * Map the RSDT/XSDT table header to get the full table length
-	 * Validate length of the table, and map entire table.
+	 * Map the *header* of RSDT/XSDT table
+	 * to get the full table length
 	 */
 	table = early_ioremap(address, sizeof(struct acpi_table_header));
 	if (!table)
@@ -354,7 +395,7 @@ static int __init acpi_tb_parse_root_table(unsigned long rsdp_address)
 		return -EFAULT;
 	}
 
-	/* Remap the whole RSDT/XSDT table */
+	/* Map the *whole* RSDT/XSDT table */
 	table = early_ioremap(address, length);
 	if (!table)
 		return -ENOMEM;
@@ -375,8 +416,10 @@ static int __init acpi_tb_parse_root_table(unsigned long rsdp_address)
 		if (!pa)
 			goto next_table;
 
-		if (acpi_tb_install(pa))
+		if (acpi_tb_install(pa)) {
+			pr_info("fail to install acpi table\n");
 			return -EFAULT;
+		}
 next_table:
 		table_entry += table_entry_size;
 	}
@@ -505,17 +548,6 @@ static __init unsigned long acpi_tb_get_root_pointer(void)
 
 	pr_err("A valid RSDP was not found!\n");
 	return 0;
-}
-
-void __init acpi_unmap_tables(void)
-{
-	int i;
-	struct acpi_table_desc *desc;
-
-	for (i = 0; i < nr_acpi_tables; i++) {
-		desc = &acpi_tables[i];
-		early_iounmap(desc->pointer, desc->length);
-	}
 }
 
 void __init acpi_table_init(void)

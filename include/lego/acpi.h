@@ -595,7 +595,6 @@ int __init acpi_parse_table(char *signature, acpi_table_handler handler);
 
 /* Initializing all ACPI tables */
 void __init acpi_table_init(void);
-void __init acpi_unmap_tables(void);
 
 /* Arch-Specific boot-time table parsing */
 void __init acpi_boot_parse_tables(void);
