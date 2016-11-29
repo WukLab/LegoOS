@@ -20,6 +20,7 @@
 #include <asm/bootparam.h>
 #include <asm/trampoline.h>
 
+#include <lego/mm.h>
 #include <lego/smp.h>
 #include <lego/acpi.h>
 #include <lego/kernel.h>
@@ -64,9 +65,14 @@ void __init setup_arch(void)
 
 	/*
 	 * Parse e820 table
-	 * Fill memblock from e820
 	 */
 	setup_physical_memory();
+	max_pfn = e820_end_of_ram_pfn();
+	pr_info("max_pfn: %#lx\n", max_pfn);
+
+	/*
+	 * Fill all RAM into memblock
+	 */
 	e820_fill_memblock();
 
 	/*

@@ -62,6 +62,9 @@
 #define __START_KERNEL_map	_AC(0xffffffff80000000, UL)
 
 /* See Documentation/x86/x86_64/mm.txt for description */
+#define MAX_PHYSADDR_BITS	44
+#define MAX_PHYSMEM_BITS	46
+#define MAXMEM			_AC(__AC(1, UL) << MAX_PHYSMEM_BITS, UL)
 #define __PHYSICAL_MASK_SHIFT	46
 #define __VIRTUAL_MASK_SHIFT	47
 

@@ -21,4 +21,6 @@
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	ALIGN(addr, PAGE_SIZE)
 
+extern unsigned long max_pfn;
+
 #endif /* _LEGO_MM_H_ */

@@ -84,6 +84,7 @@ struct e820map {
 
 void __init setup_physical_memory(void);
 void __init e820_fill_memblock(void);
+unsigned long __init e820_end_of_ram_pfn(void);
 
 #endif /* __ASSEMBLY__ */
 

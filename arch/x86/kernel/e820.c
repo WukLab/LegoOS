@@ -414,3 +414,48 @@ void __init e820_fill_memblock(void)
 
 	memblock_dump_all();
 }
+
+#define MAX_ARCH_PFN (MAXMEM<<PAGE_SHIFT)
+
+/*
+ * Find the highest page frame number we have available
+ */
+static unsigned long __init e820_end_pfn(unsigned long limit_pfn, unsigned type)
+{
+	int i;
+	unsigned long last_pfn = 0;
+	unsigned long max_arch_pfn = MAX_ARCH_PFN;
+
+	for (i = 0; i < e820.nr_map; i++) {
+		struct e820entry *ei = &e820.map[i];
+		unsigned long start_pfn;
+		unsigned long end_pfn;
+
+		if (ei->type != type)
+			continue;
+
+		start_pfn = ei->addr >> PAGE_SHIFT;
+		end_pfn = (ei->addr + ei->size) >> PAGE_SHIFT;
+
+		if (start_pfn >= limit_pfn)
+			continue;
+		if (end_pfn > limit_pfn) {
+			last_pfn = limit_pfn;
+			break;
+		}
+		if (end_pfn > last_pfn)
+			last_pfn = end_pfn;
+	}
+
+	if (last_pfn > max_arch_pfn)
+		last_pfn = max_arch_pfn;
+
+	printk(KERN_INFO "e820: last_pfn = %#lx max_arch_pfn = %#lx\n",
+			 last_pfn, max_arch_pfn);
+	return last_pfn;
+}
+
+unsigned long __init e820_end_of_ram_pfn(void)
+{
+	return e820_end_pfn(MAX_ARCH_PFN, E820_RAM);
+}
