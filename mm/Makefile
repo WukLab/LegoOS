@@ -3,3 +3,4 @@
 #
 
 obj-y := early_ioremap.o
+obj-y += memblock.o

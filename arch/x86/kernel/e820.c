@@ -7,12 +7,14 @@
  * (at your option) any later version.
  */
 
+#include <asm/page.h>
 #include <asm/e820.h>
 #include <asm/setup.h>
 
 #include <lego/bug.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
+#include <lego/memblock.h>
 
 /*
  * The e820 map is the map that gets modified e.g. with command line parameters
@@ -387,4 +389,28 @@ void __init setup_physical_memory(void)
 	memcpy(&e820_saved, &e820, sizeof(struct e820map));
 	pr_info("e820: BIOS-provided physical RAM map:\n");
 	e820_print_map(who);
+}
+
+void __init e820_fill_memblock(void)
+{
+	int i;
+	u64 end;
+
+	for (i = 0; i < e820.nr_map; i++) {
+		struct e820entry *ei = &e820.map[i];
+
+		end = ei->addr + ei->size;
+		if (end != (resource_size_t)end)
+			continue;
+
+		if (ei->type != E820_RAM && ei->type != E820_RESERVED_KERN)
+			continue;
+
+		memblock_add(ei->addr, ei->size);
+	}
+
+	/* throw away partial pages */
+	memblock_trim_memory(PAGE_SIZE);
+
+	memblock_dump_all();
 }

@@ -12,6 +12,8 @@
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
+
+#include <lego/pfn.h>
 #include <lego/kernel.h>
 
 #define offset_in_page(p)	((unsigned long)(p) & ~PAGE_MASK)

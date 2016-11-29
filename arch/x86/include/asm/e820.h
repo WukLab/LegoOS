@@ -83,6 +83,7 @@ struct e820map {
 #define BIOS_ROM_END		0xffffffff
 
 void __init setup_physical_memory(void);
+void __init e820_fill_memblock(void);
 
 #endif /* __ASSEMBLY__ */
 

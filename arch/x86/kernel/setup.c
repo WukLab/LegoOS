@@ -55,15 +55,19 @@ void __init setup_arch(void)
 	early_cpu_init();
 	early_ioremap_init();
 
-	/* Parse e820 table */
-	setup_physical_memory();
-
 	/*
 	 * Load interrupt handlers
 	 * and init everthing about BSP
 	 */
 	trap_init();
 	cpu_init();
+
+	/*
+	 * Parse e820 table
+	 * Fill memblock from e820
+	 */
+	setup_physical_memory();
+	e820_fill_memblock();
 
 	/*
 	 * Before parsing ACPI tables,
