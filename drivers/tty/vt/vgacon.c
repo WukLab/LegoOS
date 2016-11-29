@@ -15,6 +15,7 @@
 #include <lego/irq.h>
 #include <lego/kernel.h>
 #include <lego/console.h>
+#include <lego/spinlock.h>
 #include <lego/resource.h>
 #include <lego/screen_info.h>
 
@@ -28,6 +29,7 @@
  */
 #define VGA_MAP_MEM(x, s) (unsigned long)phys_to_virt(x)
 
+static DEFINE_SPINLOCK(vga_lock);
 static int cursor_size_lastfrom;
 static int cursor_size_lastto;
 
@@ -62,13 +64,13 @@ static int 		vga_video_font_height;
 static inline void write_vga(unsigned char reg, unsigned int val)
 {
 	unsigned int v1, v2;
-	//unsigned long flags;
+	unsigned long flags;
 
 	/*
 	 * ddprintk might set the console position from interrupt
 	 * handlers, thus the write has to be IRQ-atomic.
 	 */
-	//spin_lock_irqsave(&vga_lock, flags);
+	spin_lock_irqsave(&vga_lock, flags);
 
 #ifndef SLOW_VGA
 	v1 = reg + (val & 0xff00);
@@ -81,7 +83,7 @@ static inline void write_vga(unsigned char reg, unsigned int val)
 	outb(reg + 1, vga_video_port_reg);
 	outb(val & 0xff, vga_video_port_val);
 #endif
-	//spin_unlock_irqrestore(&vga_lock, flags);
+	spin_unlock_irqrestore(&vga_lock, flags);
 }
 
 static inline void vga_set_mem_top(struct console_struct *c)
@@ -91,7 +93,7 @@ static inline void vga_set_mem_top(struct console_struct *c)
 
 static void vgacon_set_cursor_size(int xpos, int from, int to)
 {
-	//unsigned long flags;
+	unsigned long flags;
 	int curs, cure;
 
 	if ((from == cursor_size_lastfrom) && (to == cursor_size_lastto))
@@ -99,7 +101,7 @@ static void vgacon_set_cursor_size(int xpos, int from, int to)
 	cursor_size_lastfrom = from;
 	cursor_size_lastto = to;
 
-	//spin_lock_irqsave(&vga_lock, flags);
+	spin_lock_irqsave(&vga_lock, flags);
 	if (vga_video_type >= VIDEO_TYPE_VGAC) {
 		outb(VGA_CRTC_CURSOR_START, vga_video_port_reg);
 		curs = inb(vga_video_port_val);
@@ -117,7 +119,7 @@ static void vgacon_set_cursor_size(int xpos, int from, int to)
 	outb(curs, vga_video_port_val);
 	outb(VGA_CRTC_CURSOR_END, vga_video_port_reg);
 	outb(cure, vga_video_port_val);
-	//spin_unlock_irqrestore(&vga_lock, flags);
+	spin_unlock_irqrestore(&vga_lock, flags);
 }
 
 static void vga_console_cursor(struct console_struct *c, int mode)
