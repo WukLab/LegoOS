@@ -7,4 +7,3 @@
  * (at your option) any later version.
  */
 
-unsigned long max_pfn;

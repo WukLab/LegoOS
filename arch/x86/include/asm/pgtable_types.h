@@ -320,6 +320,14 @@ static inline pteval_t pte_flags(pte_t pte)
 #define pgprot_val(x)	((x).pgprot)
 #define __pgprot(x)	((pgprot_t) { (x) } )
 
+enum pg_level {
+	PG_LEVEL_NONE,
+	PG_LEVEL_4K,
+	PG_LEVEL_2M,
+	PG_LEVEL_1G,
+	PG_LEVEL_NUM
+};
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_PGTABLE_TYPES_H_ */

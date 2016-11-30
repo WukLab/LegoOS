@@ -23,6 +23,7 @@ extern char __sdata[], __edata[];
 extern char __sinittext[], __einittext[];
 extern char __sinitdata[], __einitdata[];
 extern char __bss_start[], __bss_end[];
+extern char __brk_start[], __brk_limit[];
 extern char __end[];
 
 static inline int init_kernel_text(unsigned long addr)

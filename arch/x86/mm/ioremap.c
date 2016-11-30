@@ -65,7 +65,7 @@ void __init __early_ioremap_set_fixmap(enum fixed_addresses idx,
 	ptep = early_ioremap_pte(addr);
 
 	if (early_ioremap_debug)
-		pr_debug("__early_ioremap_set_fixmap(%pS): %#lx -> %#lx\n",
+		pr_debug("__early_ioremap_set_fixmap(%pS): %#lx -> %#llx\n",
 			ptep, addr, phys & PTE_PFN_MASK);
 
 	if (pgprot_val(flags))

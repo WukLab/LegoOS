@@ -151,5 +151,7 @@ static inline unsigned long pte_pfn(pte_t pte)
 	return (pte_val(pte) & PTE_PFN_MASK) >> PAGE_SHIFT;
 }
 
+extern void __init init_mem_mapping(void);
+
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_PGTABLE_H_ */

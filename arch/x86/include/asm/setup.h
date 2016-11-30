@@ -32,6 +32,35 @@ extern struct boot_params boot_params;
 void __init setup_arch(void);
 asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data);
 
+/* exceedingly early brk-like allocator */
+extern unsigned long _brk_end;
+void *extend_brk(size_t size, size_t align);
+
+/*
+ * Reserve space in the brk section.  The name must be unique within
+ * the file, and somewhat descriptive.  The size is in bytes.  Must be
+ * used at file scope.
+ *
+ * (This uses a temp function to wrap the asm so we can pass it the
+ * size parameter; otherwise we wouldn't be able to.  We can't use a
+ * "section" attribute on a normal variable because it always ends up
+ * being @progbits, which ends up allocating space in the vmlinux
+ * executable.)
+ */
+#define RESERVE_BRK(name,sz)						\
+	static void __used						\
+	__brk_reservation_fn_##name##__(void) {				\
+		asm volatile (						\
+			".pushsection .brk_reservation,\"aw\",@nobits;" \
+			".brk." #name ":"				\
+			" 1:.skip %c0;"					\
+			" .size .brk." #name ", . - 1b;"		\
+			" .popsection"					\
+			: : "i" (sz));					\
+	}
+
+void  __init early_alloc_pgt_buf(void);
+
 #endif /* __ASSEMBLY */
 
 #endif /* _ASM_X86_SETUP_H_ */

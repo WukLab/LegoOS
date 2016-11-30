@@ -129,7 +129,7 @@ SECTIONS {
 	. = ALIGN(L1_CACHE_BYTES);
 	.apicdrivers : {
 		__apicdrivers = .;
-		*(.apicdrivers);
+		*(.apicdrivers)
 		__apicdrivers_end = .;
 	}
 
@@ -147,6 +147,21 @@ SECTIONS {
 		*(.bss*)
 		__bss_end = .;
 	}
+
+	/*
+	 * Boot-time early brk-like allocator
+	 * Use RESERVE_BRK() to reserve this area at compile time
+	 * Use extend_brk() to allocate brk at run time
+	 */
+	. = ALIGN(PAGE_SIZE);
+	.brk : {
+		__brk_start = .;
+		. += 64 * 1024;
+		*(.brk_reservation)	/* areas brk users have reserved */
+		__brk_limit = .;
+	}
+
+	. = ALIGN(PAGE_SIZE);
 
 	__end = .;
 }
