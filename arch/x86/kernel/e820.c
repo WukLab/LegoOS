@@ -415,7 +415,7 @@ void __init e820_fill_memblock(void)
 	memblock_dump_all();
 }
 
-#define MAX_ARCH_PFN (MAXMEM<<PAGE_SHIFT)
+#define MAX_ARCH_PFN (MAXMEM>>PAGE_SHIFT)
 
 /*
  * Find the highest page frame number we have available
