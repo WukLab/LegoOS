@@ -71,10 +71,10 @@ KBUILD_CFLAGS += -pipe
 KBUILD_CFLAGS += -Wno-sign-compare
 KBUILD_CFLAGS += -fno-asynchronous-unwind-tables
 
+drivers-y	:= arch/x86/pci/
+libs-y		:= arch/x86/lib/
 core-y		:= arch/x86/kernel/
 core-y		+= arch/x86/mm/
-drivers-y	:=
-libs-y		:= arch/x86/lib/
 
 boot = arch/x86/boot
 
