@@ -8,11 +8,13 @@
  */
 
 
+#include <lego/bootmem.h>	/* for max_low_pfn */
 #include <asm/asm.h>
 #include <asm/e820.h>
 #include <asm/page.h>
 #include <asm/setup.h>
 #include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/tlbflush.h>
 
 #include <lego/mm.h>
@@ -21,6 +23,7 @@
 #include <lego/kernel.h>
 #include <lego/memblock.h>
 
+int after_bootmem;
 static unsigned long __initdata pgt_buf_start;
 static unsigned long __initdata pgt_buf_end;
 static unsigned long __initdata pgt_buf_top;
@@ -211,9 +214,9 @@ static int split_mem_range(struct map_range *mr, int nr_range,
  * randomize virtual addresses up to this level.
  * It returns the last physical address mapped.
  */
-static unsigned long __meminit
-phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
-	      unsigned long page_size_mask)
+static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr, 
+		unsigned long paddr_end,
+		unsigned long page_size_mask)
 {
 	unsigned long pages = 0, paddr_next;
 	unsigned long paddr_last = paddr_end;
@@ -235,7 +238,7 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 					     E820_RAM) &&
 			    !e820_any_mapped(paddr & PUD_MASK, paddr_next,
 					     E820_RESERVED_KERN))
-				set_pud(pud, __pud(0));
+				pud_set(pud, __pud(0));
 			continue;
 		}
 
@@ -273,7 +276,7 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 		if (page_size_mask & (1<<PG_LEVEL_1G)) {
 			pages++;
 			spin_lock(&init_mm.page_table_lock);
-			set_pte((pte_t *)pud,
+			pte_set((pte_t *)pud,
 				pfn_pte((paddr & PUD_MASK) >> PAGE_SHIFT,
 					PAGE_KERNEL_LARGE));
 			spin_unlock(&init_mm.page_table_lock);
@@ -525,10 +528,10 @@ void __init init_mem_mapping(void)
 	if (max_pfn > max_low_pfn)
 		max_low_pfn = max_pfn;
 
-	printk(KERN_ERR "%s: init_level4_pgt  is %lx\n", __func__, __pa_symbol(init_level4_pgt));
+	printk(KERN_ERR "%s: init_level4_pgt  is %lx\n", __func__, __pa(init_level4_pgt));
 	pgd = read_cr3();
 	printk(KERN_ERR "%s: current cr3 is %lx\n", __func__, pgd);
-	load_cr3(swapper_pg_dir);
+	write_cr3(__pa(swapper_pg_dir));
 	pgd = read_cr3();
 	printk(KERN_ERR "%s: cr3 is set  to %lx\n", __func__, pgd);
 	__flush_tlb_all();
