@@ -134,9 +134,12 @@ static void __init memblock_insert_region(struct memblock_type *type,
 					  phys_addr_t size,
 					  int nid, unsigned long flags)
 {
+	pr_debug("memblock_insert_region type %p idx %d\n", type, idx);
 	struct memblock_region *rgn = &type->regions[idx];
 
+	pr_debug("memblock_insert_region rgn %p\n", rgn);
 	BUG_ON(type->cnt >= type->max);
+	pr_debug("memblock_insert_region type %p base %lx size %lx\n", type, rgn->base, rgn->size);
 	memmove(rgn + 1, rgn, (type->cnt - idx) * sizeof(*rgn));
 	rgn->base = base;
 	rgn->size = size;
@@ -175,8 +178,10 @@ int __init memblock_add_range(struct memblock_type *type,
 	if (!size)
 		return 0;
 
+	pr_debug("memblock_add_range type %p\n", type);
 	/* special case for empty array */
 	if (type->regions[0].size == 0) {
+		pr_debug("memblock_add_range empty array\n");
 		WARN_ON(type->cnt != 1 || type->total_size);
 		type->regions[0].base = base;
 		type->regions[0].size = size;
@@ -195,9 +200,11 @@ repeat:
 	nr_new = 0;
 
 	for_each_memblock_type(type, rgn) {
+		pr_debug("memblock_add_range rgn %p\n", rgn);
 		phys_addr_t rbase = rgn->base;
 		phys_addr_t rend = rbase + rgn->size;
 
+		pr_debug("memblock_add_range rgn %p base %lx size %lx\n", rgn, rgn->base, rgn->size);
 		if (rbase >= end)
 			break;
 		if (rend <= base)

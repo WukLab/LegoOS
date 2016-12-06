@@ -21,6 +21,7 @@
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	ALIGN(addr, PAGE_SIZE)
 
+extern unsigned long max_low_pfn_mapped;
 /* max_pfn_mapped:     highest direct mapped pfn over 4GB */
 extern unsigned long max_pfn_mapped;
 

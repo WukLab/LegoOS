@@ -37,6 +37,7 @@ unsigned long min_low_pfn;
  * The direct mapping only covers E820_RAM regions,
  * so the ranges and gaps are represented by pfn_mapped
  */
+unsigned long max_low_pfn_mapped;
 unsigned long max_pfn_mapped;
 
 /*

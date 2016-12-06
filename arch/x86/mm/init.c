@@ -58,8 +58,8 @@ void *alloc_low_pages(unsigned int num)
 	}
 #endif
 
-	pr_debug("alloc_low_pages min_pfn_mapped %lx max_pfn_mapped %lx\n",
-			min_pfn_mapped, max_pfn_mapped);
+	pr_debug("alloc_low_pages min_pfn_mapped %lx max_pfn_mapped %lx pgt_buf_end %lx pgt_buf_top %lx can_use_brk_pgt %d\n",
+			min_pfn_mapped, max_pfn_mapped, pgt_buf_end, pgt_buf_top, can_use_brk_pgt);
 	if ((pgt_buf_end + num) > pgt_buf_top || !can_use_brk_pgt) {
 		unsigned long ret;
 		if (min_pfn_mapped >= max_pfn_mapped)
@@ -69,6 +69,7 @@ void *alloc_low_pages(unsigned int num)
 					PAGE_SIZE * num , PAGE_SIZE);
 		if (!ret)
 			panic("alloc_low_pages: can not alloc memory");
+		pr_debug("got memblock ret %lx\n", ret);
 		memblock_reserve(ret, PAGE_SIZE * num);
 		pfn = ret >> PAGE_SHIFT;
 	} else {
@@ -389,7 +390,7 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		pte = alloc_low_pages(1);
 		paddr_last = phys_pte_init(pte, paddr, paddr_end, new_prot);
 
-		pr_debug("after phys_pte_init\n");
+		pr_debug("phy_pmd_init allocated one after phys_pte_init\n");
 		spin_lock(&init_mm.page_table_lock);
 		pmd_populate_kernel(&init_mm, pmd, pte);
 		spin_unlock(&init_mm.page_table_lock);
@@ -477,6 +478,7 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 		}
 
 		pmd = alloc_low_pages(1);
+		pr_debug("phys_pud_init allocated one\n");
 		paddr_last = phys_pmd_init(pmd, paddr, paddr_end,
 					   page_size_mask, prot);
 
@@ -562,17 +564,20 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 
 		vaddr_next = (vaddr & PGDIR_MASK) + PGDIR_SIZE;
 
-		pr_debug("pgd %d\n", pgd);
+		pr_debug("pgd %p vaddr %lx vaddr_next %lx PGDIR_MASK %lx PGDIR_SIZE %lx %lx\n", 
+			pgd, vaddr, vaddr_next, PGDIR_MASK, PGDIR_SIZE, vaddr & PGDIR_MASK);
 		if (pgd_val(*pgd)) {
 			pr_debug("pgd exist\n");
 			pud = (pud_t *)pgd_page_vaddr(*pgd);
 			paddr_last = phys_pud_init(pud, __pa(vaddr),
 						   __pa(vaddr_end),
 						   page_size_mask);
-			continue;
+			//continue;
+			break; // TODO: check why vaddr_next not working
 		}
 
 		pud = alloc_low_pages(1);
+		pr_debug("kernel_physical_mapping_init allocated one\n");
 		paddr_last = phys_pud_init(pud, __pa(vaddr), __pa(vaddr_end),
 					   page_size_mask);
 
@@ -587,20 +592,130 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 
 	__flush_tlb_all();
 
+	return paddr_last;
+}
+
+struct range {
+	u64   start;
+	u64   end;
+};
+
+int add_range(struct range *range, int az, int nr_range, u64 start, u64 end)
+{
+	if (start >= end)
+		return nr_range;
+
+	/* Out of slots: */
+	if (nr_range >= az)
+		return nr_range;
+
+	range[nr_range].start = start;
+	range[nr_range].end = end;
+
+	nr_range++;
+
+	return nr_range;
+}
+
+int add_range_with_merge(struct range *range, int az, int nr_range,
+		u64 start, u64 end)
+{
+	int i;
+
+	if (start >= end)
+		return nr_range;
+
+	/* get new start/end: */
+	for (i = 0; i < nr_range; i++) {
+		u64 common_start, common_end;
+
+		if (!range[i].end)
+			continue;
+
+		common_start = max(range[i].start, start);
+		common_end = min(range[i].end, end);
+		if (common_start > common_end)
+			continue;
+
+		/* new start/end, will add it back at last */
+		start = min(range[i].start, start);
+		end = max(range[i].end, end);
+
+		memmove(&range[i], &range[i + 1],
+				(nr_range - (i + 1)) * sizeof(range[i]));
+		range[nr_range - 1].start = 0;
+		range[nr_range - 1].end   = 0;
+		nr_range--;
+		i--;
+	}
+
+	/* Need to add it: */
+	return add_range(range, az, nr_range, start, end);
+}
+
+static int cmp_range(const void *x1, const void *x2)
+{
+	const struct range *r1 = x1;
+	const struct range *r2 = x2;
+
+	if (r1->start < r2->start)
+		return -1;
+	if (r1->start > r2->start)
+		return 1;
 	return 0;
 }
 
+int clean_sort_range(struct range *range, int az)
+{
+	int i, j, k = az - 1, nr_range = az;
+
+	for (i = 0; i < k; i++) {
+		if (range[i].end)
+			continue;
+		for (j = k; j > i; j--) {
+			if (range[j].end) {
+				k = j;
+				break;
+			}
+		}
+		if (j == i)
+			break;
+		range[i].start = range[k].start;
+		range[i].end   = range[k].end;
+		range[k].start = 0;
+		range[k].end   = 0;
+		k--;
+	}
+	/* count it */
+	for (i = 0; i < az; i++) {
+		if (!range[i].end) {
+			nr_range = i;
+			break;
+		}
+	}
+
+	/* sort them */
+	sort(range, nr_range, sizeof(struct range), cmp_range, NULL);
+
+	return nr_range;
+}
+
+struct range pfn_mapped[E820MAX];
+int nr_pfn_mapped;
+
 static void add_pfn_range_mapped(unsigned long start_pfn, unsigned long end_pfn)                                                                                                     
 {       
-	nr_pfn_mapped = add_range_with_merge(pfn_mapped, E820_X_MAX,
+	nr_pfn_mapped = add_range_with_merge(pfn_mapped, E820MAX,
 			nr_pfn_mapped, start_pfn, end_pfn);                                                                                                     
-	nr_pfn_mapped = clean_sort_range(pfn_mapped, E820_X_MAX);                                                                                                                    
+	nr_pfn_mapped = clean_sort_range(pfn_mapped, E820MAX); 
 
-	max_pfn_mapped = max(max_pfn_mapped, end_pfn);                                                                                                                               
+	max_pfn_mapped = max(max_pfn_mapped, end_pfn);
 
 	if (start_pfn < (1UL<<(32-PAGE_SHIFT)))
 		max_low_pfn_mapped = max(max_low_pfn_mapped,
-				min(end_pfn, 1UL<<(32-PAGE_SHIFT)));                                                                                                        
+				min(end_pfn, 1UL<<(32-PAGE_SHIFT)));
+	pr_debug("add_pfn_range_mapped start_pfn %lx end_pfn %lx nr_pfn_mapped %lx max_pfn_mapped %lx max_low_pfn_mapped %lx\n",
+			start_pfn, end_pfn, nr_pfn_mapped, max_pfn_mapped, max_low_pfn_mapped);
 }
 
 /*
@@ -651,6 +766,8 @@ static unsigned long __init init_range_memory_mapping(
 	unsigned long mapped_ram_size = 0;
 	int i;
 
+	pr_debug("init_range_memory_mapping [mem %#010lx-%#010lx]\n",
+			r_start, r_end);
 	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, NULL) {
 		u64 start = clamp_val(PFN_PHYS(start_pfn), r_start, r_end);
 		u64 end = clamp_val(PFN_PHYS(end_pfn), r_start, r_end);
@@ -720,8 +837,8 @@ static void __init memory_map_top_down(unsigned long map_start,
 	min_pfn_mapped = real_end >> PAGE_SHIFT;
 	last_start = start = real_end;
 
-	pr_debug("min_pfn_mapped %lx real_end %lx addr %lx PMD_SIZE %lx\n",
-			min_pfn_mapped, real_end, addr, PMD_SIZE);
+	pr_debug("memory_map_top_down [%#010lx-%#010lx] addr %lx min_pfn_mapped %lx real_end %lx addr %lx PMD_SIZE %lx\n",
+			map_start, map_end, addr, min_pfn_mapped, real_end, addr, PMD_SIZE);
 	/*
 	 * We start from the top (end of memory) and go to the bottom.
 	 * The memblock_find_in_range() gets us a block of RAM from the
