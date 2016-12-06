@@ -27,6 +27,9 @@ extern pgd_t init_level4_pgt[];
 
 #define swapper_pg_dir init_level4_pgt
 
+extern spinlock_t pgd_lock;
+extern struct list_head pgd_list;
+
 #endif /* !__ASSEMBLY__ */
 /*
  * the pgd page can be thought of an array like this: pgd_t[PTRS_PER_PGD]

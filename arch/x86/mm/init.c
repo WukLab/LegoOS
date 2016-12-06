@@ -8,7 +8,6 @@
  */
 
 
-#include <lego/bootmem.h>	/* for max_low_pfn */
 #include <asm/asm.h>
 #include <asm/e820.h>
 #include <asm/page.h>
@@ -22,6 +21,10 @@
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
+#include <lego/list.h>
+
+DEFINE_SPINLOCK(pgd_lock);
+LIST_HEAD(pgd_list);
 
 int after_bootmem;
 static unsigned long __initdata pgt_buf_start;
@@ -45,6 +48,7 @@ void *alloc_low_pages(unsigned int num)
 	unsigned long pfn;
 	int i;
 
+#if 0
 	if (after_bootmem) {
 		unsigned int order;
 
@@ -52,6 +56,7 @@ void *alloc_low_pages(unsigned int num)
 		return (void *)__get_free_pages(GFP_ATOMIC | __GFP_NOTRACK |
 						__GFP_ZERO, order);
 	}
+#endif
 
 	if ((pgt_buf_end + num) > pgt_buf_top || !can_use_brk_pgt) {
 		unsigned long ret;
@@ -267,7 +272,7 @@ static int split_mem_range(struct map_range *mr, int nr_range,
 static unsigned long phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigned long paddr_end,
 	      pgprot_t prot)
 {
-	unsigned long pages = 0, paddr_next;
+	unsigned long paddr_next;
 	unsigned long paddr_last = paddr_end;
 	pte_t *pte;
 	int i;
@@ -294,15 +299,12 @@ static unsigned long phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigne
 		 * these mappings are more intelligent.
 		 */
 		if (!pte_none(*pte)) {
-			if (!after_bootmem)
-				pages++;
 			continue;
 		}
 
 		if (0)
 			pr_info("   pte=%p addr=%lx pte=%016lx\n", pte, paddr,
 				pfn_pte(paddr >> PAGE_SHIFT, PAGE_KERNEL).pte);
-		pages++;
 		pte_set(pte, pfn_pte(paddr >> PAGE_SHIFT, prot));
 		paddr_last = (paddr & PAGE_MASK) + PAGE_SIZE;
 	}
@@ -318,7 +320,7 @@ static unsigned long phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigne
 static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
 	      unsigned long page_size_mask, pgprot_t prot)
 {
-	unsigned long pages = 0, paddr_next;
+	unsigned long paddr_next;
 	unsigned long paddr_last = paddr_end;
 
 	int i = pmd_index(paddr);
@@ -361,8 +363,6 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 			 * attributes.
 			 */
 			if (page_size_mask & (1 << PG_LEVEL_2M)) {
-				if (!after_bootmem)
-					pages++;
 				paddr_last = paddr_next;
 				continue;
 			}
@@ -370,7 +370,6 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		}
 
 		if (page_size_mask & (1<<PG_LEVEL_2M)) {
-			pages++;
 			spin_lock(&init_mm.page_table_lock);
 			pte_set((pte_t *)pmd,
 				pfn_pte((paddr & PMD_MASK) >> PAGE_SHIFT,
@@ -401,7 +400,7 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 		unsigned long paddr_end,
 		unsigned long page_size_mask)
 {
-	unsigned long pages = 0, paddr_next;
+	unsigned long paddr_next;
 	unsigned long paddr_last = paddr_end;
 	unsigned long vaddr = (unsigned long)__va(paddr);
 	int i = pud_index(vaddr);
@@ -448,8 +447,6 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 			 * attributes.
 			 */
 			if (page_size_mask & (1 << PG_LEVEL_1G)) {
-				if (!after_bootmem)
-					pages++;
 				paddr_last = paddr_next;
 				continue;
 			}
@@ -457,7 +454,6 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 		}
 
 		if (page_size_mask & (1<<PG_LEVEL_1G)) {
-			pages++;
 			spin_lock(&init_mm.page_table_lock);
 			pte_set((pte_t *)pud,
 				pfn_pte((paddr & PUD_MASK) >> PAGE_SHIFT,
@@ -478,6 +474,53 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 	__flush_tlb_all();
 
 	return paddr_last;
+}
+
+/*
+ * When memory was added/removed make sure all the processes MM have
+ * suitable PGD entries in the local PGD level page.
+ */
+void sync_global_pgds(unsigned long start, unsigned long end, int removed)
+{
+
+// TODO
+#if 0
+	unsigned long address;
+
+	for (address = start; address <= end; address += PGDIR_SIZE) {
+		const pgd_t *pgd_ref = pgd_offset_k(address);
+		struct page *page;
+
+		/*
+		 * When it is called after memory hot remove, pgd_none()
+		 * returns true. In this case (removed == 1), we must clear
+		 * the PGD entries in the local PGD level page.
+		 */
+		if (pgd_none(*pgd_ref) && !removed)
+			continue;
+
+		spin_lock(&pgd_lock);
+		list_for_each_entry(page, &pgd_list, lru) {
+			pgd_t *pgd;
+
+			pgd = (pgd_t *)page_address(page) + pgd_index(address);
+
+			if (!pgd_none(*pgd_ref) && !pgd_none(*pgd))
+				BUG_ON(pgd_page_vaddr(*pgd)
+				       != pgd_page_vaddr(*pgd_ref));
+
+			if (removed) {
+				if (pgd_none(*pgd_ref) && !pgd_none(*pgd))
+					pgd_clear(pgd);
+			} else {
+				if (pgd_none(*pgd))
+					pgd_set(pgd, *pgd_ref);
+			}
+
+		}
+		spin_unlock(&pgd_lock);
+	}
+#endif
 }
 
 /*

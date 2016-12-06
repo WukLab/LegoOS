@@ -30,6 +30,8 @@
 #include <lego/memblock.h>
 #include <lego/early_ioremap.h>
 
+unsigned long max_low_pfn;
+unsigned long min_low_pfn;
 /*
  * max_pfn_mapped:     highest direct mapped pfn over 4GB
  * The direct mapping only covers E820_RAM regions,

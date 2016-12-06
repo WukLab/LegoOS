@@ -10,8 +10,6 @@
 
 #include <lego/bootmem.h>
 
-unsigned long max_low_pfn;
-unsigned long min_low_pfn;
 unsigned long max_pfn;
 unsigned long long max_possible_pfn;
 

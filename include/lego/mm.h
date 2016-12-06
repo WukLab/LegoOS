@@ -27,4 +27,17 @@ extern unsigned long max_pfn_mapped;
 /* max_pfn:	highest pfn of this machine */
 extern unsigned long max_pfn;
 
+/*
+ *  simple boot-time physical memory area allocator.
+ */
+
+extern unsigned long max_low_pfn;
+extern unsigned long min_low_pfn;
+
+/*
+ * highest possible page
+ */
+extern unsigned long long max_possible_pfn;
+
+
 #endif /* _LEGO_MM_H_ */
