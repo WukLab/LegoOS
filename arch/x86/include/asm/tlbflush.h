@@ -64,7 +64,8 @@ static inline void __flush_tlb_one(unsigned long addr)
 
 static inline void __flush_tlb_all(void)
 {
-	__invpcid(0, 0, INVPCID_TYPE_ALL_INCL_GLOBAL);
+	pr_debug("__flush_tlb_all\n");
+	//__invpcid(0, 0, INVPCID_TYPE_ALL_INCL_GLOBAL);
 }
 
 #endif /* _ASM_X86_TLBFLUSH_H_ */

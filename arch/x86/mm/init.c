@@ -58,6 +58,8 @@ void *alloc_low_pages(unsigned int num)
 	}
 #endif
 
+	pr_debug("alloc_low_pages min_pfn_mapped %lx max_pfn_mapped %lx\n",
+			min_pfn_mapped, max_pfn_mapped);
 	if ((pgt_buf_end + num) > pgt_buf_top || !can_use_brk_pgt) {
 		unsigned long ret;
 		if (min_pfn_mapped >= max_pfn_mapped)
@@ -277,6 +279,7 @@ static unsigned long phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigne
 	pte_t *pte;
 	int i;
 
+	pr_debug("phys_pte_init pmd_page %p\n", pte_page);
 	pte = pte_page + pte_index(paddr);
 	i = pte_index(paddr);
 
@@ -302,13 +305,14 @@ static unsigned long phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigne
 			continue;
 		}
 
-		if (0)
+		if (1)
 			pr_info("   pte=%p addr=%lx pte=%016lx\n", pte, paddr,
 				pfn_pte(paddr >> PAGE_SHIFT, PAGE_KERNEL).pte);
 		pte_set(pte, pfn_pte(paddr >> PAGE_SHIFT, prot));
 		paddr_last = (paddr & PAGE_MASK) + PAGE_SIZE;
 	}
 
+	pr_debug("phys_pte_init exit paddr_last %lx\n", paddr_last);
 	return paddr_last;
 }
 
@@ -325,6 +329,7 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 
 	int i = pmd_index(paddr);
 
+	pr_debug("phys_pmd_init pmd_page %p\n", pmd_page);
 	for (; i < PTRS_PER_PMD; i++, paddr = paddr_next) {
 		pmd_t *pmd = pmd_page + pmd_index(paddr);
 		pte_t *pte;
@@ -343,6 +348,7 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 
 		if (!pmd_none(*pmd)) {
 			if (!pmd_large(*pmd)) {
+				pr_debug("pmd not none not large\n");
 				spin_lock(&init_mm.page_table_lock);
 				pte = (pte_t *)pmd_page_vaddr(*pmd);
 				paddr_last = phys_pte_init(pte, paddr,
@@ -366,6 +372,7 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 				paddr_last = paddr_next;
 				continue;
 			}
+			pr_debug("pmd not none\n");
 			new_prot = pte_pgprot(pte_clrhuge(*(pte_t *)pmd));
 		}
 
@@ -382,11 +389,13 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		pte = alloc_low_pages(1);
 		paddr_last = phys_pte_init(pte, paddr, paddr_end, new_prot);
 
+		pr_debug("after phys_pte_init\n");
 		spin_lock(&init_mm.page_table_lock);
 		pmd_populate_kernel(&init_mm, pmd, pte);
 		spin_unlock(&init_mm.page_table_lock);
 	}
 
+	pr_debug("phys_pmd_init exit paddr_last %lx\n", paddr_last);
 	return paddr_last;
 }
 
@@ -405,6 +414,8 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 	unsigned long vaddr = (unsigned long)__va(paddr);
 	int i = pud_index(vaddr);
 
+	pr_debug("phys_pud_init pud_page %p, paddr %lx, paddr_end %lx\n",
+			pud_page, paddr, paddr_end);
 	for (; i < PTRS_PER_PUD; i++, paddr = paddr_next) {
 		pud_t *pud;
 		pmd_t *pmd;
@@ -414,6 +425,7 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 		pud = pud_page + pud_index(vaddr);
 		paddr_next = (paddr & PUD_MASK) + PUD_SIZE;
 
+		pr_debug("pud %lx\n", pud);
 		if (paddr >= paddr_end) {
 			if (!after_bootmem &&
 			    !e820_any_mapped(paddr & PUD_MASK, paddr_next,
@@ -426,6 +438,7 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 
 		if (!pud_none(*pud)) {
 			if (!pud_large(*pud)) {
+				pr_debug("pud not none not large\n");
 				pmd = pmd_offset(pud, 0);
 				paddr_last = phys_pmd_init(pmd, paddr,
 							   paddr_end,
@@ -540,6 +553,8 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 	vaddr = (unsigned long)__va(paddr_start);
 	vaddr_end = (unsigned long)__va(paddr_end);
 	vaddr_start = vaddr;
+	pr_debug("kernel_physical_mapping_init phys [%#010lx-%#010lx] virt [%#010lx-%#010lx]\n", 
+			paddr_start, paddr_end, vaddr_start, vaddr_end);
 
 	for (; vaddr < vaddr_end; vaddr = vaddr_next) {
 		pgd_t *pgd = pgd_offset_k(vaddr);
@@ -547,7 +562,9 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 
 		vaddr_next = (vaddr & PGDIR_MASK) + PGDIR_SIZE;
 
+		pr_debug("pgd %d\n", pgd);
 		if (pgd_val(*pgd)) {
+			pr_debug("pgd exist\n");
 			pud = (pud_t *)pgd_page_vaddr(*pgd);
 			paddr_last = phys_pud_init(pud, __pa(vaddr),
 						   __pa(vaddr_end),
@@ -573,13 +590,26 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 	return 0;
 }
 
+static void add_pfn_range_mapped(unsigned long start_pfn, unsigned long end_pfn)                                                                                                     
+{       
+	nr_pfn_mapped = add_range_with_merge(pfn_mapped, E820_X_MAX,
+			nr_pfn_mapped, start_pfn, end_pfn);                                                                                                     
+	nr_pfn_mapped = clean_sort_range(pfn_mapped, E820_X_MAX);                                                                                                                    
+
+	max_pfn_mapped = max(max_pfn_mapped, end_pfn);                                                                                                                               
+
+	if (start_pfn < (1UL<<(32-PAGE_SHIFT)))
+		max_low_pfn_mapped = max(max_low_pfn_mapped,
+				min(end_pfn, 1UL<<(32-PAGE_SHIFT)));                                                                                                        
+}
+
 /*
  * Setup the direct mapping of the physical memory at PAGE_OFFSET.
  * This runs before bootmem is initialized and gets pages directly from
  * the physical memory. To access them they are temporarily mapped.
  */
 unsigned long init_memory_mapping(unsigned long start,
-				  unsigned long end)
+		unsigned long end)
 {
 	struct map_range mr[NR_RANGE_MR];
 	unsigned long ret = 0;
@@ -595,7 +625,7 @@ unsigned long init_memory_mapping(unsigned long start,
 		ret = kernel_physical_mapping_init(mr[i].start, mr[i].end,
 						   mr[i].page_size_mask);
 
-	//add_pfn_range_mapped(start >> PAGE_SHIFT, ret >> PAGE_SHIFT);
+	add_pfn_range_mapped(start >> PAGE_SHIFT, ret >> PAGE_SHIFT);
 
 	return ret >> PAGE_SHIFT;
 }
@@ -690,6 +720,8 @@ static void __init memory_map_top_down(unsigned long map_start,
 	min_pfn_mapped = real_end >> PAGE_SHIFT;
 	last_start = start = real_end;
 
+	pr_debug("min_pfn_mapped %lx real_end %lx addr %lx PMD_SIZE %lx\n",
+			min_pfn_mapped, real_end, addr, PMD_SIZE);
 	/*
 	 * We start from the top (end of memory) and go to the bottom.
 	 * The memblock_find_in_range() gets us a block of RAM from the
