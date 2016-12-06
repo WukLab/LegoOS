@@ -73,6 +73,9 @@ struct e820map {
 	struct e820entry map[E820MAX];
 };
 
+extern int e820_any_mapped(u64 start, u64 end, unsigned type);
+extern int e820_all_mapped(u64 start, u64 end, unsigned type);
+
 #define ISA_START_ADDRESS	0xa0000
 #define ISA_END_ADDRESS		0x100000
 

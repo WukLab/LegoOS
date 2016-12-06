@@ -70,5 +70,8 @@ asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data)
 	copy_bootdata(__va(real_mode_data));
 	copy_screen_info();
 
+	clear_page(init_level4_pgt);
+	/* set init_level4_pgt kernel high mapping*/
+	init_level4_pgt[511] = early_level4_pgt[511];
 	start_kernel();
 }

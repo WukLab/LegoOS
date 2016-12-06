@@ -50,6 +50,9 @@ static inline void *phys_to_virt(phys_addr_t address)
 	return __va(address);
 }
 
+#define clear_page(page)        memset((page), 0, PAGE_SIZE)
+#define copy_page(to,from)      memcpy((to), (from), PAGE_SIZE)
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_PAGE_H_ */

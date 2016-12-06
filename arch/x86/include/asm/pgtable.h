@@ -13,6 +13,21 @@
 #include <asm/page.h>
 #include <asm/pgtable_types.h>
 
+#ifndef __ASSEMBLY__
+
+#include <lego/sched.h>
+
+extern pud_t level3_kernel_pgt[512];
+extern pud_t level3_ident_pgt[512];
+extern pmd_t level2_kernel_pgt[512];
+extern pmd_t level2_fixmap_pgt[512];
+extern pmd_t level2_ident_pgt[512];
+extern pte_t level1_fixmap_pgt[512];
+extern pgd_t init_level4_pgt[];
+
+#define swapper_pg_dir init_level4_pgt
+
+#endif /* !__ASSEMBLY__ */
 /*
  * the pgd page can be thought of an array like this: pgd_t[PTRS_PER_PGD]
  *
