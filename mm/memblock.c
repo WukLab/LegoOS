@@ -97,6 +97,7 @@ static void __init memblock_merge_regions(struct memblock_type *type)
 {
 	int i = 0;
 
+	pr_debug("memblock_merge_regions\n");
 	/* cnt never goes below 1 */
 	while (i < type->cnt - 1) {
 		struct memblock_region *this = &type->regions[i];
@@ -134,13 +135,12 @@ static void __init memblock_insert_region(struct memblock_type *type,
 					  phys_addr_t size,
 					  int nid, unsigned long flags)
 {
-	pr_debug("memblock_insert_region type %p idx %d\n", type, idx);
 	struct memblock_region *rgn = &type->regions[idx];
 
-	pr_debug("memblock_insert_region rgn %p\n", rgn);
 	BUG_ON(type->cnt >= type->max);
-	pr_debug("memblock_insert_region type %p base %lx size %lx\n", type, rgn->base, rgn->size);
 	memmove(rgn + 1, rgn, (type->cnt - idx) * sizeof(*rgn));
+	pr_debug("memblock_insert_region type %p idx %d base %lx size %lx type cnt %d size %lx\n", 
+			type, idx, rgn->base, rgn->size, type->cnt, type->total_size);
 	rgn->base = base;
 	rgn->size = size;
 	rgn->flags = flags;
@@ -234,6 +234,7 @@ repeat:
 					       nid, flags);
 	}
 
+	pr_debug("memblock_add_range nr_new %d\n", nr_new);
 	if (!nr_new)
 		return 0;
 
@@ -249,6 +250,7 @@ repeat:
 		goto repeat;
 	} else {
 		memblock_merge_regions(type);
+		pr_debug("memblock_add_range exit\n");
 		return 0;
 	}
 }

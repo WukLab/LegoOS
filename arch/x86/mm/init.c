@@ -83,7 +83,9 @@ void *alloc_low_pages(unsigned int num)
 		void *adr;
 
 		adr = __va((pfn + i) << PAGE_SHIFT);
+		pr_debug("alloc_low_pages pfn %lx adr %p\n", pfn, adr);
 		clear_page(adr);
+		pr_debug("alloc_low_pages exit pfn %lx adr %p\n", pfn, adr);
 	}
 
 	return __va(pfn << PAGE_SHIFT);
@@ -306,7 +308,7 @@ static unsigned long phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigne
 			continue;
 		}
 
-		if (1)
+		if (0)
 			pr_info("   pte=%p addr=%lx pte=%016lx\n", pte, paddr,
 				pfn_pte(paddr >> PAGE_SHIFT, PAGE_KERNEL).pte);
 		pte_set(pte, pfn_pte(paddr >> PAGE_SHIFT, prot));
@@ -388,9 +390,9 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		}
 
 		pte = alloc_low_pages(1);
+		pr_debug("phy_pmd_init allocated one after phys_pte_init\n");
 		paddr_last = phys_pte_init(pte, paddr, paddr_end, new_prot);
 
-		pr_debug("phy_pmd_init allocated one after phys_pte_init\n");
 		spin_lock(&init_mm.page_table_lock);
 		pmd_populate_kernel(&init_mm, pmd, pte);
 		spin_unlock(&init_mm.page_table_lock);
@@ -487,6 +489,7 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 		spin_unlock(&init_mm.page_table_lock);
 	}
 	__flush_tlb_all();
+	pr_debug("phys_pmd_init exit\n");
 
 	return paddr_last;
 }
@@ -572,8 +575,7 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 			paddr_last = phys_pud_init(pud, __pa(vaddr),
 						   __pa(vaddr_end),
 						   page_size_mask);
-			//continue;
-			break; // TODO: check why vaddr_next not working
+			continue;
 		}
 
 		pud = alloc_low_pages(1);

@@ -72,8 +72,8 @@
 
 #define __START_KERNEL		(__START_KERNEL_map + __PHYSICAL_START)
 
-#define __va(x)	((void *)((unsigned long)(x) + __START_KERNEL_map))
-#define __pa(x)	((unsigned long)((unsigned long)x - __START_KERNEL_map))
+#define __va(x)	((void *)((unsigned long)(x) + __PAGE_OFFSET))
+#define __pa(x)	((unsigned long)((unsigned long)x - __PAGE_OFFSET))
 
 #define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
 #define START_KERNEL		((unsigned long)__START_KERNEL)
