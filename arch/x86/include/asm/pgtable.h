@@ -124,16 +124,6 @@ static inline int pmd_large(pmd_t pte)
 	return pmd_flags(pte) & _PAGE_PSE;
 }
 
-static inline unsigned long pgd_page_vaddr(pgd_t pgd)
-{
-	return (unsigned long)__va((unsigned long)pgd_val(pgd) & PTE_PFN_MASK);
-}
-
-static inline unsigned long pmd_page_vaddr(pmd_t pmd)
-{
-	return (unsigned long)__va(pmd_val(pmd) & pmd_pfn_mask(pmd));
-}
-
 /* to find an entry in a page-table-directory. */
 static inline unsigned long pud_index(unsigned long address)
 {
@@ -397,11 +387,6 @@ static inline int pud_present(pud_t pud)
 	return pud_flags(pud) & _PAGE_PRESENT;
 }
 
-static inline unsigned long pud_page_vaddr(pud_t pud)
-{
-	return (unsigned long)__va(pud_val(pud) & pud_pfn_mask(pud));
-}
-
 static inline int pgd_none(pgd_t pgd)
 {
 	/*
@@ -412,6 +397,22 @@ static inline int pgd_none(pgd_t pgd)
 	 */
 	return !native_pgd_val(pgd);
 }
+
+static inline unsigned long pgd_page_vaddr(pgd_t pgd)
+{
+	return (unsigned long)__va((unsigned long)pgd_val(pgd) & PTE_PFN_MASK);
+}
+
+static inline unsigned long pmd_page_vaddr(pmd_t pmd)
+{
+	return (unsigned long)__va(pmd_val(pmd) & pmd_pfn_mask(pmd));
+}
+
+static inline unsigned long pud_page_vaddr(pud_t pud)
+{
+	return (unsigned long)__va(pud_val(pud) & pud_pfn_mask(pud));
+}
+
 static inline pud_t *pud_offset(pgd_t *pgd, unsigned long address)
 {
 	return (pud_t *)pgd_page_vaddr(*pgd) + pud_index(address);
@@ -428,6 +429,10 @@ static inline unsigned long pgd_page_vaddr_early(pgd_t pgd)
 	return (unsigned long)__va_kernel((unsigned long)pgd_val(pgd) & PTE_PFN_MASK);
 }
 
+static inline unsigned long pmd_page_vaddr_early(pmd_t pmd)
+{
+	return (unsigned long)__va_kernel(pmd_val(pmd) & pmd_pfn_mask(pmd));
+}
 static inline unsigned long pud_page_vaddr_early(pud_t pud)
 {
 	return (unsigned long)__va_kernel(pud_val(pud) & pud_pfn_mask(pud));
@@ -442,6 +447,11 @@ static inline pud_t *pud_offset_early(pgd_t *pgd, unsigned long address)
 static inline pmd_t *pmd_offset_early(pud_t *pud, unsigned long address)
 {
 	return (pmd_t *)pud_page_vaddr_early(*pud) + pmd_index(address);
+}
+
+static inline pte_t *pte_offset_early(pmd_t *pmd, unsigned long address)
+{
+	return (pte_t *)pmd_page_vaddr_early(*pmd) + pte_index(address);
 }
 
 static inline pte_t *pte_offset_kernel(pmd_t *pmd, unsigned long address)

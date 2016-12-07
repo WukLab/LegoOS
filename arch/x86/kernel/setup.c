@@ -108,9 +108,12 @@ static void __init reserve_brk(void)
  */
 void __init setup_arch(void)
 {
+	pr_debug("setup_arch\n");
 	early_cpu_init();
+	pr_debug("setup_arch\n");
 	early_ioremap_init();
 
+	pr_debug("setup_arch after ioremap\n");
 	/*
 	 * Load interrupt handlers
 	 * and init everthing about BSP

@@ -45,6 +45,11 @@ static inline phys_addr_t virt_to_phys(volatile void *address)
  *	this function
  */
 
+static inline void *phys_to_virt_early(phys_addr_t address)
+{
+	return __va_kernel(address);
+}
+
 static inline void *phys_to_virt(phys_addr_t address)
 {
 	return __va(address);

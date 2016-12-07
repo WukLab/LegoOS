@@ -82,13 +82,19 @@ void *alloc_low_pages(unsigned int num)
 	for (i = 0; i < num; i++) {
 		void *adr;
 
-		adr = __va((pfn + i) << PAGE_SHIFT);
+		if (after_bootmem)
+			adr = __va((pfn + i) << PAGE_SHIFT);
+		else
+			adr = __va_kernel((pfn + i) << PAGE_SHIFT);
 		pr_debug("alloc_low_pages pfn %lx adr %p\n", pfn, adr);
 		clear_page(adr);
 		pr_debug("alloc_low_pages exit pfn %lx adr %p\n", pfn, adr);
 	}
 
-	return __va(pfn << PAGE_SHIFT);
+	if (after_bootmem)
+		return __va(pfn << PAGE_SHIFT);
+	else
+		return __va_kernel(pfn << PAGE_SHIFT);
 }
 
 /*
@@ -108,6 +114,7 @@ void  __init early_alloc_pgt_buf(void)
 
 	base = __pa_kernel(extend_brk(tables, PAGE_SIZE));
 
+	pr_debug("early_alloc_pgt_buf base %lx\n", base);
 	pgt_buf_start = base >> PAGE_SHIFT;
 	pgt_buf_end = pgt_buf_start;
 	pgt_buf_top = pgt_buf_start + (tables >> PAGE_SHIFT);
@@ -349,11 +356,13 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 			continue;
 		}
 
+		pr_debug("phys_pmd_init pmd %p index %lx\n", pmd, pmd_index(paddr));
+		pr_debug("phys_pmd_init pmd %p pmdt %lx\n", pmd, *pmd);
 		if (!pmd_none(*pmd)) {
 			if (!pmd_large(*pmd)) {
 				pr_debug("pmd not none not large\n");
 				spin_lock(&init_mm.page_table_lock);
-				pte = (pte_t *)pmd_page_vaddr(*pmd);
+				pte = (pte_t *)pmd_page_vaddr_early(*pmd);
 				paddr_last = phys_pte_init(pte, paddr,
 							   paddr_end, prot);
 				spin_unlock(&init_mm.page_table_lock);
@@ -394,7 +403,7 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		paddr_last = phys_pte_init(pte, paddr, paddr_end, new_prot);
 
 		spin_lock(&init_mm.page_table_lock);
-		pmd_populate_kernel(&init_mm, pmd, pte);
+		pmd_populate_early(&init_mm, pmd, pte);
 		spin_unlock(&init_mm.page_table_lock);
 	}
 
@@ -428,7 +437,6 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 		pud = pud_page + pud_index(vaddr);
 		paddr_next = (paddr & PUD_MASK) + PUD_SIZE;
 
-		pr_debug("pud %lx\n", pud);
 		if (paddr >= paddr_end) {
 			if (!after_bootmem &&
 			    !e820_any_mapped(paddr & PUD_MASK, paddr_next,
@@ -439,6 +447,7 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 			continue;
 		}
 
+		pr_debug("pud %lx\n", pud);
 		if (!pud_none(*pud)) {
 			if (!pud_large(*pud)) {
 				pr_debug("pud not none not large\n");
@@ -462,14 +471,17 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 			 * not differ with respect to page frame and
 			 * attributes.
 			 */
+			pr_debug("pud not none\n");
 			if (page_size_mask & (1 << PG_LEVEL_1G)) {
 				paddr_last = paddr_next;
 				continue;
 			}
+			pr_debug("pud1 not none\n");
 			prot = pte_pgprot(pte_clrhuge(*(pte_t *)pud));
 		}
 
 		if (page_size_mask & (1<<PG_LEVEL_1G)) {
+		pr_debug("pud1 %lx\n", pud);
 			spin_lock(&init_mm.page_table_lock);
 			pte_set((pte_t *)pud,
 				pfn_pte((paddr & PUD_MASK) >> PAGE_SHIFT,
@@ -485,7 +497,7 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 					   page_size_mask, prot);
 
 		spin_lock(&init_mm.page_table_lock);
-		pud_populate(&init_mm, pud, pmd);
+		pud_populate_early(&init_mm, pud, pmd);
 		spin_unlock(&init_mm.page_table_lock);
 	}
 	__flush_tlb_all();
@@ -570,8 +582,8 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 		pr_debug("pgd %p vaddr %lx vaddr_next %lx PGDIR_MASK %lx PGDIR_SIZE %lx %lx\n", 
 			pgd, vaddr, vaddr_next, PGDIR_MASK, PGDIR_SIZE, vaddr & PGDIR_MASK);
 		if (pgd_val(*pgd)) {
-			pr_debug("pgd exist\n");
-			pud = (pud_t *)pgd_page_vaddr(*pgd);
+			pr_debug("pgd exist pgdval %lx\n", pgd_val(*pgd));
+			pud = (pud_t *)pgd_page_vaddr_early(*pgd);
 			paddr_last = phys_pud_init(pud, __pa(vaddr),
 						   __pa(vaddr_end),
 						   page_size_mask);
@@ -579,12 +591,13 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 		}
 
 		pud = alloc_low_pages(1);
-		pr_debug("kernel_physical_mapping_init allocated one\n");
+		pr_debug("kernel_physical_mapping_init allocated one pgdval %lx\n",
+				pgd_val(*pgd));
 		paddr_last = phys_pud_init(pud, __pa(vaddr), __pa(vaddr_end),
 					   page_size_mask);
 
 		spin_lock(&init_mm.page_table_lock);
-		pgd_populate(&init_mm, pgd, pud);
+		pgd_populate_early(&init_mm, pgd, pud);
 		spin_unlock(&init_mm.page_table_lock);
 		pgd_changed = true;
 	}

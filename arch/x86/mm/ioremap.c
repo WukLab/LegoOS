@@ -87,7 +87,7 @@ static void __init __set_fixmap_pte(unsigned long addr, pte_t pte)
 	pgd_t *pgd = &base[pgd_index(addr)];
 	pud_t *pud = pud_offset_early(pgd, addr);
 	pmd_t *pmd = pmd_offset_early(pud, addr);
-	pte_t *ptep = pte_offset_kernel(pmd, addr);
+	pte_t *ptep = pte_offset_early(pmd, addr);
 
 	if (early_ioremap_debug)
 		pr_debug("__set_fixmap_pte(%pS): %#lx -> %#lx\n",
