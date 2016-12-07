@@ -25,7 +25,7 @@ pmdval_t early_pmd_flags = __PAGE_KERNEL_LARGE & ~(_PAGE_GLOBAL | _PAGE_NX);
 static void __init reset_early_page_tables(void)
 {
 	memset(early_level4_pgt, 0, sizeof(pgd_t)*(PTRS_PER_PGD-1));
-	write_cr3(__pa(early_level4_pgt));
+	write_cr3(__pa_kernel(early_level4_pgt));
 }
 
 static void __init clear_bss(void)
@@ -47,7 +47,7 @@ static void __init copy_bootdata(char *real_mode_data)
 
 	cmd_line_ptr = boot_params.hdr.cmd_line_ptr;
 	if (cmd_line_ptr) {
-		command_line = __va(cmd_line_ptr);
+		command_line = __va_kernel(cmd_line_ptr);
 		memcpy(boot_command_line, command_line, COMMAND_LINE_SIZE);
 	}
 }
@@ -67,7 +67,7 @@ asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data)
 	reset_early_page_tables();
 
 	clear_bss();
-	copy_bootdata(__va(real_mode_data));
+	copy_bootdata(__va_kernel(real_mode_data));
 	copy_screen_info();
 
 	clear_page(init_level4_pgt);

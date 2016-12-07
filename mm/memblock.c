@@ -845,7 +845,7 @@ phys_addr_t __init memblock_find_in_range_node(phys_addr_t size,
 	/* avoid allocating the first page */
 	start = max_t(phys_addr_t, start, PAGE_SIZE);
 	end = max(start, end);
-	kernel_end = __pa(__end);
+	kernel_end = __pa_kernel(__end);
 
 	/*
 	 * try bottom-up allocation only when bottom-up mode

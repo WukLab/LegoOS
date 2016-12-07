@@ -423,6 +423,27 @@ static inline pmd_t *pmd_offset(pud_t *pud, unsigned long address)
 	return (pmd_t *)pud_page_vaddr(*pud) + pmd_index(address);
 }
 
+static inline unsigned long pgd_page_vaddr_early(pgd_t pgd)
+{
+	return (unsigned long)__va_kernel((unsigned long)pgd_val(pgd) & PTE_PFN_MASK);
+}
+
+static inline unsigned long pud_page_vaddr_early(pud_t pud)
+{
+	return (unsigned long)__va_kernel(pud_val(pud) & pud_pfn_mask(pud));
+}
+
+static inline pud_t *pud_offset_early(pgd_t *pgd, unsigned long address)
+{
+	return (pud_t *)pgd_page_vaddr_early(*pgd) + pud_index(address);
+}
+
+/* Find an entry in the second-level page table.. */
+static inline pmd_t *pmd_offset_early(pud_t *pud, unsigned long address)
+{
+	return (pmd_t *)pud_page_vaddr_early(*pud) + pmd_index(address);
+}
+
 static inline pte_t *pte_offset_kernel(pmd_t *pmd, unsigned long address)
 {
 	return (pte_t *)pmd_page_vaddr(*pmd) + pte_index(address);

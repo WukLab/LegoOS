@@ -92,7 +92,7 @@ void * __init extend_brk(size_t size, size_t align)
 static void __init reserve_brk(void)
 {
 	if (_brk_end > _brk_start)
-		memblock_reserve(__pa(_brk_start),
+		memblock_reserve(__pa_kernel(_brk_start),
 				 _brk_end - _brk_start);
 
 	/*
