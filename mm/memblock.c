@@ -97,7 +97,6 @@ static void __init memblock_merge_regions(struct memblock_type *type)
 {
 	int i = 0;
 
-	pr_debug("memblock_merge_regions\n");
 	/* cnt never goes below 1 */
 	while (i < type->cnt - 1) {
 		struct memblock_region *this = &type->regions[i];
@@ -139,8 +138,6 @@ static void __init memblock_insert_region(struct memblock_type *type,
 
 	BUG_ON(type->cnt >= type->max);
 	memmove(rgn + 1, rgn, (type->cnt - idx) * sizeof(*rgn));
-	pr_debug("memblock_insert_region type %p idx %d base %lx size %lx type cnt %d size %lx\n", 
-			type, idx, rgn->base, rgn->size, type->cnt, type->total_size);
 	rgn->base = base;
 	rgn->size = size;
 	rgn->flags = flags;
@@ -178,10 +175,8 @@ int __init memblock_add_range(struct memblock_type *type,
 	if (!size)
 		return 0;
 
-	pr_debug("memblock_add_range type %p\n", type);
 	/* special case for empty array */
 	if (type->regions[0].size == 0) {
-		pr_debug("memblock_add_range empty array\n");
 		WARN_ON(type->cnt != 1 || type->total_size);
 		type->regions[0].base = base;
 		type->regions[0].size = size;
@@ -200,11 +195,9 @@ repeat:
 	nr_new = 0;
 
 	for_each_memblock_type(type, rgn) {
-		pr_debug("memblock_add_range rgn %p\n", rgn);
 		phys_addr_t rbase = rgn->base;
 		phys_addr_t rend = rbase + rgn->size;
 
-		pr_debug("memblock_add_range rgn %p base %lx size %lx\n", rgn, rgn->base, rgn->size);
 		if (rbase >= end)
 			break;
 		if (rend <= base)
@@ -234,7 +227,6 @@ repeat:
 					       nid, flags);
 	}
 
-	pr_debug("memblock_add_range nr_new %d\n", nr_new);
 	if (!nr_new)
 		return 0;
 
@@ -250,7 +242,6 @@ repeat:
 		goto repeat;
 	} else {
 		memblock_merge_regions(type);
-		pr_debug("memblock_add_range exit\n");
 		return 0;
 	}
 }
@@ -262,21 +253,23 @@ int __init memblock_add_node(phys_addr_t base, phys_addr_t size, int nid)
 
 int __init memblock_add(phys_addr_t base, phys_addr_t size)
 {
+/*
 	memblock_dbg("memblock_add: [%#016llx-%#016llx] flags %#02lx %pF\n",
 		     (unsigned long long)base,
 		     (unsigned long long)base + size - 1,
 		     0UL, (void *)_RET_IP_);
-
+*/
 	return memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES, 0);
 }
 
 int __init memblock_reserve(phys_addr_t base, phys_addr_t size)
 {
+/*
 	memblock_dbg("memblock_reserve: [%#016llx-%#016llx] flags %#02lx %pF\n",
 		     (unsigned long long)base,
 		     (unsigned long long)base + size - 1,
 		     0UL, (void *)_RET_IP_);
-
+*/
 	return memblock_add_range(&memblock.reserved, base, size, MAX_NUMNODES, 0);
 }
 

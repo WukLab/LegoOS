@@ -65,6 +65,7 @@ static inline void __flush_tlb_one(unsigned long addr)
 static inline void __flush_tlb_all(void)
 {
 	pr_debug("__flush_tlb_all\n");
+	write_cr3(read_cr3());
 	//__invpcid(0, 0, INVPCID_TYPE_ALL_INCL_GLOBAL);
 }
 
