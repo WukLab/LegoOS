@@ -81,6 +81,8 @@ void * __init extend_brk(size_t size, size_t align)
 	ret = (void *)_brk_end;
 	_brk_end += size;
 
+	pr_debug("extend_brk ret %p brk_start %lx brk_end %lx\n",
+			ret, _brk_start, _brk_end);
 	memset(ret, 0, size);
 
 	return ret;

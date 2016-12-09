@@ -62,16 +62,17 @@ void *alloc_low_pages(unsigned int num)
 			pfn << PAGE_SHIFT, (pgt_buf_end << PAGE_SHIFT) - 1);
 	}
 
+	void *adr;
 	for (i = 0; i < num; i++) {
-		void *adr;
 
-		if (if_memblock)
+		//if (if_memblock)
 			adr = __va((pfn + i) << PAGE_SHIFT);
-		else
-			adr = __va_kernel((pfn + i) << PAGE_SHIFT);
-		clear_page(adr);
+		//else
+		//	adr = __va_kernel((pfn + i) << PAGE_SHIFT);
+		//clear_page(adr);
 	}
 
+	pr_debug("alloc_low_pages return %lx pfn %lx\n", adr, pfn);
 	if (if_memblock)
 		return __va(pfn << PAGE_SHIFT);
 	else
@@ -322,6 +323,8 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		pte_t *pte;
 		pgprot_t new_prot = prot;
 
+		pr_debug("phys_pmd_init pmd_page %p paddr %lx index %lx paddr_end %lx i %d\n",
+				pmd_page, paddr, pmd_index(paddr), paddr_end, i);
 		paddr_next = (paddr & PMD_MASK) + PMD_SIZE;
 		if (paddr >= paddr_end) {
 			if (!e820_any_mapped(paddr & PMD_MASK, paddr_next,
@@ -335,7 +338,10 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		if (!pmd_none(*pmd)) {
 			if (!pmd_large(*pmd)) {
 				/* no need to lock the init_mm page_table_lock at this stage */
-				pte = (pte_t *)pmd_page_vaddr_early(*pmd);
+				//if (pmd_val(*pmd) >= __START_KERNEL_map)
+					pte = (pte_t *)pmd_page_vaddr_early(*pmd);
+				//else
+				//	pte = (pte_t *)pmd_page_vaddr(*pmd);
 				paddr_last = phys_pte_init(pte, paddr,
 							   paddr_end, prot);
 				continue;
@@ -372,9 +378,9 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		paddr_last = phys_pte_init(pte, paddr, paddr_end, new_prot);
 
 		/* no need to lock the init_mm page_table_lock at this stage */
-		if (pte > __START_KERNEL_map)
-			pmd_populate_early(&init_mm, pmd, pte);
-		else
+		//if (pte > __START_KERNEL_map)
+		//	pmd_populate_early(&init_mm, pmd, pte);
+		//else
 			pmd_populate_kernel(&init_mm, pmd, pte);
 	}
 
@@ -396,8 +402,8 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 	unsigned long vaddr = (unsigned long)__va(paddr);
 	int i = pud_index(vaddr);
 
-	pr_debug("phys_pud_init pud_page %p, paddr %lx, paddr_end %lx\n",
-			pud_page, paddr, paddr_end);
+	pr_debug("phys_pud_init pud_page %p, paddr %lx, paddr_end %lx i %d\n",
+			pud_page, paddr, paddr_end, i);
 	for (; i < PTRS_PER_PUD; i++, paddr = paddr_next) {
 		pud_t *pud;
 		pmd_t *pmd;
@@ -418,10 +424,12 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 
 		pr_debug("pud %lx paddr %lx paddr_next %lx PTRS_PER_PUD %lx\n", 
 				pud, paddr, paddr_next, PTRS_PER_PUD);
+	
 		if (!pud_none(*pud)) {
 			if (!pud_large(*pud)) {
 				pr_debug("pud not none not large\n");
 				pmd = pmd_offset_early(pud, 0);
+				//pmd = pmd_offset(pud, 0);
 				paddr_last = phys_pmd_init(pmd, paddr,
 							   paddr_end,
 							   page_size_mask,
@@ -466,13 +474,12 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 					   page_size_mask, prot);
 
 		/* no need to lock the init_mm page_table_lock at this stage */
-		if (pmd > __START_KERNEL_map)
-			pud_populate_early(&init_mm, pud, pmd);
-		else
+		//if (pmd > __START_KERNEL_map)
+		//	pud_populate_early(&init_mm, pud, pmd);
+		//else
 			pud_populate(&init_mm, pud, pmd);
 	}
 	__flush_tlb_all();
-	pr_debug("phys_pmd_init exit\n");
 
 	return paddr_last;
 }
@@ -500,16 +507,19 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 			paddr_start, paddr_end, vaddr_start, vaddr_end);
 
 	for (; vaddr < vaddr_end; vaddr = vaddr_next) {
-		pgd_t *pgd = early_level4_pgt + pgd_index(vaddr); // pgd_offset_k(vaddr);
+		pgd_t *pgd = early_level4_pgt + pgd_index(vaddr);
+		//if ((pgt_buf_end + 1) > pgt_buf_top)
+		//	pgd = pgd_offset_k(vaddr);
 		pud_t *pud;
 
 		vaddr_next = (vaddr & PGDIR_MASK) + PGDIR_SIZE;
 
-		pr_debug("pgd %p vaddr %lx pgd_index %lx vaddr_next %lx PGDIR_MASK %lx PGDIR_SIZE %lx %lx\n", 
-			pgd, vaddr, pgd_index(vaddr), vaddr_next, PGDIR_MASK, PGDIR_SIZE, vaddr & PGDIR_MASK);
+		pr_debug("pgd %p *pgd %lx vaddr %lx pgd_index %lx vaddr_next %lx PGDIR_MASK %lx PGDIR_SIZE %lx %lx\n", 
+			pgd, *pgd, vaddr, pgd_index(vaddr), vaddr_next, PGDIR_MASK, PGDIR_SIZE, vaddr & PGDIR_MASK);
 		if (pgd_val(*pgd)) {
 			pr_debug("pgd exist pgdval %lx\n", pgd_val(*pgd));
-			pud = (pud_t *)pgd_page_vaddr_early(*pgd);
+				pud = (pud_t *)pgd_page_vaddr_early(*pgd);
+			//	pud = (pud_t *)pgd_page_vaddr(*pgd);
 			paddr_last = phys_pud_init(pud, __pa(vaddr),
 						   __pa(vaddr_end),
 						   page_size_mask);
@@ -523,9 +533,9 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 					   page_size_mask);
 
 		/* no need to lock the init_mm page_table_lock at this stage */
-		if (pud > __START_KERNEL_map)
-			pgd_populate_early(&init_mm, pgd, pud);
-		else
+		//if (pud > __START_KERNEL_map)
+		//	pgd_populate_early(&init_mm, pgd, pud);
+		//else
 			pgd_populate(&init_mm, pgd, pud);
 		pgd_changed = true;
 	}
@@ -724,10 +734,8 @@ void __init init_mem_mapping(void)
 
 	pgd = read_cr3();
 	pr_debug("%s: current cr3 is %lx\n", __func__, pgd);
-	/*
-	write_cr3(__pa(swapper_pg_dir));
-	pgd = read_cr3();
-	pr_debug("%s: cr3 is set  to %lx\n", __func__, pgd);
-	__flush_tlb_all();
-	*/
+//	write_cr3(__pa(swapper_pg_dir));
+//	pgd = read_cr3();
+//	pr_debug("%s: cr3 is set  to %lx\n", __func__, pgd);
+//	__flush_tlb_all();
 }
