@@ -72,7 +72,7 @@ void *alloc_low_pages(unsigned int num)
 		//clear_page(adr);
 	}
 
-	pr_debug("alloc_low_pages return %lx pfn %lx\n", adr, pfn);
+	//pr_debug("alloc_low_pages return %lx pfn %lx\n", adr, pfn);
 	if (if_memblock)
 		return __va(pfn << PAGE_SHIFT);
 	else
@@ -323,8 +323,8 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		pte_t *pte;
 		pgprot_t new_prot = prot;
 
-		pr_debug("phys_pmd_init pmd_page %p paddr %lx index %lx paddr_end %lx i %d\n",
-				pmd_page, paddr, pmd_index(paddr), paddr_end, i);
+		//pr_debug("phys_pmd_init pmd_page %p paddr %lx index %lx paddr_end %lx i %d\n",
+		//		pmd_page, paddr, pmd_index(paddr), paddr_end, i);
 		paddr_next = (paddr & PMD_MASK) + PMD_SIZE;
 		if (paddr >= paddr_end) {
 			if (!e820_any_mapped(paddr & PMD_MASK, paddr_next,
@@ -734,8 +734,8 @@ void __init init_mem_mapping(void)
 
 	pgd = read_cr3();
 	pr_debug("%s: current cr3 is %lx\n", __func__, pgd);
-//	write_cr3(__pa(swapper_pg_dir));
-//	pgd = read_cr3();
-//	pr_debug("%s: cr3 is set  to %lx\n", __func__, pgd);
-//	__flush_tlb_all();
+	write_cr3(__pa(swapper_pg_dir));
+	pgd = read_cr3();
+	pr_debug("%s: cr3 is set  to %lx\n", __func__, pgd);
+	__flush_tlb_all();
 }

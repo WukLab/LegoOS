@@ -250,45 +250,45 @@ GLOBAL(stack_start)
 #	.endr
 #ENDPROC(early_idt_handler_array)
 
-#early_idt_handler_common:
+early_idt_handler_common:
 	/*
 	 * The stack is the hardware frame, an error code or zero, and the
 	 * vector number.
 	 */
-#	cld
+	cld
 
 	#incl early_recursion_flag(%rip)
 
 	/* The vector number is currently in the pt_regs->di slot. */
-#	pushq %rsi                              /* pt_regs->si */
-#	movq 8(%rsp), %rsi                      /* RSI = vector number */
-#	movq %rdi, 8(%rsp)                      /* pt_regs->di = RDI */
-#	pushq %rdx                              /* pt_regs->dx */
-#	pushq %rcx                              /* pt_regs->cx */
-#	pushq %rax                              /* pt_regs->ax */
-#	pushq %r8                               /* pt_regs->r8 */
-#	pushq %r9                               /* pt_regs->r9 */
-#	pushq %r10                              /* pt_regs->r10 */
-#	pushq %r11                              /* pt_regs->r11 */
-#	pushq %rbx                              /* pt_regs->bx */
-#	pushq %rbp                              /* pt_regs->bp */
-#	pushq %r12                              /* pt_regs->r12 */
-#	pushq %r13                              /* pt_regs->r13 */
-#	pushq %r14                              /* pt_regs->r14 */
-#	pushq %r15                              /* pt_regs->r15 */
+	pushq %rsi                              /* pt_regs->si */
+	movq 8(%rsp), %rsi                      /* RSI = vector number */
+	movq %rdi, 8(%rsp)                      /* pt_regs->di = RDI */
+	pushq %rdx                              /* pt_regs->dx */
+	pushq %rcx                              /* pt_regs->cx */
+	pushq %rax                              /* pt_regs->ax */
+	pushq %r8                               /* pt_regs->r8 */
+	pushq %r9                               /* pt_regs->r9 */
+	pushq %r10                              /* pt_regs->r10 */
+	pushq %r11                              /* pt_regs->r11 */
+	pushq %rbx                              /* pt_regs->bx */
+	pushq %rbp                              /* pt_regs->bp */
+	pushq %r12                              /* pt_regs->r12 */
+	pushq %r13                              /* pt_regs->r13 */
+	pushq %r14                              /* pt_regs->r14 */
+	pushq %r15                              /* pt_regs->r15 */
 
-#	cmpq $14,%rsi           /* Page fault? */
-#	jnz 10f
-#	movq %cr2, %rdi      /* Can clobber any volatile register if pv */
-#	call early_make_pgtable
-#	andl %eax,%eax
-#	jz 20f                  /* All good */
+	cmpq $14,%rsi           /* Page fault? */
+	jnz 10f
+	movq %cr2, %rdi      /* Can clobber any volatile register if pv */
+	call early_make_pgtable
+	andl %eax,%eax
+	jz 20f                  /* All good */
 
-#10:
+10:
 	# movq %rsp,%rdi          /* RDI = pt_regs; RSI is already trapnr */
 	# call early_fixup_exception
 
-#20:
+20:
 	#decl early_recursion_flag(%rip)
 	#jmp restore_regs_and_iret
 
