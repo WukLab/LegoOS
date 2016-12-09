@@ -694,21 +694,15 @@ static void __init memory_map_top_down(unsigned long map_start,
 		init_range_memory_mapping(real_end, map_end);
 }
 
-#if 0
 void __init mem_init(void)
 {
-	pci_iommu_alloc();
+	//pci_iommu_alloc();
 
 	/* clear_bss() already clear the empty_zero_page */
 
-	register_page_bootmem_info();
-
 	/* this will put all memory onto the freelists */
-	free_all_bootmem();
 
-	mem_init_print_info(NULL);
 }
-#endif
 
 
 void __init init_mem_mapping(void)
