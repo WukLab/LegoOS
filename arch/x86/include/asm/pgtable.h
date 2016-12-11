@@ -16,6 +16,7 @@
 #ifndef __ASSEMBLY__
 
 #include <lego/sched.h>
+#include <lego/spinlock.h>
 
 extern pud_t level3_kernel_pgt[512];
 extern pud_t level3_ident_pgt[512];
@@ -31,6 +32,7 @@ extern spinlock_t pgd_lock;
 extern struct list_head pgd_list;
 
 #endif /* !__ASSEMBLY__ */
+
 /*
  * the pgd page can be thought of an array like this: pgd_t[PTRS_PER_PGD]
  *
@@ -325,7 +327,6 @@ static inline int pte_none(pte_t pte)
 	return !(pte.pte & ~(_PAGE_KNL_ERRATUM_MASK));
 }
 
-#define __HAVE_ARCH_PTE_SAME
 static inline int pte_same(pte_t a, pte_t b)
 {
 	return a.pte == b.pte;
@@ -422,37 +423,6 @@ static inline pud_t *pud_offset(pgd_t *pgd, unsigned long address)
 static inline pmd_t *pmd_offset(pud_t *pud, unsigned long address)
 {
 	return (pmd_t *)pud_page_vaddr(*pud) + pmd_index(address);
-}
-
-static inline unsigned long pgd_page_vaddr_early(pgd_t pgd)
-{
-	return (unsigned long)__va((unsigned long)pgd_val(pgd) & PTE_PFN_MASK);
-}
-
-static inline unsigned long pmd_page_vaddr_early(pmd_t pmd)
-{
-	return (unsigned long)__va(pmd_val(pmd) & pmd_pfn_mask(pmd));
-}
-
-static inline unsigned long pud_page_vaddr_early(pud_t pud)
-{
-	return (unsigned long)__va(pud_val(pud) & pud_pfn_mask(pud));
-}
-
-static inline pud_t *pud_offset_early(pgd_t *pgd, unsigned long address)
-{
-	return (pud_t *)pgd_page_vaddr_early(*pgd) + pud_index(address);
-}
-
-/* Find an entry in the second-level page table.. */
-static inline pmd_t *pmd_offset_early(pud_t *pud, unsigned long address)
-{
-	return (pmd_t *)pud_page_vaddr_early(*pud) + pmd_index(address);
-}
-
-static inline pte_t *pte_offset_early(pmd_t *pmd, unsigned long address)
-{
-	return (pte_t *)pmd_page_vaddr_early(*pmd) + pte_index(address);
 }
 
 static inline pte_t *pte_offset_kernel(pmd_t *pmd, unsigned long address)

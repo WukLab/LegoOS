@@ -109,13 +109,6 @@ void __init setup_arch(void)
 	early_ioremap_init();
 
 	/*
-	 * Load interrupt handlers
-	 * and init everthing about BSP
-	 */
-	trap_init();
-	cpu_init();
-
-	/*
 	 * Parse e820 table
 	 */
 	setup_physical_memory();
@@ -134,7 +127,15 @@ void __init setup_arch(void)
 	 */
 	e820_fill_memblock();
 
-	//init_mem_mapping();
+	init_mem_mapping();
+
+	/*
+	 * Load interrupt handlers after init_mem_mapping()
+	 * Because we want the early page fault handlers to
+	 * handle the __va() page fault before trap_init().
+	 */
+	trap_init();
+	cpu_init();
 
 	/*
 	 * Before parsing ACPI tables,

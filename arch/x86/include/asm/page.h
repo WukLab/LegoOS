@@ -13,6 +13,7 @@
 #include <asm/page_types.h>
 
 #ifndef __ASSEMBLY__
+#include <lego/string.h>
 
 /**
  *	virt_to_phys	-	map virtual addresses to physical
@@ -49,6 +50,9 @@ static inline void *phys_to_virt(phys_addr_t address)
 {
 	return __va(address);
 }
+
+#define clear_page(page)	memset((page), 0, PAGE_SIZE)
+#define copy_page(to,from)	memcpy((to), (from), PAGE_SIZE)
 
 #endif /* __ASSEMBLY__ */
 

@@ -15,6 +15,7 @@
 
 #include <lego/pfn.h>
 #include <lego/kernel.h>
+#include <lego/mm_types.h>
 
 #define offset_in_page(p)	((unsigned long)(p) & ~PAGE_MASK)
 
@@ -31,7 +32,6 @@ extern unsigned long max_pfn;
 /*
  *  simple boot-time physical memory area allocator.
  */
-
 extern unsigned long max_low_pfn;
 extern unsigned long min_low_pfn;
 
@@ -40,5 +40,6 @@ extern unsigned long min_low_pfn;
  */
 extern unsigned long long max_possible_pfn;
 
+extern struct mm_struct init_mm;
 
 #endif /* _LEGO_MM_H_ */

@@ -7,7 +7,6 @@
  * (at your option) any later version.
  */
 
-
 #include <asm/asm.h>
 #include <asm/e820.h>
 #include <asm/page.h>
@@ -18,10 +17,10 @@
 
 #include <lego/mm.h>
 #include <lego/numa.h>
+#include <lego/list.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
-#include <lego/list.h>
 
 DEFINE_SPINLOCK(pgd_lock);
 LIST_HEAD(pgd_list);
@@ -36,12 +35,10 @@ static unsigned long min_pfn_mapped;
 /*
  * Pages returned are already directly mapped.
  */
-void *alloc_low_pages(unsigned int num)
+static void *alloc_low_pages(unsigned int num)
 {
 	unsigned long pfn;
 	int i;
-	int if_memblock;
-	void *adr;
 
 	if ((pgt_buf_end + num) > pgt_buf_top || !can_use_brk_pgt) {
 		unsigned long ret;
@@ -54,29 +51,26 @@ void *alloc_low_pages(unsigned int num)
 			panic("alloc_low_pages: can not alloc memory");
 		memblock_reserve(ret, PAGE_SIZE * num);
 		pfn = ret >> PAGE_SHIFT;
-		if_memblock = 1;
 	} else {
 		pfn = pgt_buf_end;
 		pgt_buf_end += num;
-		if_memblock = 0;
 		printk(KERN_DEBUG "BRK [%#010lx, %#010lx] PGTABLE\n",
 			pfn << PAGE_SHIFT, (pgt_buf_end << PAGE_SHIFT) - 1);
 	}
 
 	for (i = 0; i < num; i++) {
+		void *adr;
 
-		//if (if_memblock)
-			adr = __va((pfn + i) << PAGE_SHIFT);
-		//else
-		//	adr = __va_kernel((pfn + i) << PAGE_SHIFT);
-		//clear_page(adr);
+		adr = __va((pfn + i) << PAGE_SHIFT);
+		clear_page(adr);
 	}
 
-	//pr_debug("alloc_low_pages return %lx pfn %lx\n", adr, pfn);
-	if (if_memblock)
-		return __va(pfn << PAGE_SHIFT);
-	else
-		return __va(pfn << PAGE_SHIFT);
+	return __va(pfn << PAGE_SHIFT);
+}
+
+static inline void *alloc_low_page(void)
+{
+	return alloc_low_pages(1);
 }
 
 /*
@@ -258,14 +252,22 @@ static int split_mem_range(struct map_range *mr, int nr_range,
 	return nr_range;
 }
 
+static unsigned long direct_pages_count[PG_LEVEL_NUM];
+
+static void update_page_count(int level, unsigned long pages)
+{
+	direct_pages_count[level] += pages;
+}
+
 /*
  * Create PTE level page table mapping for physical addresses.
  * It returns the last physical address mapped.
  */
-static unsigned long phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigned long paddr_end,
+static unsigned long
+phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigned long paddr_end,
 	      pgprot_t prot)
 {
-	unsigned long paddr_next;
+	unsigned long pages = 0, paddr_next;
 	unsigned long paddr_last = paddr_end;
 	pte_t *pte;
 	int i;
@@ -291,15 +293,19 @@ static unsigned long phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigne
 		 * these mappings are more intelligent.
 		 */
 		if (!pte_none(*pte)) {
+			pages++;
 			continue;
 		}
 
 		if (0)
 			pr_info("   pte=%p addr=%lx pte=%016lx\n", pte, paddr,
 				pfn_pte(paddr >> PAGE_SHIFT, PAGE_KERNEL).pte);
+		pages++;
 		pte_set(pte, pfn_pte(paddr >> PAGE_SHIFT, prot));
 		paddr_last = (paddr & PAGE_MASK) + PAGE_SIZE;
 	}
+
+	update_page_count(PG_LEVEL_4K, pages);
 
 	return paddr_last;
 }
@@ -309,10 +315,11 @@ static unsigned long phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigne
  * and physical address have to be aligned at this level.
  * It returns the last physical address mapped.
  */
-static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
+static unsigned long
+phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
 	      unsigned long page_size_mask, pgprot_t prot)
 {
-	unsigned long paddr_next;
+	unsigned long pages = 0, paddr_next;
 	unsigned long paddr_last = paddr_end;
 
 	int i = pmd_index(paddr);
@@ -322,8 +329,6 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		pte_t *pte;
 		pgprot_t new_prot = prot;
 
-		//pr_debug("phys_pmd_init pmd_page %p paddr %lx index %lx paddr_end %lx i %d\n",
-		//		pmd_page, paddr, pmd_index(paddr), paddr_end, i);
 		paddr_next = (paddr & PMD_MASK) + PMD_SIZE;
 		if (paddr >= paddr_end) {
 			if (!e820_any_mapped(paddr & PMD_MASK, paddr_next,
@@ -336,13 +341,11 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 
 		if (!pmd_none(*pmd)) {
 			if (!pmd_large(*pmd)) {
-				/* no need to lock the init_mm page_table_lock at this stage */
-				//if (pmd_val(*pmd) >= __START_KERNEL_map)
-					pte = (pte_t *)pmd_page_vaddr_early(*pmd);
-				//else
-				//	pte = (pte_t *)pmd_page_vaddr(*pmd);
+				spin_lock(&init_mm.page_table_lock);
+				pte = (pte_t *)pmd_page_vaddr(*pmd);
 				paddr_last = phys_pte_init(pte, paddr,
 							   paddr_end, prot);
+				spin_unlock(&init_mm.page_table_lock);
 				continue;
 			}
 			/*
@@ -358,6 +361,7 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 			 * attributes.
 			 */
 			if (page_size_mask & (1 << PG_LEVEL_2M)) {
+				pages++;
 				paddr_last = paddr_next;
 				continue;
 			}
@@ -365,38 +369,37 @@ static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigne
 		}
 
 		if (page_size_mask & (1<<PG_LEVEL_2M)) {
-			/* no need to lock the init_mm page_table_lock at this stage */
+			pages++;
+			spin_lock(&init_mm.page_table_lock);
 			pte_set((pte_t *)pmd,
 				pfn_pte((paddr & PMD_MASK) >> PAGE_SHIFT,
 					__pgprot(pgprot_val(prot) | _PAGE_PSE)));
+			spin_unlock(&init_mm.page_table_lock);
 			paddr_last = paddr_next;
 			continue;
 		}
 
-		pte = alloc_low_pages(1);
+		pte = alloc_low_page();
 		paddr_last = phys_pte_init(pte, paddr, paddr_end, new_prot);
 
-		/* no need to lock the init_mm page_table_lock at this stage */
-		//if (pte > __START_KERNEL_map)
-		//	pmd_populate_early(&init_mm, pmd, pte);
-		//else
-			pmd_populate_kernel(&init_mm, pmd, pte);
+		spin_lock(&init_mm.page_table_lock);
+		pmd_populate_kernel(&init_mm, pmd, pte);
+		spin_unlock(&init_mm.page_table_lock);
 	}
-
+	update_page_count(PG_LEVEL_2M, pages);
 	return paddr_last;
 }
 
 /*
  * Create PUD level page table mapping for physical addresses. The virtual
- * and physical address do not have to be aligned at this level. KASLR can
- * randomize virtual addresses up to this level.
+ * and physical address do not have to be aligned at this level.
  * It returns the last physical address mapped.
  */
-static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr, 
-		unsigned long paddr_end,
-		unsigned long page_size_mask)
+static unsigned long
+phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
+	      unsigned long page_size_mask)
 {
-	unsigned long paddr_next;
+	unsigned long pages = 0, paddr_next;
 	unsigned long paddr_last = paddr_end;
 	unsigned long vaddr = (unsigned long)__va(paddr);
 	int i = pud_index(vaddr);
@@ -421,8 +424,7 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 
 		if (!pud_none(*pud)) {
 			if (!pud_large(*pud)) {
-				pmd = pmd_offset_early(pud, 0);
-				//pmd = pmd_offset(pud, 0);
+				pmd = pmd_offset(pud, 0);
 				paddr_last = phys_pmd_init(pmd, paddr,
 							   paddr_end,
 							   page_size_mask,
@@ -443,6 +445,7 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 			 * attributes.
 			 */
 			if (page_size_mask & (1 << PG_LEVEL_1G)) {
+				pages++;
 				paddr_last = paddr_next;
 				continue;
 			}
@@ -450,30 +453,30 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 		}
 
 		if (page_size_mask & (1<<PG_LEVEL_1G)) {
-			/* no need to lock the init_mm page_table_lock at this stage */
+			pages++;
+			spin_lock(&init_mm.page_table_lock);
 			pte_set((pte_t *)pud,
 				pfn_pte((paddr & PUD_MASK) >> PAGE_SHIFT,
 					PAGE_KERNEL_LARGE));
+			spin_unlock(&init_mm.page_table_lock);
 			paddr_last = paddr_next;
 			continue;
 		}
 
-		pmd = alloc_low_pages(1);
+		pmd = alloc_low_page();
 		paddr_last = phys_pmd_init(pmd, paddr, paddr_end,
 					   page_size_mask, prot);
 
-		/* no need to lock the init_mm page_table_lock at this stage */
-		//if (pmd > __START_KERNEL_map)
-		//	pud_populate_early(&init_mm, pud, pmd);
-		//else
-			pud_populate(&init_mm, pud, pmd);
+		spin_lock(&init_mm.page_table_lock);
+		pud_populate(&init_mm, pud, pmd);
+		spin_unlock(&init_mm.page_table_lock);
 	}
 	__flush_tlb_all();
 
+	update_page_count(PG_LEVEL_1G, pages);
+
 	return paddr_last;
 }
-
-extern pgd_t early_level4_pgt[PTRS_PER_PGD];
 
 /*
  * Create page table mapping for the physical memory for specific physical
@@ -494,29 +497,26 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 	vaddr_start = vaddr;
 
 	for (; vaddr < vaddr_end; vaddr = vaddr_next) {
-		pgd_t *pgd = early_level4_pgt + pgd_index(vaddr);
-		//if ((pgt_buf_end + 1) > pgt_buf_top)
-		//	pgd = pgd_offset_k(vaddr);
+		pgd_t *pgd = pgd_offset_k(vaddr);
 		pud_t *pud;
 
 		vaddr_next = (vaddr & PGDIR_MASK) + PGDIR_SIZE;
 
 		if (pgd_val(*pgd)) {
+			pud = (pud_t *)pgd_page_vaddr(*pgd);
 			paddr_last = phys_pud_init(pud, __pa(vaddr),
 						   __pa(vaddr_end),
 						   page_size_mask);
 			continue;
 		}
 
-		pud = alloc_low_pages(1);
+		pud = alloc_low_page();
 		paddr_last = phys_pud_init(pud, __pa(vaddr), __pa(vaddr_end),
 					   page_size_mask);
 
-		/* no need to lock the init_mm page_table_lock at this stage */
-		//if (pud > __START_KERNEL_map)
-		//	pgd_populate_early(&init_mm, pgd, pud);
-		//else
-			pgd_populate(&init_mm, pgd, pud);
+		spin_lock(&init_mm.page_table_lock);
+		pgd_populate(&init_mm, pgd, pud);
+		spin_unlock(&init_mm.page_table_lock);
 		pgd_changed = true;
 	}
 
@@ -644,8 +644,6 @@ static void __init memory_map_top_down(unsigned long map_start,
 	min_pfn_mapped = real_end >> PAGE_SHIFT;
 	last_start = start = real_end;
 
-	pr_debug("memory_map_top_down [%#010lx-%#010lx] addr %lx min_pfn_mapped %lx real_end %lx addr %lx PMD_SIZE %lx\n",
-			map_start, map_end, addr, min_pfn_mapped, real_end, addr, PMD_SIZE);
 	/*
 	 * We start from the top (end of memory) and go to the bottom.
 	 * The memblock_find_in_range() gets us a block of RAM from the
@@ -670,17 +668,6 @@ static void __init memory_map_top_down(unsigned long map_start,
 	if (real_end < map_end)
 		init_range_memory_mapping(real_end, map_end);
 }
-
-void __init mem_init(void)
-{
-	//pci_iommu_alloc();
-
-	/* clear_bss() already clear the empty_zero_page */
-
-	/* this will put all memory onto the freelists */
-
-}
-
 
 void __init init_mem_mapping(void)
 {

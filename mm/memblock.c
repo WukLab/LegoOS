@@ -18,7 +18,7 @@
 #include <lego/kernel.h>
 #include <lego/memblock.h>
 
-int memblock_debug __initdata = 1;
+int memblock_debug __initdata = 0;
 
 static struct memblock_region memblock_memory_init_regions[INIT_MEMBLOCK_REGIONS] __initdata;
 static struct memblock_region memblock_reserved_init_regions[INIT_MEMBLOCK_REGIONS] __initdata;
@@ -253,23 +253,21 @@ int __init memblock_add_node(phys_addr_t base, phys_addr_t size, int nid)
 
 int __init memblock_add(phys_addr_t base, phys_addr_t size)
 {
-/*
 	memblock_dbg("memblock_add: [%#016llx-%#016llx] flags %#02lx %pF\n",
 		     (unsigned long long)base,
 		     (unsigned long long)base + size - 1,
 		     0UL, (void *)_RET_IP_);
-*/
+
 	return memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES, 0);
 }
 
 int __init memblock_reserve(phys_addr_t base, phys_addr_t size)
 {
-/*
 	memblock_dbg("memblock_reserve: [%#016llx-%#016llx] flags %#02lx %pF\n",
 		     (unsigned long long)base,
 		     (unsigned long long)base + size - 1,
 		     0UL, (void *)_RET_IP_);
-*/
+
 	return memblock_add_range(&memblock.reserved, base, size, MAX_NUMNODES, 0);
 }
 

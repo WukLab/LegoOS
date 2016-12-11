@@ -43,13 +43,6 @@ char __initdata boot_command_line[COMMAND_LINE_SIZE];
 /* Concatenated command line from boot and builtin */
 static char command_line[COMMAND_LINE_SIZE];
 
-/*
- * Set up kernel memory allocators
- */
-static void __init mm_init(void)
-{
-}
-
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
@@ -74,7 +67,5 @@ asmlinkage void __init start_kernel(void)
 	/* Architecture-Specific Initialization */
 	setup_arch();
 
-	mm_init();
-
-	BUG();
+	hlt();
 }

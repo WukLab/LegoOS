@@ -16,8 +16,8 @@
 #include <asm/processor.h>
 #include <asm/thread_info.h>
 
+#include <lego/mm.h>
 #include <lego/types.h>
-#include <lego/mm_types.h>
 
 /* Task command name length */
 #define TASK_COMM_LEN 16
@@ -34,8 +34,9 @@ struct task_struct {
 	pid_t pid;
 	pid_t tgid;
 
-	struct thread_struct thread;
 	struct mm_struct *mm, *active_mm;
+
+	struct thread_struct thread;
 };
 
 union thread_union {
@@ -68,7 +69,5 @@ static inline void *task_stack_page(const struct task_struct *task)
 {
 	return task->stack;
 }
-
-extern struct mm_struct init_mm;
 
 #endif /* _LEGO_SCHED_H_ */

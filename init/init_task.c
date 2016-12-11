@@ -7,12 +7,15 @@
  * (at your option) any later version.
  */
 
+#include <lego/mm.h>
 #include <lego/sched.h>
 
 #define INIT_TASK(task)							\
 {									\
 	.state		= 0,						\
 	.comm		= "swapper",					\
+	.mm		= &init_mm,					\
+	.active_mm	= &init_mm,					\
 	.stack		= &init_thread_info,				\
 }
 
