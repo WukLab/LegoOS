@@ -134,7 +134,13 @@ asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data)
 	int i;
 
 	reset_early_page_tables();
+
 	clear_bss();
+
+	clear_page(init_level4_pgt);
+
+	/* set init_level4_pgt kernel high mapping */
+	init_level4_pgt[511] = early_level4_pgt[511];
 
 	for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
 		set_intr_gate(i, (void *)early_idt_handler_array[i]);

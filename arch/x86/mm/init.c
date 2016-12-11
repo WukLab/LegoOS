@@ -684,5 +684,7 @@ void __init init_mem_mapping(void)
 	 */
 	memory_map_top_down(ISA_END_ADDRESS, end);
 
+	load_cr3(swapper_pg_dir);
+
 	__flush_tlb_all();
 }
