@@ -11,6 +11,7 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
+#include <asm/irq_vectors.h>
 #include <asm/processor-flags.h>
 #include <lego/linkage.h>
 #include <lego/compiler.h>
@@ -182,18 +183,18 @@ ENTRY(secondary_startup_64)
 	lgdt	early_gdt_descr(%rip)
 
 	/* set up data segments */
-	xorl %eax,%eax
-	movl %eax,%ds
-	movl %eax,%ss
-	movl %eax,%es
+	xorl	%eax,%eax
+	movl	%eax,%ds
+	movl	%eax,%ss
+	movl	%eax,%es
 
 	/*
 	 * We don't really need to load %fs or %gs, but load them anyway
 	 * to kill any stale realmode selectors.  This allows execution
 	 * under VT hardware.
 	 */
-	movl %eax,%fs
-	movl %eax,%gs
+	movl	%eax,%fs
+	movl	%eax,%gs
 
 	/*
 	 * rsi is pointer to real mode structure with interesting info.
@@ -233,22 +234,23 @@ GLOBAL(stack_start)
 	.quad	init_thread_union+THREAD_SIZE-8
 	.word	0
 
-#ENTRY(early_idt_handler_array)
+	.section ".init.text"
+ENTRY(early_idt_handler_array)
 	# 104(%rsp) %rflags
 	#  96(%rsp) %cs
 	#  88(%rsp) %rip
 	#  80(%rsp) error code
-#	i = 0
-#	.rept NUM_EXCEPTION_VECTORS
-#	.ifeq (EXCEPTION_ERRCODE_MASK >> i) & 1
-#	pushq $0                # Dummy error code, to make stack frame uniform
-#	.endif
-#	pushq $i                # 72(%rsp) Vector number
-#	jmp early_idt_handler_common
-#	i = i + 1
-#	.fill early_idt_handler_array + i*EARLY_IDT_HANDLER_SIZE - ., 1, 0xcc
-#	.endr
-#ENDPROC(early_idt_handler_array)
+	i = 0
+	.rept NUM_EXCEPTION_VECTORS
+	.ifeq (EXCEPTION_ERRCODE_MASK >> i) & 1
+	pushq	$0		# Dummy error code, to make stack frame uniform
+	.endif
+	pushq	$i		# 72(%rsp) Vector number
+	jmp	early_idt_handler_common
+	i = i + 1
+	.fill early_idt_handler_array + i*EARLY_IDT_HANDLER_SIZE - ., 1, 0xcc
+	.endr
+ENDPROC(early_idt_handler_array)
 
 early_idt_handler_common:
 	/*
@@ -257,41 +259,62 @@ early_idt_handler_common:
 	 */
 	cld
 
-	#incl early_recursion_flag(%rip)
-
 	/* The vector number is currently in the pt_regs->di slot. */
-	pushq %rsi                              /* pt_regs->si */
-	movq 8(%rsp), %rsi                      /* RSI = vector number */
-	movq %rdi, 8(%rsp)                      /* pt_regs->di = RDI */
-	pushq %rdx                              /* pt_regs->dx */
-	pushq %rcx                              /* pt_regs->cx */
-	pushq %rax                              /* pt_regs->ax */
-	pushq %r8                               /* pt_regs->r8 */
-	pushq %r9                               /* pt_regs->r9 */
-	pushq %r10                              /* pt_regs->r10 */
-	pushq %r11                              /* pt_regs->r11 */
-	pushq %rbx                              /* pt_regs->bx */
-	pushq %rbp                              /* pt_regs->bp */
-	pushq %r12                              /* pt_regs->r12 */
-	pushq %r13                              /* pt_regs->r13 */
-	pushq %r14                              /* pt_regs->r14 */
-	pushq %r15                              /* pt_regs->r15 */
+	pushq	%rsi				/* pt_regs->si */
+	movq	8(%rsp), %rsi			/* RSI = vector number */
+	movq	%rdi, 8(%rsp)			/* pt_regs->di = RDI */
+	pushq	%rdx				/* pt_regs->dx */
+	pushq	%rcx				/* pt_regs->cx */
+	pushq	%rax				/* pt_regs->ax */
+	pushq	%r8				/* pt_regs->r8 */
+	pushq	%r9				/* pt_regs->r9 */
+	pushq	%r10				/* pt_regs->r10 */
+	pushq	%r11				/* pt_regs->r11 */
+	pushq	%rbx				/* pt_regs->bx */
+	pushq	%rbp				/* pt_regs->bp */
+	pushq	%r12				/* pt_regs->r12 */
+	pushq	%r13				/* pt_regs->r13 */
+	pushq	%r14				/* pt_regs->r14 */
+	pushq	%r15				/* pt_regs->r15 */
 
-	cmpq $14,%rsi           /* Page fault? */
-	jnz 10f
-	movq %cr2, %rdi      /* Can clobber any volatile register if pv */
-	call early_make_pgtable
-	andl %eax,%eax
-	jz 20f                  /* All good */
+	cmpq	$14, %rsi		/* Page fault? */
+	jnz	1f
+	movq	%cr2, %rdi
+	call	early_make_pgtable
+	andl	%eax,%eax
+	jz	2f			/* All good */
 
-10:
-	# movq %rsp,%rdi          /* RDI = pt_regs; RSI is already trapnr */
-	# call early_fixup_exception
+1:
+	movq %rsp,%rdi			/* RDI = pt_regs; RSI is already trapnr */
+	/*
+	 * All other traps are not allowed or should not be triggered
+	 * at this time. This handler is solely for page fault.
+	 * Hence comment this out and do nothing.
+	 *
+	 * call early_fixup_exception
+	 */
 
-20:
-	#decl early_recursion_flag(%rip)
-	#jmp restore_regs_and_iret
+2:
+	/* Restore all */
+	popq	%r15
+	popq	%r14
+	popq	%r13
+	popq	%r12
+	popq	%rbp
+	popq	%rbx
+	popq	%r11
+	popq	%r10
+	popq	%r9
+	popq	%r8
+	popq	%rax
+	popq	%rcx
+	popq	%rdx
+	popq	%rsi
+	popq	%rdi
+	addq	$8, %rsp
 
+	iretq
+ENDPROC(early_idt_handler_common)
 
 #define NEXT_PAGE(name) \
 	.balign	PAGE_SIZE; \

@@ -41,6 +41,7 @@ void *alloc_low_pages(unsigned int num)
 	unsigned long pfn;
 	int i;
 	int if_memblock;
+	void *adr;
 
 	if ((pgt_buf_end + num) > pgt_buf_top || !can_use_brk_pgt) {
 		unsigned long ret;
@@ -62,7 +63,6 @@ void *alloc_low_pages(unsigned int num)
 			pfn << PAGE_SHIFT, (pgt_buf_end << PAGE_SHIFT) - 1);
 	}
 
-	void *adr;
 	for (i = 0; i < num; i++) {
 
 		//if (if_memblock)
@@ -76,7 +76,7 @@ void *alloc_low_pages(unsigned int num)
 	if (if_memblock)
 		return __va(pfn << PAGE_SHIFT);
 	else
-		return __va_kernel(pfn << PAGE_SHIFT);
+		return __va(pfn << PAGE_SHIFT);
 }
 
 /*
@@ -94,9 +94,8 @@ void  __init early_alloc_pgt_buf(void)
 	unsigned long tables = INIT_PGT_BUF_SIZE;
 	phys_addr_t base;
 
-	base = __pa_kernel(extend_brk(tables, PAGE_SIZE));
+	base = __pa(extend_brk(tables, PAGE_SIZE));
 
-	pr_debug("early_alloc_pgt_buf base %lx\n", base);
 	pgt_buf_start = base >> PAGE_SHIFT;
 	pgt_buf_end = pgt_buf_start;
 	pgt_buf_top = pgt_buf_start + (tables >> PAGE_SHIFT);
@@ -402,8 +401,6 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 	unsigned long vaddr = (unsigned long)__va(paddr);
 	int i = pud_index(vaddr);
 
-	pr_debug("phys_pud_init pud_page %p, paddr %lx, paddr_end %lx i %d\n",
-			pud_page, paddr, paddr_end, i);
 	for (; i < PTRS_PER_PUD; i++, paddr = paddr_next) {
 		pud_t *pud;
 		pmd_t *pmd;
@@ -422,12 +419,8 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 			continue;
 		}
 
-		pr_debug("pud %lx paddr %lx paddr_next %lx PTRS_PER_PUD %lx\n", 
-				pud, paddr, paddr_next, PTRS_PER_PUD);
-	
 		if (!pud_none(*pud)) {
 			if (!pud_large(*pud)) {
-				pr_debug("pud not none not large\n");
 				pmd = pmd_offset_early(pud, 0);
 				//pmd = pmd_offset(pud, 0);
 				paddr_last = phys_pmd_init(pmd, paddr,
@@ -449,17 +442,14 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 			 * not differ with respect to page frame and
 			 * attributes.
 			 */
-			pr_debug("pud not none\n");
 			if (page_size_mask & (1 << PG_LEVEL_1G)) {
 				paddr_last = paddr_next;
 				continue;
 			}
-			pr_debug("pud1 not none\n");
 			prot = pte_pgprot(pte_clrhuge(*(pte_t *)pud));
 		}
 
 		if (page_size_mask & (1<<PG_LEVEL_1G)) {
-			pr_debug("pud1 %lx\n", pud);
 			/* no need to lock the init_mm page_table_lock at this stage */
 			pte_set((pte_t *)pud,
 				pfn_pte((paddr & PUD_MASK) >> PAGE_SHIFT,
@@ -469,7 +459,6 @@ static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr,
 		}
 
 		pmd = alloc_low_pages(1);
-		pr_debug("phys_pud_init allocated one pmd page %p\n", pmd);
 		paddr_last = phys_pmd_init(pmd, paddr, paddr_end,
 					   page_size_mask, prot);
 
@@ -503,8 +492,6 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 	vaddr = (unsigned long)__va(paddr_start);
 	vaddr_end = (unsigned long)__va(paddr_end);
 	vaddr_start = vaddr;
-	pr_debug("kernel_physical_mapping_init phys [%#010lx-%#010lx] virt [%#010lx-%#010lx]\n", 
-			paddr_start, paddr_end, vaddr_start, vaddr_end);
 
 	for (; vaddr < vaddr_end; vaddr = vaddr_next) {
 		pgd_t *pgd = early_level4_pgt + pgd_index(vaddr);
@@ -514,12 +501,7 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 
 		vaddr_next = (vaddr & PGDIR_MASK) + PGDIR_SIZE;
 
-		pr_debug("pgd %p *pgd %lx vaddr %lx pgd_index %lx vaddr_next %lx PGDIR_MASK %lx PGDIR_SIZE %lx %lx\n", 
-			pgd, *pgd, vaddr, pgd_index(vaddr), vaddr_next, PGDIR_MASK, PGDIR_SIZE, vaddr & PGDIR_MASK);
 		if (pgd_val(*pgd)) {
-			pr_debug("pgd exist pgdval %lx\n", pgd_val(*pgd));
-				pud = (pud_t *)pgd_page_vaddr_early(*pgd);
-			//	pud = (pud_t *)pgd_page_vaddr(*pgd);
 			paddr_last = phys_pud_init(pud, __pa(vaddr),
 						   __pa(vaddr_end),
 						   page_size_mask);
@@ -527,8 +509,6 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 		}
 
 		pud = alloc_low_pages(1);
-		pr_debug("kernel_physical_mapping_init allocated one pgdval %lx\n",
-				pgd_val(*pgd));
 		paddr_last = phys_pud_init(pud, __pa(vaddr), __pa(vaddr_end),
 					   page_size_mask);
 
@@ -568,9 +548,6 @@ unsigned long init_memory_mapping(unsigned long start,
 						   mr[i].page_size_mask);
 
 	max_pfn_mapped = max(max_pfn_mapped, ret >> PAGE_SHIFT);
-
-	pr_debug("add_pfn_range_mapped start_pfn %lx max_pfn_mapped %lx\n",
-			start >> PAGE_SHIFT, max_pfn_mapped);
 
 	return ret >> PAGE_SHIFT;
 }
@@ -707,29 +684,18 @@ void __init mem_init(void)
 
 void __init init_mem_mapping(void)
 {
-	unsigned long end, pgd;
+	unsigned long end;
 
 	probe_page_size_mask();
 
 	end = max_pfn << PAGE_SHIFT;
 
-	pr_debug("early_level4_pgt %p pa %lx\n", early_level4_pgt, __pa(early_level4_pgt));
-	pr_debug("init_level4_pgt %p pa %lx\n", init_level4_pgt, __pa(init_level4_pgt));
 	init_memory_mapping(0, ISA_END_ADDRESS);
 
 	/*
-	char *test = __va(0);
-	pr_debug("va0 %p\n", test);
-	pr_debug("va0 val %c\n", *test);
-
 	 * X86 maps top->down direction
 	 */
 	memory_map_top_down(ISA_END_ADDRESS, end);
 
-	pgd = read_cr3();
-	pr_debug("%s: current cr3 is %lx\n", __func__, pgd);
-	write_cr3(__pa(swapper_pg_dir));
-	pgd = read_cr3();
-	pr_debug("%s: cr3 is set  to %lx\n", __func__, pgd);
 	__flush_tlb_all();
 }

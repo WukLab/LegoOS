@@ -236,6 +236,7 @@ static inline void __set_tss_desc(unsigned cpu, unsigned int entry, void *addr)
 #define set_tss_desc(cpu, addr) __set_tss_desc(cpu, GDT_ENTRY_TSS, addr)
 
 extern gate_desc idt_table[NR_VECTORS];
+extern struct desc_ptr idt_desc;
 
 /*
  * (a)

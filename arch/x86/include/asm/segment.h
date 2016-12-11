@@ -214,6 +214,15 @@
 /* Bitmask of exception vectors which push an error code on the stack: */
 #define EXCEPTION_ERRCODE_MASK		0x00027d00
 
+/*
+ * early_idt_handler_array is an array of entry points referenced in the
+ * early IDT.  For simplicity, it's a real array with one entry point
+ * every nine bytes.  That leaves room for an optional 'push $0' if the
+ * vector has no error code (two bytes), a 'push $vector_number' (two
+ * bytes), and a jump to the common entry code (up to five bytes).
+ */
+#define EARLY_IDT_HANDLER_SIZE		9
+
 #define GDT_SIZE			(GDT_ENTRIES*8)
 #define GDT_ENTRY_TLS_ENTRIES		3
 #define TLS_SIZE			(GDT_ENTRY_TLS_ENTRIES* 8)

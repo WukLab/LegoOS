@@ -27,7 +27,7 @@
  * On the PC, we can just recalculate addresses and then
  * access the videoram directly without any black magic.
  */
-#define VGA_MAP_MEM(x, s) (unsigned long)phys_to_virt_early(x)
+#define VGA_MAP_MEM(x, s) (unsigned long)phys_to_virt(x)
 
 static DEFINE_SPINLOCK(vga_lock);
 static int cursor_size_lastfrom;

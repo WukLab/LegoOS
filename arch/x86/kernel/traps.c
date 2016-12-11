@@ -26,7 +26,7 @@
  */
 gate_desc idt_table[NR_VECTORS];
 
-static struct desc_ptr idt_desc = {
+struct desc_ptr idt_desc = {
 	.size = NR_VECTORS * 16 - 1,
 	.address = (unsigned long)idt_table,
 };
@@ -134,5 +134,5 @@ void __init trap_init(void)
 	set_intr_gate(X86_TRAP_XF, simd_exception);
 	set_intr_gate(X86_TRAP_VE, virtualization_exception);
 
-	load_idt(&idt_desc);
+	load_idt((const struct desc_ptr *)&idt_desc);
 }

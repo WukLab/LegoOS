@@ -8,9 +8,11 @@
  */
 
 #include <asm/asm.h>
+#include <asm/desc.h>
 #include <asm/page.h>
 #include <asm/setup.h>
 #include <asm/pgtable.h>
+#include <asm/segment.h>
 
 #include <lego/init.h>
 #include <lego/string.h>
@@ -27,10 +29,10 @@ pmdval_t early_pmd_flags = __PAGE_KERNEL_LARGE & ~(_PAGE_GLOBAL | _PAGE_NX);
 static void __init reset_early_page_tables(void)
 {
 	memset(early_level4_pgt, 0, sizeof(pgd_t)*(PTRS_PER_PGD-1));
-	write_cr3(__pa_kernel(early_level4_pgt));
+	next_early_pgt = 0;
+	write_cr3(__pa(early_level4_pgt));
 }
 
-/* Create a new PMD entry */
 int __init early_make_pgtable(unsigned long address)
 {
 	unsigned long physaddr = address - __PAGE_OFFSET;
@@ -39,7 +41,7 @@ int __init early_make_pgtable(unsigned long address)
 	pmdval_t pmd, *pmd_p;
 
 	/* Invalid address or early pgt is done ?  */
-	if (physaddr >= MAXMEM || read_cr3() != __phys_addr_nodebug(early_level4_pgt))
+	if (physaddr >= MAXMEM || read_cr3() != __pa(early_level4_pgt))
 		return -1;
 
 again:
@@ -48,9 +50,10 @@ again:
 
 	/*
 	 * The use of __START_KERNEL_map rather than __PAGE_OFFSET here is
-	 * critical -- __PAGE_OFFSET would point us back into the dynamic
-	 * range and we might end up looping forever...
+	 * critical --- early_dynamic_pgts[]'s virtual address base is
+	 * __START_KERNEL_map.
 	 */
+
 	if (pgd)
 		pud_p = (pudval_t *)((pgd & PTE_PFN_MASK) + __START_KERNEL_map - phys_base);
 	else {
@@ -87,7 +90,7 @@ again:
 static void __init clear_bss(void)
 {
 	memset(__bss_start, 0,
-			(unsigned long)__bss_end - (unsigned long)__bss_start);
+		(unsigned long)__bss_end - (unsigned long)__bss_start);
 }
 
 /*
@@ -103,7 +106,7 @@ static void __init copy_bootdata(char *real_mode_data)
 
 	cmd_line_ptr = boot_params.hdr.cmd_line_ptr;
 	if (cmd_line_ptr) {
-		command_line = __va_kernel(cmd_line_ptr);
+		command_line = __va(cmd_line_ptr);
 		memcpy(boot_command_line, command_line, COMMAND_LINE_SIZE);
 	}
 }
@@ -115,19 +118,30 @@ static void __init copy_screen_info(void)
 }
 
 /*
+ * The early fault handlers, solely used to handle page fault
+ * All other faults should NOT happen before the final initialization
+ * of idt, which is the trap_init().
+ */
+extern const char
+early_idt_handler_array[NUM_EXCEPTION_VECTORS][EARLY_IDT_HANDLER_SIZE];
+
+/*
  * This is called from the assembly head code
  * Do some architecture setup and then jump to generic start kernel
  */
 asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data)
 {
-	reset_early_page_tables();
+	int i;
 
+	reset_early_page_tables();
 	clear_bss();
-	copy_bootdata(__va_kernel(real_mode_data));
+
+	for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
+		set_intr_gate(i, (void *)early_idt_handler_array[i]);
+	load_idt((const struct desc_ptr *)&idt_desc);
+
+	copy_bootdata(__va(real_mode_data));
 	copy_screen_info();
 
-	clear_page(init_level4_pgt);
-	/* set init_level4_pgt kernel high mapping*/
-	init_level4_pgt[511] = early_level4_pgt[511];
 	start_kernel();
 }

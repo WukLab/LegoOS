@@ -426,16 +426,17 @@ static inline pmd_t *pmd_offset(pud_t *pud, unsigned long address)
 
 static inline unsigned long pgd_page_vaddr_early(pgd_t pgd)
 {
-	return (unsigned long)__va_kernel((unsigned long)pgd_val(pgd) & PTE_PFN_MASK);
+	return (unsigned long)__va((unsigned long)pgd_val(pgd) & PTE_PFN_MASK);
 }
 
 static inline unsigned long pmd_page_vaddr_early(pmd_t pmd)
 {
-	return (unsigned long)__va_kernel(pmd_val(pmd) & pmd_pfn_mask(pmd));
+	return (unsigned long)__va(pmd_val(pmd) & pmd_pfn_mask(pmd));
 }
+
 static inline unsigned long pud_page_vaddr_early(pud_t pud)
 {
-	return (unsigned long)__va_kernel(pud_val(pud) & pud_pfn_mask(pud));
+	return (unsigned long)__va(pud_val(pud) & pud_pfn_mask(pud));
 }
 
 static inline pud_t *pud_offset_early(pgd_t *pgd, unsigned long address)

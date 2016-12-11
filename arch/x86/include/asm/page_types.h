@@ -72,15 +72,11 @@
 
 #define __START_KERNEL		(__START_KERNEL_map + __PHYSICAL_START)
 
-#define __va_kernel(x)	((void *)((unsigned long)(x) + __START_KERNEL_map))
-
-#define __va(x)	((void *)((unsigned long)(x) + __PAGE_OFFSET))
-/*
- * #define __pa(x)	((unsigned long)((unsigned long)x - __PAGE_OFFSET))
- * #define __pa_kernel(x)	((unsigned long)((unsigned long)x - __START_KERNEL_map))
- */
+#define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
+#define START_KERNEL		((unsigned long)__START_KERNEL)
 
 #ifndef __ASSEMBLY__
+/* In normal platform, phys_base is 0 */
 extern unsigned long phys_base;
 
 static inline unsigned long __phys_addr_nodebug(unsigned long x)
@@ -88,20 +84,18 @@ static inline unsigned long __phys_addr_nodebug(unsigned long x)
 	unsigned long y = x - __START_KERNEL_map;
 
 	/* use the carry flag to determine if x was < __START_KERNEL_map */
-	x = y + ((x > y) ? phys_base : (__START_KERNEL_map - __PAGE_OFFSET));
+	x = y + ((x > y) ? phys_base : (__START_KERNEL_map - PAGE_OFFSET));
 
 	return x;
 }
-
-#define __phys_addr(x)          __phys_addr_nodebug(x)
-#define __phys_addr_symbol(x) \
-	((unsigned long)(x) - __START_KERNEL_map + phys_base)
-
-#define __pa(x)         __phys_addr((unsigned long)(x))
-#define __pa_kernel(x)         __phys_addr((unsigned long)(x))
 #endif
 
-#define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
-#define START_KERNEL		((unsigned long)__START_KERNEL)
+#define __pa(x)		__phys_addr_nodebug((unsigned long)(x))
+
+/* __pa_symbol should be used for C visible symbols. */
+#define __pa_symbol(x) \
+	((unsigned long)(x) - __START_KERNEL_map + phys_base)
+
+#define __va(x)		((void *)((unsigned long)(x)+PAGE_OFFSET))
 
 #endif /* _ASM_X86_PAGE_TYPES_H_ */
