@@ -1,5 +1,1 @@
-config test_test
-	bool "ttttttt"
-	default n
-	help
-	  asdasdasdasdas
+

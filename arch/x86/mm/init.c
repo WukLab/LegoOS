@@ -13,17 +13,71 @@
 #include <asm/page.h>
 #include <asm/setup.h>
 #include <asm/pgtable.h>
+#include <asm/pgalloc.h>
+#include <asm/tlbflush.h>
 
 #include <lego/mm.h>
 #include <lego/numa.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
+#include <lego/list.h>
+
+DEFINE_SPINLOCK(pgd_lock);
+LIST_HEAD(pgd_list);
 
 static unsigned long __initdata pgt_buf_start;
 static unsigned long __initdata pgt_buf_end;
 static unsigned long __initdata pgt_buf_top;
 static bool __initdata can_use_brk_pgt = true;
+
+static unsigned long min_pfn_mapped;
+
+/*
+ * Pages returned are already directly mapped.
+ */
+void *alloc_low_pages(unsigned int num)
+{
+	unsigned long pfn;
+	int i;
+	int if_memblock;
+
+	if ((pgt_buf_end + num) > pgt_buf_top || !can_use_brk_pgt) {
+		unsigned long ret;
+		if (min_pfn_mapped >= max_pfn_mapped)
+			panic("alloc_low_pages: ran out of memory");
+		ret = memblock_find_in_range(min_pfn_mapped << PAGE_SHIFT,
+					max_pfn_mapped << PAGE_SHIFT,
+					PAGE_SIZE * num , PAGE_SIZE);
+		if (!ret)
+			panic("alloc_low_pages: can not alloc memory");
+		memblock_reserve(ret, PAGE_SIZE * num);
+		pfn = ret >> PAGE_SHIFT;
+		if_memblock = 1;
+	} else {
+		pfn = pgt_buf_end;
+		pgt_buf_end += num;
+		if_memblock = 0;
+		printk(KERN_DEBUG "BRK [%#010lx, %#010lx] PGTABLE\n",
+			pfn << PAGE_SHIFT, (pgt_buf_end << PAGE_SHIFT) - 1);
+	}
+
+	void *adr;
+	for (i = 0; i < num; i++) {
+
+		//if (if_memblock)
+			adr = __va((pfn + i) << PAGE_SHIFT);
+		//else
+		//	adr = __va_kernel((pfn + i) << PAGE_SHIFT);
+		//clear_page(adr);
+	}
+
+	//pr_debug("alloc_low_pages return %lx pfn %lx\n", adr, pfn);
+	if (if_memblock)
+		return __va(pfn << PAGE_SHIFT);
+	else
+		return __va_kernel(pfn << PAGE_SHIFT);
+}
 
 /*
  * By default
@@ -40,8 +94,9 @@ void  __init early_alloc_pgt_buf(void)
 	unsigned long tables = INIT_PGT_BUF_SIZE;
 	phys_addr_t base;
 
-	base = __pa(extend_brk(tables, PAGE_SIZE));
+	base = __pa_kernel(extend_brk(tables, PAGE_SIZE));
 
+	pr_debug("early_alloc_pgt_buf base %lx\n", base);
 	pgt_buf_start = base >> PAGE_SHIFT;
 	pgt_buf_end = pgt_buf_start;
 	pgt_buf_top = pgt_buf_start + (tables >> PAGE_SHIFT);
@@ -205,6 +260,233 @@ static int split_mem_range(struct map_range *mr, int nr_range,
 }
 
 /*
+ * Create PTE level page table mapping for physical addresses.
+ * It returns the last physical address mapped.
+ */
+static unsigned long phys_pte_init(pte_t *pte_page, unsigned long paddr, unsigned long paddr_end,
+	      pgprot_t prot)
+{
+	unsigned long paddr_next;
+	unsigned long paddr_last = paddr_end;
+	pte_t *pte;
+	int i;
+
+	pte = pte_page + pte_index(paddr);
+	i = pte_index(paddr);
+
+	for (; i < PTRS_PER_PTE; i++, paddr = paddr_next, pte++) {
+		paddr_next = (paddr & PAGE_MASK) + PAGE_SIZE;
+		if (paddr >= paddr_end) {
+			if (!e820_any_mapped(paddr & PAGE_MASK, paddr_next,
+					     E820_RAM) &&
+			    !e820_any_mapped(paddr & PAGE_MASK, paddr_next,
+					     E820_RESERVED_KERN))
+				pte_set(pte, __pte(0));
+			continue;
+		}
+
+		/*
+		 * We will re-use the existing mapping.
+		 * Xen for example has some special requirements, like mapping
+		 * pagetable pages as RO. So assume someone who pre-setup
+		 * these mappings are more intelligent.
+		 */
+		if (!pte_none(*pte)) {
+			continue;
+		}
+
+		if (0)
+			pr_info("   pte=%p addr=%lx pte=%016lx\n", pte, paddr,
+				pfn_pte(paddr >> PAGE_SHIFT, PAGE_KERNEL).pte);
+		pte_set(pte, pfn_pte(paddr >> PAGE_SHIFT, prot));
+		paddr_last = (paddr & PAGE_MASK) + PAGE_SIZE;
+	}
+
+	return paddr_last;
+}
+
+/*
+ * Create PMD level page table mapping for physical addresses. The virtual
+ * and physical address have to be aligned at this level.
+ * It returns the last physical address mapped.
+ */
+static unsigned long phys_pmd_init(pmd_t *pmd_page, unsigned long paddr, unsigned long paddr_end,
+	      unsigned long page_size_mask, pgprot_t prot)
+{
+	unsigned long paddr_next;
+	unsigned long paddr_last = paddr_end;
+
+	int i = pmd_index(paddr);
+
+	for (; i < PTRS_PER_PMD; i++, paddr = paddr_next) {
+		pmd_t *pmd = pmd_page + pmd_index(paddr);
+		pte_t *pte;
+		pgprot_t new_prot = prot;
+
+		//pr_debug("phys_pmd_init pmd_page %p paddr %lx index %lx paddr_end %lx i %d\n",
+		//		pmd_page, paddr, pmd_index(paddr), paddr_end, i);
+		paddr_next = (paddr & PMD_MASK) + PMD_SIZE;
+		if (paddr >= paddr_end) {
+			if (!e820_any_mapped(paddr & PMD_MASK, paddr_next,
+					     E820_RAM) &&
+			    !e820_any_mapped(paddr & PMD_MASK, paddr_next,
+					     E820_RESERVED_KERN))
+				pmd_set(pmd, __pmd(0));
+			continue;
+		}
+
+		if (!pmd_none(*pmd)) {
+			if (!pmd_large(*pmd)) {
+				/* no need to lock the init_mm page_table_lock at this stage */
+				//if (pmd_val(*pmd) >= __START_KERNEL_map)
+					pte = (pte_t *)pmd_page_vaddr_early(*pmd);
+				//else
+				//	pte = (pte_t *)pmd_page_vaddr(*pmd);
+				paddr_last = phys_pte_init(pte, paddr,
+							   paddr_end, prot);
+				continue;
+			}
+			/*
+			 * If we are ok with PG_LEVEL_2M mapping, then we will
+			 * use the existing mapping,
+			 *
+			 * Otherwise, we will split the large page mapping but
+			 * use the same existing protection bits except for
+			 * large page, so that we don't violate Intel's TLB
+			 * Application note (317080) which says, while changing
+			 * the page sizes, new and old translations should
+			 * not differ with respect to page frame and
+			 * attributes.
+			 */
+			if (page_size_mask & (1 << PG_LEVEL_2M)) {
+				paddr_last = paddr_next;
+				continue;
+			}
+			new_prot = pte_pgprot(pte_clrhuge(*(pte_t *)pmd));
+		}
+
+		if (page_size_mask & (1<<PG_LEVEL_2M)) {
+			/* no need to lock the init_mm page_table_lock at this stage */
+			pte_set((pte_t *)pmd,
+				pfn_pte((paddr & PMD_MASK) >> PAGE_SHIFT,
+					__pgprot(pgprot_val(prot) | _PAGE_PSE)));
+			paddr_last = paddr_next;
+			continue;
+		}
+
+		pte = alloc_low_pages(1);
+		paddr_last = phys_pte_init(pte, paddr, paddr_end, new_prot);
+
+		/* no need to lock the init_mm page_table_lock at this stage */
+		//if (pte > __START_KERNEL_map)
+		//	pmd_populate_early(&init_mm, pmd, pte);
+		//else
+			pmd_populate_kernel(&init_mm, pmd, pte);
+	}
+
+	return paddr_last;
+}
+
+/*
+ * Create PUD level page table mapping for physical addresses. The virtual
+ * and physical address do not have to be aligned at this level. KASLR can
+ * randomize virtual addresses up to this level.
+ * It returns the last physical address mapped.
+ */
+static unsigned long phys_pud_init(pud_t *pud_page, unsigned long paddr, 
+		unsigned long paddr_end,
+		unsigned long page_size_mask)
+{
+	unsigned long paddr_next;
+	unsigned long paddr_last = paddr_end;
+	unsigned long vaddr = (unsigned long)__va(paddr);
+	int i = pud_index(vaddr);
+
+	pr_debug("phys_pud_init pud_page %p, paddr %lx, paddr_end %lx i %d\n",
+			pud_page, paddr, paddr_end, i);
+	for (; i < PTRS_PER_PUD; i++, paddr = paddr_next) {
+		pud_t *pud;
+		pmd_t *pmd;
+		pgprot_t prot = PAGE_KERNEL;
+
+		vaddr = (unsigned long)__va(paddr);
+		pud = pud_page + pud_index(vaddr);
+		paddr_next = (paddr & PUD_MASK) + PUD_SIZE;
+
+		if (paddr >= paddr_end) {
+			if (!e820_any_mapped(paddr & PUD_MASK, paddr_next,
+					     E820_RAM) &&
+			    !e820_any_mapped(paddr & PUD_MASK, paddr_next,
+					     E820_RESERVED_KERN))
+				pud_set(pud, __pud(0));
+			continue;
+		}
+
+		pr_debug("pud %lx paddr %lx paddr_next %lx PTRS_PER_PUD %lx\n", 
+				pud, paddr, paddr_next, PTRS_PER_PUD);
+	
+		if (!pud_none(*pud)) {
+			if (!pud_large(*pud)) {
+				pr_debug("pud not none not large\n");
+				pmd = pmd_offset_early(pud, 0);
+				//pmd = pmd_offset(pud, 0);
+				paddr_last = phys_pmd_init(pmd, paddr,
+							   paddr_end,
+							   page_size_mask,
+							   prot);
+				__flush_tlb_all();
+				continue;
+			}
+			/*
+			 * If we are ok with PG_LEVEL_1G mapping, then we will
+			 * use the existing mapping.
+			 *
+			 * Otherwise, we will split the gbpage mapping but use
+			 * the same existing protection  bits except for large
+			 * page, so that we don't violate Intel's TLB
+			 * Application note (317080) which says, while changing
+			 * the page sizes, new and old translations should
+			 * not differ with respect to page frame and
+			 * attributes.
+			 */
+			pr_debug("pud not none\n");
+			if (page_size_mask & (1 << PG_LEVEL_1G)) {
+				paddr_last = paddr_next;
+				continue;
+			}
+			pr_debug("pud1 not none\n");
+			prot = pte_pgprot(pte_clrhuge(*(pte_t *)pud));
+		}
+
+		if (page_size_mask & (1<<PG_LEVEL_1G)) {
+			pr_debug("pud1 %lx\n", pud);
+			/* no need to lock the init_mm page_table_lock at this stage */
+			pte_set((pte_t *)pud,
+				pfn_pte((paddr & PUD_MASK) >> PAGE_SHIFT,
+					PAGE_KERNEL_LARGE));
+			paddr_last = paddr_next;
+			continue;
+		}
+
+		pmd = alloc_low_pages(1);
+		pr_debug("phys_pud_init allocated one pmd page %p\n", pmd);
+		paddr_last = phys_pmd_init(pmd, paddr, paddr_end,
+					   page_size_mask, prot);
+
+		/* no need to lock the init_mm page_table_lock at this stage */
+		//if (pmd > __START_KERNEL_map)
+		//	pud_populate_early(&init_mm, pud, pmd);
+		//else
+			pud_populate(&init_mm, pud, pmd);
+	}
+	__flush_tlb_all();
+
+	return paddr_last;
+}
+
+extern pgd_t early_level4_pgt[PTRS_PER_PGD];
+
+/*
  * Create page table mapping for the physical memory for specific physical
  * addresses. The virtual and physical addresses have to be aligned on PMD level
  * down. It returns the last physical address mapped.
@@ -214,7 +496,53 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 			     unsigned long paddr_end,
 			     unsigned long page_size_mask)
 {
-	return 0;
+	bool pgd_changed = false;
+	unsigned long vaddr, vaddr_start, vaddr_end, vaddr_next, paddr_last;
+
+	paddr_last = paddr_end;
+	vaddr = (unsigned long)__va(paddr_start);
+	vaddr_end = (unsigned long)__va(paddr_end);
+	vaddr_start = vaddr;
+	pr_debug("kernel_physical_mapping_init phys [%#010lx-%#010lx] virt [%#010lx-%#010lx]\n", 
+			paddr_start, paddr_end, vaddr_start, vaddr_end);
+
+	for (; vaddr < vaddr_end; vaddr = vaddr_next) {
+		pgd_t *pgd = early_level4_pgt + pgd_index(vaddr);
+		//if ((pgt_buf_end + 1) > pgt_buf_top)
+		//	pgd = pgd_offset_k(vaddr);
+		pud_t *pud;
+
+		vaddr_next = (vaddr & PGDIR_MASK) + PGDIR_SIZE;
+
+		pr_debug("pgd %p *pgd %lx vaddr %lx pgd_index %lx vaddr_next %lx PGDIR_MASK %lx PGDIR_SIZE %lx %lx\n", 
+			pgd, *pgd, vaddr, pgd_index(vaddr), vaddr_next, PGDIR_MASK, PGDIR_SIZE, vaddr & PGDIR_MASK);
+		if (pgd_val(*pgd)) {
+			pr_debug("pgd exist pgdval %lx\n", pgd_val(*pgd));
+				pud = (pud_t *)pgd_page_vaddr_early(*pgd);
+			//	pud = (pud_t *)pgd_page_vaddr(*pgd);
+			paddr_last = phys_pud_init(pud, __pa(vaddr),
+						   __pa(vaddr_end),
+						   page_size_mask);
+			continue;
+		}
+
+		pud = alloc_low_pages(1);
+		pr_debug("kernel_physical_mapping_init allocated one pgdval %lx\n",
+				pgd_val(*pgd));
+		paddr_last = phys_pud_init(pud, __pa(vaddr), __pa(vaddr_end),
+					   page_size_mask);
+
+		/* no need to lock the init_mm page_table_lock at this stage */
+		//if (pud > __START_KERNEL_map)
+		//	pgd_populate_early(&init_mm, pgd, pud);
+		//else
+			pgd_populate(&init_mm, pgd, pud);
+		pgd_changed = true;
+	}
+
+	__flush_tlb_all();
+
+	return paddr_last;
 }
 
 /*
@@ -223,7 +551,7 @@ kernel_physical_mapping_init(unsigned long paddr_start,
  * the physical memory. To access them they are temporarily mapped.
  */
 unsigned long init_memory_mapping(unsigned long start,
-				  unsigned long end)
+		unsigned long end)
 {
 	struct map_range mr[NR_RANGE_MR];
 	unsigned long ret = 0;
@@ -239,7 +567,10 @@ unsigned long init_memory_mapping(unsigned long start,
 		ret = kernel_physical_mapping_init(mr[i].start, mr[i].end,
 						   mr[i].page_size_mask);
 
-	//add_pfn_range_mapped(start >> PAGE_SHIFT, ret >> PAGE_SHIFT);
+	max_pfn_mapped = max(max_pfn_mapped, ret >> PAGE_SHIFT);
+
+	pr_debug("add_pfn_range_mapped start_pfn %lx max_pfn_mapped %lx\n",
+			start >> PAGE_SHIFT, max_pfn_mapped);
 
 	return ret >> PAGE_SHIFT;
 }
@@ -265,6 +596,8 @@ static unsigned long __init init_range_memory_mapping(
 	unsigned long mapped_ram_size = 0;
 	int i;
 
+	pr_debug("init_range_memory_mapping [mem %#010lx-%#010lx]\n",
+			r_start, r_end);
 	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, NULL) {
 		u64 start = clamp_val(PFN_PHYS(start_pfn), r_start, r_end);
 		u64 end = clamp_val(PFN_PHYS(end_pfn), r_start, r_end);
@@ -304,8 +637,6 @@ static unsigned long __init get_new_step_size(unsigned long step_size)
 	return step_size << (PMD_SHIFT - PAGE_SHIFT - 1);
 }
 
-static unsigned long min_pfn_mapped;
-
 /**
  * memory_map_top_down - Map [map_start, map_end) top down
  * @map_start: start address of the target memory range
@@ -336,6 +667,8 @@ static void __init memory_map_top_down(unsigned long map_start,
 	min_pfn_mapped = real_end >> PAGE_SHIFT;
 	last_start = start = real_end;
 
+	pr_debug("memory_map_top_down [%#010lx-%#010lx] addr %lx min_pfn_mapped %lx real_end %lx addr %lx PMD_SIZE %lx\n",
+			map_start, map_end, addr, min_pfn_mapped, real_end, addr, PMD_SIZE);
 	/*
 	 * We start from the top (end of memory) and go to the bottom.
 	 * The memblock_find_in_range() gets us a block of RAM from the
@@ -361,18 +694,42 @@ static void __init memory_map_top_down(unsigned long map_start,
 		init_range_memory_mapping(real_end, map_end);
 }
 
+void __init mem_init(void)
+{
+	//pci_iommu_alloc();
+
+	/* clear_bss() already clear the empty_zero_page */
+
+	/* this will put all memory onto the freelists */
+
+}
+
+
 void __init init_mem_mapping(void)
 {
-	unsigned long end;
+	unsigned long end, pgd;
 
 	probe_page_size_mask();
 
 	end = max_pfn << PAGE_SHIFT;
 
+	pr_debug("early_level4_pgt %p pa %lx\n", early_level4_pgt, __pa(early_level4_pgt));
+	pr_debug("init_level4_pgt %p pa %lx\n", init_level4_pgt, __pa(init_level4_pgt));
 	init_memory_mapping(0, ISA_END_ADDRESS);
 
 	/*
+	char *test = __va(0);
+	pr_debug("va0 %p\n", test);
+	pr_debug("va0 val %c\n", *test);
+
 	 * X86 maps top->down direction
 	 */
 	memory_map_top_down(ISA_END_ADDRESS, end);
+
+	pgd = read_cr3();
+	pr_debug("%s: current cr3 is %lx\n", __func__, pgd);
+	write_cr3(__pa(swapper_pg_dir));
+	pgd = read_cr3();
+	pr_debug("%s: cr3 is set  to %lx\n", __func__, pgd);
+	__flush_tlb_all();
 }

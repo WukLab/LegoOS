@@ -253,21 +253,23 @@ int __init memblock_add_node(phys_addr_t base, phys_addr_t size, int nid)
 
 int __init memblock_add(phys_addr_t base, phys_addr_t size)
 {
+/*
 	memblock_dbg("memblock_add: [%#016llx-%#016llx] flags %#02lx %pF\n",
 		     (unsigned long long)base,
 		     (unsigned long long)base + size - 1,
 		     0UL, (void *)_RET_IP_);
-
+*/
 	return memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES, 0);
 }
 
 int __init memblock_reserve(phys_addr_t base, phys_addr_t size)
 {
+/*
 	memblock_dbg("memblock_reserve: [%#016llx-%#016llx] flags %#02lx %pF\n",
 		     (unsigned long long)base,
 		     (unsigned long long)base + size - 1,
 		     0UL, (void *)_RET_IP_);
-
+*/
 	return memblock_add_range(&memblock.reserved, base, size, MAX_NUMNODES, 0);
 }
 
@@ -836,7 +838,7 @@ phys_addr_t __init memblock_find_in_range_node(phys_addr_t size,
 	/* avoid allocating the first page */
 	start = max_t(phys_addr_t, start, PAGE_SIZE);
 	end = max(start, end);
-	kernel_end = __pa(__end);
+	kernel_end = __pa_kernel(__end);
 
 	/*
 	 * try bottom-up allocation only when bottom-up mode

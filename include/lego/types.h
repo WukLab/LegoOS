@@ -62,5 +62,7 @@ struct list_head {
 	struct list_head *next, *prev;
 };
 
+#define pgoff_t unsigned long
+
 #endif /* __ASSEMBLY__ */
 #endif /* _LEGO_TYPES_H_ */

@@ -19,19 +19,75 @@
 #include <lego/screen_info.h>
 
 extern pgd_t early_level4_pgt[PTRS_PER_PGD];
+extern pmd_t early_dynamic_pgts[EARLY_DYNAMIC_PAGE_TABLES][PTRS_PER_PMD];
+static unsigned int __initdata next_early_pgt = 2;
 pmdval_t early_pmd_flags = __PAGE_KERNEL_LARGE & ~(_PAGE_GLOBAL | _PAGE_NX);
 
 /* Wipe all early page tables except for the kernel symbol map */
 static void __init reset_early_page_tables(void)
 {
 	memset(early_level4_pgt, 0, sizeof(pgd_t)*(PTRS_PER_PGD-1));
-	write_cr3(__pa(early_level4_pgt));
+	write_cr3(__pa_kernel(early_level4_pgt));
+}
+
+/* Create a new PMD entry */
+int __init early_make_pgtable(unsigned long address)
+{
+	unsigned long physaddr = address - __PAGE_OFFSET;
+	pgdval_t pgd, *pgd_p;
+	pudval_t pud, *pud_p;
+	pmdval_t pmd, *pmd_p;
+
+	/* Invalid address or early pgt is done ?  */
+	if (physaddr >= MAXMEM || read_cr3() != __phys_addr_nodebug(early_level4_pgt))
+		return -1;
+
+again:
+	pgd_p = &early_level4_pgt[pgd_index(address)].pgd;
+	pgd = *pgd_p;
+
+	/*
+	 * The use of __START_KERNEL_map rather than __PAGE_OFFSET here is
+	 * critical -- __PAGE_OFFSET would point us back into the dynamic
+	 * range and we might end up looping forever...
+	 */
+	if (pgd)
+		pud_p = (pudval_t *)((pgd & PTE_PFN_MASK) + __START_KERNEL_map - phys_base);
+	else {
+		if (next_early_pgt >= EARLY_DYNAMIC_PAGE_TABLES) {
+			reset_early_page_tables();
+			goto again;
+		}
+
+		pud_p = (pudval_t *)early_dynamic_pgts[next_early_pgt++];
+		memset(pud_p, 0, sizeof(*pud_p) * PTRS_PER_PUD);
+		*pgd_p = (pgdval_t)pud_p - __START_KERNEL_map + phys_base + _KERNPG_TABLE;
+	}
+	pud_p += pud_index(address);
+	pud = *pud_p;
+
+	if (pud)
+		pmd_p = (pmdval_t *)((pud & PTE_PFN_MASK) + __START_KERNEL_map - phys_base);
+	else {
+		if (next_early_pgt >= EARLY_DYNAMIC_PAGE_TABLES) {
+			reset_early_page_tables();
+			goto again;
+		}
+
+		pmd_p = (pmdval_t *)early_dynamic_pgts[next_early_pgt++];
+		memset(pmd_p, 0, sizeof(*pmd_p) * PTRS_PER_PMD);
+		*pud_p = (pudval_t)pmd_p - __START_KERNEL_map + phys_base + _KERNPG_TABLE;
+	}
+	pmd = (physaddr & PMD_MASK) + early_pmd_flags;
+	pmd_p[pmd_index(address)] = pmd;
+
+	return 0;
 }
 
 static void __init clear_bss(void)
 {
 	memset(__bss_start, 0,
-		(unsigned long)__bss_end - (unsigned long)__bss_start);
+			(unsigned long)__bss_end - (unsigned long)__bss_start);
 }
 
 /*
@@ -47,7 +103,7 @@ static void __init copy_bootdata(char *real_mode_data)
 
 	cmd_line_ptr = boot_params.hdr.cmd_line_ptr;
 	if (cmd_line_ptr) {
-		command_line = __va(cmd_line_ptr);
+		command_line = __va_kernel(cmd_line_ptr);
 		memcpy(boot_command_line, command_line, COMMAND_LINE_SIZE);
 	}
 }
@@ -67,8 +123,11 @@ asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data)
 	reset_early_page_tables();
 
 	clear_bss();
-	copy_bootdata(__va(real_mode_data));
+	copy_bootdata(__va_kernel(real_mode_data));
 	copy_screen_info();
 
+	clear_page(init_level4_pgt);
+	/* set init_level4_pgt kernel high mapping*/
+	init_level4_pgt[511] = early_level4_pgt[511];
 	start_kernel();
 }

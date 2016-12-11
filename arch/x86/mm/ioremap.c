@@ -27,10 +27,10 @@ static pte_t bm_pte[PAGE_SIZE/sizeof(pte_t)] __page_aligned_bss;
 static inline pmd_t * __init early_ioremap_pmd(unsigned long addr)
 {
 	/* Don't assume we're using swapper_pg_dir at this point */
-	pgd_t *base = __va(read_cr3());
+	pgd_t *base = __va_kernel(read_cr3());
 	pgd_t *pgd = &base[pgd_index(addr)];
-	pud_t *pud = pud_offset(pgd, addr);
-	pmd_t *pmd = pmd_offset(pud, addr);
+	pud_t *pud = pud_offset_early(pgd, addr);
+	pmd_t *pmd = pmd_offset_early(pud, addr);
 
 	return pmd;
 }
@@ -83,11 +83,11 @@ static void __init __set_fixmap_pte(unsigned long addr, pte_t pte)
 	 * And we are guaranteed that all levels of page table will
 	 * exist (because of head_64.S and some BUILD_BUG_ON check below)
 	 */
-	pgd_t *base = __va(read_cr3());
+	pgd_t *base = __va_kernel(read_cr3());
 	pgd_t *pgd = &base[pgd_index(addr)];
-	pud_t *pud = pud_offset(pgd, addr);
-	pmd_t *pmd = pmd_offset(pud, addr);
-	pte_t *ptep = pte_offset_kernel(pmd, addr);
+	pud_t *pud = pud_offset_early(pgd, addr);
+	pmd_t *pmd = pmd_offset_early(pud, addr);
+	pte_t *ptep = pte_offset_early(pmd, addr);
 
 	if (early_ioremap_debug)
 		pr_debug("__set_fixmap_pte(%pS): %#lx -> %#lx\n",
@@ -165,7 +165,7 @@ void __init early_ioremap_init(void)
 
 	pmd = early_ioremap_pmd(fix_to_virt(FIX_BTMAP_BEGIN));
 	memset(bm_pte, 0, sizeof(bm_pte));
-	pmd_set(pmd, __pmd(__pa(bm_pte) | _PAGE_TABLE));
+	pmd_set(pmd, __pmd(__pa_kernel(bm_pte) | _PAGE_TABLE));
 
 	if (pmd != early_ioremap_pmd(fix_to_virt(FIX_BTMAP_END))) {
 		WARN_ON(1);

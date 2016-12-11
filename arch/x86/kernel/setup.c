@@ -81,6 +81,8 @@ void * __init extend_brk(size_t size, size_t align)
 	ret = (void *)_brk_end;
 	_brk_end += size;
 
+	pr_debug("extend_brk ret %p brk_start %lx brk_end %lx\n",
+			ret, _brk_start, _brk_end);
 	memset(ret, 0, size);
 
 	return ret;
@@ -89,7 +91,7 @@ void * __init extend_brk(size_t size, size_t align)
 static void __init reserve_brk(void)
 {
 	if (_brk_end > _brk_start)
-		memblock_reserve(__pa(_brk_start),
+		memblock_reserve(__pa_kernel(_brk_start),
 				 _brk_end - _brk_start);
 
 	/*
@@ -105,9 +107,12 @@ static void __init reserve_brk(void)
  */
 void __init setup_arch(void)
 {
+	pr_debug("setup_arch\n");
 	early_cpu_init();
+	pr_debug("setup_arch\n");
 	early_ioremap_init();
 
+	pr_debug("setup_arch after ioremap\n");
 	/*
 	 * Load interrupt handlers
 	 * and init everthing about BSP
