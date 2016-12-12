@@ -15,6 +15,7 @@
 
 #include <lego/pfn.h>
 #include <lego/kernel.h>
+#include <lego/mm_zone.h>
 #include <lego/mm_types.h>
 
 #define offset_in_page(p)	((unsigned long)(p) & ~PAGE_MASK)
@@ -22,23 +23,11 @@
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	ALIGN(addr, PAGE_SIZE)
 
-extern unsigned long max_low_pfn_mapped;
-/* max_pfn_mapped:     highest direct mapped pfn over 4GB */
+/* highest direct mapped pfn */
 extern unsigned long max_pfn_mapped;
 
-/* max_pfn:	highest pfn of this machine */
+/* highest pfn of this machine */
 extern unsigned long max_pfn;
-
-/*
- *  simple boot-time physical memory area allocator.
- */
-extern unsigned long max_low_pfn;
-extern unsigned long min_low_pfn;
-
-/*
- * highest possible page
- */
-extern unsigned long long max_possible_pfn;
 
 extern struct mm_struct init_mm;
 

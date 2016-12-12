@@ -127,6 +127,7 @@ void __init setup_arch(void)
 	 */
 	e820_fill_memblock();
 
+	/* Setup identity mapping */
 	init_mem_mapping();
 
 	/*
