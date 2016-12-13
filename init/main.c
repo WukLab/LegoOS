@@ -12,6 +12,7 @@
 #include <asm/numa.h>
 #include <asm/setup.h>
 
+#include <lego/mm.h>
 #include <lego/bug.h>
 #include <lego/tty.h>
 #include <lego/irq.h>
@@ -66,6 +67,11 @@ asmlinkage void __init start_kernel(void)
 
 	/* Architecture-Specific Initialization */
 	setup_arch();
+
+	/*
+	 * Build all memory managment data structures:
+	 */
+	memory_init();
 
 	hlt();
 }

@@ -7,20 +7,18 @@
  * (at your option) any later version.
  */
 
-#include <asm/io.h>
-#include <asm/page.h>
+#ifndef _LEGO_KBUILD_H_
+#define _LEGO_KBUILD_H_
 
-#include <lego/mm.h>
-#include <lego/string.h>
-#include <lego/kernel.h>
-#include <lego/memblock.h>
+#define DEFINE(sym, val) \
+        asm volatile("\n->" #sym " %0 " #val : : "i" (val))
 
-void __init free_area_init_nodes(unsigned long *max_zone_pfn)
-{
+#define BLANK() asm volatile("\n->" : : )
 
-}
+#define OFFSET(sym, str, mem) \
+	DEFINE(sym, offsetof(struct str, mem))
 
-void __init memory_init(void)
-{
-	arch_zone_init();
-}
+#define COMMENT(x) \
+	asm volatile("\n->#" x)
+
+#endif /* _LEGO_KBUILD_H_ */

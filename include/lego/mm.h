@@ -17,6 +17,7 @@
 #include <lego/kernel.h>
 #include <lego/mm_zone.h>
 #include <lego/mm_types.h>
+#include <generated/bounds.h>
 
 #define offset_in_page(p)	((unsigned long)(p) & ~PAGE_MASK)
 
@@ -30,5 +31,10 @@ extern unsigned long max_pfn_mapped;
 extern unsigned long max_pfn;
 
 extern struct mm_struct init_mm;
+
+void __init free_area_init_nodes(unsigned long *max_zone_pfn);
+
+void __init arch_zone_init(void);
+void __init memory_init(void);
 
 #endif /* _LEGO_MM_H_ */

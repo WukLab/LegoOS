@@ -10,6 +10,8 @@
 #ifndef _LEGO_MM_ZONE_H_
 #define _LEGO_MM_ZONE_H_
 
+#include <lego/list.h>
+
 #ifndef CONFIG_FORCE_MAX_ZONEORDER
 #define MAX_ORDER 11
 #else
