@@ -29,6 +29,25 @@ static char * const zone_names[MAX_NR_ZONES] = {
 static unsigned long arch_zone_lowest_possible_pfn[MAX_NR_ZONES];
 static unsigned long arch_zone_highest_possible_pfn[MAX_NR_ZONES];
 
+/*
+ * Set up the zone data structures:
+ *   - mark all pages reserved
+ *   - mark all memory queues empty
+ *   - clear the memory bitmaps
+ *
+ * NOTE: pgdat should get zeroed by caller.
+ */
+static void __init free_area_init_core(void)
+{
+}
+
+void __init free_area_init_node(int nid, unsigned long *zones_size,
+				unsigned long node_start_pfn,
+				unsigned long *zholes_size)
+{
+	free_area_init_core();
+}
+
 /* Find the lowest pfn for a node */
 static unsigned long __init find_min_pfn_for_node(int nid)
 {
