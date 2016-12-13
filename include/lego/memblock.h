@@ -191,4 +191,7 @@ static inline void memblock_dump_all(void)
 
 static inline bool memblock_bottom_up(void) { return false; }
 
+int __init memblock_set_node(phys_addr_t base, phys_addr_t size,
+			     struct memblock_type *type, int nid);
+
 #endif /* _LEGO_MEMBLOCK_H_ */

@@ -922,3 +922,33 @@ void __init __next_mem_pfn_range(int *idx, int nid,
 	if (out_nid)
 		*out_nid = r->nid;
 }
+
+/**
+ * memblock_set_node - set node ID on memblock regions
+ * @base: base of area to set node ID for
+ * @size: size of area to set node ID for
+ * @type: memblock type to set node ID for
+ * @nid: node ID to set
+ *
+ * Set the nid of memblock @type regions in [@base,@base+@size) to @nid.
+ * Regions which cross the area boundaries are split as necessary.
+ *
+ * RETURNS:
+ * 0 on success, -errno on failure.
+ */
+int __init memblock_set_node(phys_addr_t base, phys_addr_t size,
+			     struct memblock_type *type, int nid)
+{
+	int start_rgn, end_rgn;
+	int i, ret;
+
+	ret = memblock_isolate_range(type, base, size, &start_rgn, &end_rgn);
+	if (ret)
+		return ret;
+
+	for (i = start_rgn; i < end_rgn; i++)
+		type->regions[i].nid = nid;
+
+	memblock_merge_regions(type);
+	return 0;
+}

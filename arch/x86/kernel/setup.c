@@ -170,6 +170,13 @@ void __init setup_arch(void)
 	init_cpu_to_node();
 
 	/*
+	 * TODO:
+	 * We do not support NUMA now.
+	 * Just view all memory as a whole now.
+	 */
+	memblock_set_node(0, (phys_addr_t)ULLONG_MAX, &memblock.memory, 0);
+
+	/*
 	 * Prepare trampoline for APs
 	 * and then boot them up
 	 */
