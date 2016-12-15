@@ -623,7 +623,7 @@ prepare1: prepare2 $(version_h) include/generated/utsrelease.h \
 # All the preparing..
 # Top level Kbuild will be included here and it will build things prior
 # to any makefile is invoked.
-prepare: prepare1
+prepare: prepare1 scripts_basic
 	$(Q)$(MAKE) $(build)=.
 
 # Generate some files

@@ -66,7 +66,19 @@ static inline int __first_unset_node(const nodemask_t *maskp)
 			find_first_zero_bit(maskp->bits, MAX_NUMNODES));
 }
 
-#define NODE_MASK_LAST_WORD BITMAP_LAST_WORD_MASK(MAX_NUMNODES)
+#define first_node(src) __first_node(&(src))
+static inline int __first_node(const nodemask_t *srcp)
+{
+	return min_t(int, MAX_NUMNODES, find_first_bit(srcp->bits, MAX_NUMNODES));
+}
+
+#define next_node(n, src) __next_node((n), &(src))
+static inline int __next_node(int n, const nodemask_t *srcp)
+{
+	return min_t(int,MAX_NUMNODES,find_next_bit(srcp->bits, MAX_NUMNODES, n+1));
+}
+
+#define NODE_MASK_LAST_WORD	BITMAP_LAST_WORD_MASK(MAX_NUMNODES)
 
 #if MAX_NUMNODES <= BITS_PER_LONG
 
@@ -89,5 +101,16 @@ static inline int __first_unset_node(const nodemask_t *maskp)
 ((nodemask_t) { {							\
 	[0 ... BITS_TO_LONGS(MAX_NUMNODES)-1] =  0UL			\
 } })
+
+#if MAX_NUMNODES > 1
+#define for_each_node_mask(node, mask)			\
+	for ((node) = first_node(mask);			\
+		(node) < MAX_NUMNODES;			\
+		(node) = next_node((node), (mask)))
+#else /* MAX_NUMNODES == 1 */
+#define for_each_node_mask(node, mask)			\
+	if (!nodes_empty(mask))				\
+		for ((node) = 0; (node) < 1; (node)++)
+#endif /* MAX_NUMNODES */
 
 #endif /* _LEGO_NODEMASK_H_ */

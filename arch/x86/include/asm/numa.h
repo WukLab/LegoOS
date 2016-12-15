@@ -28,5 +28,9 @@ int cpu_to_node(int cpu);
 void numa_set_node(int cpu, int node);
 void numa_clear_node(int cpu);
 void __init init_cpu_to_node(void);
+void __init x86_numa_init(void);
+
+int __init numa_add_memblk(int nodeid, u64 start, u64 end);
+void __init numa_set_distance(int from, int to, int distance);
 
 #endif /* _ASM_X86_NUMA_H_ */

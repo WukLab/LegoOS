@@ -10,7 +10,13 @@
 #ifndef _LEGO_MM_ZONE_H_
 #define _LEGO_MM_ZONE_H_
 
+#ifndef __GENERATING_BOUNDS_H
+#include <generated/bounds.h>
+#endif
+
 #include <lego/list.h>
+#include <lego/kernel.h>
+#include <lego/spinlock.h>
 
 #ifndef CONFIG_FORCE_MAX_ZONEORDER
 #define MAX_ORDER 11
@@ -72,12 +78,92 @@ enum zone_type {
 	 */
 	ZONE_NORMAL,
 
+	/*
+	 * The MAX_NR_ZONES is generated
+	 * by kernel/bounds.h
+	 */
 	__MAX_NR_ZONES
-
 };
+
+#ifndef __GENERATING_BOUNDS_H
 
 struct zone {
+	struct pglist_data	*zone_pgdata;
 
+	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
+	unsigned long		zone_start_pfn;
+
+	/*
+	 * spanned_pages is the total pages spanned by the zone, including
+	 * holes, which is calculated as:
+	 * 	spanned_pages = zone_end_pfn - zone_start_pfn;
+	 *
+	 * present_pages is physical pages existing within the zone, which
+	 * is calculated as:
+	 *	present_pages = spanned_pages - absent_pages(pages in holes);
+	 *
+	 * managed_pages is present pages managed by the buddy system, which
+	 * is calculated as (reserved_pages includes pages allocated by the
+	 * bootmem allocator):
+	 *	managed_pages = present_pages - reserved_pages;
+	 *
+	 * So present_pages may be used by memory hotplug or memory power
+	 * management logic to figure out unmanaged pages by checking
+	 * (present_pages - managed_pages). And managed_pages should be used
+	 * by page allocator and vm scanner to calculate all kinds of watermarks
+	 * and thresholds.
+	 *
+	 * Locking rules:
+	 *
+	 * zone_start_pfn and spanned_pages are protected by span_seqlock.
+	 * It is a seqlock because it has to be read outside of zone->lock,
+	 * and it is done in the main allocator path.  But, it is written
+	 * quite infrequently.
+	 *
+	 * The span_seq lock is declared along with zone->lock because it is
+	 * frequently read in proximity to zone->lock.  It's good to
+	 * give them a chance of being in the same cacheline.
+	 *
+	 * Write access to present_pages at runtime should be protected by
+	 * mem_hotplug_begin/end(). Any reader who can't tolerant drift of
+	 * present_pages should get_online_mems() to get a stable value.
+	 *
+	 * Read access to managed_pages should be safe because it's unsigned
+	 * long. Write access to zone->managed_pages and totalram_pages are
+	 * protected by managed_page_count_lock at runtime. Idealy only
+	 * adjust_managed_page_count() should be used instead of directly
+	 * touching zone->managed_pages and totalram_pages.
+	 */
+	unsigned long		managed_pages;
+	unsigned long		spanned_pages;
+	unsigned long		present_pages;
+
+	const char		*name;
+
+	/* free areas of different sizes */
+	struct free_area	free_area[MAX_ORDER];
+
+	/* zone flags, see below */
+	unsigned long		flags;
+
+	/* Primarily protects free_area */
+	spinlock_t		lock;
 };
 
+/*
+ * On NUMA machines, each NUMA node would have a pg_data_t to describe
+ * it's memory layout.
+ */
+typedef struct pglist_data {
+	struct zone node_zones[MAX_NR_ZONES];
+	int nr_zones;
+	struct page *node_mem_map;
+	unsigned long node_start_pfn;
+	unsigned long node_present_pages;	/* total number of physical pages */
+	unsigned long node_spanned_pages;	/* total size of physical page
+						   range, including holes */
+	int node_id;
+} pg_data_t;
+
+#endif /* __GENERATING_BOUNDS_H */
 #endif /* _LEGO_MM_ZONE_H_ */

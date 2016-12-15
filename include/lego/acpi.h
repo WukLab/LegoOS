@@ -606,4 +606,8 @@ void __init acpi_boot_numa_init(void);
 		(!entry) || (unsigned long)entry + sizeof(*entry) > end ||  \
 		((struct acpi_subtable_header *)entry)->length < sizeof(*entry))
 
+/* Conform to ACPI 2.0 SLIT distance definitions */
+#define LOCAL_DISTANCE		10
+#define REMOTE_DISTANCE		20
+
 #endif /* _LEGO_ACPI_H_ */

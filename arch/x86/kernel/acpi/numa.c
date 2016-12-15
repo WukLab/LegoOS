@@ -17,6 +17,7 @@
 #include <asm/apic.h>
 #include <asm/processor.h>
 
+#include <lego/pfn.h>
 #include <lego/acpi.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
@@ -39,6 +40,42 @@ acpi_parse_srat_gicc_affinity(struct acpi_subtable_header *header,
 	return 0;
 }
 
+static void __init
+acpi_numa_x2apic_affinity_init(struct acpi_srat_x2apic_cpu_affinity *pa)
+{
+	int pxm, node;
+	int apic_id;
+
+	if (pa->header.length < sizeof(struct acpi_srat_x2apic_cpu_affinity)) {
+		pr_err("SRAT: bad SRAT not used.\n");
+		return;
+	}
+	if ((pa->flags & ACPI_SRAT_CPU_ENABLED) == 0)
+		return;
+	pxm = pa->proximity_domain;
+	apic_id = pa->apic_id;
+	if (!apic->apic_id_valid(apic_id)) {
+		pr_info("SRAT: PXM %u -> X2APIC 0x%04x ignored\n",
+			 pxm, apic_id);
+		return;
+	}
+	node = acpi_map_pxm_to_node(pxm);
+	if (node < 0) {
+		pr_err("SRAT: Too many proximity domains %x\n", pxm);
+		pr_err("SRAT: bad SRAT not used.\n");
+		return;
+	}
+
+	if (apic_id >= MAX_LOCAL_APIC) {
+		pr_info("SRAT: PXM %u -> APIC 0x%04x -> Node %u skipped apicid that is too big\n", pxm, apic_id, node);
+		return;
+	}
+	set_apicid_to_node(apic_id, node);
+	node_set(node, numa_nodes_parsed);
+	pr_info("SRAT: PXM %u -> APIC 0x%04x -> Node %u\n",
+	       pxm, apic_id, node);
+}
+
 static int __init
 acpi_parse_srat_x2apic_affinity(struct acpi_subtable_header *header,
 				const unsigned long end)
@@ -52,7 +89,7 @@ acpi_parse_srat_x2apic_affinity(struct acpi_subtable_header *header,
 	acpi_table_print_srat_entry(header);
 
 	/* let architecture-dependent part to do it */
-	//acpi_numa_x2apic_affinity_init(processor_affinity);
+	acpi_numa_x2apic_affinity_init(processor_affinity);
 
 	return 0;
 }
@@ -110,6 +147,60 @@ static int __init acpi_parse_srat(struct acpi_table_header *table)
 	return 0;
 }
 
+/*
+ * Default callback for parsing of the Proximity Domain <-> Memory
+ * Area mappings
+ */
+static int __init
+acpi_numa_memory_affinity_init(struct acpi_srat_mem_affinity *ma)
+{
+	u64 start, end;
+	int node, pxm;
+
+	if (ma->header.length < sizeof(struct acpi_srat_mem_affinity)) {
+		pr_err("SRAT: Unexpected header length: %d\n",
+		       ma->header.length);
+		goto out_err_bad_srat;
+	}
+	if ((ma->flags & ACPI_SRAT_MEM_ENABLED) == 0)
+		goto out_err;
+
+	start = ma->base_address;
+	end = start + ma->length;
+	pxm = ma->proximity_domain;
+	if (acpi_srat_revision <= 1)
+		pxm &= 0xff;
+
+	node = acpi_map_pxm_to_node(pxm);
+	if (node == NUMA_NO_NODE || node >= MAX_NUMNODES) {
+		pr_err("SRAT: Too many proximity domains.\n");
+		goto out_err_bad_srat;
+	}
+
+	if (numa_add_memblk(node, start, end) < 0) {
+		pr_err("SRAT: Failed to add memblk to node %u [mem %#010Lx-%#010Lx]\n",
+		       node, (unsigned long long) start,
+		       (unsigned long long) end - 1);
+		goto out_err_bad_srat;
+	}
+
+	node_set(node, numa_nodes_parsed);
+
+	pr_info("SRAT: Node %u PXM %u [mem %#010Lx-%#010Lx]%s\n",
+		node, pxm,
+		(unsigned long long) start, (unsigned long long) end - 1,
+		ma->flags & ACPI_SRAT_MEM_NON_VOLATILE ? " non-volatile" : "");
+
+	//max_possible_pfn = max(max_possible_pfn, PFN_UP(end - 1));
+
+	return 0;
+
+out_err_bad_srat:
+	pr_err("SRAT: bad SRAT not used.\n");
+out_err:
+	return -EINVAL;
+}
+
 static int __init
 acpi_parse_srat_memory_affinity(struct acpi_subtable_header * header,
 				const unsigned long end)
@@ -122,9 +213,61 @@ acpi_parse_srat_memory_affinity(struct acpi_subtable_header * header,
 
 	acpi_table_print_srat_entry(header);
 
-	/* let architecture-dependent part to do it */
-	//if (!acpi_numa_memory_affinity_init(memory_affinity))
-	//	parsed_numa_memblks++;
+	acpi_numa_memory_affinity_init(memory_affinity);
+
+	return 0;
+}
+
+/*
+ * A lot of BIOS fill in 10 (= no distance) everywhere. This messes
+ * up the NUMA heuristics which wants the local node to have a smaller
+ * distance than the others.
+ * Do some quick checks here and only use the SLIT if it passes.
+ */
+static int __init slit_valid(struct acpi_table_slit *slit)
+{
+	int i, j;
+	int d = slit->locality_count;
+	for (i = 0; i < d; i++) {
+		for (j = 0; j < d; j++)  {
+			u8 val = slit->entry[d*i + j];
+			if (i == j) {
+				if (val != LOCAL_DISTANCE)
+					return 0;
+			} else if (val <= LOCAL_DISTANCE)
+				return 0;
+		}
+	}
+	return 1;
+}
+
+static int __init acpi_parse_slit(struct acpi_table_header *table)
+{
+	int i, j;
+	struct acpi_table_slit *slit = (struct acpi_table_slit *)table;
+
+	if (!slit_valid(slit)) {
+		pr_info("SLIT table looks invalid. Not used.\n");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < slit->locality_count; i++) {
+		const int from_node = pxm_to_node(i);
+
+		if (from_node == NUMA_NO_NODE)
+			continue;
+
+		for (j = 0; j < slit->locality_count; j++) {
+			const int to_node = pxm_to_node(j);
+
+			if (to_node == NUMA_NO_NODE)
+				continue;
+
+			numa_set_distance(from_node, to_node,
+				slit->entry[slit->locality_count * i + j]);
+		}
+	}
+
 	return 0;
 }
 
@@ -156,5 +299,5 @@ void __init acpi_boot_numa_init(void)
 				    NR_NODE_MEMBLKS);
 
 	/* SLIT: System Locality Information Table */
-	//acpi_table_parse(ACPI_SIG_SLIT, acpi_parse_slit);
+	acpi_parse_table(ACPI_SIG_SLIT, acpi_parse_slit);
 }

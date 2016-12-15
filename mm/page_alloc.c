@@ -15,6 +15,7 @@
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
+#include <lego/spinlock.h>
 
 static char * const zone_names[MAX_NR_ZONES] = {
 #ifdef CONFIG_ZONE_DMA

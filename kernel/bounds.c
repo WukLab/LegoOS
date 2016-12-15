@@ -13,6 +13,8 @@
  * to extract and format the required data.
  */
 
+#define __GENERATING_BOUNDS_H
+
 #include <lego/kbuild.h>
 
 /* Include headers that define the enum constants of interest */
