@@ -14,6 +14,7 @@
 #include <lego/numa.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
+#include <lego/nodemask.h>
 #include <lego/memblock.h>
 #include <lego/spinlock.h>
 

@@ -16,6 +16,8 @@
 #include <lego/nodemask.h>
 #include <lego/memblock.h>
 
+struct pglist_data *node_data[MAX_NUMNODES] __read_mostly;
+
 /*
  * __apicid_to_node[] stores the raw mapping between physical apicid
  * and node, and is used to initialize cpu_to_node mapping.
@@ -86,6 +88,12 @@ nodemask_t numa_nodes_parsed;
 
 static int numa_distance_cnt;
 static u8 *numa_distance;
+
+static void __init numa_reset_distance(void)
+{
+	numa_distance_cnt = 0;
+	numa_distance = NULL;
+}
 
 static int __init numa_add_memblk_to(int nid, u64 start, u64 end,
 				     struct numa_meminfo *mi)
@@ -221,7 +229,255 @@ void __init numa_set_distance(int from, int to, int distance)
 	numa_distance[from * numa_distance_cnt + to] = distance;
 }
 
+/**
+ * numa_cleanup_meminfo - Cleanup a numa_meminfo
+ * @mi: numa_meminfo to clean up
+ *
+ * Sanitize @mi by merging and removing unncessary memblks.  Also check for
+ * conflicts and clear unused memblks.
+ *
+ * RETURNS:
+ * 0 on success, -errno on failure.
+ */
+static int __init numa_cleanup_meminfo(struct numa_meminfo *mi)
+{
+	const u64 low = 0;
+	const u64 high = PFN_PHYS(max_pfn);
+	int i, j, k;
+
+	if (mi->nr_blks == 0) {
+		pr_debug("No NUMA memblk registered, fallback dummy\n");
+		return -EINVAL;
+	}
+
+	/* first, trim all entries */
+	for (i = 0; i < mi->nr_blks; i++) {
+		struct numa_memblk *bi = &mi->blk[i];
+
+		/* make sure all blocks are inside the limits */
+		bi->start = max(bi->start, low);
+		bi->end = min(bi->end, high);
+
+		/* and there's no empty or non-exist block */
+		if (bi->start >= bi->end ||
+		    !memblock_overlaps_region(&memblock.memory,
+			bi->start, bi->end - bi->start))
+			numa_remove_memblk_from(i--, mi);
+	}
+
+	/* merge neighboring / overlapping entries */
+	for (i = 0; i < mi->nr_blks; i++) {
+		struct numa_memblk *bi = &mi->blk[i];
+
+		for (j = i + 1; j < mi->nr_blks; j++) {
+			struct numa_memblk *bj = &mi->blk[j];
+			u64 start, end;
+
+			/*
+			 * See whether there are overlapping blocks.  Whine
+			 * about but allow overlaps of the same nid.  They
+			 * will be merged below.
+			 */
+			if (bi->end > bj->start && bi->start < bj->end) {
+				if (bi->nid != bj->nid) {
+					pr_err("NUMA: node %d [mem %#010Lx-%#010Lx] overlaps with node %d [mem %#010Lx-%#010Lx]\n",
+					       bi->nid, bi->start, bi->end - 1,
+					       bj->nid, bj->start, bj->end - 1);
+					return -EINVAL;
+				}
+				pr_warn("NUMA: Warning: node %d [mem %#010Lx-%#010Lx] overlaps with itself [mem %#010Lx-%#010Lx]\n",
+					   bi->nid, bi->start, bi->end - 1,
+					   bj->start, bj->end - 1);
+			}
+
+			/*
+			 * Join together blocks on the same node, holes
+			 * between which don't overlap with memory on other
+			 * nodes.
+			 */
+			if (bi->nid != bj->nid)
+				continue;
+			start = min(bi->start, bj->start);
+			end = max(bi->end, bj->end);
+			for (k = 0; k < mi->nr_blks; k++) {
+				struct numa_memblk *bk = &mi->blk[k];
+
+				if (bi->nid == bk->nid)
+					continue;
+				if (start < bk->end && end > bk->start)
+					break;
+			}
+			if (k < mi->nr_blks)
+				continue;
+			printk(KERN_INFO "NUMA: Node %d [mem %#010Lx-%#010Lx] + [mem %#010Lx-%#010Lx] -> [mem %#010Lx-%#010Lx]\n",
+			       bi->nid, bi->start, bi->end - 1, bj->start,
+			       bj->end - 1, start, end - 1);
+			bi->start = start;
+			bi->end = end;
+			numa_remove_memblk_from(j--, mi);
+		}
+	}
+
+	/* clear unused ones */
+	for (i = mi->nr_blks; i < ARRAY_SIZE(mi->blk); i++) {
+		mi->blk[i].start = mi->blk[i].end = 0;
+		mi->blk[i].nid = NUMA_NO_NODE;
+	}
+
+	return 0;
+}
+
+/* Allocate NODE_DATA for a node on the local memory */
+static void __init alloc_node_data(int nid)
+{
+	const size_t nd_size = roundup(sizeof(pg_data_t), PAGE_SIZE);
+	u64 nd_pa;
+	void *nd;
+
+	/*
+	 * Allocate node data.  Try node-local memory and then any node.
+	 * Never allocate in DMA zone.
+	 */
+	nd_pa = memblock_alloc_nid(nd_size, L1_CACHE_BYTES, nid);
+	if (!nd_pa) {
+		nd_pa = __memblock_alloc_base(nd_size, L1_CACHE_BYTES,
+					      MEMBLOCK_ALLOC_ACCESSIBLE);
+		if (!nd_pa) {
+			pr_err("Cannot find %zu bytes in node %d\n",
+			       nd_size, nid);
+			return;
+		}
+	}
+	nd = __va(nd_pa);
+
+	/* report and initialize */
+	printk(KERN_INFO "NODE_DATA(%d) allocated [mem %#010Lx-%#010Lx]\n", nid,
+	       nd_pa, nd_pa + nd_size - 1);
+
+	node_data[nid] = nd;
+	memset(NODE_DATA(nid), 0, sizeof(pg_data_t));
+
+	node_set_online(nid);
+}
+
+/*
+ * This function register the [memory + node] in memblock
+ * and allocate pglist data for each possible node.
+ */
+static int __init numa_register_memblks(struct numa_meminfo *mi)
+{
+	unsigned long uninitialized_var(pfn_align);
+	int i, nid;
+
+	/* Account for nodes with cpus and no memory */
+	node_possible_map = numa_nodes_parsed;
+	numa_nodemask_from_meminfo(&node_possible_map, mi);
+	if (WARN_ON(nodes_empty(node_possible_map)))
+		return -EINVAL;
+
+	for (i = 0; i < mi->nr_blks; i++) {
+		struct numa_memblk *mb = &mi->blk[i];
+
+		memblock_set_node(mb->start, mb->end - mb->start,
+				  &memblock.memory, mb->nid);
+	}
+
+	/* Finally register nodes. */
+	for_each_node_mask(nid, node_possible_map) {
+		u64 start = PFN_PHYS(max_pfn);
+		u64 end = 0;
+
+		for (i = 0; i < mi->nr_blks; i++) {
+			if (nid != mi->blk[i].nid)
+				continue;
+			start = min(mi->blk[i].start, start);
+			end = max(mi->blk[i].end, end);
+		}
+
+		if (start >= end)
+			continue;
+
+		/*
+		 * Don't confuse VM with a node that doesn't have the
+		 * minimum amount of memory:
+		 */
+		if (end && (end - start) < NODE_MIN_SIZE)
+			continue;
+
+		alloc_node_data(nid);
+	}
+
+	/* Dump memblock with node info and return. */
+	memblock_dump_all();
+
+	return 0;
+}
+
+/**
+ * node_states - Array of node states.
+ */
+nodemask_t node_states[NR_NODE_STATES] __read_mostly = {
+	[N_POSSIBLE] = NODE_MASK_ALL,
+	[N_ONLINE] = { { [0] = 1UL } },
+#ifndef CONFIG_NUMA
+	[N_NORMAL_MEMORY] = { { [0] = 1UL } },
+	[N_CPU] = { { [0] = 1UL } },
+#endif
+};
+
+/*
+ * We have parsed ACPI tables before we reach here
+ * If there is no NUMA info, then fake one node.
+ */
 void __init x86_numa_init(void)
 {
+	int ret;
+	bool fake = false;
 
+fake_numa:
+	nodes_clear(node_possible_map);
+	nodes_clear(node_online_map);
+
+	/*
+ 	 * Used if there's no underlying NUMA architecture, NUMA initialization
+ 	 * fails, or NUMA is disabled on the command line.
+ 	 *
+ 	 * Must online at least one node and add memory blocks that cover all
+ 	 * allowed memory.  This function must not fail.
+ 	 */
+	if (fake) {
+		pr_info("No NUMA configuration found\n");
+		pr_info("Faking a node at [mem %#018Lx-%#018Lx]\n",
+		       0LLU, PFN_PHYS(max_pfn) - 1);
+
+		WARN_ON(memblock_set_node(0, ULLONG_MAX, &memblock.memory,
+					  MAX_NUMNODES));
+		WARN_ON(memblock_set_node(0, ULLONG_MAX, &memblock.reserved,
+					  MAX_NUMNODES));
+
+		memset(&numa_meminfo, 0, sizeof(numa_meminfo));
+		numa_reset_distance();
+		nodes_clear(numa_nodes_parsed);
+
+		/* Fake one node and that node has all memory */
+		node_set(0, numa_nodes_parsed);
+		numa_add_memblk(0, 0, PFN_PHYS(max_pfn));
+
+		BUG_ON(numa_cleanup_meminfo(&numa_meminfo));
+		BUG_ON(numa_register_memblks(&numa_meminfo));
+
+		return;
+	}
+
+	ret = numa_cleanup_meminfo(&numa_meminfo);
+	if (ret) {
+		fake = true;
+		goto fake_numa;
+	}
+
+	ret = numa_register_memblks(&numa_meminfo);
+	if (ret) {
+		fake = true;
+		goto fake_numa;
+	}
 }

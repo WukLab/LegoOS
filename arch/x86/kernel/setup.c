@@ -115,6 +115,13 @@ void __init setup_arch(void)
 	max_pfn = e820_end_of_ram_pfn();
 
 	/*
+	 * Pass all RAM info into memblock
+	 * Now memblock is fully functional:
+	 */
+	e820_fill_memblock();
+	__memblock_dump_all();
+
+	/*
 	 * Before parsing ACPI tables,
 	 * set default APIC driver first
 	 */
@@ -157,12 +164,6 @@ void __init setup_arch(void)
 	 */
 	early_alloc_pgt_buf();
 	reserve_brk();
-
-	/*
-	 * Pass all RAM info into memblock
-	 * Now memblock is fully functional:
-	 */
-	e820_fill_memblock();
 
 	/* Setup identity mapping */
 	init_mem_mapping();

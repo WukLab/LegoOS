@@ -192,8 +192,6 @@ acpi_numa_memory_affinity_init(struct acpi_srat_mem_affinity *ma)
 		(unsigned long long) start, (unsigned long long) end - 1,
 		ma->flags & ACPI_SRAT_MEM_NON_VOLATILE ? " non-volatile" : "");
 
-	//max_possible_pfn = max(max_possible_pfn, PFN_UP(end - 1));
-
 	return 0;
 
 out_err_bad_srat:

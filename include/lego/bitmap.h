@@ -15,6 +15,7 @@
 #ifndef _LEGO_BITMAP_H_
 #define _LEGO_BITMAP_H_
 
+#include <lego/string.h>
 #include <lego/bitops.h>
 #include <lego/kernel.h>
 
@@ -36,6 +37,42 @@ static inline int bitmap_equal(const unsigned long *src1,
 static __always_inline int bitmap_weight(const unsigned long *src, unsigned int nbits)
 {
 	return __bitmap_weight(src, nbits);
+}
+
+static inline int bitmap_empty(const unsigned long *src, unsigned nbits)
+{
+	if (small_const_nbits(nbits))
+		return ! (*src & BITMAP_LAST_WORD_MASK(nbits));
+
+	return find_first_bit(src, nbits) == nbits;
+}
+
+static inline int bitmap_full(const unsigned long *src, unsigned int nbits)
+{
+	if (small_const_nbits(nbits))
+		return ! (~(*src) & BITMAP_LAST_WORD_MASK(nbits));
+
+	return find_first_zero_bit(src, nbits) == nbits;
+}
+
+static inline void bitmap_zero(unsigned long *dst, unsigned int nbits)
+{
+	if (small_const_nbits(nbits))
+		*dst = 0UL;
+	else {
+		unsigned int len = BITS_TO_LONGS(nbits) * sizeof(unsigned long);
+		memset(dst, 0, len);
+	}
+}
+
+static inline void bitmap_fill(unsigned long *dst, unsigned int nbits)
+{
+	unsigned int nlongs = BITS_TO_LONGS(nbits);
+	if (!small_const_nbits(nbits)) {
+		unsigned int len = (nlongs - 1) * sizeof(unsigned long);
+		memset(dst, 0xff,  len);
+	}
+	dst[nlongs - 1] = BITMAP_LAST_WORD_MASK(nbits);
 }
 
 #endif /* _LEGO_BITMAP_H_ */

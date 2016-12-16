@@ -20,7 +20,9 @@
 #include <lego/bitmap.h>
 #include <lego/kernel.h>
 
-typedef struct { DECLARE_BITMAP(bits, MAX_NUMNODES); } nodemask_t;
+typedef struct nodemask {
+	DECLARE_BITMAP(bits, MAX_NUMNODES);
+} nodemask_t;
 
 /*
  * The inline keyword gives the compiler room to decide to inline, or
@@ -53,10 +55,34 @@ static inline int __node_test_and_set(int node, nodemask_t *addr)
 	return test_and_set_bit(node, addr->bits);
 }
 
+#define nodes_empty(src) __nodes_empty(&(src), MAX_NUMNODES)
+static inline int __nodes_empty(const nodemask_t *srcp, unsigned int nbits)
+{
+	return bitmap_empty(srcp->bits, nbits);
+}
+
+#define nodes_full(nodemask) __nodes_full(&(nodemask), MAX_NUMNODES)
+static inline int __nodes_full(const nodemask_t *srcp, unsigned int nbits)
+{
+	return bitmap_full(srcp->bits, nbits);
+}
+
 #define nodes_weight(nodemask) __nodes_weight(&(nodemask), MAX_NUMNODES)
 static inline int __nodes_weight(const nodemask_t *srcp, unsigned int nbits)
 {
 	return bitmap_weight(srcp->bits, nbits);
+}
+
+#define nodes_setall(dst) __nodes_setall(&(dst), MAX_NUMNODES)
+static inline void __nodes_setall(nodemask_t *dstp, unsigned int nbits)
+{
+	bitmap_fill(dstp->bits, nbits);
+}
+
+#define nodes_clear(dst) __nodes_clear(&(dst), MAX_NUMNODES)
+static inline void __nodes_clear(nodemask_t *dstp, unsigned int nbits)
+{
+	bitmap_zero(dstp->bits, nbits);
 }
 
 #define first_unset_node(mask) __first_unset_node(&(mask))
@@ -83,17 +109,17 @@ static inline int __next_node(int n, const nodemask_t *srcp)
 #if MAX_NUMNODES <= BITS_PER_LONG
 
 #define NODE_MASK_ALL							\
-((nodemask_t) { {							\
+{ {									\
 	[BITS_TO_LONGS(MAX_NUMNODES)-1] = NODE_MASK_LAST_WORD		\
-} })
+} }
 
 #else
 
 #define NODE_MASK_ALL							\
-((nodemask_t) { {							\
+{ {									\
 	[0 ... BITS_TO_LONGS(MAX_NUMNODES)-2] = ~0UL,			\
 	[BITS_TO_LONGS(MAX_NUMNODES)-1] = NODE_MASK_LAST_WORD		\
-} })
+} }
 
 #endif
 
@@ -112,5 +138,47 @@ static inline int __next_node(int n, const nodemask_t *srcp)
 	if (!nodes_empty(mask))				\
 		for ((node) = 0; (node) < 1; (node)++)
 #endif /* MAX_NUMNODES */
+
+/*
+ * Bitmasks that are kept for all the nodes.
+ */
+enum node_states {
+	N_POSSIBLE,		/* The node could become online at some point */
+	N_ONLINE,		/* The node is online */
+	N_NORMAL_MEMORY,	/* The node has regular memory */
+	N_CPU,			/* The node has one or more cpus */
+
+	NR_NODE_STATES
+};
+
+/*
+ * The following particular system nodemasks and operations
+ * on them manage all possible and online nodes.
+ */
+
+extern nodemask_t node_states[NR_NODE_STATES];
+
+#define node_online_map 	node_states[N_ONLINE]
+#define node_possible_map 	node_states[N_POSSIBLE]
+
+static inline void node_set_state(int node, enum node_states state)
+{
+	__node_set(node, &node_states[state]);
+}
+
+static inline void node_clear_state(int node, enum node_states state)
+{
+	__node_clear(node, &node_states[state]);
+}
+
+static inline void node_set_online(int nid)
+{
+	node_set_state(nid, N_ONLINE);
+}
+
+static inline void node_set_offline(int nid)
+{
+	node_clear_state(nid, N_ONLINE);
+}
 
 #endif /* _LEGO_NODEMASK_H_ */
