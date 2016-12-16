@@ -115,30 +115,6 @@ void __init setup_arch(void)
 	max_pfn = e820_end_of_ram_pfn();
 
 	/*
-	 * Allocate early pgtable buffers
-	 * and them fill brk into memblock
-	 */
-	early_alloc_pgt_buf();
-	reserve_brk();
-
-	/*
-	 * Pass all RAM info into memblock
-	 * Now memblock is fully functional:
-	 */
-	e820_fill_memblock();
-
-	/* Setup identity mapping */
-	init_mem_mapping();
-
-	/*
-	 * Load interrupt handlers after init_mem_mapping()
-	 * Because we want the early page fault handlers to
-	 * handle the __va() page fault before trap_init().
-	 */
-	trap_init();
-	cpu_init();
-
-	/*
 	 * Before parsing ACPI tables,
 	 * set default APIC driver first
 	 */
@@ -174,6 +150,30 @@ void __init setup_arch(void)
 #else
 	memblock_set_node(0, (phys_addr_t)ULLONG_MAX, &memblock.memory, 0);
 #endif
+
+	/*
+	 * Allocate early pgtable buffers
+	 * and them fill brk into memblock
+	 */
+	early_alloc_pgt_buf();
+	reserve_brk();
+
+	/*
+	 * Pass all RAM info into memblock
+	 * Now memblock is fully functional:
+	 */
+	e820_fill_memblock();
+
+	/* Setup identity mapping */
+	init_mem_mapping();
+
+	/*
+	 * Load interrupt handlers after init_mem_mapping()
+	 * Because we want the early page fault handlers to
+	 * handle the __va() page fault before trap_init().
+	 */
+	trap_init();
+	cpu_init();
 
 	/*
 	 * Prepare trampoline for APs

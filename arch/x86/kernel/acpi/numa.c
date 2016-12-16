@@ -40,6 +40,7 @@ acpi_parse_srat_gicc_affinity(struct acpi_subtable_header *header,
 	return 0;
 }
 
+/* Proximity Domain -> x2APIC mapping */
 static void __init
 acpi_numa_x2apic_affinity_init(struct acpi_srat_x2apic_cpu_affinity *pa)
 {
@@ -72,7 +73,7 @@ acpi_numa_x2apic_affinity_init(struct acpi_srat_x2apic_cpu_affinity *pa)
 	}
 	set_apicid_to_node(apic_id, node);
 	node_set(node, numa_nodes_parsed);
-	pr_info("SRAT: PXM %u -> APIC 0x%04x -> Node %u\n",
+	pr_info("SRAT: PXM %u -> x2APIC 0x%04x -> Node %u\n",
 	       pxm, apic_id, node);
 }
 
