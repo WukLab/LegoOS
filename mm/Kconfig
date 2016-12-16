@@ -1,0 +1,68 @@
+config SELECT_MEMORY_MODEL
+	def_bool y
+	depends on ARCH_SELECT_MEMORY_MODEL
+
+choice
+	prompt "Memory model"
+	depends on SELECT_MEMORY_MODEL
+	default DISCONTIGMEM_MANUAL if ARCH_DISCONTIGMEM_DEFAULT
+	default FLATMEM_MANUAL
+
+config FLATMEM_MANUAL
+	bool "Flat Memory"
+	depends on !ARCH_DISCONTIGMEM_ENABLE || ARCH_FLATMEM_ENABLE
+	help
+	  This option allows you to change some of the ways that
+	  LegoOS manages its memory internally.  Most users will
+	  only have one option here: FLATMEM.  This is normal
+	  and a correct option.
+
+	  Some users of more advanced features like NUMA and
+	  memory hotplug may have different options here.
+	  DISCONTIGMEM is a more mature, better tested system,
+	  but is incompatible with memory hotplug and may suffer
+	  decreased performance over SPARSEMEM.
+
+	  If unsure, choose this option (Flat Memory) over any other.
+
+config DISCONTIGMEM_MANUAL
+	bool "Discontiguous Memory"
+	depends on ARCH_DISCONTIGMEM_ENABLE
+	help
+	  This option provides enhanced support for discontiguous
+	  memory systems, over FLATMEM.  These systems have holes
+	  in their physical address spaces, and this option provides
+	  more efficient handling of these holes.  However, the vast
+	  majority of hardware has quite flat address spaces, and
+	  can have degraded performance from the extra overhead that
+	  this option imposes.
+
+	  Many NUMA configurations will have this as the only option.
+
+	  If unsure, choose "Flat Memory" over this option.
+
+endchoice
+
+config DISCONTIGMEM
+	def_bool y
+	depends on (!SELECT_MEMORY_MODEL && ARCH_DISCONTIGMEM_ENABLE) || DISCONTIGMEM_MANUAL
+
+config FLATMEM
+	def_bool y
+	depends on (!DISCONTIGMEM) || FLATMEM_MANUAL
+
+#
+# Both the NUMA code and DISCONTIGMEM use arrays of pg_data_t's
+# to represent different areas of memory.  This variable allows
+# those dependencies to exist individually.
+#
+config NEED_MULTIPLE_NODES
+	def_bool y
+	depends on DISCONTIGMEM || NUMA
+
+config HAVE_MEMBLOCK
+	bool
+
+config HAVE_MEMBLOCK_NODE_MAP
+	bool
+

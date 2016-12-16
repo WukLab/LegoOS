@@ -165,6 +165,16 @@ typedef struct pglist_data {
 	int node_id;
 } pg_data_t;
 
+static inline unsigned long pgdat_end_pfn(pg_data_t *pgdat)
+{
+	return pgdat->node_start_pfn + pgdat->node_spanned_pages;
+}
+
+static inline bool pgdat_is_empty(pg_data_t *pgdat)
+{
+	return !pgdat->node_start_pfn && !pgdat->node_spanned_pages;
+}
+
 #ifndef CONFIG_NUMA
 extern struct pglist_data contig_page_data;
 #define NODE_DATA(nid)		(&contig_page_data)

@@ -18,6 +18,31 @@
 #include <lego/memblock.h>
 #include <lego/spinlock.h>
 
+/**
+ * node_states - Array of node states.
+ */
+nodemask_t node_states[NR_NODE_STATES] __read_mostly = {
+	[N_POSSIBLE] = NODE_MASK_ALL,
+	[N_ONLINE] = { { [0] = 1UL } },
+#ifndef CONFIG_NUMA
+	[N_NORMAL_MEMORY] = { { [0] = 1UL } },
+	[N_CPU] = { { [0] = 1UL } },
+#endif
+};
+
+#if MAX_NUMNODES > 1
+int nr_node_ids __read_mostly = MAX_NUMNODES;
+int nr_online_nodes __read_mostly = 1;
+
+static void __init setup_nr_node_ids(void)
+{
+	unsigned int highest;
+
+	highest = find_last_bit(node_possible_map.bits, MAX_NUMNODES);
+	nr_node_ids = highest + 1;
+}
+#endif
+
 static char * const zone_names[MAX_NR_ZONES] = {
 #ifdef CONFIG_ZONE_DMA
 	 "DMA",
@@ -31,6 +56,157 @@ static char * const zone_names[MAX_NR_ZONES] = {
 static unsigned long arch_zone_lowest_possible_pfn[MAX_NR_ZONES];
 static unsigned long arch_zone_highest_possible_pfn[MAX_NR_ZONES];
 
+/**
+ * get_pfn_range_for_nid - Return the start and end page frames for a node
+ * @nid: The nid to return the range for. If MAX_NUMNODES, the min and max PFN are returned.
+ * @start_pfn: Passed by reference. On return, it will have the node start_pfn.
+ * @end_pfn: Passed by reference. On return, it will have the node end_pfn.
+ *
+ * It returns the start and end page frame of a node based on information
+ * provided by memblock_set_node(). If called for a node
+ * with no available memory, a warning is printed and the start and end
+ * PFNs will be 0.
+ */
+void __init get_pfn_range_for_nid(unsigned int nid,
+				  unsigned long *start_pfn,
+				  unsigned long *end_pfn)
+{
+	unsigned long this_start_pfn, this_end_pfn;
+	int i;
+
+	*start_pfn = -1UL;
+	*end_pfn = 0;
+
+	for_each_mem_pfn_range(i, nid, &this_start_pfn, &this_end_pfn, NULL) {
+		*start_pfn = min(*start_pfn, this_start_pfn);
+		*end_pfn = max(*end_pfn, this_end_pfn);
+	}
+
+	if (*start_pfn == -1UL)
+		*start_pfn = 0;
+}
+
+/*
+ * Return the number of pages a zone spans in a node, including holes
+ * present_pages = zone_spanned_pages_in_node() - zone_absent_pages_in_node()
+ */
+static unsigned long __init zone_spanned_pages_in_node(int nid,
+					unsigned long zone_type,
+					unsigned long node_start_pfn,
+					unsigned long node_end_pfn,
+					unsigned long *zone_start_pfn,
+					unsigned long *zone_end_pfn,
+					unsigned long *ignored)
+{
+	/* Get the start and end of the zone */
+	*zone_start_pfn = arch_zone_lowest_possible_pfn[zone_type];
+	*zone_end_pfn = arch_zone_highest_possible_pfn[zone_type];
+
+	/* Check that this node has pages within the zone's required range */
+	if (*zone_end_pfn < node_start_pfn || *zone_start_pfn > node_end_pfn)
+		return 0;
+
+	/* Move the zone boundaries inside the node if necessary */
+	*zone_end_pfn = min(*zone_end_pfn, node_end_pfn);
+	*zone_start_pfn = max(*zone_start_pfn, node_start_pfn);
+
+	/* Return the spanned pages */
+	return *zone_end_pfn - *zone_start_pfn;
+}
+
+/*
+ * Return the number of holes in a range on a node. If nid is MAX_NUMNODES,
+ * then all holes in the requested range will be accounted for.
+ */
+unsigned long __init __absent_pages_in_range(int nid,
+				unsigned long range_start_pfn,
+				unsigned long range_end_pfn)
+{
+	unsigned long nr_absent = range_end_pfn - range_start_pfn;
+	unsigned long start_pfn, end_pfn;
+	int i;
+
+	for_each_mem_pfn_range(i, nid, &start_pfn, &end_pfn, NULL) {
+		start_pfn = clamp(start_pfn, range_start_pfn, range_end_pfn);
+		end_pfn = clamp(end_pfn, range_start_pfn, range_end_pfn);
+		nr_absent -= end_pfn - start_pfn;
+	}
+	return nr_absent;
+}
+
+/**
+ * absent_pages_in_range - Return number of page frames in holes within a range
+ * @start_pfn: The start PFN to start searching for holes
+ * @end_pfn: The end PFN to stop searching for holes
+ *
+ * It returns the number of pages frames in memory holes within a range.
+ */
+unsigned long __init absent_pages_in_range(unsigned long start_pfn,
+					   unsigned long end_pfn)
+{
+	return __absent_pages_in_range(MAX_NUMNODES, start_pfn, end_pfn);
+}
+
+/* Return the number of page frames in holes in a zone on a node */
+static unsigned long __init zone_absent_pages_in_node(int nid,
+					unsigned long zone_type,
+					unsigned long node_start_pfn,
+					unsigned long node_end_pfn,
+					unsigned long *ignored)
+{
+	unsigned long zone_low = arch_zone_lowest_possible_pfn[zone_type];
+	unsigned long zone_high = arch_zone_highest_possible_pfn[zone_type];
+	unsigned long zone_start_pfn, zone_end_pfn;
+	unsigned long nr_absent;
+
+	zone_start_pfn = clamp(node_start_pfn, zone_low, zone_high);
+	zone_end_pfn = clamp(node_end_pfn, zone_low, zone_high);
+
+	nr_absent = __absent_pages_in_range(nid, zone_start_pfn, zone_end_pfn);
+
+	return nr_absent;
+}
+
+static void __init calculate_node_totalpages(struct pglist_data *pgdat,
+					     unsigned long node_start_pfn,
+					     unsigned long node_end_pfn,
+					     unsigned long *zones_size,
+					     unsigned long *zholes_size)
+{
+	unsigned long realtotalpages = 0, totalpages = 0;
+	enum zone_type i;
+
+	for (i = 0; i < MAX_NR_ZONES; i++) {
+		struct zone *zone = pgdat->node_zones + i;
+		unsigned long zone_start_pfn, zone_end_pfn;
+		unsigned long size, real_size;
+
+		size = zone_spanned_pages_in_node(pgdat->node_id, i,
+						  node_start_pfn,
+						  node_end_pfn,
+						  &zone_start_pfn,
+						  &zone_end_pfn,
+						  zones_size);
+		real_size = size - zone_absent_pages_in_node(pgdat->node_id, i,
+						  node_start_pfn, node_end_pfn,
+						  zholes_size);
+		if (size)
+			zone->zone_start_pfn = zone_start_pfn;
+		else
+			zone->zone_start_pfn = 0;
+		zone->spanned_pages = size;
+		zone->present_pages = real_size;
+
+		totalpages += size;
+		realtotalpages += real_size;
+	}
+
+	pgdat->node_spanned_pages = totalpages;
+	pgdat->node_present_pages = realtotalpages;
+
+	pr_debug("On node %d totalpages: %lu\n", pgdat->node_id, realtotalpages);
+}
+
 /*
  * Set up the zone data structures:
  *   - mark all pages reserved
@@ -39,15 +215,74 @@ static unsigned long arch_zone_highest_possible_pfn[MAX_NR_ZONES];
  *
  * NOTE: pgdat should get zeroed by caller.
  */
-static void __init free_area_init_core(void)
+static void __init free_area_init_core(pg_data_t *pgdat)
 {
+}
+
+static void alloc_node_mem_map(struct pglist_data *pgdat)
+{
+	unsigned long __maybe_unused start = 0;
+	unsigned long __maybe_unused offset = 0;
+	unsigned long size, end;
+	struct page *map;
+
+	/* Skip empty nodes */
+	if (!pgdat->node_spanned_pages)
+		return;
+
+	start = pgdat->node_start_pfn & ~(MAX_ORDER_NR_PAGES - 1);
+	offset = pgdat->node_start_pfn - start;
+
+	/*
+	 * The zone's endpoints aren't required to be MAX_ORDER
+	 * aligned but the node_mem_map endpoints must be in order
+	 * for the buddy allocator to function correctly.
+	 */
+	end = pgdat_end_pfn(pgdat);
+	end = ALIGN(end, MAX_ORDER_NR_PAGES);
+	size =  (end - start) * sizeof(struct page);
+	map = memblock_virt_alloc_node_nopanic(size, pgdat->node_id);
+	pgdat->node_mem_map = map + offset;
+
+#ifndef CONFIG_NEED_MULTIPLE_NODES
+	/*
+	 * With no DISCONTIG, the global mem_map is just set as node 0's
+	 */
+	if (pgdat == NODE_DATA(0)) {
+		mem_map = NODE_DATA(0)->node_mem_map;
+#if defined(CONFIG_HAVE_MEMBLOCK_NODE_MAP) || defined(CONFIG_FLATMEM)
+		//if (page_to_pfn(mem_map) != pgdat->node_start_pfn)
+		//	mem_map -= offset;
+#endif
+	}
+#endif
 }
 
 void __init free_area_init_node(int nid, unsigned long *zones_size,
 				unsigned long node_start_pfn,
 				unsigned long *zholes_size)
 {
-	free_area_init_core();
+	pg_data_t *pgdat = NODE_DATA(nid);
+	unsigned long start_pfn = 0;
+	unsigned long end_pfn = 0;
+
+	pgdat->node_id = nid;
+	pgdat->node_start_pfn = node_start_pfn;
+
+	get_pfn_range_for_nid(nid, &start_pfn, &end_pfn);
+	pr_info("Initmem setup node %d [mem %#018Lx-%#018Lx]\n", nid,
+		(u64)start_pfn << PAGE_SHIFT,
+		end_pfn ? ((u64)end_pfn << PAGE_SHIFT) - 1 : 0);
+
+	calculate_node_totalpages(pgdat, start_pfn, end_pfn,
+				  zones_size, zholes_size);
+
+	alloc_node_mem_map(pgdat);
+
+	pr_debug("free_area_init_node: node %d, pgdat %08lx, node_mem_map %08lx\n",
+		 nid, (unsigned long)pgdat, (unsigned long)pgdat->node_mem_map);
+
+	free_area_init_core(pgdat);
 }
 
 /* Find the lowest pfn for a node */
@@ -79,6 +314,19 @@ unsigned long __init find_min_pfn_with_active_regions(void)
 	return find_min_pfn_for_node(MAX_NUMNODES);
 }
 
+/**
+ * free_area_init_nodes - Initialise all pg_data_t and zone data
+ * @max_zone_pfn: an array of max PFNs for each zone
+ *
+ * This will call free_area_init_node() for each active node in the system.
+ * Using the page ranges provided by memblock_set_node(), the size of each
+ * zone in each node and their holes is calculated. If the maximum PFN
+ * between two adjacent zones match, it is assumed that the zone is empty.
+ * For example, if arch_max_dma_pfn == arch_max_dma32_pfn, it is assumed
+ * that arch_max_dma32_pfn has no pages. It is also assumed that a zone
+ * starts where the previous one ended. For example, ZONE_DMA32 starts
+ * at arch_max_dma_pfn.
+ */
 void __init free_area_init_nodes(unsigned long *max_zone_pfn)
 {
 	unsigned long start_pfn, end_pfn;
@@ -122,9 +370,22 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn)
 			(u64)start_pfn << PAGE_SHIFT,
 			((u64)end_pfn << PAGE_SHIFT) - 1);
 
+
+	setup_nr_node_ids();
+
+	for_each_online_node(nid) {
+		pg_data_t *pgdat = NODE_DATA(nid);
+		free_area_init_node(nid, NULL,
+				find_min_pfn_for_node(nid), NULL);
+
+		/* Any memory on that node */
+		if (pgdat->node_present_pages)
+			node_set_state(nid, N_NORMAL_MEMORY);
+	}
 }
 
 void __init memory_init(void)
 {
+	/* Will call free_area_init_nodes() inside */
 	arch_zone_init();
 }

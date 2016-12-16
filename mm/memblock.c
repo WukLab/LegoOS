@@ -1032,3 +1032,105 @@ phys_addr_t __init memblock_alloc_try_nid(phys_addr_t size, phys_addr_t align, i
 		return res;
 	return memblock_alloc_base(size, align, MEMBLOCK_ALLOC_ACCESSIBLE);
 }
+
+/**
+ * memblock_virt_alloc_internal - allocate boot memory block
+ * @size: size of memory block to be allocated in bytes
+ * @align: alignment of the region and block's size
+ * @min_addr: the lower bound of the memory region to allocate (phys address)
+ * @max_addr: the upper bound of the memory region to allocate (phys address)
+ * @nid: nid of the free area to find, %NUMA_NO_NODE for any node
+ *
+ * The @min_addr limit is dropped if it can not be satisfied and the allocation
+ * will fall back to memory below @min_addr. Also, allocation may fall back
+ * to any node in the system if the specified node can not
+ * hold the requested memory.
+ *
+ * The allocation is performed from memory region limited by
+ * memblock.current_limit if @max_addr == %BOOTMEM_ALLOC_ACCESSIBLE.
+ *
+ * The memory block is aligned on SMP_CACHE_BYTES if @align == 0.
+ *
+ * The phys address of allocated boot memory block is converted to virtual and
+ * allocated memory is reset to 0.
+ *
+ * In addition, function sets the min_count to 0 using kmemleak_alloc for
+ * allocated boot memory block, so that it is never reported as leaks.
+ *
+ * RETURNS:
+ * Virtual address of allocated memory block on success, NULL on failure.
+ */
+static void * __init memblock_virt_alloc_internal(
+				phys_addr_t size, phys_addr_t align,
+				phys_addr_t min_addr, phys_addr_t max_addr,
+				int nid)
+{
+	phys_addr_t alloc;
+	void *ptr;
+	unsigned long flags = MEMBLOCK_NONE;
+
+	if (WARN_ONCE(nid == MAX_NUMNODES, "Usage of MAX_NUMNODES is deprecated. Use NUMA_NO_NODE instead\n"))
+		nid = NUMA_NO_NODE;
+
+	if (!align)
+		align = L1_CACHE_BYTES;
+
+	if (max_addr > memblock.current_limit)
+		max_addr = memblock.current_limit;
+
+again:
+	alloc = memblock_find_in_range_node(size, align, min_addr, max_addr,
+					    nid, flags);
+	if (alloc)
+		goto done;
+
+	if (nid != NUMA_NO_NODE) {
+		alloc = memblock_find_in_range_node(size, align, min_addr,
+						    max_addr, NUMA_NO_NODE,
+						    flags);
+		if (alloc)
+			goto done;
+	}
+
+	if (min_addr) {
+		min_addr = 0;
+		goto again;
+	}
+
+	return NULL;
+done:
+	memblock_reserve(alloc, size);
+	ptr = phys_to_virt(alloc);
+	memset(ptr, 0, size);
+
+	return ptr;
+}
+
+/**
+ * memblock_virt_alloc_try_nid_nopanic - allocate boot memory block
+ * @size: size of memory block to be allocated in bytes
+ * @align: alignment of the region and block's size
+ * @min_addr: the lower bound of the memory region from where the allocation
+ *	  is preferred (phys address)
+ * @max_addr: the upper bound of the memory region from where the allocation
+ *	      is preferred (phys address), or %BOOTMEM_ALLOC_ACCESSIBLE to
+ *	      allocate only from memory limited by memblock.current_limit value
+ * @nid: nid of the free area to find, %NUMA_NO_NODE for any node
+ *
+ * Public version of _memblock_virt_alloc_try_nid_nopanic() which provides
+ * additional debug information (including caller info), if enabled.
+ *
+ * RETURNS:
+ * Virtual address of allocated memory block on success, NULL on failure.
+ */
+void * __init memblock_virt_alloc_try_nid_nopanic(
+				phys_addr_t size, phys_addr_t align,
+				phys_addr_t min_addr, phys_addr_t max_addr,
+				int nid)
+{
+	memblock_dbg("%s: %llu bytes align=0x%llx nid=%d from=0x%llx max_addr=0x%llx %pF\n",
+		     __func__, (u64)size, (u64)align, nid, (u64)min_addr,
+		     (u64)max_addr, (void *)_RET_IP_);
+	return memblock_virt_alloc_internal(size, align, min_addr,
+					     max_addr, nid);
+}

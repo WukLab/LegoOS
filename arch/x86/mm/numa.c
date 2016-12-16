@@ -413,18 +413,6 @@ static int __init numa_register_memblks(struct numa_meminfo *mi)
 	return 0;
 }
 
-/**
- * node_states - Array of node states.
- */
-nodemask_t node_states[NR_NODE_STATES] __read_mostly = {
-	[N_POSSIBLE] = NODE_MASK_ALL,
-	[N_ONLINE] = { { [0] = 1UL } },
-#ifndef CONFIG_NUMA
-	[N_NORMAL_MEMORY] = { { [0] = 1UL } },
-	[N_CPU] = { { [0] = 1UL } },
-#endif
-};
-
 /*
  * We have parsed ACPI tables before we reach here
  * If there is no NUMA info, then fake one node.

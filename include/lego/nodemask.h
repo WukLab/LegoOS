@@ -195,6 +195,9 @@ static inline int num_node_state(enum node_states state)
 #define first_online_node	first_node(node_states[N_ONLINE])
 #define first_memory_node	first_node(node_states[N_NORMAL_MEMORY])
 
+extern int nr_node_ids;
+extern int nr_online_nodes;
+
 #else /* MAX_NUMNODES > 1 */
 
 static inline int node_state(int node, enum node_states state)
@@ -220,6 +223,8 @@ static inline int num_node_state(enum node_states state)
 
 #define first_online_node	0
 #define first_memory_node	0
+#define nr_online_nodes		1
+#define nr_node_ids		1
 
 #define node_set_online(node)	   node_set_state((node), N_ONLINE)
 #define node_set_offline(node)	   node_clear_state((node), N_ONLINE)

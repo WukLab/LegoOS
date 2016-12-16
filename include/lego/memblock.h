@@ -209,4 +209,20 @@ phys_addr_t memblock_alloc_base(phys_addr_t size, phys_addr_t align,
 phys_addr_t __memblock_alloc_base(phys_addr_t size, phys_addr_t align,
 				  phys_addr_t max_addr);
 
+
+#define BOOTMEM_ALLOC_ACCESSIBLE	0
+#define BOOTMEM_ALLOC_ANYWHERE		(~(phys_addr_t)0)
+
+void *memblock_virt_alloc_try_nid_nopanic(phys_addr_t size,
+		phys_addr_t align, phys_addr_t min_addr,
+		phys_addr_t max_addr, int nid);
+
+static inline void * __init memblock_virt_alloc_node_nopanic(
+						phys_addr_t size, int nid)
+{
+	return memblock_virt_alloc_try_nid_nopanic(size, 0, 0,
+						    BOOTMEM_ALLOC_ACCESSIBLE,
+						    nid);
+}
+
 #endif /* _LEGO_MEMBLOCK_H_ */

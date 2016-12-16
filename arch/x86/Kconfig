@@ -16,6 +16,8 @@ config X86_64
 ### Arch Settings
 config X86
 	def_bool y
+	select HAVE_MEMBLOCK
+	select HAVE_MEMBLOCK_NODE_MAP
 
 config OUTPUT_FORMAT
 	string
@@ -174,6 +176,21 @@ config NODES_SHIFT
 	  Specify the maximum number of NUMA Nodes available on the target
 	  system.  Increases memory reserved to accommodate various tables.
 
+config ARCH_DISCONTIGMEM_ENABLE
+	def_bool y
+	depends on NUMA
+
+config ARCH_DISCONTIGMEM_DEFAULT
+	def_bool y
+	depends on NUMA
+
+config ARCH_FLATMEM_ENABLE
+	def_bool y
+	depends on X86_64 && !NUMA
+
+config ARCH_SELECT_MEMORY_MODEL
+	def_bool y
+
 config HPET_TIMER
 	def_bool X86_64
 	prompt "HPET Timer Support" if X86_32
@@ -195,4 +212,5 @@ config HPET_TIMER
 
 endmenu
 
+source "mm/Kconfig"
 source "drivers/Kconfig"
