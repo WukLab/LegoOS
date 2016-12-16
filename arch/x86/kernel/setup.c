@@ -119,7 +119,6 @@ void __init setup_arch(void)
 	 * Now memblock is fully functional:
 	 */
 	e820_fill_memblock();
-	__memblock_dump_all();
 
 	/*
 	 * Before parsing ACPI tables,

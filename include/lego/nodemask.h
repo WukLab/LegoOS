@@ -158,8 +158,11 @@ enum node_states {
 
 extern nodemask_t node_states[NR_NODE_STATES];
 
-#define node_online_map 	node_states[N_ONLINE]
-#define node_possible_map 	node_states[N_POSSIBLE]
+#if MAX_NUMNODES > 1
+static inline int node_state(int node, enum node_states state)
+{
+	return node_isset(node, node_states[state]);
+}
 
 static inline void node_set_state(int node, enum node_states state)
 {
@@ -180,5 +183,58 @@ static inline void node_set_offline(int nid)
 {
 	node_clear_state(nid, N_ONLINE);
 }
+
+static inline int num_node_state(enum node_states state)
+{
+	return nodes_weight(node_states[state]);
+}
+
+#define for_each_node_state(__node, __state) \
+	for_each_node_mask((__node), node_states[__state])
+
+#define first_online_node	first_node(node_states[N_ONLINE])
+#define first_memory_node	first_node(node_states[N_NORMAL_MEMORY])
+
+#else /* MAX_NUMNODES > 1 */
+
+static inline int node_state(int node, enum node_states state)
+{
+	return node == 0;
+}
+
+static inline void node_set_state(int node, enum node_states state)
+{
+}
+
+static inline void node_clear_state(int node, enum node_states state)
+{
+}
+
+static inline int num_node_state(enum node_states state)
+{
+	return 1;
+}
+
+#define for_each_node_state(node, __state) \
+	for ( (node) = 0; (node) == 0; (node) = 1)
+
+#define first_online_node	0
+#define first_memory_node	0
+
+#define node_set_online(node)	   node_set_state((node), N_ONLINE)
+#define node_set_offline(node)	   node_clear_state((node), N_ONLINE)
+
+#endif /* MAX_NUMNODES > 1 */
+
+#define node_online_map			node_states[N_ONLINE]
+#define node_possible_map		node_states[N_POSSIBLE]
+
+#define num_online_nodes()		num_node_state(N_ONLINE)
+#define num_possible_nodes()		num_node_state(N_POSSIBLE)
+#define node_online(node)		node_state((node), N_ONLINE)
+#define node_possible(node)		node_state((node), N_POSSIBLE)
+
+#define for_each_node(node)		for_each_node_state(node, N_POSSIBLE)
+#define for_each_online_node(node)	for_each_node_state(node, N_ONLINE)
 
 #endif /* _LEGO_NODEMASK_H_ */

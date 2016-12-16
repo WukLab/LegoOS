@@ -165,5 +165,14 @@ typedef struct pglist_data {
 	int node_id;
 } pg_data_t;
 
+#ifndef CONFIG_NUMA
+extern struct pglist_data contig_page_data;
+#define NODE_DATA(nid)		(&contig_page_data)
+#define NODE_MEM_MAP(nid)	mem_map
+#else
+extern struct pglist_data *node_data[];
+#define NODE_DATA(nid)		(node_data[nid])
+#endif
+
 #endif /* __GENERATING_BOUNDS_H */
 #endif /* _LEGO_MM_ZONE_H_ */

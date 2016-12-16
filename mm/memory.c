@@ -7,10 +7,6 @@
  * (at your option) any later version.
  */
 
-/*
- * A boot-time physical memory allocator
- */
-
 #include <asm/io.h>
 #include <asm/page.h>
 
@@ -19,3 +15,5 @@
 #include <lego/kernel.h>
 #include <lego/memblock.h>
 
+struct pglist_data contig_page_data;
+struct page *mem_map;

@@ -16,12 +16,6 @@
 #include <lego/nodemask.h>
 #include <lego/compiler.h>
 
-#ifdef CONFIG_NUMA
-struct pglist_data;
-extern struct pglist_data *node_data[];
-#define NODE_DATA(nid)		(node_data[nid])
-#endif
-
 /*
  * Too small node sizes may confuse the VM badly. Usually they
  * result from BIOS bugs. So dont recognize nodes as standalone

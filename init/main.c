@@ -22,6 +22,7 @@
 #include <lego/atomic.h>
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
+#include <lego/nodemask.h>
 #include <lego/spinlock.h>
 
 /* Screen information used by kernel */
