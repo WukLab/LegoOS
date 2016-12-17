@@ -270,6 +270,7 @@ void __init free_area_init_node(int nid, unsigned long *zones_size,
 	pgdat->node_start_pfn = node_start_pfn;
 
 	get_pfn_range_for_nid(nid, &start_pfn, &end_pfn);
+
 	pr_info("Initmem setup node %d [mem %#018Lx-%#018Lx]\n", nid,
 		(u64)start_pfn << PAGE_SHIFT,
 		end_pfn ? ((u64)end_pfn << PAGE_SHIFT) - 1 : 0);
@@ -279,8 +280,9 @@ void __init free_area_init_node(int nid, unsigned long *zones_size,
 
 	alloc_node_mem_map(pgdat);
 
-	pr_debug("free_area_init_node: node %d, pgdat %08lx, node_mem_map %08lx\n",
-		 nid, (unsigned long)pgdat, (unsigned long)pgdat->node_mem_map);
+	pr_debug("%s: node %d, pgdat %08lx, node_mem_map %08lx\n",
+		 __func__, nid, (unsigned long)pgdat,
+		 (unsigned long)pgdat->node_mem_map);
 
 	free_area_init_core(pgdat);
 }

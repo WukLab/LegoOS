@@ -10,9 +10,10 @@
 #ifndef _LEGO_MM_TYPES_H
 #define _LEGO_MM_TYPES_H
 
+#include <asm/pgtable.h>
+
 #include <lego/types.h>
 #include <lego/spinlock.h>
-#include <asm/pgtable.h>
 
 /*
  * Each physical page in the system has a struct page associated with
@@ -28,49 +29,10 @@
  * and lru list pointers also.
  */
 struct page {
-	/* First double word block */
 	unsigned long flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
-	union {
-		struct address_space *mapping;	/* If low bit clear, points to
-						 * inode address_space, or NULL.
-						 * If page mapped as anonymous
-						 * memory, low bit is set, and
-						 * it points to anon_vma object:
-						 * see PAGE_MAPPING_ANON below.
-						 */
-		void *s_mem;			/* slab first object */
-		atomic_t compound_mapcount;	/* first tail page */
-		/* page_deferred_list().next	 -- second tail page */
-	};
 
-	/* Second double word */
-	union {
-		pgoff_t index;		/* Our offset within mapping. */
-		void *freelist;		/* sl[aou]b first free object */
-		/* page_deferred_list().prev	-- second tail page */
-	};
-
-	union {
-		/*
-		 * Count of ptes mapped in mms, to show when
-		 * page is mapped & limit reverse map searches.
-		 *
-		 * Extra information about page type may be
-		 * stored here for pages that are never mapped,
-		 * in which case the value MUST BE <= -2.
-		 * See page-flags.h for more details.
-		 */
-		atomic_t _mapcount;
-
-		unsigned int active;		/* SLAB */
-	};
-	/*
-	 * Usage count, *USE WRAPPER FUNCTION* when manual
-	 * accounting. See page_ref.h
-	 */
 	atomic_t _refcount;
-
 };
 
 /*

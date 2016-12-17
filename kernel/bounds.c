@@ -19,9 +19,11 @@
 
 /* Include headers that define the enum constants of interest */
 #include <lego/mm_zone.h>
+#include <lego/page-flags.h>
 
 void wuklabisawesome(void)
 {
 	/* The enum constants to put into include/generated/bounds.h */
 	DEFINE(MAX_NR_ZONES, __MAX_NR_ZONES);
+	DEFINE(NR_PAGEFLAGS, __NR_PAGEFLAGS);
 }

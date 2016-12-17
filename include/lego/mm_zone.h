@@ -90,6 +90,10 @@ enum zone_type {
 struct zone {
 	struct pglist_data	*zone_pgdata;
 
+#ifdef CONFIG_NUMA
+	int node;
+#endif
+
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
 	unsigned long		zone_start_pfn;
 
