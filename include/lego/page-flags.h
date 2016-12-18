@@ -105,5 +105,36 @@ PAGE_FLAG(Dirty, dirty)
 PAGE_FLAG(Reserved, reserved)
 PAGE_FLAG(Private, private)
 
+/*
+ * For pages that are never mapped to userspace, page->mapcount may be
+ * used for storing extra information about page type. Any value used
+ * for this purpose must be <= -2, but it's better start not too close
+ * to -2 so that an underflow of the page_mapcount() won't be mistaken
+ * for a special page.
+ */
+#define PAGE_MAPCOUNT_OPS(uname, lname)					\
+static __always_inline int Page##uname(struct page *page)		\
+{									\
+	return atomic_read(&page->_mapcount) ==				\
+				PAGE_##lname##_MAPCOUNT_VALUE;		\
+}									\
+static __always_inline void __SetPage##uname(struct page *page)		\
+{									\
+	VM_BUG_ON_PAGE(atomic_read(&page->_mapcount) != -1, page);	\
+	atomic_set(&page->_mapcount, PAGE_##lname##_MAPCOUNT_VALUE);	\
+}									\
+static __always_inline void __ClearPage##uname(struct page *page)	\
+{									\
+	VM_BUG_ON_PAGE(!Page##uname(page), page);			\
+	atomic_set(&page->_mapcount, -1);				\
+}
+
+/*
+ * PageBuddy() indicate that the page is free and in the buddy system
+ * (see mm/page_alloc.c).
+ */
+#define PAGE_BUDDY_MAPCOUNT_VALUE		(-128)
+PAGE_MAPCOUNT_OPS(Buddy, BUDDY)
+
 #endif /* __GENERATING_BOUNDS_H */
 #endif /* _LEGO_PAGE_FLAGS_H_ */

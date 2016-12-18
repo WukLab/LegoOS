@@ -72,6 +72,7 @@ static void __init_single_page(struct page *page, unsigned long pfn,
 	set_page_links(page, zone, nid);
 	init_page_count(page);
 	page_mapcount_reset(page);
+	INIT_LIST_HEAD(&page->lru);
 }
 
 static void __init_single_pfn(unsigned long pfn, unsigned long zone,
@@ -327,6 +328,7 @@ static void __init free_area_init_core(pg_data_t *pgdat)
 #endif
 		zone->name = zone_names[j];
 		zone->zone_pgdat = pgdat;
+		spin_lock_init(&zone->lock);
 		zone_pcp_init(zone);
 
 		if (!size)
@@ -513,13 +515,153 @@ void __init memory_init(void)
 	free_all_bootmem();
 }
 
+/*
+ * Locate the struct page for both the matching buddy in our
+ * pair (buddy1) and the combined O(n+1) page they form (page).
+ *
+ * 1) Any buddy B1 will have an order O twin B2 which satisfies
+ * the following equation:
+ *     B2 = B1 ^ (1 << O)
+ * For example, if the starting buddy (buddy2) is #8 its order
+ * 1 buddy is #10:
+ *     B2 = 8 ^ (1 << 1) = 8 ^ 2 = 10
+ *
+ * 2) Any buddy B will have an order O+1 parent P which
+ * satisfies the following equation:
+ *     P = B & ~(1 << O)
+ *
+ * Assumption: *_mem_map is contiguous at least up to MAX_ORDER
+ */
+static inline unsigned long
+__find_buddy_index(unsigned long page_idx, unsigned int order)
+{
+	return page_idx ^ (1 << order);
+}
+
+static inline void set_page_order(struct page *page, unsigned int order)
+{
+	set_page_private(page, order);
+	__SetPageBuddy(page);
+}
+
+static inline void rmv_page_order(struct page *page)
+{
+	__ClearPageBuddy(page);
+	set_page_private(page, 0);
+}
+
+/*
+ * This function checks whether a page is free && is the buddy
+ * we can do coalesce a page and its buddy if
+ * (a) the buddy is not in a hole &&
+ * (b) the buddy is in the buddy system &&
+ * (c) a page and its buddy have the same order &&
+ * (d) a page and its buddy are in the same zone.
+ *
+ * For recording whether a page is in the buddy system, we set ->_mapcount
+ * PAGE_BUDDY_MAPCOUNT_VALUE.
+ * Setting, clearing, and testing _mapcount PAGE_BUDDY_MAPCOUNT_VALUE is
+ * serialized by zone->lock.
+ *
+ * For recording page's order, we use page_private(page).
+ */
+static inline int page_is_buddy(struct page *page, struct page *buddy,
+							unsigned int order)
+{
+	if (PageBuddy(buddy) && page_order(buddy) == order) {
+		/*
+		 * zone check is done late to avoid uselessly
+		 * calculating zone/node ids for pages that could
+		 * never merge.
+		 */
+		if (page_zone_id(page) != page_zone_id(buddy))
+			return 0;
+
+		VM_BUG_ON_PAGE(page_ref_count(buddy) != 0, buddy);
+
+		return 1;
+	}
+	return 0;
+}
+
+static __always_inline void
+__free_one_page(struct page *page, unsigned long pfn, struct zone *zone,
+		unsigned int order)
+{
+	unsigned long page_idx;
+	unsigned long combined_idx;
+	unsigned long buddy_idx;
+	struct page *buddy;
+
+	page_idx = pfn & ((1 << MAX_ORDER) - 1);
+
+	VM_BUG_ON_PAGE(page_idx & ((1 << order) - 1), page);
+
+	while (order < MAX_ORDER - 1) {
+		buddy_idx = __find_buddy_index(page_idx, order);
+		buddy = page + (buddy_idx - page_idx);
+		if (!page_is_buddy(page, buddy, order))
+			goto done_merging;
+
+		list_del(&buddy->lru);
+		zone->free_area[order].nr_free--;
+		rmv_page_order(buddy);
+
+		combined_idx = buddy_idx & page_idx;
+		page = page + (combined_idx - page_idx);
+		page_idx = combined_idx;
+		order++;
+	}
+
+done_merging:
+	set_page_order(page, order);
+
+	printk_once("here\n, pfn=%#lx\n",pfn);
+	list_add(&page->lru, &zone->free_area[order].free_list);
+	zone->free_area[order].nr_free++;
+}
+
+static void free_one_page(struct zone *zone,
+			struct page *page, unsigned long pfn,
+			unsigned int order)
+{
+	spin_lock(&zone->lock);
+	__free_one_page(page, pfn, zone, order);
+	spin_unlock(&zone->lock);
+}
+
+static __always_inline bool free_pages_prepare(struct page *page,
+					unsigned int order, bool check_free)
+{
+	return true;
+}
+
+static void __free_pages_ok(struct page *page, unsigned int order)
+{
+	unsigned long flags;
+	unsigned long pfn = page_to_pfn(page);
+
+	if (!free_pages_prepare(page, order, true))
+		return;
+
+	local_irq_save(flags);
+	free_one_page(page_zone(page), page, pfn, order);
+	local_irq_restore(flags);
+}
+
 void __free_pages(struct page *page, unsigned int order)
 {
+	if (put_page_testzero(page)) {
+		__free_pages_ok(page, order);
+	}
 }
 
 void free_pages(unsigned long addr, unsigned int order)
 {
-
+	if (addr != 0) {
+		VM_BUG_ON(!virt_addr_valid(addr));
+		__free_pages(virt_to_page((void *)addr), order);
+	}
 }
 
 struct page *alloc_pages(gfp_t gfp_mask, unsigned int order)
@@ -531,24 +673,18 @@ struct page *alloc_pages(gfp_t gfp_mask, unsigned int order)
 
 static void __init __free_pages_boot_core(struct page *page, unsigned int order)
 {
-/*
-	unsigned int nr_pages = 1 << order;
+	unsigned int i, nr_pages = 1 << order;
 	struct page *p = page;
-	unsigned int loop;
 
-	prefetchw(p);
-	for (loop = 0; loop < (nr_pages - 1); loop++, p++) {
-		prefetchw(p + 1);
+	for (i = 0; i < nr_pages; i++, p++) {
 		__ClearPageReserved(p);
 		set_page_count(p, 0);
 	}
-	__ClearPageReserved(p);
-	set_page_count(p, 0);
 
+	printk("page=%p, order=%u\n", page, order);
 	page_zone(page)->managed_pages += nr_pages;
 	set_page_refcounted(page);
 	__free_pages(page, order);
-*/
 }
 
 /*

@@ -69,6 +69,7 @@ asmlinkage void __init start_kernel(void)
 	/* Architecture-Specific Initialization */
 	setup_arch();
 
+	pr_info("%pF\n", (void *)0xffffffff810033b3);
 	/*
 	 * Build all memory managment data structures:
 	 */

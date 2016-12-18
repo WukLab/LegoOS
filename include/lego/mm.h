@@ -17,6 +17,7 @@
 #include <lego/gfp.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>
+#include <lego/mm_debug.h>
 #include <lego/mm_zone.h>
 #include <lego/mm_types.h>
 #include <lego/memory_model.h>
@@ -62,7 +63,7 @@ static inline enum zone_type page_to_zonetype(const struct page *page)
  * We only guarantee that it will return the same value for two combinable
  * pages in a zone.
  */
-static inline int page_to_zoneid(struct page *page)
+static inline int page_zone_id(struct page *page)
 {
 	return (page->flags >> ZONEID_PGSHIFT) & ZONEID_MASK;
 }
@@ -141,6 +142,9 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn);
 void __init arch_zone_init(void);
 void __init memory_init(void);
 
+#define page_private(page)		((page)->private)
+#define set_page_private(page, v)	((page)->private = (v))
+
 static inline int pfn_valid(unsigned long pfn)
 {
 	return pfn < max_pfn;
@@ -161,6 +165,15 @@ static inline void init_page_count(struct page *page)
 }
 
 /*
+ * Turn a non-refcounted page (->_refcount == 0) into refcounted with
+ * a count of one.
+ */
+static inline void set_page_refcounted(struct page *page)
+{
+	set_page_count(page, 1);
+}
+
+/*
  * The atomic page->_mapcount, starts from -1: so that transitions
  * both from it and to it can be tracked, using atomic_inc_and_test
  * and atomic_add_negative(-1).
@@ -169,6 +182,47 @@ static inline void page_mapcount_reset(struct page *page)
 {
 	atomic_set(&(page)->_mapcount, -1);
 }
+
+static inline int page_ref_count(struct page *page)
+{
+	return atomic_read(&page->_refcount);
+}
+
+/*
+ * Drop a ref, return true if the refcount fell to zero (the page has no users)
+ */
+static inline int put_page_testzero(struct page *page)
+{
+	VM_BUG_ON_PAGE(page_ref_count(page) == 0, page);
+	return atomic_dec_and_test(&page->_refcount);
+}
+
+/*
+ * This function returns the order of a free page in the buddy system. In
+ * general, page_zone(page)->lock must be held by the caller to prevent the
+ * page from being allocated in parallel and returning garbage as the order.
+ * If a caller does not hold page_zone(page)->lock, it must guarantee that the
+ * page cannot be allocated or merged in parallel. Alternatively, it must
+ * handle invalid values gracefully, and use page_order_unsafe() below.
+ */
+static inline unsigned int page_order(struct page *page)
+{
+	/* PageBuddy() must be checked by the caller */
+	return page_private(page);
+}
+
+/*
+ * Like page_order(), but for callers who cannot afford to hold the zone lock.
+ * PageBuddy() should be checked first by the caller to minimize race window,
+ * and invalid values must be handled gracefully.
+ *
+ * READ_ONCE is used so that if the caller assigns the result into a local
+ * variable and e.g. tests it for valid range before using, the compiler cannot
+ * decide to remove the variable and inline the page_private(page) multiple
+ * times, potentially observing different values in the tests and the actual
+ * use of the result.
+ */
+#define page_order_unsafe(page)		READ_ONCE(page_private(page))
 
 void reserve_bootmem_region(phys_addr_t start, phys_addr_t end);
 
@@ -184,5 +238,33 @@ void free_pages(unsigned long addr, unsigned int order);
 struct page *alloc_pages(gfp_t gfp_mask, unsigned int order);
 
 #define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0)
+
+/*
+ * virt_to_page(kaddr) returns a valid pointer if and only if
+ * virt_addr_valid(kaddr) returns true.
+ */
+#define virt_to_page(kaddr)	pfn_to_page(__pa(kaddr) >> PAGE_SHIFT)
+#define pfn_to_kaddr(pfn)      __va((pfn) << PAGE_SHIFT)
+
+static inline bool virt_addr_valid(unsigned long x)
+{
+	unsigned long y = x - __START_KERNEL_map;
+
+	/* use the carry flag to determine if x was < __START_KERNEL_map */
+	if (unlikely(x > y)) {
+		x = y + phys_base;
+
+		if (y >= KERNEL_IMAGE_SIZE)
+			return false;
+	} else {
+		x = y + (__START_KERNEL_map - PAGE_OFFSET);
+
+		/* carry flag will be set if starting x was >= PAGE_OFFSET */
+		if (x > y)
+			return false;
+	}
+
+	return pfn_valid(x >> PAGE_SHIFT);
+}
 
 #endif /* _LEGO_MM_H_ */
