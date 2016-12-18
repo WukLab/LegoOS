@@ -14,6 +14,7 @@
 #include <asm/pgtable.h>
 
 #include <lego/pfn.h>
+#include <lego/gfp.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>
 #include <lego/mm_zone.h>
@@ -173,5 +174,15 @@ void reserve_bootmem_region(phys_addr_t start, phys_addr_t end);
 
 void __free_pages_bootmem(struct page *page, unsigned long pfn,
 			unsigned int order);
+
+void __free_pages(struct page *page, unsigned int order);
+void free_pages(unsigned long addr, unsigned int order);
+
+#define __free_page(page) __free_pages((page), 0)
+#define free_page(addr) free_pages((addr), 0)
+
+struct page *alloc_pages(gfp_t gfp_mask, unsigned int order);
+
+#define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0)
 
 #endif /* _LEGO_MM_H_ */

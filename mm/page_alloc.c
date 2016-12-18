@@ -268,6 +268,7 @@ static void zone_init_free_lists(struct zone *zone)
 	}
 }
 
+/* TODO */
 static void zone_pcp_init(struct zone *zone)
 {
 
@@ -510,6 +511,22 @@ void __init memory_init(void)
 
 	/* Put all avaiable memory to allocator */
 	free_all_bootmem();
+}
+
+void __free_pages(struct page *page, unsigned int order)
+{
+}
+
+void free_pages(unsigned long addr, unsigned int order)
+{
+
+}
+
+struct page *alloc_pages(gfp_t gfp_mask, unsigned int order)
+{
+	struct page *page;
+
+	return page;
 }
 
 static void __init __free_pages_boot_core(struct page *page, unsigned int order)
