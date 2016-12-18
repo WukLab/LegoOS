@@ -616,7 +616,6 @@ __free_one_page(struct page *page, unsigned long pfn, struct zone *zone,
 done_merging:
 	set_page_order(page, order);
 
-	printk_once("here\n, pfn=%#lx\n",pfn);
 	list_add(&page->lru, &zone->free_area[order].free_list);
 	zone->free_area[order].nr_free++;
 }
@@ -681,7 +680,6 @@ static void __init __free_pages_boot_core(struct page *page, unsigned int order)
 		set_page_count(p, 0);
 	}
 
-	printk("page=%p, order=%u\n", page, order);
 	page_zone(page)->managed_pages += nr_pages;
 	set_page_refcounted(page);
 	__free_pages(page, order);

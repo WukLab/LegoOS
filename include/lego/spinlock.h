@@ -18,24 +18,40 @@
 
 typedef struct spinlock {
 	arch_spinlock_t arch_lock;
+#ifdef CONFIG_DEBUG_SPINLOCK
+	int magic, owner_cpu;
+	void *owner;
+#endif
 } spinlock_t;
 
-#define __SPIN_LOCK_INIT(x)			\
-{						\
-	.arch_lock = __ARCH_SPIN_LOCK_UNLOCKED	\
+#define SPINLOCK_MAGIC 0xdead4ead
+
+#ifdef CONFIG_DEBUG_SPINLOCK
+# define SPIN_DEBUG_INIT(lock)				\
+	.magic		= SPINLOCK_MAGIC,		\
+	.owner_cpu	= -1,				\
+	.owner		= (void *)(-1L)
+#else
+# define SPIN_DEBUG_INIT(lock)
+#endif
+
+#define __SPIN_LOCK_INIT(lockname)			\
+{							\
+	.arch_lock = __ARCH_SPIN_LOCK_UNLOCKED,		\
+	SPIN_DEBUG_INIT(lockname)			\
 }
 
-#define __SPIN_LOCK_UNLOCKED(x) \
-	(struct spinlock) __SPIN_LOCK_INIT(x)
+#define __SPIN_LOCK_UNLOCKED(lock)			\
+	(spinlock_t) __SPIN_LOCK_INIT(lock)
 
-#define DEFINE_SPINLOCK(x) \
-	struct spinlock x = __SPIN_LOCK_UNLOCKED(x)
+#define DEFINE_SPINLOCK(lock)				\
+	spinlock_t lock = __SPIN_LOCK_UNLOCKED(lock)
 
 #define spin_lock_init(lock)				\
 	do {						\
 		*(lock) = __SPIN_LOCK_UNLOCKED((lock));	\
 	} while (0)
-	
+
 static inline void spin_lock(spinlock_t *lock)
 {
 	arch_spin_lock(&lock->arch_lock);

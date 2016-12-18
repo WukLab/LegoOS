@@ -14,7 +14,7 @@ typedef struct arch_spinlock {
 	unsigned int slock;
 } arch_spinlock_t;
 
-#define __ARCH_SPIN_LOCK_UNLOCKED { 1 }
+#define __ARCH_SPIN_LOCK_UNLOCKED { 1U }
 
 static __always_inline void arch_spin_lock(arch_spinlock_t *lock)
 {
