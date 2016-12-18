@@ -25,6 +25,9 @@
 #endif
 #define MAX_ORDER_NR_PAGES (1 << (MAX_ORDER - 1))
 
+#define for_each_order(order) \
+	for ((order) = 0; (order) < MAX_ORDER; (order)++)
+
 /*
  * PAGE_ALLOC_COSTLY_ORDER is the order at which allocations are deemed
  * costly to service.  That is between allocation orders which should
@@ -88,7 +91,7 @@ enum zone_type {
 #ifndef __GENERATING_BOUNDS_H
 
 struct zone {
-	struct pglist_data	*zone_pgdata;
+	struct pglist_data	*zone_pgdat;
 
 #ifdef CONFIG_NUMA
 	int node;

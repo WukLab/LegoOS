@@ -18,6 +18,13 @@
 #include <lego/memblock.h>
 #include <lego/spinlock.h>
 
+static unsigned long nr_kernel_pages;
+static unsigned long nr_all_pages;
+static unsigned long dma_reserve;
+
+/* The highest pfn that mem_map is managing */
+unsigned long highest_memmap_pfn __read_mostly;
+
 /**
  * node_states - Array of node states.
  */
@@ -55,6 +62,20 @@ static char * const zone_names[MAX_NR_ZONES] = {
 
 static unsigned long arch_zone_lowest_possible_pfn[MAX_NR_ZONES];
 static unsigned long arch_zone_highest_possible_pfn[MAX_NR_ZONES];
+
+static void __init_single_page(struct page *page, unsigned long pfn,
+				unsigned long zone, int nid)
+{
+	set_page_links(page, zone, nid);
+	init_page_count(page);
+	page_mapcount_reset(page);
+}
+
+static void __init_single_pfn(unsigned long pfn, unsigned long zone,
+			      int nid)
+{
+	return __init_single_page(pfn_to_page(pfn), pfn, zone, nid);
+}
 
 /**
  * get_pfn_range_for_nid - Return the start and end page frames for a node
@@ -207,6 +228,48 @@ static void __init calculate_node_totalpages(struct pglist_data *pgdat,
 	pr_debug("On node %d totalpages: %lu\n", pgdat->node_id, realtotalpages);
 }
 
+static unsigned long calc_memmap_size(unsigned long spanned_pages,
+				      unsigned long present_pages)
+{
+	unsigned long pages = spanned_pages;
+	return PAGE_ALIGN(pages * sizeof(struct page)) >> PAGE_SHIFT;
+}
+
+/*
+ * Initially all pages are reserved - free ones are freed
+ * up by free_all_bootmem() once the early boot process is
+ * done. Non-atomic initialization, single-pass.
+ */
+static void __init memmap_init_zone(unsigned long size, int nid,
+				    unsigned long zone, unsigned long start_pfn)
+{
+	unsigned long end_pfn = start_pfn + size;
+	unsigned long pfn;
+
+	if (highest_memmap_pfn < end_pfn - 1)
+		highest_memmap_pfn = end_pfn - 1;
+
+	for (pfn = start_pfn; pfn < end_pfn; pfn++) {
+		if (!pfn_valid(pfn))
+			continue;
+		__init_single_pfn(pfn, zone, nid);
+	}
+}
+
+static void zone_init_free_lists(struct zone *zone)
+{
+	unsigned int order;
+	for_each_order(order) {
+		INIT_LIST_HEAD(&zone->free_area[order].free_list);
+		zone->free_area[order].nr_free = 0;
+	}
+}
+
+static void zone_pcp_init(struct zone *zone)
+{
+
+}
+
 /*
  * Set up the zone data structures:
  *   - mark all pages reserved
@@ -217,6 +280,57 @@ static void __init calculate_node_totalpages(struct pglist_data *pgdat,
  */
 static void __init free_area_init_core(pg_data_t *pgdat)
 {
+	int j;
+	int nid = pgdat->node_id;
+
+	for (j = 0; j < MAX_NR_ZONES; j++) {
+		struct zone *zone = pgdat->node_zones + j;
+		unsigned long size, realsize, freesize, memmap_pages;
+
+		size = zone->spanned_pages;
+		realsize = freesize = zone->present_pages;
+
+		/*
+		 * Adjust freesize so that it accounts for how much memory
+		 * is used by this zone for memmap. This affects the watermark
+		 * and per-cpu initialisations
+		 */
+		memmap_pages = calc_memmap_size(size, realsize);
+		if (freesize >= memmap_pages) {
+			freesize -= memmap_pages;
+			if (memmap_pages)
+				printk(KERN_DEBUG
+				       "  %s zone: %lu pages used in memmap\n",
+				       zone_names[j], memmap_pages);
+		} else
+			pr_warn("  %s zone: %lu pages exceeds freesize %lu\n",
+				zone_names[j], memmap_pages, freesize);
+
+		/* Account for reserved pages */
+		if (j == 0 && freesize > dma_reserve) {
+			freesize -= dma_reserve;
+			printk(KERN_DEBUG "  %s zone: %lu pages reserved\n",
+					zone_names[0], dma_reserve);
+		}
+
+		nr_kernel_pages += freesize;
+		nr_all_pages += freesize;
+
+		zone->managed_pages = freesize;
+
+#ifdef CONFIG_NUMA
+		zone->node = nid;
+#endif
+		zone->name = zone_names[j];
+		zone->zone_pgdat = pgdat;
+		zone_pcp_init(zone);
+
+		if (!size)
+			continue;
+
+		zone_init_free_lists(zone);
+		memmap_init_zone(size, nid, j, zone->zone_start_pfn);
+	}
 }
 
 static void alloc_node_mem_map(struct pglist_data *pgdat)
@@ -251,8 +365,8 @@ static void alloc_node_mem_map(struct pglist_data *pgdat)
 	if (pgdat == NODE_DATA(0)) {
 		mem_map = NODE_DATA(0)->node_mem_map;
 #if defined(CONFIG_HAVE_MEMBLOCK_NODE_MAP) || defined(CONFIG_FLATMEM)
-		//if (page_to_pfn(mem_map) != pgdat->node_start_pfn)
-		//	mem_map -= offset;
+		if (page_to_pfn(mem_map) != pgdat->node_start_pfn)
+			mem_map -= offset;
 #endif
 	}
 #endif

@@ -1054,9 +1054,6 @@ phys_addr_t __init memblock_alloc_try_nid(phys_addr_t size, phys_addr_t align, i
  * The phys address of allocated boot memory block is converted to virtual and
  * allocated memory is reset to 0.
  *
- * In addition, function sets the min_count to 0 using kmemleak_alloc for
- * allocated boot memory block, so that it is never reported as leaks.
- *
  * RETURNS:
  * Virtual address of allocated memory block on success, NULL on failure.
  */

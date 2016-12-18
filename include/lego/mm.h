@@ -14,6 +14,7 @@
 #include <asm/pgtable.h>
 
 #include <lego/pfn.h>
+#include <lego/atomic.h>
 #include <lego/kernel.h>
 #include <lego/mm_zone.h>
 #include <lego/mm_types.h>
@@ -79,6 +80,11 @@ static inline int page_to_nid(const struct page *page)
 	return (page->flags >> NODES_PGSHIFT) & NODES_MASK;
 }
 
+/* TODO */
+#ifndef CONFIG_FLATMEM
+#define pfn_to_nid(pfn)		(0)
+#endif
+
 static inline struct zone *page_zone(const struct page *page)
 {
 	enum zone_type type = page_to_zonetype(page);
@@ -128,5 +134,34 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn);
 
 void __init arch_zone_init(void);
 void __init memory_init(void);
+
+static inline int pfn_valid(unsigned long pfn)
+{
+	return pfn < max_pfn;
+}
+
+static inline void set_page_count(struct page *page, int v)
+{
+	atomic_set(&page->_refcount, v);
+}
+
+/*
+ * Setup the page count before being freed into the page allocator for
+ * the first time (boot or memory hotplug)
+ */
+static inline void init_page_count(struct page *page)
+{
+	set_page_count(page, 1);
+}
+
+/*
+ * The atomic page->_mapcount, starts from -1: so that transitions
+ * both from it and to it can be tracked, using atomic_inc_and_test
+ * and atomic_add_negative(-1).
+ */
+static inline void page_mapcount_reset(struct page *page)
+{
+	atomic_set(&(page)->_mapcount, -1);
+}
 
 #endif /* _LEGO_MM_H_ */

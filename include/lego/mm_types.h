@@ -32,6 +32,7 @@ struct page {
 	unsigned long flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
 
+	atomic_t _mapcount;
 	atomic_t _refcount;
 };
 
