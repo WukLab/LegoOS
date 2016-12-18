@@ -128,6 +128,11 @@ extern unsigned long max_pfn_mapped;
 /* highest pfn of this machine */
 extern unsigned long max_pfn;
 
+/* Defined in mm/page_alloc.c */
+extern unsigned long totalram_pages;
+extern unsigned long totalreserve_pages;
+
+/* Defined in mm/init-mm.c */
 extern struct mm_struct init_mm;
 
 void __init free_area_init_nodes(unsigned long *max_zone_pfn);
@@ -163,5 +168,10 @@ static inline void page_mapcount_reset(struct page *page)
 {
 	atomic_set(&(page)->_mapcount, -1);
 }
+
+void reserve_bootmem_region(phys_addr_t start, phys_addr_t end);
+
+void __free_pages_bootmem(struct page *page, unsigned long pfn,
+			unsigned int order);
 
 #endif /* _LEGO_MM_H_ */

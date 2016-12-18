@@ -22,6 +22,9 @@ static unsigned long nr_kernel_pages;
 static unsigned long nr_all_pages;
 static unsigned long dma_reserve;
 
+unsigned long totalram_pages __read_mostly;
+unsigned long totalreserve_pages __read_mostly;
+
 /* The highest pfn that mem_map is managing */
 unsigned long highest_memmap_pfn __read_mostly;
 
@@ -504,4 +507,55 @@ void __init memory_init(void)
 {
 	/* Will call free_area_init_nodes() inside */
 	arch_zone_init();
+
+	/* Put all avaiable memory to allocator */
+	free_all_bootmem();
+}
+
+static void __init __free_pages_boot_core(struct page *page, unsigned int order)
+{
+/*
+	unsigned int nr_pages = 1 << order;
+	struct page *p = page;
+	unsigned int loop;
+
+	prefetchw(p);
+	for (loop = 0; loop < (nr_pages - 1); loop++, p++) {
+		prefetchw(p + 1);
+		__ClearPageReserved(p);
+		set_page_count(p, 0);
+	}
+	__ClearPageReserved(p);
+	set_page_count(p, 0);
+
+	page_zone(page)->managed_pages += nr_pages;
+	set_page_refcounted(page);
+	__free_pages(page, order);
+*/
+}
+
+/*
+ * Initialised pages do not have PageReserved set. This function is
+ * called for each range allocated by the bootmem allocator and
+ * marks the pages PageReserved. The remaining valid pages are later
+ * sent to the buddy page allocator.
+ */
+void __init reserve_bootmem_region(phys_addr_t start, phys_addr_t end)
+{
+	unsigned long start_pfn = PFN_DOWN(start);
+	unsigned long end_pfn = PFN_UP(end);
+
+	for (; start_pfn < end_pfn; start_pfn++) {
+		if (pfn_valid(start_pfn)) {
+			struct page *page = pfn_to_page(start_pfn);
+
+			SetPageReserved(page);
+		}
+	}
+}
+
+void __init __free_pages_bootmem(struct page *page, unsigned long pfn,
+				unsigned int order)
+{
+	return __free_pages_boot_core(page, order);
 }
