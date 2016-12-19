@@ -13,7 +13,9 @@
 /*
  * MM Debug Related
  */
-#define VM_BUG_ON(cond) BUG_ON(cond)
+#define VM_WARN_ON(cond)	WARN_ON(cond)
+#define VM_WARN_ON_ONCE(cond)	WARN_ON_ONCE(cond)
+#define VM_BUG_ON(cond)		BUG_ON(cond)
 #define VM_BUG_ON_PAGE(cond, page)					\
 	do {								\
 		if (unlikely(cond)) {					\

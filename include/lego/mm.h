@@ -17,9 +17,11 @@
 #include <lego/gfp.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>
-#include <lego/mm_debug.h>
+#include <lego/nodemask.h>
+
 #include <lego/mm_zone.h>
 #include <lego/mm_types.h>
+#include <lego/mm_debug.h>
 #include <lego/memory_model.h>
 #include <lego/page-flags.h>
 #include <lego/page-flags-layout.h>
@@ -235,9 +237,66 @@ void free_pages(unsigned long addr, unsigned int order);
 #define __free_page(page) __free_pages((page), 0)
 #define free_page(addr) free_pages((addr), 0)
 
-struct page *alloc_pages(gfp_t gfp_mask, unsigned int order);
+static inline int gfp_zonelist(gfp_t flags)
+{
+#ifdef CONFIG_NUMA
+	if (unlikely(flags & __GFP_THISNODE))
+		return ZONELIST_NOFALLBACK;
+#endif
+	return ZONELIST_FALLBACK;
+}
 
-#define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0)
+/*
+ * We get the zone list from the current node and the gfp_mask.
+ * This zone list contains a maximum of MAXNODES*MAX_NR_ZONES zones.
+ * There are two zonelists per node, one for all zones with memory and
+ * one containing just zones from the node the zonelist belongs to.
+ */
+static inline struct zonelist *node_zonelist(int nid, gfp_t flags)
+{
+	return NODE_DATA(nid)->node_zonelists + gfp_zonelist(flags);
+}
+
+struct page *
+__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
+		       struct zonelist *zonelist, nodemask_t *nodemask);
+
+static __always_inline struct page *
+__alloc_pages(gfp_t gfp_mask, unsigned int order,
+		struct zonelist *zonelist)
+{
+	return __alloc_pages_nodemask(gfp_mask, order, zonelist, NULL);
+}
+
+/*
+ * Allocate pages, preferring the node given as nid. The node must be valid and
+ * online. For more general interface, see alloc_pages_node().
+ */
+static __always_inline struct page *
+__alloc_pages_node(int nid, gfp_t gfp_mask, unsigned int order)
+{
+	VM_BUG_ON(nid < 0 || nid >= MAX_NUMNODES);
+	VM_WARN_ON(!node_online(nid));
+
+	return __alloc_pages(gfp_mask, order, node_zonelist(nid, gfp_mask));
+}
+
+/*
+ * Allocate pages, preferring the node given as nid. When nid == NUMA_NO_NODE,
+ * prefer the current CPU's closest node. Otherwise node must be valid and
+ * online.
+ */
+static __always_inline struct page *
+alloc_pages_node(int nid, gfp_t gfp_mask, unsigned int order)
+{
+	if (nid == NUMA_NO_NODE)
+		nid = 0;
+	return __alloc_pages_node(nid, gfp_mask, order);
+}
+
+/* TODO: Use current node instead of NUMA_NO_NODE */
+#define alloc_pages(gfp_mask, order)	alloc_pages_node(NUMA_NO_NODE, gfp_mask, order)
+#define alloc_page(gfp_mask)		alloc_pages(gfp_mask, 0)
 
 /*
  * virt_to_page(kaddr) returns a valid pointer if and only if

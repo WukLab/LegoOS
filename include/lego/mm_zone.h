@@ -157,12 +157,70 @@ struct zone {
 	spinlock_t		lock;
 };
 
+static inline unsigned long zone_end_pfn(const struct zone *zone)
+{
+	return zone->zone_start_pfn + zone->spanned_pages;
+}
+
+static inline bool zone_spans_pfn(const struct zone *zone, unsigned long pfn)
+{
+	return zone->zone_start_pfn <= pfn && pfn < zone_end_pfn(zone);
+}
+
+static inline bool zone_is_empty(struct zone *zone)
+{
+	return zone->spanned_pages == 0;
+}
+
+/* Maximum number of zones on a zonelist */
+#define MAX_ZONES_PER_ZONELIST (MAX_NUMNODES * MAX_NR_ZONES)
+
+enum {
+	ZONELIST_FALLBACK,	/* zonelist with fallback */
+#ifdef CONFIG_NUMA
+	/*
+	 * The NUMA zonelists are doubled because we need zonelists that
+	 * restrict the allocations to a single node for __GFP_THISNODE.
+	 */
+	ZONELIST_NOFALLBACK,	/* zonelist without fallback (__GFP_THISNODE) */
+#endif
+	MAX_ZONELISTS
+};
+
+/*
+ * This struct contains information about a zone in a zonelist. It is stored
+ * here to avoid dereferences into large structures and lookups of tables
+ */
+struct zoneref {
+	struct zone *zone;	/* Pointer to actual zone */
+	int zone_idx;		/* zone_idx(zoneref->zone) */
+};
+
+/*
+ * One allocation request operates on a zonelist. A zonelist
+ * is a list of zones, the first one is the 'goal' of the
+ * allocation, the other zones are fallback zones, in decreasing
+ * priority.
+ *
+ * To speed the reading of the zonelist, the zonerefs contain the zone index
+ * of the entry being read. Helper functions to access information given
+ * a struct zoneref are
+ *
+ * zonelist_zone()	- Return the struct zone * for an entry in _zonerefs
+ * zonelist_zone_idx()	- Return the index of the zone for an entry
+ * zonelist_node_idx()	- Return the index of the node for an entry
+ */
+struct zonelist {
+	struct zoneref _zonerefs[MAX_ZONES_PER_ZONELIST + 1];
+};
+
 /*
  * On NUMA machines, each NUMA node would have a pg_data_t to describe
  * it's memory layout.
  */
 typedef struct pglist_data {
 	struct zone node_zones[MAX_NR_ZONES];
+	struct zonelist node_zonelists[MAX_ZONELISTS];
 	int nr_zones;
 	struct page *node_mem_map;
 	unsigned long node_start_pfn;
@@ -171,6 +229,9 @@ typedef struct pglist_data {
 						   range, including holes */
 	int node_id;
 } pg_data_t;
+
+#define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)
+#define node_spanned_pages(nid)	(NODE_DATA(nid)->node_spanned_pages)
 
 static inline unsigned long pgdat_end_pfn(pg_data_t *pgdat)
 {
@@ -182,6 +243,13 @@ static inline bool pgdat_is_empty(pg_data_t *pgdat)
 	return !pgdat->node_start_pfn && !pgdat->node_spanned_pages;
 }
 
+static inline int zone_id(const struct zone *zone)
+{
+	struct pglist_data *pgdat = zone->zone_pgdat;
+
+	return zone - pgdat->node_zones;
+}
+
 #ifndef CONFIG_NUMA
 extern struct pglist_data contig_page_data;
 #define NODE_DATA(nid)		(&contig_page_data)
@@ -190,6 +258,164 @@ extern struct pglist_data contig_page_data;
 extern struct pglist_data *node_data[];
 #define NODE_DATA(nid)		(node_data[nid])
 #endif
+
+/*
+ * Returns true if a zone has pages managed by the buddy allocator.
+ * All the reclaim decisions have to use this function rather than
+ * populated_zone(). If the whole zone is reserved then we can easily
+ * end up with populated_zone() && !managed_zone().
+ */
+static inline bool managed_zone(struct zone *zone)
+{
+	return zone->managed_pages;
+}
+
+/*
+ * zone_idx() returns 0 for the ZONE_DMA zone, 1 for the ZONE_NORMAL zone, etc.
+ */
+#define zone_idx(zone)		((zone) - (zone)->zone_pgdat->node_zones)
+
+static inline struct zone *zonelist_zone(struct zoneref *zoneref)
+{
+	return zoneref->zone;
+}
+
+static inline int zonelist_zone_idx(struct zoneref *zoneref)
+{
+	return zoneref->zone_idx;
+}
+
+static inline int zonelist_node_idx(struct zoneref *zoneref)
+{
+#ifdef CONFIG_NUMA
+	/* zone_to_nid not available in this context */
+	return zoneref->zone->node;
+#else
+	return 0;
+#endif
+}
+
+static inline int zref_in_nodemask(struct zoneref *zref, nodemask_t *nodes)
+{
+#ifdef CONFIG_NUMA
+	return node_isset(zonelist_node_idx(zref), *nodes);
+#else
+	return 1;
+#endif
+}
+
+/* Returns the next zone at or below highest_zoneidx in a zonelist */
+static inline struct zoneref *
+__next_zones_zonelist(struct zoneref *z, enum zone_type highest_zoneidx,
+		      nodemask_t *nodes)
+{
+	/*
+	 * Find the next suitable zone to use for the allocation.
+	 * Only filter based on nodemask if it's set
+	 */
+	if (likely(nodes == NULL))
+		while (zonelist_zone_idx(z) > highest_zoneidx)
+			z++;
+	else
+		while (zonelist_zone_idx(z) > highest_zoneidx ||
+				(z->zone && !zref_in_nodemask(z, nodes)))
+			z++;
+
+	return z;
+}
+
+/**
+ * next_zones_zonelist
+ *
+ *	- Returns the next zone at or below highest_zoneidx within the allowed
+ *	nodemask using a cursor within a zonelist as a starting point
+ *
+ * @z - The cursor used as a starting point for the search
+ * @highest_zoneidx - The zone index of the highest zone to return
+ * @nodes - An optional nodemask to filter the zonelist with
+ *
+ * This function returns the next zone at or below a given zone index that is
+ * within the allowed nodemask using a cursor as the starting point for the
+ * search. The zoneref returned is a cursor that represents the current zone
+ * being examined. It should be advanced by one before calling
+ * next_zones_zonelist again.
+ */
+static __always_inline struct zoneref *next_zones_zonelist(struct zoneref *z,
+					enum zone_type highest_zoneidx,
+					nodemask_t *nodes)
+{
+	if (likely(!nodes && zonelist_zone_idx(z) <= highest_zoneidx))
+		return z;
+	return __next_zones_zonelist(z, highest_zoneidx, nodes);
+}
+
+/**
+ * first_zones_zonelist
+ *
+ *	- Returns the first zone at or below highest_zoneidx within
+ *	  the allowed nodemask in a zonelist
+ *
+ * @zonelist - The zonelist to search for a suitable zone
+ * @highest_zoneidx - The zone index of the highest zone to return
+ * @nodes - An optional nodemask to filter the zonelist with
+ * @zone - The first suitable zone found is returned via this parameter
+ *
+ * This function returns the first zone at or below a given zone index that is
+ * within the allowed nodemask. The zoneref returned is a cursor that can be
+ * used to iterate the zonelist with next_zones_zonelist by advancing it by
+ * one before calling.
+ */
+static inline struct zoneref *first_zones_zonelist(struct zonelist *zonelist,
+					enum zone_type highest_zoneidx,
+					nodemask_t *nodes)
+{
+	return next_zones_zonelist(zonelist->_zonerefs,
+							highest_zoneidx, nodes);
+}
+
+/**
+ * for_each_zone_zonelist_nodemask
+ *
+ *	- Helper macro to iterate over valid zones in a zonelist at or
+ *	  below a given zone index and within a nodemask
+ *
+ * @zone - The current zone in the iterator
+ * @z - The current pointer within zonelist->zones being iterated
+ * @zlist - The zonelist being iterated
+ * @highidx - The zone index of the highest zone to return
+ * @nodemask - Nodemask allowed by the allocator
+ *
+ * This iterator iterates though all zones at or below a given zone index and
+ * within a given nodemask
+ */
+#define for_each_zone_zonelist_nodemask(zone, z, zlist, highidx, nodemask)	\
+	for (z = first_zones_zonelist(zlist, highidx, nodemask),		\
+		zone = zonelist_zone(z);					\
+	     zone;								\
+	     z = next_zones_zonelist(++z, highidx, nodemask),			\
+		zone = zonelist_zone(z))
+
+#define for_next_zone_zonelist_nodemask(zone, z, zlist, highidx, nodemask) \
+	for (zone = z->zone;	\
+		zone;							\
+		z = next_zones_zonelist(++z, highidx, nodemask),	\
+			zone = zonelist_zone(z))
+
+/**
+ * for_each_zone_zonelist
+ *
+ *	- Helper macro to iterate over valid zones in a zonelist
+ *	  at or below a given zone index
+ *
+ * @zone - The current zone in the iterator
+ * @z - The current pointer within zonelist->zones being iterated
+ * @zlist - The zonelist being iterated
+ * @highidx - The zone index of the highest zone to return
+ *
+ * This iterator iterates though all zones at or below a given zone index.
+ */
+#define for_each_zone_zonelist(zone, z, zlist, highidx) \
+	for_each_zone_zonelist_nodemask(zone, z, zlist, highidx, NULL)
 
 #endif /* __GENERATING_BOUNDS_H */
 #endif /* _LEGO_MM_ZONE_H_ */

@@ -70,7 +70,8 @@ asmlinkage void __init start_kernel(void)
 	setup_arch();
 
 	/*
-	 * Build all memory managment data structures:
+	 * Build all memory managment data structures,
+	 * buddy allocator is avaiable afterwards:
 	 */
 	memory_init();
 

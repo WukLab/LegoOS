@@ -506,15 +506,6 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn)
 	}
 }
 
-void __init memory_init(void)
-{
-	/* Will call free_area_init_nodes() inside */
-	arch_zone_init();
-
-	/* Put all avaiable memory to allocator */
-	free_all_bootmem();
-}
-
 /*
  * Locate the struct page for both the matching buddy in our
  * pair (buddy1) and the combined O(n+1) page they form (page).
@@ -663,10 +654,146 @@ void free_pages(unsigned long addr, unsigned int order)
 	}
 }
 
-struct page *alloc_pages(gfp_t gfp_mask, unsigned int order)
+static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags)
+{
+	set_page_private(page, 0);
+	set_page_refcounted(page);
+}
+
+static inline void expand(struct zone *zone, struct page *page,
+	int low, int high, struct free_area *area)
+{
+	unsigned long size = 1 << high;
+
+	while (high > low) {
+		area--;
+		high--;
+		size >>= 1;
+
+		list_add(&page[size].lru, &area->free_list);
+		area->nr_free++;
+		set_page_order(&page[size], high);
+	}
+}
+
+/* Remove an element from the buddy allocator from the fallback list */
+static inline struct page *
+__rmqueue_fallback(struct zone *zone, unsigned int order)
+{
+	return NULL;
+}
+
+/*
+ * Go through the free lists for the given migratetype and remove
+ * the smallest available page from the freelists
+ */
+static inline
+struct page *__rmqueue_smallest(struct zone *zone, unsigned int order)
+{
+	unsigned int current_order;
+	struct free_area *area;
+	struct page *page;
+
+	/* Find a page of the appropriate size in the preferred list */
+	for (current_order = order; current_order < MAX_ORDER; ++current_order) {
+		area = &(zone->free_area[current_order]);
+		page = list_first_entry_or_null(&area->free_list, struct page, lru);
+		if (!page)
+			continue;
+		list_del(&page->lru);
+		rmv_page_order(page);
+		area->nr_free--;
+		expand(zone, page, order, current_order, area);
+		return page;
+	}
+
+	return NULL;
+}
+
+/*
+ * Do the hard work of removing an element from the buddy allocator.
+ * Call me with the zone->lock already held.
+ */
+static inline struct page *__rmqueue(struct zone *zone, unsigned int order)
+{
+	struct page *page;
+	
+	page = __rmqueue_smallest(zone, order);
+	if (unlikely(!page))
+		page = __rmqueue_fallback(zone, order);
+	return page;
+}
+
+static inline
+struct page *buffered_rmqueue(struct zone *zone, unsigned int order,
+			      gfp_t gfp_flags)
+{
+	unsigned long flags;
+	struct page *page;
+
+	/*
+	 * We most definitely don't want callers attempting to
+	 * allocate greater than order-1 page units with __GFP_NOFAIL.
+	 */
+	WARN_ON_ONCE((gfp_flags & __GFP_NOFAIL) && (order > 1));
+
+	spin_lock_irqsave(&zone->lock, flags);
+	page = __rmqueue(zone, order);
+	spin_unlock(&zone->lock);
+	if (!page)
+		goto failed;
+
+	local_irq_restore(flags);
+	return page;
+
+failed:
+	local_irq_restore(flags);
+	return NULL;
+}
+
+static struct page *
+get_page_from_freelist(gfp_t gfp_mask, unsigned int order,
+		struct zonelist *zonelist, nodemask_t *nodemask)
+{
+	struct zone *zone;
+	struct zoneref *z;
+	enum zone_type high_zoneidx;
+
+	high_zoneidx = gfp_zone(gfp_mask);
+
+	for_each_zone_zonelist_nodemask(zone, z, zonelist, high_zoneidx, nodemask) {
+		struct page *page;
+
+		page = buffered_rmqueue(zone, order, gfp_mask);
+		if (page) {
+			prep_new_page(page, order, gfp_mask);
+			return page;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * The core of zoned buddy allocator..
+ */
+struct page *
+__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
+		       struct zonelist *zonelist, nodemask_t *nodemask)
 {
 	struct page *page;
 
+	/*
+	 * Check the zones suitable for the gfp_mask contain at least one
+	 * valid zone. It's possible to have an empty zonelist as a result
+	 * of __GFP_THISNODE and a memoryless node
+	 */
+	if (unlikely(!zonelist->_zonerefs->zone))
+		return NULL;
+
+	page = get_page_from_freelist(gfp_mask, order, zonelist, nodemask);
+	if (unlikely(!page))
+		panic("Out Of Memory");
 	return page;
 }
 
@@ -709,4 +836,171 @@ void __init __free_pages_bootmem(struct page *page, unsigned long pfn,
 				unsigned int order)
 {
 	return __free_pages_boot_core(page, order);
+}
+
+/*
+ * zonelist_order:
+ * 0 = automatic detection of better ordering.
+ * 1 = order by ([node] distance, -zonetype)
+ * 2 = order by (-zonetype, [node] distance)
+ *
+ * If not NUMA, ZONELIST_ORDER_ZONE and ZONELIST_ORDER_NODE will create
+ * the same zonelist. So only NUMA can configure this param.
+ */
+#define ZONELIST_ORDER_DEFAULT  0
+#define ZONELIST_ORDER_NODE     1
+#define ZONELIST_ORDER_ZONE     2
+
+static void zoneref_set_zone(struct zone *zone, struct zoneref *zoneref)
+{
+	zoneref->zone = zone;
+	zoneref->zone_idx = zone_idx(zone);
+}
+
+/*
+ * Builds allocation fallback zone lists.
+ *
+ * Add all populated zones of a node to the zonelist.
+ */
+static int build_zonelists_node(pg_data_t *pgdat, struct zonelist *zonelist,
+				int nr_zones)
+{
+	struct zone *zone;
+	enum zone_type zone_type = MAX_NR_ZONES;
+
+	do {
+		zone_type--;
+		zone = pgdat->node_zones + zone_type;
+		if (managed_zone(zone)) {
+			zoneref_set_zone(zone,
+				&zonelist->_zonerefs[nr_zones++]);
+		}
+	} while (zone_type);
+
+	return nr_zones;
+}
+
+#ifdef CONFIG_NUMA
+/*
+ * Build zonelists ordered by node and zones within node.
+ * This results in maximum locality--normal zone overflows into local
+ * DMA zone, if any--but risks exhausting DMA zone.
+ */
+static void build_zonelists_in_node_order(pg_data_t *pgdat, int node)
+{
+	int j;
+	struct zonelist *zonelist;
+
+	zonelist = &pgdat->node_zonelists[ZONELIST_FALLBACK];
+	for (j = 0; zonelist->_zonerefs[j].zone != NULL; j++)
+		;
+	j = build_zonelists_node(NODE_DATA(node), zonelist, j);
+	zonelist->_zonerefs[j].zone = NULL;
+	zonelist->_zonerefs[j].zone_idx = 0;
+}
+
+/*
+ * Build gfp_thisnode zonelists
+ */
+static void build_thisnode_zonelists(pg_data_t *pgdat)
+{
+	int j;
+	struct zonelist *zonelist;
+
+	zonelist = &pgdat->node_zonelists[ZONELIST_NOFALLBACK];
+	j = build_zonelists_node(pgdat, zonelist, 0);
+	zonelist->_zonerefs[j].zone = NULL;
+	zonelist->_zonerefs[j].zone_idx = 0;
+}
+
+static void build_zonelists(pg_data_t *pgdat)
+{
+	int i, node;
+	struct zonelist *zonelist;
+
+	/* initialize zonelists */
+	for (i = 0; i < MAX_ZONELISTS; i++) {
+		zonelist = pgdat->node_zonelists + i;
+		zonelist->_zonerefs[0].zone = NULL;
+		zonelist->_zonerefs[0].zone_idx = 0;
+	}
+
+	/*
+	 * TODO:
+	 *
+	 * Different NODES *should* use different orders of node
+	 * so zonelists inside each pgdat will have different orders.
+	 *
+	 * As we only use for_each_online_node, then all allocation will
+	 * allocate from node 0's memory first.
+	 *
+	 * At least it should base on order of nodes!
+	 *
+	 * Linux also base on numa_distance
+	 */
+	for_each_online_node(node) {
+		build_zonelists_in_node_order(pgdat, node);
+	}
+
+	build_thisnode_zonelists(pgdat);
+}
+#else
+static void build_zonelists(pg_data_t *pgdat)
+{
+	int node, local_node;
+	enum zone_type j;
+	struct zonelist *zonelist;
+
+	local_node = pgdat->node_id;
+
+	zonelist = &pgdat->node_zonelists[ZONELIST_FALLBACK];
+	j = build_zonelists_node(pgdat, zonelist, 0);
+
+	/*
+	 * Now we build the zonelist so that it contains the zones
+	 * of all the other nodes.
+	 * We don't want to pressure a particular node, so when
+	 * building the zones for node N, we make sure that the
+	 * zones coming right after the local ones are those from
+	 * node N+1 (modulo N)
+	 */
+	for (node = local_node + 1; node < MAX_NUMNODES; node++) {
+		if (!node_online(node))
+			continue;
+		j = build_zonelists_node(NODE_DATA(node), zonelist, j);
+	}
+	for (node = 0; node < local_node; node++) {
+		if (!node_online(node))
+			continue;
+		j = build_zonelists_node(NODE_DATA(node), zonelist, j);
+	}
+
+	zonelist->_zonerefs[j].zone = NULL;
+	zonelist->_zonerefs[j].zone_idx = 0;
+}
+#endif
+
+static void __init build_all_zonelists(void)
+{
+	int nid;
+	pg_data_t *pgdat;
+
+	for_each_online_node(nid) {
+		pgdat = NODE_DATA(nid);
+		build_zonelists(pgdat);
+	}
+}
+
+void __init memory_init(void)
+{
+	/* Will call free_area_init_nodes() inside */
+	arch_zone_init();
+
+	/*
+	 * Build the allocation node + zone list
+	 */
+	build_all_zonelists();
+
+	/* Put all avaiable memory to allocator */
+	free_all_bootmem();
 }
