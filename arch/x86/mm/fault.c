@@ -13,6 +13,7 @@
 #include <asm/ptrace.h>
 #include <asm/current.h>
 
+#include <lego/mm.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
 

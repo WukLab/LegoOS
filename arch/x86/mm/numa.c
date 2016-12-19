@@ -10,6 +10,7 @@
 #include <asm/apic.h>
 #include <asm/numa.h>
 
+#include <lego/mm.h>
 #include <lego/acpi.h>
 #include <lego/numa.h>
 #include <lego/kernel.h>

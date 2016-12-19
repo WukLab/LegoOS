@@ -300,6 +300,32 @@ alloc_pages_node(int nid, gfp_t gfp_mask, unsigned int order)
 #define _alloc_page(gfp_mask)		alloc_pages(gfp_mask, 0)
 #define alloc_page()			_alloc_page(GFP_KERNEL)
 
+/**
+ * page_to_virt	-	Get the virtual address of this page
+ * @x: the page in question
+ * RETURN: the kernel virtual address
+ */
+#define page_to_virt(x)	__va(PFN_PHYS(page_to_pfn(x)))
+
+static inline unsigned long
+__get_free_pages(gfp_t gfp_mask, unsigned int order)
+{
+	struct page *page;
+
+	page = alloc_pages(gfp_mask, order);
+	if (unlikely(!page))
+		return 0;
+	return (unsigned long)page_to_virt(page);
+}
+
+static inline unsigned long
+get_zeroed_page(gfp_t gfp_mask)
+{
+	return __get_free_pages(gfp_mask | __GFP_ZERO, 0);
+}
+
+#define __get_free_page(gfp_mask)	__get_free_pages((gfp_mask), 0)
+
 /*
  * virt_to_page(kaddr) returns a valid pointer if and only if
  * virt_addr_valid(kaddr) returns true.
@@ -331,6 +357,33 @@ static inline bool virt_addr_valid(unsigned long x)
 static inline int phys_addr_valid(resource_size_t addr)
 {
 	return !(addr >> default_cpu_info.x86_phys_bits);
+}
+
+int __pud_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address);
+int __pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address);
+
+int __pte_alloc(struct mm_struct *mm, pmd_t *pmd, unsigned long address);
+int __pte_alloc_kernel(pmd_t *pmd, unsigned long address);
+
+static inline pud_t *
+pud_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
+{
+	return (unlikely(pgd_none(*pgd)) && __pud_alloc(mm, pgd, address))?
+		NULL : pud_offset(pgd, address);
+}
+
+static inline pmd_t *
+pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
+{
+	return (unlikely(pud_none(*pud)) && __pmd_alloc(mm, pud, address))?
+		NULL : pmd_offset(pud, address);
+}
+
+static inline pte_t *
+pte_alloc_kernel(pmd_t *pmd, unsigned long address)
+{
+	return (unlikely(pmd_none(*pmd)) && __pte_alloc_kernel(pmd, address))?
+		NULL : pte_offset_kernel(pmd, address);
 }
 
 #endif /* _LEGO_MM_H_ */

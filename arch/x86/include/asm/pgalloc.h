@@ -12,6 +12,8 @@
 
 #include <asm/pgtable.h>
 
+struct mm_struct;
+
 static inline void pmd_populate_kernel(struct mm_struct *mm,
 				       pmd_t *pmd, pte_t *pte)
 {
@@ -29,5 +31,17 @@ static inline void pgd_populate(struct mm_struct *mm, pgd_t *pgd, pud_t *pud)
 {
 	pgd_set(pgd, __pgd(_PAGE_TABLE | __pa(pud)));
 }
+
+pte_t *pte_alloc_one_kernel(struct mm_struct *, unsigned long);
+struct page *pte_alloc_one(struct mm_struct *, unsigned long);
+
+void pte_free_kernel(struct mm_struct *mm, pte_t *pte);
+void pte_free(struct mm_struct *mm, struct page *pte);
+
+pud_t *pud_alloc_one(struct mm_struct *mm, unsigned long addr);
+pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr);
+
+void pmd_free(struct mm_struct *mm, pmd_t *pmd);
+void pud_free(struct mm_struct *mm, pud_t *pud);
 
 #endif /* _ASM_X86_PGALLOC_H */

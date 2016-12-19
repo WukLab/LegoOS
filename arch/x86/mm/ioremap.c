@@ -15,6 +15,7 @@
 #include <asm/pgtable.h>
 #include <asm/tlbflush.h>
 
+#include <lego/mm.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/early_ioremap.h>
@@ -206,6 +207,83 @@ void iounmap(volatile void __iomem *addr)
 {
 }
 
+static int ioremap_pte_range(pmd_t *pmd, unsigned long addr,
+		unsigned long end, phys_addr_t phys_addr, pgprot_t prot)
+{
+	pte_t *pte;
+	u64 pfn;
+
+	pfn = phys_addr >> PAGE_SHIFT;
+	pte = pte_alloc_kernel(pmd, addr);
+	if (!pte)
+		return -ENOMEM;
+	do {
+		BUG_ON(!pte_none(*pte));
+		pte_set(pte, pfn_pte(pfn, prot));
+		pfn++;
+	} while (pte++, addr += PAGE_SIZE, addr != end);
+	return 0;
+}
+
+static inline int ioremap_pmd_range(pud_t *pud, unsigned long addr,
+		unsigned long end, phys_addr_t phys_addr, pgprot_t prot)
+{
+	pmd_t *pmd;
+	unsigned long next;
+
+	phys_addr -= addr;
+	pmd = pmd_alloc(&init_mm, pud, addr);
+	if (!pmd)
+		return -ENOMEM;
+	do {
+		next = pmd_addr_end(addr, end);
+		if (ioremap_pte_range(pmd, addr, next, phys_addr + addr, prot))
+			return -ENOMEM;
+	} while (pmd++, addr = next, addr != end);
+	return 0;
+}
+
+static inline int ioremap_pud_range(pgd_t *pgd, unsigned long addr,
+		unsigned long end, phys_addr_t phys_addr, pgprot_t prot)
+{
+	pud_t *pud;
+	unsigned long next;
+
+	phys_addr -= addr;
+	pud = pud_alloc(&init_mm, pgd, addr);
+	if (!pud)
+		return -ENOMEM;
+	do {
+		next = pud_addr_end(addr, end);
+		if (ioremap_pmd_range(pud, addr, next, phys_addr + addr, prot))
+			return -ENOMEM;
+	} while (pud++, addr = next, addr != end);
+	return 0;
+}
+
+static int ioremap_page_range(unsigned long addr, unsigned long end,
+			      phys_addr_t phys_addr, pgprot_t prot)
+{
+	pgd_t *pgd;
+	unsigned long start;
+	unsigned long next;
+	int err;
+
+	BUG_ON(addr >= end);
+
+	start = addr;
+	phys_addr -= addr;
+	pgd = pgd_offset_k(addr);
+	do {
+		next = pgd_addr_end(addr, end);
+		err = ioremap_pud_range(pgd, addr, next, phys_addr+addr, prot);
+		if (err)
+			break;
+	} while (pgd++, addr = next, addr != end);
+
+	return err;
+}
+
 /*
  * Remap an arbitrary physical address space into the kernel virtual
  * address space. It transparently creates kernel huge I/O mapping when
@@ -223,9 +301,11 @@ void iounmap(volatile void __iomem *addr)
 static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 		unsigned long size, enum page_cache_mode pcm, void *caller)
 {
+	unsigned long offset, vaddr;
 	void __iomem *ret_addr;
 	unsigned long last_addr;
 	unsigned long pfn, last_pfn;
+	pgprot_t prot;
 
 	/* Don't allow wraparound or zero size */
 	last_addr = phys_addr + size - 1;
@@ -255,7 +335,44 @@ static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 		return NULL;
 	}
 
-	ret_addr = NULL;
+	/* Mappings have to be page-aligneg: */
+	offset = phys_addr & ~PAGE_MASK;
+	phys_addr &= PHYSICAL_PAGE_MASK;
+	size = PAGE_ALIGN(last_addr+1) - phys_addr;
+
+	prot = PAGE_KERNEL_IO;
+	switch (pcm) {
+	case _PAGE_CACHE_MODE_UC:
+	default:
+		prot = __pgprot(pgprot_val(prot) |
+				cachemode2protval(_PAGE_CACHE_MODE_UC));
+		break;
+	case _PAGE_CACHE_MODE_UC_MINUS:
+		prot = __pgprot(pgprot_val(prot) |
+				cachemode2protval(_PAGE_CACHE_MODE_UC_MINUS));
+		break;
+	case _PAGE_CACHE_MODE_WC:
+		prot = __pgprot(pgprot_val(prot) |
+				cachemode2protval(_PAGE_CACHE_MODE_WC));
+		break;
+	case _PAGE_CACHE_MODE_WT:
+		prot = __pgprot(pgprot_val(prot) |
+				cachemode2protval(_PAGE_CACHE_MODE_WT));
+		break;
+	case _PAGE_CACHE_MODE_WB:
+		break;
+	}
+
+	/* TODO: find a vaddr in kernel va */
+	vaddr = 0;
+
+	if (ioremap_page_range(vaddr, vaddr + size, phys_addr, prot)) {
+		ret_addr = NULL;
+		goto out;
+	}
+
+	ret_addr = (void __iomem *) (vaddr + offset);
+out:
 	return ret_addr;
 }
 
