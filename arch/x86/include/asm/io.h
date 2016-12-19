@@ -10,6 +10,8 @@
 #ifndef _ASM_X86_IO_H_
 #define _ASM_X86_IO_H_
 
+#include <lego/resource.h>
+
 /*
  * This file contains the definitions for the x86 IO instructions
  * inb/inw/inl/outb/outw/outl and the "string versions" of the same
@@ -74,5 +76,35 @@ BUILD_IO_OPS(w, w, short)
 BUILD_IO_OPS(l, , int)
 
 #define IO_SPACE_LIMIT	0xffff
+
+/**
+ * ioremap     -   map bus memory into CPU space
+ * @offset:    bus address of the memory
+ * @size:      size of the resource to map
+ *
+ * ioremap performs a platform specific sequence of operations to
+ * make bus memory CPU accessible via the readb/readw/readl/writeb/
+ * writew/writel functions and the other mmio helpers. The returned
+ * address is not guaranteed to be usable directly as a virtual
+ * address.
+ *
+ * If the area you are trying to map is a PCI BAR you should have a
+ * look at pci_iomap().
+ */
+void __iomem *ioremap_nocache(resource_size_t offset, unsigned long size);
+void __iomem *ioremap_uc(resource_size_t offset, unsigned long size);
+void __iomem *ioremap_cache(resource_size_t offset, unsigned long size);
+void __iomem *ioremap_prot(resource_size_t offset, unsigned long size,
+				unsigned long prot_val);
+
+/*
+ * The default ioremap() behavior is non-cached:
+ */
+static inline void __iomem *ioremap(resource_size_t offset, unsigned long size)
+{
+	return ioremap_nocache(offset, size);
+}
+
+void iounmap(volatile void __iomem *addr);
 
 #endif /* _ASM_X86_IO_H_ */

@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <asm/io.h>
 #include <asm/asm.h>
 #include <asm/page.h>
 #include <asm/fixmap.h>
@@ -180,4 +181,158 @@ void __init early_ioremap_init(void)
 		printk(KERN_WARNING "FIX_BTMAP_BEGIN:     %d\n",
 		       FIX_BTMAP_BEGIN);
 	}
+}
+
+/**
+ * iounmap - Free a IO remapping
+ * @addr: virtual address from ioremap_*
+ *
+ * Caller must ensure there is only one unmapping for the same pointer.
+ */
+void iounmap(volatile void __iomem *addr)
+{
+}
+
+/*
+ * Remap an arbitrary physical address space into the kernel virtual
+ * address space. It transparently creates kernel huge I/O mapping when
+ * the physical address is aligned by a huge page size (1GB or 2MB) and
+ * the requested size is at least the huge page size.
+ *
+ * NOTE: MTRRs can override PAT memory types with a 4KB granularity.
+ * Therefore, the mapping code falls back to use a smaller page toward 4KB
+ * when a mapping range is covered by non-WB type of MTRRs.
+ *
+ * NOTE! We need to allow non-page-aligned mappings too: we will obviously
+ * have to convert them into an offset in a page-aligned mapping, but the
+ * caller shouldn't need to know that small detail.
+ */
+static void __iomem *__ioremap_caller(resource_size_t phys_addr,
+		unsigned long size, enum page_cache_mode pcm, void *caller)
+{
+	void __iomem *ret_addr;
+	unsigned long last_addr;
+
+	/* Don't allow wraparound or zero size */
+	last_addr = phys_addr + size - 1;
+	if (!size || last_addr < phys_addr)
+		return NULL;
+
+	ret_addr = NULL;
+	return ret_addr;
+}
+
+/**
+ * ioremap_nocache     -   map bus memory into CPU space
+ * @phys_addr:    bus address of the memory
+ * @size:      size of the resource to map
+ *
+ * ioremap_nocache performs a platform specific sequence of operations to
+ * make bus memory CPU accessible via the readb/readw/readl/writeb/
+ * writew/writel functions and the other mmio helpers. The returned
+ * address is not guaranteed to be usable directly as a virtual
+ * address.
+ *
+ * This version of ioremap ensures that the memory is marked uncachable
+ * on the CPU as well as honouring existing caching rules from things like
+ * the PCI bus. Note that there are other caches and buffers on many
+ * busses. In particular driver authors should read up on PCI writes
+ *
+ * It's useful if some control registers are in such an area and
+ * write combining or read caching is not desirable:
+ *
+ * Must be freed with iounmap.
+ */
+void __iomem *ioremap_nocache(resource_size_t phys_addr, unsigned long size)
+{
+	/*
+	 * Ideally, this should be:
+	 *	pat_enabled() ? _PAGE_CACHE_MODE_UC : _PAGE_CACHE_MODE_UC_MINUS;
+	 *
+	 * Till we fix all X drivers to use ioremap_wc(), we will use
+	 * UC MINUS. Drivers that are certain they need or can already
+	 * be converted over to strong UC can use ioremap_uc().
+	 */
+	enum page_cache_mode pcm = _PAGE_CACHE_MODE_UC_MINUS;
+
+	return __ioremap_caller(phys_addr, size, pcm,
+				__builtin_return_address(0));
+}
+
+/**
+ * ioremap_uc     -   map bus memory into CPU space as strongly uncachable
+ * @phys_addr:    bus address of the memory
+ * @size:      size of the resource to map
+ *
+ * ioremap_uc performs a platform specific sequence of operations to
+ * make bus memory CPU accessible via the readb/readw/readl/writeb/
+ * writew/writel functions and the other mmio helpers. The returned
+ * address is not guaranteed to be usable directly as a virtual
+ * address.
+ *
+ * This version of ioremap ensures that the memory is marked with a strong
+ * preference as completely uncachable on the CPU when possible. For non-PAT
+ * systems this ends up setting page-attribute flags PCD=1, PWT=1. For PAT
+ * systems this will set the PAT entry for the pages as strong UC.  This call
+ * will honor existing caching rules from things like the PCI bus. Note that
+ * there are other caches and buffers on many busses. In particular driver
+ * authors should read up on PCI writes.
+ *
+ * It's useful if some control registers are in such an area and
+ * write combining or read caching is not desirable:
+ *
+ * Must be freed with iounmap.
+ */
+void __iomem *ioremap_uc(resource_size_t phys_addr, unsigned long size)
+{
+	enum page_cache_mode pcm = _PAGE_CACHE_MODE_UC;
+
+	return __ioremap_caller(phys_addr, size, pcm,
+				__builtin_return_address(0));
+}
+
+/**
+ * ioremap_wc	-	map memory into CPU space write combined
+ * @phys_addr:	bus address of the memory
+ * @size:	size of the resource to map
+ *
+ * This version of ioremap ensures that the memory is marked write combining.
+ * Write combining allows faster writes to some hardware devices.
+ *
+ * Must be freed with iounmap.
+ */
+void __iomem *ioremap_wc(resource_size_t phys_addr, unsigned long size)
+{
+	return __ioremap_caller(phys_addr, size, _PAGE_CACHE_MODE_WC,
+					__builtin_return_address(0));
+}
+
+/**
+ * ioremap_wt	-	map memory into CPU space write through
+ * @phys_addr:	bus address of the memory
+ * @size:	size of the resource to map
+ *
+ * This version of ioremap ensures that the memory is marked write through.
+ * Write through stores data into memory while keeping the cache up-to-date.
+ *
+ * Must be freed with iounmap.
+ */
+void __iomem *ioremap_wt(resource_size_t phys_addr, unsigned long size)
+{
+	return __ioremap_caller(phys_addr, size, _PAGE_CACHE_MODE_WT,
+					__builtin_return_address(0));
+}
+
+void __iomem *ioremap_cache(resource_size_t phys_addr, unsigned long size)
+{
+	return __ioremap_caller(phys_addr, size, _PAGE_CACHE_MODE_WB,
+				__builtin_return_address(0));
+}
+
+void __iomem *ioremap_prot(resource_size_t phys_addr, unsigned long size,
+				unsigned long prot_val)
+{
+	return __ioremap_caller(phys_addr, size,
+				pgprot2cachemode(__pgprot(prot_val)),
+				__builtin_return_address(0));
 }

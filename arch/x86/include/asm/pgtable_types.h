@@ -342,6 +342,82 @@ enum pg_level {
 	PG_LEVEL_NUM
 };
 
-#endif /* __ASSEMBLY__ */
+/*
+ * The cache modes defined here are used to translate between pure SW usage
+ * and the HW defined cache mode bits and/or PAT entries.
+ *
+ * The resulting bits for PWT, PCD and PAT should be chosen in a way
+ * to have the WB mode at index 0 (all bits clear). This is the default
+ * right now and likely would break too much if changed.
+ */
+enum page_cache_mode {
+	_PAGE_CACHE_MODE_WB = 0,
+	_PAGE_CACHE_MODE_WC = 1,
+	_PAGE_CACHE_MODE_UC_MINUS = 2,
+	_PAGE_CACHE_MODE_UC = 3,
+	_PAGE_CACHE_MODE_WT = 4,
+	_PAGE_CACHE_MODE_WP = 5,
+	_PAGE_CACHE_MODE_NUM = 8
+};
 
+#define _PAGE_CACHE_MASK	(_PAGE_PAT | _PAGE_PCD | _PAGE_PWT)
+#define _PAGE_NOCACHE		(cachemode2protval(_PAGE_CACHE_MODE_UC))
+
+extern u16 __cachemode2pte_tbl[_PAGE_CACHE_MODE_NUM];
+extern u8 __pte2cachemode_tbl[8];
+
+#define __pte2cm_idx(cb)				\
+	((((cb) >> (_PAGE_BIT_PAT - 2)) & 4) |		\
+	 (((cb) >> (_PAGE_BIT_PCD - 1)) & 2) |		\
+	 (((cb) >> _PAGE_BIT_PWT) & 1))
+
+#define __cm_idx2pte(i)					\
+	((((i) & 4) << (_PAGE_BIT_PAT - 2)) |		\
+	 (((i) & 2) << (_PAGE_BIT_PCD - 1)) |		\
+	 (((i) & 1) << _PAGE_BIT_PWT))
+
+static inline unsigned long cachemode2protval(enum page_cache_mode pcm)
+{
+	if (likely(pcm == 0))
+		return 0;
+	return __cachemode2pte_tbl[pcm];
+}
+
+static inline pgprot_t cachemode2pgprot(enum page_cache_mode pcm)
+{
+	return __pgprot(cachemode2protval(pcm));
+}
+
+static inline enum page_cache_mode pgprot2cachemode(pgprot_t pgprot)
+{
+	unsigned long masked;
+
+	masked = pgprot_val(pgprot) & _PAGE_CACHE_MASK;
+	if (likely(masked == 0))
+		return 0;
+	return __pte2cachemode_tbl[__pte2cm_idx(masked)];
+}
+
+static inline pgprot_t pgprot_4k_2_large(pgprot_t pgprot)
+{
+	pgprotval_t val = pgprot_val(pgprot);
+	pgprot_t new;
+
+	pgprot_val(new) = (val & ~(_PAGE_PAT | _PAGE_PAT_LARGE)) |
+		((val & _PAGE_PAT) << (_PAGE_BIT_PAT_LARGE - _PAGE_BIT_PAT));
+	return new;
+}
+
+static inline pgprot_t pgprot_large_2_4k(pgprot_t pgprot)
+{
+	pgprotval_t val = pgprot_val(pgprot);
+	pgprot_t new;
+
+	pgprot_val(new) = (val & ~(_PAGE_PAT | _PAGE_PAT_LARGE)) |
+			  ((val & _PAGE_PAT_LARGE) >>
+			   (_PAGE_BIT_PAT_LARGE - _PAGE_BIT_PAT));
+	return new;
+}
+
+#endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_PGTABLE_TYPES_H_ */
