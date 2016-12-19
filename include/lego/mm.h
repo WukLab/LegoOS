@@ -12,6 +12,7 @@
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/processor.h>
 
 #include <lego/pfn.h>
 #include <lego/gfp.h>
@@ -324,6 +325,11 @@ static inline bool virt_addr_valid(unsigned long x)
 	}
 
 	return pfn_valid(x >> PAGE_SHIFT);
+}
+
+static inline int phys_addr_valid(resource_size_t addr)
+{
+	return !(addr >> default_cpu_info.x86_phys_bits);
 }
 
 #endif /* _LEGO_MM_H_ */

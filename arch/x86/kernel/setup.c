@@ -24,10 +24,12 @@
 #include <lego/mm.h>
 #include <lego/smp.h>
 #include <lego/acpi.h>
+#include <lego/sched.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/nodemask.h>
 #include <lego/memblock.h>
+#include <lego/resource.h>
 #include <lego/early_ioremap.h>
 
 /*
@@ -62,6 +64,60 @@ struct gdt_page gdt_page = { .gdt = {
 	[GDT_ENTRY_DEFAULT_USER_DS]	= GDT_ENTRY_INIT(0xc0f3, 0, 0xfffff),
 	[GDT_ENTRY_DEFAULT_USER_CS]	= GDT_ENTRY_INIT(0xa0fb, 0, 0xfffff),
 } };
+
+static struct resource data_resource = {
+	.name	= "Kernel data",
+	.start	= 0,
+	.end	= 0,
+	.flags	= IORESOURCE_BUSY | IORESOURCE_SYSTEM_RAM
+};
+
+static struct resource code_resource = {
+	.name	= "Kernel code",
+	.start	= 0,
+	.end	= 0,
+	.flags	= IORESOURCE_BUSY | IORESOURCE_SYSTEM_RAM
+};
+
+static struct resource bss_resource = {
+	.name	= "Kernel bss",
+	.start	= 0,
+	.end	= 0,
+	.flags	= IORESOURCE_BUSY | IORESOURCE_SYSTEM_RAM
+};
+
+static struct resource standard_io_resources[] = {
+	{ .name = "dma1", .start = 0x00, .end = 0x1f,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
+	{ .name = "pic1", .start = 0x20, .end = 0x21,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
+	{ .name = "timer0", .start = 0x40, .end = 0x43,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
+	{ .name = "timer1", .start = 0x50, .end = 0x53,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
+	{ .name = "keyboard", .start = 0x60, .end = 0x60,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
+	{ .name = "keyboard", .start = 0x64, .end = 0x64,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
+	{ .name = "dma page reg", .start = 0x80, .end = 0x8f,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
+	{ .name = "pic2", .start = 0xa0, .end = 0xa1,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
+	{ .name = "dma2", .start = 0xc0, .end = 0xdf,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO },
+	{ .name = "fpu", .start = 0xf0, .end = 0xff,
+		.flags = IORESOURCE_BUSY | IORESOURCE_IO }
+};
+
+static void __init reserve_standard_io_resources(void)
+{
+	int i;
+
+	/* request I/O space for devices used on all i[345]86 PCs */
+	for (i = 0; i < ARRAY_SIZE(standard_io_resources); i++)
+		request_resource(&ioport_resource, &standard_io_resources[i]);
+
+}
 
 static unsigned long _brk_start = (unsigned long)__brk_start;
 unsigned long _brk_end = (unsigned long)__brk_start;
@@ -105,14 +161,37 @@ static void __init reserve_brk(void)
  */
 void __init setup_arch(void)
 {
+	memblock_reserve(__pa_symbol(__text),
+		(unsigned long)__end - (unsigned long)__text);
+
+	init_mm.start_code = (unsigned long)__text;
+	init_mm.end_code = (unsigned long)__etext;
+	init_mm.end_data = (unsigned long)__edata;
+	init_mm.brk = _brk_end;
+
 	early_cpu_init();
-	early_ioremap_init();
+	iomem_resource.end = (1ULL << default_cpu_info.x86_phys_bits) - 1;
+
+	code_resource.start = __pa_symbol(__text);
+	code_resource.end = __pa_symbol(__etext)-1;
+	data_resource.start = __pa_symbol(__etext);
+	data_resource.end = __pa_symbol(__edata)-1;
+	bss_resource.start = __pa_symbol(__bss_start);
+	bss_resource.end = __pa_symbol(__bss_end)-1;
+
+	insert_resource(&iomem_resource, &code_resource);
+	insert_resource(&iomem_resource, &data_resource);
+	insert_resource(&iomem_resource, &bss_resource);
+
+	reserve_standard_io_resources();
 
 	/*
 	 * Parse e820 table
 	 */
 	setup_physical_memory();
 	max_pfn = e820_end_of_ram_pfn();
+
+	early_ioremap_init();
 
 	/*
 	 * Pass all RAM info into memblock

@@ -9,6 +9,7 @@
 
 #include <asm/io.h>
 #include <asm/asm.h>
+#include <asm/e820.h>
 #include <asm/page.h>
 #include <asm/fixmap.h>
 #include <asm/pgtable.h>
@@ -183,6 +184,19 @@ void __init early_ioremap_init(void)
 	}
 }
 
+static int __ioremap_check_ram(unsigned long start_pfn, unsigned long nr_pages,
+			       void *arg)
+{
+	unsigned long i;
+
+	for (i = 0; i < nr_pages; ++i)
+		if (pfn_valid(start_pfn + i) &&
+		    !PageReserved(pfn_to_page(start_pfn + i)))
+			return 1;
+
+	return 0;
+}
+
 /**
  * iounmap - Free a IO remapping
  * @addr: virtual address from ioremap_*
@@ -212,11 +226,35 @@ static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 {
 	void __iomem *ret_addr;
 	unsigned long last_addr;
+	unsigned long pfn, last_pfn;
 
 	/* Don't allow wraparound or zero size */
 	last_addr = phys_addr + size - 1;
 	if (!size || last_addr < phys_addr)
 		return NULL;
+
+	if (!phys_addr_valid(phys_addr)) {
+		pr_warn("ioremap: invalid physical address %llx\n",
+		       (unsigned long long)phys_addr);
+		WARN_ON(1);
+		return NULL;
+	}
+
+	/*
+	 * Don't remap the low PCI/ISA area,
+	 * it's always mapped..
+	 */
+	if (is_ISA_range(phys_addr, last_addr))
+		return (void __iomem *)phys_to_virt(phys_addr);
+
+	/* Don't allow anybody to remap normal RAM that we're using */
+	pfn      = phys_addr >> PAGE_SHIFT;
+	last_pfn = last_addr >> PAGE_SHIFT;
+	if (walk_system_ram_range(pfn, last_pfn - pfn + 1, NULL,
+					  __ioremap_check_ram) == 1) {
+		WARN(1, "ioremap on RAM at %pa - %pa\n", &phys_addr, &last_addr);
+		return NULL;
+	}
 
 	ret_addr = NULL;
 	return ret_addr;

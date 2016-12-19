@@ -17,12 +17,9 @@ struct resource {
 	resource_size_t end;
 	const char *name;
 	unsigned long flags;
+	unsigned long desc;
 	struct resource *parent, *sibling, *child;
 };
-
-/* The normal PC address spaces: IO and memory */
-extern struct resource ioport_resource;
-extern struct resource iomem_resource;
 
 /* Flags of Resource */
 #define IORESOURCE_BITS		0x000000ff	/* Bus-specific bits */
@@ -58,6 +55,63 @@ extern struct resource iomem_resource;
 #define IORESOURCE_AUTO		0x40000000
 #define IORESOURCE_BUSY		0x80000000	/* Driver has marked this resource busy */
 
+/* I/O resource extended types */
+#define IORESOURCE_SYSTEM_RAM		(IORESOURCE_MEM|IORESOURCE_SYSRAM)
+
+/*
+ * I/O Resource Descriptors
+ *
+ * Descriptors are used by walk_iomem_res_desc() and region_intersects()
+ * for searching a specific resource range in the iomem table.  Assign
+ * a new descriptor when a resource range supports the search interfaces.
+ * Otherwise, resource.desc must be set to IORES_DESC_NONE (0).
+ */
+enum {
+	IORES_DESC_NONE				= 0,
+	IORES_DESC_CRASH_KERNEL			= 1,
+	IORES_DESC_ACPI_TABLES			= 2,
+	IORES_DESC_ACPI_NV_STORAGE		= 3,
+	IORES_DESC_PERSISTENT_MEMORY		= 4,
+	IORES_DESC_PERSISTENT_MEMORY_LEGACY	= 5,
+};
+
+#define DEFINE_RES_NAMED(_start, _size, _name, _flags)			\
+	{								\
+		.start = (_start),					\
+		.end = (_start) + (_size) - 1,				\
+		.name = (_name),					\
+		.flags = (_flags),					\
+		.desc = IORES_DESC_NONE,				\
+	}
+
+#define DEFINE_RES_IO_NAMED(_start, _size, _name)			\
+	DEFINE_RES_NAMED((_start), (_size), (_name), IORESOURCE_IO)
+#define DEFINE_RES_IO(_start, _size)					\
+	DEFINE_RES_IO_NAMED((_start), (_size), NULL)
+
+#define DEFINE_RES_MEM_NAMED(_start, _size, _name)			\
+	DEFINE_RES_NAMED((_start), (_size), (_name), IORESOURCE_MEM)
+#define DEFINE_RES_MEM(_start, _size)					\
+	DEFINE_RES_MEM_NAMED((_start), (_size), NULL)
+
+#define DEFINE_RES_DMA_NAMED(_dma, _name)				\
+	DEFINE_RES_NAMED((_dma), 1, (_name), IORESOURCE_DMA)
+#define DEFINE_RES_DMA(_dma)						\
+	DEFINE_RES_DMA_NAMED((_dma), NULL)
+
+/* The normal PC address spaces: IO and memory */
+extern struct resource ioport_resource;
+extern struct resource iomem_resource;
+
+struct resource *request_resource_conflict(struct resource *root, struct resource *new);
 int request_resource(struct resource *root, struct resource *new);
+
+struct resource *insert_resource_conflict(struct resource *parent, struct resource *new);
+int insert_resource(struct resource *parent, struct resource *new);
+
+struct resource *lookup_resource(struct resource *root, resource_size_t start);
+
+int walk_system_ram_range(unsigned long start_pfn, unsigned long nr_pages,
+		void *arg, int (*func)(unsigned long, unsigned long, void *));
 
 #endif /* _LEGO_RESOURCE_H_ */

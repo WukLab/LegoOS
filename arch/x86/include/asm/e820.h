@@ -89,6 +89,15 @@ void __init setup_physical_memory(void);
 void __init e820_fill_memblock(void);
 unsigned long __init e820_end_of_ram_pfn(void);
 
+/*
+ * Returns true iff the specified range [s,e) is completely contained inside
+ * the ISA region.
+ */
+static inline bool is_ISA_range(u64 s, u64 e)
+{
+	return s >= ISA_START_ADDRESS && e <= ISA_END_ADDRESS;
+}
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_E820_H_ */
