@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <asm/io.h>
 #include <asm/asm.h>
 #include <asm/page.h>
 #include <asm/numa.h>

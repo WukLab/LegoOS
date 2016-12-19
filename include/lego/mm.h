@@ -297,7 +297,8 @@ alloc_pages_node(int nid, gfp_t gfp_mask, unsigned int order)
 
 /* TODO: Use current node instead of NUMA_NO_NODE */
 #define alloc_pages(gfp_mask, order)	alloc_pages_node(NUMA_NO_NODE, gfp_mask, order)
-#define alloc_page(gfp_mask)		alloc_pages(gfp_mask, 0)
+#define _alloc_page(gfp_mask)		alloc_pages(gfp_mask, 0)
+#define alloc_page()			_alloc_page(GFP_KERNEL)
 
 /*
  * virt_to_page(kaddr) returns a valid pointer if and only if

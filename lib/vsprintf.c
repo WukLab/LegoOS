@@ -583,6 +583,27 @@ char *symbol_string(char *buf, char *end, void *ptr,
 #endif
 }
 
+static __noinline_for_stack
+char *address_val(char *buf, char *end, const void *addr, const char *fmt)
+{
+	unsigned long long num;
+	int size;
+
+	switch (fmt[1]) {
+	case 'd':
+		num = *(const dma_addr_t *)addr;
+		size = sizeof(dma_addr_t);
+		break;
+	case 'p':
+	default:
+		num = *(const phys_addr_t *)addr;
+		size = sizeof(phys_addr_t);
+		break;
+	}
+
+	return special_hex_number(buf, end, num, size);
+}
+
 /*
  * Show a '%p' thing.  A kernel extension is that the '%p' is followed
  * by an extra set of alphanumeric characters that are extended format
@@ -716,6 +737,8 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 					/* [mM]F (FDDI) */
 					/* [mM]R (Reverse order; Bluetooth) */
 		return mac_address_string(buf, end, ptr, spec, fmt);
+	case 'a':
+		return address_val(buf, end, ptr, fmt);
 	}
 	spec.flags |= SMALL;
 	if (spec.field_width == -1) {

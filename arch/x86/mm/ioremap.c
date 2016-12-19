@@ -193,7 +193,6 @@ static int __ioremap_check_ram(unsigned long start_pfn, unsigned long nr_pages,
 		if (pfn_valid(start_pfn + i) &&
 		    !PageReserved(pfn_to_page(start_pfn + i)))
 			return 1;
-
 	return 0;
 }
 
@@ -251,7 +250,7 @@ static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 	pfn      = phys_addr >> PAGE_SHIFT;
 	last_pfn = last_addr >> PAGE_SHIFT;
 	if (walk_system_ram_range(pfn, last_pfn - pfn + 1, NULL,
-					  __ioremap_check_ram) == 1) {
+			  __ioremap_check_ram) == 1) {
 		WARN(1, "ioremap on RAM at %pa - %pa\n", &phys_addr, &last_addr);
 		return NULL;
 	}

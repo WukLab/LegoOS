@@ -179,9 +179,9 @@ void __init setup_arch(void)
 	bss_resource.start = __pa_symbol(__bss_start);
 	bss_resource.end = __pa_symbol(__bss_end)-1;
 
-	insert_resource(&iomem_resource, &code_resource);
-	insert_resource(&iomem_resource, &data_resource);
-	insert_resource(&iomem_resource, &bss_resource);
+	BUG_ON(insert_resource(&iomem_resource, &code_resource));
+	BUG_ON(insert_resource(&iomem_resource, &data_resource));
+	BUG_ON(insert_resource(&iomem_resource, &bss_resource));
 
 	reserve_standard_io_resources();
 
