@@ -14,6 +14,7 @@
 #include <asm/page.h>
 #include <asm/traps.h>
 #include <asm/setup.h>
+#include <asm/timex.h>
 #include <asm/fixmap.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
@@ -27,6 +28,7 @@
 #include <lego/sched.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
+#include <lego/jiffies.h>
 #include <lego/nodemask.h>
 #include <lego/memblock.h>
 #include <lego/resource.h>
@@ -253,6 +255,8 @@ void __init setup_arch(void)
 	 */
 	trap_init();
 	cpu_init();
+
+	register_refined_jiffies(CLOCK_TICK_RATE);
 
 	/*
 	 * Prepare trampoline for APs

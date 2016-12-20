@@ -12,6 +12,7 @@
 
 #include <stdarg.h>
 #include <lego/err.h>
+#include <lego/log2.h>
 #include <lego/errno.h>
 #include <lego/types.h>
 #include <lego/panic.h>

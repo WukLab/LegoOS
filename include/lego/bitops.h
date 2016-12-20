@@ -17,7 +17,6 @@
 #include <asm/bitops.h>
 
 #include <lego/types.h>
-#include <lego/kernel.h>
 #include <lego/hweight.h>
 
 #define BITMAP_FIRST_WORD_MASK(start) (~0UL << ((start) & (BITS_PER_LONG - 1)))

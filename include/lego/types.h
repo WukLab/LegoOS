@@ -66,5 +66,8 @@ struct list_head {
 
 #define pgoff_t unsigned long
 
+/* clocksource cycle base type */
+typedef u64 cycle_t;
+
 #endif /* __ASSEMBLY__ */
 #endif /* _LEGO_TYPES_H_ */
