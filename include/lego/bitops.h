@@ -199,4 +199,27 @@ extern unsigned long find_first_zero_bit(const unsigned long *addr,
 extern unsigned long find_last_bit(const unsigned long *addr,
 				   unsigned long size);
 
+static inline unsigned fls_long(unsigned long l)
+{
+	if (sizeof(l) == 4)
+		return fls(l);
+	return fls64(l);
+}
+
+/**
+ * get_count_order_long - get order after rounding @l up to power of 2
+ * @l: parameter
+ *
+ * it is same as get_count_order() but with long type parameter
+ */
+static inline int get_count_order_long(unsigned long l)
+{
+	if (l == 0UL)
+		return -1;
+	else if (l & (l - 1UL))
+		return (int)fls_long(l);
+	else
+		return (int)fls_long(l) - 1;
+}
+
 #endif /* _LEGO_BITOPS_H_ */

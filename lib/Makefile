@@ -6,3 +6,4 @@ obj-y += sort.o
 obj-y += find_bit.o
 obj-y += bitmap.o
 obj-y += hweight.o
+obj-y += rbtree.o

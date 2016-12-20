@@ -18,6 +18,7 @@
 #include <lego/mm.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
+#include <lego/vmalloc.h>
 #include <lego/early_ioremap.h>
 
 /*
@@ -305,6 +306,7 @@ static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 	void __iomem *ret_addr;
 	unsigned long last_addr;
 	unsigned long pfn, last_pfn;
+	struct vm_struct *area;
 	pgprot_t prot;
 
 	/* Don't allow wraparound or zero size */
@@ -363,17 +365,24 @@ static void __iomem *__ioremap_caller(resource_size_t phys_addr,
 		break;
 	}
 
-	/* TODO: find a vaddr in kernel va */
-	vaddr = 0;
+	/* Get available kernel virtual address slot */
+	area = get_vm_area_caller(size, VM_IOREMAP, caller);
+	if (!area)
+		return NULL;
 
-	if (ioremap_page_range(vaddr, vaddr + size, phys_addr, prot)) {
-		ret_addr = NULL;
-		goto out;
-	}
+	area->phys_addr = phys_addr;
+	vaddr = (unsigned long)area->addr;
+
+	/* Do the real pgtable mapping */
+	if (ioremap_page_range(vaddr, vaddr + size, phys_addr, prot))
+		goto err_free_area;
 
 	ret_addr = (void __iomem *) (vaddr + offset);
-out:
 	return ret_addr;
+
+err_free_area:
+	free_vm_area(area);
+	return NULL;
 }
 
 /**

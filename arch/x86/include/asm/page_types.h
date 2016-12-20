@@ -52,6 +52,8 @@
 #define MCE_STACK		4
 #define N_EXCEPTION_STACKS	4  /* hw limit: 7 */
 
+/* See Documentation/x86/x86_64/mm.txt for description */
+
 /*
  * Set __PAGE_OFFSET to the most negative possible address +
  * PGDIR_SIZE*16 (pgd slot 272).  The gap is to allow a space for a
@@ -61,7 +63,16 @@
 #define __PAGE_OFFSET		_AC(0xffff880000000000, UL)
 #define __START_KERNEL_map	_AC(0xffffffff80000000, UL)
 
-/* See Documentation/x86/x86_64/mm.txt for description */
+#define VMALLOC_SIZE_TB		_AC(32, UL)
+#define VMALLOC_START		_AC(0xffffc90000000000, UL)
+#define VMALLOC_END		(VMALLOC_START + _AC((VMALLOC_SIZE_TB << 40) - 1, UL))
+
+#define VMEMMAP_START		_AC(0xffffea0000000000, UL)
+
+#define MODULES_VADDR    (__START_KERNEL_map + KERNEL_IMAGE_SIZE)
+#define MODULES_END      _AC(0xffffffffff000000, UL)
+#define MODULES_LEN   (MODULES_END - MODULES_VADDR)
+
 #define MAX_PHYSADDR_BITS	44
 #define MAX_PHYSMEM_BITS	46
 #define MAXMEM			_AC(__AC(1, UL) << MAX_PHYSMEM_BITS, UL)
@@ -74,6 +85,8 @@
 
 #define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
 #define START_KERNEL		((unsigned long)__START_KERNEL)
+
+#define IOREMAP_MAX_ORDER       (PUD_SHIFT)
 
 #ifndef __ASSEMBLY__
 /* In normal platform, phys_base is 0 */
