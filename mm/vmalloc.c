@@ -7,6 +7,11 @@
  * (at your option) any later version.
  */
 
+/*
+ * Managing the kernel virtual address used by ioremap()
+ * For details of kernel va layout, refer to Documentation/mm.txt
+ */
+
 #include <lego/mm.h>
 #include <lego/err.h>
 #include <lego/numa.h>

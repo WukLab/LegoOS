@@ -8,3 +8,4 @@ obj-y += init-mm.o
 obj-y += page_alloc.o
 obj-y += memory.o
 obj-y += vmalloc.o
+obj-y += slab.o
