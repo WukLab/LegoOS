@@ -1,3 +1,5 @@
+menu "Memory Management"
+
 config SELECT_MEMORY_MODEL
 	def_bool y
 	depends on ARCH_SELECT_MEMORY_MODEL
@@ -66,3 +68,4 @@ config HAVE_MEMBLOCK
 config HAVE_MEMBLOCK_NODE_MAP
 	bool
 
+endmenu

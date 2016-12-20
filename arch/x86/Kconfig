@@ -213,4 +213,5 @@ config HPET_TIMER
 endmenu
 
 source "mm/Kconfig"
+source "kernel/Kconfig.hz"
 source "drivers/Kconfig"
