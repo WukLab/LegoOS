@@ -10,8 +10,12 @@
 #ifndef _LEGO_GFP_H_
 #define _LEGO_GFP_H_
 
+#include <lego/mm_debug.h>
+
 #define ___GFP_DMA		0x01u
+#define ___GFP_HIGHMEM		0x02u
 #define ___GFP_DMA32		0x04u
+#define ___GFP_MOVABLE		0x08u
 #define ___GFP_HIGH		0x20u
 #define ___GFP_IO		0x40u
 #define ___GFP_COLD		0x100u
@@ -25,9 +29,11 @@
 /*
  * Physical address zone modifiers
  */
-#define __GFP_DMA	((gfp_t)___GFP_DMA)
-#define __GFP_DMA32	((gfp_t)___GFP_DMA32)
-#define GFP_ZONEMASK	(__GFP_DMA|__GFP_DMA32)
+#define __GFP_DMA	((__force gfp_t)___GFP_DMA)
+#define __GFP_HIGHMEM	((__force gfp_t)___GFP_HIGHMEM)
+#define __GFP_DMA32	((__force gfp_t)___GFP_DMA32)
+#define __GFP_MOVABLE	((__force gfp_t)___GFP_MOVABLE)  /* ZONE_MOVABLE allowed */
+#define GFP_ZONEMASK	(__GFP_DMA|__GFP_HIGHMEM|__GFP_DMA32|__GFP_MOVABLE)
 
 /*
  * Page mobility and placement hints
@@ -90,10 +96,109 @@
 #define GFP_DMA		__GFP_DMA
 #define GFP_DMA32	__GFP_DMA32
 
+#ifdef CONFIG_HIGHMEM
+#define OPT_ZONE_HIGHMEM ZONE_HIGHMEM
+#else
+#define OPT_ZONE_HIGHMEM ZONE_NORMAL
+#endif
+
+#ifdef CONFIG_ZONE_DMA
+#define OPT_ZONE_DMA ZONE_DMA
+#else
+#define OPT_ZONE_DMA ZONE_NORMAL
+#endif
+
+#ifdef CONFIG_ZONE_DMA32
+#define OPT_ZONE_DMA32 ZONE_DMA32
+#else
+#define OPT_ZONE_DMA32 ZONE_NORMAL
+#endif
+
+/*
+ * GFP_ZONE_TABLE is a word size bitstring that is used for looking up the
+ * zone to use given the lowest 4 bits of gfp_t. Entries are ZONE_SHIFT long
+ * and there are 16 of them to cover all possible combinations of
+ * __GFP_DMA, __GFP_DMA32, __GFP_MOVABLE and __GFP_HIGHMEM.
+ *
+ * The zone fallback order is MOVABLE=>HIGHMEM=>NORMAL=>DMA32=>DMA.
+ * But GFP_MOVABLE is not only a zone specifier but also an allocation
+ * policy. Therefore __GFP_MOVABLE plus another zone selector is valid.
+ * Only 1 bit of the lowest 3 bits (DMA,DMA32,HIGHMEM) can be set to "1".
+ *
+ *       bit       result
+ *       =================
+ *       0x0    => NORMAL
+ *       0x1    => DMA or NORMAL
+ *       0x2    => HIGHMEM or NORMAL
+ *       0x3    => BAD (DMA+HIGHMEM)
+ *       0x4    => DMA32 or DMA or NORMAL
+ *       0x5    => BAD (DMA+DMA32)
+ *       0x6    => BAD (HIGHMEM+DMA32)
+ *       0x7    => BAD (HIGHMEM+DMA32+DMA)
+ *       0x8    => NORMAL (MOVABLE+0)
+ *       0x9    => DMA or NORMAL (MOVABLE+DMA)
+ *       0xa    => MOVABLE (Movable is valid only if HIGHMEM is set too)
+ *       0xb    => BAD (MOVABLE+HIGHMEM+DMA)
+ *       0xc    => DMA32 (MOVABLE+DMA32)
+ *       0xd    => BAD (MOVABLE+DMA32+DMA)
+ *       0xe    => BAD (MOVABLE+DMA32+HIGHMEM)
+ *       0xf    => BAD (MOVABLE+DMA32+HIGHMEM+DMA)
+ *
+ * GFP_ZONES_SHIFT must be <= 2 on 32 bit platforms.
+ */
+
+#define GFP_ZONES_SHIFT	ZONES_SHIFT
+
+#if 16 * GFP_ZONES_SHIFT > BITS_PER_LONG
+#error GFP_ZONES_SHIFT too large to create GFP_ZONE_TABLE integer
+#endif
+
+#define GFP_ZONE_TABLE ( \
+	(ZONE_NORMAL << 0 * GFP_ZONES_SHIFT)				       \
+	| (OPT_ZONE_DMA << ___GFP_DMA * GFP_ZONES_SHIFT)		       \
+	| (OPT_ZONE_HIGHMEM << ___GFP_HIGHMEM * GFP_ZONES_SHIFT)	       \
+	| (OPT_ZONE_DMA32 << ___GFP_DMA32 * GFP_ZONES_SHIFT)		       \
+	| (ZONE_NORMAL << ___GFP_MOVABLE * GFP_ZONES_SHIFT)		       \
+	| (OPT_ZONE_DMA << (___GFP_MOVABLE | ___GFP_DMA) * GFP_ZONES_SHIFT)    \
+	| (ZONE_MOVABLE << (___GFP_MOVABLE | ___GFP_HIGHMEM) * GFP_ZONES_SHIFT)\
+	| (OPT_ZONE_DMA32 << (___GFP_MOVABLE | ___GFP_DMA32) * GFP_ZONES_SHIFT)\
+)
+
+/*
+ * GFP_ZONE_BAD is a bitmap for all combinations of __GFP_DMA, __GFP_DMA32
+ * __GFP_HIGHMEM and __GFP_MOVABLE that are not permitted. One flag per
+ * entry starting with bit 0. Bit is set if the combination is not
+ * allowed.
+ */
+#define GFP_ZONE_BAD ( \
+	1 << (___GFP_DMA | ___GFP_HIGHMEM)				      \
+	| 1 << (___GFP_DMA | ___GFP_DMA32)				      \
+	| 1 << (___GFP_DMA32 | ___GFP_HIGHMEM)				      \
+	| 1 << (___GFP_DMA | ___GFP_DMA32 | ___GFP_HIGHMEM)		      \
+	| 1 << (___GFP_MOVABLE | ___GFP_HIGHMEM | ___GFP_DMA)		      \
+	| 1 << (___GFP_MOVABLE | ___GFP_DMA32 | ___GFP_DMA)		      \
+	| 1 << (___GFP_MOVABLE | ___GFP_DMA32 | ___GFP_HIGHMEM)		      \
+	| 1 << (___GFP_MOVABLE | ___GFP_DMA32 | ___GFP_DMA | ___GFP_HIGHMEM)  \
+)
+
 static inline int gfp_zone(gfp_t flags)
 {
-	int z = flags & GFP_ZONEMASK;
+	enum zone_type z;
+	int bit = (__force int) (flags & GFP_ZONEMASK);
+
+	z = (GFP_ZONE_TABLE >> (bit * GFP_ZONES_SHIFT)) &
+					 ((1 << GFP_ZONES_SHIFT) - 1);
+	VM_BUG_ON((GFP_ZONE_BAD >> bit) & 1);
 	return z;
+}
+
+static inline int gfp_zonelist(gfp_t flags)
+{
+#ifdef CONFIG_NUMA
+	if (unlikely(flags & __GFP_THISNODE))
+		return ZONELIST_NOFALLBACK;
+#endif
+	return ZONELIST_FALLBACK;
 }
 
 #endif /* _LEGO_GFP_H_ */

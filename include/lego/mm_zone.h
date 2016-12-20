@@ -81,6 +81,8 @@ enum zone_type {
 	 */
 	ZONE_NORMAL,
 
+	ZONE_MOVABLE,
+
 	/*
 	 * The MAX_NR_ZONES is generated
 	 * by kernel/bounds.h

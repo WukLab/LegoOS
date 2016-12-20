@@ -759,6 +759,13 @@ get_page_from_freelist(gfp_t gfp_mask, unsigned int order,
 	struct zoneref *z;
 	enum zone_type high_zoneidx;
 
+	/*
+	 * GFP_DMA and GFP_DMA32 matter here
+	 *
+	 * Given these zone modifiers, the high_zoneidx will be set to a small
+	 * value so the normal memory is skipped below to allocate from ZONE_DMA
+	 * or ZONE_DMA32 first.
+	 */
 	high_zoneidx = gfp_zone(gfp_mask);
 
 	for_each_zone_zonelist_nodemask(zone, z, zonelist, high_zoneidx, nodemask) {
@@ -770,7 +777,6 @@ get_page_from_freelist(gfp_t gfp_mask, unsigned int order,
 			return page;
 		}
 	}
-
 	return NULL;
 }
 
@@ -868,6 +874,10 @@ static int build_zonelists_node(pg_data_t *pgdat, struct zonelist *zonelist,
 	struct zone *zone;
 	enum zone_type zone_type = MAX_NR_ZONES;
 
+	/*
+	 * Building from descending order
+	 * So ZONE_NORMAL > ZONE_DMA in zonelist
+	 */
 	do {
 		zone_type--;
 		zone = pgdat->node_zones + zone_type;
@@ -900,7 +910,7 @@ static void build_zonelists_in_node_order(pg_data_t *pgdat, int node)
 }
 
 /*
- * Build gfp_thisnode zonelists
+ * Build GFP_THISNODE zonelists
  */
 static void build_thisnode_zonelists(pg_data_t *pgdat)
 {

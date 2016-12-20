@@ -15,7 +15,6 @@
 #include <asm/processor.h>
 
 #include <lego/pfn.h>
-#include <lego/gfp.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>
 #include <lego/nodemask.h>
@@ -26,6 +25,7 @@
 #include <lego/memory_model.h>
 #include <lego/page-flags.h>
 #include <lego/page-flags-layout.h>
+#include <lego/gfp.h>
 
 /* Page flags: | [NODE] | ZONE | ... | FLAGS | */
 #define NODES_PGOFF		((sizeof(unsigned long)*8) - NODES_WIDTH)
@@ -237,15 +237,6 @@ void free_pages(unsigned long addr, unsigned int order);
 
 #define __free_page(page) __free_pages((page), 0)
 #define free_page(addr) free_pages((addr), 0)
-
-static inline int gfp_zonelist(gfp_t flags)
-{
-#ifdef CONFIG_NUMA
-	if (unlikely(flags & __GFP_THISNODE))
-		return ZONELIST_NOFALLBACK;
-#endif
-	return ZONELIST_FALLBACK;
-}
 
 /*
  * We get the zone list from the current node and the gfp_mask.
