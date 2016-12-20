@@ -2,7 +2,7 @@ menu "Timer Interrupt Frequency Configuration"
 
 choice
 	prompt "Timer frequency"
-	default HZ_250
+	default HZ_100
 	help
 	 Allows the configuration of the timer frequency. It is customary
 	 to have the timer interrupt run at 1000 Hz but 100 Hz may be more

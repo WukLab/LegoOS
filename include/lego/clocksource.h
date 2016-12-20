@@ -131,4 +131,19 @@ static inline void __clocksource_update_freq_khz(struct clocksource *cs, u32 khz
 	__clocksource_update_freq_scale(cs, 1000, khz);
 }
 
+/**
+ * clocksource_cyc2ns - converts clocksource cycles to nanoseconds
+ * @cycles:	cycles
+ * @mult:	cycle to nanosecond multiplier
+ * @shift:	cycle to nanosecond divisor (power of two)
+ *
+ * Converts cycles to nanoseconds, using the given mult and shift.
+ *
+ * XXX - This could use some mult_lxl_ll() asm optimization
+ */
+static inline s64 clocksource_cyc2ns(cycle_t cycles, u32 mult, u32 shift)
+{
+	return ((u64) cycles * mult) >> shift;
+}
+
 #endif /* _LEGO_CLOCKSOURCE_H_ */
