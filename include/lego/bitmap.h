@@ -75,4 +75,15 @@ static inline void bitmap_fill(unsigned long *dst, unsigned int nbits)
 	dst[nlongs - 1] = BITMAP_LAST_WORD_MASK(nbits);
 }
 
+static inline void bitmap_copy(unsigned long *dst, const unsigned long *src,
+			unsigned int nbits)
+{
+	if (small_const_nbits(nbits))
+		*dst = *src;
+	else {
+		unsigned int len = BITS_TO_LONGS(nbits) * sizeof(unsigned long);
+		memcpy(dst, src, len);
+	}
+}
+
 #endif /* _LEGO_BITMAP_H_ */

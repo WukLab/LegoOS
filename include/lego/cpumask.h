@@ -375,6 +375,35 @@ static inline bool cpumask_equal(const struct cpumask *src1p,
 						 nr_cpumask_bits);
 }
 
+/**
+ * cpumask_empty - *srcp == 0
+ * @srcp: the cpumask to that all cpus < nr_cpu_ids are clear.
+ */
+static inline bool cpumask_empty(const struct cpumask *srcp)
+{
+	return bitmap_empty(cpumask_bits(srcp), nr_cpumask_bits);
+}
+
+/**
+ * cpumask_setall - set all cpus (< nr_cpu_ids) in a cpumask
+ * @dstp: the cpumask pointer
+ */
+static inline void cpumask_setall(struct cpumask *dstp)
+{
+	bitmap_fill(cpumask_bits(dstp), nr_cpumask_bits);
+}
+
+/**
+ * cpumask_copy - *dstp = *srcp
+ * @dstp: the result
+ * @srcp: the input cpumask
+ */
+static inline void cpumask_copy(struct cpumask *dstp,
+				const struct cpumask *srcp)
+{
+	bitmap_copy(cpumask_bits(dstp), cpumask_bits(srcp), nr_cpumask_bits);
+}
+
 void __init boot_cpumask_init(void);
 
 #endif /* _LEGO_CPUMASK_H_ */
