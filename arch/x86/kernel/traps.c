@@ -26,6 +26,8 @@
  */
 gate_desc idt_table[NR_VECTORS];
 
+DECLARE_BITMAP(used_vectors, NR_VECTORS);
+
 struct desc_ptr idt_desc = {
 	.size = NR_VECTORS * 16 - 1,
 	.address = (unsigned long)idt_table,
@@ -112,6 +114,8 @@ dotraplinkage void do_reserved(struct pt_regs *regs, long error_code)
 
 void __init trap_init(void)
 {
+	int i;
+
 	set_intr_gate(X86_TRAP_DE, divide_error);
 	set_intr_gate(X86_TRAP_DB, debug);
 	set_intr_gate(X86_TRAP_NMI, nmi);
@@ -133,6 +137,9 @@ void __init trap_init(void)
 	set_intr_gate(X86_TRAP_MC, machine_check);
 	set_intr_gate(X86_TRAP_XF, simd_exception);
 	set_intr_gate(X86_TRAP_VE, virtualization_exception);
+
+	for (i = 0; i < FIRST_EXTERNAL_VECTOR; i++)
+		set_bit(i, used_vectors);
 
 	load_idt((const struct desc_ptr *)&idt_desc);
 }

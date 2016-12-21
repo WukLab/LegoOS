@@ -3,3 +3,4 @@ obj-y += kallsyms.o
 obj-y += cpu.o
 obj-y += resource.o
 obj-y += time/
+obj-y += irq/

@@ -72,10 +72,19 @@ asmlinkage void __init start_kernel(void)
 	setup_arch();
 
 	/*
+	 * Just a note:
+	 * If we have any large bootmem allocations later (e.g. logbuf),
+	 * they should go right before memory_init().
+	 */
+
+	/*
 	 * Build all memory managment data structures,
 	 * buddy allocator is avaiable afterwards:
 	 */
 	memory_init();
+
+	irq_init();
+	//time_init();
 
 	hlt();
 }

@@ -10,6 +10,8 @@
 #ifndef _ASM_X86_IRQ_VECTORS_H_
 #define _ASM_X86_IRQ_VECTORS_H_
 
+#include <asm/apic_types.h>
+
 /*
  * There are 256 IDT entries (per CPU - each entry is 8 bytes) which can
  * be defined by LegoOS. They are used as a jump table by the CPU when a
