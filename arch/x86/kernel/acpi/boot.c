@@ -16,6 +16,8 @@
 
 #include <asm/asm.h>
 #include <asm/apic.h>
+#include <asm/i8259.h>
+#include <asm/io_apic.h>
 #include <asm/processor.h>
 #include <asm/irq_vectors.h>
 
@@ -27,6 +29,33 @@
 int acpi_lapic;
 int acpi_ioapic;
 u64 acpi_lapic_addr = APIC_DEFAULT_PHYS_BASE;
+
+/*
+ * The default interrupt routing model is PIC (8259).  This gets
+ * overridden if IOAPICs are enumerated (below).
+ */
+enum acpi_irq_model_id acpi_irq_model = ACPI_IRQ_MODEL_PIC;
+
+/*
+ * ISA irqs by default are the first 16 gsis but can be
+ * any gsi as specified by an interrupt source override.
+ */
+static u32 isa_irq_to_gsi[NR_IRQS_LEGACY] __read_mostly = {
+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+};
+
+#define	ACPI_INVALID_GSI		INT_MIN
+
+int acpi_isa_irq_to_gsi(unsigned isa_irq, u32 *gsi)
+{
+	if (isa_irq < nr_legacy_irqs() &&
+	    isa_irq_to_gsi[isa_irq] != ACPI_INVALID_GSI) {
+		*gsi = isa_irq_to_gsi[isa_irq];
+		return 0;
+	}
+
+	return -1;
+}
 
 /**
  * acpi_register_lapic - register a local apic and generates a logic cpu number
@@ -203,10 +232,73 @@ acpi_parse_ioapic(struct acpi_subtable_header * header, const unsigned long end)
 
 	acpi_table_print_madt_entry(header);
 
-	//mp_register_ioapic(ioapic->id, ioapic->address, ioapic->global_irq_base, &cfg);
+	mp_register_ioapic(ioapic->id, ioapic->address, ioapic->global_irq_base);
 
 	return 0;
 }
+
+#ifdef	CONFIG_X86_IO_APIC
+#define MP_ISA_BUS		0
+static void __init mp_config_acpi_legacy_irqs(void)
+{
+	int i;
+	struct mpc_intsrc mp_irq;
+
+	set_bit(MP_ISA_BUS, mp_bus_not_pci);
+	pr_debug("Bus #%d is ISA\n", MP_ISA_BUS);
+
+	/*
+	 * Use the default configuration for the IRQs 0-15.  Unless
+	 * overridden by (MADT) interrupt source override entries.
+	 */
+	for (i = 0; i < nr_legacy_irqs(); i++) {
+		int ioapic, pin;
+		unsigned int dstapic;
+		int idx;
+		u32 gsi;
+
+		/* Locate the gsi that irq i maps to. */
+		if (acpi_isa_irq_to_gsi(i, &gsi))
+			continue;
+
+		/*
+		 * Locate the IOAPIC that manages the ISA IRQ.
+		 */
+		ioapic = mp_find_ioapic(gsi);
+		if (ioapic < 0)
+			continue;
+		pin = mp_find_ioapic_pin(ioapic, gsi);
+		dstapic = mpc_ioapic_id(ioapic);
+
+		for (idx = 0; idx < mp_irq_entries; idx++) {
+			struct mpc_intsrc *irq = mp_irqs + idx;
+
+			/* Do we already have a mapping for this ISA IRQ? */
+			if (irq->srcbus == MP_ISA_BUS && irq->srcbusirq == i)
+				break;
+
+			/* Do we already have a mapping for this IOAPIC pin */
+			if (irq->dstapic == dstapic && irq->dstirq == pin)
+				break;
+		}
+
+		if (idx != mp_irq_entries) {
+			printk(KERN_DEBUG "ACPI: IRQ%d used by override.\n", i);
+			continue;	/* IRQ already used */
+		}
+
+		mp_irq.type = MP_INTSRC;
+		mp_irq.irqflag = 0;	/* Conforming */
+		mp_irq.srcbus = MP_ISA_BUS;
+		mp_irq.dstapic = dstapic;
+		mp_irq.irqtype = mp_INT;
+		mp_irq.srcbusirq = i; /* Identity mapped */
+		mp_irq.dstirq = pin;
+
+		mp_save_irq(&mp_irq);
+	}
+}
+#endif
 
 static int __init
 acpi_parse_nmi_src(struct acpi_subtable_header * header, const unsigned long end)
@@ -238,7 +330,7 @@ static int __init acpi_parse_madt_ioapic_entries(void)
 	}
 
 	/* Fill in identity legacy mappings where no override */
-	//mp_config_acpi_legacy_irqs();
+	mp_config_acpi_legacy_irqs();
 
 	count = acpi_table_parse_madt(ACPI_MADT_TYPE_NMI_SOURCE,
 				      acpi_parse_nmi_src, NR_IRQS);

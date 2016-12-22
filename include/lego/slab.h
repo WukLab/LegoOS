@@ -15,4 +15,14 @@
 void kfree(const void *p);
 void *kmalloc(size_t size, gfp_t flags);
 
+/**
+ * kzalloc - allocate memory. The memory is set to zero.
+ * @size: how many bytes of memory are required.
+ * @flags: the type of memory to allocate (see kmalloc).
+ */
+static inline void *kzalloc(size_t size, gfp_t flags)
+{
+	return kmalloc(size, flags | __GFP_ZERO);
+}
+
 #endif /* _LEGO_SLAB_H_ */

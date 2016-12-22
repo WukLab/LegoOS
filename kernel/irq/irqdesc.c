@@ -15,7 +15,7 @@
 #include <lego/nodemask.h>
 #include <lego/spinlock.h>
 
-struct cpumask irq_default_affinity;
+cpumask_var_t irq_default_affinity;
 
 int nr_irqs = NR_IRQS;
 
@@ -39,16 +39,16 @@ struct irq_desc irq_desc[NR_IRQS] __cacheline_aligned = {
 
 static void __init init_irq_default_affinity(void)
 {
-	if (cpumask_empty(&irq_default_affinity))
-		cpumask_setall(&irq_default_affinity);
+	if (cpumask_empty(irq_default_affinity))
+		cpumask_setall(irq_default_affinity);
 }
 
 static void desc_smp_init(struct irq_desc *desc, int node,
 			  const struct cpumask *affinity)
 {
 	if (!affinity)
-		affinity = &irq_default_affinity;
-	cpumask_copy(desc->irq_common_data.affinity, affinity);
+		affinity = irq_default_affinity;
+	cpumask_copy(&desc->irq_common_data.affinity, affinity);
 
 #ifdef CONFIG_NUMA
 	desc->irq_common_data.node = node;
@@ -75,19 +75,15 @@ static void desc_set_defaults(unsigned int irq, struct irq_desc *desc, int node,
 
 void __init irq_init(void)
 {
-	int i, count, node = first_online_node;
-	struct irq_desc *desc;
+	int i, node = first_online_node;
 
 	init_irq_default_affinity();
 
 	pr_info("NR_IRQS:%d\n", NR_IRQS);
 
-	desc = irq_desc;
-	count = ARRAY_SIZE(irq_desc);
-
-	for (i = 0; i < count; i++) {
-		spin_lock_init(&desc[i].lock);
-		desc_set_defaults(i, &desc[i], node, NULL);
+	for (i = 0; i < NR_IRQS; i++) {
+		spin_lock_init(&irq_desc[i].lock);
+		desc_set_defaults(i, &irq_desc[i], node, NULL);
 	}
 
 	arch_irq_init();

@@ -13,6 +13,15 @@
 #include <lego/numa.h>
 #include <lego/types.h>
 
+enum acpi_irq_model_id {
+	ACPI_IRQ_MODEL_PIC = 0,
+	ACPI_IRQ_MODEL_IOAPIC,
+	ACPI_IRQ_MODEL_IOSAPIC,
+	ACPI_IRQ_MODEL_PLATFORM,
+	ACPI_IRQ_MODEL_GIC,
+	ACPI_IRQ_MODEL_COUNT
+};
+
 /*
  * Values for description table header signatures for tables defined in this
  * file. Useful because they make it more difficult to inadvertently type in
@@ -609,5 +618,7 @@ void __init acpi_boot_numa_init(void);
 /* Conform to ACPI 2.0 SLIT distance definitions */
 #define LOCAL_DISTANCE		10
 #define REMOTE_DISTANCE		20
+
+int acpi_isa_irq_to_gsi(unsigned isa_irq, u32 *gsi);
 
 #endif /* _LEGO_ACPI_H_ */

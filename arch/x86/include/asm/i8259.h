@@ -10,8 +10,20 @@
 #ifndef _ASM_X86_I8259_H_
 #define _ASM_X86_I8259_H_
 
+#include <asm/io.h>
 #include <lego/delay.h>
 #include <lego/spinlock.h>
+
+/*
+ * Not all IRQs can be routed through the IO-APIC, eg. on certain (older)
+ * boards the timer interrupt is not really connected to any IO-APIC pin,
+ * it's fed to the master 8259A's IR0 line only.
+ *
+ * Any '1' bit in this mask means the IRQ is routed through the IO-APIC.
+ * this 'mixed mode' IRQ handling costs nothing because it's only used
+ * at IRQ setup time.
+ */
+extern unsigned long io_apic_irqs;
 
 extern unsigned int cached_irq_mask;
 
