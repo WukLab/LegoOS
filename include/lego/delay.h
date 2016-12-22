@@ -12,4 +12,14 @@
 
 extern unsigned long loops_per_jiffy;
 
+static inline void udelay(unsigned int n)
+{
+
+}
+
+static inline void ndelay(unsigned int n)
+{
+
+}
+
 #endif /* _LEGO_DELAY_H_ */

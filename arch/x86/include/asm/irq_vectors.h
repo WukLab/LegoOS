@@ -97,6 +97,12 @@
 #define FIRST_SYSTEM_VECTOR		NR_VECTORS
 #endif
 
+/*
+ * Vectors 0x30-0x3f are used for ISA interrupts.
+ *   round up to the next 16-vector boundary
+ */
+#define ISA_IRQ_VECTOR(irq)		(((FIRST_EXTERNAL_VECTOR + 16) & ~15) + irq)
+
 #define FPU_IRQ				  13
 
 /*

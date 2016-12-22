@@ -13,11 +13,26 @@
 #include <lego/spinlock.h>
 
 /**
- * handle_bad_irq - handle spurious and unhandled irqs
- * @desc:      description of the interrupt
+ *	handle_bad_irq - handle spurious and unhandled irqs
+ *	@desc:      description of the interrupt
  *
- * Handles spurious and unhandled IRQ's. It also prints a debugmessage.
+ *	Handles spurious and unhandled IRQ's. It also prints a debugmessage.
  */
 void handle_bad_irq(struct irq_desc *desc)
 {
+
+}
+
+/**
+ *	handle_level_irq - Level type irq handler
+ *	@desc:	the interrupt description structure for this irq
+ *
+ *	Level type interrupts are active as long as the hardware line has
+ *	the active level. This may require to mask the interrupt and unmask
+ *	it after the associated handler has acknowledged the device, so the
+ *	interrupt line is back to inactive.
+ */
+void handle_level_irq(struct irq_desc *desc)
+{
+
 }

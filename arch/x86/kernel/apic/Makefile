@@ -7,3 +7,4 @@ obj-y := apic.o
 obj-y += io_apic.o
 obj-y += ipi.o
 obj-y += apic_flat.o
+obj-y += vector.o

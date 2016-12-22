@@ -14,6 +14,8 @@ obj-y += smpboot.o
 obj-y += trampoline.o
 obj-y += time.o
 
+obj-y += i8259.o
+
 # ACPI APIC.. is this annoying?
 obj-y += acpi/
 obj-y += apic/

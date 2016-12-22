@@ -86,4 +86,7 @@ static inline void bitmap_copy(unsigned long *dst, const unsigned long *src,
 	}
 }
 
+extern void bitmap_set(unsigned long *map, unsigned int start, int len);
+extern void bitmap_clear(unsigned long *map, unsigned int start, int len);
+
 #endif /* _LEGO_BITMAP_H_ */
