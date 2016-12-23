@@ -24,10 +24,6 @@ struct apic_chip_data {
 	u8			move_in_progress : 1;
 };
 
-static struct irq_chip lapic_controller;
-static DEFINE_SPINLOCK(vector_lock);
-static cpumask_var_t vector_cpumask, vector_searchmask, searched_cpumask;
-
 #ifdef CONFIG_X86_IO_APIC
 static struct apic_chip_data legacy_irq_data[NR_IRQS_LEGACY];
 #endif
@@ -50,7 +46,7 @@ struct irq_cfg *irqd_cfg(struct irq_data *irq_data)
 
 struct irq_cfg *irq_cfg(unsigned int irq)
 {
-	irqd_cfg(irq_get_irq_data(irq));
+	return irqd_cfg(irq_get_irq_data(irq));
 }
 
 /*

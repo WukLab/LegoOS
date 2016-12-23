@@ -393,6 +393,12 @@ static inline void irq_settings_set_nothread(struct irq_desc *desc)
 	desc->status_use_accessors |= _IRQ_NOTHREAD;
 }
 
+static inline void *irq_get_chip_data(unsigned int irq)
+{
+	struct irq_data *d = irq_get_irq_data(irq);
+	return d ? d->chip_data : NULL;
+}
+
 void irq_mark_irq(unsigned int irq);
 void synchronize_irq(unsigned int irq);
 void disable_irq(unsigned int irq);

@@ -15,6 +15,9 @@
 #include <asm/io_apic.h>
 #include <asm/irq_vectors.h>
 
+#include <lego/irq.h>
+#include <lego/irqdesc.h>
+#include <lego/irqchip.h>
 #include <lego/slab.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
@@ -116,6 +119,11 @@ int mpc_ioapic_id(int ioapic_idx)
 static inline struct mp_ioapic_gsi *mp_ioapic_gsi_routing(int ioapic_idx)
 {
 	return &ioapics[ioapic_idx].gsi_config;
+}
+
+static inline u32 mp_pin_to_gsi(int ioapic, int pin)
+{
+	return mp_ioapic_gsi_routing(ioapic)->gsi_base + pin;
 }
 
 #define mpc_ioapic_ver(ioapic_idx)	ioapics[ioapic_idx].mp_config.apicver
@@ -315,7 +323,7 @@ static void alloc_ioapic_saved_registers(int idx)
 		pr_err("IOAPIC %d: suspend/resume impossible!\n", idx);
 }
 
-static void free_ioapic_saved_registers(int idx)
+static void __used free_ioapic_saved_registers(int idx)
 {
 	kfree(ioapics[idx].saved_registers);
 	ioapics[idx].saved_registers = NULL;

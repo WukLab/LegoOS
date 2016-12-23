@@ -19,6 +19,11 @@
 #include <lego/cpumask.h>
 #include <lego/compiler.h>
 
+/* Macros for apic_extnmi which controls external NMI masking */
+#define APIC_EXTNMI_BSP		0 /* Default */
+#define APIC_EXTNMI_ALL		1
+#define APIC_EXTNMI_NONE	2
+
 struct local_apic {
 
 /*000*/	struct { u32 __reserved[4]; } __reserved_01;
@@ -482,6 +487,8 @@ void __init init_apic_mappings(void);
 void __init register_lapic_address(unsigned long address);
 
 void __init x86_apic_ioapic_init(void);
+
+void __init init_bsp_APIC(void);
 
 int cpu_to_apicid(int cpu);
 int apic_register_new_cpu(int apicid, int enabled);

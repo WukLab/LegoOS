@@ -40,7 +40,7 @@ static void __init pre_vector_init(void)
 	int i;
 
 #if defined(CONFIG_X86_64) || defined(CONFIG_X86_LOCAL_APIC)
-	//init_bsp_APIC();
+	init_bsp_APIC();
 #endif
 
 	/* init i8259 itself */
@@ -101,11 +101,6 @@ void __init arch_irq_init(void)
 	/* IPI vectors for APIC spurious and error interrupts */
 	alloc_intr_gate(SPURIOUS_APIC_VECTOR, spurious_interrupt);
 	alloc_intr_gate(ERROR_APIC_VECTOR, error_interrupt);
-
-	/* IRQ work interrupts: */
-#ifdef CONFIG_IRQ_WORK
-	alloc_intr_gate(IRQ_WORK_VECTOR, irq_work_interrupt);
-#endif
 #endif
 
 	/*
@@ -129,5 +124,4 @@ void __init arch_irq_init(void)
 
 	if (!acpi_ioapic && nr_legacy_irqs())
 		setup_irq(2, &irq2);
-
 }
