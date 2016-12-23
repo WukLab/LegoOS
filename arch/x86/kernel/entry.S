@@ -319,7 +319,8 @@ IDT_ENTRY virtualization_exception	do_virtualization_exception	has_error_code=0
  */
 	.align 64
 ENTRY(common_interrupt)
-	addq	$-0x80, (%rsp)			/* Adjust vector to [-256, -1] range */
+	/* Adjust vector to [-256, -1] range */
+	addq	$-0x80, (%rsp)
 	INTR	do_IRQ
 
 ret_from_intr:
@@ -353,7 +354,17 @@ restore_c_regs_and_iret:
 	iretq
 END(common_interrupt)
 
-/*
+/**
+ * irq_entries_start	-	[0x20...FIRST_SYSTEM_VECTOR handler
+ *
+ * IDT has 0xff vectors:
+ *   [0x0...0x1f] are Intel reserved vectors.
+ *   [0x20...FIRST_SYSTEM_VECTOR] handlers are the below handler array
+ *   [FIRST_SYSTEM_VECTOR...0xff] are filled of special system vectors,
+ *   the holes inside this small range are filled of spurious_interrupt().
+ *
+ * Check arch/x86/kernel/irqinit.c for the god damn details.
+ *
  * Build the entry stubs with some assembler magic.
  * We pack 1 stub into every 8-byte block.
  */
@@ -361,7 +372,8 @@ END(common_interrupt)
 ENTRY(irq_entries_start)
     vector=FIRST_EXTERNAL_VECTOR
     .rept (FIRST_SYSTEM_VECTOR - FIRST_EXTERNAL_VECTOR)
-	pushq	$(~vector+0x80)			/* Note: always in signed byte range */
+	/* Note: always in signed byte range */
+	pushq	$(~vector+0x80)
     vector=vector+1
 	jmp	common_interrupt
 	.align	8

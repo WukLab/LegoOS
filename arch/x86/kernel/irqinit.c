@@ -39,10 +39,6 @@ static void __init pre_vector_init(void)
 	struct irq_chip *chip = legacy_pic->chip;
 	int i;
 
-#if defined(CONFIG_X86_64) || defined(CONFIG_X86_LOCAL_APIC)
-	init_bsp_APIC();
-#endif
-
 	/* init i8259 itself */
 	legacy_pic->init(0);
 
@@ -57,10 +53,18 @@ void __init arch_irq_init(void)
 
 	x86_apic_ioapic_init();
 
+#if defined(CONFIG_X86_64) || defined(CONFIG_X86_LOCAL_APIC)
+	init_bsp_APIC();
+#endif
+
+	/*
+	 * Set IRQ 0..nr_legacy_irqs()
+	 */
 	pre_vector_init();
 
 	/*
 	 * On cpu 0, Assign ISA_IRQ_VECTOR(irq) to IRQ 0..15.
+	 *
 	 * If these IRQ's are handled by legacy interrupt-controllers like PIC,
 	 * then this configuration will likely be static after the boot. If
 	 * these IRQ's are handled by more mordern controllers like IO-APIC,
@@ -113,13 +117,14 @@ void __init arch_irq_init(void)
 #define first_system_vector NR_VECTORS
 #endif
 	for_each_clear_bit_from(i, used_vectors, first_system_vector) {
-		/* IA32_SYSCALL_VECTOR could be used in trap_init already. */
 		set_intr_gate(i, irq_entries_start +
 				8 * (i - FIRST_EXTERNAL_VECTOR));
 	}
+
 #ifdef CONFIG_X86_LOCAL_APIC
-	for_each_clear_bit_from(i, used_vectors, NR_VECTORS)
+	for_each_clear_bit_from(i, used_vectors, NR_VECTORS) {
 		set_intr_gate(i, spurious_interrupt);
+	}
 #endif
 
 	if (!acpi_ioapic && nr_legacy_irqs())
