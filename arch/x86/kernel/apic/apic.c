@@ -269,3 +269,26 @@ void __init init_apic_mappings(void)
 		boot_cpu_apic_version = GET_APIC_VERSION(apic_read(APIC_LVR));
 	}
 }
+
+/*
+ * Local APIC timer interrupt. This is the most natural way for doing
+ * local interrupts, but local timer interrupts can be emulated by
+ * broadcast interrupts too. [in case the hw doesn't support APIC timers]
+ *
+ * [ if a single-CPU system runs an SMP kernel then we call the local
+ *   interrupt as well. Thus we cannot inline the local irq ... ]
+ */
+asmlinkage __visible void
+apic_timer_interrupt(struct pt_regs *regs)
+{
+}
+
+asmlinkage __visible void
+error_interrupt(struct pt_regs *regs)
+{
+}
+
+asmlinkage __visible void
+spurious_interrupt(struct pt_regs *regs)
+{
+}

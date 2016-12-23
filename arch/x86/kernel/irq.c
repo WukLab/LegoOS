@@ -7,27 +7,19 @@
  * (at your option) any later version.
  */
 
-#include <asm/ipi.h>
-#include <asm/apic.h>
-#include <asm/hw_irq.h>
 #include <asm/ptrace.h>
 
+#include <lego/irq.h>
 #include <lego/kernel.h>
 
-asmlinkage __visible void
-reboot_interrupt(struct pt_regs *regs)
+asmlinkage __visible unsigned int
+do_IRQ(struct pt_regs *regs)
 {
-
+	return 0;
 }
 
 asmlinkage __visible void
-call_function_single_interrupt(struct pt_regs *regs)
-{
-
-}
-
-asmlinkage __visible void
-call_function_interrupt(struct pt_regs *regs)
+x86_platform_ipi(struct pt_regs *regs)
 {
 
 }

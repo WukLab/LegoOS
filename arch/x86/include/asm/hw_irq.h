@@ -10,6 +10,20 @@
 #ifndef _ASM_X86_HW_IRQ_H_
 #define _ASM_X86_HW_IRQ_H_
 
+#include <asm/ptrace.h>
+
+/* Interrupt handlers registered during init_IRQ */
+extern asmlinkage void apic_timer_interrupt(struct pt_regs *regs);
+extern asmlinkage void x86_platform_ipi(struct pt_regs *regs);
+extern asmlinkage void error_interrupt(struct pt_regs *regs);
+extern asmlinkage void spurious_interrupt(struct pt_regs *regs);
+extern asmlinkage void irq_work_interrupt(struct pt_regs *regs);
+extern asmlinkage void call_function_interrupt(struct pt_regs *regs);
+extern asmlinkage void call_function_single_interrupt(struct pt_regs *regs);
+extern asmlinkage void reboot_interrupt(struct pt_regs *regs);
+
+extern asmlinkage unsigned int do_IRQ(struct pt_regs *regs);
+
 #ifdef CONFIG_X86_LOCAL_APIC
 struct irq_data;
 struct msi_desc;
@@ -82,5 +96,12 @@ extern void apic_ack_edge(struct irq_data *data);
 static inline void lock_vector_lock(void) {}
 static inline void unlock_vector_lock(void) {}
 #endif	/* CONFIG_X86_LOCAL_APIC */
+
+#define VECTOR_UNUSED		NULL
+#define VECTOR_RETRIGGERED	((void *)~0UL)
+
+typedef struct irq_desc* vector_irq_t[NR_VECTORS];
+
+extern char irq_entries_start[];
 
 #endif /* _ASM_X86_HW_IRQ_H_ */

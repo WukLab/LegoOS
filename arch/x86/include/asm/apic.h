@@ -481,6 +481,8 @@ void __init init_apic_mappings(void);
 
 void __init register_lapic_address(unsigned long address);
 
+void __init x86_apic_ioapic_init(void);
+
 int cpu_to_apicid(int cpu);
 int apic_register_new_cpu(int apicid, int enabled);
 

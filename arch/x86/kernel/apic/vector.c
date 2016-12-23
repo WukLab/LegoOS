@@ -53,7 +53,13 @@ struct irq_cfg *irq_cfg(unsigned int irq)
 	irqd_cfg(irq_get_irq_data(irq));
 }
 
-void __init arch_irq_init(void)
+/*
+ * IRQ init the apic and ioapic, register irq chip/handler.
+ *
+ * Note that all apic and ioapic information were filled
+ * early by paring the ACPI tables.
+ */
+void __init x86_apic_ioapic_init(void)
 {
 	int i;
 
@@ -63,6 +69,9 @@ void __init arch_irq_init(void)
 		data = &legacy_irq_data[i];
 		data->cfg.vector = ISA_IRQ_VECTOR(i);
 		cpumask_setall(data->domain);
+
+		/* The irq chip and handler will be set later
+		   by init_ISA_irqs() */
 		irq_set_chip_data(i, data);
 	}
 

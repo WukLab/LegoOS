@@ -26,6 +26,7 @@
  */
 gate_desc idt_table[NR_VECTORS];
 
+int first_system_vector = FIRST_SYSTEM_VECTOR;
 DECLARE_BITMAP(used_vectors, NR_VECTORS);
 
 struct desc_ptr idt_desc = {

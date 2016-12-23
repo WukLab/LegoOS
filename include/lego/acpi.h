@@ -620,5 +620,6 @@ void __init acpi_boot_numa_init(void);
 #define REMOTE_DISTANCE		20
 
 int acpi_isa_irq_to_gsi(unsigned isa_irq, u32 *gsi);
+extern int acpi_ioapic;
 
 #endif /* _LEGO_ACPI_H_ */

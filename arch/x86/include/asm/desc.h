@@ -325,4 +325,25 @@ static inline void set_task_gate(unsigned int gate, unsigned int gdt_entry)
 	__set_gate(gate, GATE_TASK, (void *)0, 0, 0, (gdt_entry << 3));
 }
 
+/* used_vectors is BITMAP for irq is not managed by percpu vector_irq */
+extern DECLARE_BITMAP(used_vectors, NR_VECTORS);
+extern int first_system_vector;
+
+static inline void alloc_system_vector(int vector)
+{
+	if (!test_bit(vector, used_vectors)) {
+		set_bit(vector, used_vectors);
+		if (first_system_vector > vector)
+			first_system_vector = vector;
+	} else {
+		BUG();
+	}
+}
+
+#define alloc_intr_gate(n, addr)				\
+	do {							\
+		alloc_system_vector(n);				\
+		set_intr_gate(n, addr);				\
+	} while (0)
+
 #endif /* _ASM_X86_DESC_H_ */

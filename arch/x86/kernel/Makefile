@@ -15,6 +15,7 @@ obj-y += trampoline.o
 obj-y += time.o
 
 obj-y += i8259.o
+obj-y += irq.o irqinit.o
 
 # ACPI APIC.. is this annoying?
 obj-y += acpi/

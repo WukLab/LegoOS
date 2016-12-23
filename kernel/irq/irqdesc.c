@@ -215,3 +215,32 @@ int __irq_set_trigger(struct irq_desc *desc, unsigned long flags)
 void check_irq_resend(struct irq_desc *desc)
 {
 }
+
+/*
+ * Internal function to register an irqaction - typically used to
+ * allocate special interrupts that are part of the architecture.
+ */
+static int __setup_irq(unsigned int irq, struct irq_desc *desc,
+		       struct irqaction *new)
+{
+	return 0;
+}
+
+/**
+ *	setup_irq - setup an interrupt
+ *	@irq: Interrupt line to setup
+ *	@act: irqaction for the interrupt
+ *
+ * Used to statically setup interrupts in the early boot process.
+ */
+int setup_irq(unsigned int irq, struct irqaction *act)
+{
+	int retval;
+	struct irq_desc *desc = irq_to_desc(irq);
+
+	if (!desc)
+		return -EINVAL;
+
+	retval = __setup_irq(irq, desc, act);
+	return retval;
+}

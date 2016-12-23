@@ -12,6 +12,14 @@
 #include <lego/irqdesc.h>
 #include <lego/spinlock.h>
 
+/*
+ * Special, empty irq handler:
+ */
+irqreturn_t no_action(int cpl, void *dev_id)
+{
+	return IRQ_NONE;
+}
+
 /**
  *	handle_bad_irq - handle spurious and unhandled irqs
  *	@desc:      description of the interrupt

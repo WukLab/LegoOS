@@ -399,6 +399,8 @@ void disable_irq(unsigned int irq);
 void disable_irq_nosync(unsigned int irq);
 void enable_irq(unsigned int irq);
 
+int setup_irq(unsigned int irq, struct irqaction *new);
+
 int __irq_set_trigger(struct irq_desc *desc, unsigned long flags);
 
 void check_irq_resend(struct irq_desc *desc);
