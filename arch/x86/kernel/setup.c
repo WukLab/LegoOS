@@ -202,6 +202,16 @@ void __init setup_arch(void)
 	e820_fill_memblock();
 
 	/*
+	 * Allocate early pgtable buffers
+	 * and them fill brk into memblock
+	 */
+	early_alloc_pgt_buf();
+	reserve_brk();
+
+	/* Setup identity mapping */
+	init_mem_mapping();
+
+	/*
 	 * Before parsing ACPI tables,
 	 * set default APIC driver first
 	 */
@@ -237,16 +247,6 @@ void __init setup_arch(void)
 #else
 	memblock_set_node(0, (phys_addr_t)ULLONG_MAX, &memblock.memory, 0);
 #endif
-
-	/*
-	 * Allocate early pgtable buffers
-	 * and them fill brk into memblock
-	 */
-	early_alloc_pgt_buf();
-	reserve_brk();
-
-	/* Setup identity mapping */
-	init_mem_mapping();
 
 	/*
 	 * Load interrupt handlers after init_mem_mapping()

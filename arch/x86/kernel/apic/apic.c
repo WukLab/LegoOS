@@ -384,14 +384,17 @@ void __init init_bsp_APIC(void)
 asmlinkage __visible void
 apic_timer_interrupt(struct pt_regs *regs)
 {
+	pr_info("apic_timer_interrupt");
 }
 
 asmlinkage __visible void
 error_interrupt(struct pt_regs *regs)
 {
+	pr_info("error_interrupt");
 }
 
 asmlinkage __visible void
 spurious_interrupt(struct pt_regs *regs)
 {
+	pr_info("spurious_interrupt");
 }

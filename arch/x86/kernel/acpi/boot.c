@@ -80,7 +80,7 @@ static int acpi_register_lapic(int id, u32 acpiid, u8 enabled)
 
 static int __init acpi_parse_madt(struct acpi_table_header *table)
 {
-	struct acpi_table_madt *madt;
+	struct acpi_table_madt *madt = NULL;
 
 	if (!cpu_has(X86_FEATURE_APIC))
 		return -EINVAL;
@@ -208,6 +208,9 @@ acpi_parse_lapic_nmi(struct acpi_subtable_header * header, const unsigned long e
 	struct acpi_madt_local_apic_nmi *lapic_nmi = NULL;
 
 	lapic_nmi = (struct acpi_madt_local_apic_nmi *)header;
+
+	pr_info("header: %p, end: %#lx, entry->length: %#x\n",
+		header, end, header->length);
 
 	if (BAD_MADT_ENTRY(lapic_nmi, end))
 		return -EINVAL;
@@ -343,11 +346,15 @@ static int __init acpi_parse_madt_ioapic_entries(void)
 
 static int __init acpi_parse_madt_lapic_entries(void)
 {
-	int ret, count, x2count;
+	int ret, count = 0, x2count = 0;
 	struct acpi_subtable_proc madt_proc[2];
 
 	count = acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_SAPIC,
 				      acpi_parse_sapic, MAX_LOCAL_APIC);
+
+	/*
+	 * Parse APIC
+	 */
 
 	if (!count) {
 		memset(madt_proc, 0, sizeof(madt_proc));
@@ -375,13 +382,24 @@ static int __init acpi_parse_madt_lapic_entries(void)
 		return count;
 	}
 
-	x2count = acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_X2APIC_NMI,
-					acpi_parse_x2apic_nmi, 0);
+	/*
+	 * Parse APIC NMI
+	 */
 
-	count = acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_APIC_NMI,
-				      acpi_parse_lapic_nmi, 0);
+	memset(madt_proc, 0, sizeof(madt_proc));
+	madt_proc[0].id = ACPI_MADT_TYPE_LOCAL_X2APIC_NMI;
+	madt_proc[0].handler = acpi_parse_x2apic_nmi;
+	madt_proc[1].id = ACPI_MADT_TYPE_LOCAL_APIC_NMI;
+	madt_proc[1].handler = acpi_parse_lapic_nmi;
 
-	if (count < 0 || x2count < 0) {
+	ret = acpi_table_parse_entries_array(ACPI_SIG_MADT,
+		sizeof(struct acpi_table_madt), madt_proc, ARRAY_SIZE(madt_proc),
+		MAX_LOCAL_APIC);
+
+	count = madt_proc[0].count;
+	x2count = madt_proc[1].count;
+
+	if (ret < 0 || count < 0 || x2count < 0) {
 		pr_err("Error parsing LAPIC NMI entry\n");
 		return count;
 	}
@@ -500,6 +518,22 @@ static void __init acpi_boot_parse_hpet(void)
 	acpi_parse_table(ACPI_SIG_HPET, acpi_parse_hpet);
 }
 
+int sbf_port __initdata = -1;
+
+static int __init acpi_parse_sbf(struct acpi_table_header *table)
+{
+	struct acpi_table_boot *sb = (struct acpi_table_boot *)table;
+
+	sbf_port = sb->cmos_index;	/* Save CMOS port */
+
+	return 0;
+}
+
+static void __init acpi_boot_parse_sbf(void)
+{
+	acpi_parse_table(ACPI_SIG_BOOT, acpi_parse_sbf);
+}
+
 /*
  * Parse ACPI tables one-by-one
  * - MADT: Multiple APIC Description Table
@@ -507,6 +541,9 @@ static void __init acpi_boot_parse_hpet(void)
  */
 void __init acpi_boot_parse_tables(void)
 {
+	acpi_boot_parse_sbf();
+
 	acpi_boot_parse_madt();
+
 	acpi_boot_parse_hpet();
 }

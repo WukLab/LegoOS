@@ -21,7 +21,7 @@
 #include <lego/kernel.h>
 #include <lego/early_ioremap.h>
 
-int early_ioremap_debug = 0;
+int early_ioremap_debug = 1;
 
 static void *prev_map[FIX_BTMAPS_SLOTS] __initdata;
 static unsigned long prev_size[FIX_BTMAPS_SLOTS] __initdata;
@@ -42,6 +42,7 @@ void __init early_ioremap_setup(void)
 static void __init *
 __early_ioremap(resource_size_t phys_addr, unsigned long size, pgprot_t prot)
 {
+	resource_size_t orig_phys_addr = phys_addr;
 	unsigned long offset;
 	resource_size_t last_addr;
 	unsigned int nrpages;
@@ -93,7 +94,7 @@ __early_ioremap(resource_size_t phys_addr, unsigned long size, pgprot_t prot)
 
 	if (early_ioremap_debug)
 		printk("%s(%08llx, %08lx) [%d] => %08lx + %08lx\n",
-	     		__func__, (u64)phys_addr, size, slot, offset, slot_virt[slot]);
+	     		__func__, (u64)orig_phys_addr, size, slot, offset, slot_virt[slot]);
 
 	prev_map[slot] = (void *)(offset + slot_virt[slot]);
 	return prev_map[slot];
@@ -124,9 +125,6 @@ void __init early_iounmap(void *addr, unsigned long size)
 		 addr, size, slot, prev_size[slot]))
 		return;
 
-	if (early_ioremap_debug)
-		printk("early_iounmap(%p, %08lx) [%d]\n", addr, size, slot);
-
 	virt_addr = (unsigned long)addr;
 	if (WARN_ON(virt_addr < fix_to_virt(FIX_BTMAP_BEGIN)))
 		return;
@@ -142,6 +140,9 @@ void __init early_iounmap(void *addr, unsigned long size)
 		--nrpages;
 	}
 	prev_map[slot] = NULL;
+
+	if (early_ioremap_debug)
+		printk("early_iounmap(%p, %08lx) [%d]\n", addr, size, slot);
 }
 
 /* Remap an IO device */

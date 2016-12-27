@@ -50,6 +50,7 @@ enum acpi_irq_model_id {
 #define ACPI_SIG_SRAT	"SRAT"		/* System Resource Affinity Table */
 #define ACPI_SIG_NFIT	"NFIT"		/* NVDIMM Firmware Interface Table */
 #define ACPI_SIG_HPET	"HPET"		/* High Precision Event Timer table */
+#define ACPI_SIG_BOOT	"BOOT"		/* Simple Boot Flag Table */
 
 #define ACPI_NAME_SIZE		4
 #define ACPI_OEM_ID_SIZE	6
@@ -125,6 +126,20 @@ struct acpi_generic_address {
 	u8 bit_offset;		/* Bit offset within the register */
 	u8 access_width;	/* Minimum Access size (ACPI 3.0) */
 	u64 address;		/* 64-bit address of struct or register */
+};
+
+/*******************************************************************************
+ *
+ * BOOT - Simple Boot Flag Table
+ *        Version 1
+ *
+ * Conforms to the "Simple Boot Flag Specification", Version 2.1
+ *
+ ******************************************************************************/
+struct acpi_table_boot {
+	struct acpi_table_header header;	/* Common ACPI table header */
+	u8 cmos_index;		/* Index in CMOS RAM for the boot register */
+	u8 reserved[3];
 };
 
 /*******************************************************************************
@@ -611,9 +626,10 @@ void __init acpi_boot_parse_tables(void);
 /* Arch-Specific boot-time NUMA setup */
 void __init acpi_boot_numa_init(void);
 
-#define BAD_MADT_ENTRY(entry, end) (					    \
-		(!entry) || (unsigned long)entry + sizeof(*entry) > end ||  \
-		((struct acpi_subtable_header *)entry)->length < sizeof(*entry))
+#define BAD_MADT_ENTRY(entry, end)						\
+	WARN_ON(								\
+	((!entry) || (unsigned long)entry + sizeof(*entry) > end ||		\
+	((struct acpi_subtable_header *)entry)->length < sizeof(*entry)))
 
 /* Conform to ACPI 2.0 SLIT distance definitions */
 #define LOCAL_DISTANCE		10

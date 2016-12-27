@@ -421,7 +421,7 @@ static int __init numa_register_memblks(struct numa_meminfo *mi)
 void __init x86_numa_init(void)
 {
 	int ret;
-	bool fake = false;
+	bool fake = true;
 
 fake_numa:
 	nodes_clear(node_possible_map);

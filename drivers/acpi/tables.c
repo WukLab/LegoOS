@@ -107,12 +107,20 @@ acpi_parse_entries_array(char *id, unsigned long table_size,
 	int errs = 0;
 	int i;
 
-	if (!id || !table_header)
+	if (!id)
 		return -EINVAL;
+
+	if (!table_size)
+		return -EINVAL;
+
+	if (!table_header) {
+		pr_warn("%4.4s not present\n", id);
+		return -ENODEV;
+	}
 
 	table_end = (unsigned long)table_header + table_header->length;
 
-	/* Get the entry of subtables */
+	/* Parse all entries looking for a match. */
 	entry = (struct acpi_subtable_header *)
 	    ((unsigned long)table_header + table_size);
 
@@ -344,8 +352,14 @@ static int __init acpi_tb_install(unsigned long address)
 }
 
 /*
- * This function is called to parse the
- * Root System Description Table (RSDT or XSDT)
+ * PARAMETERS:  rsdp                    - Pointer to the RSDP
+ *
+ * DESCRIPTION: This function is called to parse the Root System Description
+ *              Table (RSDT or XSDT)
+ *
+ * NOTE:        Tables are mapped (not copied) for efficiency. The FACS must
+ *              be mapped and cannot be copied because it contains the actual
+ *              memory location of the ACPI Global Lock.
  */
 static int __init acpi_tb_parse_root_table(unsigned long rsdp_address)
 {
@@ -357,19 +371,23 @@ static int __init acpi_tb_parse_root_table(unsigned long rsdp_address)
 	struct acpi_table_rsdp *rsdp;
 	struct acpi_table_header *table;
 
+	/* Map the entire RSDP and extract the address of the RSDT or XSDT */
 	rsdp = early_ioremap(rsdp_address, sizeof(struct acpi_table_rsdp));
-	if (!rsdp)
+	if (!rsdp) {
+		panic("Unable to entire RSDP");
 		return -ENOMEM;
+	}
 
 	acpi_tb_print_table_header(rsdp_address, (struct acpi_table_header *)rsdp);
 
+	/* Use XSDT if present and not overridden. Otherwise, use RSDT */
 	if ((rsdp->revision > 1) && rsdp->xsdt_physical_address) {
 		/*
 		 * RSDP contains an XSDT (64-bit physical addresses). We must use
 		 * the XSDT if the revision is > 1 and the XSDT pointer is present,
 		 * as per the ACPI specification.
 		 */
-		address = rsdp->xsdt_physical_address;
+		address = (u64)rsdp->xsdt_physical_address;
 		table_entry_size = ACPI_XSDT_ENTRY_SIZE;
 	} else {
 		/* Root table is an RSDT (32-bit physical addresses) */
@@ -386,6 +404,11 @@ static int __init acpi_tb_parse_root_table(unsigned long rsdp_address)
 	if (!table)
 		return -ENOMEM;
 	acpi_tb_print_table_header(address, table);
+
+	/*
+	 * Validate length of the table, and map entire table.
+	 * Minimum length table must contain at least one entry.
+	 */
 	length = table->length;
 	early_iounmap(table, sizeof(struct acpi_table_header));
 
@@ -489,6 +512,14 @@ static __init u8 *acpi_tb_scan_memory_for_rsdp(u8 *start_address, u32 length)
 	return NULL;
 }
 
+/*
+ * DESCRIPTION: Search lower 1Mbyte of memory for the root system descriptor
+ *              pointer structure. If it is found, set *RSDP to point to it.
+ *
+ * NOTE1:       The RSDP must be either in the first 1K of the Extended
+ *              BIOS Data Area or between E0000 and FFFFF (From ACPI Spec.)
+ *              Only a 32-bit physical address is necessary.
+ */
 static __init unsigned long acpi_tb_get_root_pointer(void)
 {
 	u8 *table_ptr;
@@ -550,11 +581,18 @@ static __init unsigned long acpi_tb_get_root_pointer(void)
 	return 0;
 }
 
+/*
+ * acpi_table_init()
+ *
+ * find RSDP, find and checksum SDT/XSDT.
+ * checksum all tables, print SDT/XSDT
+ */
 void __init acpi_table_init(void)
 {
 	int ret;
 	unsigned long rsdp_address;
 
+	/* Get the address of the RSDP */
 	rsdp_address = acpi_tb_get_root_pointer();
 	if (!rsdp_address)
 		return;

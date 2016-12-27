@@ -17,17 +17,17 @@
 asmlinkage __visible void
 reboot_interrupt(struct pt_regs *regs)
 {
-
+	pr_info("reboot_interrupt");
 }
 
 asmlinkage __visible void
 call_function_single_interrupt(struct pt_regs *regs)
 {
-
+	pr_info("call_function_interrupt");
 }
 
 asmlinkage __visible void
 call_function_interrupt(struct pt_regs *regs)
 {
-
+	pr_info("call_function_interrupt");
 }

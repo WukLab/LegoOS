@@ -261,10 +261,11 @@ static int __init acpi_parse_slit(struct acpi_table_header *table)
 
 			if (to_node == NUMA_NO_NODE)
 				continue;
-
+/*
 			numa_set_distance(from_node, to_node,
 				slit->entry[slit->locality_count * i + j]);
-		}
+*/
+	}
 	}
 
 	return 0;

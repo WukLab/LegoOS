@@ -15,11 +15,12 @@
 asmlinkage __visible unsigned int
 do_IRQ(struct pt_regs *regs)
 {
+	pr_info("do_IRQ");
 	return 0;
 }
 
 asmlinkage __visible void
 x86_platform_ipi(struct pt_regs *regs)
 {
-
+	pr_info("x86_platform_ipi");
 }
