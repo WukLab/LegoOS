@@ -61,6 +61,7 @@ static char * const zone_names[MAX_NR_ZONES] = {
 	 "DMA32",
 #endif
 	 "Normal",
+	 "Movable",
 };
 
 static unsigned long arch_zone_lowest_possible_pfn[MAX_NR_ZONES];

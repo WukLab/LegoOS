@@ -38,3 +38,5 @@ build/
 !.mailmap
 
 output
+output_ttyS0
+output_ttyS1

@@ -240,6 +240,7 @@ static int __init slit_valid(struct acpi_table_slit *slit)
 	return 1;
 }
 
+/* SLIT: System Locality Information Table */
 static int __init acpi_parse_slit(struct acpi_table_header *table)
 {
 	int i, j;
@@ -294,10 +295,15 @@ void __init acpi_boot_numa_init(void)
 				sizeof(struct acpi_table_srat),
 				srat_proc, ARRAY_SIZE(srat_proc), 0);
 
+/*
+XXX:
+	Temporary disable this code because ACPI table is broken
+	Fix this when ACPI is fixed
+
 	cnt = acpi_table_parse_srat(ACPI_SRAT_TYPE_MEMORY_AFFINITY,
 				    acpi_parse_srat_memory_affinity,
 				    NR_NODE_MEMBLKS);
 
-	/* SLIT: System Locality Information Table */
 	acpi_parse_table(ACPI_SIG_SLIT, acpi_parse_slit);
+*/
 }
