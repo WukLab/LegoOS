@@ -25,4 +25,6 @@ static inline void *kzalloc(size_t size, gfp_t flags)
 	return kmalloc(size, flags | __GFP_ZERO);
 }
 
+void kfree_tmp(size_t size, const void *p);
+
 #endif /* _LEGO_SLAB_H_ */

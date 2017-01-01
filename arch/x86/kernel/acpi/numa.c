@@ -200,7 +200,7 @@ out_err:
 	return -EINVAL;
 }
 
-static int __init
+static int __init __used
 acpi_parse_srat_memory_affinity(struct acpi_subtable_header * header,
 				const unsigned long end)
 {
@@ -241,7 +241,7 @@ static int __init slit_valid(struct acpi_table_slit *slit)
 }
 
 /* SLIT: System Locality Information Table */
-static int __init acpi_parse_slit(struct acpi_table_header *table)
+static int __init __used acpi_parse_slit(struct acpi_table_header *table)
 {
 	int i, j;
 	struct acpi_table_slit *slit = (struct acpi_table_slit *)table;
@@ -274,7 +274,7 @@ static int __init acpi_parse_slit(struct acpi_table_header *table)
 
 void __init acpi_boot_numa_init(void)
 {
-	int ret, cnt;
+	int ret;
 	struct acpi_subtable_proc srat_proc[3];
 
 	ret = acpi_parse_table(ACPI_SIG_SRAT, acpi_parse_srat);
