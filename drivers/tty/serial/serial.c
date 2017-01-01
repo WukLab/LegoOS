@@ -13,7 +13,12 @@
 #include <lego/tty.h>
 
 /* ttyS0 */
-#define DEFAULT_SERIAL_PORT 0x3f8
+#define __DEFAULT_SERIAL_PORT_0 0x3f8
+
+/* ttyS1 */
+#define __DEFAULT_SERIAL_PORT_1 0x2f8
+
+#define DEFAULT_SERIAL_PORT __DEFAULT_SERIAL_PORT_1
 static unsigned long serial_base = DEFAULT_SERIAL_PORT;
 
 #define DEFAULT_BAUD	9600
