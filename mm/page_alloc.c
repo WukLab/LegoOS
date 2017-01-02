@@ -755,8 +755,21 @@ void free_pages(unsigned long addr, unsigned int order)
 	}
 }
 
+static __always_inline void __clear_page(void *page)
+{
+	/* XXX: Trace this if necessary */
+	memset(page, 0, PAGE_SIZE);
+}
+
 static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags)
 {
+	int i;
+
+	if (gfp_flags & __GFP_ZERO) {
+		for (i = 0; i < (1 << order); i++)
+			__clear_page(page_to_virt(page + i));
+	}
+
 	set_page_private(page, 0);
 	set_page_refcounted(page);
 }
