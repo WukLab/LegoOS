@@ -13,250 +13,29 @@
  * - INTERRUPT:		Define interrupt entry points
  */
 
-/*
- * x86-64 ABI:
- * ---------------------------------------------------------------------------
- * arguments           |  callee-saved      | extra caller-saved | return
- * [callee-clobbered]   |                    | [callee-clobbered] |
- * ---------------------------------------------------------------------------
- * rdi rsi rdx rcx r8-9 | rbx rbp [*] r12-15 | r10-11             | rax, rdx [**]
- *
- * ( rsp is obviously invariant across normal function calls. (gcc can 'merge'
- * functions when it sees tail-call optimization possibilities) rflags is
- * clobbered. Leftover arguments are passed over the stack frame.)
- *
- * [*]  In the frame-pointers case rbp is fixed to the stack frame.
- *
- * [**] For struct return values wider than 64 bits the return convention is a
- *	bit more complex: up to 128 bits width we return small structures
- *	straight in rax, rdx. For structures larger than that (3 words or
- *	larger) the caller puts a pointer to an on-stack return struct
- *	[allocated in the caller's stack frame] into the first argument - i.e.
- *	into rdi. All other arguments shift up by one in this case.
- *	Fortunately this case is rare in the kernel.
- */
-
 #include <asm/ptrace.h>
 #include <asm/irq_vectors.h>
 #include <lego/linkage.h>
 
-/*
- * C ABI says these regs are callee-preserved. They aren't saved on kernel entry
- * unless syscall needs a complete, fully filled "struct pt_regs".
- */
-#define R15		0*8
-#define R14		1*8
-#define R13		2*8
-#define R12		3*8
-#define RBP		4*8
-#define RBX		5*8
-/* These regs are callee-clobbered. Always saved on kernel entry. */
-#define R11		6*8
-#define R10		7*8
-#define R9		8*8
-#define R8		9*8
-#define RAX		10*8
-#define RCX		11*8
-#define RDX		12*8
-#define RSI		13*8
-#define RDI		14*8
-/*
- * On syscall entry, this is syscall#. On CPU exception, this is error code.
- * On hw interrupt, it's IRQ number:
- */
-#define ORIG_RAX	15*8
-
-/* Return frame for iretq */
-#define RIP		16*8
-#define CS		17*8
-#define EFLAGS		18*8
-#define RSP		19*8
-#define SS		20*8
-
-#define SIZEOF_PTREGS	21*8
-
-.macro ALLOC_PT_GPREGS_ON_STACK addskip=0
-	addq	$-(15*8+\addskip), %rsp
-.endm
-
-.macro SAVE_C_REGS_HELPER offset=0 rax=1 rcx=1 r8910=1 r11=1
-	.if \r11
-	movq	%r11, 6*8+\offset(%rsp)
-	.endif
-
-	.if \r8910
-	movq	%r10, 7*8+\offset(%rsp)
-	movq	%r9,  8*8+\offset(%rsp)
-	movq	%r8,  9*8+\offset(%rsp)
-	.endif
-
-	.if \rax
-	movq	%rax, 10*8+\offset(%rsp)
-	.endif
-
-	.if \rcx
-	movq	%rcx, 11*8+\offset(%rsp)
-	.endif
-
-	movq	%rdx, 12*8+\offset(%rsp)
-	movq	%rsi, 13*8+\offset(%rsp)
-	movq	%rdi, 14*8+\offset(%rsp)
-.endm
-
-.macro SAVE_C_REGS offset=0
-	SAVE_C_REGS_HELPER \offset, 1, 1, 1, 1
-.endm
-
-.macro SAVE_C_REGS_EXCEPT_RAX_RCX offset=0
-	SAVE_C_REGS_HELPER \offset, 0, 0, 1, 1
-.endm
-
-.macro SAVE_C_REGS_EXCEPT_R891011
-	SAVE_C_REGS_HELPER 0, 1, 1, 0, 0
-.endm
-
-.macro SAVE_C_REGS_EXCEPT_RCX_R891011
-	SAVE_C_REGS_HELPER 0, 1, 0, 0, 0
-.endm
-
-.macro SAVE_C_REGS_EXCEPT_RAX_RCX_R11
-	SAVE_C_REGS_HELPER 0, 0, 0, 1, 0
-.endm
-
-.macro SAVE_EXTRA_REGS offset=0
-	movq	%r15, 0*8+\offset(%rsp)
-	movq	%r14, 1*8+\offset(%rsp)
-	movq	%r13, 2*8+\offset(%rsp)
-	movq	%r12, 3*8+\offset(%rsp)
-	movq	%rbp, 4*8+\offset(%rsp)
-	movq	%rbx, 5*8+\offset(%rsp)
-.endm
-
-.macro RESTORE_EXTRA_REGS offset=0
-	movq 0*8+\offset(%rsp), %r15
-	movq 1*8+\offset(%rsp), %r14
-	movq 2*8+\offset(%rsp), %r13
-	movq 3*8+\offset(%rsp), %r12
-	movq 4*8+\offset(%rsp), %rbp
-	movq 5*8+\offset(%rsp), %rbx
-.endm
-
-.macro ZERO_EXTRA_REGS
-	xorl	%r15d, %r15d
-	xorl	%r14d, %r14d
-	xorl	%r13d, %r13d
-	xorl	%r12d, %r12d
-	xorl	%ebp, %ebp
-	xorl	%ebx, %ebx
-.endm
-
-.macro RESTORE_C_REGS_HELPER rstor_rax=1, rstor_rcx=1, rstor_r11=1, rstor_r8910=1, rstor_rdx=1
-	.if \rstor_r11
-	movq 6*8(%rsp), %r11
-	.endif
-
-	.if \rstor_r8910
-	movq 7*8(%rsp), %r10
-	movq 8*8(%rsp), %r9
-	movq 9*8(%rsp), %r8
-	.endif
-
-	.if \rstor_rax
-	movq 10*8(%rsp), %rax
-	.endif
-
-	.if \rstor_rcx
-	movq 11*8(%rsp), %rcx
-	.endif
-
-	.if \rstor_rdx
-	movq 12*8(%rsp), %rdx
-	.endif
-
-	movq 13*8(%rsp), %rsi
-	movq 14*8(%rsp), %rdi
-.endm
-
-.macro RESTORE_C_REGS
-	RESTORE_C_REGS_HELPER 1,1,1,1,1
-.endm
-
-.macro RESTORE_C_REGS_EXCEPT_RAX
-	RESTORE_C_REGS_HELPER 0,1,1,1,1
-.endm
-
-.macro RESTORE_C_REGS_EXCEPT_RCX
-	RESTORE_C_REGS_HELPER 1,0,1,1,1
-.endm
-
-.macro RESTORE_C_REGS_EXCEPT_R11
-	RESTORE_C_REGS_HELPER 1,1,0,1,1
-.endm
-
-.macro RESTORE_C_REGS_EXCEPT_RCX_R11
-	RESTORE_C_REGS_HELPER 1,0,0,1,1
-.endm
-
-.macro REMOVE_PT_GPREGS_FROM_STACK addskip=0
-	subq $-(15*8+\addskip), %rsp
-.endm
+#include "entry.h"
 
 /*
- * Interrupt entry/exit.
- *
- * Interrupt entry points save only callee clobbered registers in fast path.
- *
- * Entry runs with interrupts off.
+ * IDT_ENTRY - Intel Reserved Vector Handler
+ * Corresponding to Intel's software developer manual, e.g. page fault.
  */
-/* 0(%rsp): ~(interrupt number) */
-.macro INTR func
-	cld
-	ALLOC_PT_GPREGS_ON_STACK
-	SAVE_C_REGS
-	SAVE_EXTRA_REGS
-
-	testb	$3, CS(%rsp)
-	jz	1f
-
-	/*
-	 * IRQ from user mode.
-	 * Switch to kernel gsbase.
-	 */
-	#SWAPGS
-
-1:
-	/*
-	 * This is the point where we can switch to
-	 * interrupt stack!
-	 * But now Lego only has one type of stack.
-	 */
-
-	/* rdi points to pt_regs */
-	call	\func
-.endm
-
 .macro IDT_ENTRY sym do_sym has_error_code:req
 ENTRY(\sym)
 	.ifeq \has_error_code
 	pushq	$-1			/* ORIG_RAX: no syscall to restart */
 	.endif
 
-	/* Save all */
-	pushq	%rdi
-	pushq	%rsi
-	pushq	%rdx
-	pushq	%rcx
-	pushq	%rax
-	pushq	%r8
-	pushq	%r9
-	pushq	%r10
-	pushq	%r11
-	pushq	%rbx
-	pushq	%rbp
-	pushq	%r12
-	pushq	%r13
-	pushq	%r14
-	pushq	%r15
+	/*
+	 * Save all registers in pt_regs
+	 */
+	cld
+	ALLOC_PT_GPREGS_ON_STACK
+	SAVE_C_REGS
+	SAVE_EXTRA_REGS
 
 	movq	%rsp, %rdi		/* pt_regs pointer */
 
@@ -269,24 +48,9 @@ ENTRY(\sym)
 
 	call	\do_sym
 
-	/* Restore all */
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbp
-	popq	%rbx
-	popq	%r11
-	popq	%r10
-	popq	%r9
-	popq	%r8
-	popq	%rax
-	popq	%rcx
-	popq	%rdx
-	popq	%rsi
-	popq	%rdi
-	addq	$8, %rsp		/* orig_ax */
-
+	RESTORE_EXTRA_REGS
+	RESTORE_C_REGS
+	REMOVE_PT_GPREGS_FROM_STACK 8
 	iretq
 END(\sym)
 .endm
@@ -312,6 +76,43 @@ IDT_ENTRY alignment_check		do_alignment_check		has_error_code=1
 IDT_ENTRY machine_check			do_machine_check		has_error_code=0
 IDT_ENTRY simd_exception		do_simd_exception		has_error_code=0
 IDT_ENTRY virtualization_exception	do_virtualization_exception	has_error_code=0
+
+/*
+ * Interrupt entry/exit.
+ * Interrupt entry points save only callee clobbered registers in fast path.
+ * Entry runs with interrupts off.
+ *
+ * When called, 0(%rsp): ~(interrupt number)
+ */
+.macro INTR func
+	cld
+	ALLOC_PT_GPREGS_ON_STACK
+	SAVE_C_REGS
+	SAVE_EXTRA_REGS
+
+	testb	$3, CS(%rsp)
+	jz	1f
+
+	/*
+	 * IRQ from user mode.
+	 * Switch to kernel gsbase.
+	 */
+	#SWAPGS
+
+1:
+	/*
+	 * TODO:
+	 * This is the point where we can switch to interrupt stack!
+	 * Since Intel supports different stacks! e.g. NMI, Interrupt
+	 *
+	 * But for now Lego only the stack of the current thread
+	 * No switching
+	 */
+
+	movq	%rsp, %rdi		/* pt_regs pointer */
+
+	call	\func
+.endm
 
 /*
  * The interrupt stubs push (~vector+0x80) onto the stack
@@ -381,7 +182,11 @@ ENTRY(irq_entries_start)
 END(irq_entries_start)
 
 /*
- * APIC interrupts.
+ * APIC interrupts
+ *
+ * These are system interrupt handlers.
+ * Thus, always come from kernel mode.
+ * Lay between [FIRST_SYSTEM_VECTOR...0xff]
  */
 .macro apicinterrupt num do_sym __sym
 ENTRY(\__sym)
