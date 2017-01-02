@@ -687,6 +687,7 @@ endif # CONFIG_MODULES
 
 MRPROPER_DIRS	+= include/config include/generated arch/*/include/generated
 MRPROPER_FILES	+= .config .config.old tags TAGS
+MRPROPER_FILES  += output output_ttyS0 output_ttyS1
 
 clean-dirs	:= $(addprefix _clean_, . $(vmImage-dirs) scripts/)
 
