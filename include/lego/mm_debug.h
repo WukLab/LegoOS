@@ -10,6 +10,12 @@
 #ifndef _LEGO_MM_DEBUG_H_
 #define _LEGO_MM_DEBUG_H_
 
+#include <lego/stringify.h>
+#include <lego/tracepoint.h>
+
+void dump_page(struct page *, const char *);
+extern const struct trace_print_flags pageflag_names[];
+
 /*
  * MM Debug Related
  */
@@ -19,6 +25,7 @@
 #define VM_BUG_ON_PAGE(cond, page)					\
 	do {								\
 		if (unlikely(cond)) {					\
+			dump_page(page, "VM_BUG_ON_PAGE(" __stringify(cond)")");\
 			BUG();						\
 		}							\
 	} while (0)

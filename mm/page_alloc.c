@@ -12,6 +12,7 @@
 
 #include <lego/mm.h>
 #include <lego/numa.h>
+#include <lego/sched.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/nodemask.h>
@@ -340,7 +341,7 @@ static void __init free_area_init_core(pg_data_t *pgdat)
 	}
 }
 
-static void alloc_node_mem_map(struct pglist_data *pgdat)
+static void alloc_node_mem_map(struct pglist_data *pgdat, unsigned long *mem_map_size)
 {
 	unsigned long __maybe_unused start = 0;
 	unsigned long __maybe_unused offset = 0;
@@ -362,6 +363,7 @@ static void alloc_node_mem_map(struct pglist_data *pgdat)
 	end = pgdat_end_pfn(pgdat);
 	end = ALIGN(end, MAX_ORDER_NR_PAGES);
 	size =  (end - start) * sizeof(struct page);
+	*mem_map_size = size;
 	map = memblock_virt_alloc_node_nopanic(size, pgdat->node_id);
 	pgdat->node_mem_map = map + offset;
 
@@ -386,6 +388,7 @@ void __init free_area_init_node(int nid, unsigned long *zones_size,
 	pg_data_t *pgdat = NODE_DATA(nid);
 	unsigned long start_pfn = 0;
 	unsigned long end_pfn = 0;
+	unsigned long mem_map_size = 0;
 
 	pgdat->node_id = nid;
 	pgdat->node_start_pfn = node_start_pfn;
@@ -399,11 +402,12 @@ void __init free_area_init_node(int nid, unsigned long *zones_size,
 	calculate_node_totalpages(pgdat, start_pfn, end_pfn,
 				  zones_size, zholes_size);
 
-	alloc_node_mem_map(pgdat);
+	alloc_node_mem_map(pgdat, &mem_map_size);
 
-	pr_debug("%s: node %d, pgdat %08lx, node_mem_map %08lx\n",
+	pr_debug("%s: node %d, pgdat %#08lx, node_mem_map %#08lx - %#08lx\n",
 		 __func__, nid, (unsigned long)pgdat,
-		 (unsigned long)pgdat->node_mem_map);
+		 (unsigned long)pgdat->node_mem_map,
+		 (unsigned long)pgdat->node_mem_map + mem_map_size);
 
 	free_area_init_core(pgdat);
 }
@@ -621,12 +625,108 @@ static void free_one_page(struct zone *zone,
 	spin_unlock(&zone->lock);
 }
 
-static __always_inline bool free_pages_prepare(struct page *page,
-					unsigned int order, bool check_free)
+static void bad_page(struct page *page, const char *reason,
+		unsigned long bad_flags)
 {
+	pr_alert("BUG: Bad page state in process %s  pfn:%05lx\n",
+		current->comm, page_to_pfn(page));
+
+	dump_page(page, reason);
+
+	bad_flags &= page->flags;
+	if (bad_flags)
+		pr_alert("bad because of flags: %#lx(%pGp)\n",
+						bad_flags, &bad_flags);
+	dump_stack();
+
+	/* Leave bad fields for debug, except PageBuddy could make trouble */
+	/* remove PageBuddy */
+	page_mapcount_reset(page);
+}
+
+static __always_inline bool
+page_expected_state(struct page *page, unsigned long check_flags)
+{
+	if (unlikely(atomic_read(&page->_mapcount) != -1))
+		return false;
+
+	if (unlikely(page_ref_count(page) != 0))
+		return false;
+
+	if (unlikely(page->flags & check_flags))
+		return false;
+
 	return true;
 }
 
+static void free_pages_check_bad(struct page *page)
+{
+	const char *bad_reason;
+	unsigned long bad_flags;
+
+	bad_reason = NULL;
+	bad_flags = 0;
+
+	if (unlikely(atomic_read(&page->_mapcount) != -1))
+		bad_reason = "nonzero _mapcount";
+	if (unlikely(page_ref_count(page) != 0))
+		bad_reason = "nonzero _refcount";
+	if (unlikely(page->flags & PAGE_FLAGS_CHECK_AT_FREE)) {
+		bad_reason = "PAGE_FLAGS_CHECK_AT_FREE flag(s) set";
+		bad_flags = PAGE_FLAGS_CHECK_AT_FREE;
+	}
+	bad_page(page, bad_reason, bad_flags);
+}
+
+static __always_inline int
+free_pages_check(struct page *page)
+{
+	if (likely(page_expected_state(page, PAGE_FLAGS_CHECK_AT_FREE)))
+		return 0;
+
+	/* Something has gone sideways, find it */
+	free_pages_check_bad(page);
+	return 1;
+}
+
+/*
+ * Someone is going to free a page.
+ * Do some *necessary* checking before letting go.
+ */
+static __always_inline bool
+free_pages_prepare(struct page *page, unsigned int order, bool check_free)
+{
+	int bad = 0;
+
+	if (unlikely(order)) {
+		int i;
+
+		for (i = 1; i < (1 << order); i++) {
+			if (unlikely(free_pages_check(page + i))) {
+				bad++;
+				continue;
+			}
+			(page + i)->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
+		}
+	}
+
+	if (check_free)
+		bad += free_pages_check(page);
+
+	if (bad)
+		return false;
+
+	page->flags &= ~PAGE_FLAGS_CHECK_AT_PREP;
+
+	return true;
+}
+
+/*
+ * Ok or not ok, this is a question.
+ *
+ * If we have some problems about the going-to-freed page,
+ * then we will dump page, then complain about it and do nothing.
+ */
 static void __free_pages_ok(struct page *page, unsigned int order)
 {
 	unsigned long flags;
@@ -809,6 +909,7 @@ static void __init __free_pages_boot_core(struct page *page, unsigned int order)
 	unsigned int i, nr_pages = 1 << order;
 	struct page *p = page;
 
+	/* Cleanup */
 	for (i = 0; i < nr_pages; i++, p++) {
 		__ClearPageReserved(p);
 		set_page_count(p, 0);
@@ -839,6 +940,7 @@ void __init reserve_bootmem_region(phys_addr_t start, phys_addr_t end)
 	}
 }
 
+/* Called to free memblock into buddy allocator */
 void __init __free_pages_bootmem(struct page *page, unsigned long pfn,
 				unsigned int order)
 {

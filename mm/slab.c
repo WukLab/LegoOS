@@ -76,5 +76,5 @@ void *kmalloc(size_t size, gfp_t flags)
 	unsigned int order = get_order(size);
 
 	BUG_ON(order >= MAX_ORDER);
-	return alloc_pages(GFP_KERNEL, order);
+	return (void *)__get_free_pages(GFP_KERNEL, order);
 }

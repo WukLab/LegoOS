@@ -264,5 +264,5 @@ void __init setup_arch(void)
 	 */
 	copy_trampoline_code();
 
-	native_cpu_up(1);
+	//native_cpu_up(1);
 }

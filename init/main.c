@@ -40,8 +40,6 @@ static char command_line[COMMAND_LINE_SIZE];
 
 asmlinkage void __init start_kernel(void)
 {
-	void *p;
-
 	local_irq_disable();
 
 	boot_cpumask_init();

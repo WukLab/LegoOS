@@ -498,7 +498,7 @@ static void __init memblock_dump(struct memblock_type *type, char *name)
 	int idx;
 	struct memblock_region *rgn;
 
-	pr_info(" %s.cnt  = 0x%lx\n", name, type->cnt);
+	pr_info("  %s.cnt  = 0x%lx\n", name, type->cnt);
 
 	for_each_memblock_type(type, rgn) {
 		char nid_buf[32] = "";
@@ -508,7 +508,7 @@ static void __init memblock_dump(struct memblock_type *type, char *name)
 		flags = rgn->flags;
 		if (rgn->nid != MAX_NUMNODES)
 			snprintf(nid_buf, sizeof(nid_buf), " on node %d", rgn->nid);
-		pr_info(" %s[%#x]\t[%#016llx-%#016llx], %#llx bytes%s flags: %#lx\n",
+		pr_info("  %s[%#x]\t[%#016llx-%#016llx], %#llx bytes%s flags: %#lx\n",
 			name, idx, base, base + size - 1, size, nid_buf, flags);
 	}
 }
@@ -516,7 +516,7 @@ static void __init memblock_dump(struct memblock_type *type, char *name)
 void __init __memblock_dump_all(void)
 {
 	pr_info("MEMBLOCK configuration:\n");
-	pr_info(" memory size = %#llx reserved size = %#llx\n",
+	pr_info("  memory size = %#llx reserved size = %#llx\n",
 		(unsigned long long)memblock.memory.total_size,
 		(unsigned long long)memblock.reserved.total_size);
 
@@ -1195,24 +1195,39 @@ static unsigned long __init __free_memory_core(phys_addr_t start,
 	return end_pfn - start_pfn;
 }
 
+/**
+ * free_low_memory_core_early
+ *
+ * This is the last call made into memblock.
+ * Memblock will retire afterwards.
+ *
+ * Mark all reserved memory as PageReserved
+ * and free all still usable memory to buddy allocator.
+ */
 static unsigned long __init free_low_memory_core_early(void)
 {
 	unsigned long count = 0;
 	phys_addr_t start, end;
 	u64 i;
 
-	for_each_reserved_mem_region(i, &start, &end)
+	__memblock_dump_all();
+
+	pr_info("Physical Memory Reserved:\n");
+	for_each_reserved_mem_region(i, &start, &end) {
+		pr_info("  [%#016llx-%#016llx]\n", start, end);
 		reserve_bootmem_region(start, end);
+	}
 
 	/*
 	 * We need to use NUMA_NO_NODE instead of NODE_DATA(0)->node_id
 	 *  because in some case like Node0 doesn't have RAM installed
 	 *  low ram will be on Node1
 	 */
-	for_each_free_mem_range(i, NUMA_NO_NODE, MEMBLOCK_NONE, &start, &end,
-				NULL)
+	pr_info("Physical Memory Managed by Buddy:\n");
+	for_each_free_mem_range(i, NUMA_NO_NODE, MEMBLOCK_NONE, &start, &end, NULL) {
+		pr_info("  [%#016llx-%#016llx]\n", start, end);
 		count += __free_memory_core(start, end);
-
+	}
 	return count;
 }
 

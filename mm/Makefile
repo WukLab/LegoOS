@@ -9,3 +9,4 @@ obj-y += page_alloc.o
 obj-y += memory.o
 obj-y += vmalloc.o
 obj-y += slab.o
+obj-y += debug.o

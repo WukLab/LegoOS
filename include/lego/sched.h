@@ -58,6 +58,13 @@ void show_stack_content(struct task_struct *task, struct pt_regs *regs);
 void show_general_task_info(struct task_struct *task);
 void show_regs(struct pt_regs *regs);
 
+/**
+ * dump_stack	-	Dump the current stack
+ *
+ * By default, this function will just dump the *current* process's stack
+ * and registers. If we have further requirement, e.g. dump *another* process's
+ * stack, then we need to look back and improve this guy.
+ */
 static inline void dump_stack(void)
 {
 	show_general_task_info(current);
