@@ -479,6 +479,14 @@ static inline unsigned int read_apic_id(void)
 	return apic->get_apic_id(reg);
 }
 
+static inline void ack_APIC_irq(void)
+{
+	/*
+	 * ack_APIC_irq() actually gets compiled as a single instruction
+	 * ... yummie.
+	 */
+	apic_eoi();
+}
 
 void __init apic_set_eoi_write(void (*eoi_write)(u32 reg, u32 v));
 

@@ -12,6 +12,10 @@
 #include <lego/irqdesc.h>
 #include <lego/spinlock.h>
 
+#include <asm/hw_irq.h>
+
+#include "debug.h"
+
 /*
  * Special, empty irq handler:
  */
@@ -28,7 +32,10 @@ irqreturn_t no_action(int cpl, void *dev_id)
  */
 void handle_bad_irq(struct irq_desc *desc)
 {
+	unsigned int irq = irq_desc_get_irq(desc);
 
+	print_irq_desc(irq, desc);
+	ack_bad_irq(irq);
 }
 
 /**
@@ -42,5 +49,7 @@ void handle_bad_irq(struct irq_desc *desc)
  */
 void handle_level_irq(struct irq_desc *desc)
 {
+	unsigned int irq = irq_desc_get_irq(desc);
 
+	print_irq_desc(irq, desc);
 }

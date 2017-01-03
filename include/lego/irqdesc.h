@@ -411,4 +411,6 @@ int __irq_set_trigger(struct irq_desc *desc, unsigned long flags);
 
 void check_irq_resend(struct irq_desc *desc);
 
+
+
 #endif /* _LEGO_IRQDESC_H_ */

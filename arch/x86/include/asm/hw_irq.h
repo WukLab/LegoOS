@@ -102,6 +102,16 @@ static inline void unlock_vector_lock(void) {}
 
 typedef struct irq_desc* vector_irq_t[NR_VECTORS];
 
+/*
+ * This vector_irq describes all 0xff vectors
+ * Each one is a irq_desc as typedefed above.
+ *
+ * Check do_IRQ() see how it is used.
+ */
+extern vector_irq_t vector_irq;
+
 extern char irq_entries_start[];
+
+void ack_bad_irq(unsigned int irq);
 
 #endif /* _ASM_X86_HW_IRQ_H_ */

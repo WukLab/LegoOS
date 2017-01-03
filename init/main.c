@@ -38,6 +38,8 @@ char __initdata boot_command_line[COMMAND_LINE_SIZE];
 /* Concatenated command line from boot and builtin */
 static char command_line[COMMAND_LINE_SIZE];
 
+static void internal_test(void);
+
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
@@ -77,5 +79,14 @@ asmlinkage void __init start_kernel(void)
 	irq_init();
 	//time_init();
 
+	internal_test();
 	hlt();
+}
+
+static void internal_test(void)
+{
+	asm ("int $0x30");
+	asm ("int $0x3f");
+	asm ("int $0xef");
+	asm ("int $0xef");
 }

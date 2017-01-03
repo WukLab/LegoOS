@@ -156,7 +156,7 @@ restore_c_regs_and_iret:
 END(common_interrupt)
 
 /**
- * irq_entries_start	-	[0x20...FIRST_SYSTEM_VECTOR handler
+ * irq_entries_start	-	[0x20...FIRST_SYSTEM_VECTOR] handler
  *
  * IDT has 0xff vectors:
  *   [0x0...0x1f] are Intel reserved vectors.

@@ -27,6 +27,7 @@ static struct irqaction irq2 = {
 	.flags = IRQF_NO_THREAD,
 };
 
+/* TODO: per-cpu */
 vector_irq_t vector_irq = {
 	[0 ... NR_VECTORS - 1] = VECTOR_UNUSED,
 };
