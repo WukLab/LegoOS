@@ -62,6 +62,11 @@ static struct clocksource clocksource_jiffies = {
 	.max_cycles	= 10,
 };
 
+struct clocksource * __init __weak clocksource_default_clock(void)
+{
+	return &clocksource_jiffies;
+}
+
 struct clocksource refined_jiffies;
 
 int register_refined_jiffies(long cycles_per_second)

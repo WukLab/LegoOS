@@ -110,6 +110,7 @@
 #define __scanf(a, b)		__attribute__((format(scanf, a, b)))
 #define __printf(a, b)		__attribute__((format(printf, a, b)))
 #define __alias(symbol)		__attribute__((alias(#symbol)))
+#define __attribute_const__	__attribute__((__const__))
 
 #define __same_type(a, b)	__builtin_types_compatible_p(typeof(a), typeof(b))
 #define __constant(exp)		__builtin_constant_p(exp)

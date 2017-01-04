@@ -52,9 +52,14 @@ typedef u64 phys_addr_t;
 
 typedef phys_addr_t resource_size_t;
 
+/* Get free page */
 typedef unsigned int gfp_t;
 
+/* process id */
 typedef int pid_t;
+
+/* clocksource cycle base type */
+typedef u64 cycle_t;
 
 typedef struct {
 	int counter;
@@ -64,10 +69,16 @@ struct list_head {
 	struct list_head *next, *prev;
 };
 
-#define pgoff_t unsigned long
+typedef u64	pgoff_t;
 
-/* clocksource cycle base type */
-typedef u64 cycle_t;
+typedef s64	__kernel_time_t;
+typedef s64	__kernel_clock_t;
+typedef s64	__kernel_suseconds_t;
+typedef s32	__kernel_timer_t;
+typedef s32	__kernel_clockid_t;
+
+typedef __kernel_time_t		time_t;
+typedef __kernel_clock_t	clock_t;
 
 #endif /* __ASSEMBLY__ */
 #endif /* _LEGO_TYPES_H_ */

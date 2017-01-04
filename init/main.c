@@ -11,6 +11,7 @@
 #include <lego/init.h>
 #include <lego/list.h>
 #include <lego/slab.h>
+#include <lego/time.h>
 #include <lego/string.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>
@@ -65,9 +66,11 @@ asmlinkage void __init start_kernel(void)
 	setup_arch();
 
 	/*
-	 * Just a note:
-	 * If we have any large bootmem allocations later (e.g. logbuf),
-	 * they should go right before memory_init().
+	 * JUST A NOTE:
+	 * If we have any large bootmem allocations later (e.g. printk logbuf),
+	 * they should go right before memory_init(), because memory_init()
+	 * will reserve the reserved memblock, and free the free memblock
+	 * to buddy allocator. No more large allocations will be possible.
 	 */
 
 	/*
@@ -76,8 +79,15 @@ asmlinkage void __init start_kernel(void)
 	 */
 	memory_init();
 
+	/*
+	 * Make IRQ subsystem functional
+	 * and then enable interrupt.
+	 */
 	irq_init();
-	//time_init();
+	local_irq_enable();
+
+	timekeeping_init();
+	time_init();
 
 	internal_test();
 	hlt();

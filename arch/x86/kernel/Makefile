@@ -1,25 +1,16 @@
 extra-y += vmImage.lds
 
-obj-y := head_64.o
-obj-y += head64.o
+obj-y := head_64.o head64.o
 obj-y += entry.o
 obj-y += process.o
 obj-y += dumpstack.o
 obj-y += setup.o
-obj-y += traps.o
 obj-y += e820.o
 obj-y += cpu.o cpu_intel.o
-obj-y += smp.o
-obj-y += smpboot.o
-obj-y += trampoline.o
-obj-y += time.o
-
-obj-y += i8259.o
-obj-y += irq.o irqinit.o
-
-# ACPI APIC.. is this annoying?
-obj-y += acpi/
-obj-y += apic/
+obj-y += smp.o smpboot.o trampoline.o
+obj-y += time.o rtc.o
+obj-y += traps.o irq.o irqinit.o i8259.o
+obj-y += acpi/ apic/
 
 #
 # Always a good idea to enable CONFIG_FRAME_POINTER
