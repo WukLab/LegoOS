@@ -16,6 +16,7 @@
 
 #include <asm/asm.h>
 #include <asm/apic.h>
+#include <asm/hpet.h>
 #include <asm/i8259.h>
 #include <asm/io_apic.h>
 #include <asm/processor.h>
@@ -482,9 +483,6 @@ static void __init acpi_boot_parse_madt(void)
 	else if (acpi_lapic)
 		pr_info("Using ACPI for processor (LAPIC) configuration\n");
 }
-
-u8 hpet_blockid;
-unsigned long hpet_address;
 
 static int __init acpi_parse_hpet(struct acpi_table_header *table)
 {

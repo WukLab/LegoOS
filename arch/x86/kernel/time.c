@@ -41,7 +41,7 @@ void __init setup_default_timer_irq(void)
 /* Default timer init function */
 void __init hpet_time_init(void)
 {
-	if (!hpet_enable()) 
+	if (hpet_enable())
 		// setup_pit_timer();
 		panic("HPET fails");
 	setup_default_timer_irq();
