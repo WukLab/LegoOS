@@ -58,4 +58,10 @@ static inline ktime_t ktime_set(const s64 secs, const unsigned long nsecs)
  */
 #define ktime_sub_ns(kt, nsval)		((kt) - (nsval))
 
+/* convert a timespec to ktime_t format: */
+static inline ktime_t timespec_to_ktime(struct timespec ts)
+{
+	return ktime_set(ts.tv_sec, ts.tv_nsec);
+}
+
 #endif /* _LEGO_KTIME_H_ */

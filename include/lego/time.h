@@ -84,6 +84,8 @@ time_t mktime(const unsigned int year0,
 	const unsigned int hour, const unsigned int min,
 	const unsigned int sec);
 
+void set_normalized_timespec(struct timespec *ts, time_t sec, s64 nsec);
+
 /*
  * Returns true if the timespec is norm, false if denorm:
  */
