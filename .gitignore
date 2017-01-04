@@ -37,6 +37,12 @@ build/
 !.gitignore
 !.mailmap
 
+#
+# These are serial output files from QEMU
+#
 output
 output_ttyS0
 output_ttyS1
+ttyS0
+ttyS1
+test-output/
