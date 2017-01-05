@@ -223,6 +223,8 @@ void check_irq_resend(struct irq_desc *desc)
 static int __setup_irq(unsigned int irq, struct irq_desc *desc,
 		       struct irqaction *new)
 {
+	/*TODO*/
+	/* Hen Guan Jian! */
 	return 0;
 }
 

@@ -517,13 +517,12 @@ union acpi_name_union {
 
 /* Internal ACPI Table Descriptor. One per ACPI table. */
 struct acpi_table_desc {
-	struct acpi_table_header *pointer;
 	u64 address;
-	/* Length fixed at 32 bits (fixed in table header) */
-	u32 length;
+	struct acpi_table_header *pointer;
+	u32 length;		/* Length fixed at 32 bits (fixed in table header) */
 	union acpi_name_union signature;
-	u8 owner_id;
 	u8 flags;
+	u16 validation_count;
 };
 
 /*
@@ -559,10 +558,13 @@ struct acpi_table_desc {
 #define ACPI_RSDP_XCHECKSUM_LENGTH      36
 
 #define ACPI_CAST_PTR(t, p)             ((t *)(void *)(p))
-#define ACPI_VALIDATE_RSDP_SIG(a)       (!strncmp((char *)(a), ACPI_SIG_RSDP, 8))
 
 #define ACPI_COMPARE_NAME(a,b)          (*ACPI_CAST_PTR (u32, (a)) == *ACPI_CAST_PTR (u32, (b)))
 #define ACPI_MOVE_NAME(dest,src)        (*ACPI_CAST_PTR (u32, (dest)) = *ACPI_CAST_PTR (u32, (src)))
+
+/* Support for the special RSDP signature (8 characters) */
+#define ACPI_VALIDATE_RSDP_SIG(a)       (!strncmp (ACPI_CAST_PTR (char, (a)), ACPI_SIG_RSDP, 8))
+#define ACPI_MAKE_RSDP_SIG(dest)        (memcpy (ACPI_CAST_PTR (char, (dest)), ACPI_SIG_RSDP, 8))
 
 /*
  * printf() format helper. This macros is a workaround for the difficulties
@@ -637,5 +639,32 @@ void __init acpi_boot_numa_init(void);
 
 int acpi_isa_irq_to_gsi(unsigned isa_irq, u32 *gsi);
 extern int acpi_ioapic;
+
+/* Pointer manipulation */
+
+#define acpi_uintptr_t                  void *
+typedef u64 acpi_size;
+typedef u64 acpi_io_address;
+typedef u64 acpi_physical_address;
+
+#define ACPI_CAST_INDIRECT_PTR(t, p)    ((t **) (acpi_uintptr_t) (p))
+#define ACPI_ADD_PTR(t, a, b)           ACPI_CAST_PTR (t, (ACPI_CAST_PTR (u8, (a)) + (acpi_size)(b)))
+#define ACPI_SUB_PTR(t, a, b)           ACPI_CAST_PTR (t, (ACPI_CAST_PTR (u8, (a)) - (acpi_size)(b)))
+#define ACPI_PTR_DIFF(a, b)             (acpi_size) (ACPI_CAST_PTR (u8, (a)) - ACPI_CAST_PTR (u8, (b)))
+
+/* 16-bit source, 16/32/64 destination */
+#define ACPI_MOVE_16_TO_16(d, s)        *(u16 *)(void *)(d) = *(u16 *)(void *)(s)
+#define ACPI_MOVE_16_TO_32(d, s)        *(u32 *)(void *)(d) = *(u16 *)(void *)(s)
+#define ACPI_MOVE_16_TO_64(d, s)        *(u64 *)(void *)(d) = *(u16 *)(void *)(s)
+
+/* 32-bit source, 16/32/64 destination */
+#define ACPI_MOVE_32_TO_16(d, s)        ACPI_MOVE_16_TO_16(d, s)	/* Truncate to 16 */
+#define ACPI_MOVE_32_TO_32(d, s)        *(u32 *)(void *)(d) = *(u32 *)(void *)(s)
+#define ACPI_MOVE_32_TO_64(d, s)        *(u64 *)(void *)(d) = *(u32 *)(void *)(s)
+
+/* 64-bit source, 16/32/64 destination */
+#define ACPI_MOVE_64_TO_16(d, s)        ACPI_MOVE_16_TO_16(d, s)	/* Truncate to 16 */
+#define ACPI_MOVE_64_TO_32(d, s)        ACPI_MOVE_32_TO_32(d, s)	/* Truncate to 32 */
+#define ACPI_MOVE_64_TO_64(d, s)        *(u64 *)(void *)(d) = *(u64 *)(void *)(s)
 
 #endif /* _LEGO_ACPI_H_ */

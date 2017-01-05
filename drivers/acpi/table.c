@@ -17,18 +17,9 @@
 #include <lego/kernel.h>
 #include <lego/early_ioremap.h>
 
-/*
- * Note:
- * This is a internal array for ACPI tables.
- * This array only store the physical and length of each ACPI table.
- * Nothing is mapped at normal. Tables will be mapped only after you
- * call acpi_get_and_map_table() and unmapped by calling acpi_unmap_table()
- *
- * We do this because early_ioremap slots are limited.
- */
-#define ACPI_MAX_TABLES 128
-static int nr_acpi_tables = 0;
-static struct acpi_table_desc acpi_tables[ACPI_MAX_TABLES] __initdata;
+#include "internal.h"
+
+u32 acpi_gbl_fadt_index;
 
 /*
  * Find a table via signature
@@ -223,7 +214,30 @@ int __init acpi_parse_table(char *signature, acpi_table_handler handler)
 	return 0;
 }
 
-static inline u64 __init
+/*TODO*/
+void __init acpi_tb_parse_fadt(void)
+{
+
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_get_root_table_entry
+ *
+ * PARAMETERS:  table_entry         - Pointer to the RSDT/XSDT table entry
+ *              table_entry_size    - sizeof 32 or 64 (RSDT or XSDT)
+ *
+ * RETURN:      Physical address extracted from the root table
+ *
+ * DESCRIPTION: Get one root table entry. Handles 32-bit and 64-bit cases on
+ *              both 32-bit and 64-bit platforms
+ *
+ * NOTE:        acpi_physical_address is 32-bit on 32-bit platforms, 64-bit on
+ *              64-bit platforms.
+ *
+ ******************************************************************************/
+
+static acpi_physical_address
 acpi_tb_get_root_table_entry(u8 *table_entry, u32 table_entry_size)
 {
 	u64 address64;
@@ -237,15 +251,16 @@ acpi_tb_get_root_table_entry(u8 *table_entry, u32 table_entry_size)
 		 * 32-bit platform, RSDT: Return 32-bit table entry
 		 * 64-bit platform, RSDT: Expand 32-bit to 64-bit and return
 		 */
-		return ((u64)(*ACPI_CAST_PTR(u32, table_entry)));
+		return ((acpi_physical_address)
+			(*ACPI_CAST_PTR(u32, table_entry)));
 	} else {
 		/*
 		 * 32-bit platform, XSDT: Truncate 64-bit to 32-bit and return
 		 * 64-bit platform, XSDT: Move (unaligned) 64-bit to local,
 		 *  return 64-bit
 		 */
-		address64 = *((u64 *)table_entry);
-		return ((u64)(address64));
+		ACPI_MOVE_64_TO_64(&address64, table_entry);
+		return ((acpi_physical_address)(address64));
 	}
 }
 
@@ -280,7 +295,7 @@ acpi_tb_cleanup_table_header(struct acpi_table_header *out_header,
 	acpi_tb_fix_string(out_header->asl_compiler_id, ACPI_NAME_SIZE);
 }
 
-static void __init
+void __init
 acpi_tb_print_table_header(unsigned long address, struct acpi_table_header *header)
 {
 	struct acpi_table_header local_header;
@@ -293,15 +308,18 @@ acpi_tb_print_table_header(unsigned long address, struct acpi_table_header *head
 	} else if (ACPI_VALIDATE_RSDP_SIG(header->signature)) {
 		/* RSDP has no common fields */
 		memcpy(local_header.oem_id,
-			((struct acpi_table_rsdp *)header)->oem_id,
-			ACPI_OEM_ID_SIZE);
+		       ACPI_CAST_PTR(struct acpi_table_rsdp, header)->oem_id,
+		       ACPI_OEM_ID_SIZE);
 		acpi_tb_fix_string(local_header.oem_id, ACPI_OEM_ID_SIZE);
 
 		pr_info("RSDP 0x%8.8X%8.8X %06X (v%.2d %-6.6s)\n",
-			ACPI_FORMAT_UINT64(address),
-			(((struct acpi_table_rsdp *)header)->revision > 0) ?
-			((struct acpi_table_rsdp *)header)->length : 20,
-			((struct acpi_table_rsdp *)header)->revision,
+			   ACPI_FORMAT_UINT64(address),
+			   (ACPI_CAST_PTR(struct acpi_table_rsdp, header)->
+			    revision >
+			    0) ? ACPI_CAST_PTR(struct acpi_table_rsdp,
+					       header)->length : 20,
+			   ACPI_CAST_PTR(struct acpi_table_rsdp,
+					 header)->revision,
 			   local_header.oem_id);
 	} else {
 		/* Standard ACPI table with full common header */
@@ -318,37 +336,288 @@ acpi_tb_print_table_header(unsigned long address, struct acpi_table_header *head
 	}
 }
 
-/*
- * Save table information to the acpi_tables[] array.
+/*******************************************************************************
  *
- * FAT NOTE: we can *not* map the entire table here, since we have
- * limited early_ioremap slots. In some server machines, mostly it
- * is not enough to support large ACPI tables.
- */
-static int __init acpi_tb_install(unsigned long address)
+ * FUNCTION:    acpi_tb_acquire_table
+ *
+ * PARAMETERS:  table_desc          - Table descriptor
+ *              table_ptr           - Where table is returned
+ *              table_length        - Where table length is returned
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Acquire an ACPI table. It can be used for tables not
+ *              maintained in the acpi_gbl_root_table_list.
+ *
+ ******************************************************************************/
+static __init int
+acpi_tb_acquire_table(struct acpi_table_desc *table_desc,
+		      struct acpi_table_header **table_ptr,
+		      u32 *table_length)
 {
-	struct acpi_table_header *header;
-	struct acpi_table_desc desc;
+	struct acpi_table_header *table = NULL;
 
-	/* Map header */
-	header = early_ioremap(address, sizeof(*header));
-	if (!header)
+	table = early_ioremap(table_desc->address, table_desc->length);
+
+	/* Table is not valid yet */
+	if (!table)
 		return -ENOMEM;
 
-	acpi_tb_print_table_header(address, header);
-
-	memset(&desc, 0, sizeof(desc));
-	desc.address = address;
-	desc.length = header->length;
-	memcpy(&desc.signature, header->signature, ACPI_NAME_SIZE);
-
-	/* Unmap header */
-	early_iounmap(header, sizeof(*header));
-
-	acpi_tables[nr_acpi_tables++] = desc;
-	BUG_ON(nr_acpi_tables > ACPI_MAX_TABLES);
+	/* Fill the return values */
+	*table_ptr = table;
+	*table_length = table_desc->length;
 
 	return 0;
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_release_table
+ *
+ * PARAMETERS:  table               - Pointer for the table
+ *              table_length        - Length for the table
+ *
+ * RETURN:      None
+ *
+ * DESCRIPTION: Release a table. The inverse of acpi_tb_acquire_table().
+ *
+ ******************************************************************************/
+static __init void
+acpi_tb_release_table(struct acpi_table_header *table,
+		      u32 table_length)
+{
+	early_iounmap(table, table_length);
+}
+
+/******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_validate_table
+ *
+ * PARAMETERS:  table_desc          - Table descriptor
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: This function is called to validate the table, the returned
+ *              table descriptor is in "VALIDATED" state.
+ *
+ *****************************************************************************/
+static __init int
+acpi_tb_validate_table(struct acpi_table_desc *table_desc)
+{
+	int ret = 0;
+
+	/* Validate the table if necessary */
+	if (!table_desc->pointer) {
+		ret = acpi_tb_acquire_table(table_desc, &table_desc->pointer,
+					    &table_desc->length);
+		if (!table_desc->pointer)
+			ret = -ENOMEM;
+	}
+	return ret;
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_invalidate_table
+ *
+ * PARAMETERS:  table_desc          - Table descriptor
+ *
+ * RETURN:      None
+ *
+ * DESCRIPTION: Invalidate one internal ACPI table, this is the inverse of
+ *              acpi_tb_validate_table().
+ *
+ ******************************************************************************/
+static __init void
+acpi_tb_invalidate_table(struct acpi_table_desc *table_desc)
+{
+
+	/* Table must be validated */
+	if (!table_desc->pointer)
+		return;
+
+	acpi_tb_release_table(table_desc->pointer, table_desc->length);
+	table_desc->pointer = NULL;
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_init_table_descriptor
+ *
+ * PARAMETERS:  table_desc              - Table descriptor
+ *              address                 - Physical address of the table
+ *              table                   - Pointer to the table
+ *
+ * RETURN:      None
+ *
+ * DESCRIPTION: Initialize a new table descriptor
+ *
+ ******************************************************************************/
+void
+acpi_tb_init_table_descriptor(struct acpi_table_desc *table_desc,
+			      u64 address, struct acpi_table_header *table)
+{
+
+	/*
+	 * Initialize the table descriptor. Set the pointer to NULL, since the
+	 * table is not fully mapped at this time.
+	 */
+	memset(table_desc, 0, sizeof(struct acpi_table_desc));
+	table_desc->address = address;
+	table_desc->length = table->length;
+	ACPI_MOVE_32_TO_32(table_desc->signature.ascii, table->signature);
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_acquire_temp_table
+ *
+ * PARAMETERS:  table_desc          - Table descriptor to be acquired
+ *              address             - Address of the table
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: This function validates the table header to obtain the length
+ *              of a table and fills the table descriptor to make its state as
+ *              "INSTALLED". Such a table descriptor is only used for verified
+ *              installation.
+ *
+ ******************************************************************************/
+static __init int
+acpi_tb_acquire_temp_table(struct acpi_table_desc *table_desc, u64 address)
+{
+	struct acpi_table_header *table_header;
+
+	/* Get the length of the full table from the header */
+	table_header = early_ioremap(address, sizeof(struct acpi_table_header));
+	if (!table_header)
+		return -ENOMEM;
+
+	acpi_tb_init_table_descriptor(table_desc, address, table_header);
+	early_iounmap(table_header, sizeof(struct acpi_table_header));
+
+	return 0;
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_release_temp_table
+ *
+ * PARAMETERS:  table_desc          - Table descriptor to be released
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: The inverse of acpi_tb_acquire_temp_table().
+ *
+ *****************************************************************************/
+static __init void
+acpi_tb_release_temp_table(struct acpi_table_desc *table_desc)
+{
+
+	/*
+	 * Note that the .Address is maintained by the callers of
+	 * acpi_tb_acquire_temp_table(), thus do not invoke acpi_tb_uninstall_table()
+	 * where .Address will be freed.
+	 */
+	acpi_tb_invalidate_table(table_desc);
+}
+
+/******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_validate_temp_table
+ *
+ * PARAMETERS:  table_desc          - Table descriptor
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: This function is called to validate the table, the returned
+ *              table descriptor is in "VALIDATED" state.
+ *
+ *****************************************************************************/
+static __init int
+acpi_tb_validate_temp_table(struct acpi_table_desc *table_desc)
+{
+
+	if (!table_desc->pointer) {
+		/*
+		 * Only validates the header of the table.
+		 * Note that Length contains the size of the mapping after invoking
+		 * this work around, this value is required by
+		 * acpi_tb_release_temp_table().
+		 * We can do this because in acpi_init_table_descriptor(), the Length
+		 * field of the installed descriptor is filled with the actual
+		 * table length obtaining from the table header.
+		 */
+		table_desc->length = sizeof(struct acpi_table_header);
+	}
+
+	return (acpi_tb_validate_table(table_desc));
+}
+
+/******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_verify_temp_table
+ *
+ * PARAMETERS:  table_desc          - Table descriptor
+ *              signature           - Table signature to verify
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: This function is called to validate and verify the table, the
+ *              returned table descriptor is in "VALIDATED" state.
+ *
+ *****************************************************************************/
+static __init int
+acpi_tb_verify_temp_table(struct acpi_table_desc *table_desc, char *signature)
+{
+	int ret = 0;
+
+	/* Validate the table */
+	ret = acpi_tb_validate_temp_table(table_desc);
+	if (ret)
+		return -ENOMEM;
+
+	/* If a particular signature is expected (DSDT/FACS), it must match */
+	if (signature && !ACPI_COMPARE_NAME(&table_desc->signature, signature)) {
+		pr_err("Invalid signature 0x%X for ACPI table, expected [%s]",
+			table_desc->signature.integer, signature);
+		ret = -EFAULT;
+		goto invalidate_and_exit;
+	}
+	return 0;
+
+invalidate_and_exit:
+	acpi_tb_invalidate_table(table_desc);
+	return ret;
+}
+
+static int __init
+acpi_tb_install_standard_table(u64 address, bool reload, bool override,
+				u32 *table_index)
+{
+	int ret = 0;
+	struct acpi_table_desc desc;
+
+	/* Acquire a temporary table descriptor for validation */
+	ret = acpi_tb_acquire_temp_table(&desc, address);
+	if (ret) {
+		pr_err("Could not acquire table length at %8.8X%8.8X\n",
+			ACPI_FORMAT_UINT64(address));
+		return -ENOMEM;
+	}
+
+	/* Validate and verify a table before installation */
+	ret = acpi_tb_verify_temp_table(&desc, NULL);
+	if (ret)
+		goto release_and_exit;
+
+	/* Add the table to the global root table list */
+	acpi_tb_install_table_with_override(&desc, override, table_index);
+
+release_and_exit:
+	/* Release the temporary table descriptor */
+	acpi_tb_release_temp_table(&desc);
+	return ret;
 }
 
 /*
@@ -361,12 +630,13 @@ static int __init acpi_tb_install(unsigned long address)
  *              be mapped and cannot be copied because it contains the actual
  *              memory location of the ACPI Global Lock.
  */
-static int __init acpi_tb_parse_root_table(unsigned long rsdp_address)
+static int __init acpi_tb_parse_root_table(u64 rsdp_address)
 {
-	int i;
+	int i, ret;
 	u8 *table_entry;
 	u32 length, table_count;
 	u32 table_entry_size;
+	u32 table_index;
 	u64 address;
 	struct acpi_table_rsdp *rsdp;
 	struct acpi_table_header *table;
@@ -374,7 +644,7 @@ static int __init acpi_tb_parse_root_table(unsigned long rsdp_address)
 	/* Map the entire RSDP and extract the address of the RSDT or XSDT */
 	rsdp = early_ioremap(rsdp_address, sizeof(struct acpi_table_rsdp));
 	if (!rsdp) {
-		panic("Unable to entire RSDP");
+		pr_err("Unable to ioremap entire RSDP\n");
 		return -ENOMEM;
 	}
 
@@ -424,24 +694,27 @@ static int __init acpi_tb_parse_root_table(unsigned long rsdp_address)
 		return -ENOMEM;
 
 	table_count = (u32)((table->length - sizeof(struct acpi_table_header)) /
-				table_entry_size);
-	table_entry = (u8 *)((u8 *)table + sizeof(struct acpi_table_header));
+			    table_entry_size);
+	table_entry = ACPI_ADD_PTR(u8, table, sizeof(struct acpi_table_header));
 
 	/*
 	 * Iterate all ACPI tables and install them
 	 * in internal acpi_tables[] descriptor array
 	 */
 	for (i = 0; i < table_count; i++) {
-		unsigned long pa;
-
 		/* Get table physical address (32-bit for RSDT, 64-bit for XSDT) */
-		pa = acpi_tb_get_root_table_entry(table_entry, table_entry_size);
-		if (!pa)
+		address = acpi_tb_get_root_table_entry(table_entry, table_entry_size);
+
+		/* Skip NULL entries in RSDT/XSDT */
+		if (!address)
 			goto next_table;
 
-		if (acpi_tb_install(pa)) {
-			pr_info("fail to install acpi table\n");
-			return -EFAULT;
+		ret = acpi_tb_install_standard_table(address,
+					false, true, &table_index);
+		if (!ret && ACPI_COMPARE_NAME(&acpi_tables[table_index].signature,
+					      ACPI_SIG_FADT)) {
+			acpi_gbl_fadt_index = table_index;
+			acpi_tb_parse_fadt();
 		}
 next_table:
 		table_entry += table_entry_size;
@@ -508,29 +781,30 @@ static __init u8 *acpi_tb_scan_memory_for_rsdp(u8 *start_address, u32 length)
 		if (!status)
 			return mem_rover;
 	}
-	pr_info("RSDP was not found from %p + %#x\n", start_address, length);
+	pr_debug("RSDP was not found from %p + %#x\n", start_address, length);
 	return NULL;
 }
 
 /*
- * DESCRIPTION: Search lower 1Mbyte of memory for the root system descriptor
- *              pointer structure. If it is found, set *RSDP to point to it.
+ * Search lower 1Mbyte of memory for the root system descriptor
+ * pointer structure. If it is found, set *RSDP to point to it.
  *
- * NOTE1:       The RSDP must be either in the first 1K of the Extended
- *              BIOS Data Area or between E0000 and FFFFF (From ACPI Spec.)
- *              Only a 32-bit physical address is necessary.
+ * The RSDP must be either in the first 1K of the Extended
+ * BIOS Data Area or between E0000 and FFFFF (From ACPI Spec.)
+ * Only a 32-bit physical address is necessary.
  */
-static __init unsigned long acpi_tb_get_root_pointer(void)
+static __init u64 acpi_os_get_root_pointer(void)
 {
 	u8 *table_ptr;
 	u8 *mem_rover;
 	u32 physical_address;
+	u64 table_address;
 
 	/*
 	 * 1) Search EBDA
 	 */
 
-	table_ptr = early_ioremap((unsigned long)ACPI_EBDA_PTR_LOCATION, ACPI_EBDA_PTR_LENGTH);
+	table_ptr = early_ioremap((u64)ACPI_EBDA_PTR_LOCATION, ACPI_EBDA_PTR_LENGTH);
 	if (!table_ptr) {
 		pr_err("Can not map at 0x%8.8X for length %u\n",
 			ACPI_EBDA_PTR_LOCATION, ACPI_EBDA_PTR_LENGTH);
@@ -544,7 +818,7 @@ static __init unsigned long acpi_tb_get_root_pointer(void)
 
 	/* EBDA present? */
 	if (physical_address > 0x400) {
-		table_ptr = early_ioremap((unsigned long)physical_address, ACPI_EBDA_WINDOW_SIZE);
+		table_ptr = early_ioremap((u64)physical_address, ACPI_EBDA_WINDOW_SIZE);
 		if (!table_ptr) {
 			pr_err("Can not map at 0x%8.8X for len %u\n",
 				physical_address, ACPI_EBDA_WINDOW_SIZE);
@@ -555,7 +829,8 @@ static __init unsigned long acpi_tb_get_root_pointer(void)
 		early_iounmap(table_ptr, ACPI_EBDA_WINDOW_SIZE);
 		if (mem_rover) {
 			physical_address += (u32)(mem_rover - table_ptr);
-			return physical_address;
+			table_address = (u64)physical_address;
+			return table_address;
 		}
 	}
 
@@ -574,10 +849,9 @@ static __init unsigned long acpi_tb_get_root_pointer(void)
 	if (mem_rover) {
 		physical_address = (u32)(ACPI_HI_RSDP_WINDOW_BASE +
 		     (u32)(mem_rover - table_ptr));
-		return physical_address;
+		table_address = (u64)physical_address;
+		return table_address;
 	}
-
-	pr_err("A valid RSDP was not found!\n");
 	return 0;
 }
 
@@ -593,9 +867,11 @@ void __init acpi_table_init(void)
 	unsigned long rsdp_address;
 
 	/* Get the address of the RSDP */
-	rsdp_address = acpi_tb_get_root_pointer();
-	if (!rsdp_address)
+	rsdp_address = acpi_os_get_root_pointer();
+	if (!rsdp_address) {
+		panic("ACPI: fail to find RSDP");
 		return;
+	}
 
 	/*
 	 * Get the root table (RSDT or XSDT)
@@ -606,5 +882,5 @@ void __init acpi_table_init(void)
 	 */
 	ret = acpi_tb_parse_root_table(rsdp_address);
 	if (ret)
-		pr_err("fail to parse rsdp\n");
+		panic("ACPI: fail to parse root table");
 }
