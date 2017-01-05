@@ -40,7 +40,13 @@
 #error ZONES_SHIFT -- too many zones configured adjust calculation
 #endif
 
-#if defined(CONFIG_SPARSEMEM)
+#ifdef CONFIG_SPARSEMEM
+#include <asm/sparsemem.h>
+/* SECTION_SHIFT	#bits space required to store a section # */
+#define SECTIONS_SHIFT		(MAX_PHYSMEM_BITS - SECTION_SIZE_BITS)
+#endif
+
+#if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)
 #define SECTIONS_WIDTH		SECTIONS_SHIFT
 #else
 #define SECTIONS_WIDTH		0
@@ -48,10 +54,21 @@
 
 #define ZONES_WIDTH		ZONES_SHIFT
 
-#if (ZONES_SHIFT + NODES_SHIFT) <= (BITS_PER_LONG - NR_PAGEFLAGS)
+#if SECTIONS_WIDTH+ZONES_WIDTH+NODES_SHIFT <= BITS_PER_LONG - NR_PAGEFLAGS
 #define NODES_WIDTH		NODES_SHIFT
 #else
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
+#error "Vmemmap: No space for nodes field in page flags"
+#endif
 #define NODES_WIDTH		0
+#endif
+
+#define LAST_CPUPID_SHIFT	0
+
+#if SECTIONS_WIDTH+ZONES_WIDTH+NODES_SHIFT+LAST_CPUPID_SHIFT <= BITS_PER_LONG - NR_PAGEFLAGS
+#define LAST_CPUPID_WIDTH	LAST_CPUPID_SHIFT
+#else
+#define LAST_CPUPID_WIDTH	0
 #endif
 
 /*

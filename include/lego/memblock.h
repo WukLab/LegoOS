@@ -225,6 +225,15 @@ static inline void * __init memblock_virt_alloc_node_nopanic(
 						    nid);
 }
 
+void __memblock_free_early(phys_addr_t base, phys_addr_t size);
+
+static inline void __init memblock_free_early(
+					phys_addr_t base, phys_addr_t size)
+{
+	__memblock_free_early(base, size);
+}
+
+
 void __next_reserved_mem_region(u64 *idx, phys_addr_t *out_start,
 				phys_addr_t *out_end);
 

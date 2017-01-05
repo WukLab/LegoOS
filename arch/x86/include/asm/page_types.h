@@ -13,6 +13,8 @@
 #include <lego/const.h>
 #include <lego/types.h>
 
+#include <asm/sparsemem.h>
+
 #define PAGE_SHIFT		12
 #define PAGE_SIZE		(_AC(1,UL) << PAGE_SHIFT)
 #define PAGE_MASK		(~(PAGE_SIZE-1))
@@ -69,12 +71,10 @@
 
 #define VMEMMAP_START		_AC(0xffffea0000000000, UL)
 
-#define MODULES_VADDR    (__START_KERNEL_map + KERNEL_IMAGE_SIZE)
-#define MODULES_END      _AC(0xffffffffff000000, UL)
-#define MODULES_LEN   (MODULES_END - MODULES_VADDR)
+#define MODULES_VADDR		(__START_KERNEL_map + KERNEL_IMAGE_SIZE)
+#define MODULES_END		_AC(0xffffffffff000000, UL)
+#define MODULES_LEN		(MODULES_END - MODULES_VADDR)
 
-#define MAX_PHYSADDR_BITS	44
-#define MAX_PHYSMEM_BITS	46
 #define MAXMEM			_AC(__AC(1, UL) << MAX_PHYSMEM_BITS, UL)
 #define __PHYSICAL_MASK_SHIFT	46
 #define __VIRTUAL_MASK_SHIFT	47
@@ -87,6 +87,8 @@
 #define START_KERNEL		((unsigned long)__START_KERNEL)
 
 #define IOREMAP_MAX_ORDER       (PUD_SHIFT)
+
+#define vmemmap			((struct page *)VMEMMAP_START)
 
 #ifndef __ASSEMBLY__
 /* In normal platform, phys_base is 0 */

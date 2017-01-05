@@ -161,6 +161,5 @@ PAGE_MAPCOUNT_OPS(Buddy, BUDDY)
  */
 #define PAGE_FLAGS_CHECK_AT_PREP	((1UL << NR_PAGEFLAGS) - 1)
 
-
 #endif /* __GENERATING_BOUNDS_H */
 #endif /* _LEGO_PAGE_FLAGS_H_ */

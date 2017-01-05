@@ -246,8 +246,8 @@ static unsigned long calc_memmap_size(unsigned long spanned_pages,
  * up by free_all_bootmem() once the early boot process is
  * done. Non-atomic initialization, single-pass.
  */
-static void __init memmap_init_zone(unsigned long size, int nid,
-				    unsigned long zone, unsigned long start_pfn)
+static void __init zone_init_mem_map(unsigned long size, int nid,
+				     unsigned long zone, unsigned long start_pfn)
 {
 	unsigned long end_pfn = start_pfn + size;
 	unsigned long pfn;
@@ -337,7 +337,7 @@ static void __init free_area_init_core(pg_data_t *pgdat)
 			continue;
 
 		zone_init_free_lists(zone);
-		memmap_init_zone(size, nid, j, zone->zone_start_pfn);
+		zone_init_mem_map(size, nid, j, zone->zone_start_pfn);
 	}
 }
 
@@ -1117,8 +1117,29 @@ static void __init build_all_zonelists(void)
 	}
 }
 
+/**
+ * sparse_memory_present_with_active_regions - Call memory_present for each active range
+ * @nid: The node to call memory_present for. If MAX_NUMNODES, all nodes will be used.
+ *
+ * If an architecture guarantees that all ranges registered contain no holes and may
+ * be freed, this function may be used instead of calling memory_present() manually.
+ */
+static void __init sparse_memory_present_with_active_regions(int nid)
+{
+	unsigned long start_pfn, end_pfn;
+	int i, this_nid;
+
+	for_each_mem_pfn_range(i, nid, &start_pfn, &end_pfn, &this_nid) {
+		pr_info("%#lx - %#lx\n", start_pfn, end_pfn);
+		memory_present(this_nid, start_pfn, end_pfn);
+	}
+}
+
 void __init memory_init(void)
 {
+	sparse_memory_present_with_active_regions(MAX_NUMNODES);
+	sparse_init();
+
 	/* Will call free_area_init_nodes() inside */
 	arch_zone_init();
 

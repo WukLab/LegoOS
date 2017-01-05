@@ -19,40 +19,71 @@
 #include <lego/kernel.h>
 #include <lego/nodemask.h>
 
+/* MUST list before others */
+#include <lego/page-flags-layout.h>
+
 #include <lego/mm_zone.h>
 #include <lego/mm_types.h>
 #include <lego/mm_debug.h>
 #include <lego/memory_model.h>
 #include <lego/page-flags.h>
-#include <lego/page-flags-layout.h>
 #include <lego/gfp.h>
 
-/* Page flags: | [NODE] | ZONE | ... | FLAGS | */
-#define NODES_PGOFF		((sizeof(unsigned long)*8) - NODES_WIDTH)
+/* Page flags: | [SECTION] | [NODE] | ZONE | [LAST_CPUPID] | ... | FLAGS | */
+#define SECTIONS_PGOFF		((sizeof(unsigned long)*8) - SECTIONS_WIDTH)
+#define NODES_PGOFF		(SECTIONS_PGOFF - NODES_WIDTH)
 #define ZONES_PGOFF		(NODES_PGOFF - ZONES_WIDTH)
+#define LAST_CPUPID_PGOFF	(ZONES_PGOFF - LAST_CPUPID_WIDTH)
 
 /*
  * Define the bit shifts to access each section.  For non-existent
  * sections we define the shift as 0; that plus a 0 mask ensures
  * the compiler will optimise away reference to them.
  */
+#define SECTIONS_PGSHIFT	(SECTIONS_PGOFF * (SECTIONS_WIDTH != 0))
 #define NODES_PGSHIFT		(NODES_PGOFF * (NODES_WIDTH != 0))
 #define ZONES_PGSHIFT		(ZONES_PGOFF * (ZONES_WIDTH != 0))
+#define LAST_CPUPID_PGSHIFT	(LAST_CPUPID_PGOFF * (LAST_CPUPID_WIDTH != 0))
 
-/* NODE:ZONE is used to ID a zone for the buddy allocator */
+/* NODE:ZONE or SECTION:ZONE is used to ID a zone for the buddy allocator */
+#ifdef NODE_NOT_IN_PAGE_FLAGS
+#define ZONEID_SHIFT		(SECTIONS_SHIFT + ZONES_SHIFT)
+#define ZONEID_PGOFF		((SECTIONS_PGOFF < ZONES_PGOFF)? \
+						SECTIONS_PGOFF : ZONES_PGOFF)
+#else
 #define ZONEID_SHIFT		(NODES_SHIFT + ZONES_SHIFT)
 #define ZONEID_PGOFF		((NODES_PGOFF < ZONES_PGOFF)? \
 						NODES_PGOFF : ZONES_PGOFF)
+#endif
 
 #define ZONEID_PGSHIFT		(ZONEID_PGOFF * (ZONEID_SHIFT != 0))
 
-#if NODES_WIDTH+ZONES_WIDTH > BITS_PER_LONG - NR_PAGEFLAGS
-# error NODES_WIDTH+ZONES_WIDTH > BITS_PER_LONG - NR_PAGEFLAGS
+#if SECTIONS_WIDTH+NODES_WIDTH+ZONES_WIDTH > BITS_PER_LONG - NR_PAGEFLAGS
+#error SECTIONS_WIDTH+NODES_WIDTH+ZONES_WIDTH > BITS_PER_LONG - NR_PAGEFLAGS
 #endif
 
-#define NODES_MASK		((1UL << NODES_WIDTH) - 1)
 #define ZONES_MASK		((1UL << ZONES_WIDTH) - 1)
+#define NODES_MASK		((1UL << NODES_WIDTH) - 1)
+#define SECTIONS_MASK		((1UL << SECTIONS_WIDTH) - 1)
+#define LAST_CPUPID_MASK	((1UL << LAST_CPUPID_SHIFT) - 1)
 #define ZONEID_MASK		((1UL << ZONEID_SHIFT) - 1)
+
+#if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)
+#define SECTION_IN_PAGE_FLAGS
+#endif
+
+#ifdef SECTION_IN_PAGE_FLAGS
+static inline void set_page_section(struct page *page, unsigned long section)
+{
+	page->flags &= ~(SECTIONS_MASK << SECTIONS_PGSHIFT);
+	page->flags |= (section & SECTIONS_MASK) << SECTIONS_PGSHIFT;
+}
+
+static inline unsigned long page_to_section(const struct page *page)
+{
+	return (page->flags >> SECTIONS_PGSHIFT) & SECTIONS_MASK;
+}
+#endif
 
 static inline enum zone_type page_to_zonetype(const struct page *page)
 {
@@ -85,16 +116,12 @@ static inline int page_to_nid(const struct page *page)
 	return (page->flags >> NODES_PGSHIFT) & NODES_MASK;
 }
 
-/* TODO */
-#ifndef CONFIG_FLATMEM
-#define pfn_to_nid(pfn)		(0)
-#endif
-
 static inline struct zone *page_zone(const struct page *page)
 {
 	enum zone_type type = page_to_zonetype(page);
 	int nid = page_to_nid(page);
 
+	pr_info("zone_type: %d nid: %d\n", type, nid);
 	return &NODE_DATA(nid)->node_zones[type];
 }
 
@@ -142,8 +169,18 @@ extern struct mm_struct init_mm;
 
 void __init free_area_init_nodes(unsigned long *max_zone_pfn);
 
+void __init sparse_init(void);
 void __init arch_zone_init(void);
 void __init memory_init(void);
+void __init memory_present(int nid, unsigned long start, unsigned long end);
+
+void sparse_mem_maps_populate_node(struct page **map_map,
+				   unsigned long pnum_begin,
+				   unsigned long pnum_end,
+				   unsigned long map_count,
+				   int nodeid);
+
+struct page *sparse_mem_map_populate(unsigned long pnum, int nid);
 
 #define page_private(page)		((page)->private)
 #define set_page_private(page, v)	((page)->private = (v))

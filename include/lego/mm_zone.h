@@ -257,7 +257,7 @@ extern struct pglist_data contig_page_data;
 #define NODE_DATA(nid)		(&contig_page_data)
 #define NODE_MEM_MAP(nid)	mem_map
 #else
-extern struct pglist_data *node_data[];
+extern struct pglist_data	*node_data[];
 #define NODE_DATA(nid)		(node_data[nid])
 #endif
 
@@ -418,6 +418,136 @@ static inline struct zoneref *first_zones_zonelist(struct zonelist *zonelist,
  */
 #define for_each_zone_zonelist(zone, z, zlist, highidx) \
 	for_each_zone_zonelist_nodemask(zone, z, zlist, highidx, NULL)
+
+#ifdef CONFIG_FLATMEM
+#define pfn_to_nid(pfn)		(0)
+#endif
+
+#ifdef CONFIG_SPARSEMEM
+#include <asm/sparsemem.h>
+
+/*
+ * SECTION_SHIFT    		#bits space required to store a section #
+ *
+ * PA_SECTION_SHIFT		physical address to/from section number
+ * PFN_SECTION_SHIFT		pfn to/from section number
+ */
+#define PA_SECTION_SHIFT	(SECTION_SIZE_BITS)
+#define PFN_SECTION_SHIFT	(SECTION_SIZE_BITS - PAGE_SHIFT)
+
+#define NR_MEM_SECTIONS		(1UL << SECTIONS_SHIFT)
+#define PAGES_PER_SECTION	(1UL << PFN_SECTION_SHIFT)
+#define PAGE_SECTION_MASK	(~(PAGES_PER_SECTION-1))
+
+/* If huge pages are not used, group by MAX_ORDER_NR_PAGES */
+#define pageblock_order		(MAX_ORDER-1)
+#define NR_PAGEBLOCK_BITS	0
+#define SECTION_BLOCKFLAGS_BITS \
+	((1UL << (PFN_SECTION_SHIFT - pageblock_order)) * NR_PAGEBLOCK_BITS)
+
+#if (MAX_ORDER - 1 + PAGE_SHIFT) > SECTION_SIZE_BITS
+#error Allocator MAX_ORDER exceeds SECTION_SIZE
+#endif
+
+#define pfn_to_section_nr(pfn)	((pfn) >> PFN_SECTION_SHIFT)
+#define section_nr_to_pfn(sec)	((sec) << PFN_SECTION_SHIFT)
+
+#define SECTION_ALIGN_UP(pfn)	(((pfn) + PAGES_PER_SECTION - 1) & PAGE_SECTION_MASK)
+#define SECTION_ALIGN_DOWN(pfn)	((pfn) & PAGE_SECTION_MASK)
+
+struct mem_section {
+	/*
+	 * This is, logically, a pointer to an array of struct
+	 * pages.  However, it is stored with some other magic.
+	 * (see sparse.c::sparse_init_one_section())
+	 *
+	 * Additionally during early boot we encode node id of
+	 * the location of the section here to guide allocation.
+	 * (see sparse.c::memory_present())
+	 *
+	 * Making it a UL at least makes someone do a cast
+	 * before using it wrong.
+	 */
+	unsigned long section_mem_map;
+
+	/* See declaration of similar field in struct zone */
+	unsigned long *pageblock_flags;
+
+	/*
+	 * WARNING: mem_section must be a power-of-2 in size for the
+	 * calculation and use of SECTION_ROOT_MASK to make sense.
+	 */
+};
+
+#ifdef CONFIG_SPARSEMEM_EXTREME
+#define SECTIONS_PER_ROOT       (PAGE_SIZE / sizeof (struct mem_section))
+#else
+#define SECTIONS_PER_ROOT	1
+#endif
+
+#define SECTION_NR_TO_ROOT(sec)	((sec) / SECTIONS_PER_ROOT)
+#define NR_SECTION_ROOTS	DIV_ROUND_UP(NR_MEM_SECTIONS, SECTIONS_PER_ROOT)
+#define SECTION_ROOT_MASK	(SECTIONS_PER_ROOT - 1)
+
+#ifdef CONFIG_SPARSEMEM_EXTREME
+extern struct mem_section *mem_section[NR_SECTION_ROOTS];
+#else
+extern struct mem_section mem_section[NR_SECTION_ROOTS][SECTIONS_PER_ROOT];
+#endif
+
+static inline struct mem_section *__nr_to_section(unsigned long nr)
+{
+	if (!mem_section[SECTION_NR_TO_ROOT(nr)])
+		return NULL;
+	return &mem_section[SECTION_NR_TO_ROOT(nr)][nr & SECTION_ROOT_MASK];
+}
+
+extern int __section_nr(struct mem_section* ms);
+extern unsigned long usemap_size(void);
+
+/*
+ * We use the lower bits of the mem_map pointer to store
+ * a little bit of information.  There should be at least
+ * 3 bits here due to 32-bit alignment.
+ */
+#define	SECTION_MARKED_PRESENT	(1UL<<0)
+#define SECTION_HAS_MEM_MAP	(1UL<<1)
+#define SECTION_MAP_LAST_BIT	(1UL<<2)
+#define SECTION_MAP_MASK	(~(SECTION_MAP_LAST_BIT-1))
+#define SECTION_NID_SHIFT	2
+
+static inline struct page *__section_mem_map_addr(struct mem_section *section)
+{
+	unsigned long map = section->section_mem_map;
+	map &= SECTION_MAP_MASK;
+	return (struct page *)map;
+}
+
+static inline int present_section(struct mem_section *section)
+{
+	return (section && (section->section_mem_map & SECTION_MARKED_PRESENT));
+}
+
+static inline int present_section_nr(unsigned long nr)
+{
+	return present_section(__nr_to_section(nr));
+}
+
+static inline int valid_section(struct mem_section *section)
+{
+	return (section && (section->section_mem_map & SECTION_HAS_MEM_MAP));
+}
+
+static inline int valid_section_nr(unsigned long nr)
+{
+	return valid_section(__nr_to_section(nr));
+}
+
+static inline struct mem_section *__pfn_to_section(unsigned long pfn)
+{
+	return __nr_to_section(pfn_to_section_nr(pfn));
+}
+#endif /* CONFIG_SPARSEMEM */
 
 #endif /* __GENERATING_BOUNDS_H */
 #endif /* _LEGO_MM_ZONE_H_ */
