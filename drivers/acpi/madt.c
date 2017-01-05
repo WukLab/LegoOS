@@ -186,7 +186,7 @@ void __init acpi_table_print_madt_entry(struct acpi_subtable_header *header)
  * Parse MADT subtable
  */
 int __init acpi_table_parse_madt(enum acpi_madt_type id,
-				 acpi_table_entry_handler handler,
+				 acpi_tbl_entry_handler handler,
 				 unsigned int max_entries)
 {
 	return acpi_table_parse_entries(ACPI_SIG_MADT,

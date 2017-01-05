@@ -200,6 +200,8 @@ out_err:
 	return -EINVAL;
 }
 
+static int __initdata parsed_numa_memblks;
+
 static int __init __used
 acpi_parse_srat_memory_affinity(struct acpi_subtable_header * header,
 				const unsigned long end)
@@ -212,7 +214,8 @@ acpi_parse_srat_memory_affinity(struct acpi_subtable_header * header,
 
 	acpi_table_print_srat_entry(header);
 
-	acpi_numa_memory_affinity_init(memory_affinity);
+	if (!acpi_numa_memory_affinity_init(memory_affinity))
+		parsed_numa_memblks++;
 
 	return 0;
 }
@@ -262,27 +265,37 @@ static int __init __used acpi_parse_slit(struct acpi_table_header *table)
 
 			if (to_node == NUMA_NO_NODE)
 				continue;
-/*
+
 			numa_set_distance(from_node, to_node,
 				slit->entry[slit->locality_count * i + j]);
-*/
-	}
+		}
 	}
 
 	return 0;
 }
 
+bool acpi_numa_disabled = false;
+
+/*
+ * Find possible NUMA configuration from ACPI tables
+ * Mainly, we need to parse SRAT subtable and SLIT.
+ */
 void __init acpi_boot_numa_init(void)
 {
+	const char *reason;
+	int cnt __maybe_unused;
 	int ret;
 	struct acpi_subtable_proc srat_proc[3];
 
 	ret = acpi_parse_table(ACPI_SIG_SRAT, acpi_parse_srat);
 	if (ret) {
-		pr_info("SRAT not found, skip NUMA\n");
-		return;
+		reason = "no SRAT table found";
+		goto no_numa;
 	}
 
+	/*
+	 * 1) CPU <--> Node Affinity
+	 */
 	memset(srat_proc, 0, sizeof(srat_proc));
 	srat_proc[0].id = ACPI_SRAT_TYPE_CPU_AFFINITY;
 	srat_proc[0].handler = acpi_parse_srat_cpu_affinity;
@@ -295,15 +308,27 @@ void __init acpi_boot_numa_init(void)
 				sizeof(struct acpi_table_srat),
 				srat_proc, ARRAY_SIZE(srat_proc), 0);
 
-/*
-XXX:
-	Temporary disable this code because ACPI table is broken
-	Fix this when ACPI is fixed
-
+	/*
+	 * 2) Node <--> Memory Affinity
+	 */
 	cnt = acpi_table_parse_srat(ACPI_SRAT_TYPE_MEMORY_AFFINITY,
 				    acpi_parse_srat_memory_affinity,
 				    NR_NODE_MEMBLKS);
 
+	if (cnt < 0 || !parsed_numa_memblks) {
+		reason = "fail to get Node <--> Memory affinity";
+		goto no_numa;
+	}
+
+	/*
+	 * 3) NUMA distance table
+	 * SLIT: System Locality Information Table
+	 */
 	acpi_parse_table(ACPI_SIG_SLIT, acpi_parse_slit);
-*/
+
+	return;
+
+no_numa:
+	acpi_numa_disabled = true;
+	pr_info("SRAT: NUMA Disabled, because %s\n", reason);
 }

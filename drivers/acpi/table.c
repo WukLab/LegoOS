@@ -316,7 +316,7 @@ void acpi_put_table(struct acpi_table_header *table)
  *
  * Return 0 if table found, -errno if not.
  */
-int __init acpi_parse_table(char *id, acpi_table_handler handler)
+int __init acpi_parse_table(char *id, acpi_tbl_table_handler handler)
 {
 	struct acpi_table_header *table = NULL;
 

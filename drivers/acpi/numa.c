@@ -140,11 +140,11 @@ void __init acpi_table_print_srat_entry(struct acpi_subtable_header *header)
  *
  * Parse SRAT subtable
  */
-int __init acpi_table_parse_srat(enum acpi_srat_type id,
-				 acpi_table_entry_handler handler,
-				 unsigned int max_entries)
+int __init
+acpi_table_parse_srat(enum acpi_srat_type id,
+		      acpi_tbl_entry_handler handler, unsigned int max_entries)
 {
 	return acpi_table_parse_entries(ACPI_SIG_SRAT,
-					sizeof(struct acpi_table_srat),
-					id, handler, max_entries);
+					    sizeof(struct acpi_table_srat), id,
+					    handler, max_entries);
 }

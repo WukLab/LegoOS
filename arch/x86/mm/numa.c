@@ -203,31 +203,33 @@ static int __init numa_alloc_distance(void)
 		for (j = 0; j < cnt; j++)
 			numa_distance[i * cnt + j] = i == j ?
 				LOCAL_DISTANCE : REMOTE_DISTANCE;
-	printk(KERN_DEBUG "NUMA: Initialized distance table, cnt=%d\n", cnt);
+	pr_debug("NUMA: Initialized distance table, cnt=%d\n", cnt);
 
 	return 0;
 }
 
-void __init numa_set_distance(int from, int to, int distance)
+int __init numa_set_distance(int from, int to, int distance)
 {
 	if (!numa_distance && numa_alloc_distance() < 0)
-		return;
+		return -ENOMEM;
 
 	if (from >= numa_distance_cnt || to >= numa_distance_cnt ||
 			from < 0 || to < 0) {
 		pr_warn_once("NUMA: Warning: node ids are out of bound, from=%d to=%d distance=%d\n",
 			    from, to, distance);
-		return;
+		return -EINVAL;
 	}
 
 	if ((u8)distance != distance ||
 	    (from == to && distance != LOCAL_DISTANCE)) {
 		pr_warn_once("NUMA: Warning: invalid distance parameter, from=%d to=%d distance=%d\n",
 			     from, to, distance);
-		return;
+		return -EINVAL;
 	}
 
 	numa_distance[from * numa_distance_cnt + to] = distance;
+
+	return 0;
 }
 
 /**
@@ -352,7 +354,7 @@ static void __init alloc_node_data(int nid)
 	nd = __va(nd_pa);
 
 	/* report and initialize */
-	printk(KERN_INFO "NODE_DATA(%d) allocated [mem %#010Lx-%#010Lx]\n", nid,
+	pr_info("NODE_DATA(%d) allocated [mem %#010Lx-%#010Lx]\n", nid,
 	       nd_pa, nd_pa + nd_size - 1);
 
 	node_data[nid] = nd;
@@ -421,7 +423,10 @@ static int __init numa_register_memblks(struct numa_meminfo *mi)
 void __init x86_numa_init(void)
 {
 	int ret;
-	bool fake = true;
+	bool fake = false;
+
+	if (acpi_numa_disabled)
+		fake = true;
 
 fake_numa:
 	nodes_clear(node_possible_map);

@@ -52,6 +52,12 @@ enum acpi_irq_model_id {
 #define ACPI_SIG_HPET	"HPET"		/* High Precision Event Timer table */
 #define ACPI_SIG_BOOT	"BOOT"		/* Simple Boot Flag Table */
 
+/*
+ * All tables and structures must be byte-packed to match the ACPI
+ * specification, since the tables are provided by the system BIOS
+ */
+#pragma pack(1)
+
 #define ACPI_NAME_SIZE		4
 #define ACPI_OEM_ID_SIZE	6
 #define ACPI_OEM_TABLE_ID_SIZE	8
@@ -217,111 +223,124 @@ enum acpi_madt_type {
  */
 
 /* 0: Processor Local APIC */
+
 struct acpi_madt_local_apic {
 	struct acpi_subtable_header header;
-	u8 processor_id;			/* ACPI processor id */
-	u8 id;					/* Processor's local APIC id */
+	u8 processor_id;	/* ACPI processor id */
+	u8 id;			/* Processor's local APIC id */
 	u32 lapic_flags;
 };
 
 /* 1: IO APIC */
+
 struct acpi_madt_io_apic {
 	struct acpi_subtable_header header;
-	u8 id;					/* I/O APIC ID */
-	u8 reserved;				/* reserved - must be zero */
-	u32 address;				/* APIC physical address */
-	u32 global_irq_base;			/* Global system interrupt where INTI lines start */
+	u8 id;			/* I/O APIC ID */
+	u8 reserved;		/* reserved - must be zero */
+	u32 address;		/* APIC physical address */
+	u32 global_irq_base;	/* Global system interrupt where INTI lines start */
 };
 
 /* 2: Interrupt Override */
+
 struct acpi_madt_interrupt_override {
 	struct acpi_subtable_header header;
-	u8 bus;					/* 0 - ISA */
-	u8 source_irq;				/* Interrupt source (IRQ) */
-	u32 global_irq;				/* Global system interrupt */
+	u8 bus;			/* 0 - ISA */
+	u8 source_irq;		/* Interrupt source (IRQ) */
+	u32 global_irq;		/* Global system interrupt */
 	u16 inti_flags;
 };
 
 /* 3: NMI Source */
+
 struct acpi_madt_nmi_source {
 	struct acpi_subtable_header header;
 	u16 inti_flags;
-	u32 global_irq;				/* Global system interrupt */
+	u32 global_irq;		/* Global system interrupt */
 };
 
 /* 4: Local APIC NMI */
+
 struct acpi_madt_local_apic_nmi {
 	struct acpi_subtable_header header;
-	u8 processor_id;			/* ACPI processor id */
+	u8 processor_id;	/* ACPI processor id */
 	u16 inti_flags;
-	u8 lint;				/* LINTn to which NMI is connected */
+	u8 lint;		/* LINTn to which NMI is connected */
 };
 
 /* 5: Address Override */
+
 struct acpi_madt_local_apic_override {
 	struct acpi_subtable_header header;
-	u16 reserved;				/* Reserved, must be zero */
-	u64 address;				/* APIC physical address */
+	u16 reserved;		/* Reserved, must be zero */
+	u64 address;		/* APIC physical address */
 };
 
 /* 6: I/O Sapic */
+
 struct acpi_madt_io_sapic {
 	struct acpi_subtable_header header;
-	u8 id;					/* I/O SAPIC ID */
-	u8 reserved;				/* Reserved, must be zero */
-	u32 global_irq_base;			/* Global interrupt for SAPIC start */
-	u64 address;				/* SAPIC physical address */
+	u8 id;			/* I/O SAPIC ID */
+	u8 reserved;		/* Reserved, must be zero */
+	u32 global_irq_base;	/* Global interrupt for SAPIC start */
+	u64 address;		/* SAPIC physical address */
 };
 
 /* 7: Local Sapic */
+
 struct acpi_madt_local_sapic {
 	struct acpi_subtable_header header;
-	u8 processor_id;			/* ACPI processor id */
-	u8 id;					/* SAPIC ID */
-	u8 eid;					/* SAPIC EID */
-	u8 reserved[3];				/* Reserved, must be zero */
+	u8 processor_id;	/* ACPI processor id */
+	u8 id;			/* SAPIC ID */
+	u8 eid;			/* SAPIC EID */
+	u8 reserved[3];		/* Reserved, must be zero */
 	u32 lapic_flags;
-	u32 uid;				/* Numeric UID - ACPI 3.0 */
-	char uid_string[1];			/* String UID  - ACPI 3.0 */
+	u32 uid;		/* Numeric UID - ACPI 3.0 */
+	char uid_string[1];	/* String UID  - ACPI 3.0 */
 };
 
 /* 8: Platform Interrupt Source */
+
 struct acpi_madt_interrupt_source {
 	struct acpi_subtable_header header;
 	u16 inti_flags;
-	u8 type;				/* 1=PMI, 2=INIT, 3=corrected */
-	u8 id;					/* Processor ID */
-	u8 eid;					/* Processor EID */
-	u8 io_sapic_vector;			/* Vector value for PMI interrupts */
-	u32 global_irq;				/* Global system interrupt */
-	u32 flags;				/* Interrupt Source Flags */
+	u8 type;		/* 1=PMI, 2=INIT, 3=corrected */
+	u8 id;			/* Processor ID */
+	u8 eid;			/* Processor EID */
+	u8 io_sapic_vector;	/* Vector value for PMI interrupts */
+	u32 global_irq;		/* Global system interrupt */
+	u32 flags;		/* Interrupt Source Flags */
 };
 
 /* Masks for Flags field above */
+
 #define ACPI_MADT_CPEI_OVERRIDE     (1)
 
 /* 9: Processor Local X2APIC (ACPI 4.0) */
+
 struct acpi_madt_local_x2apic {
 	struct acpi_subtable_header header;
-	u16 reserved;				/* reserved - must be zero */
-	u32 local_apic_id;			/* Processor x2APIC ID  */
+	u16 reserved;		/* reserved - must be zero */
+	u32 local_apic_id;	/* Processor x2APIC ID  */
 	u32 lapic_flags;
-	u32 uid;				/* ACPI processor UID */
+	u32 uid;		/* ACPI processor UID */
 };
 
 /* 10: Local X2APIC NMI (ACPI 4.0) */
+
 struct acpi_madt_local_x2apic_nmi {
 	struct acpi_subtable_header header;
 	u16 inti_flags;
-	u32 uid;				/* ACPI processor UID */
-	u8 lint;				/* LINTn to which NMI is connected */
-	u8 reserved[3];				/* reserved - must be zero */
+	u32 uid;		/* ACPI processor UID */
+	u8 lint;		/* LINTn to which NMI is connected */
+	u8 reserved[3];		/* reserved - must be zero */
 };
 
 /* 11: Generic Interrupt (ACPI 5.0 + ACPI 6.0 changes) */
+
 struct acpi_madt_generic_interrupt {
 	struct acpi_subtable_header header;
-	u16 reserved;				/* reserved - must be zero */
+	u16 reserved;		/* reserved - must be zero */
 	u32 cpu_interface_number;
 	u32 uid;
 	u32 flags;
@@ -345,17 +364,19 @@ struct acpi_madt_generic_interrupt {
 #define ACPI_MADT_VGIC_IRQ_MODE         (1<<2)	/* 02: VGIC Maintenance Interrupt mode */
 
 /* 12: Generic Distributor (ACPI 5.0 + ACPI 6.0 changes) */
+
 struct acpi_madt_generic_distributor {
 	struct acpi_subtable_header header;
-	u16 reserved;				/* reserved - must be zero */
+	u16 reserved;		/* reserved - must be zero */
 	u32 gic_id;
 	u64 base_address;
 	u32 global_irq_base;
 	u8 version;
-	u8 reserved2[3];			/* reserved - must be zero */
+	u8 reserved2[3];	/* reserved - must be zero */
 };
 
 /* Values for Version field above */
+
 enum acpi_madt_gic_version {
 	ACPI_MADT_GIC_VERSION_NONE = 0,
 	ACPI_MADT_GIC_VERSION_V1 = 1,
@@ -366,9 +387,10 @@ enum acpi_madt_gic_version {
 };
 
 /* 13: Generic MSI Frame (ACPI 5.1) */
+
 struct acpi_madt_generic_msi_frame {
 	struct acpi_subtable_header header;
-	u16 reserved;				/* reserved - must be zero */
+	u16 reserved;		/* reserved - must be zero */
 	u32 msi_frame_id;
 	u64 base_address;
 	u32 flags;
@@ -377,20 +399,23 @@ struct acpi_madt_generic_msi_frame {
 };
 
 /* Masks for Flags field above */
+
 #define ACPI_MADT_OVERRIDE_SPI_VALUES   (1)
 
 /* 14: Generic Redistributor (ACPI 5.1) */
+
 struct acpi_madt_generic_redistributor {
 	struct acpi_subtable_header header;
-	u16 reserved;				/* reserved - must be zero */
+	u16 reserved;		/* reserved - must be zero */
 	u64 base_address;
 	u32 length;
 };
 
 /* 15: Generic Translator (ACPI 6.0) */
+
 struct acpi_madt_generic_translator {
 	struct acpi_subtable_header header;
-	u16 reserved;				/* reserved - must be zero */
+	u16 reserved;		/* reserved - must be zero */
 	u32 translation_id;
 	u64 base_address;
 	u32 reserved2;
@@ -401,13 +426,16 @@ struct acpi_madt_generic_translator {
  */
 
 /* MADT Local APIC flags */
-#define ACPI_MADT_ENABLED		(1)	/* 00: Processor is usable if set */
+
+#define ACPI_MADT_ENABLED           (1)	/* 00: Processor is usable if set */
 
 /* MADT MPS INTI flags (inti_flags) */
-#define ACPI_MADT_POLARITY_MASK		(3)	/* 00-01: Polarity of APIC I/O input signals */
-#define ACPI_MADT_TRIGGER_MASK		(3<<2)	/* 02-03: Trigger mode of APIC input signals */
+
+#define ACPI_MADT_POLARITY_MASK     (3)	/* 00-01: Polarity of APIC I/O input signals */
+#define ACPI_MADT_TRIGGER_MASK      (3<<2)	/* 02-03: Trigger mode of APIC input signals */
 
 /* Values for MPS INTI flags */
+
 #define ACPI_MADT_POLARITY_CONFORMS       0
 #define ACPI_MADT_POLARITY_ACTIVE_HIGH    1
 #define ACPI_MADT_POLARITY_RESERVED       2
@@ -512,6 +540,9 @@ struct acpi_srat_gicc_affinity {
 /* Flags for struct acpi_srat_gicc_affinity */
 #define ACPI_SRAT_GICC_ENABLED     (1)		/* 00: Use affinity structure */
 
+/* Reset to default packing */
+#pragma pack()
+
 /*
  * LegoOS Internal Representations
  */
@@ -590,13 +621,9 @@ struct acpi_table_desc {
 # define MAX_PXM_DOMAINS	(256)
 #endif
 
-typedef int (*acpi_table_entry_handler)(struct acpi_subtable_header *header,
-				        const unsigned long end);
-typedef int (*acpi_table_handler)(struct acpi_table_header *table);
-
 struct acpi_subtable_proc {
 	int id;
-	acpi_table_entry_handler handler;
+	acpi_tbl_entry_handler handler;
 	int count;
 };
 
@@ -610,21 +637,21 @@ void __init acpi_table_print_madt_entry(struct acpi_subtable_header *header);
 void __init acpi_table_print_srat_entry(struct acpi_subtable_header *header);
 
 int __init acpi_table_parse_entries(char *id, unsigned long table_size, int entry_id,
-			 acpi_table_entry_handler handler, unsigned int max_entries);
+			 acpi_tbl_entry_handler handler, unsigned int max_entries);
 
 int __init acpi_table_parse_madt(enum acpi_madt_type id,
-				 acpi_table_entry_handler handler,
+				 acpi_tbl_entry_handler handler,
 				 unsigned int max_entries);
 
 int __init acpi_table_parse_srat(enum acpi_srat_type id,
-				 acpi_table_entry_handler handler,
+				 acpi_tbl_entry_handler handler,
 				 unsigned int max_entries);
 
 int pxm_to_node(int pxm);
 int node_to_pxm(int node);
 int acpi_map_pxm_to_node(int pxm);
 
-int __init acpi_parse_table(char *signature, acpi_table_handler handler);
+int __init acpi_parse_table(char *signature, acpi_tbl_table_handler handler);
 
 /* Initializing all ACPI tables */
 void __init acpi_table_init(void);
@@ -635,10 +662,10 @@ void __init acpi_boot_parse_tables(void);
 /* Arch-Specific boot-time NUMA setup */
 void __init acpi_boot_numa_init(void);
 
-#define BAD_MADT_ENTRY(entry, end)						\
-	WARN_ON(								\
-	((!entry) || (unsigned long)entry + sizeof(*entry) > end ||		\
-	((struct acpi_subtable_header *)entry)->length < sizeof(*entry)))
+#define BAD_MADT_ENTRY(entry, end) (					    \
+		(!entry) || (unsigned long)entry + sizeof(*entry) > end ||  \
+		((struct acpi_subtable_header *)entry)->length < sizeof(*entry))
+
 
 /* Conform to ACPI 2.0 SLIT distance definitions */
 #define LOCAL_DISTANCE		10

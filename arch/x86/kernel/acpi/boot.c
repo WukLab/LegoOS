@@ -16,7 +16,6 @@
 
 #include <asm/asm.h>
 #include <asm/apic.h>
-#include <asm/hpet.h>
 #include <asm/i8259.h>
 #include <asm/io_apic.h>
 #include <asm/processor.h>
@@ -25,6 +24,8 @@
 #include <lego/acpi.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
+#include <lego/resource.h>
+#include <lego/memblock.h>
 #include <lego/early_ioremap.h>
 
 int acpi_lapic;
@@ -210,9 +211,6 @@ acpi_parse_lapic_nmi(struct acpi_subtable_header * header, const unsigned long e
 
 	lapic_nmi = (struct acpi_madt_local_apic_nmi *)header;
 
-	pr_info("header: %p, end: %#lx, entry->length: %#x\n",
-		header, end, header->length);
-
 	if (BAD_MADT_ENTRY(lapic_nmi, end))
 		return -EINVAL;
 
@@ -383,24 +381,11 @@ static int __init acpi_parse_madt_lapic_entries(void)
 		return count;
 	}
 
-	/*
-	 * Parse APIC NMI
-	 */
-
-	memset(madt_proc, 0, sizeof(madt_proc));
-	madt_proc[0].id = ACPI_MADT_TYPE_LOCAL_X2APIC_NMI;
-	madt_proc[0].handler = acpi_parse_x2apic_nmi;
-	madt_proc[1].id = ACPI_MADT_TYPE_LOCAL_APIC_NMI;
-	madt_proc[1].handler = acpi_parse_lapic_nmi;
-
-	ret = acpi_table_parse_entries_array(ACPI_SIG_MADT,
-		sizeof(struct acpi_table_madt), madt_proc, ARRAY_SIZE(madt_proc),
-		MAX_LOCAL_APIC);
-
-	count = madt_proc[0].count;
-	x2count = madt_proc[1].count;
-
-	if (ret < 0 || count < 0 || x2count < 0) {
+	x2count = acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_X2APIC_NMI,
+					acpi_parse_x2apic_nmi, 0);
+	count = acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_APIC_NMI,
+				      acpi_parse_lapic_nmi, 0);
+	if (count < 0 || x2count < 0) {
 		pr_err("Error parsing LAPIC NMI entry\n");
 		return count;
 	}
@@ -484,6 +469,9 @@ static void __init acpi_boot_parse_madt(void)
 		pr_info("Using ACPI for processor (LAPIC) configuration\n");
 }
 
+#ifdef CONFIG_HPET_TIMER
+#include <asm/hpet.h>
+
 static int __init acpi_parse_hpet(struct acpi_table_header *table)
 {
 	struct acpi_table_hpet *hpet_tbl = (struct acpi_table_hpet *)table;
@@ -522,6 +510,9 @@ static int __init acpi_parse_hpet(struct acpi_table_header *table)
 
 	return 0;
 }
+#else
+static inline void acpi_boot_parse_hpet(void) { };
+#endif
 
 static void __init acpi_boot_parse_hpet(void)
 {
