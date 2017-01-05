@@ -21,53 +21,6 @@
 
 u32 acpi_gbl_fadt_index;
 
-/*
- * Find a table via signature
- * Map the table and return the mapped address if found
- */
-static void __init acpi_get_and_map_table(char *signature,
-					  struct acpi_table_header **h)
-{
-	struct acpi_table_desc *desc;
-	void *p;
-	int i;
-
-	*h = NULL;
-	for (i = 0; i < nr_acpi_tables; i++) {
-		desc = &acpi_tables[i];
-		if (!strncmp(desc->signature.ascii, signature, 4)) {
-			BUG_ON(desc->pointer);
-			p = early_ioremap(desc->address, desc->length);
-			if (!p) {
-				pr_info("fail to map acpi_table[%d]\n", i);
-				return;
-			}
-			desc->pointer = p;
-			*h = p;
-		}
-	}
-}
-
-/*
- * Unmap a previous mapped ACPI table
- * It is BUG if you can this without a proceeding map
- */
-static void __init acpi_unmap_table(char *signature)
-{
-	struct acpi_table_desc *desc;
-	int i;
-
-	for (i = 0; i < nr_acpi_tables; i++) {
-		desc = &acpi_tables[i];
-		if (!strncmp(desc->signature.ascii, signature, 4)) {
-			BUG_ON(!desc->pointer);
-			early_iounmap(desc->pointer, desc->length);
-			desc->pointer = NULL;
-			return;
-		}
-	}
-}
-
 /**
  * acpi_parse_entries_array - for each proc_num find a suitable subtable
  *
@@ -88,9 +41,9 @@ static void __init acpi_unmap_table(char *signature)
  */
 static int __init
 acpi_parse_entries_array(char *id, unsigned long table_size,
-			 struct acpi_table_header *table_header,
-			 struct acpi_subtable_proc *proc, int proc_num,
-			 unsigned int max_entries)
+		struct acpi_table_header *table_header,
+		struct acpi_subtable_proc *proc, int proc_num,
+		unsigned int max_entries)
 {
 	struct acpi_subtable_header *entry;
 	unsigned long table_end;
@@ -112,6 +65,7 @@ acpi_parse_entries_array(char *id, unsigned long table_size,
 	table_end = (unsigned long)table_header + table_header->length;
 
 	/* Parse all entries looking for a match. */
+
 	entry = (struct acpi_subtable_header *)
 	    ((unsigned long)table_header + table_size);
 
@@ -157,31 +111,37 @@ acpi_parse_entries_array(char *id, unsigned long table_size,
 }
 
 int __init
-acpi_table_parse_entries_array(char *id, unsigned long table_size,
-			       struct acpi_subtable_proc *proc, int proc_num,
-			       unsigned int max_entries)
+acpi_table_parse_entries_array(char *id,
+			 unsigned long table_size,
+			 struct acpi_subtable_proc *proc, int proc_num,
+			 unsigned int max_entries)
 {
-	struct acpi_table_header *h;
+	struct acpi_table_header *table_header = NULL;
 	int count;
+	u32 instance = 0;
 
 	if (!id)
 		return -EINVAL;
 
-	acpi_get_and_map_table(id, &h);
-	if (!h) {
+	acpi_get_table(id, instance, &table_header);
+	if (!table_header) {
 		pr_warn("%4.4s not present\n", id);
 		return -ENODEV;
 	}
 
-	count = acpi_parse_entries_array(id, table_size, h, proc, proc_num, max_entries);
-	acpi_unmap_table(id);
+	count = acpi_parse_entries_array(id, table_size, table_header,
+			proc, proc_num, max_entries);
 
+	acpi_put_table(table_header);
 	return count;
 }
 
 int __init
-acpi_table_parse_entries(char *id, unsigned long table_size, int entry_id,
-			 acpi_table_entry_handler handler, unsigned int max_entries)
+acpi_table_parse_entries(char *id,
+			unsigned long table_size,
+			int entry_id,
+			acpi_tbl_entry_handler handler,
+			unsigned int max_entries)
 {
 	struct acpi_subtable_proc proc = {
 		.id		= entry_id,
@@ -189,29 +149,188 @@ acpi_table_parse_entries(char *id, unsigned long table_size, int entry_id,
 	};
 
 	return acpi_table_parse_entries_array(id, table_size, &proc, 1,
-					      max_entries);
+						max_entries);
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_get_table
+ *
+ * PARAMETERS:  table_desc          - Table descriptor
+ *              out_table           - Where the pointer to the table is returned
+ *
+ * RETURN:      Status and pointer to the requested table
+ *
+ * DESCRIPTION: Increase a reference to a table descriptor and return the
+ *              validated table pointer.
+ *              If the table descriptor is an entry of the root table list,
+ *              this API must be invoked with ACPI_MTX_TABLES acquired.
+ *
+ ******************************************************************************/
+static int
+acpi_tb_get_table(struct acpi_table_desc *table_desc,
+		  struct acpi_table_header **out_table)
+{
+	int status;
+
+	if (table_desc->validation_count == 0) {
+
+		/* Table need to be "VALIDATED" */
+		status = acpi_tb_validate_table(table_desc);
+		if (status)
+			return status;
+	}
+
+	table_desc->validation_count++;
+
+	*out_table = table_desc->pointer;
+
+	return 0;
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_tb_put_table
+ *
+ * PARAMETERS:  table_desc          - Table descriptor
+ *
+ * RETURN:      None
+ *
+ * DESCRIPTION: Decrease a reference to a table descriptor and release the
+ *              validated table pointer if no references.
+ *              If the table descriptor is an entry of the root table list,
+ *              this API must be invoked with ACPI_MTX_TABLES acquired.
+ *
+ ******************************************************************************/
+static void acpi_tb_put_table(struct acpi_table_desc *table_desc)
+{
+
+	if (table_desc->validation_count == 0) {
+		pr_err("Table %p, Validation count is zero before decrement\n", table_desc);
+		return;
+	}
+	table_desc->validation_count--;
+
+	if (table_desc->validation_count == 0) {
+		/* Table need to be "INVALIDATED" */
+		acpi_tb_invalidate_table(table_desc);
+	}
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_get_table
+ *
+ * PARAMETERS:  signature           - ACPI signature of needed table
+ *              instance            - Which instance (for SSDTs)
+ *              out_table           - Where the pointer to the table is returned
+ *
+ * RETURN:      Status and pointer to the requested table
+ *
+ * DESCRIPTION: Finds and verifies an ACPI table. Table must be in the
+ *              RSDT/XSDT.
+ *              Note that an early stage acpi_get_table() call must be paired
+ *              with an early stage acpi_put_table() call. otherwise the table
+ *              pointer mapped by the early stage mapping implementation may be
+ *              erroneously unmapped by the late stage unmapping implementation
+ *              in an acpi_put_table() invoked during the late stage.
+ *
+ ******************************************************************************/
+int acpi_get_table(char *signature, u32 instance, struct acpi_table_header ** out_table)
+{
+	u32 i;
+	u32 j;
+	int status = 0;
+	struct acpi_table_desc *table_desc;
+
+	/* Parameter validation */
+	if (!signature || !out_table)
+		return -EINVAL;
+
+	/*
+	 * Note that the following line is required by some OSPMs, they only
+	 * check if the returned table is NULL instead of the returned status
+	 * to determined if this function is succeeded.
+	 */
+	*out_table = NULL;
+
+	/* Walk the root table list */
+	for (i = 0, j = 0; i < nr_acpi_tables; i++) {
+		table_desc = &acpi_tables[i];
+
+		if (!ACPI_COMPARE_NAME(&table_desc->signature, signature)) {
+			continue;
+		}
+
+		if (++j < instance) {
+			continue;
+		}
+
+		status = acpi_tb_get_table(table_desc, out_table);
+		break;
+	}
+
+	return status;
+}
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_put_table
+ *
+ * PARAMETERS:  table               - The pointer to the table
+ *
+ * RETURN:      None
+ *
+ * DESCRIPTION: Release a table returned by acpi_get_table() and its clones.
+ *              Note that it is not safe if this function was invoked after an
+ *              uninstallation happened to the original table descriptor.
+ *              Currently there is no OSPMs' requirement to handle such
+ *              situations.
+ *
+ ******************************************************************************/
+void acpi_put_table(struct acpi_table_header *table)
+{
+	u32 i;
+	struct acpi_table_desc *table_desc;
+
+	/* Walk the root table list */
+	for (i = 0; i < nr_acpi_tables; i++) {
+		table_desc = &acpi_tables[i];
+
+		if (table_desc->pointer != table) {
+			continue;
+		}
+
+		acpi_tb_put_table(table_desc);
+		break;
+	}
 }
 
 /**
- * acpi_parse_table
- * @signature: The signature ID of this table
- * @handler: Handler you wanna run if this table is found
+ * acpi_table_parse - find table with @id, run @handler on it
+ * @id: table id to find
+ * @handler: handler to run
+ *
+ * Scan the ACPI System Descriptor Table (STD) for a table matching @id,
+ * run @handler on it.
+ *
+ * Return 0 if table found, -errno if not.
  */
-int __init acpi_parse_table(char *signature, acpi_table_handler handler)
+int __init acpi_parse_table(char *id, acpi_table_handler handler)
 {
-	struct acpi_table_header *h;
+	struct acpi_table_header *table = NULL;
 
-	if (!signature || !handler)
+	if (!id || !handler)
 		return -EINVAL;
 
-	acpi_get_and_map_table(signature, &h);
-	if (h) {
-		handler(h);
-		acpi_unmap_table(signature);
+	acpi_get_table(id, 0, &table);
+
+	if (table) {
+		handler(table);
+		acpi_put_table(table);
+		return 0;
 	} else
 		return -ENODEV;
-
-	return 0;
 }
 
 /*TODO*/
@@ -236,7 +355,6 @@ void __init acpi_tb_parse_fadt(void)
  *              64-bit platforms.
  *
  ******************************************************************************/
-
 static acpi_physical_address
 acpi_tb_get_root_table_entry(u8 *table_entry, u32 table_entry_size)
 {
@@ -401,8 +519,7 @@ acpi_tb_release_table(struct acpi_table_header *table,
  *              table descriptor is in "VALIDATED" state.
  *
  *****************************************************************************/
-static __init int
-acpi_tb_validate_table(struct acpi_table_desc *table_desc)
+int acpi_tb_validate_table(struct acpi_table_desc *table_desc)
 {
 	int ret = 0;
 
@@ -428,8 +545,7 @@ acpi_tb_validate_table(struct acpi_table_desc *table_desc)
  *              acpi_tb_validate_table().
  *
  ******************************************************************************/
-static __init void
-acpi_tb_invalidate_table(struct acpi_table_desc *table_desc)
+void acpi_tb_invalidate_table(struct acpi_table_desc *table_desc)
 {
 
 	/* Table must be validated */

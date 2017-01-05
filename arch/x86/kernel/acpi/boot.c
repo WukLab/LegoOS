@@ -501,11 +501,23 @@ static int __init acpi_parse_hpet(struct acpi_table_header *table)
 	 * want to allocate a resource there.
 	 */
 	if (!hpet_address) {
-		pr_err("HPET id: %#x base: %#lx is invalid\n",
+		pr_warn("HPET id: %#x base: %#lx is invalid\n",
 			hpet_tbl->id, hpet_address);
 		return 0;
 	}
 
+#ifdef CONFIG_X86_64
+	/*
+	 * Some even more broken BIOSes advertise HPET at
+	 * 0xfed0000000000000 instead of 0xfed00000. Fix it up and add
+	 * some noise:
+	 */
+	if (hpet_address == 0xfed0000000000000UL) {
+		pr_warn("HPET id: %#x base: 0xfed0000000000000 fixed up "
+			"to 0xfed00000.\n", hpet_tbl->id);
+		hpet_address >>= 32;
+	}
+#endif
 	pr_info("HPET id: %#x base: %#lx\n", hpet_tbl->id, hpet_address);
 
 	return 0;

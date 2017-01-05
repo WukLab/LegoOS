@@ -172,6 +172,13 @@ struct acpi_subtable_header {
 	u8 length;
 };
 
+/* Table Handlers */
+
+typedef int (*acpi_tbl_table_handler)(struct acpi_table_header *table);
+
+typedef int (*acpi_tbl_entry_handler)(struct acpi_subtable_header *header,
+				      const unsigned long end);
+
 /*******************************************************************************
  *
  * MADT - Multiple APIC Description Table
