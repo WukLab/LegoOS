@@ -12,6 +12,8 @@
 #include <lego/kernel.h>
 #include <lego/memblock.h>
 
+#include <asm/dma.h>
+
 #ifdef CONFIG_SPARSEMEM_EXTREME
 struct mem_section *
 mem_section[NR_SECTION_ROOTS] ____cacheline_aligned;
@@ -224,6 +226,59 @@ static void __init sparse_early_usemaps_alloc_node(void *data,
 		usemap += size;
 	}
 }
+
+#ifndef CONFIG_SPARSEMEM_VMEMMAP
+struct page __init *sparse_mem_map_populate(unsigned long pnum, int nid)
+{
+	struct page *map;
+	unsigned long size;
+
+	size = PAGE_ALIGN(sizeof(struct page) * PAGES_PER_SECTION);
+	map = memblock_virt_alloc_try_nid_nopanic(size,
+					  PAGE_SIZE, __pa(MAX_DMA_ADDRESS),
+					  BOOTMEM_ALLOC_ACCESSIBLE, nid);
+	return map;
+}
+
+void __init sparse_mem_maps_populate_node(struct page **map_map,
+					  unsigned long pnum_begin,
+					  unsigned long pnum_end,
+					  unsigned long map_count, int nodeid)
+{
+	void *map;
+	unsigned long pnum;
+	unsigned long size = sizeof(struct page) * PAGES_PER_SECTION;
+
+	size = PAGE_ALIGN(size);
+	map = memblock_virt_alloc_try_nid_nopanic(size * map_count,
+					  PAGE_SIZE, __pa(MAX_DMA_ADDRESS),
+					  BOOTMEM_ALLOC_ACCESSIBLE, nodeid);
+	if (map) {
+		for (pnum = pnum_begin; pnum < pnum_end; pnum++) {
+			if (!present_section_nr(pnum))
+				continue;
+			map_map[pnum] = map;
+			map += size;
+		}
+		return;
+	}
+
+	/* fallback */
+	for (pnum = pnum_begin; pnum < pnum_end; pnum++) {
+		struct mem_section *ms;
+
+		if (!present_section_nr(pnum))
+			continue;
+		map_map[pnum] = sparse_mem_map_populate(pnum, nodeid);
+		if (map_map[pnum])
+			continue;
+		ms = __nr_to_section(pnum);
+		pr_err("%s: sparsemem memory map backing failed some memory will not be available\n",
+		       __func__);
+		ms->section_mem_map = 0;
+	}
+}
+#endif /* !CONFIG_SPARSEMEM_VMEMMAP */
 
 #ifdef CONFIG_SPARSEMEM_ALLOC_MEM_MAP_TOGETHER
 static void __init sparse_early_mem_maps_alloc_node(void *data,

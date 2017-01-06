@@ -743,6 +743,7 @@ void __init arch_zone_init(void) {
 	free_area_init_nodes(max_zone_pfns);
 }
 
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
 /*
  * Initialise the sparsemem vmemmap using huge-pages at the PMD level.
  */
@@ -822,3 +823,4 @@ int __init vmemmap_populate(unsigned long start, unsigned long end, int node)
 #endif
 	return err;
 }
+#endif /* CONFIG_SPARSEMEM_VMEMMAP */
