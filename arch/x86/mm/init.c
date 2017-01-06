@@ -15,6 +15,7 @@
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
 #include <asm/tlbflush.h>
+#include <asm/processor.h>
 
 #include <lego/mm.h>
 #include <lego/numa.h>
@@ -740,4 +741,84 @@ void __init arch_zone_init(void) {
 	max_zone_pfns[ZONE_NORMAL]	= max_pfn;
 
 	free_area_init_nodes(max_zone_pfns);
+}
+
+/*
+ * Initialise the sparsemem vmemmap using huge-pages at the PMD level.
+ */
+static long addr_start, addr_end;
+static void *p_start, *p_end;
+static int node_start;
+
+static int __init
+vmemmap_populate_hugepages(unsigned long start, unsigned long end, int node)
+{
+	unsigned long addr;
+	unsigned long next;
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+
+	for (addr = start; addr < end; addr = next) {
+		next = pmd_addr_end(addr, end);
+
+		pgd = vmemmap_pgd_populate(addr, node);
+		if (!pgd)
+			return -ENOMEM;
+
+		pud = vmemmap_pud_populate(pgd, addr, node);
+		if (!pud)
+			return -ENOMEM;
+
+		pmd = pmd_offset(pud, addr);
+		if (pmd_none(*pmd)) {
+			void *p;
+
+			p = __vmemmap_alloc_block_buf(PMD_SIZE, node);
+			if (p) {
+				pte_t entry;
+
+				entry = pfn_pte(__pa(p) >> PAGE_SHIFT,
+						PAGE_KERNEL_LARGE);
+				pmd_set(pmd, __pmd(pte_val(entry)));
+
+				/* check to see if we have contiguous blocks */
+				if (p_end != p || node_start != node) {
+					if (p_start)
+						pr_debug(" [%lx-%lx] PMD -> [%p-%p] on node %d\n",
+						       addr_start, addr_end-1, p_start, p_end-1, node_start);
+					addr_start = addr;
+					node_start = node;
+					p_start = p;
+				}
+
+				addr_end = addr + PMD_SIZE;
+				p_end = p + PMD_SIZE;
+				continue;
+			}
+		} else if (pmd_large(*pmd)) {
+			vmemmap_verify((pte_t *)pmd, node, addr, next);
+			continue;
+		}
+		pr_warn_once("vmemmap: falling back to regular page backing\n");
+		if (vmemmap_populate_basepages(addr, next, node))
+			return -ENOMEM;
+	}
+	return 0;
+}
+
+int __init vmemmap_populate(unsigned long start, unsigned long end, int node)
+{
+	int err;
+
+	if (cpu_has(X86_FEATURE_PSE))
+		err = vmemmap_populate_hugepages(start, end, node);
+	else
+		err = vmemmap_populate_basepages(start, end, node);
+
+#if 0
+	if (!err)
+		sync_global_pgds(start, end - 1);
+#endif
+	return err;
 }

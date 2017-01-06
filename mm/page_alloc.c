@@ -238,6 +238,19 @@ static unsigned long calc_memmap_size(unsigned long spanned_pages,
 				      unsigned long present_pages)
 {
 	unsigned long pages = spanned_pages;
+
+	/*
+	 * Provide a more accurate estimation if there are holes within
+	 * the zone and SPARSEMEM is in use. If there are holes within the
+	 * zone, each populated memory region may cost us one or two extra
+	 * memmap pages due to alignment because memmap pages for each
+	 * populated regions may not naturally algined on page boundary.
+	 * So the (present_pages >> 4) heuristic is a tradeoff for that.
+	 */
+	if (spanned_pages > present_pages + (present_pages >> 4) &&
+	    IS_ENABLED(CONFIG_SPARSEMEM))
+		pages = present_pages;
+
 	return PAGE_ALIGN(pages * sizeof(struct page)) >> PAGE_SHIFT;
 }
 
@@ -256,6 +269,12 @@ static void __init zone_init_mem_map(unsigned long size, int nid,
 		highest_memmap_pfn = end_pfn - 1;
 
 	for (pfn = start_pfn; pfn < end_pfn; pfn++) {
+		/*
+		 * FAT NOTE:
+		 * There can be holes inside zone range.
+		 * And for sparsemem, the mem_section maybe unused
+		 * Hence we must use pfn_valid() to bail out
+		 */
 		if (!pfn_valid(pfn))
 			continue;
 		__init_single_pfn(pfn, zone, nid);
@@ -496,7 +515,6 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn)
 		pr_info("  node %3d: [mem %#018Lx-%#018Lx]\n", nid,
 			(u64)start_pfn << PAGE_SHIFT,
 			((u64)end_pfn << PAGE_SHIFT) - 1);
-
 
 	setup_nr_node_ids();
 
@@ -1129,10 +1147,8 @@ static void __init sparse_memory_present_with_active_regions(int nid)
 	unsigned long start_pfn, end_pfn;
 	int i, this_nid;
 
-	for_each_mem_pfn_range(i, nid, &start_pfn, &end_pfn, &this_nid) {
-		pr_info("%#lx - %#lx\n", start_pfn, end_pfn);
+	for_each_mem_pfn_range(i, nid, &start_pfn, &end_pfn, &this_nid)
 		memory_present(this_nid, start_pfn, end_pfn);
-	}
 }
 
 void __init memory_init(void)

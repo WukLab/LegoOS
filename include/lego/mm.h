@@ -121,7 +121,6 @@ static inline struct zone *page_zone(const struct page *page)
 	enum zone_type type = page_to_zonetype(page);
 	int nid = page_to_nid(page);
 
-	pr_info("zone_type: %d nid: %d\n", type, nid);
 	return &NODE_DATA(nid)->node_zones[type];
 }
 
@@ -179,16 +178,26 @@ void sparse_mem_maps_populate_node(struct page **map_map,
 				   unsigned long pnum_end,
 				   unsigned long map_count,
 				   int nodeid);
-
 struct page *sparse_mem_map_populate(unsigned long pnum, int nid);
+int vmemmap_populate(unsigned long start, unsigned long end, int node);
+void vmemmap_populate_print_last(void);
+int vmemmap_populate_basepages(unsigned long start, unsigned long end, int node);
+pgd_t *vmemmap_pgd_populate(unsigned long addr, int node);
+pud_t *vmemmap_pud_populate(pgd_t *pgd, unsigned long addr, int node);
+pmd_t *vmemmap_pmd_populate(pud_t *pud, unsigned long addr, int node);
+pte_t *vmemmap_pte_populate(pmd_t *pmd, unsigned long addr, int node);
+void *__vmemmap_alloc_block_buf(unsigned long size, int node);
+void vmemmap_verify(pte_t *, int, unsigned long, unsigned long);
 
 #define page_private(page)		((page)->private)
 #define set_page_private(page, v)	((page)->private = (v))
 
+#ifdef CONFIG_FLATMEM
 static inline int pfn_valid(unsigned long pfn)
 {
 	return pfn < max_pfn;
 }
+#endif
 
 static inline void set_page_count(struct page *page, int v)
 {

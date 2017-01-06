@@ -124,10 +124,10 @@ static inline int sparse_early_nid(struct mem_section *section)
 }
 
 /* Validate the physical addressing limitations of the model */
-void __init mminit_validate_memmodel_limits(unsigned long *start_pfn,
-					    unsigned long *end_pfn)
+static void __init
+mminit_validate_memmodel_limits(unsigned long *start_pfn, unsigned long *end_pfn)
 {
-	unsigned long max_sparsemem_pfn = 1UL << (MAX_PHYSMEM_BITS-PAGE_SHIFT);
+	unsigned long max_sparsemem_pfn = 1UL << (MAX_PHYSMEM_BITS - PAGE_SHIFT);
 
 	/*
 	 * Sanity checks - do not allow an architecture to pass
@@ -143,7 +143,11 @@ void __init mminit_validate_memmodel_limits(unsigned long *start_pfn,
 	}
 }
 
-/* Record a memory area against a node. */
+/**
+ * memory_present	-	Init mem_section[] array
+ *
+ * Record a memory area against a node.
+ */
 void __init memory_present(int nid, unsigned long start, unsigned long end)
 {
 	unsigned long pfn;
@@ -151,13 +155,13 @@ void __init memory_present(int nid, unsigned long start, unsigned long end)
 	start &= PAGE_SECTION_MASK;
 	mminit_validate_memmodel_limits(&start, &end);
 	for (pfn = start; pfn < end; pfn += PAGES_PER_SECTION) {
-		unsigned long section = pfn_to_section_nr(pfn);
+		unsigned long section_nr = pfn_to_section_nr(pfn);
 		struct mem_section *ms;
 
-		sparse_index_init(section, nid);
-		set_section_nid(section, nid);
+		sparse_index_init(section_nr, nid);
+		set_section_nid(section_nr, nid);
 
-		ms = __nr_to_section(section);
+		ms = __nr_to_section(section_nr);
 		if (!ms->section_mem_map)
 			ms->section_mem_map = sparse_encode_early_nid(nid) |
 							SECTION_MARKED_PRESENT;
@@ -174,16 +178,16 @@ static unsigned long sparse_encode_mem_map(struct page *mem_map, unsigned long p
 	return (unsigned long)(mem_map - (section_nr_to_pfn(pnum)));
 }
 
-static int __init sparse_init_one_section(struct mem_section *ms,
-		unsigned long pnum, struct page *mem_map,
-		unsigned long *pageblock_bitmap)
+static int __init
+sparse_init_one_section(struct mem_section *ms, unsigned long pnum,
+			struct page *mem_map, unsigned long *pageblock_bitmap)
 {
 	if (!present_section(ms))
 		return -EINVAL;
 
 	ms->section_mem_map &= ~SECTION_MAP_MASK;
-	ms->section_mem_map |= sparse_encode_mem_map(mem_map, pnum) |
-							SECTION_HAS_MEM_MAP;
+	ms->section_mem_map |= sparse_encode_mem_map(mem_map, pnum);
+	ms->section_mem_map |= SECTION_HAS_MEM_MAP;
  	ms->pageblock_flags = pageblock_bitmap;
 
 	return 1;
@@ -321,9 +325,6 @@ void __init sparse_init(void)
 	 * make next 2M slip to one more 2M later.
 	 * then in big system, the memory will have a lot of holes...
 	 * here try to allocate 2M pages continuously.
-	 *
-	 * powerpc need to call sparse_init_one_section right after each
-	 * sparse_early_mem_map_alloc, so allocate usemap_map at first.
 	 */
 	size = sizeof(unsigned long *) * NR_MEM_SECTIONS;
 	usemap_map = memblock_virt_alloc_node_nopanic(size, 0);
@@ -355,8 +356,7 @@ void __init sparse_init(void)
 		if (!map)
 			continue;
 
-		sparse_init_one_section(__nr_to_section(pnum), pnum, map,
-								usemap);
+		sparse_init_one_section(__nr_to_section(pnum), pnum, map, usemap);
 	}
 
 	//vmemmap_populate_print_last();
