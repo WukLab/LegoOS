@@ -224,7 +224,9 @@ typedef struct pglist_data {
 	struct zone node_zones[MAX_NR_ZONES];
 	struct zonelist node_zonelists[MAX_ZONELISTS];
 	int nr_zones;
+#ifndef CONFIG_SPARSEMEM
 	struct page *node_mem_map;
+#endif
 	unsigned long node_start_pfn;
 	unsigned long node_present_pages;	/* total number of physical pages */
 	unsigned long node_spanned_pages;	/* total size of physical page

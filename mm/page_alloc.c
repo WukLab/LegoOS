@@ -365,13 +365,15 @@ static void alloc_node_mem_map(struct pglist_data *pgdat, unsigned long *mem_map
 {
 	unsigned long __maybe_unused start = 0;
 	unsigned long __maybe_unused offset = 0;
-	unsigned long size, end;
-	struct page *map;
+	unsigned long __maybe_unused size;
+	unsigned long __maybe_unused end;
+	struct page __maybe_unused *map;
 
 	/* Skip empty nodes */
 	if (!pgdat->node_spanned_pages)
 		return;
 
+#ifndef CONFIG_SPARSEMEM
 	start = pgdat->node_start_pfn & ~(MAX_ORDER_NR_PAGES - 1);
 	offset = pgdat->node_start_pfn - start;
 
@@ -398,7 +400,8 @@ static void alloc_node_mem_map(struct pglist_data *pgdat, unsigned long *mem_map
 			mem_map -= offset;
 #endif
 	}
-#endif
+#endif /* CONFIG_NEED_MULTIPLE_NODES */
+#endif /* CONFIG_SPARSEMEM */
 }
 
 void __init free_area_init_node(int nid, unsigned long *zones_size,
@@ -423,12 +426,12 @@ void __init free_area_init_node(int nid, unsigned long *zones_size,
 				  zones_size, zholes_size);
 
 	alloc_node_mem_map(pgdat, &mem_map_size);
-
+#ifndef CONFIG_SPARSEMEM
 	pr_debug("%s: node %d, pgdat %#08lx, node_mem_map %#08lx - %#08lx\n",
 		 __func__, nid, (unsigned long)pgdat,
 		 (unsigned long)pgdat->node_mem_map,
 		 (unsigned long)pgdat->node_mem_map + mem_map_size);
-
+#endif
 	free_area_init_core(pgdat);
 }
 
