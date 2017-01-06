@@ -68,10 +68,11 @@ static char * const zone_names[MAX_NR_ZONES] = {
 static unsigned long arch_zone_lowest_possible_pfn[MAX_NR_ZONES];
 static unsigned long arch_zone_highest_possible_pfn[MAX_NR_ZONES];
 
+/* Encode everything about the page structure */
 static void __init_single_page(struct page *page, unsigned long pfn,
 				unsigned long zone, int nid)
 {
-	set_page_links(page, zone, nid);
+	set_page_links(page, zone, nid, pfn);
 	init_page_count(page);
 	page_mapcount_reset(page);
 	INIT_LIST_HEAD(&page->lru);

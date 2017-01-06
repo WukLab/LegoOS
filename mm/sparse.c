@@ -172,6 +172,9 @@ void __init memory_present(int nid, unsigned long start, unsigned long end)
  * Subtle, we encode the real pfn into the mem_map such that
  * the identity pfn - section_mem_map will return the actual
  * physical page frame number.
+ *
+ * In __pfn_to_page(pfn):
+ *	__section_mem_map_addr(__sec) + __pfn;
  */
 static unsigned long sparse_encode_mem_map(struct page *mem_map, unsigned long pnum)
 {
@@ -358,8 +361,6 @@ void __init sparse_init(void)
 
 		sparse_init_one_section(__nr_to_section(pnum), pnum, map, usemap);
 	}
-
-	//vmemmap_populate_print_last();
 
 #ifdef CONFIG_SPARSEMEM_ALLOC_MEM_MAP_TOGETHER
 	memblock_free_early(__pa(map_map), size2);

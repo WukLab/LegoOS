@@ -65,10 +65,10 @@
 	(unsigned long)(__pg - __section_mem_map_addr(__nr_to_section(__sec)));	\
 })
 
-#define __pfn_to_page(pfn)				\
-({	unsigned long __pfn = (pfn);			\
+#define __pfn_to_page(pfn)					\
+({	unsigned long __pfn = (pfn);				\
 	struct mem_section *__sec = __pfn_to_section(__pfn);	\
-	__section_mem_map_addr(__sec) + __pfn;		\
+	__section_mem_map_addr(__sec) + __pfn;			\
 })
 
 #endif /* CONFIG_FLATMEM/DISCONTIGMEM/SPARSEMEM */

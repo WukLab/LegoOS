@@ -162,6 +162,9 @@ int __init vmemmap_populate_basepages(unsigned long start,
 	return 0;
 }
 
+/*
+ * Create the virtual mem_map mapping
+ */
 struct page * __init sparse_mem_map_populate(unsigned long pnum, int nid)
 {
 	unsigned long start;
