@@ -39,7 +39,6 @@ qemu-system-x86_64 -s \
 	$SERIAL \
 	-cpu Haswell \
 	-m 16G \
-	-nographic \
 	-monitor stdio \
 	-smp cpus=24,cores=12,threads=2,sockets=2 \
 	-numa node,cpus=0-11,mem=8G,nodeid=0 \

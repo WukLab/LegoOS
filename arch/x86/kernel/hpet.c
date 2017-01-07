@@ -7,13 +7,22 @@
  * (at your option) any later version.
  */
 
+#include <lego/mm.h>
 #include <lego/irq.h>
+#include <lego/smp.h>
+#include <lego/slab.h>
 #include <lego/time.h>
 #include <lego/kernel.h>
+#include <lego/cpumask.h>
+#include <lego/clocksource.h>
 
 #include <asm/io.h>
+#include <asm/msr.h>
 #include <asm/hpet.h>
 #include <asm/apic.h>
+#include <asm/processor.h>
+
+#define HPET_MASK			CLOCKSOURCE_MASK(32)
 
 /* HPET address is set by ACPI, when an ACPI entry exists */
 unsigned long hpet_address;
@@ -39,30 +48,30 @@ bool hpet_verbose = true;
 static void _hpet_print_config(const char *function, int line)
 {
 	u32 i, timers, l, h;
-	printk(KERN_INFO "hpet: %s(%d):\n", function, line);
+	printk(KERN_INFO "HPET: %s(%d):\n", function, line);
 	l = hpet_readl(HPET_ID);
 	h = hpet_readl(HPET_PERIOD);
 	timers = ((l & HPET_ID_NUMBER) >> HPET_ID_NUMBER_SHIFT) + 1;
-	printk(KERN_INFO "hpet: ID: 0x%x, PERIOD: 0x%x\n", l, h);
+	printk(KERN_INFO "HPET: ID: 0x%x, PERIOD: 0x%x\n", l, h);
 	l = hpet_readl(HPET_CFG);
 	h = hpet_readl(HPET_STATUS);
-	printk(KERN_INFO "hpet: CFG: 0x%x, STATUS: 0x%x\n", l, h);
+	printk(KERN_INFO "HPET: CFG: 0x%x, STATUS: 0x%x\n", l, h);
 	l = hpet_readl(HPET_COUNTER);
 	h = hpet_readl(HPET_COUNTER+4);
-	printk(KERN_INFO "hpet: COUNTER_l: 0x%x, COUNTER_h: 0x%x\n", l, h);
+	printk(KERN_INFO "HPET: COUNTER_l: 0x%x, COUNTER_h: 0x%x\n", l, h);
 
 	for (i = 0; i < timers; i++) {
 		l = hpet_readl(HPET_Tn_CFG(i));
 		h = hpet_readl(HPET_Tn_CFG(i)+4);
-		printk(KERN_INFO "hpet: T%d: CFG_l: 0x%x, CFG_h: 0x%x\n",
+		printk(KERN_INFO "HPET: T%d: CFG_l: 0x%x, CFG_h: 0x%x\n",
 		       i, l, h);
 		l = hpet_readl(HPET_Tn_CMP(i));
 		h = hpet_readl(HPET_Tn_CMP(i)+4);
-		printk(KERN_INFO "hpet: T%d: CMP_l: 0x%x, CMP_h: 0x%x\n",
+		printk(KERN_INFO "HPET: T%d: CMP_l: 0x%x, CMP_h: 0x%x\n",
 		       i, l, h);
 		l = hpet_readl(HPET_Tn_ROUTE(i));
 		h = hpet_readl(HPET_Tn_ROUTE(i)+4);
-		printk(KERN_INFO "hpet: T%d ROUTE_l: 0x%x, ROUTE_h: 0x%x\n",
+		printk(KERN_INFO "HPET: T%d ROUTE_l: 0x%x, ROUTE_h: 0x%x\n",
 		       i, l, h);
 	}
 }
@@ -84,6 +93,114 @@ static inline void hpet_clear_mapping(void)
 	hpet_virt_address = NULL;
 }
 
+static void hpet_stop_counter(void)
+{
+	u32 cfg = hpet_readl(HPET_CFG);
+	cfg &= ~HPET_CFG_ENABLE;
+	hpet_writel(cfg, HPET_CFG);
+}
+
+static void hpet_reset_counter(void)
+{
+	hpet_writel(0, HPET_COUNTER);
+	hpet_writel(0, HPET_COUNTER + 4);
+}
+
+static void hpet_start_counter(void)
+{
+	unsigned int cfg = hpet_readl(HPET_CFG);
+	cfg |= HPET_CFG_ENABLE;
+	hpet_writel(cfg, HPET_CFG);
+}
+
+static void hpet_restart_counter(void)
+{
+	hpet_stop_counter();
+	hpet_reset_counter();
+	hpet_start_counter();
+}
+
+/*
+ * HPET timer interrupt enable / disable
+ */
+static bool hpet_legacy_int_enabled;
+
+static void hpet_enable_legacy_int(void)
+{
+	unsigned int cfg = hpet_readl(HPET_CFG);
+
+	cfg |= HPET_CFG_LEGACY;
+	hpet_writel(cfg, HPET_CFG);
+	hpet_legacy_int_enabled = true;
+}
+
+static void hpet_legacy_clockevent_register(void)
+{
+	/* Start HPET legacy interrupts */
+	hpet_enable_legacy_int();
+
+	/* TODO */
+#if 0
+	/*
+	 * Start hpet with the boot cpu mask and make it
+	 * global after the IO_APIC has been initialized.
+	 */
+	hpet_clockevent.cpumask = cpumask_of(smp_processor_id());
+	clockevents_config_and_register(&hpet_clockevent, hpet_freq,
+					HPET_MIN_PROG_DELTA, 0x7FFFFFFF);
+	global_clock_event = &hpet_clockevent;
+	printk(KERN_DEBUG "hpet clockevent registered\n");
+#endif
+}
+
+static u64 read_hpet(struct clocksource *cs)
+{
+	return (u64)hpet_readl(HPET_COUNTER);
+}
+
+static struct clocksource clocksource_hpet = {
+	.name		= "hpet",
+	.rating		= 250,
+	.read		= read_hpet,
+	.mask		= HPET_MASK,
+	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
+};
+
+static int hpet_clocksource_register(void)
+{
+	u64 start, now;
+	u64 t1;
+
+	/* Start the counter */
+	hpet_restart_counter();
+
+	/* Verify whether hpet counter works */
+	t1 = hpet_readl(HPET_COUNTER);
+	start = rdtsc();
+
+	/*
+	 * We don't know the TSC frequency yet, but waiting for
+	 * 200000 TSC cycles is safe:
+	 * 4 GHz == 50us
+	 * 1 GHz == 200us
+	 */
+	do {
+		rep_nop();
+		now = rdtsc();
+	} while ((now - start) < 200000UL);
+
+	if (t1 == hpet_readl(HPET_COUNTER)) {
+		printk(KERN_WARNING
+		       "HPET counter not counting. HPET disabled\n");
+		return -ENODEV;
+	}
+
+	clocksource_register_hz(&clocksource_hpet, (u32)hpet_freq);
+	return 0;
+}
+
+static u32 *hpet_boot_cfg;
+
 /**
  * hpet_enable
  *
@@ -96,7 +213,7 @@ int hpet_enable(void)
 	u64 freq;
 	unsigned int i, last;
 
-	if (hpet_address)
+	if (!hpet_address)
 		return -ENODEV;
 
 	hpet_set_mapping();
@@ -126,8 +243,48 @@ int hpet_enable(void)
 
 	last = (id & HPET_ID_NUMBER) >> HPET_ID_NUMBER_SHIFT;
 
-	return 0;
+	cfg = hpet_readl(HPET_CFG);
+	hpet_boot_cfg = kmalloc((last + 2) * sizeof(*hpet_boot_cfg),
+				GFP_KERNEL);
+	if (hpet_boot_cfg)
+		*hpet_boot_cfg = cfg;
+	else
+		pr_warn("HPET initial state will not be saved\n");
+	cfg &= ~(HPET_CFG_ENABLE | HPET_CFG_LEGACY);
+	hpet_writel(cfg, HPET_CFG);
+	if (cfg)
+		pr_warn("HPET: Unrecognized bits %#x set in global cfg\n",
+			cfg);
+
+	for (i = 0; i <= last; ++i) {
+		cfg = hpet_readl(HPET_Tn_CFG(i));
+		if (hpet_boot_cfg)
+			hpet_boot_cfg[i + 1] = cfg;
+		cfg &= ~(HPET_TN_ENABLE | HPET_TN_LEVEL | HPET_TN_FSB);
+		hpet_writel(cfg, HPET_Tn_CFG(i));
+		cfg &= ~(HPET_TN_PERIODIC | HPET_TN_PERIODIC_CAP
+			 | HPET_TN_64BIT_CAP | HPET_TN_32BIT | HPET_TN_ROUTE
+			 | HPET_TN_FSB | HPET_TN_FSB_CAP);
+		if (cfg)
+			pr_warn("HPET: Unrecognized bits %#x set in cfg#%u\n",
+				cfg, i);
+	}
+	hpet_print_config();
+
+	if (hpet_clocksource_register())
+		goto out_nohpet;
+
+	if (id & HPET_ID_LEGSUP) {
+		hpet_legacy_clockevent_register();
+
+		/* Success */
+		return 0;
+	}
+
+	return -ENODEV;
 
 out_nohpet:
+	hpet_clear_mapping();
+	hpet_address = 0;
 	return -ENODEV;
 }

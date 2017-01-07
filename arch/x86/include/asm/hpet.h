@@ -10,6 +10,10 @@
 #ifndef _ASM_X86_HPET_H_
 #define _ASM_X86_HPET_H_
 
+/*
+ * These registers are defined in IA-PC HPET Specification
+ */
+
 #ifdef CONFIG_HPET_TIMER
 
 #define HPET_MMAP_SIZE		1024

@@ -15,6 +15,8 @@
 #include <asm/hpet.h>
 #include <asm/i8259.h>
 
+extern void __init setup_pit_timer(void);
+
 __visible volatile unsigned long jiffies __cacheline_aligned = INITIAL_JIFFIES;
 
 /*
@@ -42,8 +44,7 @@ void __init setup_default_timer_irq(void)
 void __init hpet_time_init(void)
 {
 	if (hpet_enable())
-		// setup_pit_timer();
-		panic("HPET fails");
+		setup_pit_timer();
 	setup_default_timer_irq();
 }
 
