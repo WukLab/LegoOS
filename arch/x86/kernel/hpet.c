@@ -12,17 +12,34 @@
 #include <lego/smp.h>
 #include <lego/slab.h>
 #include <lego/time.h>
+#include <lego/delay.h>
 #include <lego/kernel.h>
+#include <lego/jiffies.h>
 #include <lego/cpumask.h>
+#include <lego/clockevent.h>
 #include <lego/clocksource.h>
 
 #include <asm/io.h>
 #include <asm/msr.h>
 #include <asm/hpet.h>
+#include <asm/time.h>
 #include <asm/apic.h>
 #include <asm/processor.h>
 
 #define HPET_MASK			CLOCKSOURCE_MASK(32)
+
+/* FSEC = 10^-15
+   NSEC = 10^-9 */
+#define FSEC_PER_NSEC			1000000L
+
+#define HPET_DEV_USED_BIT		2
+#define HPET_DEV_USED			(1 << HPET_DEV_USED_BIT)
+#define HPET_DEV_VALID			0x8
+#define HPET_DEV_FSB_CAP		0x1000
+#define HPET_DEV_PERI_CAP		0x2000
+
+#define HPET_MIN_CYCLES			128
+#define HPET_MIN_PROG_DELTA		(HPET_MIN_CYCLES + (HPET_MIN_CYCLES >> 1))
 
 /* HPET address is set by ACPI, when an ACPI entry exists */
 unsigned long hpet_address;
@@ -32,6 +49,25 @@ u8 hpet_blockid;
 
 static unsigned long hpet_freq;
 static void __iomem *hpet_virt_address;
+
+/*
+ * HPET timer interrupt enable / disable
+ */
+static bool hpet_legacy_int_enabled;
+
+struct hpet_dev {
+	struct clock_event_device	evt;
+	unsigned int			num;
+	int				cpu;
+	unsigned int			irq;
+	unsigned int			flags;
+	char				name[10];
+};
+
+static inline struct hpet_dev *EVT_TO_HPET_DEV(struct clock_event_device *evtdev)
+{
+	return container_of(evtdev, struct hpet_dev, evt);
+}
 
 inline unsigned int hpet_readl(unsigned int a)
 {
@@ -43,7 +79,7 @@ static inline void hpet_writel(unsigned int d, unsigned int a)
 	writel(d, hpet_virt_address + a);
 }
 
-bool hpet_verbose = true;
+bool hpet_verbose = false;
 
 static void _hpet_print_config(const char *function, int line)
 {
@@ -120,11 +156,6 @@ static void hpet_restart_counter(void)
 	hpet_start_counter();
 }
 
-/*
- * HPET timer interrupt enable / disable
- */
-static bool hpet_legacy_int_enabled;
-
 static void hpet_enable_legacy_int(void)
 {
 	unsigned int cfg = hpet_readl(HPET_CFG);
@@ -134,13 +165,160 @@ static void hpet_enable_legacy_int(void)
 	hpet_legacy_int_enabled = true;
 }
 
+static int hpet_set_periodic(struct clock_event_device *evt, int timer)
+{
+	unsigned int cfg, cmp, now;
+	u64 delta;
+
+	hpet_stop_counter();
+	delta = ((u64)(NSEC_PER_SEC / HZ)) * evt->mult;
+	delta >>= evt->shift;
+	now = hpet_readl(HPET_COUNTER);
+	cmp = now + (unsigned int)delta;
+	cfg = hpet_readl(HPET_Tn_CFG(timer));
+	cfg |= HPET_TN_ENABLE | HPET_TN_PERIODIC | HPET_TN_SETVAL |
+	       HPET_TN_32BIT;
+	hpet_writel(cfg, HPET_Tn_CFG(timer));
+	hpet_writel(cmp, HPET_Tn_CMP(timer));
+	udelay(1);
+	/*
+	 * HPET on AMD 81xx needs a second write (with HPET_TN_SETVAL
+	 * cleared) to T0_CMP to set the period. The HPET_TN_SETVAL
+	 * bit is automatically cleared after the first write.
+	 * (See AMD-8111 HyperTransport I/O Hub Data Sheet,
+	 * Publication # 24674)
+	 */
+	hpet_writel((unsigned int)delta, HPET_Tn_CMP(timer));
+	hpet_start_counter();
+	hpet_print_config();
+
+	return 0;
+}
+
+static int hpet_set_oneshot(struct clock_event_device *evt, int timer)
+{
+	unsigned int cfg;
+
+	cfg = hpet_readl(HPET_Tn_CFG(timer));
+	cfg &= ~HPET_TN_PERIODIC;
+	cfg |= HPET_TN_ENABLE | HPET_TN_32BIT;
+	hpet_writel(cfg, HPET_Tn_CFG(timer));
+
+	return 0;
+}
+
+static int hpet_shutdown(struct clock_event_device *evt, int timer)
+{
+	unsigned int cfg;
+
+	cfg = hpet_readl(HPET_Tn_CFG(timer));
+	cfg &= ~HPET_TN_ENABLE;
+	hpet_writel(cfg, HPET_Tn_CFG(timer));
+
+	return 0;
+}
+
+static int hpet_resume(struct clock_event_device *evt, int timer)
+{
+	if (!timer) {
+		hpet_enable_legacy_int();
+	} else {
+		struct hpet_dev *hdev = EVT_TO_HPET_DEV(evt);
+
+		//irq_domain_activate_irq(irq_get_irq_data(hdev->irq));
+		//disable_irq(hdev->irq);
+		//irq_set_affinity(hdev->irq, cpumask_of(hdev->cpu));
+		//enable_irq(hdev->irq);
+	}
+	hpet_print_config();
+
+	return 0;
+}
+
+static int hpet_next_event(unsigned long delta,
+			   struct clock_event_device *evt, int timer)
+{
+	u32 cnt;
+	s32 res;
+
+	cnt = hpet_readl(HPET_COUNTER);
+	cnt += (u32) delta;
+	hpet_writel(cnt, HPET_Tn_CMP(timer));
+
+	/*
+	 * HPETs are a complete disaster. The compare register is
+	 * based on a equal comparison and neither provides a less
+	 * than or equal functionality (which would require to take
+	 * the wraparound into account) nor a simple count down event
+	 * mode. Further the write to the comparator register is
+	 * delayed internally up to two HPET clock cycles in certain
+	 * chipsets (ATI, ICH9,10). Some newer AMD chipsets have even
+	 * longer delays. We worked around that by reading back the
+	 * compare register, but that required another workaround for
+	 * ICH9,10 chips where the first readout after write can
+	 * return the old stale value. We already had a minimum
+	 * programming delta of 5us enforced, but a NMI or SMI hitting
+	 * between the counter readout and the comparator write can
+	 * move us behind that point easily. Now instead of reading
+	 * the compare register back several times, we make the ETIME
+	 * decision based on the following: Return ETIME if the
+	 * counter value after the write is less than HPET_MIN_CYCLES
+	 * away from the event or if the counter is already ahead of
+	 * the event. The minimum programming delta for the generic
+	 * clockevents code is set to 1.5 * HPET_MIN_CYCLES.
+	 */
+	res = (s32)(cnt - hpet_readl(HPET_COUNTER));
+
+	return res < HPET_MIN_CYCLES ? -ETIME : 0;
+}
+
+static int hpet_legacy_set_periodic(struct clock_event_device *evt)
+{
+	return hpet_set_periodic(evt, 0);
+}
+
+static int hpet_legacy_set_oneshot(struct clock_event_device *evt)
+{
+	return hpet_set_oneshot(evt, 0);
+}
+
+static int hpet_legacy_shutdown(struct clock_event_device *evt)
+{
+	return hpet_shutdown(evt, 0);
+}
+
+static int hpet_legacy_resume(struct clock_event_device *evt)
+{
+	return hpet_resume(evt, 0);
+}
+
+static int hpet_legacy_next_event(unsigned long delta,
+			struct clock_event_device *evt)
+{
+	return hpet_next_event(delta, evt, 0);
+}
+
+/*
+ * The hpet clock event device
+ */
+static struct clock_event_device hpet_clockevent = {
+	.name			= "hpet",
+	.features		= CLOCK_EVT_FEAT_PERIODIC |
+				  CLOCK_EVT_FEAT_ONESHOT,
+	.set_state_periodic	= hpet_legacy_set_periodic,
+	.set_state_oneshot	= hpet_legacy_set_oneshot,
+	.set_state_shutdown	= hpet_legacy_shutdown,
+	.tick_resume		= hpet_legacy_resume,
+	.set_next_event		= hpet_legacy_next_event,
+	.irq			= 0,
+	.rating			= 50,
+};
+
 static void hpet_legacy_clockevent_register(void)
 {
 	/* Start HPET legacy interrupts */
 	hpet_enable_legacy_int();
 
-	/* TODO */
-#if 0
 	/*
 	 * Start hpet with the boot cpu mask and make it
 	 * global after the IO_APIC has been initialized.
@@ -148,9 +326,9 @@ static void hpet_legacy_clockevent_register(void)
 	hpet_clockevent.cpumask = cpumask_of(smp_processor_id());
 	clockevents_config_and_register(&hpet_clockevent, hpet_freq,
 					HPET_MIN_PROG_DELTA, 0x7FFFFFFF);
+
 	global_clock_event = &hpet_clockevent;
-	printk(KERN_DEBUG "hpet clockevent registered\n");
-#endif
+	pr_info("hpet clockevent registered\n");
 }
 
 static u64 read_hpet(struct clocksource *cs)

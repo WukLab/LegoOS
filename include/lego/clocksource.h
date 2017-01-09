@@ -148,4 +148,7 @@ static inline s64 clocksource_cyc2ns(cycle_t cycles, u32 mult, u32 shift)
 
 extern struct clocksource * __init clocksource_default_clock(void);
 
+extern void
+clocks_calc_mult_shift(u32 *mult, u32 *shift, u32 from, u32 to, u32 minsec);
+
 #endif /* _LEGO_CLOCKSOURCE_H_ */

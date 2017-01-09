@@ -161,3 +161,16 @@ void __init timekeeping_init(void)
 	set_normalized_timespec(&tmp, -boot.tv_sec, -boot.tv_nsec);
 	tk_set_wall_to_mono(tk, tmp);
 }
+
+/**
+ * timekeeping_notify - Install a new clock source
+ * @clock:		pointer to the clock source
+ *
+ * This function is called from clocksource.c after a new, better clock
+ * source has been registered. The caller holds the clocksource_mutex.
+ */
+int timekeeping_notify(struct clocksource *clock)
+{
+	return 0;
+}
+

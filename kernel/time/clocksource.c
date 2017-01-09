@@ -7,10 +7,25 @@
  * (at your option) any later version.
  */
 
+#include <lego/list.h>
 #include <lego/time.h>
 #include <lego/kernel.h>
 #include <lego/jiffies.h>
+#include <lego/spinlock.h>
 #include <lego/clocksource.h>
+#include <lego/timekeeping.h>
+
+/*[Clocksource internal variables]---------
+ * curr_clocksource:
+ *	currently selected clocksource.
+ * clocksource_list:
+ *	linked list with the registered clocksources
+ * clocksource_lock:
+ *	protects manipulations to curr_clocksource and the clocksource_list
+ */
+static struct clocksource *curr_clocksource;
+static LIST_HEAD(clocksource_list);
+static DEFINE_SPINLOCK(clocksource_lock);
 
 /**
  * clocks_calc_mult_shift - calculate mult/shift factors for scaled math of clocks
@@ -206,6 +221,73 @@ void __clocksource_update_freq_scale(struct clocksource *cs, u32 scale, u32 freq
 		cs->name, cs->mask, cs->max_cycles, cs->max_idle_ns);
 }
 
+/*
+ * Enqueue the clocksource sorted by rating
+ */
+static void clocksource_enqueue(struct clocksource *cs)
+{
+	struct list_head *entry = &clocksource_list;
+	struct clocksource *tmp;
+
+	list_for_each_entry(tmp, &clocksource_list, list) {
+		/* Keep track of the place, where to insert */
+		if (tmp->rating < cs->rating)
+			break;
+		entry = &tmp->list;
+	}
+	list_add(&cs->list, entry);
+}
+
+static struct clocksource *clocksource_find_best(bool oneshot, bool skipcur)
+{
+	struct clocksource *cs;
+
+	if (list_empty(&clocksource_list))
+		return NULL;
+
+	/*
+	 * We pick the clocksource with the highest rating. If oneshot
+	 * mode is active, we pick the highres valid clocksource with
+	 * the best rating.
+	 */
+	list_for_each_entry(cs, &clocksource_list, list) {
+		if (skipcur && cs == curr_clocksource)
+			continue;
+		if (oneshot && !(cs->flags & CLOCK_SOURCE_VALID_FOR_HRES))
+			continue;
+		return cs;
+	}
+	return NULL;
+}
+
+static void __clocksource_select(bool skipcur)
+{
+	struct clocksource *best;
+
+	/* Find the best suitable clocksource */
+	best = clocksource_find_best(false, skipcur);
+	if (!best)
+		return;
+
+	if (curr_clocksource != best && !timekeeping_notify(best)) {
+		pr_info("Switched to clocksource %s\n", best->name);
+		curr_clocksource = best;
+	}
+}
+
+/**
+ * clocksource_select - Select the best clocksource available
+ *
+ * Private function. Must hold clocksource_mutex when called.
+ *
+ * Select the clocksource with the best rating, or the clocksource,
+ * which is selected by userspace override.
+ */
+static void clocksource_select(void)
+{
+	__clocksource_select(false);
+}
+
 /**
  * __clocksource_register_scale - Used to install new clocksources
  * @cs:		clocksource to be registered
@@ -221,6 +303,12 @@ int __clocksource_register_scale(struct clocksource *cs, u32 scale, u32 freq)
 {
 	/* Initialize mult/shift and max_idle_ns */
 	__clocksource_update_freq_scale(cs, scale, freq);
+
+	/* Add clocksource to the clocksource list */
+	spin_lock(&clocksource_lock);
+	clocksource_enqueue(cs);
+	clocksource_select();
+	spin_unlock(&clocksource_lock);
 
 	return 0;
 }

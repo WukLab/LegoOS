@@ -132,5 +132,6 @@ struct timekeeper {
 };
 
 void read_persistent_clock(struct timespec *now);
+extern int timekeeping_notify(struct clocksource *clock);
 
 #endif /* _LEGO_TIMEKEEPING_H_ */

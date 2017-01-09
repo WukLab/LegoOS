@@ -9,7 +9,7 @@ obj-y += e820.o
 obj-y += cpu.o cpu_intel.o
 obj-y += smp.o smpboot.o trampoline.o
 obj-y += time.o rtc.o
-obj-y += hpet.o i8253.o
+obj-y += hpet.o i8253.o tsc.o
 obj-y += traps.o irq.o irqinit.o i8259.o
 obj-y += acpi/ apic/
 

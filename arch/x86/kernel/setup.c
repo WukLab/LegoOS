@@ -263,6 +263,4 @@ void __init setup_arch(void)
 	 * and then boot them up
 	 */
 	copy_trampoline_code();
-
-	//native_cpu_up(1);
 }

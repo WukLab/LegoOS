@@ -11,11 +11,13 @@
 #include <lego/irqdesc.h>
 #include <lego/kernel.h>
 #include <lego/jiffies.h>
+#include <lego/clockevent.h>
+#include <lego/clocksource.h>
 
+#include <asm/tsc.h>
+#include <asm/time.h>
 #include <asm/hpet.h>
 #include <asm/i8259.h>
-
-extern void __init setup_pit_timer(void);
 
 __visible volatile unsigned long jiffies __cacheline_aligned = INITIAL_JIFFIES;
 
@@ -24,6 +26,7 @@ __visible volatile unsigned long jiffies __cacheline_aligned = INITIAL_JIFFIES;
  */
 static irqreturn_t timer_interrupt(int irq, void *dev_id)
 {
+	global_clock_event->event_handler(global_clock_event);
 	return IRQ_HANDLED;
 }
 
@@ -51,5 +54,5 @@ void __init hpet_time_init(void)
 void __init time_init(void)
 {
 	hpet_time_init();
-	//tsc_init();
+	tsc_init();
 }
