@@ -348,7 +348,6 @@ static int __setup_irq(unsigned int irq, struct irq_desc *desc,
 	int ret, nested, shared = 0;
 	cpumask_var_t mask;
 
-
 	if (!desc)
 		return -EINVAL;
 

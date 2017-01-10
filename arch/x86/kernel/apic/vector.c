@@ -66,8 +66,10 @@ void __init x86_apic_ioapic_init(void)
 		data->cfg.vector = ISA_IRQ_VECTOR(i);
 		cpumask_setall(data->domain);
 
-		/* The irq chip and handler will be set later
-		   by init_ISA_irqs() */
+		/*
+		 * The irq chip and handler will be set later
+		 * by init_ISA_irqs()
+		 */
 		irq_set_chip_data(i, data);
 	}
 

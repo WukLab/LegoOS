@@ -95,8 +95,4 @@ asmlinkage void __init start_kernel(void)
 
 static void internal_test(void)
 {
-	asm ("int $0x30");
-	asm ("int $0x3f");
-	asm ("int $0xef");
-	asm ("int $0xef");
 }
