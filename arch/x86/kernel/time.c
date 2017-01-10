@@ -22,6 +22,12 @@
 __visible volatile unsigned long jiffies __cacheline_aligned = INITIAL_JIFFIES;
 
 /*
+ * HPET replaces the PIT, when enabled.
+ * So we need to know, which of the two timers is used
+ */
+struct clock_event_device *global_clock_event;
+
+/*
  * Default timer interrupt handler for PIT/HPET
  */
 static irqreturn_t timer_interrupt(int irq, void *dev_id)
@@ -51,6 +57,11 @@ void __init hpet_time_init(void)
 	setup_default_timer_irq();
 }
 
+/*
+ * Register clock source
+ * Register clock event
+ * Register timer interrupt handler
+ */
 void __init time_init(void)
 {
 	hpet_time_init();

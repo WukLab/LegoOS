@@ -393,10 +393,84 @@ static inline void irq_settings_set_nothread(struct irq_desc *desc)
 	desc->status_use_accessors |= _IRQ_NOTHREAD;
 }
 
+static inline bool irq_settings_can_probe(struct irq_desc *desc)
+{
+	return !(desc->status_use_accessors & _IRQ_NOPROBE);
+}
+
+static inline void irq_settings_clr_noprobe(struct irq_desc *desc)
+{
+	desc->status_use_accessors &= ~_IRQ_NOPROBE;
+}
+
+static inline bool irq_settings_can_move_pcntxt(struct irq_desc *desc)
+{
+	return desc->status_use_accessors & _IRQ_MOVE_PCNTXT;
+}
+
+static inline bool irq_settings_can_autoenable(struct irq_desc *desc)
+{
+	return !(desc->status_use_accessors & _IRQ_NOAUTOEN);
+}
+
+static inline bool irq_settings_is_nested_thread(struct irq_desc *desc)
+{
+	return desc->status_use_accessors & _IRQ_NESTED_THREAD;
+}
+
+static inline bool irq_settings_is_polled(struct irq_desc *desc)
+{
+	return desc->status_use_accessors & _IRQ_IS_POLLED;
+}
+
 static inline void *irq_get_chip_data(unsigned int irq)
 {
 	struct irq_data *d = irq_get_irq_data(irq);
 	return d ? d->chip_data : NULL;
+}
+
+static inline void irq_settings_set_per_cpu(struct irq_desc *desc)
+{
+	desc->status_use_accessors |= _IRQ_PER_CPU;
+}
+
+static inline void irq_settings_set_no_balancing(struct irq_desc *desc)
+{
+	desc->status_use_accessors |= _IRQ_NO_BALANCING;
+}
+
+static inline bool irqd_can_balance(struct irq_data *d)
+{
+	return !(__irqd_to_state(d) & (IRQD_PER_CPU | IRQD_NO_BALANCING));
+}
+
+static inline struct irq_desc *irq_data_to_desc(struct irq_data *data)
+{
+	return container_of(data->common, struct irq_desc, irq_common_data);
+}
+
+static inline struct irq_chip *irq_data_get_irq_chip(struct irq_data *d)
+{
+	return d->chip;
+}
+
+static inline bool irqd_affinity_is_managed(struct irq_data *d)
+{
+	return __irqd_to_state(d) & IRQD_AFFINITY_MANAGED;
+}
+
+static inline int irq_common_data_get_node(struct irq_common_data *d)
+{
+#ifdef CONFIG_NUMA
+	return d->node;
+#else
+	return 0;
+#endif
+}
+
+static inline int irq_desc_get_node(struct irq_desc *desc)
+{
+	return irq_common_data_get_node(&desc->irq_common_data);
 }
 
 void irq_mark_irq(unsigned int irq);
@@ -410,7 +484,5 @@ int setup_irq(unsigned int irq, struct irqaction *new);
 int __irq_set_trigger(struct irq_desc *desc, unsigned long flags);
 
 void check_irq_resend(struct irq_desc *desc);
-
-
 
 #endif /* _LEGO_IRQDESC_H_ */

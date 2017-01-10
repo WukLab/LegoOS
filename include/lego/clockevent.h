@@ -105,6 +105,32 @@ struct clock_event_device {
 	struct list_head	list;
 } ____cacheline_aligned;
 
+/* Helpers to verify state of a clockevent device */
+static inline bool clockevent_state_detached(struct clock_event_device *dev)
+{
+	return dev->state_use_accessors == CLOCK_EVT_STATE_DETACHED;
+}
+
+static inline bool clockevent_state_shutdown(struct clock_event_device *dev)
+{
+	return dev->state_use_accessors == CLOCK_EVT_STATE_SHUTDOWN;
+}
+
+static inline bool clockevent_state_periodic(struct clock_event_device *dev)
+{
+	return dev->state_use_accessors == CLOCK_EVT_STATE_PERIODIC;
+}
+
+static inline bool clockevent_state_oneshot(struct clock_event_device *dev)
+{
+	return dev->state_use_accessors == CLOCK_EVT_STATE_ONESHOT;
+}
+
+static inline bool clockevent_state_oneshot_stopped(struct clock_event_device *dev)
+{
+	return dev->state_use_accessors == CLOCK_EVT_STATE_ONESHOT_STOPPED;
+}
+
 static inline void clockevent_set_state(struct clock_event_device *dev,
 					enum clock_event_state state)
 {

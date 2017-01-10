@@ -223,12 +223,14 @@ static int hpet_resume(struct clock_event_device *evt, int timer)
 	if (!timer) {
 		hpet_enable_legacy_int();
 	} else {
+#if 0
 		struct hpet_dev *hdev = EVT_TO_HPET_DEV(evt);
 
-		//irq_domain_activate_irq(irq_get_irq_data(hdev->irq));
-		//disable_irq(hdev->irq);
-		//irq_set_affinity(hdev->irq, cpumask_of(hdev->cpu));
-		//enable_irq(hdev->irq);
+		irq_domain_activate_irq(irq_get_irq_data(hdev->irq));
+		disable_irq(hdev->irq);
+		irq_set_affinity(hdev->irq, cpumask_of(hdev->cpu));
+		enable_irq(hdev->irq);
+#endif
 	}
 	hpet_print_config();
 
@@ -374,6 +376,7 @@ static int hpet_clocksource_register(void)
 	}
 
 	clocksource_register_hz(&clocksource_hpet, (u32)hpet_freq);
+
 	return 0;
 }
 

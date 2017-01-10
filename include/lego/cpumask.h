@@ -10,6 +10,7 @@
 #ifndef _LEGO_CPUMASK_H_
 #define _LEGO_CPUMASK_H_
 
+#include <lego/numa.h>
 #include <lego/types.h>
 #include <lego/bitops.h>
 #include <lego/bitmap.h>
@@ -406,6 +407,43 @@ static inline void cpumask_copy(struct cpumask *dstp,
 	bitmap_copy(cpumask_bits(dstp), cpumask_bits(srcp), nr_cpumask_bits);
 }
 
+/**
+ * cpumask_intersects - (*src1p & *src2p) != 0
+ * @src1p: the first input
+ * @src2p: the second input
+ */
+static inline bool cpumask_intersects(const struct cpumask *src1p,
+				     const struct cpumask *src2p)
+{
+	return bitmap_intersects(cpumask_bits(src1p), cpumask_bits(src2p),
+						      nr_cpumask_bits);
+}
+
+/**
+ * cpumask_and - *dstp = *src1p & *src2p
+ * @dstp: the cpumask result
+ * @src1p: the first input
+ * @src2p: the second input
+ *
+ * If *@dstp is empty, returns 0, else returns 1
+ */
+static inline int cpumask_and(struct cpumask *dstp,
+			       const struct cpumask *src1p,
+			       const struct cpumask *src2p)
+{
+	return bitmap_and(cpumask_bits(dstp), cpumask_bits(src1p),
+				       cpumask_bits(src2p), nr_cpumask_bits);
+}
+
 void __init boot_cpumask_init(void);
+
+/* Mappings between node number and cpus on that node. */
+extern cpumask_var_t node_to_cpumask_map[MAX_NUMNODES];
+
+/* Returns a pointer to the cpumask of CPUs on Node 'node'. */
+static inline const struct cpumask *cpumask_of_node(int node)
+{
+	return node_to_cpumask_map[node];
+}
 
 #endif /* _LEGO_CPUMASK_H_ */

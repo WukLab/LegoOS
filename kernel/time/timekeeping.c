@@ -173,4 +173,3 @@ int timekeeping_notify(struct clocksource *clock)
 {
 	return 0;
 }
-

@@ -46,3 +46,6 @@ void __init boot_cpumask_init(void)
 	set_cpu_present(cpu, true);
 	set_cpu_possible(cpu, true);
 }
+
+/* TODO: init */
+cpumask_var_t node_to_cpumask_map[MAX_NUMNODES];

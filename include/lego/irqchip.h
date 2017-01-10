@@ -153,6 +153,8 @@ void irq_enable(struct irq_desc *desc);
 void mask_irq(struct irq_desc *desc);
 void unmask_irq(struct irq_desc *desc);
 
+void __enable_irq(struct irq_desc *desc);
+
 int irq_startup(struct irq_desc *desc, bool resend);
 void irq_shutdown(struct irq_desc *desc);
 

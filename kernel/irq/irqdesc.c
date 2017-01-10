@@ -89,6 +89,26 @@ void __init irq_init(void)
 	arch_irq_init();
 }
 
+/*
+ * Default primary interrupt handler for threaded interrupts. Is
+ * assigned as primary handler when request_threaded_irq is called
+ * with handler == NULL. Useful for oneshot interrupts.
+ */
+static irqreturn_t irq_default_primary_handler(int irq, void *dev_id)
+{
+	return IRQ_WAKE_THREAD;
+}
+
+/*
+ * Primary handler for nested threaded interrupts. Should never be
+ * called.
+ */
+static irqreturn_t irq_nested_primary_handler(int irq, void *dev_id)
+{
+	WARN(1, "Primary handler called for nested irq %d\n", irq);
+	return IRQ_NONE;
+}
+
 /**
  *	synchronize_irq - wait for pending IRQ handlers (on other CPUs)
  *	@irq: interrupt number to wait for
@@ -216,6 +236,106 @@ void check_irq_resend(struct irq_desc *desc)
 {
 }
 
+static int
+setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
+{
+	return 0;
+}
+
+static int irq_request_resources(struct irq_desc *desc)
+{
+	struct irq_data *d = &desc->irq_data;
+	struct irq_chip *c = d->chip;
+
+	return c->irq_request_resources ? c->irq_request_resources(d) : 0;
+}
+
+static bool __irq_can_set_affinity(struct irq_desc *desc)
+{
+	if (!desc || !irqd_can_balance(&desc->irq_data) ||
+	    !desc->irq_data.chip || !desc->irq_data.chip->irq_set_affinity)
+		return false;
+	return true;
+}
+
+/**
+ *	irq_can_set_affinity - Check if the affinity of a given irq can be set
+ *	@irq:		Interrupt to check
+ *
+ */
+int irq_can_set_affinity(unsigned int irq)
+{
+	return __irq_can_set_affinity(irq_to_desc(irq));
+}
+
+/**
+ *	irq_set_thread_affinity - Notify irq threads to adjust affinity
+ *	@desc:		irq descriptor which has affitnity changed
+ *
+ *	We just set IRQTF_AFFINITY and delegate the affinity setting
+ *	to the interrupt thread itself. We can not call
+ *	set_cpus_allowed_ptr() here as we hold desc->lock and this
+ *	code can be called from hard interrupt context.
+ */
+void irq_set_thread_affinity(struct irq_desc *desc)
+{
+}
+
+int irq_do_set_affinity(struct irq_data *data, const struct cpumask *mask,
+			bool force)
+{
+	struct irq_desc *desc = irq_data_to_desc(data);
+	struct irq_chip *chip = irq_data_get_irq_chip(data);
+	int ret;
+
+	ret = chip->irq_set_affinity(data, mask, force);
+	switch (ret) {
+	case IRQ_SET_MASK_OK:
+	case IRQ_SET_MASK_OK_DONE:
+		cpumask_copy(&desc->irq_common_data.affinity, mask);
+	case IRQ_SET_MASK_OK_NOCOPY:
+		irq_set_thread_affinity(desc);
+		ret = 0;
+	}
+
+	return ret;
+}
+
+static int setup_affinity(struct irq_desc *desc, struct cpumask *mask)
+{
+	struct cpumask *set = irq_default_affinity;
+	int node = irq_desc_get_node(desc);
+
+	/* Excludes PER_CPU and NO_BALANCE interrupts */
+	if (!__irq_can_set_affinity(desc))
+		return 0;
+
+	/*
+	 * Preserve the managed affinity setting and an userspace affinity
+	 * setup, but make sure that one of the targets is online.
+	 */
+	if (irqd_affinity_is_managed(&desc->irq_data) ||
+	    irqd_has_set(&desc->irq_data, IRQD_AFFINITY_SET)) {
+		if (cpumask_intersects(&desc->irq_common_data.affinity,
+				       cpu_online_mask))
+			set = &desc->irq_common_data.affinity;
+		else
+			irqd_clear(&desc->irq_data, IRQD_AFFINITY_SET);
+	}
+
+	cpumask_and(mask, cpu_online_mask, set);
+	if (node != NUMA_NO_NODE) {
+		const struct cpumask *nodemask = cpumask_of_node(node);
+
+		/* make sure at least one of the cpus in nodemask is online */
+		if (cpumask_intersects(mask, nodemask))
+			cpumask_and(mask, mask, nodemask);
+	}
+
+	irq_do_set_affinity(&desc->irq_data, mask, false);
+	return 0;
+}
+
 /*
  * Internal function to register an irqaction - typically used to
  * allocate special interrupts that are part of the architecture.
@@ -223,9 +343,256 @@ void check_irq_resend(struct irq_desc *desc)
 static int __setup_irq(unsigned int irq, struct irq_desc *desc,
 		       struct irqaction *new)
 {
-	/*TODO*/
-	/* Hen Guan Jian! */
+	struct irqaction *old, **old_ptr;
+	unsigned long flags, thread_mask = 0;
+	int ret, nested, shared = 0;
+	cpumask_var_t mask;
+
+
+	if (!desc)
+		return -EINVAL;
+
+	if (desc->irq_data.chip == &no_irq_chip)
+		return -ENOSYS;
+
+	new->irq = irq;
+
+	/*
+	 * If the trigger type is not specified by the caller,
+	 * then use the default for this interrupt.
+	 */
+	if (!(new->flags & IRQF_TRIGGER_MASK))
+		new->flags |= irqd_get_trigger_type(&desc->irq_data);
+
+	/*
+	 * Check whether the interrupt nests into another interrupt
+	 * thread.
+	 */
+	nested = irq_settings_is_nested_thread(desc);
+	if (nested) {
+		if (!new->thread_fn) {
+			ret = -EINVAL;
+			goto out;
+		}
+		/*
+		 * Replace the primary handler which was provided from
+		 * the driver for non nested interrupt handling by the
+		 * dummy function which warns when called.
+		 */
+		new->handler = irq_nested_primary_handler;
+	}
+
+	/*
+	 * Create a handler thread when a thread function is supplied
+	 * and the interrupt does not nest into another interrupt
+	 * thread.
+	 */
+	if (new->thread_fn && !nested) {
+		ret = setup_irq_thread(new, irq, false);
+		if (ret)
+			goto out;
+		if (new->secondary) {
+			ret = setup_irq_thread(new->secondary, irq, true);
+			if (ret)
+				goto out_thread;
+		}
+	}
+
+	/*
+	 * Drivers are often written to work w/o knowledge about the
+	 * underlying irq chip implementation, so a request for a
+	 * threaded irq without a primary hard irq context handler
+	 * requires the ONESHOT flag to be set. Some irq chips like
+	 * MSI based interrupts are per se one shot safe. Check the
+	 * chip flags, so we can avoid the unmask dance at the end of
+	 * the threaded handler for those.
+	 */
+	if (desc->irq_data.chip->flags & IRQCHIP_ONESHOT_SAFE)
+		new->flags &= ~IRQF_ONESHOT;
+
+	spin_lock_irqsave(&desc->lock, flags);
+	old_ptr = &desc->action;
+	old = *old_ptr;
+	if (old) {
+		/*
+		 * Can't share interrupts unless both agree to and are
+		 * the same type (level, edge, polarity). So both flag
+		 * fields must have IRQF_SHARED set and the bits which
+		 * set the trigger type must match. Also all must
+		 * agree on ONESHOT.
+		 */
+		if (!((old->flags & new->flags) & IRQF_SHARED) ||
+		    ((old->flags ^ new->flags) & IRQF_TRIGGER_MASK) ||
+		    ((old->flags ^ new->flags) & IRQF_ONESHOT))
+			goto mismatch;
+
+		/* All handlers must agree on per-cpuness */
+		if ((old->flags & IRQF_PERCPU) !=
+		    (new->flags & IRQF_PERCPU))
+			goto mismatch;
+
+		/* add new interrupt at end of irq queue */
+		do {
+			/*
+			 * Or all existing action->thread_mask bits,
+			 * so we can find the next zero bit for this
+			 * new action.
+			 */
+			thread_mask |= old->thread_mask;
+			old_ptr = &old->next;
+			old = *old_ptr;
+		} while (old);
+		shared = 1;
+	}
+
+	/*
+	 * Setup the thread mask for this irqaction for ONESHOT. For
+	 * !ONESHOT irqs the thread mask is 0 so we can avoid a
+	 * conditional in irq_wake_thread().
+	 */
+	if (new->flags & IRQF_ONESHOT) {
+		/*
+		 * Unlikely to have 32 resp 64 irqs sharing one line,
+		 * but who knows.
+		 */
+		if (thread_mask == ~0UL) {
+			ret = -EBUSY;
+			goto out_unlock;
+		}
+		/*
+		 * The thread_mask for the action is or'ed to
+		 * desc->thread_active to indicate that the
+		 * IRQF_ONESHOT thread handler has been woken, but not
+		 * yet finished. The bit is cleared when a thread
+		 * completes. When all threads of a shared interrupt
+		 * line have completed desc->threads_active becomes
+		 * zero and the interrupt line is unmasked. See
+		 * handle.c:irq_wake_thread() for further information.
+		 *
+		 * If no thread is woken by primary (hard irq context)
+		 * interrupt handlers, then desc->threads_active is
+		 * also checked for zero to unmask the irq line in the
+		 * affected hard irq flow handlers
+		 * (handle_[fasteoi|level]_irq).
+		 *
+		 * The new action gets the first zero bit of
+		 * thread_mask assigned. See the loop above which or's
+		 * all existing action->thread_mask bits.
+		 */
+		new->thread_mask = 1 << ffz(thread_mask);
+
+	} else if (new->handler == irq_default_primary_handler &&
+		   !(desc->irq_data.chip->flags & IRQCHIP_ONESHOT_SAFE)) {
+		/*
+		 * The interrupt was requested with handler = NULL, so
+		 * we use the default primary handler for it. But it
+		 * does not have the oneshot flag set. In combination
+		 * with level interrupts this is deadly, because the
+		 * default primary handler just wakes the thread, then
+		 * the irq lines is reenabled, but the device still
+		 * has the level irq asserted. Rinse and repeat....
+		 *
+		 * While this works for edge type interrupts, we play
+		 * it safe and reject unconditionally because we can't
+		 * say for sure which type this interrupt really
+		 * has. The type flags are unreliable as the
+		 * underlying chip implementation can override them.
+		 */
+		pr_err("Threaded irq requested with handler=NULL and !ONESHOT for irq %d\n",
+		       irq);
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	if (!shared) {
+		ret = irq_request_resources(desc);
+		if (ret) {
+			pr_err("Failed to request resources for %s (irq %d) on irqchip %s\n",
+			       new->name, irq, desc->irq_data.chip->name);
+			goto out_unlock;
+		}
+
+		/* Setup the type (level, edge polarity) if configured: */
+		if (new->flags & IRQF_TRIGGER_MASK) {
+			ret = __irq_set_trigger(desc,
+						new->flags & IRQF_TRIGGER_MASK);
+
+			if (ret)
+				goto out_unlock;
+		}
+
+		desc->istate &= ~(IRQS_AUTODETECT | IRQS_SPURIOUS_DISABLED | \
+				  IRQS_ONESHOT | IRQS_WAITING);
+		irqd_clear(&desc->irq_data, IRQD_IRQ_INPROGRESS);
+
+		if (new->flags & IRQF_PERCPU) {
+			irqd_set(&desc->irq_data, IRQD_PER_CPU);
+			irq_settings_set_per_cpu(desc);
+		}
+
+		if (new->flags & IRQF_ONESHOT)
+			desc->istate |= IRQS_ONESHOT;
+
+		if (irq_settings_can_autoenable(desc))
+			irq_startup(desc, true);
+		else
+			/* Undo nested disables: */
+			desc->depth = 1;
+
+		/* Exclude IRQ from balancing if requested */
+		if (new->flags & IRQF_NOBALANCING) {
+			irq_settings_set_no_balancing(desc);
+			irqd_set(&desc->irq_data, IRQD_NO_BALANCING);
+		}
+
+		/* Set default affinity mask once everything is setup */
+		setup_affinity(desc, mask);
+
+	} else if (new->flags & IRQF_TRIGGER_MASK) {
+		unsigned int nmsk = new->flags & IRQF_TRIGGER_MASK;
+		unsigned int omsk = irqd_get_trigger_type(&desc->irq_data);
+
+		if (nmsk != omsk)
+			/* hope the handler works with current  trigger mode */
+			pr_warn("irq %d uses trigger mode %u; requested %u\n",
+				irq, omsk, nmsk);
+	}
+
+	*old_ptr = new;
+
+	/* Reset broken irq detection when installing new handler */
+	desc->irq_count = 0;
+	desc->irqs_unhandled = 0;
+
+	/*
+	 * Check whether we disabled the irq via the spurious handler
+	 * before. Reenable it and give it another chance.
+	 */
+	if (shared && (desc->istate & IRQS_SPURIOUS_DISABLED)) {
+		desc->istate &= ~IRQS_SPURIOUS_DISABLED;
+		__enable_irq(desc);
+	}
+
+	spin_unlock_irqrestore(&desc->lock, flags);
+
 	return 0;
+
+mismatch:
+	if (!(new->flags & IRQF_PROBE_SHARED)) {
+		pr_err("Flags mismatch irq %d. %08x (%s) vs. %08x (%s)\n",
+		       irq, new->flags, new->name, old->flags, old->name);
+#ifdef CONFIG_DEBUG_SHIRQ
+		dump_stack();
+#endif
+	}
+	ret = -EBUSY;
+
+out_unlock:
+	spin_unlock_irqrestore(&desc->lock, flags);
+
+out_thread:
+out:
+	return ret;
 }
 
 /**
