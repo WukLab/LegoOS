@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+
 #include <asm/io.h>
 #include <asm/asm.h>
 #include <asm/page.h>
@@ -5,6 +14,7 @@
 #include <asm/setup.h>
 
 #include <lego/mm.h>
+#include <lego/smp.h>
 #include <lego/bug.h>
 #include <lego/tty.h>
 #include <lego/irq.h>
@@ -39,7 +49,8 @@ char __initdata boot_command_line[COMMAND_LINE_SIZE];
 /* Concatenated command line from boot and builtin */
 static char command_line[COMMAND_LINE_SIZE];
 
-static void internal_test(void);
+/* Setup configured maximum number of CPUs to activate */
+unsigned int setup_max_cpus = NR_CPUS;
 
 asmlinkage void __init start_kernel(void)
 {
@@ -89,10 +100,8 @@ asmlinkage void __init start_kernel(void)
 	timekeeping_init();
 	time_init();
 
-	internal_test();
-	hlt();
-}
+	smp_prepare_cpus(setup_max_cpus);
 
-static void internal_test(void)
-{
+	asm("int $0x30\n");
+	hlt();
 }

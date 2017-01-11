@@ -159,3 +159,21 @@ int native_cpu_up(int cpu)
 
 	return 0;
 }
+
+static int cpu0_logical_apicid;
+
+/*
+ * Prepare for SMP bootup.  The MP table or ACPI has been read
+ * earlier.  Just do some sanity checking here and enable APIC mode.
+ */
+void __init smp_prepare_cpus(unsigned int maxcpus)
+{
+
+	if (read_apic_id() != boot_cpu_physical_apicid) {
+		panic("Boot APIC ID in local APIC unexpected (%d vs %d)",
+		     read_apic_id(), boot_cpu_physical_apicid);
+		/* Or can we switch back to PIC here? */
+	}
+
+	cpu0_logical_apicid = apic_bsp_setup();
+}

@@ -37,7 +37,7 @@ fi
 qemu-system-x86_64 -s \
 	-kernel $KERNEL -append "$KERNEL_PARAM" \
 	$SERIAL \
-	-cpu Haswell \
+	-cpu Haswell,+tsc \
 	-m 16G \
 	-monitor stdio \
 	-smp cpus=24,cores=12,threads=2,sockets=2 \

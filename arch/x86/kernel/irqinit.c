@@ -72,9 +72,10 @@ void __init arch_irq_init(void)
 	 * then this vector space can be freed and re-used dynamically as the
 	 * irq's migrate etc.
 	 */
-	for (i = 0; i < nr_legacy_irqs(); i++)
+	for (i = 0; i < nr_legacy_irqs(); i++) {
 		/* TODO percpu, this is cpu 0 */
 		vector_irq[ISA_IRQ_VECTOR(i)] = irq_to_desc(i);
+	}
 
 	/*
 	 * SMP

@@ -56,6 +56,8 @@ do_IRQ(struct pt_regs *regs)
 	vector = ~regs->orig_ax;
 	desc = vector_irq[vector];
 
+	pr_info("%s: vector %u\n", __func__, vector);
+
 	if (IS_ERR_OR_NULL(desc)) {
 		ack_APIC_irq();
 

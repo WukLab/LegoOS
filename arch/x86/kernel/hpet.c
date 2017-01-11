@@ -469,3 +469,16 @@ out_nohpet:
 	hpet_address = 0;
 	return -ENODEV;
 }
+
+static inline int is_hpet_capable(void)
+{
+	return !!hpet_address;
+}
+
+/**
+ * is_hpet_enabled - check whether the hpet timer interrupt is enabled
+ */
+int is_hpet_enabled(void)
+{
+	return is_hpet_capable() && hpet_legacy_int_enabled;
+}

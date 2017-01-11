@@ -373,6 +373,17 @@ void __init init_bsp_APIC(void)
 	apic_write(APIC_LVT1, value);
 }
 
+/**
+ * apic_bsp_setup - Setup function for local apic and io-apic
+ *
+ * Returns:
+ * apic_id of BSP APIC
+ */
+int __init apic_bsp_setup(void)
+{
+	return 0;
+}
+
 /*
  * Local APIC timer interrupt. This is the most natural way for doing
  * local interrupts, but local timer interrupts can be emulated by

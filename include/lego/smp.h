@@ -10,8 +10,12 @@
 #ifndef _LEGO_SMP_H_
 #define _LEGO_SMP_H_
 
+#include <lego/compiler.h>
+
 #define smp_processor_id()	0
 
 int native_cpu_up(int cpu);
+
+void __init smp_prepare_cpus(unsigned int maxcpus);
 
 #endif /* _LEGO_SMP_H_ */

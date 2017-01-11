@@ -501,4 +501,8 @@ void __init init_bsp_APIC(void);
 int cpu_to_apicid(int cpu);
 int apic_register_new_cpu(int apicid, int enabled);
 
+int __init apic_bsp_setup(void);
+
+extern unsigned int boot_cpu_physical_apicid;
+
 #endif /* _ASM_X86_APIC_H_ */
