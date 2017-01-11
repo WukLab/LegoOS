@@ -510,6 +510,11 @@ unsigned long calibrate_tsc(void)
 	return crystal_khz * ebx_numerator / eax_denominator;
 }
 
+void mark_tsc_unstable(char *reason)
+{
+	pr_info("Marking TSC unstable due to %s\n", reason);
+}
+
 void __init tsc_init(void)
 {
 	if (!cpu_has(X86_FEATURE_TSC))
@@ -518,5 +523,22 @@ void __init tsc_init(void)
 	cpu_khz = calibrate_cpu();
 	tsc_khz = calibrate_tsc();
 
-	pr_info("cpu_khz: %u tsc_khz: %u\n", cpu_khz,tsc_khz);
+	/*
+	 * Trust non-zero tsc_khz as authorative,
+	 * and use it to sanity check cpu_khz,
+	 * which will be off if system timer is off.
+	 */
+	if (tsc_khz == 0)
+		tsc_khz = cpu_khz;
+	else if (abs(cpu_khz - tsc_khz) * 10 > tsc_khz)
+		cpu_khz = tsc_khz;
+
+	if (!tsc_khz) {
+		mark_tsc_unstable("could not calculate TSC khz");
+		return;
+	}
+
+	pr_info("Detected %lu.%03lu MHz processor\n",
+		(unsigned long)cpu_khz / 1000,
+		(unsigned long)cpu_khz % 1000);
 }
