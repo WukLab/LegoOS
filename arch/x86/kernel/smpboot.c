@@ -14,6 +14,8 @@
 #include <asm/bootparam.h>
 #include <asm/trampoline.h>
 
+#include <lego/sched.h>
+#include <lego/delay.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/nodemask.h>
@@ -45,6 +47,32 @@ void __init copy_trampoline_code(void)
 }
 
 /*
+ * The Multiprocessor Specification 1.4 (1997) example code suggests
+ * that there should be a 10ms delay between the BSP asserting INIT
+ * and de-asserting INIT, when starting a remote processor.
+ * But that slows boot and resume on modern processors, which include
+ * many cores and don't require that delay.
+ *
+ * Modern processor families are quirked to remove the delay entirely.
+ */
+#define UDELAY_10MS_DEFAULT 10000
+
+static unsigned int init_udelay = UDELAY_10MS_DEFAULT;
+
+static void __init smp_quirk_init_udelay(void)
+{
+	/* if modern processor, use no delay */
+	if (((default_cpu_info.x86_vendor == X86_VENDOR_INTEL) && (default_cpu_info.x86 == 6)) ||
+	    ((default_cpu_info.x86_vendor == X86_VENDOR_AMD) && (default_cpu_info.x86 >= 0xF))) {
+		init_udelay = 0;
+		return;
+	}
+	/* else, use legacy delay */
+	init_udelay = UDELAY_10MS_DEFAULT;
+}
+
+
+/*
  * Wakeup secondary CPUs or application CPUs via INIT
  */
 static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
@@ -64,7 +92,7 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 	pr_debug("Waiting for send to finish...\n");
 	send_status = safe_apic_wait_icr_idle();
 
-	//udelay(init_udelay);
+	udelay(init_udelay);
 
 	pr_debug("Deasserting INIT\n");
 
@@ -109,10 +137,10 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 		/*
 		 * Give the other CPU some time to accept the IPI.
 		 */
-		//if (init_udelay == 0)
-		//	udelay(10);
-		//else
-		//	udelay(300);
+		if (init_udelay == 0)
+			udelay(10);
+		else
+			udelay(300);
 
 		pr_debug("Startup point 1\n");
 
@@ -122,10 +150,10 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 		/*
 		 * Give the other CPU some time to accept the IPI.
 		 */
-		//if (init_udelay == 0)
-		//	udelay(10);
-		//else
-		//	udelay(200);
+		if (init_udelay == 0)
+			udelay(10);
+		else
+			udelay(200);
 
 		accept_status = (apic_read(APIC_ESR) & 0xEF);
 		if (send_status || accept_status)
@@ -141,7 +169,7 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 	return (send_status | accept_status);
 }
 
-static int do_cpu_up(int apicid, int cpu)
+static int do_cpu_up(int apicid, int cpu, struct task_struct *idle)
 {
 	unsigned long start_ip = trampoline_base;
 
@@ -150,12 +178,25 @@ static int do_cpu_up(int apicid, int cpu)
 	return 0;
 }
 
-int native_cpu_up(int cpu)
+/**
+ * native_cpu_up
+ *
+ * Boot a CPU, do the necessary
+ */
+int native_cpu_up(int cpu, struct task_struct *idle)
 {
 	int ret;
 	int apicid = cpu_to_apicid(cpu);
 
-	ret = do_cpu_up(apicid, cpu);
+	pr_debug("++++++++++++++++++++=_---CPU UP  %u\n", cpu);
+	ret = do_cpu_up(apicid, cpu, idle);
+	if (ret) {
+		pr_err("native_cpu_up failed(%d) to wakeup CPU#%u\n", ret, cpu);
+		return -EIO;
+	}
+
+	while (!cpu_online(cpu))
+		cpu_relax();
 
 	return 0;
 }
@@ -168,7 +209,6 @@ static int cpu0_logical_apicid;
  */
 void __init smp_prepare_cpus(unsigned int maxcpus)
 {
-
 	if (read_apic_id() != boot_cpu_physical_apicid) {
 		panic("Boot APIC ID in local APIC unexpected (%d vs %d)",
 		     read_apic_id(), boot_cpu_physical_apicid);
@@ -176,4 +216,7 @@ void __init smp_prepare_cpus(unsigned int maxcpus)
 	}
 
 	cpu0_logical_apicid = apic_bsp_setup();
+
+	/* Adjust delay, see comment above */
+	smp_quirk_init_udelay();
 }
