@@ -55,6 +55,11 @@ void __init arch_irq_init(void)
 	x86_apic_ioapic_init();
 
 #if defined(CONFIG_X86_64) || defined(CONFIG_X86_LOCAL_APIC)
+	/*
+	 * An initial setup of the Virtual Wire Mode
+	 * BSP LVT0's delivery mode is ExtINT
+	 * BSP LVT1's delivery mode is NMI
+	 */
 	init_bsp_APIC();
 #endif
 

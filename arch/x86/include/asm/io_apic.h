@@ -65,6 +65,10 @@ union IO_APIC_reg_03 {
 	} __attribute__ ((packed)) bits;
 };
 
+/*
+ * IOREDTBL
+ * I/O Redirection Table Registers
+ */
 struct IO_APIC_route_entry {
 	__u32	vector		:  8,
 		delivery_mode	:  3,	/* 000: FIXED
@@ -141,6 +145,55 @@ struct mpc_intsrc {
 	unsigned char dstirq;
 };
 
+struct irq_pin_list {
+	struct list_head		list;
+	int 				apic;
+	int				pin;
+};
+
+struct mp_chip_data {
+	struct list_head		irq_2_pin;
+	struct IO_APIC_route_entry	entry;
+	int				trigger;
+	int				polarity;
+	u32				count;
+	bool				isa_irq;
+};
+
+struct mp_ioapic_gsi {
+	u32				gsi_base;
+	u32				gsi_end;
+};
+
+struct mpc_ioapic {
+	unsigned char type;
+	unsigned char apicid;
+	unsigned char apicver;
+	unsigned char flags;
+	unsigned int apicaddr;
+};
+
+struct ioapic {
+	/* # of IRQ routing registers */
+	int				nr_registers;
+
+	/*
+	 * Saved state during suspend/resume,
+	 * or while enabling intr-remap.
+	 */
+	struct IO_APIC_route_entry	*saved_registers;
+
+	/* I/O APIC config */
+	struct mpc_ioapic		mp_config;
+
+	/* IO APIC gsi routing info */
+	struct mp_ioapic_gsi		gsi_config;
+
+	struct resource			*iomem_res;
+};
+
+extern struct ioapic ioapics[MAX_IO_APICS];
+
 #define MAX_MP_BUSSES		256
 /* Each PCI slot may be a combo card with its own bus.  4 IRQ pins per slot. */
 #define MAX_IRQ_SOURCES		(MAX_MP_BUSSES * 4)
@@ -165,5 +218,7 @@ int mpc_ioapic_id(int ioapic);
 void mp_save_irq(struct mpc_intsrc *m);
 
 void __init arch_ioapic_init(void);
+void __init enable_IO_APIC(void);
+void __init setup_IO_APIC(void);
 
 #endif /* _ASM_X86_IO_APIC_H_ */

@@ -7,18 +7,24 @@
  * (at your option) any later version.
  */
 
-#define pr_fmt(fmt) "APIC: " fmt
-
-#include <asm/asm.h>
-#include <asm/apic.h>
-#include <asm/ptrace.h>
-#include <asm/irq_vectors.h>
-#include <asm/processor.h>
+#define pr_fmt(fmt) "LAPIC: " fmt
 
 #include <lego/irq.h>
+#include <lego/smp.h>
+#include <lego/delay.h>
 #include <lego/kernel.h>
 #include <lego/bitops.h>
 #include <lego/cpumask.h>
+
+#include <asm/tsc.h>
+#include <asm/asm.h>
+#include <asm/apic.h>
+#include <asm/io_apic.h>
+#include <asm/ptrace.h>
+#include <asm/processor.h>
+#include <asm/irq_vectors.h>
+
+unsigned int apic_verbosity = APIC_VERBOSE;
 
 unsigned int nr_cpus;
 
@@ -32,6 +38,26 @@ unsigned int max_physical_apicid;
 static unsigned long mp_lapic_addr;
 
 static unsigned long apic_phys;
+
+/*
+ * Get the LAPIC version
+ */
+static inline int lapic_get_version(void)
+{
+	return GET_APIC_VERSION(apic_read(APIC_LVR));
+}
+
+/*
+ * Check, whether this is a modern or a first generation APIC
+ */
+static int modern_apic(void)
+{
+	/* AMD systems use old APIC versions, so check the CPU */
+	if (default_cpu_info.x86_vendor == X86_VENDOR_AMD &&
+	    default_cpu_info.x86 >= 0xf)
+		return 1;
+	return lapic_get_version() >= 0x14;
+}
 
 #ifdef CONFIG_X86_X2APIC
 int x2apic_mode;
@@ -111,7 +137,7 @@ u32 native_safe_apic_wait_icr_idle(void)
 		send_status = apic_read(APIC_ICR) & APIC_ICR_BUSY;
 		if (!send_status)
 			break;
-		//udelay(100);
+		udelay(100);
 	} while (timeout++ < 1000);
 
 	return send_status;
@@ -341,7 +367,13 @@ void clear_local_APIC(void)
 }
 
 /*
- * An initial setup of the virtual wire mode.
+ * An initial setup of the Virtual Wire Mode.
+ *
+ * Note:
+ * Virtual Wire Mode provides a uniprocessor hardware environment
+ * capable of booting and running all DOS shrink-wrapped software.
+ * For detailed explaination, check sec 3.6.2.2 of MultiProcessor
+ * Specification, Intel.
  */
 void __init init_bsp_APIC(void)
 {
@@ -354,6 +386,9 @@ void __init init_bsp_APIC(void)
 
 	/*
 	 * Enable APIC.
+	 *
+	 * via the Spurious-interrupt vector
+	 * (bit 8: APIC software enable/disable)
 	 */
 	value = apic_read(APIC_SPIV);
 	value &= ~APIC_VECTOR_MASK;
@@ -364,13 +399,187 @@ void __init init_bsp_APIC(void)
 	apic_write(APIC_SPIV, value);
 
 	/*
-	 * Set up the virtual wire mode.
+	 * LVT0, set up the Virtual Wire Mode:
+	 *
+	 * ExtINT:
+	 * Cause the processor to respond to the interrupt
+	 * as if the interrupt originated in an externally
+	 * connected (i8259) interrupt controller.
+	 *
+	 * Only one processor in the system should have
+	 * an LVT entry configured to use the ExtINT delivery mode.
 	 */
 	apic_write(APIC_LVT0, APIC_DM_EXTINT);
+
+	/*
+	 * LVT1, BSP
+	 */
 	value = APIC_DM_NMI;
 	if (apic_extnmi == APIC_EXTNMI_NONE)
 		value |= APIC_LVT_MASKED;
 	apic_write(APIC_LVT1, value);
+}
+
+/**
+ * setup_local_APIC - setup the local APIC
+ *
+ * Used to setup local APIC while initializing BSP or bringin up APs.
+ * Always called with preemption disabled.
+ *
+ * Things to do:
+ *	Set DFR, LDR registers
+ *	Set TPR register to accept all
+ *	Enable APIC
+ *	Set LVT0
+ *	Set LVT1
+ */
+void setup_local_APIC(void)
+{
+	int cpu = smp_processor_id();
+	unsigned int value, queued;
+	int i, j, acked = 0;
+	unsigned long long tsc = 0, ntsc;
+	long long max_loops = cpu_khz ? cpu_khz : 1000000;
+
+	if (cpu_has(X86_FEATURE_TSC))
+		tsc = rdtsc();
+
+	/*
+	 * Intel recommends to set DFR, LDR and TPR before enabling
+	 * an APIC.  See e.g. "AP-388 82489DX User's Manual" (Intel
+	 * document number 292116).  So here it goes...
+	 */
+	apic->init_apic_ldr();
+
+	/*
+	 * Set Task Priority to 'accept all'.
+	 * We never change this later on.
+	 */
+	value = apic_read(APIC_TASKPRI);
+	value &= ~APIC_TPRI_MASK;
+	apic_write(APIC_TASKPRI, value);
+
+	/*
+	 * After a crash, we no longer service the interrupts and a pending
+	 * interrupt from previous kernel might still have ISR bit set.
+	 *
+	 * Most probably by now CPU has serviced that pending interrupt and
+	 * it might not have done the ack_APIC_irq() because it thought,
+	 * interrupt came from i8259 as ExtInt. LAPIC did not get EOI so it
+	 * does not clear the ISR bit and cpu thinks it has already serivced
+	 * the interrupt. Hence a vector might get locked. It was noticed
+	 * for timer irq (vector 0x31). Issue an extra EOI to clear ISR.
+	 */
+	do {
+		queued = 0;
+		for (i = APIC_ISR_NR - 1; i >= 0; i--)
+			queued |= apic_read(APIC_IRR + i*0x10);
+
+		for (i = APIC_ISR_NR - 1; i >= 0; i--) {
+			value = apic_read(APIC_ISR + i*0x10);
+			for (j = 31; j >= 0; j--) {
+				if (value & (1<<j)) {
+					ack_APIC_irq();
+					acked++;
+				}
+			}
+		}
+		if (acked > 256) {
+			printk(KERN_ERR "LAPIC pending interrupts after %d EOI\n",
+			       acked);
+			break;
+		}
+		if (queued) {
+			if (cpu_has(X86_FEATURE_TSC) && cpu_khz) {
+				ntsc = rdtsc();
+				max_loops = (cpu_khz << 10) - (ntsc - tsc);
+			} else
+				max_loops--;
+		}
+	} while (queued && max_loops > 0);
+	WARN_ON(max_loops <= 0);
+
+	/*
+	 * Now that we are all set up, enable the APIC
+	 * Using the APIC software enable/disable bit of SPIV
+	 */
+	value = apic_read(APIC_SPIV);
+	value &= ~APIC_VECTOR_MASK;
+
+	/* Enable APIC */
+	value |= APIC_SPIV_APIC_ENABLED;
+
+	/* Set spurious IRQ vector, by the way :-) */
+	value |= SPURIOUS_APIC_VECTOR;
+	apic_write(APIC_SPIV, value);
+
+	/*
+	 * Set up LVT0, LVT1:
+	 *
+	 * set up through-local-APIC on the BP's LINT0. This is not
+	 * strictly necessary in pure symmetric-IO mode, but sometimes
+	 * we delegate interrupts to the 8259A.
+	 */
+	value = apic_read(APIC_LVT0) & APIC_LVT_MASKED;
+	if (!cpu && !value) {
+		value = APIC_DM_EXTINT;
+		apic_printk(APIC_VERBOSE, "enabled ExtINT on CPU#%d\n", cpu);
+	} else {
+		value = APIC_DM_EXTINT | APIC_LVT_MASKED;
+		apic_printk(APIC_VERBOSE, "masked ExtINT on CPU#%d\n", cpu);
+	}
+	apic_write(APIC_LVT0, value);
+
+	/*
+	 * Only the BSP sees the LINT1 NMI signal by default.
+	 * This can be modified by apic_extnmi= boot option.
+	 */
+	if ((!cpu && apic_extnmi != APIC_EXTNMI_NONE) ||
+	    apic_extnmi == APIC_EXTNMI_ALL)
+		value = APIC_DM_NMI;
+	else
+		value = APIC_DM_NMI | APIC_LVT_MASKED;
+	apic_write(APIC_LVT1, value);
+}
+
+static void lapic_setup_esr(void)
+{
+	unsigned int oldvalue, value, maxlvt;
+
+	maxlvt = lapic_get_maxlvt();
+	if (maxlvt > 3)		/* Due to the Pentium erratum 3AP. */
+		apic_write(APIC_ESR, 0);
+	oldvalue = apic_read(APIC_ESR);
+
+	/* enables sending errors */
+	value = ERROR_APIC_VECTOR;
+	apic_write(APIC_LVTERR, value);
+
+	/*
+	 * spec says clear errors after enabling vector.
+	 */
+	if (maxlvt > 3)
+		apic_write(APIC_ESR, 0);
+	value = apic_read(APIC_ESR);
+	if (value != oldvalue)
+		apic_printk(APIC_VERBOSE, "ESR value before enabling "
+			"vector: 0x%08x  after: 0x%08x\n",
+			oldvalue, value);
+}
+
+static void end_local_APIC_setup(void)
+{
+	/* LVTERR, ESR */
+	lapic_setup_esr();
+#ifdef CONFIG_X86_32
+	{
+		unsigned int value;
+		/* Disable the local apic timer */
+		value = apic_read(APIC_LVTT);
+		value |= (APIC_LVT_MASKED | LOCAL_TIMER_VECTOR);
+		apic_write(APIC_LVTT, value);
+	}
+#endif
 }
 
 /**
@@ -381,7 +590,45 @@ void __init init_bsp_APIC(void)
  */
 int __init apic_bsp_setup(void)
 {
-	return 0;
+	int id;
+
+	setup_local_APIC();
+
+	if (x2apic_mode)
+		id = apic_read(APIC_LDR);
+	else
+		id = GET_APIC_LOGICAL_ID(apic_read(APIC_LDR));
+
+	enable_IO_APIC();
+	end_local_APIC_setup();
+
+	setup_IO_APIC();
+
+	/* Setup local timer */
+
+	return id;
+}
+
+/**
+ * sync_Arb_IDs - synchronize APIC bus arbitration IDs
+ */
+void __init sync_Arb_IDs(void)
+{
+	/*
+	 * Unsupported on P4 - see Intel Dev. Manual Vol. 3, Ch. 8.6.1 And not
+	 * needed on AMD.
+	 */
+	if (modern_apic() || default_cpu_info.x86_vendor == X86_VENDOR_AMD)
+		return;
+
+	/*
+	 * Wait for idle.
+	 */
+	apic_wait_icr_idle();
+
+	apic_printk(APIC_VERBOSE, "%s: Synchronizing Arb IDs\n", __func__);
+
+	apic_write(APIC_ICR, APIC_DEST_ALLINC | APIC_INT_LEVELTRIG | APIC_DM_INIT);
 }
 
 /*

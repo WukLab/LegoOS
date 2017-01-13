@@ -19,10 +19,30 @@
 #include <lego/cpumask.h>
 #include <lego/compiler.h>
 
+/*
+ * Debugging macros
+ */
+#define APIC_QUIET   0
+#define APIC_VERBOSE 1
+#define APIC_DEBUG   2
+
 /* Macros for apic_extnmi which controls external NMI masking */
 #define APIC_EXTNMI_BSP		0 /* Default */
 #define APIC_EXTNMI_ALL		1
 #define APIC_EXTNMI_NONE	2
+
+/*
+ * Define the default level of output to be very little
+ * This can be turned up by using apic=verbose for more
+ * information and apic=debug for _lots_ of information.
+ * apic_verbosity is defined in apic.c
+ */
+#define apic_printk(v, s, a...) do {       \
+		if ((v) <= apic_verbosity) \
+			pr_info(s, ##a);    \
+	} while (0)
+
+extern unsigned int apic_verbosity;
 
 struct local_apic {
 
@@ -304,6 +324,8 @@ struct apic {
 	unsigned int (*get_apic_id)(unsigned long x);
 	unsigned long (*set_apic_id)(unsigned int id);
 
+	void (*init_apic_ldr)(void);
+
 	/* ipi */
 	void (*send_IPI)(int cpu, int vector);
 	void (*send_IPI_mask)(const struct cpumask *mask, int vector);
@@ -487,6 +509,8 @@ static inline void ack_APIC_irq(void)
 	 */
 	apic_eoi();
 }
+
+void __init sync_Arb_IDs(void);
 
 void __init apic_set_eoi_write(void (*eoi_write)(u32 reg, u32 v));
 

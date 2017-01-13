@@ -50,10 +50,13 @@ struct irq_cfg *irq_cfg(unsigned int irq)
 }
 
 /*
- * IRQ init the apic and ioapic, register irq chip/handler.
+ * This functin link or allocate data structures used
+ * by APIC and IO-APIC.
  *
- * Note that all apic and ioapic information were filled
- * early by paring the ACPI tables.
+ * This function does NOT enable APIC or IO-APIC!
+ *
+ * Note that all APIC and IO-APIC information were filled
+ * early by paring the ACPI tables in setup_arch().
  */
 void __init x86_apic_ioapic_init(void)
 {

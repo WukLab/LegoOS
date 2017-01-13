@@ -105,6 +105,26 @@ static int flat_probe(void)
 	return 1;
 }
 
+/*
+ * Set up the logical destination ID.
+ *
+ * Intel recommends to set DFR, LDR and TPR before enabling
+ * an APIC.  See e.g. "AP-388 82489DX User's Manual" (Intel
+ * document number 292116).  So here it goes...
+ */
+void flat_init_apic_ldr(void)
+{
+	unsigned long val;
+	unsigned long num, id;
+
+	num = smp_processor_id();
+	id = 1UL << num;
+	apic_write(APIC_DFR, APIC_DFR_FLAT);
+	val = apic_read(APIC_LDR) & ~APIC_LDR_MASK;
+	val |= SET_APIC_LOGICAL_ID(id);
+	apic_write(APIC_LDR, val);
+}
+
 static struct apic apic_flat = {
 	.name				= "flat",
 	.probe				= flat_probe,
@@ -117,6 +137,8 @@ static struct apic apic_flat = {
 
 	.get_apic_id			= flat_get_apic_id,
 	.set_apic_id			= set_apic_id,
+
+	.init_apic_ldr			= flat_init_apic_ldr,
 
 	.send_IPI			= default_send_IPI_single,
 	.send_IPI_mask			= flat_send_IPI_mask,
@@ -166,6 +188,9 @@ static struct apic apic_physflat = {
 
 	.get_apic_id			= flat_get_apic_id,
 	.set_apic_id			= set_apic_id,
+
+	/* not needed, but shouldn't hurt: */
+	.init_apic_ldr			= flat_init_apic_ldr,
 
 	.send_IPI			= default_send_IPI_single_phys,
 	.send_IPI_mask			= default_send_IPI_mask_sequence_phys,

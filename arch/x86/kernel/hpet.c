@@ -7,6 +7,8 @@
  * (at your option) any later version.
  */
 
+#define pr_fmt(fmt) "HPET: " fmt
+
 #include <lego/mm.h>
 #include <lego/irq.h>
 #include <lego/smp.h>
@@ -430,11 +432,11 @@ int hpet_enable(void)
 	if (hpet_boot_cfg)
 		*hpet_boot_cfg = cfg;
 	else
-		pr_warn("HPET initial state will not be saved\n");
+		pr_warn("initial state will not be saved\n");
 	cfg &= ~(HPET_CFG_ENABLE | HPET_CFG_LEGACY);
 	hpet_writel(cfg, HPET_CFG);
 	if (cfg)
-		pr_warn("HPET: Unrecognized bits %#x set in global cfg\n",
+		pr_warn("Unrecognized bits %#x set in global cfg\n",
 			cfg);
 
 	for (i = 0; i <= last; ++i) {
@@ -447,7 +449,7 @@ int hpet_enable(void)
 			 | HPET_TN_64BIT_CAP | HPET_TN_32BIT | HPET_TN_ROUTE
 			 | HPET_TN_FSB | HPET_TN_FSB_CAP);
 		if (cfg)
-			pr_warn("HPET: Unrecognized bits %#x set in cfg#%u\n",
+			pr_warn("Unrecognized bits %#x set in cfg#%u\n",
 				cfg, i);
 	}
 	hpet_print_config();

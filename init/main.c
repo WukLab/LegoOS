@@ -101,7 +101,7 @@ asmlinkage void __init start_kernel(void)
 	time_init();
 
 	smp_prepare_cpus(setup_max_cpus);
-	smp_init();
+	//smp_init();
 
 	asm("int $0x30\n");
 	hlt();

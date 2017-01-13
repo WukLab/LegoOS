@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-#define pr_fmt(fmt) "tsc: " fmt
+#define pr_fmt(fmt) "TSC: " fmt
 
 #include <lego/irq.h>
 #include <lego/kernel.h>

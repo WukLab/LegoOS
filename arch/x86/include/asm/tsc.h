@@ -10,6 +10,9 @@
 #ifndef _ASM_X86_TSC_H_
 #define _ASM_X86_TSC_H_
 
+extern unsigned int cpu_khz;
+extern unsigned int tsc_khz;
+
 void __init tsc_init(void);
 
 #endif /* _ASM_X86_TSC_H_ */
