@@ -229,12 +229,10 @@ static int __init
 acpi_parse_ioapic(struct acpi_subtable_header * header, const unsigned long end)
 {
 	struct acpi_madt_io_apic *ioapic = NULL;
-	#if 0
 	struct ioapic_domain_cfg cfg = {
 		.type = IOAPIC_DOMAIN_DYNAMIC,
 		.ops = &mp_ioapic_irqdomain_ops,
 	};
-	#endif
 
 	ioapic = (struct acpi_madt_io_apic *)header;
 
@@ -245,14 +243,13 @@ acpi_parse_ioapic(struct acpi_subtable_header * header, const unsigned long end)
 
 	/* Statically assign IRQ numbers for IOAPICs hosting legacy IRQs */
 	if (ioapic->global_irq_base < nr_legacy_irqs())
-		;
-		//cfg.type = IOAPIC_DOMAIN_LEGACY;
+		cfg.type = IOAPIC_DOMAIN_LEGACY;
 
 	/*
 	 * Register this IO-APIC
 	 * GSI: Global System Interrupt, a weird name used by ACPI only!
 	 */
-	mp_register_ioapic(ioapic->id, ioapic->address, ioapic->global_irq_base);
+	mp_register_ioapic(ioapic->id, ioapic->address, ioapic->global_irq_base, &cfg);
 
 	return 0;
 }
@@ -458,6 +455,10 @@ static int __init acpi_parse_madt_ioapic_entries(void)
 {
 	int count;
 
+	/*
+	 * Part I:
+	 * Parse IO-APIC configurations:
+	 */
 	count = acpi_table_parse_madt(ACPI_MADT_TYPE_IO_APIC, acpi_parse_ioapic,
 				      MAX_IO_APICS);
 	if (!count) {
@@ -468,6 +469,10 @@ static int __init acpi_parse_madt_ioapic_entries(void)
 		return count;
 	}
 
+	/*
+	 * Part II:
+	 * Parse possible IRQ override:
+	 */
 	count = acpi_table_parse_madt(ACPI_MADT_TYPE_INTERRUPT_OVERRIDE,
 				      acpi_parse_int_src_ovr, NR_IRQS);
 	if (count < 0) {
@@ -477,7 +482,7 @@ static int __init acpi_parse_madt_ioapic_entries(void)
 
 	/*
 	 * If BIOS did not supply an INT_SRC_OVR for the SCI
-	 * pretend we got one so we can set the SCI flags.
+	 * pretend we got one so we can set the SCI flags:
 	 */
 	if (!acpi_sci_override_gsi)
 		acpi_sci_ioapic_setup(acpi_gbl_FADT.sci_interrupt, 0, 0,
@@ -486,6 +491,10 @@ static int __init acpi_parse_madt_ioapic_entries(void)
 	/* Fill in identity legacy mappings where no override */
 	mp_config_acpi_legacy_irqs();
 
+	/*
+	 * Part III:
+	 * Parse NMI SRC:
+	 */
 	count = acpi_table_parse_madt(ACPI_MADT_TYPE_NMI_SOURCE,
 				      acpi_parse_nmi_src, NR_IRQS);
 	if (count < 0) {

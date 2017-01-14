@@ -166,12 +166,36 @@ struct mp_ioapic_gsi {
 };
 
 struct mpc_ioapic {
-	unsigned char type;
-	unsigned char apicid;
-	unsigned char apicver;
-	unsigned char flags;
-	unsigned int apicaddr;
+	unsigned char			type;
+	unsigned char			apicid;
+	unsigned char			apicver;
+	unsigned char			flags;
+	unsigned int			apicaddr;
 };
+
+struct irq_data;
+
+struct irq_domain_ops {
+	int (*alloc)(unsigned int virq, unsigned int nr_irqs, void *arg);
+	void (*free)(unsigned int virq, unsigned int nr_irqs);
+	void (*activate)(struct irq_data *irq_data);
+	void (*deactivate)( struct irq_data *irq_data);
+};
+
+enum ioapic_domain_type {
+	IOAPIC_DOMAIN_INVALID,
+	IOAPIC_DOMAIN_LEGACY,
+	IOAPIC_DOMAIN_STRICT,
+	IOAPIC_DOMAIN_DYNAMIC,
+};
+
+struct ioapic_domain_cfg {
+	enum ioapic_domain_type		type;
+	const struct irq_domain_ops	*ops;
+};
+
+extern const struct irq_domain_ops mp_ioapic_irqdomain_ops;
+
 
 struct ioapic {
 	/* # of IRQ routing registers */
@@ -188,6 +212,8 @@ struct ioapic {
 
 	/* IO APIC gsi routing info */
 	struct mp_ioapic_gsi		gsi_config;
+
+	struct ioapic_domain_cfg	irqdomain_cfg;
 
 	struct resource			*iomem_res;
 };
@@ -211,7 +237,7 @@ extern struct mpc_intsrc mp_irqs[MAX_IRQ_SOURCES];
  */
 extern int nr_ioapics;
 
-int mp_register_ioapic(int id, u32 address, u32 gsi_base);
+int mp_register_ioapic(int id, u32 address, u32 gsi_base, struct ioapic_domain_cfg *cfg);
 int mp_find_ioapic(u32 gsi);
 int mp_find_ioapic_pin(int ioapic, u32 gsi);
 int mpc_ioapic_id(int ioapic);
