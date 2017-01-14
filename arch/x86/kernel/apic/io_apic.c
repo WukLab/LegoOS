@@ -765,87 +765,13 @@ static int irq_polarity(int idx)
 	}
 }
 
-int acpi_get_override_irq(u32 gsi, int *trigger, int *polarity)
-{
-	int ioapic, pin, idx;
-
-	ioapic = mp_find_ioapic(gsi);
-	if (ioapic < 0)
-		return -1;
-
-	pin = mp_find_ioapic_pin(ioapic, gsi);
-	if (pin < 0)
-		return -1;
-
-	idx = find_irq_entry(ioapic, pin, mp_INT);
-	if (idx < 0)
-		return -1;
-
-	*trigger = irq_trigger(idx);
-	*polarity = irq_polarity(idx);
-	return 0;
-}
-
-static void ioapic_copy_alloc_attr(struct irq_alloc_info *dst,
-				   struct irq_alloc_info *src,
-				   u32 gsi, int ioapic_idx, int pin)
-{
-	int trigger, polarity;
-
-	copy_irq_alloc_info(dst, src);
-	dst->type = X86_IRQ_ALLOC_TYPE_IOAPIC;
-	dst->ioapic_id = mpc_ioapic_id(ioapic_idx);
-	dst->ioapic_pin = pin;
-	dst->ioapic_valid = 1;
-	if (src && src->ioapic_valid) {
-		dst->ioapic_node = src->ioapic_node;
-		dst->ioapic_trigger = src->ioapic_trigger;
-		dst->ioapic_polarity = src->ioapic_polarity;
-	} else {
-		dst->ioapic_node = NUMA_NO_NODE;
-		if (acpi_get_override_irq(gsi, &trigger, &polarity) >= 0) {
-			dst->ioapic_trigger = trigger;
-			dst->ioapic_polarity = polarity;
-		} else {
-			/*
-			 * PCI interrupts are always active low level
-			 * triggered.
-			 */
-			dst->ioapic_trigger = IOAPIC_LEVEL;
-			dst->ioapic_polarity = IOAPIC_POL_LOW;
-		}
-	}
-}
-
-static int mp_map_pin_to_irq(u32 gsi, int idx, int ioapic, int pin,
-			     unsigned int flags, struct irq_alloc_info *info)
-{
-	bool legacy = false;
-	struct irq_alloc_info tmp;
-	int irq;
-
-	if (idx >= 0 && test_bit(mp_irqs[idx].srcbus, mp_bus_not_pci)) {
-		irq = mp_irqs[idx].srcbusirq;
-		legacy = mp_is_legacy_irq(irq);
-	}
-
-	spin_lock(&ioapic_lock);
-	if (flags & IOAPIC_MAP_ALLOC) {
-		ioapic_copy_alloc_attr(&tmp, info, gsi, ioapic, pin);
-	} else {
-	
-	}
-	spin_unlock(&ioapic_lock);
-
-	return irq;
-}
-
 /*
  * Map from the pin number to IRQ number
  */
-static int pin_2_irq(int idx, int ioapic, int pin, unsigned int flags)
+static int pin_2_irq(int idx, int ioapic, int pin)
 {
 	u32 gsi = mp_pin_to_gsi(ioapic, pin);
+	int irq, bus;
 
 	/*
 	 * Debugging check, we are in big trouble if this message pops up!
@@ -853,7 +779,17 @@ static int pin_2_irq(int idx, int ioapic, int pin, unsigned int flags)
 	if (mp_irqs[idx].dstirq != pin)
 		pr_err("broken BIOS or MPTABLE parser, ayiee!!\n");
 
-	return mp_map_pin_to_irq(gsi, idx, ioapic, pin, flags, NULL);
+	bus = mp_irqs[idx].srcbus;
+	if (idx >= 0 && test_bit(bus, mp_bus_not_pci)) {
+		irq = mp_irqs[idx].srcbusirq;
+	} else {
+		if (gsi > NR_IRQS_LEGACY)
+			irq = gsi;
+		else
+			irq = gsi_top + gsi;
+	}
+
+	return irq;
 }
 
 static void __init setup_IO_APIC_irqs(void)
@@ -872,7 +808,7 @@ static void __init setup_IO_APIC_irqs(void)
 			continue;
 		}
 
-		irq = pin_2_irq(idx, ioapic, pin, ioapic ? 0 : IOAPIC_MAP_ALLOC);
+		irq = pin_2_irq(idx, ioapic, pin);
 		apic_printk(APIC_VERBOSE, " ioapic[%d] pin: %d map to irq: %d\n",
 			ioapic, pin, irq);
 	}
