@@ -21,6 +21,7 @@
 #include <asm/processor.h>
 #include <asm/irq_vectors.h>
 
+#include <lego/irq.h>
 #include <lego/acpi.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
@@ -31,6 +32,8 @@
 int acpi_lapic;
 int acpi_ioapic;
 u64 acpi_lapic_addr = APIC_DEFAULT_PHYS_BASE;
+
+int acpi_sci_override_gsi;
 
 /*
  * The default interrupt routing model is PIC (8259).  This gets
@@ -226,6 +229,12 @@ static int __init
 acpi_parse_ioapic(struct acpi_subtable_header * header, const unsigned long end)
 {
 	struct acpi_madt_io_apic *ioapic = NULL;
+	#if 0
+	struct ioapic_domain_cfg cfg = {
+		.type = IOAPIC_DOMAIN_DYNAMIC,
+		.ops = &mp_ioapic_irqdomain_ops,
+	};
+	#endif
 
 	ioapic = (struct acpi_madt_io_apic *)header;
 
@@ -234,11 +243,26 @@ acpi_parse_ioapic(struct acpi_subtable_header * header, const unsigned long end)
 
 	acpi_table_print_madt_entry(header);
 
+	/* Statically assign IRQ numbers for IOAPICs hosting legacy IRQs */
+	if (ioapic->global_irq_base < nr_legacy_irqs())
+		;
+		//cfg.type = IOAPIC_DOMAIN_LEGACY;
+
+	/*
+	 * Register this IO-APIC
+	 * GSI: Global System Interrupt, a weird name used by ACPI only!
+	 */
 	mp_register_ioapic(ioapic->id, ioapic->address, ioapic->global_irq_base);
 
 	return 0;
 }
 
+/*
+ * For legacy IRQ override
+ * Typically, there are two overrides:
+ *	- IRQ0
+ *	- IRQ9
+ */
 #ifdef	CONFIG_X86_IO_APIC
 #define MP_ISA_BUS		0
 static void __init mp_config_acpi_legacy_irqs(void)
@@ -294,13 +318,56 @@ static void __init mp_config_acpi_legacy_irqs(void)
 		mp_irq.srcbus = MP_ISA_BUS;
 		mp_irq.dstapic = dstapic;
 		mp_irq.irqtype = mp_INT;
-		mp_irq.srcbusirq = i; /* Identity mapped */
+		mp_irq.srcbusirq = i;	/* Identity mapped */
 		mp_irq.dstirq = pin;
 
 		mp_save_irq(&mp_irq);
 	}
 }
-#endif
+
+static void __init mp_override_legacy_irq(u8 bus_irq, u8 polarity, u8 trigger,
+					  u32 gsi)
+{
+	int ioapic;
+	int pin;
+	struct mpc_intsrc mp_irq;
+
+	/*
+	 * Convert 'gsi' to 'ioapic.pin'.
+	 */
+	ioapic = mp_find_ioapic(gsi);
+	if (ioapic < 0)
+		return;
+	pin = mp_find_ioapic_pin(ioapic, gsi);
+
+	/*
+	 * TBD: This check is for faulty timer entries, where the override
+	 *      erroneously sets the trigger to level, resulting in a HUGE
+	 *      increase of timer interrupts!
+	 */
+	if ((bus_irq == 0) && (trigger == 3))
+		trigger = 1;
+
+	mp_irq.type = MP_INTSRC;
+	mp_irq.irqtype = mp_INT;
+	mp_irq.irqflag = (trigger << 2) | polarity;
+	mp_irq.srcbus = MP_ISA_BUS;
+	mp_irq.srcbusirq = bus_irq;			/* IRQ */
+	mp_irq.dstapic = mpc_ioapic_id(ioapic);		/* APIC ID */
+	mp_irq.dstirq = pin;				/* INTIN# */
+
+	mp_save_irq(&mp_irq);
+
+	/*
+	 * Reset default identity mapping if gsi is also an legacy IRQ,
+	 * otherwise there will be more than one entry with the same GSI
+	 * and acpi_isa_irq_to_gsi() may give wrong result.
+	 */
+	if (gsi < nr_legacy_irqs() && isa_irq_to_gsi[gsi] == gsi)
+		isa_irq_to_gsi[gsi] = ACPI_INVALID_GSI;
+	isa_irq_to_gsi[bus_irq] = gsi;
+}
+#endif /* CONFIG_X86_IO_APIC */
 
 static int __init
 acpi_parse_nmi_src(struct acpi_subtable_header * header, const unsigned long end)
@@ -317,6 +384,76 @@ acpi_parse_nmi_src(struct acpi_subtable_header * header, const unsigned long end
 	return 0;
 }
 
+/*
+ * Parse Interrupt Source Override for the ACPI SCI
+ */
+static void __init acpi_sci_ioapic_setup(u8 bus_irq, u16 polarity, u16 trigger, u32 gsi)
+{
+	if (trigger == 0)	/* compatible SCI trigger is level */
+		trigger = 3;
+
+	if (polarity == 0)	/* compatible SCI polarity is low */
+		polarity = 3;
+
+	mp_override_legacy_irq(bus_irq, polarity, trigger, gsi);
+
+	/*
+	 * TODO:
+	 * Something about Houtplug?
+	 */
+	//acpi_penalize_sci_irq(bus_irq, trigger, polarity);
+
+	/*
+	 * stash over-ride to indicate we've been here
+	 * and for later update of acpi_gbl_FADT
+	 */
+	acpi_sci_override_gsi = gsi;
+	return;
+}
+
+static int __init
+acpi_parse_int_src_ovr(struct acpi_subtable_header * header,
+		       const unsigned long end)
+{
+	struct acpi_madt_interrupt_override *intsrc = NULL;
+
+	intsrc = (struct acpi_madt_interrupt_override *)header;
+
+	if (BAD_MADT_ENTRY(intsrc, end))
+		return -EINVAL;
+
+	acpi_table_print_madt_entry(header);
+
+	if (intsrc->source_irq == acpi_gbl_FADT.sci_interrupt) {
+		acpi_sci_ioapic_setup(intsrc->source_irq,
+				      intsrc->inti_flags & ACPI_MADT_POLARITY_MASK,
+				      (intsrc->inti_flags & ACPI_MADT_TRIGGER_MASK) >> 2,
+				      intsrc->global_irq);
+		return 0;
+	}
+
+	/* IRQ0 overrided by gsi2 */
+	if (intsrc->source_irq == 0) {
+		if ((intsrc->global_irq == 2)
+			&& (intsrc->inti_flags & ACPI_MADT_POLARITY_MASK)) {
+			intsrc->inti_flags &= ~ACPI_MADT_POLARITY_MASK;
+			pr_info("BIOS IRQ0 pin2 override: forcing polarity to high active.\n");
+		}
+	}
+
+	/* Override isa_irq_to_gsi[] */
+	mp_override_legacy_irq(intsrc->source_irq,
+				intsrc->inti_flags & ACPI_MADT_POLARITY_MASK,
+				(intsrc->inti_flags & ACPI_MADT_TRIGGER_MASK) >> 2,
+				intsrc->global_irq);
+
+	return 0;
+}
+
+/*
+ * Parse IOAPIC related entries in MADT
+ * returns 0 on success, < 0 on error
+ */
 static int __init acpi_parse_madt_ioapic_entries(void)
 {
 	int count;
@@ -330,6 +467,21 @@ static int __init acpi_parse_madt_ioapic_entries(void)
 		pr_err("Error parsing IOAPIC entry\n");
 		return count;
 	}
+
+	count = acpi_table_parse_madt(ACPI_MADT_TYPE_INTERRUPT_OVERRIDE,
+				      acpi_parse_int_src_ovr, NR_IRQS);
+	if (count < 0) {
+		pr_err("Error parsing interrupt source overrides entry\n");
+		return count;
+	}
+
+	/*
+	 * If BIOS did not supply an INT_SRC_OVR for the SCI
+	 * pretend we got one so we can set the SCI flags.
+	 */
+	if (!acpi_sci_override_gsi)
+		acpi_sci_ioapic_setup(acpi_gbl_FADT.sci_interrupt, 0, 0,
+				      acpi_gbl_FADT.sci_interrupt);
 
 	/* Fill in identity legacy mappings where no override */
 	mp_config_acpi_legacy_irqs();

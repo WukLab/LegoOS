@@ -301,9 +301,10 @@ static int io_apic_get_redir_entries(int ioapic)
 	reg_01.raw = io_apic_read(ioapic, 1);
 	spin_unlock_irqrestore(&ioapic_lock, flags);
 
-	/* The register returns the maximum index redir index
-	 * supported, which is one less than the total number of redir
-	 * entries.
+	/*
+	 * The register returns the maximum index redir index
+	 * supported, which is one less than the total number
+	 * of redir entries.
 	 */
 	return reg_01.bits.entries + 1;
 }

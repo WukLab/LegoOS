@@ -167,9 +167,8 @@ acpi_table_parse_entries(char *id,
  *              this API must be invoked with ACPI_MTX_TABLES acquired.
  *
  ******************************************************************************/
-static int
-acpi_tb_get_table(struct acpi_table_desc *table_desc,
-		  struct acpi_table_header **out_table)
+int acpi_tb_get_table(struct acpi_table_desc *table_desc,
+		      struct acpi_table_header **out_table)
 {
 	int status;
 
@@ -202,7 +201,7 @@ acpi_tb_get_table(struct acpi_table_desc *table_desc,
  *              this API must be invoked with ACPI_MTX_TABLES acquired.
  *
  ******************************************************************************/
-static void acpi_tb_put_table(struct acpi_table_desc *table_desc)
+void acpi_tb_put_table(struct acpi_table_desc *table_desc)
 {
 
 	if (table_desc->validation_count == 0) {
@@ -331,12 +330,6 @@ int __init acpi_parse_table(char *id, acpi_tbl_table_handler handler)
 		return 0;
 	} else
 		return -ENODEV;
-}
-
-/*TODO*/
-void __init acpi_tb_parse_fadt(void)
-{
-
 }
 
 /*******************************************************************************

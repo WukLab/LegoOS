@@ -28,3 +28,12 @@ int acpi_get_table(char *signature,
 #define ACPI_MAX_TABLES 128
 extern u32 nr_acpi_tables;
 extern struct acpi_table_desc acpi_tables[ACPI_MAX_TABLES];
+
+int acpi_tb_get_table(struct acpi_table_desc *table_desc,
+		      struct acpi_table_header **out_table);
+
+void acpi_tb_put_table(struct acpi_table_desc *table_desc);
+
+/* FADT */
+extern u32 acpi_gbl_fadt_index;
+void __init acpi_tb_parse_fadt(void);
