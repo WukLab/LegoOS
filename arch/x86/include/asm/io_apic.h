@@ -183,21 +183,6 @@ struct mpc_intsrc {
 	unsigned char dstirq;
 };
 
-struct irq_pin_list {
-	struct list_head		list;
-	int 				apic;
-	int				pin;
-};
-
-struct mp_chip_data {
-	struct list_head		irq_2_pin;
-	struct IO_APIC_route_entry	entry;
-	int				trigger;
-	int				polarity;
-	u32				count;
-	bool				isa_irq;
-};
-
 struct mp_ioapic_gsi {
 	u32				gsi_base;
 	u32				gsi_end;

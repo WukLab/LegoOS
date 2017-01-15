@@ -29,6 +29,25 @@
 #include <lego/resource.h>
 #include <lego/spinlock.h>
 
+struct irq_pin_list {
+	struct list_head		list;
+	int 				apic;
+	int				pin;
+};
+
+/*
+ * This is the: desc->irq_data->chip_data for io-apic
+ * The local apic has different chip_data
+ */
+struct mp_chip_data {
+	struct list_head		irq_2_pin;
+	struct IO_APIC_route_entry	entry;
+	int				trigger;
+	int				polarity;
+	u32				count;
+	bool				isa_irq;
+};
+
 #define	for_each_ioapic(idx)		\
 	for ((idx) = 0; (idx) < nr_ioapics; (idx)++)
 #define	for_each_ioapic_reverse(idx)	\
@@ -824,29 +843,6 @@ static void ioapic_copy_alloc_attr(struct irq_alloc_info *dst,
 	}
 }
 
-static int alloc_irq_from_domain(struct irq_domain *domain, int ioapic, u32 gsi,
-				 struct irq_alloc_info *info)
-{
-	return 0;
-}
-
-/*
- * Need special handling for ISA IRQs because there may be multiple IOAPIC pins
- * sharing the same ISA IRQ number and irqdomain only supports 1:1 mapping
- * between IOAPIC pin and IRQ number. A typical IOAPIC has 24 pins, pin 0-15 are
- * used for legacy IRQs and pin 16-23 are used for PCI IRQs (PIRQ A-H).
- * When ACPI is disabled, only legacy IRQ numbers (IRQ0-15) are available, and
- * some BIOSes may use MP Interrupt Source records to override IRQ numbers for
- * PIRQs instead of reprogramming the interrupt routing logic. Thus there may be
- * multiple pins sharing the same legacy IRQ number when ACPI is disabled.
- */
-static int alloc_isa_irq_from_domain(struct irq_domain *domain,
-				     int irq, int ioapic, int pin,
-				     struct irq_alloc_info *info)
-{
-	return 0;
-}
-
 static void mp_register_handler(unsigned int irq, unsigned long trigger)
 {
 }
@@ -869,6 +865,96 @@ static bool mp_check_pin_attr(int irq, struct irq_alloc_info *info)
 
 	return data->trigger == info->ioapic_trigger &&
 	       data->polarity == info->ioapic_polarity;
+}
+
+/*
+ * The common case is 1:1 IRQ<->pin mappings. Sometimes there are
+ * shared ISA-space IRQs, so we have to support them. We are super
+ * fast in the common case, and fast for shared ISA-space IRQs.
+ *
+ * Return 0 if there is already the same pin in the list or we
+ * inserted ths new pin successfully.
+ */
+static int __add_pin_to_irq_node(struct mp_chip_data *data,
+				 int node, int apic, int pin)
+{
+	struct irq_pin_list *entry;
+
+	/* Don't allow duplicates */
+	list_for_each_entry(entry, &data->irq_2_pin, list)
+		if (entry->apic == apic && entry->pin == pin)
+			return 0;
+
+	entry = kzalloc_node(sizeof(struct irq_pin_list), GFP_KERNEL, node);
+	if (!entry) {
+		pr_err("can not alloc irq_pin_list (%d,%d,%d)\n",
+		       node, apic, pin);
+		return -ENOMEM;
+	}
+	entry->apic = apic;
+	entry->pin = pin;
+	list_add_tail(&entry->list, &data->irq_2_pin);
+
+	return 0;
+}
+
+static void add_pin_to_irq_node(struct mp_chip_data *data,
+				int node, int apic, int pin)
+{
+	if (__add_pin_to_irq_node(data, node, apic, pin))
+		panic("IO-APIC: failed to add irq-pin. Can not proceed\n");
+}
+
+static int alloc_irq_from_domain(struct irq_domain *domain, int ioapic, u32 gsi,
+				 struct irq_alloc_info *info)
+{
+	return 0;
+}
+
+static int ioapic_alloc_attr_node(struct irq_alloc_info *info)
+{
+	return (info && info->ioapic_valid) ? info->ioapic_node : NUMA_NO_NODE;
+}
+
+/*
+ * Need special handling for ISA IRQs because there may be multiple IOAPIC pins
+ * sharing the same ISA IRQ number and irqdomain only supports 1:1 mapping
+ * between IOAPIC pin and IRQ number. A typical IOAPIC has 24 pins, pin 0-15 are
+ * used for legacy IRQs and pin 16-23 are used for PCI IRQs (PIRQ A-H).
+ * When ACPI is disabled, only legacy IRQ numbers (IRQ0-15) are available, and
+ * some BIOSes may use MP Interrupt Source records to override IRQ numbers for
+ * PIRQs instead of reprogramming the interrupt routing logic. Thus there may be
+ * multiple pins sharing the same legacy IRQ number when ACPI is disabled.
+ */
+static int alloc_isa_irq_from_domain(struct irq_domain *domain,
+				     int irq, int ioapic, int pin,
+				     struct irq_alloc_info *info)
+{
+	struct mp_chip_data *data;
+	struct irq_data *irq_data = irq_get_irq_data(irq);
+	int node = ioapic_alloc_attr_node(info);
+
+	/*
+	 * Legacy ISA IRQ has already been allocated, just add pin to
+	 * the pin list assoicated with this IRQ and program the IOAPIC
+	 * entry. The IOAPIC entry
+	 */
+	if (irq_data && 0) {
+		pr_info("111 %pS\n", irq_data->chip_data);
+		if (!mp_check_pin_attr(irq, info))
+			return -EBUSY;
+		if (__add_pin_to_irq_node(irq_data->chip_data, node, ioapic,
+					  info->ioapic_pin))
+			return -ENOMEM;
+	} else {
+		irq = __irq_domain_alloc_irqs(domain, irq, 1, node, info, true, NULL);
+		if (irq >= 0) {
+			data = irq_data->chip_data;
+			//data->isa_irq = true;
+		}
+	}
+
+	return irq;
 }
 
 static int mp_map_pin_to_irq(u32 gsi, int idx, int ioapic, int pin,
@@ -914,8 +1000,15 @@ static int mp_map_pin_to_irq(u32 gsi, int idx, int ioapic, int pin,
 	return irq;
 }
 
-/*
- * Map from the pin number to IRQ number
+/**
+ * pin_2_irq		-	Map from the pin number to IRQ number
+ *
+ * @idx:	Index of into the IRETENTRY
+ * @ioapic:	Index of the ioapin
+ * @pin:	pin number
+ * @flags:	allocate or not
+ *
+ * Return:	Lego IRQ number
  */
 static int pin_2_irq(int idx, int ioapic, int pin, unsigned int flags)
 {
@@ -973,6 +1066,20 @@ static void __init setup_IO_APIC_irqs(void)
  */
 #define PIC_IRQS	(1UL << PIC_CASCADE_IR)
 
+unsigned int arch_dynirq_lower_bound(unsigned int from)
+{
+	/*
+	 * dmar_alloc_hwirq() may be called before setup_IO_APIC(), so use
+	 * gsi_top if ioapic_dynirq_base hasn't been initialized yet.
+	 */
+	return ioapic_initialized ? ioapic_dynirq_base : gsi_top;
+}
+
+int mp_irqdomain_ioapic_idx(struct irq_domain *domain)
+{
+	return (int)(long)domain->host_data;
+}
+
 void __init setup_IO_APIC(void)
 {
 	int i;
@@ -1003,7 +1110,10 @@ void __init setup_IO_APIC(void)
 	}
 
 	sync_Arb_IDs();
+
+	/* Setup pin <-> IRQ mapping */
 	setup_IO_APIC_irqs();
+
 #if 0
 	init_IO_APIC_traps();
 	if (nr_legacy_irqs())
@@ -1012,5 +1122,110 @@ void __init setup_IO_APIC(void)
 	ioapic_initialized = 1;
 }
 
+static struct irq_chip ioapic_chip __read_mostly = {
+	.name			= "IO-APIC",
+};
+
+static struct irq_chip ioapic_ir_chip __read_mostly = {
+	.name			= "IR-IO-APIC",
+};
+
+static void mp_irqdomain_get_attr(u32 gsi, struct mp_chip_data *data,
+				  struct irq_alloc_info *info)
+{
+	if (info && info->ioapic_valid) {
+		data->trigger = info->ioapic_trigger;
+		data->polarity = info->ioapic_polarity;
+	} else if (acpi_get_override_irq(gsi, &data->trigger,
+					 &data->polarity) < 0) {
+		/* PCI interrupts are always active low level triggered. */
+		data->trigger = IOAPIC_LEVEL;
+		data->polarity = IOAPIC_POL_LOW;
+	}
+}
+
+static void mp_setup_entry(struct irq_cfg *cfg, struct mp_chip_data *data,
+			   struct IO_APIC_route_entry *entry)
+{
+	memset(entry, 0, sizeof(*entry));
+	entry->delivery_mode = apic->irq_delivery_mode;
+	entry->dest_mode     = apic->irq_dest_mode;
+	entry->dest	     = cfg->dest_apicid;
+	entry->vector	     = cfg->vector;
+	entry->trigger	     = data->trigger;
+	entry->polarity	     = data->polarity;
+	/*
+	 * Mask level triggered irqs. Edge triggered irqs are masked
+	 * by the irq core code in case they fire.
+	 */
+	if (data->trigger == IOAPIC_LEVEL)
+		entry->mask = IOAPIC_MASKED;
+	else
+		entry->mask = IOAPIC_UNMASKED;
+}
+
+static int mp_irqdomain_alloc(struct irq_domain *domain, unsigned int virq,
+			      unsigned int nr_irqs, void *arg)
+{
+	struct irq_data *irq_data;
+	struct mp_chip_data *data;
+	struct irq_alloc_info *info;
+	struct irq_cfg *cfg;
+	int ioapic, ret, pin;
+	unsigned long flags;
+
+	/* Upper IRQ layyer pass it back to us :-; */
+	info = (struct irq_alloc_info *)arg;
+	if (!info || nr_irqs > 1)
+		return -EINVAL;
+
+	irq_data = irq_get_irq_data(virq);
+	BUG_ON(!irq_data);
+
+	ioapic = mp_irqdomain_ioapic_idx(domain);
+	pin = info->ioapic_pin;
+
+	if (irq_find_mapping(domain, (irq_hw_number_t)pin) > 0)
+		return -EEXIST;
+
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	info->ioapic_entry = &data->entry;
+	//ret = irq_domain_alloc_irqs_parent(domain, virq, nr_irqs, info);
+	if (ret < 0) {
+		kfree(data);
+		return ret;
+	}
+
+	INIT_LIST_HEAD(&data->irq_2_pin);
+	irq_data->hwirq = info->ioapic_pin;
+	irq_data->chip = (domain->parent == x86_vector_domain) ?
+			  &ioapic_chip : &ioapic_ir_chip;
+	irq_data->chip_data = data;
+
+	mp_irqdomain_get_attr(mp_pin_to_gsi(ioapic, pin), data, info);
+
+	cfg = irqd_cfg(irq_data);
+	add_pin_to_irq_node(data, ioapic_alloc_attr_node(info), ioapic, pin);
+
+	local_irq_save(flags);
+	if (info->ioapic_entry)
+		mp_setup_entry(cfg, data, info->ioapic_entry);
+	mp_register_handler(virq, data->trigger);
+	if (virq < nr_legacy_irqs())
+		legacy_pic->mask(virq);
+	local_irq_restore(flags);
+
+	apic_printk(APIC_VERBOSE,
+		    "IOAPIC[%d]: Set routing entry (%d-%d -> 0x%x -> IRQ %d Mode:%i Active:%i Dest:%d)\n",
+		    ioapic, mpc_ioapic_id(ioapic), pin, cfg->vector,
+		    virq, data->trigger, data->polarity, cfg->dest_apicid);
+
+	return 0;
+}
+
 const struct irq_domain_ops mp_ioapic_irqdomain_ops = {
+	.alloc		= mp_irqdomain_alloc,
 };

@@ -473,6 +473,20 @@ static inline int irq_desc_get_node(struct irq_desc *desc)
 	return irq_common_data_get_node(&desc->irq_common_data);
 }
 
+/* Architecture may has a lower bound for dynamic IRQ allocation */
+unsigned int arch_dynirq_lower_bound(unsigned int from);
+
+/*
+ * Allocate unique IRQ numbers from Lego
+ */
+int  __irq_number_alloc(int irq, unsigned int from, unsigned int cnt, int node,
+			const struct cpumask *affinity);
+
+/*
+ * Fee unique IRQ numbers to Lego
+ */
+void __irq_number_free(unsigned int irq, unsigned int cnt);
+
 void irq_mark_irq(unsigned int irq);
 void synchronize_irq(unsigned int irq);
 void disable_irq(unsigned int irq);

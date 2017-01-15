@@ -9,6 +9,7 @@
 
 #include <lego/irq.h>
 #include <lego/irqdesc.h>
+#include <lego/irqdomain.h>
 #include <lego/spinlock.h>
 
 #include <asm/apic.h>
@@ -23,6 +24,8 @@ struct apic_chip_data {
 	cpumask_var_t		domain;
 	u8			move_in_progress : 1;
 };
+
+struct irq_domain *x86_vector_domain;
 
 #ifdef CONFIG_X86_IO_APIC
 static struct apic_chip_data legacy_irq_data[NR_IRQS_LEGACY];

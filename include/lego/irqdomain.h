@@ -13,12 +13,15 @@
 #include <lego/types.h>
 
 struct irq_data;
+struct irq_domain;
 
 struct irq_domain_ops {
-	int (*alloc)(unsigned int virq, unsigned int nr_irqs, void *arg);
-	void (*free)(unsigned int virq, unsigned int nr_irqs);
-	void (*activate)(struct irq_data *irq_data);
-	void (*deactivate)( struct irq_data *irq_data);
+	int (*alloc)(struct irq_domain *d, unsigned int virq,
+		     unsigned int nr_irqs, void *arg);
+	void (*free)(struct irq_domain *d, unsigned int virq,
+		     unsigned int nr_irqs);
+	void (*activate)(struct irq_domain *d, struct irq_data *irq_data);
+	void (*deactivate)(struct irq_domain *d, struct irq_data *irq_data);
 };
 
 enum ioapic_domain_type {
@@ -36,14 +39,22 @@ enum ioapic_domain_type {
  *             core code.
  */
 struct irq_domain {
-	const char *name;
-	const struct irq_domain_ops *ops;
-	void *host_data;
-	unsigned int flags;
+	const char			*name;
+	struct irq_domain		*parent;
+	const struct irq_domain_ops	*ops;
+	void				*host_data;
+	unsigned int			flags;
 
-	irq_hw_number_t hwirq_max;
+	irq_hw_number_t			hwirq_max;
 };
 
 unsigned int irq_find_mapping(struct irq_domain *host, irq_hw_number_t hwirq);
+
+int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
+			   unsigned int nr_irqs, int node, void *arg,
+			   bool realloc, const struct cpumask *affinity);
+
+int irq_domain_alloc_IRQ_number(int virq, unsigned int cnt, irq_hw_number_t hwirq,
+			   int node, const struct cpumask *affinity);
 
 #endif /* _LEGO_IRQDOMAIN_H_ */

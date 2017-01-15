@@ -16,6 +16,8 @@
 #include <lego/types.h>
 #include <lego/typecheck.h>
 
+extern int nr_irqs;
+
 struct irq_desc;
 
 static inline void local_irq_disable(void)

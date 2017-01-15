@@ -25,6 +25,23 @@ static inline void *kzalloc(size_t size, gfp_t flags)
 	return kmalloc(size, flags | __GFP_ZERO);
 }
 
+/* TODO: Using node */
+static inline void *kmalloc_node(size_t size, gfp_t flags, int node)
+{
+	return kmalloc(size, flags);
+}
+
+/**
+ * kzalloc_node - allocate zeroed memory from a particular memory node.
+ * @size: how many bytes of memory are required.
+ * @flags: the type of memory to allocate (see kmalloc).
+ * @node: memory node from which to allocate
+ */
+static inline void *kzalloc_node(size_t size, gfp_t flags, int node)
+{
+	return kmalloc_node(size, flags | __GFP_ZERO, node);
+}
+
 void kfree_tmp(size_t size, const void *p);
 
 #endif /* _LEGO_SLAB_H_ */

@@ -37,12 +37,6 @@ struct irq_desc irq_desc[NR_IRQS] __cacheline_aligned = {
 	}
 };
 
-static void __init init_irq_default_affinity(void)
-{
-	if (cpumask_empty(irq_default_affinity))
-		cpumask_setall(irq_default_affinity);
-}
-
 static void desc_smp_init(struct irq_desc *desc, int node,
 			  const struct cpumask *affinity)
 {
@@ -71,6 +65,102 @@ static void desc_set_defaults(unsigned int irq, struct irq_desc *desc, int node,
 	desc->irqs_unhandled = 0;
 	desc->name = NULL;
 	desc_smp_init(desc, node, affinity);
+}
+
+/* Dynamic interrupt handling */
+
+static void free_desc(unsigned int irq)
+{
+	struct irq_desc *desc = irq_to_desc(irq);
+	unsigned long flags;
+
+	spin_lock_irqsave(&desc->lock, flags);
+	desc_set_defaults(irq, desc, irq_desc_get_node(desc), NULL);
+	spin_unlock_irqrestore(&desc->lock, flags);
+}
+
+/**
+ * __irq_number_free
+ * @from:	Free base
+ * @cnt:	number of irqs to free
+ */
+void __irq_number_free(unsigned int from, unsigned int cnt)
+{
+	int i;
+
+	if (from >= NR_IRQS || (from + cnt) > NR_IRQS)
+		return;
+
+	for (i = 0; i < cnt; i++)
+		free_desc(from + i);
+
+	spin_lock(&allocated_irqs_lock);
+	bitmap_clear(allocated_irqs, from, cnt);
+	spin_unlock(&allocated_irqs_lock);
+}
+
+/**
+ * __irq_number_alloc
+ * @irq:	Allocate for specific irq number if irq >= 0
+ * @from:	Start the search from this irq number
+ * @cnt:	Number of consecutive irqs to allocate.
+ * @node:	Preferred node on which the irq descriptor should be allocated
+ * @affinity:	Optional pointer to an affinity mask array of size @cnt which
+ *		hints where the irq descriptors should be allocated and which
+ *		default affinities to use
+ *
+ * Returns the first irq number or error code
+ */
+int  __irq_number_alloc(int irq, unsigned int from, unsigned int cnt, int node,
+			const struct cpumask *affinity)
+{
+	int start, ret;
+
+	if (!cnt)
+		return -EINVAL;
+
+	if (irq >= 0) {
+		if (from > irq)
+			return -EINVAL;
+		from = irq;
+	} else {
+		/*
+		 * For interrupts which are freely allocated the
+		 * architecture can force a lower bound to the @from
+		 * argument. x86 uses this to exclude the GSI space.
+		 */
+		from = arch_dynirq_lower_bound(from);
+	}
+
+	spin_lock(&allocated_irqs_lock);
+	start = bitmap_find_next_zero_area(allocated_irqs, NR_IRQS,
+					   from, cnt, 0);
+
+	/* Already used by another device */
+	if (irq >= 0 && start != irq) {
+		ret = -EEXIST;
+		goto err;
+	}
+
+	if (start + cnt > NR_IRQS) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	bitmap_set(allocated_irqs, start, cnt);
+	spin_unlock(&allocated_irqs_lock);
+
+	return start;
+
+err:
+	spin_unlock(&allocated_irqs_lock);
+	return ret;
+}
+
+static void __init init_irq_default_affinity(void)
+{
+	if (cpumask_empty(irq_default_affinity))
+		cpumask_setall(irq_default_affinity);
 }
 
 void __init irq_init(void)
