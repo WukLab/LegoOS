@@ -24,7 +24,7 @@ extern asmlinkage void reboot_interrupt(struct pt_regs *regs);
 
 extern asmlinkage unsigned int do_IRQ(struct pt_regs *regs);
 
-extern struct irq_domain *x86_vector_domain;
+extern struct irq_domain x86_vector_domain;
 
 #ifdef CONFIG_X86_LOCAL_APIC
 struct irq_data;

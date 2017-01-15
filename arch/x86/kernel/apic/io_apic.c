@@ -939,8 +939,8 @@ static int alloc_isa_irq_from_domain(struct irq_domain *domain,
 	 * the pin list assoicated with this IRQ and program the IOAPIC
 	 * entry. The IOAPIC entry
 	 */
-	if (irq_data && 0) {
-		pr_info("111 %pS\n", irq_data->chip_data);
+	if (irq_data && irq_data->parent_data) {
+		pr_info("%s: 111\n", __func__);
 		if (!mp_check_pin_attr(irq, info))
 			return -EBUSY;
 		if (__add_pin_to_irq_node(irq_data->chip_data, node, ioapic,
@@ -950,7 +950,7 @@ static int alloc_isa_irq_from_domain(struct irq_domain *domain,
 		irq = __irq_domain_alloc_irqs(domain, irq, 1, node, info, true, NULL);
 		if (irq >= 0) {
 			data = irq_data->chip_data;
-			//data->isa_irq = true;
+			data->isa_irq = true;
 		}
 	}
 
@@ -1098,15 +1098,18 @@ void __init setup_IO_APIC(void)
 		if (cfg->type == IOAPIC_DOMAIN_INVALID)
 			continue;
 
-		if (cfg->type == IOAPIC_DOMAIN_LEGACY ||
-		    cfg->type == IOAPIC_DOMAIN_STRICT)
-		    	ioapic_dynirq_base = max(ioapic_dynirq_base, gsi_cfg->gsi_end + 1);
-
 		ip->irqdomain = kzalloc(sizeof(struct irq_domain), GFP_KERNEL);
 		BUG_ON(!ip->irqdomain);
 		ip->irqdomain->ops = cfg->ops;
 		ip->irqdomain->host_data = (void *)(unsigned long)i;
 		ip->irqdomain->hwirq_max = hwirqs;
+
+		/* Just one single parent */
+		ip->irqdomain->parent = &x86_vector_domain;
+
+		if (cfg->type == IOAPIC_DOMAIN_LEGACY ||
+		    cfg->type == IOAPIC_DOMAIN_STRICT)
+		    	ioapic_dynirq_base = max(ioapic_dynirq_base, gsi_cfg->gsi_end + 1);
 	}
 
 	sync_Arb_IDs();
@@ -1179,8 +1182,9 @@ static int mp_irqdomain_alloc(struct irq_domain *domain, unsigned int virq,
 	if (!info || nr_irqs > 1)
 		return -EINVAL;
 
-	irq_data = irq_get_irq_data(virq);
-	BUG_ON(!irq_data);
+	irq_data = irq_domain_get_irq_data(domain, virq);
+	if (!irq_data)
+		return -EINVAL;
 
 	ioapic = mp_irqdomain_ioapic_idx(domain);
 	pin = info->ioapic_pin;
@@ -1201,7 +1205,7 @@ static int mp_irqdomain_alloc(struct irq_domain *domain, unsigned int virq,
 
 	INIT_LIST_HEAD(&data->irq_2_pin);
 	irq_data->hwirq = info->ioapic_pin;
-	irq_data->chip = (domain->parent == x86_vector_domain) ?
+	irq_data->chip = (domain->parent == &x86_vector_domain) ?
 			  &ioapic_chip : &ioapic_ir_chip;
 	irq_data->chip_data = data;
 

@@ -8,10 +8,29 @@
  */
 
 #include <lego/irq.h>
+#include <lego/slab.h>
 #include <lego/irqdesc.h>
 #include <lego/irqdomain.h>
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
+
+static struct irq_domain *irq_default_domain;
+
+/**
+ * irq_set_default_host() - Set a "default" irq domain
+ * @domain: default domain pointer
+ *
+ * For convenience, it's possible to set a "default" domain that will be used
+ * whenever NULL is passed to irq_create_mapping(). It makes life easier for
+ * platforms that want to manipulate a few hard coded interrupt numbers that
+ * aren't properly represented in the device-tree.
+ */
+void irq_set_default_host(struct irq_domain *domain)
+{
+	pr_debug("Default domain set to @0x%p\n", domain);
+
+	irq_default_domain = domain;
+}
 
 /**
  * irq_find_mapping() - Find a Lego irq from an hw irq number.
@@ -44,6 +63,66 @@ int irq_domain_alloc_IRQ_number(int virq, unsigned int cnt, irq_hw_number_t hwir
 	return virq;
 }
 
+static void irq_domain_free_irq_data(unsigned int virq, unsigned int nr_irqs)
+{
+	struct irq_data *irq_data, *tmp;
+	int i;
+
+	for (i = 0; i < nr_irqs; i++) {
+		irq_data = irq_get_irq_data(virq + i);
+		tmp = irq_data->parent_data;
+		irq_data->parent_data = NULL;
+		irq_data->domain = NULL;
+
+		while (tmp) {
+			irq_data = tmp;
+			tmp = tmp->parent_data;
+			kfree(irq_data);
+		}
+	}
+}
+
+static struct irq_data *irq_domain_insert_irq_data(struct irq_domain *domain,
+						   struct irq_data *child)
+{
+	struct irq_data *irq_data;
+
+	irq_data = kzalloc_node(sizeof(*irq_data), GFP_KERNEL,
+				irq_data_get_node(child));
+	if (irq_data) {
+		child->parent_data = irq_data;
+		irq_data->irq = child->irq;
+		irq_data->common = child->common;
+		irq_data->domain = domain;
+	}
+
+	return irq_data;
+}
+
+static int irq_domain_alloc_irq_data(struct irq_domain *domain,
+				     unsigned int virq, unsigned int nr_irqs)
+{
+	struct irq_data *irq_data;
+	struct irq_domain *parent;
+	int i;
+
+	/* The outermost irq_data is embedded in struct irq_desc */
+	for (i = 0; i < nr_irqs; i++) {
+		irq_data = irq_get_irq_data(virq + i);
+		irq_data->domain = domain;
+
+		for (parent = domain->parent; parent; parent = parent->parent) {
+			irq_data = irq_domain_insert_irq_data(parent, irq_data);
+			if (!irq_data) {
+				irq_domain_free_irq_data(virq, i + 1);
+				return -ENOMEM;
+			}
+		}
+	}
+
+	return 0;
+}
+
 /**
  * __irq_domain_alloc_irqs - Allocate IRQs from domain
  * @domain:	domain to allocate from
@@ -70,12 +149,12 @@ int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 			    unsigned int nr_irqs, int node, void *arg,
 			    bool realloc, const struct cpumask *affinity)
 {
-	int virq, ret;
+	int virq, ret, i;
 
-	if (unlikely(!domain)) {
-		WARN(1, "domain is NULL, can not allocate IRQ\n");
-		return -EINVAL;
-
+	if (domain == NULL) {
+		domain = irq_default_domain;
+		if (WARN(!domain, "domain is NULL; cannot allocate IRQ\n"))
+			return -EINVAL;
 	}
 
 	if (!domain->ops->alloc) {
@@ -95,6 +174,12 @@ int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 		}
 	}
 
+	if (irq_domain_alloc_irq_data(domain, virq, nr_irqs)) {
+		pr_debug("cannot allocate memory for IRQ%d\n", virq);
+		ret = -ENOMEM;
+		goto out;
+	}
+
 	/*
 	 * Domain chip's callback
 	 * It will allocate irq_data->chip_data and
@@ -102,13 +187,35 @@ int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 	 */
 	ret = domain->ops->alloc(domain, virq, nr_irqs, arg);
 	if (ret < 0)
-		goto err;
+		goto out_free;
 
 	/* TODO: insert into some irq mapping map */
+	for (i = 0; i < nr_irqs; i++)
+		;
 
 	return virq;
 
-err:
+out_free:
+	irq_domain_free_irq_data(virq, nr_irqs);
+out:
 	__irq_number_free(virq, nr_irqs);
 	return ret;
+}
+
+/**
+ * irq_domain_get_irq_data - Get irq_data associated with @virq and @domain
+ * @domain:	domain to match
+ * @virq:	IRQ number to get irq_data
+ */
+struct irq_data *irq_domain_get_irq_data(struct irq_domain *domain,
+					 unsigned int virq)
+{
+	struct irq_data *irq_data;
+
+	for (irq_data = irq_get_irq_data(virq); irq_data;
+	     irq_data = irq_data->parent_data)
+		if (irq_data->domain == domain)
+			return irq_data;
+
+	return NULL;
 }

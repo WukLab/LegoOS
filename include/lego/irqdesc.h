@@ -85,6 +85,10 @@ struct irq_common_data {
  * @hwirq:		hardware interrupt number, local to the interrupt domain
  * @common:		point to data shared by all irqchips
  * @chip:		low level interrupt hardware access
+ * @domain:		Interrupt translation domain; responsible for mapping
+ *			between hwirq number and lego irq number.
+ * @parent_data:	pointer to parent struct irq_data to support hierarchy
+ *			irq_domain
  * @chip_data:		platform-specific per-chip private data for the chip
  *			methods, to allow shared chip implementations
  */
@@ -94,6 +98,8 @@ struct irq_data {
 	unsigned long		hwirq;
 	struct irq_common_data	*common;
 	struct irq_chip		*chip;
+	struct irq_domain	*domain;
+	struct irq_data		*parent_data;
 	void			*chip_data;
 };
 
@@ -125,8 +131,6 @@ struct irqaction {
 
 /*
  * IRQ line status.
- *
- * Bits 0-7 are the same as the IRQF_* bits in linux/interrupt.h
  *
  * IRQ_TYPE_NONE		- default, unspecified type
  * IRQ_TYPE_EDGE_RISING		- rising edge triggered
@@ -466,6 +470,11 @@ static inline int irq_common_data_get_node(struct irq_common_data *d)
 #else
 	return 0;
 #endif
+}
+
+static inline int irq_data_get_node(struct irq_data *d)
+{
+	return irq_common_data_get_node(d->common);
 }
 
 static inline int irq_desc_get_node(struct irq_desc *desc)

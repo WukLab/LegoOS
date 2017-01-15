@@ -57,4 +57,9 @@ int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 int irq_domain_alloc_IRQ_number(int virq, unsigned int cnt, irq_hw_number_t hwirq,
 			   int node, const struct cpumask *affinity);
 
+void irq_set_default_host(struct irq_domain *domain);
+
+extern struct irq_data *irq_domain_get_irq_data(struct irq_domain *domain,
+						unsigned int virq);
+
 #endif /* _LEGO_IRQDOMAIN_H_ */

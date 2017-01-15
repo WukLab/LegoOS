@@ -25,8 +25,6 @@ struct apic_chip_data {
 	u8			move_in_progress : 1;
 };
 
-struct irq_domain *x86_vector_domain;
-
 #ifdef CONFIG_X86_IO_APIC
 static struct apic_chip_data legacy_irq_data[NR_IRQS_LEGACY];
 #endif
@@ -51,6 +49,28 @@ struct irq_cfg *irq_cfg(unsigned int irq)
 {
 	return irqd_cfg(irq_get_irq_data(irq));
 }
+
+static int x86_vector_alloc_irqs(struct irq_domain *domain, unsigned int virq,
+				 unsigned int nr_irqs, void *arg)
+{
+	pr_info("%s\n",__func__);
+	return 0;
+}
+
+static void x86_vector_free_irqs(struct irq_domain *domain,
+				 unsigned int virq, unsigned int nr_irqs)
+{
+}
+
+static const struct irq_domain_ops x86_vector_domain_ops = {
+	.alloc	= x86_vector_alloc_irqs,
+	.free	= x86_vector_free_irqs,
+};
+
+struct irq_domain x86_vector_domain = {
+	.name	= "x86-vector",
+	.ops	= &x86_vector_domain_ops,
+};
 
 /*
  * This functin link or allocate data structures used
@@ -78,6 +98,8 @@ void __init x86_apic_ioapic_init(void)
 		 */
 		irq_set_chip_data(i, data);
 	}
+
+	irq_set_default_host(&x86_vector_domain);
 
 	arch_ioapic_init();
 }
