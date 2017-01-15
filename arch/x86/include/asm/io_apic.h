@@ -14,6 +14,44 @@
 #include <asm/apic_types.h>
 #include <asm/irq_vectors.h>
 
+#include <lego/irqdomain.h>
+
+enum irq_alloc_type {
+	X86_IRQ_ALLOC_TYPE_IOAPIC = 1,
+	X86_IRQ_ALLOC_TYPE_HPET,
+	X86_IRQ_ALLOC_TYPE_MSI,
+	X86_IRQ_ALLOC_TYPE_MSIX,
+	X86_IRQ_ALLOC_TYPE_DMAR,
+	X86_IRQ_ALLOC_TYPE_UV,
+};
+
+struct irq_alloc_info {
+	enum irq_alloc_type	type;
+	u32			flags;
+	const struct cpumask	*mask;	/* CPU mask for vector allocation */
+	union {
+		int		unused;
+#ifdef	CONFIG_HPET_TIMER
+		struct {
+			int		hpet_id;
+			int		hpet_index;
+			void		*hpet_data;
+		};
+#endif
+#ifdef	CONFIG_X86_IO_APIC
+		struct {
+			int		ioapic_id;
+			int		ioapic_pin;
+			int		ioapic_node;
+			u32		ioapic_trigger : 1;
+			u32		ioapic_polarity : 1;
+			u32		ioapic_valid : 1;
+			struct IO_APIC_route_entry *ioapic_entry;
+		};
+#endif
+	};
+};
+
 /* I/O Unit Redirection Table */
 #define IO_APIC_REDIR_VECTOR_MASK	0x000FF
 #define IO_APIC_REDIR_DEST_LOGICAL	0x00800
@@ -173,29 +211,12 @@ struct mpc_ioapic {
 	unsigned int			apicaddr;
 };
 
-struct irq_data;
-
-struct irq_domain_ops {
-	int (*alloc)(unsigned int virq, unsigned int nr_irqs, void *arg);
-	void (*free)(unsigned int virq, unsigned int nr_irqs);
-	void (*activate)(struct irq_data *irq_data);
-	void (*deactivate)( struct irq_data *irq_data);
-};
-
-enum ioapic_domain_type {
-	IOAPIC_DOMAIN_INVALID,
-	IOAPIC_DOMAIN_LEGACY,
-	IOAPIC_DOMAIN_STRICT,
-	IOAPIC_DOMAIN_DYNAMIC,
-};
-
 struct ioapic_domain_cfg {
 	enum ioapic_domain_type		type;
 	const struct irq_domain_ops	*ops;
 };
 
 extern const struct irq_domain_ops mp_ioapic_irqdomain_ops;
-
 
 struct ioapic {
 	/* # of IRQ routing registers */
@@ -213,6 +234,7 @@ struct ioapic {
 	/* IO APIC gsi routing info */
 	struct mp_ioapic_gsi		gsi_config;
 
+	struct irq_domain		*irqdomain;
 	struct ioapic_domain_cfg	irqdomain_cfg;
 
 	struct resource			*iomem_res;
