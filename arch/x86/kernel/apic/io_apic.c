@@ -23,9 +23,12 @@
 #include <lego/irqchip.h>
 #include <lego/irqdomain.h>
 #include <lego/slab.h>
+#include <lego/time.h>
+#include <lego/delay.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/bitmap.h>
+#include <lego/jiffies.h>
 #include <lego/resource.h>
 #include <lego/spinlock.h>
 
@@ -974,7 +977,6 @@ static int alloc_isa_irq_from_domain(struct irq_domain *domain,
 	 * entry. The IOAPIC entry
 	 */
 	if (irq_data && irq_data->parent_data) {
-		pr_info("%s: 111\n", __func__);
 		if (!mp_check_pin_attr(irq, info))
 			return -EBUSY;
 		if (__add_pin_to_irq_node(irq_data->chip_data, node, ioapic,
@@ -1157,8 +1159,6 @@ static int mp_alloc_timer_irq(int ioapic, int pin)
 	int irq = -1;
 	struct irq_domain *domain = mp_ioapic_irqdomain(ioapic);
 
-	pr_info("%s\n", __func__);
-
 	if (domain) {
 		struct irq_alloc_info info;
 
@@ -1172,6 +1172,61 @@ static int mp_alloc_timer_irq(int ioapic, int pin)
 	}
 
 	return irq;
+}
+
+/*
+ * There is a nasty bug in some older SMP boards, their mptable lies
+ * about the timer IRQ. We do the following to work around the situation:
+ *
+ *	- timer IRQ defaults to IO-APIC IRQ
+ *	- if this function detects that timer IRQs are defunct, then we fall
+ *	  back to ISA timer IRQs
+ */
+static int __init timer_irq_works(void)
+{
+	unsigned long t1 = jiffies;
+	unsigned long flags;
+
+	local_save_flags(flags);
+	local_irq_enable();
+	/* Let ten ticks pass... */
+	mdelay((10 * 1000) / HZ);
+	local_irq_restore(flags);
+
+	/*
+	 * Expect a few ticks at least, to be sure some possible
+	 * glue logic does not lock up after one or two first
+	 * ticks in a non-ExtINT mode.  Also the local APIC
+	 * might have cached one ExtINT interrupt.  Finally, at
+	 * least one tick may be lost due to delays.
+	 */
+
+	/* jiffies wrap? */
+	if (time_after(jiffies, t1 + 4))
+		return 1;
+	return 1;
+}
+
+/*
+ * Reroute an IRQ to a different pin.
+ */
+static void __init replace_pin_at_irq_node(struct mp_chip_data *data, int node,
+					   int oldapic, int oldpin,
+					   int newapic, int newpin)
+{
+	struct irq_pin_list *entry;
+
+	for_each_irq_pin(entry, data->irq_2_pin) {
+		if (entry->apic == oldapic && entry->pin == oldpin) {
+			entry->apic = newapic;
+			entry->pin = newpin;
+			/* every one is different, right? */
+			return;
+		}
+	}
+
+	/* old apic/pin didn't exist, so just add new ones */
+	add_pin_to_irq_node(data, node, newapic, newpin);
 }
 
 /*
@@ -1219,6 +1274,77 @@ static inline void __init check_timer(void)
 	apic_printk(APIC_QUIET, "..TIMER: vector=0x%02X "
 		    "apic1=%d pin1=%d apic2=%d pin2=%d\n",
 		    cfg->vector, apic1, pin1, apic2, pin2);
+
+	/*
+	 * Some BIOS writers are clueless and report the ExtINTA
+	 * I/O APIC input from the cascaded 8259A as the timer
+	 * interrupt input.  So just in case, if only one pin
+	 * was found above, try it both directly and through the
+	 * 8259A.
+	 */
+	if (pin1 == -1) {
+		pin1 = pin2;
+		apic1 = apic2;
+		no_pin1 = 1;
+	} else if (pin2 == -1) {
+		pin2 = pin1;
+		apic2 = apic1;
+	}
+
+	if (pin1 != -1) {
+		/* Ok, does IRQ0 through the IOAPIC work? */
+		if (no_pin1) {
+			mp_alloc_timer_irq(apic1, pin1);
+		} else {
+			/*
+			 * for edge trigger, it's already unmasked,
+			 * so only need to unmask if it is level-trigger
+			 * do we really have level trigger timer?
+			 */
+			int idx;
+			idx = find_irq_entry(apic1, pin1, mp_INT);
+			if (idx != -1 && irq_trigger(idx))
+				unmask_ioapic_irq(irq_get_chip_data(0));
+		}
+
+		irq_domain_activate_irq(irq_data);
+
+		if (timer_irq_works())
+			goto out;
+
+		local_irq_disable();
+		clear_IO_APIC_pin(apic1, pin1);
+		if (!no_pin1)
+			apic_printk(APIC_QUIET, "..MP-BIOS bug: "
+				    "8254 timer not connected to IO-APIC\n");
+
+		apic_printk(APIC_QUIET, KERN_INFO "...trying to set up timer "
+			    "(IRQ0) through the 8259A ...\n");
+		apic_printk(APIC_QUIET, KERN_INFO
+			    "..... (found apic %d pin %d) ...\n", apic2, pin2);
+		/*
+		 * legacy devices should be connected to IO APIC #0
+		 */
+		replace_pin_at_irq_node(data, node, apic1, pin1, apic2, pin2);
+		irq_domain_activate_irq(irq_data);
+		legacy_pic->unmask(0);
+		if (timer_irq_works()) {
+			apic_printk(APIC_QUIET, KERN_INFO "....... works.\n");
+			goto out;
+		}
+		/*
+		 * Cleanup, just in case ...
+		 */
+		local_irq_disable();
+		legacy_pic->mask(0);
+		clear_IO_APIC_pin(apic2, pin2);
+		apic_printk(APIC_QUIET, KERN_INFO "....... failed.\n");
+	}
+
+	panic("IO-APIC + timer doesn't work!");
+
+out:
+	local_irq_restore(flags);
 }
 
 void __init setup_IO_APIC(void)
@@ -1317,7 +1443,7 @@ static int mp_irqdomain_alloc(struct irq_domain *domain, unsigned int virq,
 	int ioapic, ret, pin;
 	unsigned long flags;
 
-	/* Upper IRQ layyer pass it back to us :-; */
+	/* Upper IRQ layer pass it back to us :-; */
 	info = (struct irq_alloc_info *)arg;
 	if (!info || nr_irqs > 1)
 		return -EINVAL;
@@ -1381,6 +1507,20 @@ static int mp_irqdomain_alloc(struct irq_domain *domain, unsigned int virq,
 	return 0;
 }
 
+void mp_irqdomain_activate(struct irq_domain *domain,
+			   struct irq_data *irq_data)
+{
+	unsigned long flags;
+	struct irq_pin_list *entry;
+	struct mp_chip_data *data = irq_data->chip_data;
+
+	spin_lock_irqsave(&ioapic_lock, flags);
+	for_each_irq_pin(entry, data->irq_2_pin)
+		__ioapic_write_entry(entry->apic, entry->pin, data->entry);
+	spin_unlock_irqrestore(&ioapic_lock, flags);
+}
+
 const struct irq_domain_ops mp_ioapic_irqdomain_ops = {
 	.alloc		= mp_irqdomain_alloc,
+	.activate	= mp_irqdomain_activate,
 };

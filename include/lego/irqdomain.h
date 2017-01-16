@@ -68,4 +68,6 @@ extern int irq_domain_alloc_irqs_parent(struct irq_domain *domain,
 
 extern void irq_domain_reset_irq_data(struct irq_data *irq_data);
 
+extern void irq_domain_activate_irq(struct irq_data *irq_data);
+
 #endif /* _LEGO_IRQDOMAIN_H_ */

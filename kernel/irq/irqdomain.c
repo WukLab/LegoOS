@@ -256,3 +256,23 @@ void irq_domain_reset_irq_data(struct irq_data *irq_data)
 	irq_data->chip = &no_irq_chip;
 	irq_data->chip_data = NULL;
 }
+
+/**
+ * irq_domain_activate_irq - Call domain_ops->activate recursively to activate
+ *			     interrupt
+ * @irq_data:	outermost irq_data associated with interrupt
+ *
+ * This is the second step to call domain_ops->activate to program interrupt
+ * controllers, so the interrupt could actually get delivered.
+ */
+void irq_domain_activate_irq(struct irq_data *irq_data)
+{
+	if (irq_data && irq_data->domain) {
+		struct irq_domain *domain = irq_data->domain;
+
+		if (irq_data->parent_data)
+			irq_domain_activate_irq(irq_data->parent_data);
+		if (domain->ops->activate)
+			domain->ops->activate(domain, irq_data);
+	}
+}
