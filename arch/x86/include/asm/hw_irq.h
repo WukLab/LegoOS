@@ -66,4 +66,7 @@ extern char irq_entries_start[];
 
 void ack_bad_irq(unsigned int irq);
 
+struct pt_regs *get_irq_regs(void);
+struct pt_regs *set_irq_regs(struct pt_regs *new_regs);
+
 #endif /* _ASM_X86_HW_IRQ_H_ */

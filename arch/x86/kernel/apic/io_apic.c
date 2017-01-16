@@ -74,6 +74,9 @@ u32 gsi_top;
 
 int nr_ioapics;
 
+atomic_t irq_err_count;
+atomic_t irq_mis_count;
+
 static inline struct irq_domain *mp_ioapic_irqdomain(int ioapic)
 {
 	return ioapics[ioapic].irqdomain;
@@ -554,6 +557,17 @@ static void __eoi_ioapic_pin(int apic, int pin, int vector)
 	}
 }
 
+static void eoi_ioapic_pin(int vector, struct mp_chip_data *data)
+{
+	unsigned long flags;
+	struct irq_pin_list *entry;
+
+	spin_lock_irqsave(&ioapic_lock, flags);
+	for_each_irq_pin(entry, data->irq_2_pin)
+		__eoi_ioapic_pin(entry->apic, entry->pin, vector);
+	spin_unlock_irqrestore(&ioapic_lock, flags);
+}
+
 static void clear_IO_APIC_pin(unsigned int apic, unsigned int pin)
 {
 	struct IO_APIC_route_entry entry;
@@ -882,6 +896,19 @@ static void ioapic_copy_alloc_attr(struct irq_alloc_info *dst,
 
 static void mp_register_handler(unsigned int irq, unsigned long trigger)
 {
+	irq_flow_handler_t hdl;
+	bool fasteoi;
+
+	if (trigger) {
+		irq_set_status_flags(irq, IRQ_LEVEL);
+		fasteoi = true;
+	} else {
+		irq_clear_status_flags(irq, IRQ_LEVEL);
+		fasteoi = false;
+	}
+
+	hdl = fasteoi ? handle_fasteoi_irq : handle_edge_irq;
+	__irq_set_handler(irq, hdl, 0, fasteoi ? "fasteoi" : "edge");
 }
 
 static bool mp_check_pin_attr(int irq, struct irq_alloc_info *info)
@@ -1391,12 +1418,247 @@ void __init setup_IO_APIC(void)
 	ioapic_initialized = 1;
 }
 
+static void io_apic_sync(struct irq_pin_list *entry)
+{
+	/*
+	 * Synchronize the IO-APIC and the CPU by doing
+	 * a dummy read from the IO-APIC
+	 */
+	struct io_apic __iomem *io_apic;
+
+	io_apic = io_apic_base(entry->apic);
+	readl(&io_apic->data);
+}
+
+static void mask_ioapic_irq(struct irq_data *irq_data)
+{
+	struct mp_chip_data *data = irq_data->chip_data;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ioapic_lock, flags);
+	io_apic_modify_irq(data, ~0, IO_APIC_REDIR_MASKED, &io_apic_sync);
+	spin_unlock_irqrestore(&ioapic_lock, flags);
+}
+
+/*
+ * Starting up a edge-triggered IO-APIC interrupt is
+ * nasty - we need to make sure that we get the edge.
+ * If it is already asserted for some reason, we need
+ * return 1 to indicate that is was pending.
+ *
+ * This is not complete - we should be able to fake
+ * an edge even if it isn't on the 8259A...
+ */
+static unsigned int startup_ioapic_irq(struct irq_data *data)
+{
+	int was_pending = 0, irq = data->irq;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ioapic_lock, flags);
+	if (irq < nr_legacy_irqs()) {
+		legacy_pic->mask(irq);
+		if (legacy_pic->irq_pending(irq))
+			was_pending = 1;
+	}
+	__unmask_ioapic(data->chip_data);
+	spin_unlock_irqrestore(&ioapic_lock, flags);
+
+	return was_pending;
+}
+
+static bool io_apic_level_ack_pending(struct mp_chip_data *data)
+{
+	struct irq_pin_list *entry;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ioapic_lock, flags);
+	for_each_irq_pin(entry, data->irq_2_pin) {
+		unsigned int reg;
+		int pin;
+
+		pin = entry->pin;
+		reg = io_apic_read(entry->apic, 0x10 + pin*2);
+		/* Is the remote IRR bit set? */
+		if (reg & IO_APIC_REDIR_REMOTE_IRR) {
+			spin_unlock_irqrestore(&ioapic_lock, flags);
+			return true;
+		}
+	}
+	spin_unlock_irqrestore(&ioapic_lock, flags);
+
+	return false;
+}
+
+static inline bool ioapic_irqd_mask(struct irq_data *data)
+{
+	/* If we are moving the irq we need to mask it */
+	if (unlikely(irqd_is_setaffinity_pending(data))) {
+		mask_ioapic_irq(data);
+		return true;
+	}
+	return false;
+}
+
+static inline void ioapic_irqd_unmask(struct irq_data *data, bool masked)
+{
+	if (unlikely(masked)) {
+		/* Only migrate the irq if the ack has been received.
+		 *
+		 * On rare occasions the broadcast level triggered ack gets
+		 * delayed going to ioapics, and if we reprogram the
+		 * vector while Remote IRR is still set the irq will never
+		 * fire again.
+		 *
+		 * To prevent this scenario we read the Remote IRR bit
+		 * of the ioapic.  This has two effects.
+		 * - On any sane system the read of the ioapic will
+		 *   flush writes (and acks) going to the ioapic from
+		 *   this cpu.
+		 * - We get to see if the ACK has actually been delivered.
+		 *
+		 * Based on failed experiments of reprogramming the
+		 * ioapic entry from outside of irq context starting
+		 * with masking the ioapic entry and then polling until
+		 * Remote IRR was clear before reprogramming the
+		 * ioapic I don't trust the Remote IRR bit to be
+		 * completey accurate.
+		 *
+		 * However there appears to be no other way to plug
+		 * this race, so if the Remote IRR bit is not
+		 * accurate and is causing problems then it is a hardware bug
+		 * and you can go talk to the chipset vendor about it.
+		 */
+		if (!io_apic_level_ack_pending(data->chip_data))
+			irq_move_masked_irq(data);
+		unmask_ioapic_irq(data);
+	}
+}
+
+static void ioapic_ack_level(struct irq_data *irq_data)
+{
+	struct irq_cfg *cfg = irqd_cfg(irq_data);
+	unsigned long v;
+	bool masked;
+	int i;
+
+	irq_complete_move(cfg);
+	masked = ioapic_irqd_mask(irq_data);
+
+	/*
+	 * It appears there is an erratum which affects at least version 0x11
+	 * of I/O APIC (that's the 82093AA and cores integrated into various
+	 * chipsets).  Under certain conditions a level-triggered interrupt is
+	 * erroneously delivered as edge-triggered one but the respective IRR
+	 * bit gets set nevertheless.  As a result the I/O unit expects an EOI
+	 * message but it will never arrive and further interrupts are blocked
+	 * from the source.  The exact reason is so far unknown, but the
+	 * phenomenon was observed when two consecutive interrupt requests
+	 * from a given source get delivered to the same CPU and the source is
+	 * temporarily disabled in between.
+	 *
+	 * A workaround is to simulate an EOI message manually.  We achieve it
+	 * by setting the trigger mode to edge and then to level when the edge
+	 * trigger mode gets detected in the TMR of a local APIC for a
+	 * level-triggered interrupt.  We mask the source for the time of the
+	 * operation to prevent an edge-triggered interrupt escaping meanwhile.
+	 * The idea is from Manfred Spraul.  --macro
+	 *
+	 * Also in the case when cpu goes offline, fixup_irqs() will forward
+	 * any unhandled interrupt on the offlined cpu to the new cpu
+	 * destination that is handling the corresponding interrupt. This
+	 * interrupt forwarding is done via IPI's. Hence, in this case also
+	 * level-triggered io-apic interrupt will be seen as an edge
+	 * interrupt in the IRR. And we can't rely on the cpu's EOI
+	 * to be broadcasted to the IO-APIC's which will clear the remoteIRR
+	 * corresponding to the level-triggered interrupt. Hence on IO-APIC's
+	 * supporting EOI register, we do an explicit EOI to clear the
+	 * remote IRR and on IO-APIC's which don't have an EOI register,
+	 * we use the above logic (mask+edge followed by unmask+level) from
+	 * Manfred Spraul to clear the remote IRR.
+	 */
+	i = cfg->vector;
+	v = apic_read(APIC_TMR + ((i & ~0x1f) >> 1));
+
+	/*
+	 * We must acknowledge the irq before we move it or the acknowledge will
+	 * not propagate properly.
+	 */
+	ack_APIC_irq();
+
+	/*
+	 * Tail end of clearing remote IRR bit (either by delivering the EOI
+	 * message via io-apic EOI register write or simulating it using
+	 * mask+edge followed by unnask+level logic) manually when the
+	 * level triggered interrupt is seen as the edge triggered interrupt
+	 * at the cpu.
+	 */
+	if (!(v & (1 << (i & 0x1f)))) {
+		atomic_inc(&irq_mis_count);
+		eoi_ioapic_pin(cfg->vector, irq_data->chip_data);
+	}
+
+	ioapic_irqd_unmask(irq_data, masked);
+}
+
+static int ioapic_set_affinity(struct irq_data *irq_data,
+			       const struct cpumask *mask, bool force)
+{
+	struct irq_data *parent = irq_data->parent_data;
+	struct mp_chip_data *data = irq_data->chip_data;
+	struct irq_pin_list *entry;
+	struct irq_cfg *cfg;
+	unsigned long flags;
+	int ret;
+
+	ret = parent->chip->irq_set_affinity(parent, mask, force);
+	spin_lock_irqsave(&ioapic_lock, flags);
+	if (ret >= 0 && ret != IRQ_SET_MASK_OK_DONE) {
+		cfg = irqd_cfg(irq_data);
+		data->entry.dest = cfg->dest_apicid;
+		data->entry.vector = cfg->vector;
+		for_each_irq_pin(entry, data->irq_2_pin)
+			__ioapic_write_entry(entry->apic, entry->pin,
+					     data->entry);
+	}
+	spin_unlock_irqrestore(&ioapic_lock, flags);
+
+	return ret;
+}
+
+static void ioapic_ir_ack_level(struct irq_data *irq_data)
+{
+	struct mp_chip_data *data = irq_data->chip_data;
+
+	/*
+	 * Intr-remapping uses pin number as the virtual vector
+	 * in the RTE. Actual vector is programmed in
+	 * intr-remapping table entry. Hence for the io-apic
+	 * EOI we use the pin number.
+	 */
+	ack_APIC_irq();
+	eoi_ioapic_pin(data->entry.vector, data);
+}
+
 static struct irq_chip ioapic_chip __read_mostly = {
 	.name			= "IO-APIC",
+	.irq_startup		= startup_ioapic_irq,
+	.irq_mask		= mask_ioapic_irq,
+	.irq_unmask		= unmask_ioapic_irq,
+	.irq_ack		= irq_chip_ack_parent,
+	.irq_eoi		= ioapic_ack_level,
+	.irq_set_affinity	= ioapic_set_affinity,
+	.flags			= IRQCHIP_SKIP_SET_WAKE,
 };
 
 static struct irq_chip ioapic_ir_chip __read_mostly = {
 	.name			= "IR-IO-APIC",
+	.irq_startup		= startup_ioapic_irq,
+	.irq_mask		= mask_ioapic_irq,
+	.irq_unmask		= unmask_ioapic_irq,
+	.irq_ack		= irq_chip_ack_parent,
+	.irq_eoi		= ioapic_ir_ack_level,
+	.irq_set_affinity	= ioapic_set_affinity,
+	.flags			= IRQCHIP_SKIP_SET_WAKE,
 };
 
 static void mp_irqdomain_get_attr(u32 gsi, struct mp_chip_data *data,

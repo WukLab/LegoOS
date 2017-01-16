@@ -137,8 +137,22 @@ typedef	void (*irq_flow_handler_t)(struct irq_desc *desc);
  */
 void handle_level_irq(struct irq_desc *desc);
 void handle_bad_irq(struct irq_desc *desc);
+void handle_fasteoi_irq(struct irq_desc *desc);
+void handle_edge_irq(struct irq_desc *desc);
 
 irqreturn_t no_action(int cpl, void *dev_id);
+
+void irq_modify_status(unsigned int irq, unsigned long clr, unsigned long set);
+
+static inline void irq_set_status_flags(unsigned int irq, unsigned long set)
+{
+	irq_modify_status(irq, 0, set);
+}
+
+static inline void irq_clear_status_flags(unsigned int irq, unsigned long clr)
+{
+	irq_modify_status(irq, clr, 0);
+}
 
 void __init irq_init(void);
 void __init arch_irq_init(void);

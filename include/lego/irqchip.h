@@ -150,6 +150,9 @@ static inline void irq_set_chip_and_handler(unsigned int irq, struct irq_chip *c
 
 int irq_set_chip(unsigned int irq, struct irq_chip *chip);
 
+void __irq_set_handler(unsigned int irq, irq_flow_handler_t handle,
+		       int is_chained, const char *name);
+
 void irq_disable(struct irq_desc *desc);
 void irq_enable(struct irq_desc *desc);
 void mask_irq(struct irq_desc *desc);
@@ -159,6 +162,8 @@ void __enable_irq(struct irq_desc *desc);
 
 int irq_startup(struct irq_desc *desc, bool resend);
 void irq_shutdown(struct irq_desc *desc);
+
+extern void irq_chip_ack_parent(struct irq_data *data);
 
 extern struct irqaction chained_action;
 

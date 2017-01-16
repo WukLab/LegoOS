@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/smp.h>
 #include <lego/irq.h>
 #include <lego/slab.h>
 #include <lego/irqdesc.h>
@@ -263,7 +264,47 @@ static int assign_irq_vector_policy(int irq, int node,
 	return assign_irq_vector(irq, data, apic->target_cpus());
 }
 
+void apic_ack_edge(struct irq_data *data)
+{
+	irq_complete_move(irqd_cfg(data));
+	irq_move_irq(data);
+	ack_APIC_irq();
+}
+
+static int apic_set_affinity(struct irq_data *irq_data,
+			     const struct cpumask *dest, bool force)
+{
+	struct apic_chip_data *data = irq_data->chip_data;
+	int err, irq = irq_data->irq;
+
+	if (!IS_ENABLED(CONFIG_SMP))
+		return -EPERM;
+
+	if (!cpumask_intersects(dest, cpu_online_mask))
+		return -EINVAL;
+
+	err = assign_irq_vector(irq, data, dest);
+	return err ? err : IRQ_SET_MASK_OK;
+}
+
+static int apic_retrigger_irq(struct irq_data *irq_data)
+{
+	struct apic_chip_data *data = apic_chip_data(irq_data);
+	unsigned long flags;
+	int cpu;
+
+	spin_lock_irqsave(&vector_lock, flags);
+	cpu = cpumask_first_and(data->domain, cpu_online_mask);
+	apic->send_IPI_mask(cpumask_of(cpu), data->cfg.vector);
+	spin_unlock_irqrestore(&vector_lock, flags);
+
+	return 1;
+}
+
 static struct irq_chip lapic_controller = {
+	.irq_ack		= apic_ack_edge,
+	.irq_set_affinity	= apic_set_affinity,
+	.irq_retrigger		= apic_retrigger_irq,
 };
 
 static void x86_vector_free_irqs(struct irq_domain *domain,
@@ -373,3 +414,47 @@ void __init x86_apic_ioapic_init(void)
 
 	arch_ioapic_init();
 }
+
+#ifdef CONFIG_SMP
+
+/*
+ * Reserve the lowest usable vector (and hence lowest priority)  0x20 for
+ * triggering cleanup after irq migration. 0x21-0x2f will still be used
+ * for device interrupts.
+ */
+#define IRQ_MOVE_CLEANUP_VECTOR		FIRST_EXTERNAL_VECTOR
+
+static void __send_cleanup_vector(struct apic_chip_data *data)
+{
+	spin_lock(&vector_lock);
+	cpumask_and(data->old_domain, data->old_domain, cpu_online_mask);
+	data->move_in_progress = 0;
+	if (!cpumask_empty(data->old_domain))
+		apic->send_IPI_mask(data->old_domain, IRQ_MOVE_CLEANUP_VECTOR);
+	spin_unlock(&vector_lock);
+}
+
+static void __irq_complete_move(struct irq_cfg *cfg, unsigned vector)
+{
+	unsigned me;
+	struct apic_chip_data *data;
+
+	data = container_of(cfg, struct apic_chip_data, cfg);
+	if (likely(!data->move_in_progress))
+		return;
+
+	me = smp_processor_id();
+	if (vector == data->cfg.vector && cpumask_test_cpu(me, data->domain))
+		__send_cleanup_vector(data);
+}
+
+void irq_complete_move(struct irq_cfg *cfg)
+{
+	unsigned int vector;
+
+	pr_info("%s called! This function is TODO\n", __func__);
+
+	vector = ~get_irq_regs()->orig_ax;
+	__irq_complete_move(cfg, vector);
+}
+#endif

@@ -271,6 +271,7 @@ enum {
  * @last_unhandled:	aging timer for unhandled count
  * @irqs_unhandled:	stats field for spurious unhandled interrupts
  * @lock:		locking for SMP
+ * @pending_mask:	pending rebalanced interrupts
  */
 struct irq_desc {
 	struct irq_common_data	irq_common_data;
@@ -285,6 +286,7 @@ struct irq_desc {
 	unsigned long		last_unhandled;
 	unsigned int		irqs_unhandled;
 	spinlock_t		lock;
+	cpumask_var_t		pending_mask;
 };
 
 extern struct irq_desc irq_desc[NR_IRQS];
@@ -323,6 +325,11 @@ static inline struct irq_data *irq_get_irq_data(unsigned int irq)
 	return desc ? &desc->irq_data : NULL;
 }
 
+static inline struct irq_data *irq_desc_get_irq_data(struct irq_desc *desc)
+{
+	return &desc->irq_data;
+}
+
 #define __irqd_to_state(d) (d)->common->state_use_accessors
 
 static inline void irqd_clear(struct irq_data *d, unsigned int mask)
@@ -353,6 +360,16 @@ static inline bool irqd_irq_masked(struct irq_data *d)
 static inline bool irqd_irq_disabled(struct irq_data *d)
 {
 	return __irqd_to_state(d) & IRQD_IRQ_DISABLED;
+}
+
+static inline bool irqd_is_setaffinity_pending(struct irq_data *d)
+{
+	return __irqd_to_state(d) & IRQD_SETAFFINITY_PENDING;
+}
+
+static inline void irqd_clr_move_pending(struct irq_data *d)
+{
+	__irqd_to_state(d) &= ~IRQD_SETAFFINITY_PENDING;
 }
 
 static inline bool irq_settings_disable_unlazy(struct irq_desc *desc)
@@ -427,10 +444,27 @@ static inline bool irq_settings_is_polled(struct irq_desc *desc)
 	return desc->status_use_accessors & _IRQ_IS_POLLED;
 }
 
+static inline bool irq_settings_is_level(struct irq_desc *desc)
+{
+	return desc->status_use_accessors & _IRQ_LEVEL;
+}
+
 static inline void *irq_get_chip_data(unsigned int irq)
 {
 	struct irq_data *d = irq_get_irq_data(irq);
 	return d ? d->chip_data : NULL;
+}
+
+static inline void
+irq_settings_clr_and_set(struct irq_desc *desc, u32 clr, u32 set)
+{
+	desc->status_use_accessors &= ~(clr & _IRQF_MODIFY_MASK);
+	desc->status_use_accessors |= (set & _IRQF_MODIFY_MASK);
+}
+
+static inline bool irq_settings_has_no_balance_set(struct irq_desc *desc)
+{
+	return desc->status_use_accessors & _IRQ_NO_BALANCING;
 }
 
 static inline void irq_settings_set_per_cpu(struct irq_desc *desc)
@@ -438,9 +472,19 @@ static inline void irq_settings_set_per_cpu(struct irq_desc *desc)
 	desc->status_use_accessors |= _IRQ_PER_CPU;
 }
 
+static inline bool irq_settings_is_per_cpu(struct irq_desc *desc)
+{
+	return desc->status_use_accessors & _IRQ_PER_CPU;
+}
+
 static inline void irq_settings_set_no_balancing(struct irq_desc *desc)
 {
 	desc->status_use_accessors |= _IRQ_NO_BALANCING;
+}
+
+static inline u32 irq_settings_get_trigger_mask(struct irq_desc *desc)
+{
+	return desc->status_use_accessors & IRQ_TYPE_SENSE_MASK;
 }
 
 static inline bool irqd_can_balance(struct irq_data *d)
@@ -526,5 +570,8 @@ int setup_irq(unsigned int irq, struct irqaction *new);
 int __irq_set_trigger(struct irq_desc *desc, unsigned long flags);
 
 void check_irq_resend(struct irq_desc *desc);
+
+void irq_move_masked_irq(struct irq_data *data);
+void irq_move_irq(struct irq_data *idata);
 
 #endif /* _LEGO_IRQDESC_H_ */

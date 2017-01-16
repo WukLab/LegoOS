@@ -280,3 +280,40 @@ void irq_shutdown(struct irq_desc *desc)
 		desc->irq_data.chip->irq_mask(&desc->irq_data);
 	irq_state_set_masked(desc);
 }
+
+void irq_modify_status(unsigned int irq, unsigned long clr, unsigned long set)
+{
+	unsigned long flags;
+	struct irq_desc *desc = irq_to_desc(irq);
+
+	if (!desc)
+		return;
+
+	spin_lock_irqsave(&desc->lock, flags);	
+	irq_settings_clr_and_set(desc, clr, set);
+
+	irqd_clear(&desc->irq_data, IRQD_NO_BALANCING | IRQD_PER_CPU |
+		   IRQD_TRIGGER_MASK | IRQD_LEVEL | IRQD_MOVE_PCNTXT);
+	if (irq_settings_has_no_balance_set(desc))
+		irqd_set(&desc->irq_data, IRQD_NO_BALANCING);
+	if (irq_settings_is_per_cpu(desc))
+		irqd_set(&desc->irq_data, IRQD_PER_CPU);
+	if (irq_settings_can_move_pcntxt(desc))
+		irqd_set(&desc->irq_data, IRQD_MOVE_PCNTXT);
+	if (irq_settings_is_level(desc))
+		irqd_set(&desc->irq_data, IRQD_LEVEL);
+
+	irqd_set(&desc->irq_data, irq_settings_get_trigger_mask(desc));
+
+	spin_unlock_irqrestore(&desc->lock, flags);
+}
+
+/**
+ * irq_chip_ack_parent - Acknowledge the parent interrupt
+ * @data:	Pointer to interrupt specific data
+ */
+void irq_chip_ack_parent(struct irq_data *data)
+{
+	data = data->parent_data;
+	data->chip->irq_ack(data);
+}

@@ -17,6 +17,28 @@
 #include <asm/ptrace.h>
 #include <asm/hw_irq.h>
 
+/* TODO Per-CPU */
+struct pt_regs *irq_regs[NR_CPUS];
+
+struct pt_regs *get_irq_regs(void)
+{
+	int cpu = smp_processor_id();
+
+	BUG_ON(!cpu_online(cpu));
+	return irq_regs[cpu];
+}
+
+struct pt_regs *set_irq_regs(struct pt_regs *new_regs)
+{
+	int cpu = smp_processor_id();
+	struct pt_regs *old_regs;
+
+	old_regs = get_irq_regs();
+	irq_regs[cpu] = new_regs;
+
+	return old_regs;
+}
+
 /*
  * 'what should we do if we get a hw irq event on an illegal vector'.
  * each architecture has to answer this themselves.
@@ -52,6 +74,7 @@ do_IRQ(struct pt_regs *regs)
 	unsigned int vector;
 	struct irq_desc *desc;
 	struct irq_desc **vector_irq;
+	struct pt_regs *old_regs = set_irq_regs(regs);
 
 	/* Pushed in the prologue */
 	vector = ~regs->orig_ax;
@@ -74,11 +97,16 @@ do_IRQ(struct pt_regs *regs)
 
 	desc->handle_irq(desc);
 
+	set_irq_regs(old_regs);
 	return 0;
 }
 
 asmlinkage __visible void
 x86_platform_ipi(struct pt_regs *regs)
 {
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
 	pr_info("x86_platform_ipi\n");
+
+	set_irq_regs(old_regs);
 }
