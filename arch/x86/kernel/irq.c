@@ -51,9 +51,12 @@ do_IRQ(struct pt_regs *regs)
 {
 	unsigned int vector;
 	struct irq_desc *desc;
+	struct irq_desc **vector_irq;
 
 	/* Pushed in the prologue */
 	vector = ~regs->orig_ax;
+
+	vector_irq = per_cpu_vector_irq(smp_processor_id());
 	desc = vector_irq[vector];
 
 	pr_info("%s: vector %u\n", __func__, vector);

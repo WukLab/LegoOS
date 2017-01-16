@@ -1028,7 +1028,7 @@ static int pin_2_irq(int idx, int ioapic, int pin, unsigned int flags)
 static void __init setup_IO_APIC_irqs(void)
 {
 	unsigned int ioapic, pin;
-	int idx, irq;
+	int idx;
 
 	apic_printk(APIC_VERBOSE, KERN_DEBUG "init IO_APIC IRQs\n");
 
@@ -1041,9 +1041,7 @@ static void __init setup_IO_APIC_irqs(void)
 			continue;
 		}
 
-		irq = pin_2_irq(idx, ioapic, pin, ioapic ? 0 : IOAPIC_MAP_ALLOC);
-		apic_printk(APIC_VERBOSE, " ioapic[%d] pin: %d map to irq: %d\n",
-			ioapic, pin, irq);
+		pin_2_irq(idx, ioapic, pin, ioapic ? 0 : IOAPIC_MAP_ALLOC);
 	}
 }
 
@@ -1197,7 +1195,16 @@ static int mp_irqdomain_alloc(struct irq_domain *domain, unsigned int virq,
 		return -ENOMEM;
 
 	info->ioapic_entry = &data->entry;
-	//ret = irq_domain_alloc_irqs_parent(domain, virq, nr_irqs, info);
+
+	/*
+	 * !
+	 * Call back to parent x86_vector_domain
+	 * Call back to local APIC vector alloc
+	 *
+	 * Local APIC will allocate the vector for,
+	 * after this, we have the pin <-> IRQ <-> vector number mapping
+	 */
+	ret = irq_domain_alloc_irqs_parent(domain, virq, nr_irqs, info);
 	if (ret < 0) {
 		kfree(data);
 		return ret;
@@ -1212,6 +1219,8 @@ static int mp_irqdomain_alloc(struct irq_domain *domain, unsigned int virq,
 	mp_irqdomain_get_attr(mp_pin_to_gsi(ioapic, pin), data, info);
 
 	cfg = irqd_cfg(irq_data);
+
+	/* Add pin to irq list */
 	add_pin_to_irq_node(data, ioapic_alloc_attr_node(info), ioapic, pin);
 
 	local_irq_save(flags);

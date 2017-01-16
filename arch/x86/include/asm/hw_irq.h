@@ -60,14 +60,7 @@ static inline void unlock_vector_lock(void) {}
 #define VECTOR_RETRIGGERED	((void *)~0UL)
 
 typedef struct irq_desc* vector_irq_t[NR_VECTORS];
-
-/*
- * This vector_irq describes all 0xff vectors
- * Each one is a irq_desc as typedefed above.
- *
- * Check do_IRQ() see how it is used.
- */
-extern vector_irq_t vector_irq;
+struct irq_desc **per_cpu_vector_irq(int cpu);
 
 extern char irq_entries_start[];
 

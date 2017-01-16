@@ -42,6 +42,12 @@
  */
 #define FIRST_EXTERNAL_VECTOR		0x20
 
+/*
+ * We start allocating at 0x21 to spread out vectors evenly between
+ * priority levels. (0x80 is the syscall vector)
+ */
+#define VECTOR_OFFSET_START		1
+
 #define IA32_SYSCALL_VECTOR		0x80
 
 /*

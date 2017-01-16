@@ -125,6 +125,72 @@ void flat_init_apic_ldr(void)
 	apic_write(APIC_LDR, val);
 }
 
+static const struct cpumask *online_target_cpus(void)
+{
+	return cpu_online_mask;
+}
+
+static void
+flat_vector_allocation_domain(int cpu, struct cpumask *retmask,
+			      const struct cpumask *mask)
+{
+	/* Careful. Some cpus do not strictly honor the set of cpus
+	 * specified in the interrupt destination when using lowest
+	 * priority interrupt delivery mode.
+	 *
+	 * In particular there was a hyperthreading cpu observed to
+	 * deliver interrupts to the wrong hyperthread when only one
+	 * hyperthread was specified in the interrupt desitination.
+	 */
+	cpumask_clear(retmask);
+	cpumask_bits(retmask)[0] = APIC_ALL_CPUS;
+}
+
+static void
+default_vector_allocation_domain(int cpu, struct cpumask *retmask,
+				 const struct cpumask *mask)
+{
+	cpumask_copy(retmask, cpumask_of(cpu));
+}
+
+static int
+flat_cpu_mask_to_apicid_and(const struct cpumask *cpumask,
+			    const struct cpumask *andmask,
+			    unsigned int *apicid)
+{
+	unsigned long cpu_mask = cpumask_bits(cpumask)[0] &
+				 cpumask_bits(andmask)[0] &
+				 cpumask_bits(cpu_online_mask)[0] &
+				 APIC_ALL_CPUS;
+
+	if (likely(cpu_mask)) {
+		*apicid = (unsigned int)cpu_mask;
+		return 0;
+	} else {
+		return -EINVAL;
+	}
+}
+
+static int
+default_cpu_mask_to_apicid_and(const struct cpumask *cpumask,
+			       const struct cpumask *andmask,
+			       unsigned int *apicid)
+{
+	unsigned int cpu;
+
+	for_each_cpu_and(cpu, cpumask, andmask) {
+		if (cpumask_test_cpu(cpu, cpu_online_mask))
+			break;
+	}
+
+	if (likely(cpu < nr_cpu_ids)) {
+		*apicid = cpu_to_apicid(cpu);
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 static struct apic apic_flat = {
 	.name				= "flat",
 	.probe				= flat_probe,
@@ -133,12 +199,17 @@ static struct apic apic_flat = {
 	.irq_delivery_mode		= dest_LowestPrio,
 	.irq_dest_mode			= 1, /* Logical */
 
+	.target_cpus			= online_target_cpus,
+
 	.dest_logical			= APIC_DEST_LOGICAL,
 
 	.get_apic_id			= flat_get_apic_id,
 	.set_apic_id			= set_apic_id,
 
+	.vector_allocation_domain	= flat_vector_allocation_domain,
 	.init_apic_ldr			= flat_init_apic_ldr,
+
+	.cpu_mask_to_apicid_and		= flat_cpu_mask_to_apicid_and,
 
 	.send_IPI			= default_send_IPI_single,
 	.send_IPI_mask			= flat_send_IPI_mask,
@@ -186,11 +257,16 @@ static struct apic apic_physflat = {
 
 	.dest_logical			= 0,
 
+	.target_cpus			= online_target_cpus,
+
 	.get_apic_id			= flat_get_apic_id,
 	.set_apic_id			= set_apic_id,
 
+	.vector_allocation_domain	= default_vector_allocation_domain,
 	/* not needed, but shouldn't hurt: */
 	.init_apic_ldr			= flat_init_apic_ldr,
+
+	.cpu_mask_to_apicid_and		= default_cpu_mask_to_apicid_and,
 
 	.send_IPI			= default_send_IPI_single_phys,
 	.send_IPI_mask			= default_send_IPI_mask_sequence_phys,

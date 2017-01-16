@@ -19,6 +19,8 @@
 #include <lego/bitops.h>
 #include <lego/kernel.h>
 
+extern void __bitmap_or(unsigned long *dst, const unsigned long *bitmap1,
+			const unsigned long *bitmap2, unsigned int nbits);
 extern int __bitmap_and(unsigned long *dst, const unsigned long *bitmap1,
 			const unsigned long *bitmap2, unsigned int nbits);
 extern int __bitmap_equal(const unsigned long *bitmap1,
@@ -29,6 +31,10 @@ extern void bitmap_clear(unsigned long *map, unsigned int start, int len);
 extern int __bitmap_intersects(const unsigned long *bitmap1,
 			const unsigned long *bitmap2, unsigned int bits);
 
+extern int __bitmap_andnot(unsigned long *dst, const unsigned long *bitmap1,
+			const unsigned long *bitmap2, unsigned int nbits);
+extern int __bitmap_subset(const unsigned long *bitmap1,
+			const unsigned long *bitmap2, unsigned int nbits);
 
 #define small_const_nbits(nbits) \
 	(__builtin_constant_p(nbits) && (nbits) <= BITS_PER_LONG)
@@ -108,6 +114,32 @@ static inline int bitmap_and(unsigned long *dst, const unsigned long *src1,
 	if (small_const_nbits(nbits))
 		return (*dst = *src1 & *src2 & BITMAP_LAST_WORD_MASK(nbits)) != 0;
 	return __bitmap_and(dst, src1, src2, nbits);
+}
+
+static inline int bitmap_subset(const unsigned long *src1,
+			const unsigned long *src2, unsigned int nbits)
+{
+	if (small_const_nbits(nbits))
+		return ! ((*src1 & ~(*src2)) & BITMAP_LAST_WORD_MASK(nbits));
+	else
+		return __bitmap_subset(src1, src2, nbits);
+}
+
+static inline int bitmap_andnot(unsigned long *dst, const unsigned long *src1,
+			const unsigned long *src2, unsigned int nbits)
+{
+	if (small_const_nbits(nbits))
+		return (*dst = *src1 & ~(*src2) & BITMAP_LAST_WORD_MASK(nbits)) != 0;
+	return __bitmap_andnot(dst, src1, src2, nbits);
+}
+
+static inline void bitmap_or(unsigned long *dst, const unsigned long *src1,
+			const unsigned long *src2, unsigned int nbits)
+{
+	if (small_const_nbits(nbits))
+		*dst = *src1 | *src2;
+	else
+		__bitmap_or(dst, src1, src2, nbits);
 }
 
 extern unsigned long bitmap_find_next_zero_area_off(unsigned long *map,

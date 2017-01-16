@@ -219,3 +219,40 @@ struct irq_data *irq_domain_get_irq_data(struct irq_domain *domain,
 
 	return NULL;
 }
+
+int irq_domain_alloc_irqs(struct irq_domain *domain, unsigned int irq_base,
+			  unsigned int nr_irqs, void *arg)
+{
+	return domain->ops->alloc(domain, irq_base, nr_irqs, arg);
+}
+
+/**
+ * irq_domain_alloc_irqs_parent - Allocate interrupts from parent domain
+ * @irq_base:	Base IRQ number
+ * @nr_irqs:	Number of IRQs to allocate
+ * @arg:	Allocation data (arch/domain specific)
+ *
+ * Check whether the domain has been setup recursive. If not allocate
+ * through the parent domain.
+ */
+int irq_domain_alloc_irqs_parent(struct irq_domain *domain, unsigned int irq_base,
+				 unsigned int nr_irqs, void *arg)
+{
+	struct irq_domain *parent;
+
+	parent = domain->parent;
+	if (parent)
+		return irq_domain_alloc_irqs(parent, irq_base, nr_irqs, arg);
+	return -ENOSYS;
+}
+
+/**
+ * irq_domain_reset_irq_data - Clear hwirq, chip and chip_data in @irq_data
+ * @irq_data:	The pointer to irq_data
+ */
+void irq_domain_reset_irq_data(struct irq_data *irq_data)
+{
+	irq_data->hwirq = 0;
+	irq_data->chip = &no_irq_chip;
+	irq_data->chip_data = NULL;
+}

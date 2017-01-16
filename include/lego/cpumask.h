@@ -212,6 +212,8 @@ static inline unsigned int cpumask_next_zero(int n, const struct cpumask *srcp)
 	return find_next_zero_bit(cpumask_bits(srcp), nr_cpumask_bits, n+1);
 }
 
+int cpumask_next_and(int n, const struct cpumask *, const struct cpumask *);
+
 /**
  * for_each_cpu - iterate over every cpu in a mask
  * @cpu: the (optionally unsigned) integer iterator
@@ -420,6 +422,19 @@ static inline bool cpumask_intersects(const struct cpumask *src1p,
 }
 
 /**
+ * cpumask_or - *dstp = *src1p | *src2p
+ * @dstp: the cpumask result
+ * @src1p: the first input
+ * @src2p: the second input
+ */
+static inline void cpumask_or(struct cpumask *dstp, const struct cpumask *src1p,
+			      const struct cpumask *src2p)
+{
+	bitmap_or(cpumask_bits(dstp), cpumask_bits(src1p),
+				      cpumask_bits(src2p), nr_cpumask_bits);
+}
+
+/**
  * cpumask_and - *dstp = *src1p & *src2p
  * @dstp: the cpumask result
  * @src1p: the first input
@@ -434,6 +449,77 @@ static inline int cpumask_and(struct cpumask *dstp,
 	return bitmap_and(cpumask_bits(dstp), cpumask_bits(src1p),
 				       cpumask_bits(src2p), nr_cpumask_bits);
 }
+
+/**
+ * cpumask_clear - clear all cpus (< nr_cpu_ids) in a cpumask
+ * @dstp: the cpumask pointer
+ */
+static inline void cpumask_clear(struct cpumask *dstp)
+{
+	bitmap_zero(cpumask_bits(dstp), nr_cpumask_bits);
+}
+
+/**
+ * cpumask_subset - (*src1p & ~*src2p) == 0
+ * @src1p: the first input
+ * @src2p: the second input
+ *
+ * Returns 1 if *@src1p is a subset of *@src2p, else returns 0
+ */
+static inline int cpumask_subset(const struct cpumask *src1p,
+				 const struct cpumask *src2p)
+{
+	return bitmap_subset(cpumask_bits(src1p), cpumask_bits(src2p),
+						  nr_cpumask_bits);
+}
+
+/**
+ * cpumask_andnot - *dstp = *src1p & ~*src2p
+ * @dstp: the cpumask result
+ * @src1p: the first input
+ * @src2p: the second input
+ *
+ * If *@dstp is empty, returns 0, else returns 1
+ */
+static inline int cpumask_andnot(struct cpumask *dstp,
+				  const struct cpumask *src1p,
+				  const struct cpumask *src2p)
+{
+	return bitmap_andnot(cpumask_bits(dstp), cpumask_bits(src1p),
+					  cpumask_bits(src2p), nr_cpumask_bits);
+}
+
+/**
+ * cpumask_any - pick a "random" cpu from *srcp
+ * @srcp: the input cpumask
+ *
+ * Returns >= nr_cpu_ids if no cpus set.
+ */
+#define cpumask_any(srcp) cpumask_first(srcp)
+
+/**
+ * cpumask_first_and - return the first cpu from *srcp1 & *srcp2
+ * @src1p: the first input
+ * @src2p: the second input
+ *
+ * Returns >= nr_cpu_ids if no cpus set in both.  See also cpumask_next_and().
+ */
+#define cpumask_first_and(src1p, src2p) cpumask_next_and(-1, (src1p), (src2p))
+
+/**
+ * cpumask_any_and - pick a "random" cpu from *mask1 & *mask2
+ * @mask1: the first input cpumask
+ * @mask2: the second input cpumask
+ *
+ * Returns >= nr_cpu_ids if no cpus set.
+ */
+#define cpumask_any_and(mask1, mask2) cpumask_first_and((mask1), (mask2))
+
+/**
+ * cpumask_of - the cpumask containing just a given cpu
+ * @cpu: the cpu (<= nr_cpu_ids)
+ */
+#define cpumask_of(cpu) (get_cpu_mask(cpu))
 
 void __init boot_cpumask_init(void);
 

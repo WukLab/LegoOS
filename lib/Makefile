@@ -8,3 +8,4 @@ obj-y += bitmap.o
 obj-y += hweight.o
 obj-y += rbtree.o
 obj-y += bcd.o
+obj-y += cpumask.o

@@ -62,4 +62,10 @@ void irq_set_default_host(struct irq_domain *domain);
 extern struct irq_data *irq_domain_get_irq_data(struct irq_domain *domain,
 						unsigned int virq);
 
+extern int irq_domain_alloc_irqs_parent(struct irq_domain *domain,
+					unsigned int irq_base,
+					unsigned int nr_irqs, void *arg);
+
+extern void irq_domain_reset_irq_data(struct irq_data *irq_data);
+
 #endif /* _LEGO_IRQDOMAIN_H_ */
