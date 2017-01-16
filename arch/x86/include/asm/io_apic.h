@@ -227,6 +227,10 @@ struct ioapic {
 
 extern struct ioapic ioapics[MAX_IO_APICS];
 
+extern unsigned long io_apic_irqs;
+
+#define IO_APIC_IRQ(x) (((x) >= NR_IRQS_LEGACY) || ((1 << (x)) & io_apic_irqs))
+
 #define MAX_MP_BUSSES		256
 /* Each PCI slot may be a combo card with its own bus.  4 IRQ pins per slot. */
 #define MAX_IRQ_SOURCES		(MAX_MP_BUSSES * 4)

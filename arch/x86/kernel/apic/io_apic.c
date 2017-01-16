@@ -477,6 +477,40 @@ void __init arch_ioapic_init(void)
 		alloc_ioapic_saved_registers(i);
 }
 
+static void io_apic_modify_irq(struct mp_chip_data *data,
+			       int mask_and, int mask_or,
+			       void (*final)(struct irq_pin_list *entry))
+{
+	union entry_union eu;
+	struct irq_pin_list *entry;
+
+	eu.entry = data->entry;
+	eu.w1 &= mask_and;
+	eu.w1 |= mask_or;
+	data->entry = eu.entry;
+
+	for_each_irq_pin(entry, data->irq_2_pin) {
+		io_apic_write(entry->apic, 0x10 + 2 * entry->pin, eu.w1);
+		if (final)
+			final(entry);
+	}
+}
+
+static void __unmask_ioapic(struct mp_chip_data *data)
+{
+	io_apic_modify_irq(data, ~IO_APIC_REDIR_MASKED, 0, NULL);
+}
+
+static void unmask_ioapic_irq(struct irq_data *irq_data)
+{
+	struct mp_chip_data *data = irq_data->chip_data;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ioapic_lock, flags);
+	__unmask_ioapic(data);
+	spin_unlock_irqrestore(&ioapic_lock, flags);
+}
+
 /*
  * IO-APIC versions below 0x20 don't support EOI register.
  * For the record, here is the information about various versions:
@@ -1078,6 +1112,115 @@ int mp_irqdomain_ioapic_idx(struct irq_domain *domain)
 	return (int)(long)domain->host_data;
 }
 
+static inline void init_IO_APIC_traps(void)
+{
+	struct irq_cfg *cfg;
+	unsigned int irq;
+
+	for_each_active_irq(irq) {
+		cfg = irq_cfg(irq);
+		if (IO_APIC_IRQ(irq) && cfg && !cfg->vector) {
+			/*
+			 * Hmm.. We don't have an entry for this,
+			 * so default to an old-fashioned 8259
+			 * interrupt if we can..
+			 */
+			if (irq < nr_legacy_irqs())
+				legacy_pic->make_irq(irq);
+			else
+				/* Strange. Oh, well.. */
+				irq_set_chip(irq, &no_irq_chip);
+		}
+	}
+}
+
+void init_irq_alloc_info(struct irq_alloc_info *info,
+			 const struct cpumask *mask)
+{
+	memset(info, 0, sizeof(*info));
+	info->mask = mask;
+}
+
+void ioapic_set_alloc_attr(struct irq_alloc_info *info, int node,
+			   int trigger, int polarity)
+{
+	init_irq_alloc_info(info, NULL);
+	info->type = X86_IRQ_ALLOC_TYPE_IOAPIC;
+	info->ioapic_node = node;
+	info->ioapic_trigger = trigger;
+	info->ioapic_polarity = polarity;
+	info->ioapic_valid = 1;
+}
+
+static int mp_alloc_timer_irq(int ioapic, int pin)
+{
+	int irq = -1;
+	struct irq_domain *domain = mp_ioapic_irqdomain(ioapic);
+
+	pr_info("%s\n", __func__);
+
+	if (domain) {
+		struct irq_alloc_info info;
+
+		ioapic_set_alloc_attr(&info, NUMA_NO_NODE, 0, 0);
+		info.ioapic_id = mpc_ioapic_id(ioapic);
+		info.ioapic_pin = pin;
+
+		spin_lock(&ioapic_lock);
+		irq = alloc_isa_irq_from_domain(domain, 0, ioapic, pin, &info);
+		spin_unlock(&ioapic_lock);
+	}
+
+	return irq;
+}
+
+/*
+ * This code may look a bit paranoid, but it's supposed to cooperate with
+ * a wide range of boards and BIOS bugs.  Fortunately only the timer IRQ
+ * is so screwy.  Thanks to Brian Perkins for testing/hacking this beast
+ * fanatically on his truly buggy board.
+ *
+ * FIXME: really need to revamp this for all platforms.
+ */
+static inline void __init check_timer(void)
+{
+	struct irq_data *irq_data = irq_get_irq_data(0);
+	struct mp_chip_data *data = irq_data->chip_data;
+	struct irq_cfg *cfg = irqd_cfg(irq_data);
+	int node = cpu_to_node(0);
+	int apic1, pin1, apic2, pin2;
+	unsigned long flags;
+	int no_pin1 = 0;
+
+	local_irq_save(flags);
+
+	/*
+	 * get/set the timer IRQ vector:
+	 */
+	legacy_pic->mask(0);
+
+	/*
+	 * As IRQ0 is to be enabled in the 8259A, the virtual
+	 * wire has to be disabled in the local APIC.  Also
+	 * timer interrupts need to be acknowledged manually in
+	 * the 8259A for the i82489DX when using the NMI
+	 * watchdog as that APIC treats NMIs as level-triggered.
+	 * The AEOI mode will finish them in the 8259A
+	 * automatically.
+	 */
+	apic_write(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_EXTINT);
+	legacy_pic->init(1);
+
+	pin1  = find_isa_irq_pin(0, mp_INT);
+	apic1 = find_isa_irq_apic(0, mp_INT);
+	pin2  = ioapic_i8259.pin;
+	apic2 = ioapic_i8259.apic;
+
+	apic_printk(APIC_QUIET, "..TIMER: vector=0x%02X "
+		    "apic1=%d pin1=%d apic2=%d pin2=%d\n",
+		    cfg->vector, apic1, pin1, apic2, pin2);
+}
+
 void __init setup_IO_APIC(void)
 {
 	int i;
@@ -1115,11 +1258,10 @@ void __init setup_IO_APIC(void)
 	/* Setup pin <-> IRQ mapping */
 	setup_IO_APIC_irqs();
 
-#if 0
 	init_IO_APIC_traps();
 	if (nr_legacy_irqs())
 		check_timer();
-#endif
+
 	ioapic_initialized = 1;
 }
 

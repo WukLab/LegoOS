@@ -148,6 +148,8 @@ static inline void irq_set_chip_and_handler(unsigned int irq, struct irq_chip *c
 	irq_set_chip_and_handler_name(irq, chip, handle, NULL);
 }
 
+int irq_set_chip(unsigned int irq, struct irq_chip *chip);
+
 void irq_disable(struct irq_desc *desc);
 void irq_enable(struct irq_desc *desc);
 void mask_irq(struct irq_desc *desc);

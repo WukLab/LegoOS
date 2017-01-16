@@ -496,6 +496,25 @@ int  __irq_number_alloc(int irq, unsigned int from, unsigned int cnt, int node,
  */
 void __irq_number_free(unsigned int irq, unsigned int cnt);
 
+/*
+ * For IRQ number lookup
+ */
+unsigned int irq_get_next_irq(unsigned int offset);
+
+#define for_each_irq_desc(irq, desc)					\
+	for (irq = 0, desc = irq_to_desc(irq); irq < NR_IRQS;		\
+	     irq++, desc = irq_to_desc(irq))				\
+		if (!desc)						\
+			;						\
+		else
+
+#define for_each_active_irq(irq)			\
+	for (irq = irq_get_next_irq(0); irq < NR_IRQS;	\
+	     irq = irq_get_next_irq(irq + 1))
+
+#define for_each_irq_nr(irq)                   \
+       for (irq = 0; irq < NR_IRQS; irq++)
+
 void irq_mark_irq(unsigned int irq);
 void synchronize_irq(unsigned int irq);
 void disable_irq(unsigned int irq);
