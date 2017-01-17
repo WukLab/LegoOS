@@ -44,7 +44,7 @@ static void irq_state_set_masked(struct irq_desc *desc)
 	irqd_set(&desc->irq_data, IRQD_IRQ_MASKED);
 }
 
-static inline void mask_ack_irq(struct irq_desc *desc)
+void mask_ack_irq(struct irq_desc *desc)
 {
 	if (desc->irq_data.chip->irq_mask_ack)
 		desc->irq_data.chip->irq_mask_ack(&desc->irq_data);

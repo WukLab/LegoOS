@@ -42,6 +42,15 @@ enum clock_event_state {
 # define CLOCK_EVT_FEAT_ONESHOT		0x000002
 # define CLOCK_EVT_FEAT_KTIME		0x000004
 
+/*
+ * x86(64) specific (mis)features:
+ *
+ * - Clockevent source stops in C3 State and needs broadcast support.
+ * - Local APIC timer is used as a dummy device.
+ */
+# define CLOCK_EVT_FEAT_C3STOP		0x000008
+# define CLOCK_EVT_FEAT_DUMMY		0x000010
+
 /**
  * struct clock_event_device - clock event device descriptor
  * @event_handler:	Assigned by the framework to be called by the low
@@ -70,7 +79,6 @@ enum clock_event_state {
  * @bound_on:		Bound on CPU
  * @cpumask:		cpumask to indicate for which CPUs this device works
  * @list:		list head for the management code
- * @owner:		module reference
  */
 struct clock_event_device {
 	void			(*event_handler)(struct clock_event_device *);
@@ -105,10 +113,37 @@ struct clock_event_device {
 	struct list_head	list;
 } ____cacheline_aligned;
 
+/**
+ * tick_handle_periodic
+ *
+ * Common entry for tick handling.
+ * Called from timer interrupt handler.
+ */
+void tick_handle_periodic(struct clock_event_device *dev);
+
+
+/**
+ * tick_handle_noop
+ *
+ * Noop handler when we shut down an event device
+ */
+void tick_handle_noop(struct clock_event_device *dev);
+
+static inline enum clock_event_state clockevent_get_state(struct clock_event_device *dev)
+{
+	return dev->state_use_accessors;
+}
+
 /* Helpers to verify state of a clockevent device */
 static inline bool clockevent_state_detached(struct clock_event_device *dev)
 {
 	return dev->state_use_accessors == CLOCK_EVT_STATE_DETACHED;
+}
+
+static inline void clockevent_set_state(struct clock_event_device *dev,
+					enum clock_event_state state)
+{
+	dev->state_use_accessors = state;
 }
 
 static inline bool clockevent_state_shutdown(struct clock_event_device *dev)
@@ -131,14 +166,15 @@ static inline bool clockevent_state_oneshot_stopped(struct clock_event_device *d
 	return dev->state_use_accessors == CLOCK_EVT_STATE_ONESHOT_STOPPED;
 }
 
-static inline void clockevent_set_state(struct clock_event_device *dev,
-					enum clock_event_state state)
-{
-	dev->state_use_accessors = state;
-}
-
 extern void clockevents_config_and_register(struct clock_event_device *dev,
 					    u32 freq, unsigned long min_delta,
 					    unsigned long max_delta);
 
+void clockevents_exchange_device(struct clock_event_device *old,
+				 struct clock_event_device *new);
+
+void clockevents_shutdown(struct clock_event_device *dev);
+
+void clockevents_switch_state(struct clock_event_device *dev,
+			      enum clock_event_state state);
 #endif /* _LEGO_CLOCKEVENT_H_ */

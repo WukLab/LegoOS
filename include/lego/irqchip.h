@@ -155,8 +155,10 @@ void __irq_set_handler(unsigned int irq, irq_flow_handler_t handle,
 
 void irq_disable(struct irq_desc *desc);
 void irq_enable(struct irq_desc *desc);
+
 void mask_irq(struct irq_desc *desc);
 void unmask_irq(struct irq_desc *desc);
+void mask_ack_irq(struct irq_desc *desc);
 
 void __enable_irq(struct irq_desc *desc);
 

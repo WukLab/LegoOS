@@ -64,4 +64,6 @@ static inline ktime_t timespec_to_ktime(struct timespec ts)
 	return ktime_set(ts.tv_sec, ts.tv_nsec);
 }
 
+extern ktime_t ktime_get(void);
+
 #endif /* _LEGO_KTIME_H_ */

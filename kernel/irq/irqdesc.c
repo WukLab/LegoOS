@@ -11,6 +11,8 @@
 #include <lego/kernel.h>
 #include <lego/bitmap.h>
 #include <lego/irqdesc.h>
+#include <lego/irqchip.h>
+#include <lego/irqdomain.h>
 #include <lego/cpumask.h>
 #include <lego/nodemask.h>
 #include <lego/spinlock.h>
@@ -776,4 +778,41 @@ void irq_move_irq(struct irq_data *idata)
 	irq_move_masked_irq(idata);
 	if (!masked)
 		idata->chip->irq_unmask(idata);
+}
+
+int irq_set_affinity_locked(struct irq_data *data, const struct cpumask *mask,
+			    bool force)
+{
+	struct irq_chip *chip = irq_data_get_irq_chip(data);
+	struct irq_desc *desc = irq_data_to_desc(data);
+	int ret = 0;
+
+	if (!chip || !chip->irq_set_affinity)
+		return -EINVAL;
+
+	if (irq_can_move_pcntxt(data)) {
+		ret = irq_do_set_affinity(data, mask, force);
+	} else {
+		irqd_set_move_pending(data);
+		irq_copy_pending(desc, mask);
+	}
+
+	irqd_set(data, IRQD_AFFINITY_SET);
+
+	return ret;
+}
+
+int __irq_set_affinity(unsigned int irq, const struct cpumask *mask, bool force)
+{
+	struct irq_desc *desc = irq_to_desc(irq);
+	unsigned long flags;
+	int ret;
+
+	if (!desc)
+		return -EINVAL;
+
+	spin_lock_irqsave(&desc->lock, flags);
+	ret = irq_set_affinity_locked(irq_desc_get_irq_data(desc), mask, force);
+	spin_unlock_irqrestore(&desc->lock, flags);
+	return ret;
 }

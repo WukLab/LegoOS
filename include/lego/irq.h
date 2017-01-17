@@ -54,6 +54,7 @@ static inline void local_irq_enable(void)
 		arch_local_irq_restore(flags);		\
 	} while (0)
 
+#define irqs_disabled()		(arch_irqs_disabled())
 
 /*
  * These correspond to the IORESOURCE_IRQ_* defines in

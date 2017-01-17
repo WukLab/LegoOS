@@ -18,6 +18,9 @@
 #include <lego/kernel.h>
 #include <lego/jiffies.h>
 #include <lego/cpumask.h>
+#include <lego/irqchip.h>
+#include <lego/irqdesc.h>
+#include <lego/irqdomain.h>
 #include <lego/clockevent.h>
 #include <lego/clocksource.h>
 
@@ -86,7 +89,8 @@ bool hpet_verbose = false;
 static void _hpet_print_config(const char *function, int line)
 {
 	u32 i, timers, l, h;
-	printk(KERN_INFO "HPET: %s(%d):\n", function, line);
+	printk(KERN_INFO "HPET: ----------------------------------\n");
+	printk(KERN_INFO "HPET: called from %s(%d):\n", function, line);
 	l = hpet_readl(HPET_ID);
 	h = hpet_readl(HPET_PERIOD);
 	timers = ((l & HPET_ID_NUMBER) >> HPET_ID_NUMBER_SHIFT) + 1;
@@ -131,6 +135,14 @@ static inline void hpet_clear_mapping(void)
 	hpet_virt_address = NULL;
 }
 
+/* Reset main counter */
+static void hpet_reset_counter(void)
+{
+	hpet_writel(0, HPET_COUNTER);
+	hpet_writel(0, HPET_COUNTER + 4);
+}
+
+/* Halt main counter and disable all timer interrupts */
 static void hpet_stop_counter(void)
 {
 	u32 cfg = hpet_readl(HPET_CFG);
@@ -138,12 +150,7 @@ static void hpet_stop_counter(void)
 	hpet_writel(cfg, HPET_CFG);
 }
 
-static void hpet_reset_counter(void)
-{
-	hpet_writel(0, HPET_COUNTER);
-	hpet_writel(0, HPET_COUNTER + 4);
-}
-
+/* Allow main counter to run and allow timer interrupts to fire */
 static void hpet_start_counter(void)
 {
 	unsigned int cfg = hpet_readl(HPET_CFG);
@@ -158,6 +165,11 @@ static void hpet_restart_counter(void)
 	hpet_start_counter();
 }
 
+/*
+ * Legacy Replacement Route Mode:
+ *  - Timer 0 will be routed to IRQ0 in non-APIC or IRQ2 in the I/O APIC
+ *  - Timer 1 will be routed to IRQ8 in non-APIC or IRQ8 in the I/O APIC
+ */
 static void hpet_enable_legacy_int(void)
 {
 	unsigned int cfg = hpet_readl(HPET_CFG);
@@ -225,14 +237,12 @@ static int hpet_resume(struct clock_event_device *evt, int timer)
 	if (!timer) {
 		hpet_enable_legacy_int();
 	} else {
-#if 0
 		struct hpet_dev *hdev = EVT_TO_HPET_DEV(evt);
 
 		irq_domain_activate_irq(irq_get_irq_data(hdev->irq));
 		disable_irq(hdev->irq);
 		irq_set_affinity(hdev->irq, cpumask_of(hdev->cpu));
 		enable_irq(hdev->irq);
-#endif
 	}
 	hpet_print_config();
 
@@ -307,6 +317,7 @@ static int hpet_legacy_next_event(unsigned long delta,
  */
 static struct clock_event_device hpet_clockevent = {
 	.name			= "hpet",
+	.event_handler		= tick_handle_periodic,
 	.features		= CLOCK_EVT_FEAT_PERIODIC |
 				  CLOCK_EVT_FEAT_ONESHOT,
 	.set_state_periodic	= hpet_legacy_set_periodic,
@@ -320,7 +331,10 @@ static struct clock_event_device hpet_clockevent = {
 
 static void hpet_legacy_clockevent_register(void)
 {
-	/* Start HPET legacy interrupts */
+	/*
+	 * Enable HPET legacy interrupts
+	 * But the HPET is still disabled to run
+	 */
 	hpet_enable_legacy_int();
 
 	/*
@@ -328,6 +342,11 @@ static void hpet_legacy_clockevent_register(void)
 	 * global after the IO_APIC has been initialized.
 	 */
 	hpet_clockevent.cpumask = cpumask_of(smp_processor_id());
+
+	/*
+	 * Register hpet clockevent, and it will callback to
+	 * set hpet run and afterwards, timer interrupt is alive!
+	 */
 	clockevents_config_and_register(&hpet_clockevent, hpet_freq,
 					HPET_MIN_PROG_DELTA, 0x7FFFFFFF);
 
@@ -402,7 +421,9 @@ int hpet_enable(void)
 	hpet_set_mapping();
 
 	/*
-	 * Read the period and check for a sane value:
+	 * Read main counter tick period
+	 * This field indicates the period at which the counter
+	 * increments in femptoseconds (10^-15 seconds).
 	 */
 	hpet_period = hpet_readl(HPET_PERIOD);
 
@@ -416,6 +437,10 @@ int hpet_enable(void)
 	freq = FSEC_PER_SEC;
 	do_div(freq, hpet_period);
 	hpet_freq = freq;
+
+	pr_info("Detected %lu.%03lu MHz HPET\n",
+		(unsigned long)hpet_freq / 1000,
+		(unsigned long)hpet_freq % 1000);
 
 	/*
 	 * Read the HPET ID register to retrieve the IRQ routing
@@ -433,6 +458,15 @@ int hpet_enable(void)
 		*hpet_boot_cfg = cfg;
 	else
 		pr_warn("initial state will not be saved\n");
+
+	/*
+	 * Disable HPET first
+	 *
+	 * HPET_CFG_ENABLE: Overall enable, this bit must be
+	 * set to enable any of the timers to generate interrupts
+	 *	0 - halt
+	 *	1 - enable
+	 */
 	cfg &= ~(HPET_CFG_ENABLE | HPET_CFG_LEGACY);
 	hpet_writel(cfg, HPET_CFG);
 	if (cfg)
@@ -443,8 +477,18 @@ int hpet_enable(void)
 		cfg = hpet_readl(HPET_Tn_CFG(i));
 		if (hpet_boot_cfg)
 			hpet_boot_cfg[i + 1] = cfg;
+
+		/*
+		 * Disable each timer counter first
+		 *
+		 * HPET_TN_ENABLE: This bit must be set to enable
+		 * timer n to cause an interrupt when timer event fires.
+		 *	0 - operate, no interrupt
+		 *	1 - operate, interrupt
+		 */
 		cfg &= ~(HPET_TN_ENABLE | HPET_TN_LEVEL | HPET_TN_FSB);
 		hpet_writel(cfg, HPET_Tn_CFG(i));
+
 		cfg &= ~(HPET_TN_PERIODIC | HPET_TN_PERIODIC_CAP
 			 | HPET_TN_64BIT_CAP | HPET_TN_32BIT | HPET_TN_ROUTE
 			 | HPET_TN_FSB | HPET_TN_FSB_CAP);
@@ -454,9 +498,20 @@ int hpet_enable(void)
 	}
 	hpet_print_config();
 
+	/*
+	 * Check if HPET is really working,
+	 * if yes, register HPET's clocksource
+	 */
 	if (hpet_clocksource_register())
 		goto out_nohpet;
 
+	/*
+	 * If this bit is 1, it indicates that the hardware supports
+	 * the Legacy Replacement Interrupt Route option.
+	 *
+	 * If so, we can use this HPET. (why?)
+	 * and register the clockevent and enable HPET
+	 */
 	if (id & HPET_ID_LEGSUP) {
 		hpet_legacy_clockevent_register();
 

@@ -19,8 +19,9 @@
 #include <asm/tsc.h>
 #include <asm/asm.h>
 #include <asm/apic.h>
-#include <asm/io_apic.h>
+#include <asm/hw_irq.h>
 #include <asm/ptrace.h>
+#include <asm/io_apic.h>
 #include <asm/processor.h>
 #include <asm/irq_vectors.h>
 
@@ -642,17 +643,29 @@ void __init sync_Arb_IDs(void)
 asmlinkage __visible void
 apic_timer_interrupt(struct pt_regs *regs)
 {
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
 	pr_info("apic_timer_interrupt\n");
+
+	set_irq_regs(old_regs);
 }
 
 asmlinkage __visible void
 error_interrupt(struct pt_regs *regs)
 {
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
 	pr_info("error_interrupt\n");
+
+	set_irq_regs(old_regs);
 }
 
 asmlinkage __visible void
 spurious_interrupt(struct pt_regs *regs)
 {
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
 	pr_info("spurious_interrupt\n");
+
+	set_irq_regs(old_regs);
 }

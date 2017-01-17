@@ -106,6 +106,7 @@ struct irq_data {
 /**
  * struct irqaction - per interrupt action descriptor
  * @handler:	interrupt handler function
+ * @dev_id:	cookie to identify the device
  * @next:	pointer to the next irqaction for shared interrupts
  * @irq:	interrupt number
  * @flags:	flags (see IRQF_* above)
@@ -118,6 +119,7 @@ struct irq_data {
  */
 struct irqaction {
 	irq_handler_t		handler;
+	void			*dev_id;
 	struct irqaction	*next;
 	irq_handler_t		thread_fn;
 	struct task_struct	*thread;
@@ -367,6 +369,14 @@ static inline bool irqd_is_setaffinity_pending(struct irq_data *d)
 	return __irqd_to_state(d) & IRQD_SETAFFINITY_PENDING;
 }
 
+/*
+ * Manipulation functions for irq_data.state
+ */
+static inline void irqd_set_move_pending(struct irq_data *d)
+{
+	__irqd_to_state(d) |= IRQD_SETAFFINITY_PENDING;
+}
+
 static inline void irqd_clr_move_pending(struct irq_data *d)
 {
 	__irqd_to_state(d) &= ~IRQD_SETAFFINITY_PENDING;
@@ -375,6 +385,11 @@ static inline void irqd_clr_move_pending(struct irq_data *d)
 static inline bool irq_settings_disable_unlazy(struct irq_desc *desc)
 {
 	return desc->status_use_accessors & _IRQ_DISABLE_UNLAZY;
+}
+
+static inline bool irqd_can_move_in_process_context(struct irq_data *d)
+{
+	return __irqd_to_state(d) & IRQD_MOVE_PCNTXT;
 }
 
 static inline void irq_settings_clr_disable_unlazy(struct irq_desc *desc)
@@ -558,6 +573,47 @@ unsigned int irq_get_next_irq(unsigned int offset);
 
 #define for_each_irq_nr(irq)                   \
        for (irq = 0; irq < NR_IRQS; irq++)
+
+static inline bool irq_can_move_pcntxt(struct irq_data *data)
+{
+	return irqd_can_move_in_process_context(data);
+}
+
+static inline bool irq_move_pending(struct irq_data *data)
+{
+	return irqd_is_setaffinity_pending(data);
+}
+
+static inline void
+irq_copy_pending(struct irq_desc *desc, const struct cpumask *mask)
+{
+	cpumask_copy(desc->pending_mask, mask);
+}
+
+static inline void
+irq_get_pending(struct cpumask *mask, struct irq_desc *desc)
+{
+	cpumask_copy(mask, desc->pending_mask);
+}
+
+/* Internal implementation. Use the helpers below */
+extern int __irq_set_affinity(unsigned int irq, const struct cpumask *cpumask,
+			      bool force);
+
+/**
+ * irq_set_affinity - Set the irq affinity of a given irq
+ * @irq:	Interrupt to set affinity
+ * @cpumask:	cpumask
+ *
+ * Fails if cpumask does not contain an online CPU
+ */
+static inline int
+irq_set_affinity(unsigned int irq, const struct cpumask *cpumask)
+{
+	return __irq_set_affinity(irq, cpumask, false);
+}
+
+int irq_can_set_affinity(unsigned int irq);
 
 void irq_mark_irq(unsigned int irq);
 void synchronize_irq(unsigned int irq);

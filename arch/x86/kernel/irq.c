@@ -82,8 +82,6 @@ do_IRQ(struct pt_regs *regs)
 	vector_irq = per_cpu_vector_irq(smp_processor_id());
 	desc = vector_irq[vector];
 
-	pr_info("%s: vector %u\n", __func__, vector);
-
 	if (IS_ERR_OR_NULL(desc)) {
 		ack_APIC_irq();
 
@@ -95,9 +93,13 @@ do_IRQ(struct pt_regs *regs)
 		return 1;
 	}
 
+	/*
+	 * Now call the chained handlers...
+	 */
 	desc->handle_irq(desc);
 
 	set_irq_regs(old_regs);
+
 	return 0;
 }
 

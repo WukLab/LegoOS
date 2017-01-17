@@ -452,8 +452,6 @@ void irq_complete_move(struct irq_cfg *cfg)
 {
 	unsigned int vector;
 
-	pr_info("%s called! This function is TODO\n", __func__);
-
 	vector = ~get_irq_regs()->orig_ax;
 	__irq_complete_move(cfg, vector);
 }
