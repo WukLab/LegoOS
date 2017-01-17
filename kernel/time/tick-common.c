@@ -17,6 +17,7 @@
 #include <lego/jiffies.h>
 #include <lego/clockevent.h>
 #include <lego/clocksource.h>
+#include <lego/timekeeping.h>
 
 #include "tick-internal.h"
 
@@ -195,5 +196,11 @@ void tick_handle_noop(struct clock_event_device *dev)
  */
 void tick_handle_periodic(struct clock_event_device *dev)
 {
-	pr_info("%s %pS\n",__func__, dev);
+	int cpu = smp_processor_id();
+
+	if (cpu == tick_do_timer_cpu) {
+		do_timer(1);
+	}
+
+	pr_info("%s: jiffies: %lu\n", __func__, jiffies);
 }

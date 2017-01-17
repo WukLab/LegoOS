@@ -179,3 +179,8 @@ ktime_t ktime_get(void)
 {
 	return (ktime_t)100;
 }
+
+void do_timer(unsigned long ticks)
+{
+	jiffies += ticks;
+}

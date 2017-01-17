@@ -177,6 +177,7 @@ static int pit_next_event(unsigned long delta, struct clock_event_device *evt)
  */
 struct clock_event_device i8253_clockevent = {
 	.name			= "pit",
+	.event_handler		= tick_handle_periodic,
 	.features		= CLOCK_EVT_FEAT_PERIODIC,
 	.set_state_shutdown	= pit_shutdown,
 	.set_state_periodic	= pit_set_periodic,

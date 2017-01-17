@@ -134,4 +134,7 @@ struct timekeeper {
 void read_persistent_clock(struct timespec *now);
 extern int timekeeping_notify(struct clocksource *clock);
 
+/* Update jiffies */
+void do_timer(unsigned long ticks);
+
 #endif /* _LEGO_TIMEKEEPING_H_ */
