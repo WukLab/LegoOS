@@ -367,6 +367,106 @@ void clear_local_APIC(void)
 	apic_read(APIC_ESR);
 }
 
+static void lapic_setup_esr(void)
+{
+	unsigned int oldvalue, value, maxlvt;
+
+	maxlvt = lapic_get_maxlvt();
+	if (maxlvt > 3)		/* Due to the Pentium erratum 3AP. */
+		apic_write(APIC_ESR, 0);
+	oldvalue = apic_read(APIC_ESR);
+
+	/* enables sending errors */
+	value = ERROR_APIC_VECTOR;
+	apic_write(APIC_LVTERR, value);
+
+	/*
+	 * spec says clear errors after enabling vector.
+	 */
+	if (maxlvt > 3)
+		apic_write(APIC_ESR, 0);
+	value = apic_read(APIC_ESR);
+	if (value != oldvalue)
+		apic_printk(APIC_VERBOSE, "ESR value before enabling "
+			"vector: 0x%08x  after: 0x%08x\n",
+			oldvalue, value);
+}
+
+static void end_local_APIC_setup(void)
+{
+	/* LVTERR, ESR */
+	lapic_setup_esr();
+#ifdef CONFIG_X86_32
+	{
+		unsigned int value;
+		/* Disable the local apic timer */
+		value = apic_read(APIC_LVTT);
+		value |= (APIC_LVT_MASKED | LOCAL_TIMER_VECTOR);
+		apic_write(APIC_LVTT, value);
+	}
+#endif
+}
+
+/**
+ * sync_Arb_IDs - synchronize APIC bus arbitration IDs
+ */
+void __init sync_Arb_IDs(void)
+{
+	/*
+	 * Unsupported on P4 - see Intel Dev. Manual Vol. 3, Ch. 8.6.1 And not
+	 * needed on AMD.
+	 */
+	if (modern_apic() || default_cpu_info.x86_vendor == X86_VENDOR_AMD)
+		return;
+
+	/*
+	 * Wait for idle.
+	 */
+	apic_wait_icr_idle();
+
+	apic_printk(APIC_VERBOSE, "%s: Synchronizing Arb IDs\n", __func__);
+
+	apic_write(APIC_ICR, APIC_DEST_ALLINC | APIC_INT_LEVELTRIG | APIC_DM_INIT);
+}
+
+/*
+ * Local APIC timer interrupt. This is the most natural way for doing
+ * local interrupts, but local timer interrupts can be emulated by
+ * broadcast interrupts too. [in case the hw doesn't support APIC timers]
+ *
+ * [ if a single-CPU system runs an SMP kernel then we call the local
+ *   interrupt as well. Thus we cannot inline the local irq ... ]
+ */
+asmlinkage __visible void
+apic_timer_interrupt(struct pt_regs *regs)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
+	pr_info("apic_timer_interrupt\n");
+
+	set_irq_regs(old_regs);
+}
+
+asmlinkage __visible void
+error_interrupt(struct pt_regs *regs)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
+	pr_info("error_interrupt\n");
+
+	set_irq_regs(old_regs);
+}
+
+asmlinkage __visible void
+spurious_interrupt(struct pt_regs *regs)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
+	pr_info("spurious_interrupt\n");
+
+	set_irq_regs(old_regs);
+}
+
 /*
  * An initial setup of the Virtual Wire Mode.
  *
@@ -520,6 +620,14 @@ void setup_local_APIC(void)
 	 * set up through-local-APIC on the BP's LINT0. This is not
 	 * strictly necessary in pure symmetric-IO mode, but sometimes
 	 * we delegate interrupts to the 8259A.
+	 *
+	 * The APIC architecture supports only one ExtINT source in a system,
+	 * usually contained in the compatibility bridge (a 8259A, seriously?).
+	 * Only one processor in the system should have an LVT entry configured
+	 * to use the ExtINT delivery.
+	 *
+	 * So in Lego, only BSP's LVT0 is configured to ExtINT, all other CPUs
+	 * LVT0 will be masked.
 	 */
 	value = apic_read(APIC_LVT0) & APIC_LVT_MASKED;
 	if (!cpu && !value) {
@@ -543,46 +651,6 @@ void setup_local_APIC(void)
 	apic_write(APIC_LVT1, value);
 }
 
-static void lapic_setup_esr(void)
-{
-	unsigned int oldvalue, value, maxlvt;
-
-	maxlvt = lapic_get_maxlvt();
-	if (maxlvt > 3)		/* Due to the Pentium erratum 3AP. */
-		apic_write(APIC_ESR, 0);
-	oldvalue = apic_read(APIC_ESR);
-
-	/* enables sending errors */
-	value = ERROR_APIC_VECTOR;
-	apic_write(APIC_LVTERR, value);
-
-	/*
-	 * spec says clear errors after enabling vector.
-	 */
-	if (maxlvt > 3)
-		apic_write(APIC_ESR, 0);
-	value = apic_read(APIC_ESR);
-	if (value != oldvalue)
-		apic_printk(APIC_VERBOSE, "ESR value before enabling "
-			"vector: 0x%08x  after: 0x%08x\n",
-			oldvalue, value);
-}
-
-static void end_local_APIC_setup(void)
-{
-	/* LVTERR, ESR */
-	lapic_setup_esr();
-#ifdef CONFIG_X86_32
-	{
-		unsigned int value;
-		/* Disable the local apic timer */
-		value = apic_read(APIC_LVTT);
-		value |= (APIC_LVT_MASKED | LOCAL_TIMER_VECTOR);
-		apic_write(APIC_LVTT, value);
-	}
-#endif
-}
-
 /**
  * apic_bsp_setup - Setup function for local apic and io-apic
  *
@@ -600,72 +668,15 @@ int __init apic_bsp_setup(void)
 	else
 		id = GET_APIC_LOGICAL_ID(apic_read(APIC_LDR));
 
+	/* This is not real enable, just regular checking.. */
 	enable_IO_APIC();
+
 	end_local_APIC_setup();
 
+	/* Do real work to fully init IO-APIC! */
 	setup_IO_APIC();
 
-	/* Setup local timer */
+	/* TODO: Setup local timer */
 
 	return id;
-}
-
-/**
- * sync_Arb_IDs - synchronize APIC bus arbitration IDs
- */
-void __init sync_Arb_IDs(void)
-{
-	/*
-	 * Unsupported on P4 - see Intel Dev. Manual Vol. 3, Ch. 8.6.1 And not
-	 * needed on AMD.
-	 */
-	if (modern_apic() || default_cpu_info.x86_vendor == X86_VENDOR_AMD)
-		return;
-
-	/*
-	 * Wait for idle.
-	 */
-	apic_wait_icr_idle();
-
-	apic_printk(APIC_VERBOSE, "%s: Synchronizing Arb IDs\n", __func__);
-
-	apic_write(APIC_ICR, APIC_DEST_ALLINC | APIC_INT_LEVELTRIG | APIC_DM_INIT);
-}
-
-/*
- * Local APIC timer interrupt. This is the most natural way for doing
- * local interrupts, but local timer interrupts can be emulated by
- * broadcast interrupts too. [in case the hw doesn't support APIC timers]
- *
- * [ if a single-CPU system runs an SMP kernel then we call the local
- *   interrupt as well. Thus we cannot inline the local irq ... ]
- */
-asmlinkage __visible void
-apic_timer_interrupt(struct pt_regs *regs)
-{
-	struct pt_regs *old_regs = set_irq_regs(regs);
-
-	pr_info("apic_timer_interrupt\n");
-
-	set_irq_regs(old_regs);
-}
-
-asmlinkage __visible void
-error_interrupt(struct pt_regs *regs)
-{
-	struct pt_regs *old_regs = set_irq_regs(regs);
-
-	pr_info("error_interrupt\n");
-
-	set_irq_regs(old_regs);
-}
-
-asmlinkage __visible void
-spurious_interrupt(struct pt_regs *regs)
-{
-	struct pt_regs *old_regs = set_irq_regs(regs);
-
-	pr_info("spurious_interrupt\n");
-
-	set_irq_regs(old_regs);
 }

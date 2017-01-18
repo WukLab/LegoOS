@@ -356,9 +356,15 @@ static void __init mp_override_legacy_irq(u8 bus_irq, u8 polarity, u8 trigger,
 	mp_save_irq(&mp_irq);
 
 	/*
+	 * BIG FAT NOTE:
+	 *
 	 * Reset default identity mapping if gsi is also an legacy IRQ,
 	 * otherwise there will be more than one entry with the same GSI
 	 * and acpi_isa_irq_to_gsi() may give wrong result.
+	 *
+	 * For example, if IRQ0 is overrides to GSI2, then GSI2 and IRQ2
+	 * themselves are no longer used! You can check the IO-APIC interrupt
+	 * redirection table for this info.
 	 */
 	if (gsi < nr_legacy_irqs() && isa_irq_to_gsi[gsi] == gsi)
 		isa_irq_to_gsi[gsi] = ACPI_INVALID_GSI;
