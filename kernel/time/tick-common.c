@@ -14,6 +14,7 @@
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
 #include <lego/irqdesc.h>
+#include <lego/percpu.h>
 #include <lego/jiffies.h>
 #include <lego/clockevent.h>
 #include <lego/clocksource.h>
@@ -21,24 +22,7 @@
 
 #include "tick-internal.h"
 
-/* TODO: per-cpu */
-struct tick_device tick_devices[NR_CPUS];
-
-struct tick_device *get_tick_device(void)
-{
-	int cpu = smp_processor_id();
-
-	BUG_ON(!cpu_online(cpu));
-	return &tick_devices[cpu];
-}
-
-void set_tick_device(struct tick_device *dev)
-{
-	int cpu = smp_processor_id();
-
-	BUG_ON(!cpu_online(cpu));
-	tick_devices[cpu] = *dev;
-}
+DEFINE_PER_CPU(struct tick_device, tick_devices);
 
 /*
  * Tick next event: keeps track of the tick time
@@ -156,7 +140,7 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	int cpu;
 
 	cpu = smp_processor_id();
-	td = get_tick_device();
+	td = per_cpu_ptr(tick_devices, cpu);
 	curdev = td->evtdev;
 
 	/* cpu local device ? */
@@ -171,13 +155,11 @@ void tick_check_new_device(struct clock_event_device *newdev)
 
 	/*
 	 * Set the timer device to run...
+	 * IRQ is all set and interupt is enabld
+	 * just enable the device itself:
 	 */
 	tick_setup_device(td, newdev, cpu, cpumask_of(cpu));
 
-#if 0
-	if (newdev->features & CLOCK_EVT_FEAT_ONESHOT)
-		tick_oneshot_notify();
-#endif
 	return;
 
 out:

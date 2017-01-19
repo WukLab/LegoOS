@@ -90,6 +90,16 @@ SECTIONS {
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data)
 
+		/*
+		 * TODO:
+		 * Per-CPU variable
+		 * Maybe replaced if I build a REAL per-cpu!
+		 */
+		. = ALIGN(L1_CACHE_BYTES);
+		__spercpu = .;
+		*(.data..percpu)
+		__epercpu = .;
+
 		/* WARN_ONCE etc. */
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data..unlikely)

@@ -166,9 +166,12 @@ static inline bool clockevent_state_oneshot_stopped(struct clock_event_device *d
 	return dev->state_use_accessors == CLOCK_EVT_STATE_ONESHOT_STOPPED;
 }
 
-extern void clockevents_config_and_register(struct clock_event_device *dev,
-					    u32 freq, unsigned long min_delta,
-					    unsigned long max_delta);
+/* Just do register this device into framework without config */
+void clockevents_register_device(struct clock_event_device *dev);
+
+void clockevents_config_and_register(struct clock_event_device *dev,
+				    u32 freq, unsigned long min_delta,
+				    unsigned long max_delta);
 
 void clockevents_exchange_device(struct clock_event_device *old,
 				 struct clock_event_device *new);

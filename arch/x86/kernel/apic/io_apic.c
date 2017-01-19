@@ -1231,6 +1231,8 @@ static int __init timer_irq_works(void)
 	/* jiffies wrap? */
 	if (time_after(jiffies, t1 + 4))
 		return 1;
+
+	/* Not working, return 0 */
 	return 1;
 }
 

@@ -14,8 +14,11 @@
 #include <lego/delay.h>
 #include <lego/kernel.h>
 #include <lego/bitops.h>
+#include <lego/percpu.h>
 #include <lego/cpumask.h>
+#include <lego/clockevent.h>
 
+#include <asm/msr.h>
 #include <asm/tsc.h>
 #include <asm/asm.h>
 #include <asm/apic.h>
@@ -651,6 +654,74 @@ void setup_local_APIC(void)
 	apic_write(APIC_LVT1, value);
 }
 
+/* Local APIC Timer */
+
+/* Clock divisor */
+#define APIC_DIVISOR	16
+#define TSC_DIVISOR	8
+
+static int lapic_next_deadline(unsigned long delta,
+			       struct clock_event_device *evt)
+{
+	u64 tsc;
+
+	tsc = rdtsc();
+	wrmsrl(MSR_IA32_TSC_DEADLINE, tsc + (((u64) delta) * TSC_DIVISOR));
+	return 0;
+}
+
+static struct clock_event_device lapic_clockevent = {
+	.name		= "lapic",
+	.features	= CLOCK_EVT_FEAT_PERIODIC |
+			  CLOCK_EVT_FEAT_ONESHOT |
+			  CLOCK_EVT_FEAT_C3STOP |
+			  CLOCK_EVT_FEAT_DUMMY,
+	.shift		= 32,
+	.rating		= 100,
+	.irq		= -1,
+};
+
+static DEFINE_PER_CPU(struct clock_event_device, lapic_events);
+
+/**
+ * setup_cpu_local_APIC_timer
+ *
+ * Setup the local APIC timer for this CPU.
+ * Copy the initialized values from the boot CPU
+ * and register the clock event in the framework.
+ */
+static void setup_cpu_local_APIC_timer(void)
+{
+	int cpu = smp_processor_id();
+	struct clock_event_device *levt;
+
+	levt = per_cpu_ptr(lapic_events, cpu);
+
+	if (cpu_has(X86_FEATURE_ARAT)) {
+		lapic_clockevent.features &= ~CLOCK_EVT_FEAT_C3STOP;
+		/* Make LAPIC timer preferrable over percpu HPET */
+		lapic_clockevent.rating = 150;
+	}
+
+	memcpy(levt, &lapic_clockevent, sizeof(*levt));
+	levt->cpumask = cpumask_of(cpu);
+
+	if (cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER)) {
+		levt->features &= ~(CLOCK_EVT_FEAT_PERIODIC |
+				    CLOCK_EVT_FEAT_DUMMY);
+		levt->set_next_event = lapic_next_deadline;
+		clockevents_config_and_register(levt,
+						tsc_khz * (1000 / TSC_DIVISOR),
+						0xF, ~0UL);
+	} else
+		clockevents_register_device(levt);
+}
+
+void __init setup_boot_APIC_clock(void)
+{
+	//calibrate_APIC_clock();
+}
+
 /**
  * apic_bsp_setup - Setup function for local apic and io-apic
  *
@@ -673,10 +744,14 @@ int __init apic_bsp_setup(void)
 
 	end_local_APIC_setup();
 
-	/* Do real work to fully init IO-APIC! */
+	/*
+	 * Fully initialize IO-APIC
+	 * Setup pin -> IRQ -> vector mapping
+	 * and fill interrupt redirectiont table
+	 */
 	setup_IO_APIC();
 
-	/* TODO: Setup local timer */
+	setup_boot_APIC_clock();
 
 	return id;
 }
