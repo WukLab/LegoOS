@@ -64,12 +64,34 @@ static bool tick_check_percpu(struct clock_event_device *curdev,
 	return true;
 }
 
+/**
+ * tick_check_oneshot_mode - check whether the system is in oneshot mode
+ *
+ * returns 1 when either nohz or highres are enabled. otherwise 0.
+ */
+int tick_oneshot_mode_active(void)
+{
+	unsigned long flags;
+	int ret, cpu;
+	struct tick_device *dev;
+
+	local_irq_save(flags);
+	cpu = smp_processor_id();
+	dev = per_cpu_ptr(tick_devices, cpu);
+	ret = dev->mode == TICKDEV_MODE_ONESHOT;
+	local_irq_restore(flags);
+
+	return ret;
+}
+
 static bool tick_check_preferred(struct clock_event_device *curdev,
 				 struct clock_event_device *newdev)
 {
 	/* Prefer oneshot capable device */
 	if (!(newdev->features & CLOCK_EVT_FEAT_ONESHOT)) {
 		if (curdev && (curdev->features & CLOCK_EVT_FEAT_ONESHOT))
+			return false;
+		if (tick_oneshot_mode_active())
 			return false;
 	}
 
@@ -82,6 +104,37 @@ static bool tick_check_preferred(struct clock_event_device *curdev,
 	       !cpumask_equal(curdev->cpumask, newdev->cpumask);
 }
 
+void tick_setup_periodic(struct clock_event_device *dev, int broadcast)
+{
+	/*
+	 * Right on,
+	 * set default tick-common periodic handler:
+	 */
+	dev->event_handler = tick_handle_periodic;
+
+	if (dev->features & CLOCK_EVT_FEAT_PERIODIC) {
+		/*
+		 * If the device wants to set periodic mode
+		 * then call back the device and set it:
+		 */
+		clockevents_switch_state(dev, CLOCK_EVT_STATE_PERIODIC);
+	} else {
+		/*
+		 * Otherwise, the device wants to set one-shot mode
+		 */
+		ktime_t next;
+
+		next = tick_next_period;
+		clockevents_switch_state(dev, CLOCK_EVT_STATE_ONESHOT);
+
+		for (;;) {
+			if (!clockevents_program_event(dev, next, false))
+				return;
+			next = ktime_add(next, tick_period);
+		}
+	}
+}
+
 /*
  * Setup the tick device
  * Register common tick handler if needed
@@ -90,6 +143,9 @@ static void tick_setup_device(struct tick_device *td,
 			      struct clock_event_device *newdev, int cpu,
 			      const struct cpumask *cpumask)
 {
+	void (*handler)(struct clock_event_device *) = NULL;
+	ktime_t next_event = 0;
+
 	/*
 	 * First time to setup device?
 	 */
@@ -108,6 +164,10 @@ static void tick_setup_device(struct tick_device *td,
 		 * Startup in periodic mode first.
 		 */
 		td->mode = TICKDEV_MODE_PERIODIC;
+	} else {
+		handler = td->evtdev->event_handler;
+		next_event = td->evtdev->next_event;
+		td->evtdev->event_handler = tick_handle_noop;
 	}
 
 	td->evtdev = newdev;
@@ -120,13 +180,11 @@ static void tick_setup_device(struct tick_device *td,
 		irq_set_affinity(newdev->irq, cpumask);
 
 	if (td->mode == TICKDEV_MODE_PERIODIC) {
-		/*
-		 * Set the default tick handler
-		 */
-		newdev->event_handler = tick_handle_periodic;
-		clockevents_switch_state(newdev, CLOCK_EVT_STATE_PERIODIC);
-	} else
-		panic("Oneshot not supported!");
+		tick_setup_periodic(newdev, 0);
+	} else {
+		panic("No support for one-shot mode\n");
+		//tick_setup_oneshot(newdev, handler, next_event);
+	}
 }
 
 /*
@@ -151,6 +209,9 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	if (!tick_check_preferred(curdev, newdev))
 		goto out;
 
+	/*
+	 * Replace the existing device by the new device:
+	 */
 	clockevents_exchange_device(curdev, newdev);
 
 	/*

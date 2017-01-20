@@ -843,7 +843,12 @@ static void setup_cpu_local_APIC_timer(void)
 	levt->cpumask = cpumask_of(cpu);
 
 	if (cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER)) {
-		apic_printk(APIC_VERBOSE, "Using TSC deadline mode\n");
+		apic_printk(APIC_VERBOSE,
+			"TSC deadline mode is supported by your CPU. "
+			"But Lego currently does not support one-shot tick mode. "
+			"Fall back to TSC periodic mode\n");
+		goto
+			REMOVEME;
 
 		levt->features &= ~(CLOCK_EVT_FEAT_PERIODIC |
 				    CLOCK_EVT_FEAT_DUMMY);
@@ -854,6 +859,7 @@ static void setup_cpu_local_APIC_timer(void)
 						tsc_khz * (1000 / TSC_DIVISOR),
 						0xF, ~0UL);
 	} else {
+REMOVEME:
 		apic_printk(APIC_VERBOSE, "Using TSC periodic mode\n");
 
 		/* Register tick-common handler */

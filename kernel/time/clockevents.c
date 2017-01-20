@@ -11,6 +11,7 @@
 #include <lego/list.h>
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
+#include <lego/jiffies.h>
 #include <lego/spinlock.h>
 #include <lego/clockevent.h>
 #include <lego/clocksource.h>
@@ -264,6 +265,117 @@ void clockevents_exchange_device(struct clock_event_device *old,
 		BUG_ON(!clockevent_state_detached(new));
 		clockevents_shutdown(new);
 	}
+}
+
+/* Limit min_delta to a jiffie */
+#define MIN_DELTA_LIMIT		(NSEC_PER_SEC / HZ)
+
+/**
+ * clockevents_increase_min_delta - raise minimum delta of a clock event device
+ * @dev:       device to increase the minimum delta
+ *
+ * Returns 0 on success, -ETIME when the minimum delta reached the limit.
+ */
+static int clockevents_increase_min_delta(struct clock_event_device *dev)
+{
+	/* Nothing to do if we already reached the limit */
+	if (dev->min_delta_ns >= MIN_DELTA_LIMIT) {
+		pr_warn("CE: Reprogramming failure. Giving up\n");
+		dev->next_event = KTIME_MAX;
+		return -ETIME;
+	}
+
+	if (dev->min_delta_ns < 5000)
+		dev->min_delta_ns = 5000;
+	else
+		dev->min_delta_ns += dev->min_delta_ns >> 1;
+
+	if (dev->min_delta_ns > MIN_DELTA_LIMIT)
+		dev->min_delta_ns = MIN_DELTA_LIMIT;
+
+	pr_warn("CE: %s increased min_delta_ns to %llu nsec\n",
+		dev->name ? dev->name : "?",
+		(unsigned long long) dev->min_delta_ns);
+	return 0;
+}
+
+/**
+ * clockevents_program_min_delta - Set clock event device to the minimum delay.
+ * @dev:	device to program
+ *
+ * Returns 0 on success, -ETIME when the retry loop failed.
+ */
+static int clockevents_program_min_delta(struct clock_event_device *dev)
+{
+	unsigned long long clc;
+	s64 delta;
+	int i;
+
+	for (i = 0;;) {
+		delta = dev->min_delta_ns;
+		dev->next_event = ktime_add_ns(ktime_get(), delta);
+
+		if (clockevent_state_shutdown(dev))
+			return 0;
+
+		dev->retries++;
+		clc = ((unsigned long long) delta * dev->mult) >> dev->shift;
+		if (dev->set_next_event((unsigned long) clc, dev) == 0)
+			return 0;
+
+		if (++i > 2) {
+			/*
+			 * We tried 3 times to program the device with the
+			 * given min_delta_ns. Try to increase the minimum
+			 * delta, if that fails as well get out of here.
+			 */
+			if (clockevents_increase_min_delta(dev))
+				return -ETIME;
+			i = 0;
+		}
+	}
+}
+
+/**
+ * clockevents_program_event - Reprogram the clock event device.
+ * @dev:	device to program
+ * @expires:	absolute expiry time (monotonic clock)
+ * @force:	program minimum delay if expires can not be set
+ *
+ * Returns 0 on success, -ETIME when the event is in the past.
+ */
+int clockevents_program_event(struct clock_event_device *dev, ktime_t expires,
+			      bool force)
+{
+	unsigned long long clc;
+	s64 delta;
+	int rc;
+
+	if (unlikely(expires < 0)) {
+		WARN_ON_ONCE(1);
+		return -ETIME;
+	}
+
+	dev->next_event = expires;
+
+	if (clockevent_state_shutdown(dev))
+		return 0;
+
+	/* We must be in ONESHOT state here */
+	WARN_ONCE(!clockevent_state_oneshot(dev), "Current state: %d\n",
+		  clockevent_get_state(dev));
+
+	delta = ktime_to_ns(ktime_sub(expires, ktime_get()));
+	if (delta <= 0)
+		return force ? clockevents_program_min_delta(dev) : -ETIME;
+
+	delta = min(delta, (s64) dev->max_delta_ns);
+	delta = max(delta, (s64) dev->min_delta_ns);
+
+	clc = ((unsigned long long) delta * dev->mult) >> dev->shift;
+	rc = dev->set_next_event((unsigned long) clc, dev);
+
+	return (rc && force) ? clockevents_program_min_delta(dev) : rc;
 }
 
 /**

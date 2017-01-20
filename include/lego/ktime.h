@@ -58,6 +58,9 @@ static inline ktime_t ktime_set(const s64 secs, const unsigned long nsecs)
  */
 #define ktime_sub_ns(kt, nsval)		((kt) - (nsval))
 
+/* Convert ktime_t to nanoseconds - NOP in the scalar storage format: */
+#define ktime_to_ns(kt)			(kt)
+
 /* convert a timespec to ktime_t format: */
 static inline ktime_t timespec_to_ktime(struct timespec ts)
 {
