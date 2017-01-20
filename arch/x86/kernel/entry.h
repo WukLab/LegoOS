@@ -19,6 +19,10 @@
  *	[allocated in the caller's stack frame] into the first argument - i.e.
  *	into rdi. All other arguments shift up by one in this case.
  *	Fortunately this case is rare in the kernel.
+ *
+ * [***]
+ *      In 64-bit mode, the SS:RSP is pushed unconditionally on interrupts.
+ *      The new SS is set to NULL if there is a change in CPL
  */
 
 /*

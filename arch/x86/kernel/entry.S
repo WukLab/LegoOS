@@ -1,8 +1,6 @@
 /*
  * entry.S contains the system-call and fault low-level handling routines.
  *
- * Some of this is documented in Documentation/x86/entry_64.txt
- *
  * A note on terminology:
  * - iret frame:	Architecture defined interrupt frame from SS to RIP
  *			at the top of the kernel process stack.
