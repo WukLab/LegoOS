@@ -157,9 +157,6 @@ void clockevents_config_and_register(struct clock_event_device *dev,
 static int __clockevents_switch_state(struct clock_event_device *dev,
 				      enum clock_event_state state)
 {
-	if (dev->features & CLOCK_EVT_FEAT_DUMMY)
-		return 0;
-
 	/* Transition with new state-specific callbacks */
 	switch (state) {
 	case CLOCK_EVT_STATE_DETACHED:

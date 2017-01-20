@@ -90,9 +90,6 @@ static void tick_setup_device(struct tick_device *td,
 			      struct clock_event_device *newdev, int cpu,
 			      const struct cpumask *cpumask)
 {
-	void (*handler)(struct clock_event_device *) = NULL;
-	ktime_t next_event = 0;
-
 	/*
 	 * First time to setup device?
 	 */
@@ -111,10 +108,6 @@ static void tick_setup_device(struct tick_device *td,
 		 * Startup in periodic mode first.
 		 */
 		td->mode = TICKDEV_MODE_PERIODIC;
-	} else {
-		handler = td->evtdev->event_handler;
-		next_event = td->evtdev->next_event;
-		td->evtdev->event_handler = tick_handle_noop;
 	}
 
 	td->evtdev = newdev;

@@ -745,10 +745,6 @@ static int lapic_timer_shutdown(struct clock_event_device *evt)
 static inline int
 lapic_timer_set_periodic_oneshot(struct clock_event_device *evt, bool oneshot)
 {
-	/* Lapic used as dummy for broadcast ? */
-	if (evt->features & CLOCK_EVT_FEAT_DUMMY)
-		return 0;
-
 	__setup_APIC_LVTT(lapic_timer_frequency, oneshot, 1);
 	return 0;
 }
@@ -771,9 +767,7 @@ static int lapic_timer_set_oneshot(struct clock_event_device *evt)
 static struct clock_event_device lapic_clockevent = {
 	.name			= "lapic",
 	.features		= CLOCK_EVT_FEAT_PERIODIC |
-				  CLOCK_EVT_FEAT_ONESHOT |
-				  CLOCK_EVT_FEAT_C3STOP |
-				  CLOCK_EVT_FEAT_DUMMY,
+				  CLOCK_EVT_FEAT_ONESHOT,
 	.shift			= 32,
 	.set_state_shutdown	= lapic_timer_shutdown,
 	.set_state_periodic	= lapic_timer_set_periodic,
@@ -854,12 +848,15 @@ static void setup_cpu_local_APIC_timer(void)
 		levt->features &= ~(CLOCK_EVT_FEAT_PERIODIC |
 				    CLOCK_EVT_FEAT_DUMMY);
 		levt->set_next_event = lapic_next_deadline;
+
+		/* Register tick-common handler */
 		clockevents_config_and_register(levt,
 						tsc_khz * (1000 / TSC_DIVISOR),
 						0xF, ~0UL);
 	} else {
 		apic_printk(APIC_VERBOSE, "Using TSC periodic mode\n");
 
+		/* Register tick-common handler */
 		clockevents_register_device(levt);
 	}
 }
