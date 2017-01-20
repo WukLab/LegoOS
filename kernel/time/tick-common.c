@@ -232,8 +232,10 @@ out:
  */
 void tick_handle_noop(struct clock_event_device *dev)
 {
-	pr_info("%s\n", __func__);
+	pr_info("[%s] jiffies: %lu\n", __func__, jiffies);
 }
+
+static int rlimit;
 
 /*
  * Event handler for periodic ticks
@@ -247,5 +249,8 @@ void tick_handle_periodic(struct clock_event_device *dev)
 		do_timer(1);
 	}
 
-	pr_info("%s: jiffies: %lu\n", __func__, jiffies);
+	if (++rlimit == HZ) {
+		rlimit = 0;
+		pr_info("[%s] jiffies: %lu\n", __func__, jiffies);
+	}
 }
