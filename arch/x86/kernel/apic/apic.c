@@ -816,7 +816,6 @@ apic_timer_interrupt(struct pt_regs *regs)
 	}
 
 	/* Clockevent framework, yummy. */
-	pr_info("LAPIC Interrupt!\n");
 	levt->event_handler(levt);
 
 	set_irq_regs(old_regs);
@@ -837,9 +836,6 @@ static void setup_cpu_local_APIC_timer(void)
 	levt = per_cpu_ptr(lapic_events, cpu);
 
 	if (cpu_has(X86_FEATURE_ARAT)) {
-		apic_printk(APIC_VERBOSE,
-			"Always Running APIC Timer (ARAT) supported\n");
-
 		lapic_clockevent.features &= ~CLOCK_EVT_FEAT_C3STOP;
 		/* Make LAPIC timer preferrable over percpu HPET */
 		lapic_clockevent.rating = 150;
@@ -853,14 +849,19 @@ static void setup_cpu_local_APIC_timer(void)
 	levt->cpumask = cpumask_of(cpu);
 
 	if (cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER)) {
+		apic_printk(APIC_VERBOSE, "Using TSC deadline mode\n");
+
 		levt->features &= ~(CLOCK_EVT_FEAT_PERIODIC |
 				    CLOCK_EVT_FEAT_DUMMY);
 		levt->set_next_event = lapic_next_deadline;
 		clockevents_config_and_register(levt,
 						tsc_khz * (1000 / TSC_DIVISOR),
 						0xF, ~0UL);
-	} else
+	} else {
+		apic_printk(APIC_VERBOSE, "Using TSC periodic mode\n");
+
 		clockevents_register_device(levt);
+	}
 }
 
 /*
@@ -899,7 +900,6 @@ static void __init lapic_cal_handler(struct clock_event_device *dev)
 	if (cpu_has(X86_FEATURE_TSC))
 		tsc = rdtsc();
 
-	pr_info("%s: loop=%d\n", __func__, lapic_cal_loops);
 	switch (lapic_cal_loops++) {
 	case 0:
 		lapic_cal_t1 = tapic;

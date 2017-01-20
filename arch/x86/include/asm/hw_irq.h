@@ -13,14 +13,14 @@
 #include <asm/ptrace.h>
 
 /* Interrupt handlers registered during init_IRQ */
-extern asmlinkage void apic_timer_interrupt(struct pt_regs *regs);
-extern asmlinkage void x86_platform_ipi(struct pt_regs *regs);
-extern asmlinkage void error_interrupt(struct pt_regs *regs);
-extern asmlinkage void spurious_interrupt(struct pt_regs *regs);
-extern asmlinkage void irq_work_interrupt(struct pt_regs *regs);
-extern asmlinkage void call_function_interrupt(struct pt_regs *regs);
-extern asmlinkage void call_function_single_interrupt(struct pt_regs *regs);
-extern asmlinkage void reboot_interrupt(struct pt_regs *regs);
+extern asmlinkage void smp__apic_timer_interrupt(void);
+extern asmlinkage void smp__x86_platform_ipi(void);
+extern asmlinkage void smp__error_interrupt(void);
+extern asmlinkage void smp__spurious_interrupt(void);
+extern asmlinkage void smp__irq_work_interrupt(void);
+extern asmlinkage void smp__call_function_interrupt(void);
+extern asmlinkage void smp__call_function_single_interrupt(void);
+extern asmlinkage void smp__reboot_interrupt(void);
 
 extern asmlinkage unsigned int do_IRQ(struct pt_regs *regs);
 

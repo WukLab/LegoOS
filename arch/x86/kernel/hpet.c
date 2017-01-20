@@ -225,6 +225,8 @@ static int hpet_shutdown(struct clock_event_device *evt, int timer)
 {
 	unsigned int cfg;
 
+	pr_debug("hpet shutdown\n");
+
 	cfg = hpet_readl(HPET_Tn_CFG(timer));
 	cfg &= ~HPET_TN_ENABLE;
 	hpet_writel(cfg, HPET_Tn_CFG(timer));

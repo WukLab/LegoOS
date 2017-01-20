@@ -125,6 +125,7 @@ ENTRY(common_interrupt)
 	INTR	do_IRQ
 
 ret_from_intr:
+	cli
 	testb	$3, CS(%rsp)
 	jz	retint_kernel
 
@@ -188,18 +189,18 @@ END(irq_entries_start)
  * Thus, always come from kernel mode.
  * Lay between [FIRST_SYSTEM_VECTOR...0xff]
  */
-.macro apicinterrupt num do_sym __sym
-ENTRY(\__sym)
+.macro apicinterrupt num do_sym smp__sym
+ENTRY(\smp__sym)
 	pushq	$~(\num)
 	INTR	\do_sym
 	jmp	ret_from_intr
-END(\__sym)
+END(\smp__sym)
 .endm
 
-apicinterrupt REBOOT_VECTOR			reboot_interrupt		__reboot_interrupt
-apicinterrupt LOCAL_TIMER_VECTOR		apic_timer_interrupt		__apic_timer_interrupt
-apicinterrupt X86_PLATFORM_IPI_VECTOR		x86_platform_ipi		__x86_platform_ipi
-apicinterrupt CALL_FUNCTION_SINGLE_VECTOR	call_function_single_interrupt	__call_function_single_interrupt
-apicinterrupt CALL_FUNCTION_VECTOR		call_function_interrupt		__call_function_interrupt
-apicinterrupt ERROR_APIC_VECTOR			error_interrupt			__error_interrupt
-apicinterrupt SPURIOUS_APIC_VECTOR		spurious_interrupt		__spurious_interrupt
+apicinterrupt REBOOT_VECTOR			reboot_interrupt		smp__reboot_interrupt
+apicinterrupt LOCAL_TIMER_VECTOR		apic_timer_interrupt		smp__apic_timer_interrupt
+apicinterrupt X86_PLATFORM_IPI_VECTOR		x86_platform_ipi		smp__x86_platform_ipi
+apicinterrupt CALL_FUNCTION_SINGLE_VECTOR	call_function_single_interrupt	smp__call_function_single_interrupt
+apicinterrupt CALL_FUNCTION_VECTOR		call_function_interrupt		smp__call_function_interrupt
+apicinterrupt ERROR_APIC_VECTOR			error_interrupt			smp__error_interrupt
+apicinterrupt SPURIOUS_APIC_VECTOR		spurious_interrupt		smp__spurious_interrupt

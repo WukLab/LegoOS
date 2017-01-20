@@ -82,6 +82,10 @@ static bool tick_check_preferred(struct clock_event_device *curdev,
 	       !cpumask_equal(curdev->cpumask, newdev->cpumask);
 }
 
+/*
+ * Setup the tick device
+ * Register common tick handler if needed
+ */
 static void tick_setup_device(struct tick_device *td,
 			      struct clock_event_device *newdev, int cpu,
 			      const struct cpumask *cpumask)
@@ -123,10 +127,13 @@ static void tick_setup_device(struct tick_device *td,
 		irq_set_affinity(newdev->irq, cpumask);
 
 	if (td->mode == TICKDEV_MODE_PERIODIC) {
+		/*
+		 * Set the default tick handler
+		 */
+		newdev->event_handler = tick_handle_periodic;
 		clockevents_switch_state(newdev, CLOCK_EVT_STATE_PERIODIC);
-	} else {
-		WARN(1, "no one-shot support now");
-	}
+	} else
+		panic("Oneshot not supported!");
 }
 
 /*
@@ -171,6 +178,7 @@ out:
  */
 void tick_handle_noop(struct clock_event_device *dev)
 {
+	pr_info("%s\n", __func__);
 }
 
 /*
@@ -181,6 +189,7 @@ void tick_handle_periodic(struct clock_event_device *dev)
 	int cpu = smp_processor_id();
 
 	if (cpu == tick_do_timer_cpu) {
+		/* Update jiffies */
 		do_timer(1);
 	}
 

@@ -94,14 +94,14 @@ void __init arch_irq_init(void)
 
 #ifdef CONFIG_SMP
 	/* IPI for generic function call */
-	alloc_intr_gate(CALL_FUNCTION_VECTOR, call_function_interrupt);
+	alloc_intr_gate(CALL_FUNCTION_VECTOR, smp__call_function_interrupt);
 
 	/* IPI for generic single function call */
 	alloc_intr_gate(CALL_FUNCTION_SINGLE_VECTOR,
-			call_function_single_interrupt);
+			smp__call_function_single_interrupt);
 
 	/* IPI used for rebooting/stopping */
-	alloc_intr_gate(REBOOT_VECTOR, reboot_interrupt);
+	alloc_intr_gate(REBOOT_VECTOR, smp__reboot_interrupt);
 #endif
 
 	/*
@@ -110,14 +110,14 @@ void __init arch_irq_init(void)
 
 #ifdef CONFIG_X86_LOCAL_APIC
 	/* self generated IPI for local APIC timer */
-	alloc_intr_gate(LOCAL_TIMER_VECTOR, apic_timer_interrupt);
+	alloc_intr_gate(LOCAL_TIMER_VECTOR, smp__apic_timer_interrupt);
 
 	/* IPI for X86 platform specific use */
-	alloc_intr_gate(X86_PLATFORM_IPI_VECTOR, x86_platform_ipi);
+	alloc_intr_gate(X86_PLATFORM_IPI_VECTOR, smp__x86_platform_ipi);
 
 	/* IPI vectors for APIC spurious and error interrupts */
-	alloc_intr_gate(SPURIOUS_APIC_VECTOR, spurious_interrupt);
-	alloc_intr_gate(ERROR_APIC_VECTOR, error_interrupt);
+	alloc_intr_gate(SPURIOUS_APIC_VECTOR, smp__spurious_interrupt);
+	alloc_intr_gate(ERROR_APIC_VECTOR, smp__error_interrupt);
 #endif
 
 	/*
@@ -136,7 +136,7 @@ void __init arch_irq_init(void)
 
 #ifdef CONFIG_X86_LOCAL_APIC
 	for_each_clear_bit_from(i, used_vectors, NR_VECTORS) {
-		set_intr_gate(i, spurious_interrupt);
+		set_intr_gate(i, smp__spurious_interrupt);
 	}
 #endif
 
