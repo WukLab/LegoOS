@@ -166,7 +166,8 @@ static inline bool clockevent_state_oneshot_stopped(struct clock_event_device *d
 	return dev->state_use_accessors == CLOCK_EVT_STATE_ONESHOT_STOPPED;
 }
 
-/* Just do register this device into framework without config */
+/* Clock event layer functions */
+u64 clockevent_delta2ns(unsigned long latch, struct clock_event_device *evt);
 void clockevents_register_device(struct clock_event_device *dev);
 
 void clockevents_config_and_register(struct clock_event_device *dev,
@@ -180,4 +181,26 @@ void clockevents_shutdown(struct clock_event_device *dev);
 
 void clockevents_switch_state(struct clock_event_device *dev,
 			      enum clock_event_state state);
+
+/*
+ * Calculate a multiplication factor for scaled math, which is used to convert
+ * nanoseconds based values to clock ticks:
+ *
+ * clock_ticks = (nanoseconds * factor) >> shift.
+ *
+ * div_sc is the rearranged equation to calculate a factor from a given clock
+ * ticks / nanoseconds ratio:
+ *
+ * factor = (clock_ticks << shift) / nanoseconds
+ */
+static inline unsigned long
+div_sc(unsigned long ticks, unsigned long nsec, int shift)
+{
+	u64 tmp = ((u64)ticks) << shift;
+
+	do_div(tmp, nsec);
+
+	return (unsigned long) tmp;
+}
+
 #endif /* _LEGO_CLOCKEVENT_H_ */

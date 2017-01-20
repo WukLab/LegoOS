@@ -15,6 +15,7 @@
 #include <lego/kernel.h>
 #include <lego/bitops.h>
 #include <lego/percpu.h>
+#include <lego/jiffies.h>
 #include <lego/cpumask.h>
 #include <lego/clockevent.h>
 
@@ -22,6 +23,7 @@
 #include <asm/tsc.h>
 #include <asm/asm.h>
 #include <asm/apic.h>
+#include <asm/time.h>
 #include <asm/hw_irq.h>
 #include <asm/ptrace.h>
 #include <asm/io_apic.h>
@@ -432,24 +434,6 @@ void __init sync_Arb_IDs(void)
 	apic_write(APIC_ICR, APIC_DEST_ALLINC | APIC_INT_LEVELTRIG | APIC_DM_INIT);
 }
 
-/*
- * Local APIC timer interrupt. This is the most natural way for doing
- * local interrupts, but local timer interrupts can be emulated by
- * broadcast interrupts too. [in case the hw doesn't support APIC timers]
- *
- * [ if a single-CPU system runs an SMP kernel then we call the local
- *   interrupt as well. Thus we cannot inline the local irq ... ]
- */
-asmlinkage __visible void
-apic_timer_interrupt(struct pt_regs *regs)
-{
-	struct pt_regs *old_regs = set_irq_regs(regs);
-
-	pr_info("apic_timer_interrupt\n");
-
-	set_irq_regs(old_regs);
-}
-
 asmlinkage __visible void
 error_interrupt(struct pt_regs *regs)
 {
@@ -654,11 +638,80 @@ void setup_local_APIC(void)
 	apic_write(APIC_LVT1, value);
 }
 
-/* Local APIC Timer */
+/* Local APIC Timer Part */
 
-/* Clock divisor */
-#define APIC_DIVISOR	16
+unsigned int lapic_timer_frequency;
+
 #define TSC_DIVISOR	8
+
+/*
+ * APIC has a configuration register (APIC_TDCR) to set the
+ * the divide value.
+ * We choose 16 here, and will write it to APIC_TDCR.
+ */
+#define APIC_DIVISOR	16
+
+/*
+ * This function sets up the local APIC timer, with a timeout of
+ * 'clocks' APIC bus clock. During calibration we actually call
+ * this function twice on the boot CPU, once with a bogus timeout
+ * value, second time for real. The other (noncalibrating) CPUs
+ * call this function only once, with the real, calibrated value.
+ *
+ * We do reads before writes even if unnecessary, to get around the
+ * P5 APIC double write bug.
+ */
+static void __setup_APIC_LVTT(unsigned int clocks, int oneshot, int irqen)
+{
+	unsigned int lvtt_value, tmp_value;
+
+	lvtt_value = LOCAL_TIMER_VECTOR;
+	if (!oneshot)
+		lvtt_value |= APIC_LVT_TIMER_PERIODIC;
+	else if (cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER))
+		lvtt_value |= APIC_LVT_TIMER_TSCDEADLINE;
+
+	if (!irqen)
+		lvtt_value |= APIC_LVT_MASKED;
+
+	apic_write(APIC_LVTT, lvtt_value);
+
+	if (lvtt_value & APIC_LVT_TIMER_TSCDEADLINE) {
+		/*
+		 * See Intel SDM: TSC-Deadline Mode chapter. In xAPIC mode,
+		 * writing to the APIC LVTT and TSC_DEADLINE MSR isn't serialized.
+		 * According to Intel, MFENCE can do the serialization here.
+		 */
+		asm volatile("mfence" : : : "memory");
+
+		printk_once(KERN_DEBUG "TSC deadline timer enabled\n");
+		return;
+	}
+
+	/*
+	 * Divide PICLK by 16
+	 */
+	tmp_value = apic_read(APIC_TDCR);
+	apic_write(APIC_TDCR,
+		(tmp_value & ~(APIC_TDR_DIV_1 | APIC_TDR_DIV_TMBASE)) |
+		APIC_TDR_DIV_16);
+
+	/*
+	 * In periodic mode, the current-count register is automatically
+	 * reloaded from the initial-count register when the count reaches 0,
+	 * and a timer interrupt is generated, and the count-down is repeated.
+	 */
+	if (!oneshot)
+		apic_write(APIC_TMICT, clocks / APIC_DIVISOR);
+}
+
+/* Program the next event, relative to now */
+static int lapic_next_event(unsigned long delta,
+			    struct clock_event_device *evt)
+{
+	apic_write(APIC_TMICT, delta);
+	return 0;
+}
 
 static int lapic_next_deadline(unsigned long delta,
 			       struct clock_event_device *evt)
@@ -670,18 +723,104 @@ static int lapic_next_deadline(unsigned long delta,
 	return 0;
 }
 
+/*
+ * A write of 0 to the APIC_TMICT resgiter effectively
+ * stops the local APIC timer, in both period and one-shot mode.
+ */
+static int lapic_timer_shutdown(struct clock_event_device *evt)
+{
+	unsigned int v;
+
+	/* Lapic used as dummy for broadcast ? */
+	if (evt->features & CLOCK_EVT_FEAT_DUMMY)
+		return 0;
+
+	v = apic_read(APIC_LVTT);
+	v |= (APIC_LVT_MASKED | LOCAL_TIMER_VECTOR);
+	apic_write(APIC_LVTT, v);
+	apic_write(APIC_TMICT, 0);
+	return 0;
+}
+
+static inline int
+lapic_timer_set_periodic_oneshot(struct clock_event_device *evt, bool oneshot)
+{
+	/* Lapic used as dummy for broadcast ? */
+	if (evt->features & CLOCK_EVT_FEAT_DUMMY)
+		return 0;
+
+	__setup_APIC_LVTT(lapic_timer_frequency, oneshot, 1);
+	return 0;
+}
+
+static int lapic_timer_set_periodic(struct clock_event_device *evt)
+{
+	return lapic_timer_set_periodic_oneshot(evt, false);
+}
+
+static int lapic_timer_set_oneshot(struct clock_event_device *evt)
+{
+	return lapic_timer_set_periodic_oneshot(evt, true);
+}
+
+/**
+ * lapic_clockevent
+ *
+ * Your local APIC timer device
+ */
 static struct clock_event_device lapic_clockevent = {
-	.name		= "lapic",
-	.features	= CLOCK_EVT_FEAT_PERIODIC |
-			  CLOCK_EVT_FEAT_ONESHOT |
-			  CLOCK_EVT_FEAT_C3STOP |
-			  CLOCK_EVT_FEAT_DUMMY,
-	.shift		= 32,
-	.rating		= 100,
-	.irq		= -1,
+	.name			= "lapic",
+	.features		= CLOCK_EVT_FEAT_PERIODIC |
+				  CLOCK_EVT_FEAT_ONESHOT |
+				  CLOCK_EVT_FEAT_C3STOP |
+				  CLOCK_EVT_FEAT_DUMMY,
+	.shift			= 32,
+	.set_state_shutdown	= lapic_timer_shutdown,
+	.set_state_periodic	= lapic_timer_set_periodic,
+	.set_state_oneshot	= lapic_timer_set_oneshot,
+	.set_next_event		= lapic_next_event,
+	.rating			= 100,
+	.irq			= -1,
 };
 
 static DEFINE_PER_CPU(struct clock_event_device, lapic_events);
+
+/*
+ * Local APIC timer interrupt.
+ * This is the most natural way for doing local interrupts.
+ *
+ * [ if a single-CPU system runs an SMP kernel then we call the local
+ *   interrupt as well. Thus we cannot inline the local irq ... ]
+ */
+asmlinkage __visible void
+apic_timer_interrupt(struct pt_regs *regs)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+	struct clock_event_device *levt;
+	int cpu;
+
+	/*
+	 * NOTE! We'd better ACK the irq immediately,
+	 * because timer handling can be slow.
+	 */
+	ack_APIC_irq();
+
+	cpu = smp_processor_id();
+	levt = per_cpu_ptr(lapic_events, cpu);
+
+	if (!levt->event_handler) {
+		pr_warn("Spurious LAPIC timer interrupt on cpu %d\n", cpu);
+		/* Switch it off */
+		lapic_timer_shutdown(levt);
+		return;
+	}
+
+	/* Clockevent framework, yummy. */
+	pr_info("LAPIC Interrupt!\n");
+	levt->event_handler(levt);
+
+	set_irq_regs(old_regs);
+}
 
 /**
  * setup_cpu_local_APIC_timer
@@ -698,9 +837,16 @@ static void setup_cpu_local_APIC_timer(void)
 	levt = per_cpu_ptr(lapic_events, cpu);
 
 	if (cpu_has(X86_FEATURE_ARAT)) {
+		apic_printk(APIC_VERBOSE,
+			"Always Running APIC Timer (ARAT) supported\n");
+
 		lapic_clockevent.features &= ~CLOCK_EVT_FEAT_C3STOP;
 		/* Make LAPIC timer preferrable over percpu HPET */
 		lapic_clockevent.rating = 150;
+	} else {
+		apic_printk(APIC_VERBOSE,
+			"ARAT not supported. The APIC timer may temporarily "
+			"stop while the processor in deep C-states.\n");
 	}
 
 	memcpy(levt, &lapic_clockevent, sizeof(*levt));
@@ -717,9 +863,221 @@ static void setup_cpu_local_APIC_timer(void)
 		clockevents_register_device(levt);
 }
 
+/*
+ * In this functions we calibrate APIC bus clocks to the external timer.
+ *
+ * We want to do the calibration only once since we want to have local timer
+ * irqs syncron. CPUs connected by the same APIC bus have the very same bus
+ * frequency.
+ *
+ * This was previously done by reading the PIT/HPET and waiting for a wrap
+ * around to find out, that a tick has elapsed. I have a box, where the PIT
+ * readout is broken, so it never gets out of the wait loop again. This was
+ * also reported by others.
+ *
+ * Monitoring the jiffies value is inaccurate and the clockevents
+ * infrastructure allows us to do a simple substitution of the interrupt
+ * handler.
+ *
+ * The calibration routine also uses the pm_timer when possible, as the PIT
+ * happens to run way too slow (factor 2.3 on my VAIO CoreDuo, which goes
+ * back to normal later in the boot process).
+ */
+#define LAPIC_CAL_LOOPS		(HZ/10)
+
+static __initdata int lapic_cal_loops = -1;
+static __initdata long lapic_cal_t1, lapic_cal_t2;
+static __initdata unsigned long long lapic_cal_tsc1, lapic_cal_tsc2;
+static __initdata unsigned long lapic_cal_j1, lapic_cal_j2;
+
+/* Temporary timer interrupt handler */
+static void __init lapic_cal_handler(struct clock_event_device *dev)
+{
+	unsigned long long tsc = 0;
+	long tapic = apic_read(APIC_TMCCT);
+
+	if (cpu_has(X86_FEATURE_TSC))
+		tsc = rdtsc();
+
+	pr_info("%s: loop=%d\n", __func__, lapic_cal_loops);
+	switch (lapic_cal_loops++) {
+	case 0:
+		lapic_cal_t1 = tapic;
+		lapic_cal_tsc1 = tsc;
+		lapic_cal_j1 = jiffies;
+		break;
+
+	case LAPIC_CAL_LOOPS:
+		lapic_cal_t2 = tapic;
+		lapic_cal_tsc2 = tsc;
+		lapic_cal_j2 = jiffies;
+		break;
+	}
+}
+
+static int __init calibrate_APIC_clock(void)
+{
+	int cpu;
+	struct clock_event_device *levt;
+	void (*real_handler)(struct clock_event_device *dev);
+	unsigned long deltaj;
+	long delta, deltatsc;
+
+	cpu = smp_processor_id();
+	levt = per_cpu_ptr(lapic_events, cpu);
+
+	/*
+	 * Check if lapic timer has already been calibrated by platform
+	 * specific routine, such as tsc calibration code. if so, we just fill
+	 * in the clockevent structure and return.
+	 */
+
+	if (cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER)) {
+		return 0;
+	} else if (lapic_timer_frequency) {
+		apic_printk(APIC_VERBOSE, "lapic timer already calibrated %d\n",
+				lapic_timer_frequency);
+		lapic_clockevent.mult = div_sc(lapic_timer_frequency/APIC_DIVISOR,
+					TICK_NSEC, lapic_clockevent.shift);
+		lapic_clockevent.max_delta_ns =
+			clockevent_delta2ns(0x7FFFFF, &lapic_clockevent);
+		lapic_clockevent.min_delta_ns =
+			clockevent_delta2ns(0xF, &lapic_clockevent);
+		lapic_clockevent.features &= ~CLOCK_EVT_FEAT_DUMMY;
+		return 0;
+	}
+
+	apic_printk(APIC_VERBOSE, "Using local APIC timer interrupts.\n"
+		    "calibrating APIC timer ...\n");
+
+	local_irq_disable();
+
+	/* Replace the global timer interrupt handler */
+	real_handler = global_clock_event->event_handler;
+	global_clock_event->event_handler = lapic_cal_handler;
+
+	/*
+	 * Setup the APIC counter to maximum.
+	 *
+	 * There is no way the lapic can underflow in
+	 * the 100ms detection time frame
+	 */
+	__setup_APIC_LVTT(0xffffffff, 0, 0);
+
+	/* Let the interrupts run */
+	local_irq_enable();
+
+	/* Wait to finish... */
+	while (lapic_cal_loops <= LAPIC_CAL_LOOPS)
+		cpu_relax();
+
+	local_irq_disable();
+
+	/* Restore the real event handler */
+	global_clock_event->event_handler = real_handler;
+
+	/* Build delta t1-t2 as apic timer counts down */
+	delta = lapic_cal_t1 - lapic_cal_t2;
+	apic_printk(APIC_VERBOSE, "... lapic delta = %ld\n", delta);
+
+	deltatsc = (long)(lapic_cal_tsc2 - lapic_cal_tsc1);
+
+	/* Calculate the scaled math multiplication factor */
+	lapic_clockevent.mult = div_sc(delta, TICK_NSEC * LAPIC_CAL_LOOPS,
+				       lapic_clockevent.shift);
+	lapic_clockevent.max_delta_ns =
+		clockevent_delta2ns(0x7FFFFFFF, &lapic_clockevent);
+	lapic_clockevent.min_delta_ns =
+		clockevent_delta2ns(0xF, &lapic_clockevent);
+
+	/*
+	 * The APIC timer frequency will be the processor's bus clock
+	 * or core crystal clock frequency divided by the value specified
+	 * in the divide configuration register.
+	 */
+	lapic_timer_frequency = (delta * APIC_DIVISOR) / LAPIC_CAL_LOOPS;
+
+	apic_printk(APIC_VERBOSE, "..... delta %ld\n", delta);
+	apic_printk(APIC_VERBOSE, "..... mult: %u\n", lapic_clockevent.mult);
+	apic_printk(APIC_VERBOSE, "..... lapic_timer_frequency: %u\n",
+		    lapic_timer_frequency);
+
+	if (cpu_has(X86_FEATURE_TSC)) {
+		apic_printk(APIC_VERBOSE, "..... CPU clock speed is "
+			    "%ld.%04ld MHz.\n",
+			    (deltatsc / LAPIC_CAL_LOOPS) / (1000000 / HZ),
+			    (deltatsc / LAPIC_CAL_LOOPS) % (1000000 / HZ));
+	}
+
+	apic_printk(APIC_VERBOSE, "..... host bus clock speed is "
+		    "%u.%04u MHz.\n",
+		    lapic_timer_frequency / (1000000 / HZ),
+		    lapic_timer_frequency % (1000000 / HZ));
+
+	/*
+	 * Do a sanity check on the APIC calibration result
+	 */
+	if (lapic_timer_frequency < (1000000 / HZ)) {
+		local_irq_enable();
+		pr_warn("APIC frequency too slow, disabling apic timer\n");
+		return -1;
+	}
+
+	levt->features &= ~CLOCK_EVT_FEAT_DUMMY;
+
+	/*
+	 * XXX:
+	 * Verify APIC timer, because Lego currently is not using
+	 * any PM timer, which is used by Linux by default.
+	 *
+	 * PM timer is reported by ACPI.
+	 */
+	apic_printk(APIC_VERBOSE, "... verify APIC timer\n");
+
+	/*
+	 * Setup the apic timer manually
+	 */
+	levt->event_handler = lapic_cal_handler;
+	lapic_timer_set_periodic(levt);
+	lapic_cal_loops = -1;
+
+	/* Let the interrupts run */
+	local_irq_enable();
+
+	/* Wait to finish... */
+	while (lapic_cal_loops <= LAPIC_CAL_LOOPS)
+		cpu_relax();
+
+	/* Stop the lapic timer */
+	local_irq_disable();
+	lapic_timer_shutdown(levt);
+
+	/* Jiffies delta */
+	deltaj = lapic_cal_j2 - lapic_cal_j1;
+	apic_printk(APIC_VERBOSE, "... jiffies delta = %lu\n", deltaj);
+
+	/* Check, if the jiffies result is consistent */
+	if (deltaj >= LAPIC_CAL_LOOPS-2 && deltaj <= LAPIC_CAL_LOOPS+2)
+		apic_printk(APIC_VERBOSE, "... jiffies result ok\n");
+	else
+		levt->features |= CLOCK_EVT_FEAT_DUMMY;
+
+	local_irq_enable();
+
+	if (levt->features & CLOCK_EVT_FEAT_DUMMY) {
+		pr_warn("APIC timer disabled due to verification failure\n");
+			return -1;
+	}
+
+	return 0;
+}
+
 void __init setup_boot_APIC_clock(void)
 {
-	//calibrate_APIC_clock();
+	WARN_ON(calibrate_APIC_clock());
+
+	/* Setup the lapic at BSP */
+	setup_cpu_local_APIC_timer();
 }
 
 /**
