@@ -132,7 +132,13 @@ ENTRY(secondary_startup_64)
 	movq	$(init_level4_pgt - __START_KERNEL_map), %rax
 1:
 
-	/* Enable PAE mode and PGE */
+	/*
+	 * Enable PAE mode and PGE
+	 *
+	 * PAE: must be set before entering IA-32e mode.
+	 * PGE: global pages are not flushed from the TLB on a
+	 *      task switch or a write to register CR3.
+	 */
 	movl	$(X86_CR4_PAE | X86_CR4_PGE), %ecx
 	movq	%rcx, %cr4
 

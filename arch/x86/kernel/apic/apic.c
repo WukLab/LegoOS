@@ -934,10 +934,7 @@ static int __init calibrate_APIC_clock(void)
 	 * specific routine, such as tsc calibration code. if so, we just fill
 	 * in the clockevent structure and return.
 	 */
-
-	if (cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER)) {
-		return 0;
-	} else if (lapic_timer_frequency) {
+	if (lapic_timer_frequency) {
 		apic_printk(APIC_VERBOSE, "lapic timer already calibrated %d\n",
 				lapic_timer_frequency);
 		lapic_clockevent.mult = div_sc(lapic_timer_frequency/APIC_DIVISOR,
