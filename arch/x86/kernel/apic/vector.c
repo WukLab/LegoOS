@@ -374,13 +374,15 @@ error:
 }
 
 static const struct irq_domain_ops x86_vector_domain_ops = {
-	.alloc	= x86_vector_alloc_irqs,
-	.free	= x86_vector_free_irqs,
+	.alloc		= x86_vector_alloc_irqs,
+	.free		= x86_vector_free_irqs,
 };
 
 struct irq_domain x86_vector_domain = {
-	.name	= "x86-vector",
-	.ops	= &x86_vector_domain_ops,
+	.name		= "x86-vector",
+	.ops		= &x86_vector_domain_ops,
+	.hwirq_max	= NR_IRQS,
+	.revmap_size	= NR_IRQS,
 };
 
 /*
@@ -409,6 +411,9 @@ void __init x86_apic_ioapic_init(void)
 		 */
 		irq_set_chip_data(i, data);
 	}
+
+	x86_vector_domain.linear_revmap =
+		kzalloc(sizeof(unsigned int) * NR_IRQS, GFP_KERNEL);
 
 	irq_set_default_host(&x86_vector_domain);
 

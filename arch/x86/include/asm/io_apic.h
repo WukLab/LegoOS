@@ -254,6 +254,8 @@ int mp_find_ioapic_pin(int ioapic, u32 gsi);
 int mpc_ioapic_id(int ioapic);
 void mp_save_irq(struct mpc_intsrc *m);
 
+int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pin);
+
 void __init arch_ioapic_init(void);
 void __init enable_IO_APIC(void);
 void __init setup_IO_APIC(void);

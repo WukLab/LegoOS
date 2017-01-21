@@ -1259,6 +1259,68 @@ static void __init replace_pin_at_irq_node(struct mp_chip_data *data, int node,
 }
 
 /*
+ * Find a specific PCI IRQ entry.
+ * Not an __init, possibly needed by modules
+ */
+int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pin)
+{
+	int irq, i, best_ioapic = -1, best_idx = -1;
+
+	apic_printk(APIC_DEBUG,
+		"querying PCI -> IRQ mapping bus:%d, slot:%d, pin:%d.\n",
+		bus, slot, pin);
+
+	if (test_bit(bus, mp_bus_not_pci)) {
+		apic_printk(APIC_VERBOSE,
+			"PCI BIOS passed nonexistent PCI bus %d!\n", bus);
+		return -1;
+	}
+
+	for (i = 0; i < mp_irq_entries; i++) {
+		int lbus = mp_irqs[i].srcbus;
+		int ioapic_idx, found = 0;
+
+		if (bus != lbus || mp_irqs[i].irqtype != mp_INT ||
+		    slot != ((mp_irqs[i].srcbusirq >> 2) & 0x1f))
+			continue;
+
+		for_each_ioapic(ioapic_idx)
+			if (mpc_ioapic_id(ioapic_idx) == mp_irqs[i].dstapic ||
+			    mp_irqs[i].dstapic == MP_APIC_ALL) {
+				found = 1;
+				break;
+			}
+		if (!found)
+			continue;
+
+		/* Skip ISA IRQs */
+		irq = pin_2_irq(i, ioapic_idx, mp_irqs[i].dstirq, 0);
+		if (irq > 0 && !IO_APIC_IRQ(irq))
+			continue;
+
+		if (pin == (mp_irqs[i].srcbusirq & 3)) {
+			best_idx = i;
+			best_ioapic = ioapic_idx;
+			goto out;
+		}
+
+		/*
+		 * Use the first all-but-pin matching entry as a
+		 * best-guess fuzzy result for broken mptables.
+		 */
+		if (best_idx < 0) {
+			best_idx = i;
+			best_ioapic = ioapic_idx;
+		}
+	}
+	if (best_idx < 0)
+		return -1;
+
+out:
+	return pin_2_irq(best_idx, best_ioapic, mp_irqs[best_idx].dstirq,
+			 IOAPIC_MAP_ALLOC);
+}
+/*
  * This code may look a bit paranoid, but it's supposed to cooperate with
  * a wide range of boards and BIOS bugs.  Fortunately only the timer IRQ
  * is so screwy.  Thanks to Brian Perkins for testing/hacking this beast
@@ -1390,6 +1452,7 @@ void __init setup_IO_APIC(void)
 		struct ioapic_domain_cfg *cfg = &ip->irqdomain_cfg;
 		struct mp_ioapic_gsi *gsi_cfg = mp_ioapic_gsi_routing(i);
 		int hwirqs = mp_ioapic_pin_count(i);
+		size_t size;
 
 		if (cfg->type == IOAPIC_DOMAIN_INVALID)
 			continue;
@@ -1399,6 +1462,12 @@ void __init setup_IO_APIC(void)
 		ip->irqdomain->ops = cfg->ops;
 		ip->irqdomain->host_data = (void *)(unsigned long)i;
 		ip->irqdomain->hwirq_max = hwirqs;
+
+		/* For reverse map */
+		ip->irqdomain->revmap_size = hwirqs;
+		size = sizeof(unsigned int) * hwirqs;
+		ip->irqdomain->linear_revmap = kzalloc(size, GFP_KERNEL);
+		BUG_ON(!ip->irqdomain->linear_revmap);
 
 		/* Just one single parent */
 		ip->irqdomain->parent = &x86_vector_domain;

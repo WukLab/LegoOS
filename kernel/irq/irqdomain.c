@@ -27,8 +27,6 @@ static struct irq_domain *irq_default_domain;
  */
 void irq_set_default_host(struct irq_domain *domain)
 {
-	pr_debug("Default domain set to @0x%p\n", domain);
-
 	irq_default_domain = domain;
 }
 
@@ -40,6 +38,16 @@ void irq_set_default_host(struct irq_domain *domain)
 unsigned int irq_find_mapping(struct irq_domain *domain,
 			      irq_hw_number_t hwirq)
 {
+	/* Look for default domain if nececssary */
+	if (domain == NULL)
+		domain = irq_default_domain;
+	if (domain == NULL)
+		return 0;
+
+	/* Check if the hwirq is in the linear revmap. */
+	if (hwirq < domain->revmap_size)
+		return domain->linear_revmap[hwirq];
+
 	return 0;
 }
 
@@ -123,6 +131,29 @@ static int irq_domain_alloc_irq_data(struct irq_domain *domain,
 	return 0;
 }
 
+static void irq_domain_insert_irq(int virq)
+{
+	struct irq_data *data;
+
+	for (data = irq_get_irq_data(virq); data; data = data->parent_data) {
+		struct irq_domain *domain = data->domain;
+		irq_hw_number_t hwirq = data->hwirq;
+
+		if (hwirq < domain->revmap_size) {
+			domain->linear_revmap[hwirq] = virq;
+		} else {
+			WARN(1, "Invalid hwirq: %lu\n", hwirq);
+			return;
+		}
+
+		/* If not already assigned, give the domain the chip's name */
+		if (!domain->name && data->chip)
+			domain->name = data->chip->name;
+	}
+
+	irq_clear_status_flags(virq, IRQ_NOREQUEST);
+}
+
 /**
  * __irq_domain_alloc_irqs - Allocate IRQs from domain
  * @domain:	domain to allocate from
@@ -189,9 +220,8 @@ int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 	if (ret < 0)
 		goto out_free;
 
-	/* TODO: insert into some irq mapping map */
 	for (i = 0; i < nr_irqs; i++)
-		;
+		irq_domain_insert_irq(virq + i);
 
 	return virq;
 

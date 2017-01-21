@@ -28,6 +28,7 @@
 #include <lego/cpumask.h>
 #include <lego/nodemask.h>
 #include <lego/spinlock.h>
+#include <lego/irqdomain.h>
 
 /* Screen information used by kernel */
 struct screen_info screen_info;

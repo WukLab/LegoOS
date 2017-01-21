@@ -45,7 +45,10 @@ struct irq_domain {
 	void				*host_data;
 	unsigned int			flags;
 
+	/* Reverse map data */
 	irq_hw_number_t			hwirq_max;
+	unsigned int			revmap_size;
+	unsigned int			*linear_revmap;
 };
 
 unsigned int irq_find_mapping(struct irq_domain *host, irq_hw_number_t hwirq);
