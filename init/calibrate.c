@@ -7,8 +7,6 @@
  * (at your option) any later version.
  */
 
-#define pr_fmt(fmt) "Calibrate: " fmt
-
 #include <lego/delay.h>
 #include <lego/kernel.h>
 #include <lego/jiffies.h>

@@ -77,4 +77,6 @@ static inline void *task_stack_page(const struct task_struct *task)
 	return task->stack;
 }
 
+unsigned long long sched_clock(void);
+
 #endif /* _LEGO_SCHED_H_ */
