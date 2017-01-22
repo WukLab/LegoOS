@@ -22,6 +22,7 @@
 #include <lego/list.h>
 #include <lego/slab.h>
 #include <lego/time.h>
+#include <lego/delay.h>
 #include <lego/string.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>
@@ -32,12 +33,6 @@
 
 /* Screen information used by kernel */
 struct screen_info screen_info;
-
-/*
- * This should be approx 2 Bo*oMips to start (note initial shift), and will
- * still work even if initially too large, it will just take slightly longer
- */
-unsigned long loops_per_jiffy = (1<<12);
 
 /* Builtin command line from kconfig */
 #ifdef CONFIG_CMDLINE_BOOL
@@ -52,6 +47,8 @@ static char command_line[COMMAND_LINE_SIZE];
 
 /* Setup configured maximum number of CPUs to activate */
 unsigned int setup_max_cpus = NR_CPUS;
+
+extern void calibrate_delay(void);
 
 asmlinkage void __init start_kernel(void)
 {
@@ -100,6 +97,7 @@ asmlinkage void __init start_kernel(void)
 
 	timekeeping_init();
 	time_init();
+	calibrate_delay();
 
 	smp_prepare_cpus(setup_max_cpus);
 	//smp_init();

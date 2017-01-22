@@ -137,4 +137,7 @@ extern int timekeeping_notify(struct clocksource *clock);
 /* Update jiffies */
 void do_timer(unsigned long ticks);
 
+/* Update all wall time based on our clocksource */
+void update_wall_time(void);
+
 #endif /* _LEGO_TIMEKEEPING_H_ */

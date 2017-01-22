@@ -184,3 +184,7 @@ void do_timer(unsigned long ticks)
 {
 	jiffies += ticks;
 }
+
+void update_wall_time(void)
+{
+}

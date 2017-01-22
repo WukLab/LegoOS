@@ -131,6 +131,24 @@ static int irq_domain_alloc_irq_data(struct irq_domain *domain,
 	return 0;
 }
 
+/**
+ * irq_domain_insert_irq
+ *
+ * Insert virq and its hwirq mapping into domain reverse map.
+ * All parent domains are updated as well.
+ *
+ * TODO: Known BUG:
+ *	In x86, different IO-APICs have the same hwirq from 0-23
+ *	So for the IO-APIC domain itself, it is okay to just insert.
+ *	Since each IO-APIC has its own domain structure.
+ *	But, since all IO-APIC domain share the same x86_vector_domain,
+ *	so it is BUG to insert directly into the parent domain.
+ *
+ *	We have this issue because the reverse mapping in lego is much
+ *	simiplified and different from Linux's original implementation.
+ *
+ *	Just pay attention to this and fix this oneday.
+ */
 static void irq_domain_insert_irq(int virq)
 {
 	struct irq_data *data;

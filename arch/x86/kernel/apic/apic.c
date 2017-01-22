@@ -779,12 +779,12 @@ static struct clock_event_device lapic_clockevent = {
 
 static DEFINE_PER_CPU(struct clock_event_device, lapic_events);
 
-/*
+/**
+ * apic_timer_interrupt
+ *
  * Local APIC timer interrupt.
  * This is the most natural way for doing local interrupts.
  *
- * [ if a single-CPU system runs an SMP kernel then we call the local
- *   interrupt as well. Thus we cannot inline the local irq ... ]
  */
 asmlinkage __visible void
 apic_timer_interrupt(struct pt_regs *regs)
@@ -802,14 +802,18 @@ apic_timer_interrupt(struct pt_regs *regs)
 	cpu = smp_processor_id();
 	levt = per_cpu_ptr(lapic_events, cpu);
 
-	if (!levt->event_handler) {
+	if (unlikely(!levt->event_handler)) {
 		pr_warn("Spurious LAPIC timer interrupt on cpu %d\n", cpu);
 		/* Switch it off */
 		lapic_timer_shutdown(levt);
 		return;
 	}
 
-	/* Clockevent framework, yummy. */
+	/*
+	 * Callback to clockevent framework, hmm, yummy
+	 * Since deadline TSC and one-shot is not supported now,
+	 * hence the handler is tick_handle_periodic():
+	 */
 	levt->event_handler(levt);
 
 	set_irq_regs(old_regs);

@@ -237,16 +237,30 @@ void tick_handle_noop(struct clock_event_device *dev)
 
 static int rlimit;
 
-/*
- * Event handler for periodic ticks
+/**
+ * tick_handle_periodic - Event handler for periodic ticks
+ *
+ * This function is the general interface between clock event
+ * device and the clockevent framework.
+ *
+ * Everytime a timer interrupt fires, the device timer interrupt
+ * handler will call back to this function to let kernel handle
+ * general timing bookkeeping job.
+ *
+ * Only one CPU will update the jiffies.
  */
 void tick_handle_periodic(struct clock_event_device *dev)
 {
 	int cpu = smp_processor_id();
 
 	if (cpu == tick_do_timer_cpu) {
-		/* Update jiffies */
+		/* jiffies += 1 */
 		do_timer(1);
+
+		/* Keep track of the next tick event */
+		tick_next_period = ktime_add(tick_next_period, tick_period);
+
+		update_wall_time();
 	}
 
 	if (++rlimit == HZ) {
