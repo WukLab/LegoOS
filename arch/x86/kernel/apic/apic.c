@@ -951,8 +951,8 @@ static int __init calibrate_APIC_clock(void)
 		return 0;
 	}
 
-	apic_printk(APIC_VERBOSE, "Using local APIC timer interrupts.\n"
-		    "calibrating APIC timer ...\n");
+	apic_printk(APIC_VERBOSE, "Using local APIC timer interrupts.\n");
+	apic_printk(APIC_VERBOSE, "Calibrating APIC timer ...\n");
 
 	local_irq_disable();
 

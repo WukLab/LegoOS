@@ -238,7 +238,6 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 	struct vmap_area *va;
 	struct vm_struct *area;
 
-	pr_debug("%s enter\n", __func__);
 	size = PAGE_ALIGN(size);
 	if (unlikely(!size))
 		return NULL;
@@ -262,7 +261,6 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 
 	setup_vmalloc_vm(area, va, flags, caller);
 
-	pr_debug("%s exit\n", __func__);
 	return area;
 }
 

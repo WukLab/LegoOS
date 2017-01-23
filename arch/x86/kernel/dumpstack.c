@@ -238,7 +238,7 @@ void show_stack_content(struct task_struct *task, struct pt_regs *regs)
 		if ((i % STACKSLOTS_PER_LINE) == 0) {
 			if (i != 0)
 				pr_cont("\n");
-			pr_cont("%016lx", word);
+			pr_info("%016lx", word);
 		} else
 			pr_cont(" %016lx", word);
 

@@ -1093,7 +1093,7 @@ static void __init setup_IO_APIC_irqs(void)
 	unsigned int ioapic, pin;
 	int idx;
 
-	apic_printk(APIC_VERBOSE, KERN_DEBUG "init IO_APIC IRQs\n");
+	apic_printk(APIC_VERBOSE, "init IO_APIC IRQs\n");
 
 	for_each_ioapic_pin(ioapic, pin) {
 		idx = find_irq_entry(ioapic, pin, mp_INT);
@@ -1409,9 +1409,9 @@ static inline void __init check_timer(void)
 			apic_printk(APIC_QUIET, "..MP-BIOS bug: "
 				    "8254 timer not connected to IO-APIC\n");
 
-		apic_printk(APIC_QUIET, KERN_INFO "...trying to set up timer "
+		apic_printk(APIC_QUIET, "...trying to set up timer "
 			    "(IRQ0) through the 8259A ...\n");
-		apic_printk(APIC_QUIET, KERN_INFO
+		apic_printk(APIC_QUIET,
 			    "..... (found apic %d pin %d) ...\n", apic2, pin2);
 		/*
 		 * legacy devices should be connected to IO APIC #0
@@ -1420,7 +1420,7 @@ static inline void __init check_timer(void)
 		irq_domain_activate_irq(irq_data);
 		legacy_pic->unmask(0);
 		if (timer_irq_works()) {
-			apic_printk(APIC_QUIET, KERN_INFO "....... works.\n");
+			apic_printk(APIC_QUIET, "....... works.\n");
 			goto out;
 		}
 		/*
@@ -1429,7 +1429,7 @@ static inline void __init check_timer(void)
 		local_irq_disable();
 		legacy_pic->mask(0);
 		clear_IO_APIC_pin(apic2, pin2);
-		apic_printk(APIC_QUIET, KERN_INFO "....... failed.\n");
+		apic_printk(APIC_QUIET, "....... failed.\n");
 	}
 
 	panic("IO-APIC + timer doesn't work!");
