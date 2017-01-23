@@ -91,6 +91,7 @@
 #define vmemmap			((struct page *)VMEMMAP_START)
 
 #ifndef __ASSEMBLY__
+
 /* In normal platform, phys_base is 0 */
 extern unsigned long phys_base;
 
@@ -103,7 +104,8 @@ static inline unsigned long __phys_addr_nodebug(unsigned long x)
 
 	return x;
 }
-#endif
+
+#endif /* __ASSEMBLY__ */
 
 #define __pa(x)		__phys_addr_nodebug((unsigned long)(x))
 

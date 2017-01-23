@@ -13,8 +13,8 @@
 #include <lego/irq.h>
 #include <lego/typecheck.h>
 
-/* Arch-specific spinlock */
 #include <asm/spinlock.h>
+#include <asm/barrier.h>
 
 typedef struct spinlock {
 	arch_spinlock_t arch_lock;

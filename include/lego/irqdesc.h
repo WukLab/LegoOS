@@ -630,4 +630,15 @@ void check_irq_resend(struct irq_desc *desc);
 void irq_move_masked_irq(struct irq_data *data);
 void irq_move_irq(struct irq_data *idata);
 
+static inline struct msi_desc *irq_get_msi_desc(unsigned int irq)
+{
+       struct irq_data *d = irq_get_irq_data(irq);
+       return d ? d->common->msi_desc : NULL;
+}
+
+static inline struct msi_desc *irq_data_get_msi_desc(struct irq_data *d)
+{
+	return d->common->msi_desc;
+}
+
 #endif /* _LEGO_IRQDESC_H_ */

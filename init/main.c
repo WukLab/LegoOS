@@ -30,6 +30,8 @@
 #include <lego/nodemask.h>
 #include <lego/spinlock.h>
 #include <lego/irqdomain.h>
+#include <lego/pci.h>
+#include <lego/net.h>
 
 /* Screen information used by kernel */
 struct screen_info screen_info;
@@ -100,7 +102,16 @@ asmlinkage void __init start_kernel(void)
 	calibrate_delay();
 
 	smp_prepare_cpus(setup_max_cpus);
-	//smp_init();
+	local_irq_enable();
+
+#if 0
+	/* not ready to init smp */
+	smp_init();
+#endif
+
+	pci_init();
+	lego_ib_init();
+	//init_lwip();
 
 	hlt();
 }

@@ -316,6 +316,10 @@ __alloc_pages(gfp_t gfp_mask, unsigned int order,
 static __always_inline struct page *
 __alloc_pages_node(int nid, gfp_t gfp_mask, unsigned int order)
 {
+	/*
+	 * If these messages show up, means there are
+	 * some major problems with the kernel.
+	 */
 	VM_BUG_ON(nid < 0 || nid >= MAX_NUMNODES);
 	VM_WARN_ON(!node_online(nid));
 
@@ -345,7 +349,7 @@ alloc_pages_node(int nid, gfp_t gfp_mask, unsigned int order)
  * @x: the page in question
  * RETURN: the kernel virtual address
  */
-#define page_to_virt(x)	__va(PFN_PHYS(page_to_pfn(x)))
+#define page_to_virt(x)			__va(PFN_PHYS(page_to_pfn(x)))
 
 static inline unsigned long
 __get_free_pages(gfp_t gfp_mask, unsigned int order)
@@ -370,8 +374,13 @@ get_zeroed_page(gfp_t gfp_mask)
  * virt_to_page(kaddr) returns a valid pointer if and only if
  * virt_addr_valid(kaddr) returns true.
  */
-#define virt_to_page(kaddr)	pfn_to_page(__pa(kaddr) >> PAGE_SHIFT)
-#define pfn_to_kaddr(pfn)      __va((pfn) << PAGE_SHIFT)
+#define virt_to_pfn(kaddr)	(__pa(kaddr) >> PAGE_SHIFT)
+#define virt_to_page(addr)	pfn_to_page(virt_to_pfn(addr))
+#define pfn_to_kaddr(pfn)	__va((pfn) << PAGE_SHIFT)
+
+#define pfn_to_virt(pfn)	__va((pfn) << PAGE_SHIFT)
+#define page_to_phys(page)	(page_to_pfn(page) << PAGE_SHIFT)
+#define page_address(page)	__va(PFN_PHYS(page_to_pfn(page)))
 
 static inline bool virt_addr_valid(unsigned long x)
 {
@@ -425,5 +434,9 @@ pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 	return (unlikely(pmd_none(*pmd)) && __pte_alloc_kernel(pmd, address))?
 		NULL : pte_offset_kernel(pmd, address);
 }
+
+#define nth_page(page,n)	pfn_to_page(page_to_pfn((page)) + (n))
+
+#define PAGE_ALIGNED(addr)      IS_ALIGNED((unsigned long)addr, PAGE_SIZE)
 
 #endif /* _LEGO_MM_H_ */

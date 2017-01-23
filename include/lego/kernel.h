@@ -20,6 +20,7 @@
 #include <lego/printk.h>
 #include <lego/sections.h>
 #include <lego/compiler.h>
+#include <lego/byteorder.h>
 
 #define USHRT_MAX		((u16)(~0U))
 #define SHRT_MAX		((s16)(USHRT_MAX>>1))

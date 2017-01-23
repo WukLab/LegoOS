@@ -1,1 +1,6 @@
+menu "Device Drivers"
 
+source "drivers/infiniband/Kconfig"
+source "drivers/eth/Kconfig"
+
+endmenu

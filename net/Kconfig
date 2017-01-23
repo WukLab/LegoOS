@@ -1,0 +1,8 @@
+menu "Networking"
+
+menuconfig LWIP
+	tristate "lwip TCP/IP layer"
+	---help---
+	  lwip TCP/IP layer.
+
+endmenu

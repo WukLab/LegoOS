@@ -13,7 +13,7 @@
 
 void kfree(const void *p)
 {
-	BUG();
+	panic("kfree() is not ready! Use kfree_tmp() instead!\n");
 }
 
 void kfree_tmp(size_t size, const void *p)
@@ -75,6 +75,10 @@ void *kmalloc(size_t size, gfp_t flags)
 {
 	unsigned int order = get_order(size);
 
-	BUG_ON(order >= MAX_ORDER);
+	if (unlikely((order >= MAX_ORDER))) {
+		WARN_ON(1);
+		return NULL;
+	}
+
 	return (void *)__get_free_pages(GFP_KERNEL, order);
 }

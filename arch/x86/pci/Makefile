@@ -1,1 +1,2 @@
-obj-y := early.o
+obj-y := pci.o
+obj-y += msi.o
