@@ -30,8 +30,10 @@ static dma_addr_t nommu_map_page(struct pci_dev *dev, struct page *page,
 				 unsigned long attrs)
 {
 	dma_addr_t bus = page_to_phys(page) + offset;
+/*
 	pr_debug("%s dev %p page %p bus %lx offset %lx\n",
 			__func__, dev, page, bus, offset); 
+*/
 	WARN_ON(size == 0);
 	if (!check_addr("map_single", dev, bus, size))
 		return DMA_ERROR_CODE;
@@ -66,8 +68,10 @@ int nommu_map_sg(struct pci_dev *hwdev, struct scatterlist *sg,
         for_each_sg(sg, s, nents, i) {
                 BUG_ON(!sg_page(s));
                 s->dma_address = sg_phys(s);
+/*
 		pr_debug("%s dev %p, dma_addr %lx length %lx\n", 
 				__func__, hwdev, s->dma_address, s->length);
+*/
                 //if (!check_addr("map_sg", hwdev, s->dma_address, s->length))
                   //      return 0;
                 s->dma_length = s->length;

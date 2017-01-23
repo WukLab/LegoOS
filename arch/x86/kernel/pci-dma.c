@@ -30,17 +30,20 @@ void *dma_generic_alloc_coherent(struct pci_dev *pcid, size_t size,
 	dma_mask = dma_alloc_coherent_mask(pcid, flag);
 
 	flag &= ~__GFP_ZERO;
-again:
+
 	page = alloc_pages(flag, get_order(size));
 	if (!page)
 		return NULL;
+/*
 	pr_debug("%s mask %lx size %d got page %p\n", 
 			__func__, dma_mask, size, page);
-
+*/
 	addr = page_to_phys(page);
 	if (addr + size > dma_mask) {
+/*
 		pr_debug("addr %lx + size %lx bigger than dma_mask %lx\n",
 				addr, addr+size, dma_mask);
+*/
 	//	__free_pages(page, get_order(size));
 
 	//	if (dma_mask < DMA_BIT_MASK(32) && !(flag & GFP_DMA)) {

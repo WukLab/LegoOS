@@ -96,6 +96,8 @@ int pci_receive_packet(void * dst);
 
 #ifdef CONFIG_INFINIBAND
 int mlx4_init_one(struct pci_dev *f);
+#else
+static inline int mlx4_init_one(struct pci_dev *f) { return 0; }
 #endif
 
 u32 pci_conf_read(struct pci_dev *f, u32 off, int len);
