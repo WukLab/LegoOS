@@ -1,0 +1,31 @@
+menuconfig INFINIBAND
+	tristate "InfiniBand support"
+#	depends on PCI || BROKEN
+#	depends on HAS_IOMEM
+#	depends on NET
+#	depends on INET
+#	depends on m || IPV6 != m
+	select IRQ_POLL
+	---help---
+	  Core support for InfiniBand (IB).  Make sure to also select
+	  any protocols you wish to use as well as drivers for your
+	  InfiniBand hardware.
+
+if INFINIBAND
+
+config INFINIBAND_CLIENT
+	tristate "InfiniBand client side of rc"
+	depends on INFINIBAND
+
+config INFINIBAND_SERVER
+	tristate "InfiniBand server side of rc"
+	depends on INFINIBAND
+
+source "drivers/infiniband/hw/mlx4/Kconfig"
+
+source "drivers/infiniband/ulp/ipoib/Kconfig"
+
+#source "drivers/infiniband/sw/rdmavt/Kconfig"
+#source "drivers/infiniband/sw/rxe/Kconfig"
+
+endif # INFINIBAND

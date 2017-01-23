@@ -541,17 +541,19 @@ ifeq ($(KBUILD_EXTMOD),)
 init-y		:= init/
 core-y		+= kernel/ mm/
 drivers-y	+= drivers/
+net-y		:= net/
 libs-y		+= lib/
 
-vmImage-dirs	:= $(patsubst %/,%,$(filter %/, $(init-y) $(core-y) $(drivers-y) $(libs-y)))
+vmImage-dirs	:= $(patsubst %/,%,$(filter %/, $(init-y) $(core-y) $(drivers-y) $(net-y) $(libs-y)))
 init-y		:= $(patsubst %/, %/built-in.o, $(init-y))
 core-y		:= $(patsubst %/, %/built-in.o, $(core-y))
 drivers-y	:= $(patsubst %/, %/built-in.o, $(drivers-y))
+net-y		:= $(patsubst %/, %/built-in.o, $(net-y))
 libs-y		:= $(patsubst %/, %/built-in.o, $(libs-y))
 
 # Externally visible to link-vmImage.sh
 export KBUILD_VMIMAGE_INIT := $(head-y) $(init-y)
-export KBUILD_VMIMAGE_MAIN := $(core-y) $(libs-y) $(drivers-y)
+export KBUILD_VMIMAGE_MAIN := $(core-y) $(libs-y) $(drivers-y) $(net-y)
 export KBUILD_LDS          := arch/$(SRCARCH)/kernel/vmImage.lds
 export LDFLAGS_vmImage
 

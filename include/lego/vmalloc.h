@@ -15,7 +15,9 @@
 #include <lego/kernel.h>
 
 #define VM_IOREMAP		0x00000001
-#define VM_NO_GUARD		0x00000040      /* don't add guard page */
+#define VM_MAP			0x00000004	/* vmap()ed pages */
+#define VM_NO_GUARD		0x00000040	/* don't add guard page */
+#define VM_VPAGES		0x00000010	/* buffer for pages was vmalloc'ed */
 
 struct vm_struct {
 	struct vm_struct	*next;
@@ -49,5 +51,15 @@ struct vm_struct *__get_vm_area_caller(unsigned long size, unsigned long flags,
 					const void *caller);
 
 void free_vm_area(struct vm_struct *area);
+
+static inline size_t get_vm_area_size(const struct vm_struct *area)
+{
+	/* return actual size without guard page */
+	return area->size - PAGE_SIZE;
+}
+
+void *vmap(struct page **pages, unsigned int count,
+	   unsigned long flags, pgprot_t prot);
+void vunmap(const void *addr);
 
 #endif /* _LEGO_VMALLOC_H_ */

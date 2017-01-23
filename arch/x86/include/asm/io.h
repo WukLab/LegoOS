@@ -148,4 +148,23 @@ static inline void __iomem *ioremap(resource_size_t offset, unsigned long size)
 
 void iounmap(volatile void __iomem *addr);
 
+/* dummy func, no need */
+static inline void flush_write_buffers(void) { }
+
+#include <lego/types.h>
+
+static inline void __raw_writeq(u64 value, volatile void *addr)
+{
+        *(volatile u64 __force *)addr = value;
+}
+
+static inline void __raw_writel(u32 value, volatile void *addr)
+{
+        *(volatile u32 __force *)addr = value;
+}
+
+#define __raw_readl __readl
+
+#define mmiowb() barrier()
+
 #endif /* _ASM_X86_IO_H_ */

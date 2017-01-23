@@ -94,6 +94,12 @@
  */
 #define __visible		__attribute__((externally_visible))
 
+#define __user
+#define __kernel
+#define __force
+#define __iomem
+#define __rcu
+
 /*
  * Generic GCC Function and Variable attribute.
  * Please consult GCC manual for more details.
@@ -326,5 +332,9 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
  * code
  */
 #define uninitialized_var(x) x = x
+
+#ifndef __attribute_const__
+# define __attribute_const__    /* unimplemented */
+#endif
 
 #endif /* _LEGO_COMPILER_H_ */

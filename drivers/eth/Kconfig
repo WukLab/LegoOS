@@ -1,0 +1,10 @@
+menuconfig E1000
+	tristate "e1000 driver"
+	---help---
+	  Driver for Intel E1000.
+
+menuconfig TG3
+	tristate "tg3 driver"
+	---help---
+	  Driver for Broadcom tg3.
+

@@ -1,0 +1,20 @@
+obj-$(CONFIG_INFINIBAND)		+= mlx4_core.o
+
+mlx4_core-y := alloc.o 
+#mlx4_core-y += catas.o 
+mlx4_core-y += cmd.o 
+mlx4_core-y += cq.o 
+mlx4_core-y += intf.o 
+mlx4_core-y += eq.o 
+mlx4_core-y += fw.o 
+mlx4_core-y += icm.o #not used
+mlx4_core-y += main.o 
+#mlx4_core-y += mcg.o #not used 
+mlx4_core-y += mr.o 
+mlx4_core-y += pd.o 
+mlx4_core-y += port.o 
+mlx4_core-y += profile.o 
+mlx4_core-y += qp.o 
+mlx4_core-y += reset.o 
+#mlx4_core-y += sense.o 
+#mlx4_core-y += srq.o 

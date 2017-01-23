@@ -172,4 +172,14 @@ bitmap_find_next_zero_area(unsigned long *map,
 					      align_mask, 0);
 }
 
+extern int bitmap_find_free_region(unsigned long *bitmap, int bits, int order);
+extern void bitmap_release_region(unsigned long *bitmap, int pos, int order);
+extern int bitmap_allocate_region(unsigned long *bitmap, int pos, int order);
+
+extern unsigned long bitmap_find_next_zero_area(unsigned long *map,
+                                         unsigned long size,
+                                         unsigned long start,
+                                         unsigned int nr,
+                                         unsigned long align_mask);
+
 #endif /* _LEGO_BITMAP_H_ */
