@@ -13,7 +13,9 @@
 
 void kfree(const void *p)
 {
+#if 0
 	panic("kfree() is not ready! Use kfree_tmp() instead!\n");
+#endif
 }
 
 void kfree_tmp(size_t size, const void *p)
