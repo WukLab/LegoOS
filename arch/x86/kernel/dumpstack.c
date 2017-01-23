@@ -217,7 +217,7 @@ void show_call_trace(struct task_struct *task, struct pt_regs *regs)
 }
 
 #define STACKSLOTS_PER_LINE	4
-#define STACK_LINES		3
+#define STACK_LINES		5
 #define kstack_depth_to_print	(STACK_LINES * STACKSLOTS_PER_LINE)
 
 void show_stack_content(struct task_struct *task, struct pt_regs *regs)
