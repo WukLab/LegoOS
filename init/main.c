@@ -52,6 +52,24 @@ unsigned int setup_max_cpus = NR_CPUS;
 
 extern void calibrate_delay(void);
 
+/* Defined in linker scripts */
+extern const struct obs_kernel_param __sinitsetup[], __einitsetup[];
+
+static int __init parse_kernel_param(char *param, char *val)
+{
+	const struct obs_kernel_param *p;
+
+	for (p = __sinitsetup; p < __einitsetup; p++) {
+		if (parameq(param, p->str)) {
+			if (p->setup_func(val) != 0) {
+				pr_warn("Malformed option '%s'\n", param);
+				return -ENOENT;
+			}
+		}
+	}
+	return 0;
+}
+
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
@@ -72,6 +90,9 @@ asmlinkage void __init start_kernel(void)
 #endif
 	strlcpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
 	pr_info("Command line: %s\n", command_line);
+
+	/* Parse setup parameters */
+	parse_args(command_line, parse_kernel_param);
 
 	/* Architecture-Specific Initialization */
 	setup_arch();

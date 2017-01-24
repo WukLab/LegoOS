@@ -11,6 +11,7 @@
 
 #include <lego/irq.h>
 #include <lego/smp.h>
+#include <lego/init.h>
 #include <lego/delay.h>
 #include <lego/kernel.h>
 #include <lego/bitops.h>
@@ -30,7 +31,22 @@
 #include <asm/processor.h>
 #include <asm/irq_vectors.h>
 
-unsigned int apic_verbosity = APIC_VERBOSE;
+unsigned int apic_verbosity = APIC_QUIET;
+
+static int __init apic_set_verbosity(char *arg)
+{
+	if (strcmp("debug", arg) == 0)
+		apic_verbosity = APIC_DEBUG;
+	else if (strcmp("verbose", arg) == 0)
+		apic_verbosity = APIC_VERBOSE;
+	else {
+		pr_warn("APIC Verbosity level %s not recognised"
+			" use apic=verbose or apic=debug\n", arg);
+		return -EINVAL;
+	}
+	return 0;
+}
+__setup("apic", apic_set_verbosity);
 
 unsigned int nr_cpus;
 

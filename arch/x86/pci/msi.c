@@ -239,9 +239,9 @@ void write_msi_msg(unsigned int irq, struct msi_msg *msg)
 static void free_msi_irqs(struct pci_dev *dev)
 {
 	struct msi_desc *entry, *tmp;
+	int nvec;
 
 	list_for_each_entry(entry, &dev->msi_list, list) {
-		int i, nvec;
 		if (!entry->irq)
 			continue;
 		if (entry->nvec_used)
@@ -377,7 +377,6 @@ void pci_restore_msi_state(struct pci_dev *dev)
 static int msi_capability_init(struct pci_dev *dev, int nvec)
 {
 	struct msi_desc *entry;
-	int ret;
 	u16 control;
 	unsigned mask;
 
@@ -402,7 +401,7 @@ static int msi_capability_init(struct pci_dev *dev, int nvec)
 		entry->mask_pos = dev->msi_cap + PCI_MSI_MASK_32;
 	/* All MSIs are unmasked by default, Mask them all */
 	if (entry->msi_attrib.maskbit)
-		pci_conf_read(dev, entry->mask_pos, &entry->masked);
+		pci_conf_read(dev, entry->mask_pos, (entry->masked));
 	mask = msi_capable_mask(control);
 	msi_mask_irq(entry, mask, mask);
 
@@ -542,7 +541,6 @@ static int msix_capability_init(struct pci_dev *dev,
 
 	return 0;
 
-error:
 	if (ret < 0) {
 		/*
 		 * If we had some success, report the number of irqs

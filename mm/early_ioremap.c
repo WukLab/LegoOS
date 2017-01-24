@@ -17,11 +17,19 @@
 
 #include <lego/mm.h>
 #include <lego/bug.h>
+#include <lego/init.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/early_ioremap.h>
 
-int early_ioremap_debug = 0;
+int early_ioremap_debug;
+
+static int __init setup_early_ioremap_debug(char *s)
+{
+	early_ioremap_debug = 1;
+	return 0;
+}
+__setup("early_ioremap_debug", setup_early_ioremap_debug);
 
 static void *prev_map[FIX_BTMAPS_SLOTS] __initdata;
 static unsigned long prev_size[FIX_BTMAPS_SLOTS] __initdata;

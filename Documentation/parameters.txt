@@ -28,3 +28,13 @@ LegoOS parameters
 
 			Interaction with the standard serial driver is not
 			very good.
+
+	apic=		[APIC] Advanced Programmable Interrupt Controller
+			Change the output verbosity whilst booting
+			Format: { quiet (default) | verbose | debug }
+			Change the amount of debugging information output
+			when initialising the APIC and IO-APIC components.
+
+	early_ioremap_debug
+			Enable to print early_ioremap() debug information.
+			This may generate a mount of messages, you are warned.

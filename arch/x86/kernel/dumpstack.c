@@ -16,6 +16,7 @@
 
 #include <lego/bug.h>
 #include <lego/smp.h>
+#include <lego/init.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
@@ -216,14 +217,34 @@ void show_call_trace(struct task_struct *task, struct pt_regs *regs)
 	}
 }
 
-#define STACKSLOTS_PER_LINE	4
-#define STACK_LINES		5
-#define kstack_depth_to_print	(STACK_LINES * STACKSLOTS_PER_LINE)
+static int stackslots_per_line = 4;
+static int stack_lines = 5;
+
+/* TODO: once we have kstrtoint() */
+static int __init setup_stackslots_per_line(char *s)
+{
+	if (!s)
+		return -EINVAL;
+
+	return 0;
+}
+__setup("stackslots_per_line", setup_stackslots_per_line);
+
+static int __init setup_stack_lines(char *s)
+{
+	if (!s)
+		return -EINVAL;
+
+	return 0;
+}
+__setup("stack_lines", setup_stack_lines);
 
 void show_stack_content(struct task_struct *task, struct pt_regs *regs)
 {
-	int i;
+	int i, kstack_depth_to_print;
 	unsigned long *stack;
+
+	kstack_depth_to_print = stackslots_per_line * stack_lines;
 
 	pr_info("Stack:\n");
 
@@ -235,7 +256,7 @@ void show_stack_content(struct task_struct *task, struct pt_regs *regs)
 			break;
 
 		probe_kernel_address(stack, word);
-		if ((i % STACKSLOTS_PER_LINE) == 0) {
+		if ((i % stackslots_per_line) == 0) {
 			if (i != 0)
 				pr_cont("\n");
 			pr_info("%016lx", word);

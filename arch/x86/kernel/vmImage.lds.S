@@ -130,6 +130,24 @@ SECTIONS {
 	}
 
 	. = ALIGN(L1_CACHE_BYTES);
+	.init.rodata : {
+		__sinitrodata = .;
+		*(.init.rodata)
+		__einitrodata = .;
+	}
+
+	/*
+	 * Kernel parameter setup functions
+	 * __setup(str, fn);
+	 */
+	. = ALIGN(L1_CACHE_BYTES);
+	.init.setup : {
+		__sinitsetup = .;
+		*(.init.setup)
+		__einitsetup = .;
+	}
+
+	. = ALIGN(L1_CACHE_BYTES);
 	.x86_cpu_vendor.init : {
 		__x86_cpu_vendor_start = .;
 		*(.x86_cpu_vendor.init)
