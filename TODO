@@ -1,0 +1,5 @@
+- build_all_zonelists(), based on node order or zone order
+- schedule()
+- create_thread
+- sched_clock(), use tsc() instead of jiffies
+- PCI MSI
