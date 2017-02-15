@@ -14,6 +14,7 @@
 #include <asm/setup.h>
 
 #include <lego/mm.h>
+#include <lego/pid.h>
 #include <lego/smp.h>
 #include <lego/bug.h>
 #include <lego/tty.h>
@@ -73,6 +74,8 @@ static int __init parse_kernel_param(char *param, char *val)
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
+
+	setup_task_stack_end_magic(&init_task);
 
 	boot_cpumask_init();
 

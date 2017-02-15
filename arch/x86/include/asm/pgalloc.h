@@ -44,4 +44,10 @@ pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr);
 void pmd_free(struct mm_struct *mm, pmd_t *pmd);
 void pud_free(struct mm_struct *mm, pud_t *pud);
 
+/*
+ * Allocate and free page tables.
+ */
+pgd_t *pgd_alloc(struct mm_struct *);
+void pgd_free(struct mm_struct *mm, pgd_t *pgd);
+
 #endif /* _ASM_X86_PGALLOC_H */

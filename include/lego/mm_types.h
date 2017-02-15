@@ -32,6 +32,12 @@ struct page {
 	unsigned long flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
 
+	union {
+		pgoff_t index;		/* Our offset within mapping.
+					 * Point to mm_struct if pgd page */
+		void *freelist;		/* slab first free object */
+	};
+
 	struct list_head lru;
 	unsigned long private;
 	atomic_t _mapcount;
@@ -75,6 +81,10 @@ struct mm_struct {
 	struct vm_area_struct *mmap;		/* list of VMAs */
 	unsigned long task_size;		/* size of task vm space */
 	unsigned long highest_vm_end;		/* highest vma end address */
+
+	atomic_t mm_users;
+	atomic_t mm_count;
+
 	pgd_t * pgd;
 	int map_count;				/* number of VMAs */
 
@@ -82,7 +92,6 @@ struct mm_struct {
 	struct list_head mmlist;		/* list of all mm_structs */
 
 	unsigned long total_vm;		/* Total pages mapped */
-	unsigned long locked_vm;	/* Pages that have PG_mlocked set */
 	unsigned long pinned_vm;	/* Refcount permanently increased */
 	unsigned long data_vm;		/* VM_WRITE & ~VM_SHARED & ~VM_STACK */
 	unsigned long exec_vm;		/* VM_EXEC & ~VM_WRITE & ~VM_STACK */

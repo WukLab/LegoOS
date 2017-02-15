@@ -24,3 +24,12 @@ unsigned long long __weak sched_clock(void)
 	return (unsigned long long)(jiffies - INITIAL_JIFFIES)
 					* (NSEC_PER_SEC / HZ);
 }
+
+/**
+ * schedule_tail - first thing a freshly forked thread must call.
+ * @prev: the thread we just switched away from.
+ */
+asmlinkage __visible void schedule_tail(struct task_struct *prev)
+{
+	printk("%s is invoked\n", __func__);
+}

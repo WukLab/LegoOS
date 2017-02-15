@@ -13,3 +13,4 @@ obj-y += time/
 obj-y += irq/
 obj-y += sched/
 obj-y += fork.o
+obj-y += pid.o

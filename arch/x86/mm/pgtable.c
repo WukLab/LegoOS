@@ -69,3 +69,84 @@ void pte_free(struct mm_struct *mm, struct page *pte)
 	/* pgtable_page_dtor(pte); */
 	__free_page(pte);
 }
+
+/*
+ * A list of pages that are used as pgd
+ */
+LIST_HEAD(pgd_list);
+DEFINE_SPINLOCK(pgd_lock);
+
+static inline void pgd_list_add(pgd_t *pgd)
+{
+	struct page *page = virt_to_page(pgd);
+
+	list_add(&page->lru, &pgd_list);
+}
+
+static inline void pgd_list_del(pgd_t *pgd)
+{
+	struct page *page = virt_to_page(pgd);
+
+	list_del(&page->lru);
+}
+
+static void pgd_set_mm(pgd_t *pgd, struct mm_struct *mm)
+{
+	BUILD_BUG_ON(sizeof(virt_to_page(pgd)->index) < sizeof(mm));
+	virt_to_page(pgd)->index = (pgoff_t)mm;
+}
+
+struct mm_struct *pgd_page_get_mm(struct page *page)
+{
+	return (struct mm_struct *)page->index;
+}
+
+/*
+ * clone_pgd_range(pgd_t *dst, pgd_t *src, int count);
+ *
+ *  dst - pointer to pgd range anwhere on a pgd page
+ *  src - ""
+ *  count - the number of pgds to copy.
+ *
+ * dst and src can be on the same page, but the range must not overlap,
+ * and must not cross a page boundary.
+ */
+static inline void clone_pgd_range(pgd_t *dst, pgd_t *src, int count)
+{
+       memcpy(dst, src, count * sizeof(pgd_t));
+}
+
+pgd_t *pgd_alloc(struct mm_struct *mm)
+{
+	pgd_t *pgd;
+
+	pgd = (pgd_t *)__get_free_page(PGALLOC_GFP);
+	if (!pgd)
+		return NULL;
+
+	/*
+	 * Copy the kernel identity mapping
+	 * for all the forked processes..
+	 *
+	 * That is where user-kernel VA sapce split happens!
+	 */
+	spin_lock(&pgd_lock);
+	clone_pgd_range(pgd + KERNEL_PGD_BOUNDARY,
+			swapper_pg_dir + KERNEL_PGD_BOUNDARY,
+			KERNEL_PGD_PTRS);
+
+	pgd_set_mm(pgd, mm);
+	pgd_list_add(pgd);
+	spin_unlock(&pgd_lock);
+
+	return pgd;
+}
+
+void pgd_free(struct mm_struct *mm, pgd_t *pgd)
+{
+	spin_lock(&pgd_lock);
+	pgd_list_del(pgd);
+	spin_unlock(&pgd_lock);
+
+	free_page((unsigned long)pgd);
+}

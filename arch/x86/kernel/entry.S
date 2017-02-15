@@ -202,3 +202,33 @@ apicinterrupt CALL_FUNCTION_SINGLE_VECTOR	call_function_single_interrupt	smp__ca
 apicinterrupt CALL_FUNCTION_VECTOR		call_function_interrupt		smp__call_function_interrupt
 apicinterrupt ERROR_APIC_VECTOR			error_interrupt			smp__error_interrupt
 apicinterrupt SPURIOUS_APIC_VECTOR		spurious_interrupt		smp__spurious_interrupt
+
+/*
+ * A newly forked process directly context switches into this address.
+ *
+ * rax: prev task we switched from
+ * rbx: kernel thread func (NULL for user thread)
+ * r12: kernel thread arg
+ */
+ENTRY(ret_from_fork)
+	movq	%rax, %rdi
+	call	schedule_tail		/* rdi: 'prev' task parameter */
+
+	testq	%rbx, %rbx		/* from kernel_thread? */
+	jnz	1f			/* kernel threads are uncommon */
+2:
+	/* TODO */
+	call	user_thread_bug_now
+1:
+	/* kernel thread */
+	movq	%r12, %rdi
+	call	*%rbx
+
+	/*
+	 * A kernel thread is allowed to return here after successfully
+	 * calling do_execve().  Exit to userspace to complete the execve()
+	 * syscall.
+	 */
+	movq	$0, RAX(%rsp)
+	jmp	2b
+END(ret_from_fork)

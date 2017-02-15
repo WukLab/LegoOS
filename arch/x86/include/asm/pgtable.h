@@ -53,6 +53,9 @@ extern struct list_head pgd_list;
  */
 #define pgd_offset_k(address) pgd_offset(&init_mm, (address))
 
+#define KERNEL_PGD_BOUNDARY	pgd_index(PAGE_OFFSET)
+#define KERNEL_PGD_PTRS		(PTRS_PER_PGD - KERNEL_PGD_BOUNDARY)
+
 #ifndef __ASSEMBLY__
 
 /*
