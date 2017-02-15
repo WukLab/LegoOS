@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
  *
  * Initialize ENV and fetch HW info from BIOS, then jump to PM
  */

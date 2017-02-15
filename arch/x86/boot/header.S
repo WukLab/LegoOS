@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
  *
  * This is the entry point of 16-bit setup kernel. It will do the necessary
  * sanitary checking and initilization, then jumps to main() of setup.

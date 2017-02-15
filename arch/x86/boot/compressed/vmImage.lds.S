@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
  */
 
 OUTPUT_FORMAT(CONFIG_OUTPUT_FORMAT, CONFIG_OUTPUT_FORMAT, CONFIG_OUTPUT_FORMAT)
