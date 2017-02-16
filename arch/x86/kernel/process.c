@@ -79,8 +79,3 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 
 	return prev_p;
 }
-
-void user_thread_bug_now(void)
-{
-	panic("%s\n", __func__);
-}

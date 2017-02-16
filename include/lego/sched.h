@@ -183,6 +183,7 @@ void setup_task_stack_end_magic(struct task_struct *tsk);
 
 asmlinkage void schedule_tail(struct task_struct *prev);
 int setup_sched_fork(unsigned long clone_flags, struct task_struct *p);
+void sched_remove_from_rq(struct task_struct *p);
 
 /* arch-hook to copy thread info while doing fork */
 int copy_thread_tls(unsigned long, unsigned long, unsigned long,

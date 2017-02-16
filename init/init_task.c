@@ -14,9 +14,11 @@
 {									\
 	.state		= 0,						\
 	.comm		= "swapper",					\
+	.flags		= PF_KTHREAD,					\
 	.mm		= &init_mm,					\
 	.active_mm	= &init_mm,					\
 	.stack		= &init_thread_info,				\
+	.thread		= INIT_THREAD,					\
 }
 
 struct task_struct init_task = INIT_TASK(init_task);

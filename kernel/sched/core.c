@@ -13,6 +13,11 @@
 #include <lego/jiffies.h>
 #include <lego/spinlock.h>
 
+/*
+ * TODO:
+ *	Rewrite runqueue
+ */
+
 /**
  * sched_clock
  *
@@ -24,6 +29,17 @@ unsigned long long __weak sched_clock(void)
 {
 	return (unsigned long long)(jiffies - INITIAL_JIFFIES)
 					* (NSEC_PER_SEC / HZ);
+}
+
+void returned_kthread(void)
+{
+	pr_err("TODO: kill kernel thread code needed. Can not reach here\n");
+	hlt();
+}
+
+void user_thread_bug_now(void)
+{
+	panic("%s\n", __func__);
 }
 
 /**
@@ -50,6 +66,11 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 	spin_unlock(&rq_lock);
 
 	return 0;
+}
+
+void sched_remove_from_rq(struct task_struct *p)
+{
+	list_del(&p->rq);
 }
 
 /**

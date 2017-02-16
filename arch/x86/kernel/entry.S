@@ -254,19 +254,18 @@ ENTRY(ret_from_fork)
 
 	testq	%rbx, %rbx		/* from kernel_thread? */
 	jnz	1f			/* kernel threads are uncommon */
+
 2:
-	/* TODO */
+	/*
+	 * User thread
+	 * or the return path of kernel thread
+	 */
 	call	user_thread_bug_now
 1:
 	/* kernel thread */
 	movq	%r12, %rdi
 	call	*%rbx
 
-	/*
-	 * A kernel thread is allowed to return here after successfully
-	 * calling do_execve().  Exit to userspace to complete the execve()
-	 * syscall.
-	 */
-	movq	$0, RAX(%rsp)
-	jmp	2b
+	/* TODO: kernel thread should not reach here */
+	call	returned_kthread
 END(ret_from_fork)

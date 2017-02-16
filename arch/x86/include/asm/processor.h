@@ -255,7 +255,6 @@ static inline unsigned long current_top_of_stack(void)
 
 #define INIT_THREAD  {				\
 	.sp0		= TOP_OF_INIT_STACK,	\
-	.addr_limit	= KERNEL_DS,		\
 }
 
 #define task_pt_regs(tsk)	((struct pt_regs *)(tsk)->thread.sp0 - 1)

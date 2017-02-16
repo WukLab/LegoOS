@@ -71,6 +71,14 @@ static int __init parse_kernel_param(char *param, char *val)
 	return 0;
 }
 
+static int kernel_init(void *unused)
+{
+	printk("this is kernel init, pid: %d!\n",
+		current->pid);	
+
+	return 0;
+}
+
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
@@ -136,6 +144,9 @@ asmlinkage void __init start_kernel(void)
 	pci_init();
 	lego_ib_init();
 	//init_lwip();
+
+	kernel_thread(kernel_init, NULL, 0);
+	schedule();
 
 	hlt();
 }

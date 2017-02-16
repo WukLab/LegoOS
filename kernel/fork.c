@@ -238,7 +238,7 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	/* Duplicate mm_struct and create new pgd */
 	retval = copy_mm(clone_flags, p);
 	if (retval)
-		goto out_free;
+		goto out_cleanup_sched;
 
 	retval = copy_thread_tls(clone_flags, stack_start, stack_size, p, tls);
 	if (retval)
@@ -275,6 +275,8 @@ out_cleanup_thread:
 out_cleanup_mm:
 	if (p->mm)
 		mmput(p->mm);
+out_cleanup_sched:
+	sched_remove_from_rq(p);
 out_free:
 	p->state = TASK_DEAD;
 	free_task(p);
