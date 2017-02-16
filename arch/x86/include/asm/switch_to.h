@@ -46,6 +46,17 @@ struct task_struct *__switch_to_asm(struct task_struct *prev,
 struct task_struct *__switch_to(struct task_struct *prev,
 				struct task_struct *next);
 
+/*
+ * Quick fact:
+ * The @last is assigned after the switching thread got resumed next time.
+ * The __switch_to_asm() is executed in the current switching thread, but
+ * the assignment to @(last) happens after this switching thread got resumed
+ * laster. With this, every thread can know who do the switch to them.
+ *
+ * The way schedule() call swicth_to(): the @last equals @prev, so @prev will
+ * be overrided, so the current switching thread can know who did the switch
+ * to him.
+ */
 #define switch_to(prev, next, last)			\
 do {							\
 	(last) = __switch_to_asm((prev), (next));	\
