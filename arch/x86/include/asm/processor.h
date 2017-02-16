@@ -10,11 +10,13 @@
 #ifndef _ASM_X86_PROCESSOR_H_
 #define _ASM_X86_PROCESSOR_H_
 
+#include <asm/smp.h>
 #include <asm/thread_info.h>
 #include <asm/processor-flags.h>
 #include <asm/processor-features.h>
 
 #include <lego/kernel.h>
+#include <lego/percpu.h>
 
 /**
  * struct cpu_info
@@ -161,7 +163,7 @@ struct tss_struct {
 	unsigned long		io_bitmap[IO_BITMAP_LONGS + 1];
 } ____cacheline_aligned;
 
-extern struct tss_struct cpu_tss;
+DECLARE_PER_CPU(struct tss_struct, cpu_tss);
 
 typedef struct {
 	unsigned long		seg;
@@ -200,7 +202,10 @@ static inline void load_sp0(struct tss_struct *tss,
 
 static inline unsigned long current_top_of_stack(void)
 {
-	return cpu_tss.x86_tss.sp0;
+	int cpu = smp_processor_id();
+	struct tss_struct *tss = per_cpu_ptr(cpu_tss, cpu);
+
+	return tss->x86_tss.sp0;
 }
 
 /*

@@ -13,7 +13,9 @@
 
 #include <asm/ptrace.h>
 #include <asm/irq_vectors.h>
+
 #include <lego/linkage.h>
+#include <generated/asm-offsets.h>
 
 #include "entry.h"
 
@@ -202,6 +204,42 @@ apicinterrupt CALL_FUNCTION_SINGLE_VECTOR	call_function_single_interrupt	smp__ca
 apicinterrupt CALL_FUNCTION_VECTOR		call_function_interrupt		smp__call_function_interrupt
 apicinterrupt ERROR_APIC_VECTOR			error_interrupt			smp__error_interrupt
 apicinterrupt SPURIOUS_APIC_VECTOR		spurious_interrupt		smp__spurious_interrupt
+
+/*
+ * %rdi: prev task
+ * %rsi: next task
+ */
+ENTRY(__switch_to_asm)
+	/*
+	 * Save callee-saved registers
+	 * This must match the order in inactive_task_frame
+	 */
+	pushq	%rbp
+	pushq	%rbx
+	pushq	%r12
+	pushq	%r13
+	pushq	%r14
+	pushq	%r15
+
+	/* Switch stack */
+	movq	%rsp, TASK_THREAD_SP(%rdi)
+	movq	TASK_THREAD_SP(%rsi), %rsp
+
+	/* restore callee-saved registers */
+	popq	%r15
+	popq	%r14
+	popq	%r13
+	popq	%r12
+	popq	%rbx
+	popq	%rbp
+
+	/*
+	 * Note: _Jump_ to __switch_to() function!
+	 * The __switch_to() will return to the address saved
+	 * previously or the ret_from_fork
+	 */
+	jmp	__switch_to
+END(__switch_to_asm)
 
 /*
  * A newly forked process directly context switches into this address.

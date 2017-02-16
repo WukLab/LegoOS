@@ -230,6 +230,11 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	INIT_LIST_HEAD(&p->children);
 	INIT_LIST_HEAD(&p->sibling);
 
+	/* Setup scheduler, assign this task to a CPU */
+	retval = setup_sched_fork(clone_flags, p);
+	if (retval)
+		goto out_free;
+
 	/* Duplicate mm_struct and create new pgd */
 	retval = copy_mm(clone_flags, p);
 	if (retval)

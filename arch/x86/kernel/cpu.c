@@ -313,8 +313,7 @@ void cpu_init(void)
 	int cpu = smp_processor_id();
 	struct tss_struct *tss;
 
-	/* TODO: per-cpu tss */
-	tss = &cpu_tss;
+	tss = per_cpu_ptr(cpu_tss, cpu);
 
 	tss->x86_tss.io_bitmap_base = offsetof(struct tss_struct, io_bitmap);
 

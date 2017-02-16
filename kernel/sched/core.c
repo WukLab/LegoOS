@@ -33,3 +33,16 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 {
 	printk("%s is invoked\n", __func__);
 }
+
+/*
+ * Called from fork() time, to setup a new task to scheduler.
+ */
+int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
+{
+	return 0;
+}
+
+void schedule(void)
+{
+
+}

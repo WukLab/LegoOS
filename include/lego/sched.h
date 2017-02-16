@@ -14,6 +14,7 @@
 #include <asm/ptrace.h>
 #include <asm/current.h>
 #include <asm/processor.h>
+#include <asm/switch_to.h>
 #include <asm/thread_info.h>
 
 #include <lego/mm.h>
@@ -178,6 +179,7 @@ static inline void dump_stack(void)
 void setup_task_stack_end_magic(struct task_struct *tsk);
 
 asmlinkage void schedule_tail(struct task_struct *prev);
+int setup_sched_fork(unsigned long clone_flags, struct task_struct *p);
 
 /* arch-hook to copy thread info while doing fork */
 int copy_thread_tls(unsigned long, unsigned long, unsigned long,

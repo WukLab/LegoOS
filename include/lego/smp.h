@@ -15,8 +15,6 @@
 
 #include <asm/smp.h>
 
-#define smp_processor_id()	0
-
 static inline void cpu_up(int cpu, struct task_struct *tidle)
 {
 	native_cpu_up(cpu, tidle);

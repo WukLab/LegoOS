@@ -48,5 +48,24 @@ kernel/bounds.s: kernel/bounds.c FORCE
 $(obj)/$(bounds-file): kernel/bounds.s FORCE
 	$(call filechk,offsets,__LEGO_BOUNDS_H__)
 
+#####
+# 2) Generate asm-offsets.h
+#
+
+offsets-file := include/generated/asm-offsets.h
+
+always  += $(offsets-file)
+targets += arch/$(SRCARCH)/kernel/asm-offsets.s
+
+# We use internal kbuild rules to avoid the "is up to date" message from make
+arch/$(SRCARCH)/kernel/asm-offsets.s: arch/$(SRCARCH)/kernel/asm-offsets.c \
+                                      $(obj)/$(bounds-file) FORCE
+	$(Q)mkdir -p $(dir $@)
+	$(call if_changed_dep,cc_s_c)
+
+$(obj)/$(offsets-file): arch/$(SRCARCH)/kernel/asm-offsets.s FORCE
+	$(call filechk,offsets,__ASM_OFFSETS_H__)
+
+
 # Keep these three files during make clean
 no-clean-files := $(bounds-file) $(offsets-file) $(timeconst-file)

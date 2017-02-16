@@ -38,4 +38,17 @@ struct fork_frame {
 
 asmlinkage void ret_from_fork(void);
 
+struct task_struct;
+
+struct task_struct *__switch_to_asm(struct task_struct *prev,
+				    struct task_struct *next);
+
+struct task_struct *__switch_to(struct task_struct *prev,
+				struct task_struct *next);
+
+#define switch_to(prev, next, last)			\
+do {							\
+	(last) = __switch_to_asm((prev), (next));	\
+} while (0)
+
 #endif /* _ASM_X86_SWITCH_TO_H_ */

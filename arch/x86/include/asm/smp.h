@@ -10,12 +10,11 @@
 #ifndef _ASM_X86_SMP_H_
 #define _ASM_X86_SMP_H_
 
-#ifndef _LEGO_SMP_H_
-#error Please include lego/smp.h instead
-#endif
-
 struct task_struct;
 
 int native_cpu_up(int cpu, struct task_struct *tidle);
+
+/* TODO */
+#define smp_processor_id()	0
 
 #endif /* _ASM_X86_SMP_H_ */
