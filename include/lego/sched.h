@@ -126,6 +126,9 @@ struct task_struct {
 
 	struct mm_struct *mm, *active_mm;
 
+	/* TODO: replace with runqueue */
+	struct list_head rq;
+
 	struct thread_struct thread;
 };
 
@@ -189,5 +192,7 @@ int copy_thread_tls(unsigned long, unsigned long, unsigned long,
 unsigned long long sched_clock(void);
 
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
+
+void schedule(void);
 
 #endif /* _LEGO_SCHED_H_ */

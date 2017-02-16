@@ -11,6 +11,7 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/jiffies.h>
+#include <lego/spinlock.h>
 
 /**
  * sched_clock
@@ -31,18 +32,69 @@ unsigned long long __weak sched_clock(void)
  */
 asmlinkage __visible void schedule_tail(struct task_struct *prev)
 {
-	printk("%s is invoked\n", __func__);
+	printk("  %s is invoked\n", __func__);
 }
 
+static LIST_HEAD(rq_list);
+static DEFINE_SPINLOCK(rq_lock);
+
 /*
- * Called from fork() time, to setup a new task to scheduler.
+ * Called from fork()/clone(), to setup a new task to scheduler.
  */
 int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
+	INIT_LIST_HEAD(&p->rq);
+
+	spin_lock(&rq_lock);
+	list_add(&p->rq, &rq_list);
+	spin_unlock(&rq_lock);
+
 	return 0;
+}
+
+/**
+ * pick_next_task	-	Pick up the highest-prio task:
+ *
+ * Get next highest-prio task to run from @rq
+ * and put the @prev back to @rq
+ */
+static struct task_struct *pick_next_task( struct task_struct *prev)
+{
+	struct task_struct *next = NULL;
+
+	spin_lock(&rq_lock);
+	if (!list_empty(&rq_list)) {
+		struct list_head *list;
+
+		list = rq_list.next;
+		list_del(list);
+		next = container_of(list, struct task_struct, rq);
+
+		list_add(&prev->rq, &rq_list);
+	} else
+		next = prev;
+	spin_unlock(&rq_lock);
+
+	return next;
+}
+
+static void switch_mm_irqs_off(struct mm_struct *prev,
+			       struct mm_struct *next,
+			       struct task_struct *tsk)
+{
+	load_cr3(next->pgd);
 }
 
 void schedule(void)
 {
+	struct task_struct *next, *prev;
 
+	prev = current;
+	next = pick_next_task(prev);
+
+	if (likely(prev != next)) {
+		switch_mm_irqs_off(prev->mm, next->mm, next);
+		switch_to(prev, next, prev);
+		barrier();
+	}
 }
