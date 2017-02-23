@@ -299,9 +299,9 @@ pid_t do_fork(unsigned long clone_flags,
 
 /**
  * kernel_thread	-	Create a kernel thread
- * @fn:
- * @arg:
- * @flags:
+ * @fn: the function to run in the thread
+ * @arg: data pointer for @fn()
+ * @flags: CLONE flags
  *
  * Return the pid of newly created thread on success.
  */

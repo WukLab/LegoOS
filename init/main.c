@@ -76,6 +76,9 @@ static int kernel_init(void *unused)
 	printk("this is kernel init, pid: %d!\n",
 		current->pid);	
 
+	schedule();
+	panic("can not reach here\n");
+
 	return 0;
 }
 
@@ -147,6 +150,8 @@ asmlinkage void __init start_kernel(void)
 
 	kernel_thread(kernel_init, NULL, 0);
 	schedule();
+
+	pr_info("swapper resumed\n");
 
 	hlt();
 }

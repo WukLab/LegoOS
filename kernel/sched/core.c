@@ -59,18 +59,23 @@ static DEFINE_SPINLOCK(rq_lock);
  */
 int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
-	INIT_LIST_HEAD(&p->rq);
+	p->on_rq = 0;
+	p->static_prio = 0;
+	INIT_LIST_HEAD(&p->run_list);
 
-	spin_lock(&rq_lock);
-	list_add(&p->rq, &rq_list);
-	spin_unlock(&rq_lock);
+	/*
+	 * We mark the process as NEW here. This guarantees that
+	 * nobody will actually run it, and a signal or other external
+	 * event cannot wake it up and insert it on the runqueue either.
+	 */
+	p->state = TASK_NEW;
 
 	return 0;
 }
 
 void sched_remove_from_rq(struct task_struct *p)
 {
-	list_del(&p->rq);
+	list_del(&p->run_list);
 }
 
 /**
@@ -89,11 +94,11 @@ static struct task_struct *pick_next_task( struct task_struct *prev)
 
 		list = rq_list.next;
 		list_del(list);
-		next = container_of(list, struct task_struct, rq);
+		next = container_of(list, struct task_struct, run_list);
 
-		list_add(&prev->rq, &rq_list);
+		list_add(&prev->run_list, &rq_list);
 	} else
-		next = prev;
+		next = &init_task;
 	spin_unlock(&rq_lock);
 
 	return next;

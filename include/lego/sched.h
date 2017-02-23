@@ -107,13 +107,21 @@ struct task_struct {
 
 	char comm[TASK_COMM_LEN];
 
+	/* scheduler related */
+	int on_rq;
+	int static_prio;
+	struct list_head run_list;
+
+	/* list of all task_structs in the system */
+	struct list_head tasks;
+
 	pid_t pid;
 	pid_t tgid;
 
 	/*
-	 * pointers to (original) parent process, youngest child, younger sibling,
-	 * older sibling, respectively.  (p->father can be replaced with
-	 * p->real_parent->pid)
+	 * pointers to (original) parent process, youngest child,
+	 * younger sibling, older sibling, respectively.
+	 * (p->father can be replaced with p->real_parent->pid)
 	 */
 	struct task_struct *real_parent;	/* real parent process */
 	struct task_struct *parent;		/* recipient of SIGCHLD, wait4() reports */
@@ -126,9 +134,7 @@ struct task_struct {
 
 	struct mm_struct *mm, *active_mm;
 
-	/* TODO: replace with runqueue */
-	struct list_head rq;
-
+	/* CPU-specific state of this task */
 	struct thread_struct thread;
 };
 
