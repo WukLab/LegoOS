@@ -161,12 +161,12 @@ struct mlx4_ib_srq {
 	struct mlx4_mtt		mtt;
 	struct mutex		mutex;
 };
+#endif
 
 struct mlx4_ib_ah {
 	struct ib_ah		ibah;
 	union mlx4_ext_av       av;
 };
-#endif
 
 struct mlx4_ib_dev {
 	struct ib_device	ib_dev;
@@ -251,12 +251,12 @@ static inline struct mlx4_ib_srq *to_mibsrq(struct mlx4_srq *msrq)
 {
 	return container_of(msrq, struct mlx4_ib_srq, msrq);
 }
+#endif
 
 static inline struct mlx4_ib_ah *to_mah(struct ib_ah *ibah)
 {
 	return container_of(ibah, struct mlx4_ib_ah, ibah);
 }
-#endif
 
 struct ib_mr *mlx4_ib_get_dma_mr(struct ib_pd *pd, int acc);
 int mlx4_ib_dereg_mr(struct ib_mr *mr);
@@ -275,11 +275,11 @@ int mlx4_ib_arm_cq(struct ib_cq *cq, enum ib_cq_notify_flags flags);
 void __mlx4_ib_cq_clean(struct mlx4_ib_cq *cq, u32 qpn);
 void mlx4_ib_cq_clean(struct mlx4_ib_cq *cq, u32 qpn);
 
-#if 0
 struct ib_ah *mlx4_ib_create_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr);
 int mlx4_ib_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
 int mlx4_ib_destroy_ah(struct ib_ah *ah);
 
+#if 0
 struct ib_srq *mlx4_ib_create_srq(struct ib_pd *pd,
 				  struct ib_srq_init_attr *init_attr,
 				  struct ib_udata *udata);
@@ -323,17 +323,17 @@ int mlx4_ib_fmr_dealloc(struct ib_fmr *fmr);
 
 int mlx4_ib_resolve_grh(struct mlx4_ib_dev *dev, const struct ib_ah_attr *ah_attr,
 			u8 *mac, int *is_mcast, u8 port);
+#endif
 
 static inline int mlx4_ib_ah_grh_present(struct mlx4_ib_ah *ah)
 {
 	u8 port = be32_to_cpu(ah->av.ib.port_pd) >> 24 & 3;
 
-	if (rdma_port_get_link_layer(ah->ibah.device, port) == IB_LINK_LAYER_ETHERNET)
-		return 1;
+	//if (rdma_port_get_link_layer(ah->ibah.device, port) == IB_LINK_LAYER_ETHERNET)
+	//	return 1;
 
 	return !!(ah->av.ib.g_slid & 0x80);
 }
-#endif
 
 int mlx4_ib_add_mc(struct mlx4_ib_dev *mdev, struct mlx4_ib_qp *mqp,
 		   union ib_gid *gid);

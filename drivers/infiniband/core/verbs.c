@@ -42,7 +42,7 @@
 #include <lego/slab.h>
 
 #include <rdma/ib_verbs.h>
-#include <rdma/ib_cache.h>
+//#include <rdma/ib_cache.h>
 
 int ib_rate_to_mult(enum ib_rate rate)
 {
@@ -158,7 +158,6 @@ int ib_dealloc_pd(struct ib_pd *pd)
 	return pd->device->dealloc_pd(pd);
 }
 
-#if 0
 /* Address handles */
 
 struct ib_ah *ib_create_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr)
@@ -170,7 +169,7 @@ struct ib_ah *ib_create_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr)
 	if (!IS_ERR(ah)) {
 		ah->device  = pd->device;
 		ah->pd      = pd;
-		ah->uobject = NULL;
+		//ah->uobject = NULL;
 		atomic_inc(&pd->usecnt);
 	}
 
@@ -190,15 +189,20 @@ int ib_init_ah_from_wc(struct ib_device *device, u8 port_num, struct ib_wc *wc,
 	ah_attr->src_path_bits = wc->dlid_path_bits;
 	ah_attr->port_num = port_num;
 
+	pr_info("%s dlid %d sl %d src_path_bits %x port %d\n",
+		__func__, ah_attr->dlid, ah_attr->sl, ah_attr->src_path_bits, ah_attr->port_num);
+
 	if (wc->wc_flags & IB_WC_GRH) {
+		pr_info("%s IB_WC_GRH\n", __func__);
 		ah_attr->ah_flags = IB_AH_GRH;
 		ah_attr->grh.dgid = grh->sgid;
 
-		ret = ib_find_cached_gid(device, &grh->dgid, &port_num,
-					 &gid_index);
-		if (ret)
-			return ret;
-
+		//ret = ib_find_cached_gid(device, &grh->dgid, &port_num,
+		//			 &gid_index);
+		//if (ret)
+		//	return ret;
+		gid_index = -1; //TODO: now fixed at -1
+		
 		ah_attr->grh.sgid_index = (u8) gid_index;
 		flow_class = be32_to_cpu(grh->version_tclass_flow);
 		ah_attr->grh.flow_label = flow_class & 0xFFFFF;
@@ -248,6 +252,7 @@ int ib_destroy_ah(struct ib_ah *ah)
 	return ret;
 }
 
+#if 0
 int ib_modify_srq(struct ib_srq *srq,
 		  struct ib_srq_attr *srq_attr,
 		  enum ib_srq_attr_mask srq_attr_mask)

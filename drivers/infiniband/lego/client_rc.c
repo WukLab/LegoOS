@@ -1,4 +1,4 @@
-//#include <lego/sched.h>
+#include <lego/sched.h>
 #include <lego/slab.h>
 #include <lego/init.h>
 #include <lego/mm.h>
@@ -128,12 +128,12 @@ static int pp_connect_ctx(int ctxid, int port, int my_psn,
 	struct ib_qp_attr attr = {
 		.qp_state		= IB_QPS_RTR,
 		.path_mtu		= mtu,
-		.dest_qp_num		= 83, //dest->qpn,
+		.dest_qp_num		= 9008, //dest->qpn,
 		.rq_psn			= 1, //dest->psn,
 		.max_dest_rd_atomic	= 1,
 		.min_rnr_timer		= 4,
 		.ah_attr		= {
-			.dlid		= 7, //dest->lid,
+			.dlid		= 3, //dest->lid,
 			.sl		= sl,
 			.src_path_bits	= 0,
 			.port_num	= port
@@ -620,17 +620,19 @@ int routine(int ctxid)
 	}
 #endif
 
-	ret = ib_query_port(ib_dev, 1, &ctx[ctxid]->portinfo);
+	ret = ib_query_port(ib_dev, ib_port, &ctx[ctxid]->portinfo);
         if (ret < 0){
 	    printk(KERN_CRIT "ib_query_port failed %d\n", ret);
  	    return 1;
 	}
 	
-//	my_dest.lid = ctx[ctxid]->portinfo.lid;
-  // 	if (!my_dest.lid) {
-//		printk(KERN_CRIT "Couldn't get local LID\n");
-//		return 1;
-//	}
+	my_dest.lid = ctx[ctxid]->portinfo.lid;
+   	if (!my_dest.lid) {
+		printk(KERN_CRIT "Couldn't get local LID\n");
+		//return 1;
+	}
+	else
+		pr_info("got local LID %d\n", my_dest.lid);
 
 	my_dest.qpn = ctx[ctxid]->qp->qp_num;
 	//get_random_bytes(&rr, sizeof(int));
@@ -687,6 +689,10 @@ int lego_ib_init(void)
 {
 	int ret, i;
 
+	pr_info("%s\n", __func__);
+	while (mad_got_one == 0)
+		schedule();
+	pr_info("%s got mad\n", __func__);
 	ret = ib_register_client(&ibv_client);
 	if (ret) {
 		pr_err("couldn't register IB client\n");

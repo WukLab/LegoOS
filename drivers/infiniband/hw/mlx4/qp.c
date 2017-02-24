@@ -745,7 +745,6 @@ struct ib_qp *mlx4_ib_create_qp(struct ib_pd *pd,
 
 		break;
 	}
-#if 0
 	case IB_QPT_SMI:
 	case IB_QPT_GSI:
 	{
@@ -770,7 +769,6 @@ struct ib_qp *mlx4_ib_create_qp(struct ib_pd *pd,
 
 		break;
 	}
-#endif
 	default:
 		/* Don't support raw QPs */
 		return ERR_PTR(-EINVAL);
@@ -878,8 +876,9 @@ static int mlx4_set_path(struct mlx4_ib_dev *dev, const struct ib_ah_attr *ah,
 	} else
 		path->static_rate = 0;
 
-#if 0
 	if (ah->ah_flags & IB_AH_GRH) {
+		pr_info("%s need grh back\n", __func__);
+#if 0
 		if (ah->grh.sgid_index >= dev->dev->caps.gid_table_len[port]) {
 			printk(KERN_ERR "sgid_index (%u) too large. max is %d\n",
 			       ah->grh.sgid_index, dev->dev->caps.gid_table_len[port] - 1);
@@ -893,8 +892,8 @@ static int mlx4_set_path(struct mlx4_ib_dev *dev, const struct ib_ah_attr *ah,
 			cpu_to_be32((ah->grh.traffic_class << 20) |
 				    (ah->grh.flow_label));
 		memcpy(path->rgid, ah->grh.dgid.raw, 16);
-	}
 #endif
+	}
 	path->sched_queue = MLX4_IB_DEFAULT_SCHED_QUEUE |
 		((port - 1) << 6) | ((ah->sl & 0xf) << 2);
 
@@ -1171,9 +1170,9 @@ static int __mlx4_ib_modify_qp(struct ib_qp *ibqp,
 	 * QP0 to RESET or ERROR, bring the link back down.
 	 */
 	if (is_qp0(dev, qp)) {
-		pr_debug("%s is qp0\n", __func__);
+		//pr_debug("%s is qp0\n", __func__);
 		if (cur_state != IB_QPS_RTR && new_state == IB_QPS_RTR) {
-			pr_debug("%s is qp0 change to RTR\n", __func__);
+			pr_debug("%s qp0 change to RTR\n", __func__);
 			if (mlx4_INIT_PORT(dev->dev, qp->port))
 				printk(KERN_WARNING "INIT_PORT failed for port %d\n",
 				       qp->port);
@@ -1261,14 +1260,13 @@ int mlx4_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	}
 
 	err = __mlx4_ib_modify_qp(ibqp, attr, attr_mask, cur_state, new_state);
-	pr_debug("%s return err %d\n", __func__, err);
+	//pr_debug("%s return err %d\n", __func__, err);
 
 out:
 	mutex_unlock(&qp->mutex);
 	return err;
 }
 
-#if 0
 static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 			    void *wqe, unsigned *mlx_seg_len)
 {
@@ -1282,33 +1280,28 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 	int header_size;
 	int spc;
 	int i;
-	int is_eth;
 	int is_vlan = 0;
-	int is_grh;
+	int is_eth = 0;
+	int is_grh = 0;
 	u16 vlan;
 
+	pr_info("%s\n", __func__);
 	send_size = 0;
 	for (i = 0; i < wr->num_sge; ++i)
 		send_size += wr->sg_list[i].length;
 
-	is_eth = rdma_port_get_link_layer(sqp->qp.ibqp.device, sqp->qp.port) == IB_LINK_LAYER_ETHERNET;
+	is_eth = 0;
 	is_grh = mlx4_ib_ah_grh_present(ah);
-	if (is_eth) {
-		ib_get_cached_gid(ib_dev, be32_to_cpu(ah->av.ib.port_pd) >> 24,
-				  ah->av.ib.gid_index, &sgid);
-		vlan = rdma_get_vlan_id(&sgid);
-		is_vlan = vlan < 0x1000;
-	}
 	ib_ud_header_init(send_size, !is_eth, is_eth, is_vlan, is_grh, 0, &sqp->ud_header);
 
-	if (!is_eth) {
-		sqp->ud_header.lrh.service_level =
-			be32_to_cpu(ah->av.ib.sl_tclass_flowlabel) >> 28;
-		sqp->ud_header.lrh.destination_lid = ah->av.ib.dlid;
-		sqp->ud_header.lrh.source_lid = cpu_to_be16(ah->av.ib.g_slid & 0x7f);
-	}
+	sqp->ud_header.lrh.service_level =
+		be32_to_cpu(ah->av.ib.sl_tclass_flowlabel) >> 28;
+	sqp->ud_header.lrh.destination_lid = ah->av.ib.dlid;
+	sqp->ud_header.lrh.source_lid = cpu_to_be16(ah->av.ib.g_slid & 0x7f);
 
 	if (is_grh) {
+		pr_info("%s isgrdh need grh back\n", __func__);
+#if 0
 		sqp->ud_header.grh.traffic_class =
 			(be32_to_cpu(ah->av.ib.sl_tclass_flowlabel) >> 20) & 0xff;
 		sqp->ud_header.grh.flow_label    =
@@ -1318,17 +1311,16 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 				  ah->av.ib.gid_index, &sqp->ud_header.grh.source_gid);
 		memcpy(sqp->ud_header.grh.destination_gid.raw,
 		       ah->av.ib.dgid, 16);
+#endif
 	}
 
 	mlx->flags &= cpu_to_be32(MLX4_WQE_CTRL_CQ_UPDATE);
 
-	if (!is_eth) {
 		mlx->flags |= cpu_to_be32((!sqp->qp.ibqp.qp_num ? MLX4_WQE_MLX_VL15 : 0) |
 					  (sqp->ud_header.lrh.destination_lid ==
 					   IB_LID_PERMISSIVE ? MLX4_WQE_MLX_SLR : 0) |
 					  (sqp->ud_header.lrh.service_level << 8));
 		mlx->rlid = sqp->ud_header.lrh.destination_lid;
-	}
 
 	switch (wr->opcode) {
 	case IB_WR_SEND:
@@ -1344,44 +1336,26 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 		return -EINVAL;
 	}
 
-	if (is_eth) {
-		u8 *smac;
-
-		memcpy(sqp->ud_header.eth.dmac_h, ah->av.eth.mac, 6);
-		/* FIXME: cache smac value? */
-		smac = to_mdev(sqp->qp.ibqp.device)->iboe.netdevs[sqp->qp.port - 1]->dev_addr;
-		memcpy(sqp->ud_header.eth.smac_h, smac, 6);
-		if (!memcmp(sqp->ud_header.eth.smac_h, sqp->ud_header.eth.dmac_h, 6))
-			mlx->flags |= cpu_to_be32(MLX4_WQE_CTRL_FORCE_LOOPBACK);
-		if (!is_vlan) {
-			sqp->ud_header.eth.type = cpu_to_be16(MLX4_IB_IBOE_ETHERTYPE);
-		} else {
-			u16 pcp;
-
-			sqp->ud_header.vlan.type = cpu_to_be16(MLX4_IB_IBOE_ETHERTYPE);
-			pcp = (be32_to_cpu(ah->av.ib.sl_tclass_flowlabel) >> 27 & 3) << 13;
-			sqp->ud_header.vlan.tag = cpu_to_be16(vlan | pcp);
-		}
-	} else {
-		sqp->ud_header.lrh.virtual_lane    = !sqp->qp.ibqp.qp_num ? 15 : 0;
-		if (sqp->ud_header.lrh.destination_lid == IB_LID_PERMISSIVE)
-			sqp->ud_header.lrh.source_lid = IB_LID_PERMISSIVE;
-	}
+	sqp->ud_header.lrh.virtual_lane    = !sqp->qp.ibqp.qp_num ? 15 : 0;
+	if (sqp->ud_header.lrh.destination_lid == IB_LID_PERMISSIVE)
+		sqp->ud_header.lrh.source_lid = IB_LID_PERMISSIVE;
 	sqp->ud_header.bth.solicited_event = !!(wr->send_flags & IB_SEND_SOLICITED);
 	if (!sqp->qp.ibqp.qp_num)
-		ib_get_cached_pkey(ib_dev, sqp->qp.port, sqp->pkey_index, &pkey);
+		//ib_get_cached_pkey(ib_dev, sqp->qp.port, sqp->pkey_index, &pkey);
+		ib_query_pkey(ib_dev, sqp->qp.port, sqp->pkey_index, &pkey);
 	else
-		ib_get_cached_pkey(ib_dev, sqp->qp.port, wr->wr.ud.pkey_index, &pkey);
+		//ib_get_cached_pkey(ib_dev, sqp->qp.port, wr->wr.ud.pkey_index, &pkey);
+		ib_query_pkey(ib_dev, sqp->qp.port, wr->wr.ud.pkey_index, &pkey);
 	sqp->ud_header.bth.pkey = cpu_to_be16(pkey);
 	sqp->ud_header.bth.destination_qpn = cpu_to_be32(wr->wr.ud.remote_qpn);
 	sqp->ud_header.bth.psn = cpu_to_be32((sqp->send_psn++) & ((1 << 24) - 1));
 	sqp->ud_header.deth.qkey = cpu_to_be32(wr->wr.ud.remote_qkey & 0x80000000 ?
-					       sqp->qkey : wr->wr.ud.remote_qkey);
+			sqp->qkey : wr->wr.ud.remote_qkey);
 	sqp->ud_header.deth.source_qpn = cpu_to_be32(sqp->qp.ibqp.qp_num);
 
 	header_size = ib_ud_header_pack(&sqp->ud_header, sqp->header_buf);
 
-	if (0) {
+	if (1) {
 		printk(KERN_ERR "built UD header of size %d:\n", header_size);
 		for (i = 0; i < header_size / 4; ++i) {
 			if (i % 8 == 0)
@@ -1434,7 +1408,6 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 		ALIGN(i * sizeof (struct mlx4_wqe_inline_seg) + header_size, 16);
 	return 0;
 }
-#endif
 
 static int mlx4_wq_overflow(struct mlx4_ib_wq *wq, int nreq, struct ib_cq *ib_cq)
 {
@@ -1442,8 +1415,8 @@ static int mlx4_wq_overflow(struct mlx4_ib_wq *wq, int nreq, struct ib_cq *ib_cq
 	struct mlx4_ib_cq *cq;
 
 	cur = wq->head - wq->tail;
-	pr_debug("%s cur %d  wq->head %d wq->tail %d nreq %d maxpost %d\n", 
-			__func__, cur, wq->head, wq->tail, nreq, wq->max_post);
+	//pr_debug("%s cur %d  wq->head %d wq->tail %d nreq %d maxpost %d\n", 
+	//		__func__, cur, wq->head, wq->tail, nreq, wq->max_post);
 	if (likely(cur + nreq < wq->max_post))
 		return 0;
 
@@ -1452,7 +1425,7 @@ static int mlx4_wq_overflow(struct mlx4_ib_wq *wq, int nreq, struct ib_cq *ib_cq
 	cur = wq->head - wq->tail;
 	spin_unlock(&cq->lock);
 
-	pr_debug("%s cur %d nreq %d maxpost %d\n", __func__, cur, nreq, wq->max_post);
+	//pr_debug("%s cur %d nreq %d maxpost %d\n", __func__, cur, nreq, wq->max_post);
 	return cur + nreq >= wq->max_post;
 }
 
@@ -1528,7 +1501,6 @@ static void set_masked_atomic_seg(struct mlx4_wqe_masked_atomic_seg *aseg,
 	aseg->compare_mask	= cpu_to_be64(wr->wr.atomic.compare_add_mask);
 }
 
-#if 0
 static void set_datagram_seg(struct mlx4_wqe_datagram_seg *dseg,
 			     struct ib_send_wr *wr)
 {
@@ -1558,7 +1530,6 @@ static void set_mlx_icrc_seg(void *dseg)
 
 	iseg->byte_count = cpu_to_be32((1 << 31) | 4);
 }
-#endif
 
 static void set_data_seg(struct mlx4_wqe_data_seg *dseg, struct ib_sge *sg)
 {
@@ -1681,7 +1652,7 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		switch (ibqp->qp_type) {
 		case IB_QPT_RC:
 		case IB_QPT_UC:
-			pr_debug("%s qptype %d\n", __func__, ibqp->qp_type);
+			//pr_debug("%s qptype %d\n", __func__, ibqp->qp_type);
 			switch (wr->opcode) {
 			case IB_WR_ATOMIC_CMP_AND_SWP:
 			case IB_WR_ATOMIC_FETCH_AND_ADD:
@@ -1759,9 +1730,11 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 				size += seglen / 16;
 			}
 			break;
+#endif
 
 		case IB_QPT_SMI:
 		case IB_QPT_GSI:
+			//pr_info("%s queue type SMI/GSI %d\n", __func__, ibqp->qp_type);
 			err = build_mlx_header(to_msqp(qp), wr, ctrl, &seglen);
 			if (unlikely(err)) {
 				*bad_wr = wr;
@@ -1770,7 +1743,6 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 			wqe  += seglen;
 			size += seglen / 16;
 			break;
-#endif
 		default:
 			break;
 		}
@@ -1786,14 +1758,13 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		dseg += wr->num_sge - 1;
 		size += wr->num_sge * (sizeof (struct mlx4_wqe_data_seg) / 16);
 
-#if 0
 		/* Add one more inline data segment for ICRC for MLX sends */
 		if (unlikely(qp->ibqp.qp_type == IB_QPT_SMI ||
 			     qp->ibqp.qp_type == IB_QPT_GSI)) {
+			//pr_info("unlikely qp type SMI/GSI\n");
 			set_mlx_icrc_seg(dseg + 1);
 			size += sizeof (struct mlx4_wqe_data_seg) / 16;
 		}
-#endif
 
 		for (i = wr->num_sge - 1; i >= 0; --i, --dseg)
 			set_data_seg(dseg, wr->sg_list + i);
@@ -1869,7 +1840,7 @@ out:
 
 	spin_unlock_irqrestore(&qp->sq.lock, flags);
 
-	pr_debug("%s return %d\n", __func__, err);
+	//pr_debug("%s return %d\n", __func__, err);
 	return err;
 }
 
@@ -2013,7 +1984,7 @@ int mlx4_ib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *qp_attr, int qp_attr
 	int mlx4_state;
 	int err = 0;
 
-	pr_debug("%s mlx4ibdev %p ibqp %p mlx4qp %p\n", __func__, dev, ibqp, qp);
+	//pr_debug("%s mlx4ibdev %p ibqp %p mlx4qp %p\n", __func__, dev, ibqp, qp);
 	mutex_lock(&qp->mutex);
 
 	if (qp->state == IB_QPS_RESET) {
@@ -2094,7 +2065,7 @@ done:
 
 out:
 	mutex_unlock(&qp->mutex);
-	pr_debug("%s exit %d\n", __func__, err);
+	//pr_debug("%s exit %d\n", __func__, err);
 	return err;
 }
 

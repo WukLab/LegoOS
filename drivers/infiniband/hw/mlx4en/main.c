@@ -1363,7 +1363,7 @@ int mlx4_init_one(struct pci_dev *pdev)
 	pr_debug("%s before init mlx4 ib\n", __func__);
 
 	// first init mlx4 then init mlx4_ib
-	mlx4_ib_add(dev);
+	//mlx4_ib_add(dev);
 	mlx4_ib_init();
 	
 	pr_debug("%s exit\n", __func__);

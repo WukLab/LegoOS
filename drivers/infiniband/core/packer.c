@@ -31,8 +31,7 @@
  * SOFTWARE.
  */
 
-#include <linux/export.h>
-#include <linux/string.h>
+#include <lego/string.h>
 
 #include <rdma/ib_pack.h>
 
@@ -122,7 +121,6 @@ void ib_pack(const struct ib_field        *desc,
 		}
 	}
 }
-EXPORT_SYMBOL(ib_pack);
 
 static void value_write(int offset, int size, u64 val, void *structure)
 {
@@ -200,4 +198,3 @@ void ib_unpack(const struct ib_field        *desc,
 		}
 	}
 }
-EXPORT_SYMBOL(ib_unpack);

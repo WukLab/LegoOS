@@ -71,17 +71,6 @@ static int __init parse_kernel_param(char *param, char *val)
 	return 0;
 }
 
-static int kernel_init(void *unused)
-{
-	printk("this is kernel init, pid: %d!\n",
-		current->pid);	
-
-	schedule();
-	panic("can not reach here\n");
-
-	return 0;
-}
-
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
@@ -144,14 +133,19 @@ asmlinkage void __init start_kernel(void)
 	smp_init();
 #endif
 
+	//ib_cache_setup();
+	ib_mad_init();
+	pr_info("after ib_mad_init\n");
+	schedule();
+	pr_info("before pci init\n");
 	pci_init();
+	//for (i = 0; i < 5; i++) {
+	//mdelay(1000);
+	//}
+	schedule();
+	pr_info("before lego ib init\n");
 	lego_ib_init();
 	//init_lwip();
-
-	kernel_thread(kernel_init, NULL, 0);
-	schedule();
-
-	pr_info("swapper resumed\n");
 
 	hlt();
 }

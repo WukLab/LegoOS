@@ -49,8 +49,8 @@ struct ib_mr *mlx4_ib_get_dma_mr(struct ib_pd *pd, int acc)
 	struct mlx4_ib_mr *mr;
 	int err;
 
-	pr_debug("%s pd %p\n", __func__, pd);
-	pr_debug("%s pd %p dev %p\n", __func__, pd, pd->device);
+	//pr_debug("%s pd %p\n", __func__, pd);
+	//pr_debug("%s pd %p dev %p\n", __func__, pd, pd->device);
 	mr = kmalloc(sizeof *mr, GFP_KERNEL);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
@@ -60,14 +60,14 @@ struct ib_mr *mlx4_ib_get_dma_mr(struct ib_pd *pd, int acc)
 	if (err)
 		goto err_free;
 
-	pr_debug("%s allocated\n", __func__);
+	//pr_debug("%s allocated\n", __func__);
 	err = mlx4_mr_enable(to_mdev(pd->device)->dev, &mr->mmr);
 	if (err)
 		goto err_mr;
 
 	mr->ibmr.rkey = mr->ibmr.lkey = mr->mmr.key;
 
-	pr_debug("%s exit\n", __func__);
+	//pr_debug("%s exit\n", __func__);
 	return &mr->ibmr;
 
 err_mr:

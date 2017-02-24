@@ -10,7 +10,7 @@
 #include <asm/processor.h>
 #include <asm/dma.h>
 
-static int
+static int __used
 check_addr(char *name, struct pci_dev *hwdev, dma_addr_t bus, size_t size)
 {
 	if (hwdev && !dma_capable(hwdev, bus, size)) {
@@ -35,8 +35,8 @@ static dma_addr_t nommu_map_page(struct pci_dev *dev, struct page *page,
 			__func__, dev, page, bus, offset); 
 */
 	WARN_ON(size == 0);
-	if (!check_addr("map_single", dev, bus, size))
-		return DMA_ERROR_CODE;
+//	if (!check_addr("map_single", dev, bus, size))
+//		return DMA_ERROR_CODE;
 	flush_write_buffers();
 	return bus;
 }

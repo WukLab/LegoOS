@@ -179,7 +179,7 @@ struct ib_cq *mlx4_ib_create_cq(struct ib_device *ibdev, int entries, int vector
 	cq->mcq.comp  = mlx4_ib_cq_comp;
 	cq->mcq.event = mlx4_ib_cq_event;
 
-	pr_debug("%s exit successfully\n", __func__);
+	pr_debug("%s exit successfully created cq %d\n", __func__, cq->mcq.cqn);
 	return &cq->ibcq;
 
 err_dbmap:
@@ -527,7 +527,7 @@ repoll:
 	}
 
 	wc->status = IB_WC_SUCCESS;
-	pr_debug("%s wc status IB_WC_SUCCESS\n", __func__);
+	//pr_debug("%s wc status IB_WC_SUCCESS\n", __func__);
 
 	if (is_send) {
 		wc->wc_flags = 0;
@@ -610,7 +610,7 @@ repoll:
 		wc->pkey_index     = be32_to_cpu(cqe->immed_rss_invalid) & 0x7f;
 	//	wc->csum_ok	   = mlx4_ib_ipoib_csum_ok(cqe->status, cqe->checksum);
 	}
-	pr_debug("%s exit status %d\n", __func__, wc->status);
+	//pr_debug("%s exit status %d\n", __func__, wc->status);
 
 	return 0;
 }

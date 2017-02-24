@@ -66,6 +66,8 @@ struct mlx4_qp *qp_table_rb_lookup(struct rb_root *root, u32 qpn)
 	struct rb_node *node = root->rb_node;
 	struct mlx4_qp *entry;
 	
+	//pr_info("%s root %p qpn %d %x %06x\n", __func__, root, qpn, qpn, qpn);
+	qpn = qpn & 0xFF;
 	while (node)
 	{
 		entry = rb_entry(node, struct mlx4_qp, node);
@@ -86,11 +88,11 @@ static void qp_table_rb_insert(struct rb_root *root, u32 qpn, struct mlx4_qp *ne
 	struct rb_node *parent = NULL;
 	struct mlx4_qp *entry;
 
-	pr_debug("%s root %p, link %p qpn %d, new_entry %p\n", __func__, root, root->rb_node, qpn, new_entry);
+	//pr_debug("%s root %p, link %p qpn %d, new_entry %p\n", __func__, root, root->rb_node, qpn, new_entry);
 	while (*link) {
 		parent = *link;
 		entry = rb_entry(parent, struct mlx4_qp, node);
-		pr_debug("%s entry %p entryqpn %d\n", __func__, entry, entry->qpn);
+		//pr_debug("%s entry %p entryqpn %d\n", __func__, entry, entry->qpn);
 		if (entry->qpn > qpn)
 			link = &(*link)->rb_left;
 		else
@@ -208,7 +210,7 @@ int mlx4_qp_modify(struct mlx4_dev *dev, struct mlx4_mtt *mtt,
 		       op[cur_state][new_state], MLX4_CMD_TIME_CLASS_C);
 
 	mlx4_free_cmd_mailbox(dev, mailbox);
-	pr_debug("%s ret %d\n", __func__, ret);
+	//pr_debug("%s ret %d\n", __func__, ret);
 	return ret;
 }
 
@@ -398,7 +400,7 @@ int mlx4_qp_query(struct mlx4_dev *dev, struct mlx4_qp *qp,
 	struct mlx4_cmd_mailbox *mailbox;
 	int err;
 
-	pr_debug("%s mlx4dev %p qp %p qpn %d\n", __func__, dev, qp, qp->qpn);
+	//pr_debug("%s mlx4dev %p qp %p qpn %d\n", __func__, dev, qp, qp->qpn);
 	mailbox = mlx4_alloc_cmd_mailbox(dev);
 	if (IS_ERR(mailbox))
 		return PTR_ERR(mailbox);

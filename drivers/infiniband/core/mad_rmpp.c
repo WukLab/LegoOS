@@ -31,7 +31,7 @@
  * SOFTWARE.
  */
 
-#include <linux/slab.h>
+#include <lego/slab.h>
 
 #include "mad_priv.h"
 #include "mad_rmpp.h"
@@ -46,9 +46,9 @@ enum rmpp_state {
 struct mad_rmpp_recv {
 	struct ib_mad_agent_private *agent;
 	struct list_head list;
-	struct delayed_work timeout_work;
-	struct delayed_work cleanup_work;
-	struct completion comp;
+//	struct delayed_work timeout_work;
+//	struct delayed_work cleanup_work;
+//	struct completion comp;
 	enum rmpp_state state;
 	spinlock_t lock;
 	atomic_t refcount;
@@ -71,14 +71,14 @@ struct mad_rmpp_recv {
 
 static inline void deref_rmpp_recv(struct mad_rmpp_recv *rmpp_recv)
 {
-	if (atomic_dec_and_test(&rmpp_recv->refcount))
-		complete(&rmpp_recv->comp);
+//	if (atomic_dec_and_test(&rmpp_recv->refcount))
+//		complete(&rmpp_recv->comp);
 }
 
 static void destroy_rmpp_recv(struct mad_rmpp_recv *rmpp_recv)
 {
 	deref_rmpp_recv(rmpp_recv);
-	wait_for_completion(&rmpp_recv->comp);
+//	wait_for_completion(&rmpp_recv->comp);
 	ib_destroy_ah(rmpp_recv->ah);
 	kfree(rmpp_recv);
 }
@@ -295,9 +295,9 @@ create_rmpp_recv(struct ib_mad_agent_private *agent,
 		goto error;
 
 	rmpp_recv->agent = agent;
-	init_completion(&rmpp_recv->comp);
-	INIT_DELAYED_WORK(&rmpp_recv->timeout_work, recv_timeout_handler);
-	INIT_DELAYED_WORK(&rmpp_recv->cleanup_work, recv_cleanup_handler);
+//	init_completion(&rmpp_recv->comp);
+//	INIT_DELAYED_WORK(&rmpp_recv->timeout_work, recv_timeout_handler);
+//	INIT_DELAYED_WORK(&rmpp_recv->cleanup_work, recv_cleanup_handler);
 	spin_lock_init(&rmpp_recv->lock);
 	rmpp_recv->state = RMPP_STATE_ACTIVE;
 	atomic_set(&rmpp_recv->refcount, 1);

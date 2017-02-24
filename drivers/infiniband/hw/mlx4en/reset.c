@@ -123,7 +123,6 @@ int mlx4_reset(struct mlx4_dev *dev)
 		for (j=0;j < 10000;j++) 
 			for (k=0;k < 10000;k++) 
 				dummy=1+2;
-	//msleep(1000);
 	mdelay(1000);
 
 	end = jiffies + MLX4_RESET_TIMEOUT_JIFFIES;

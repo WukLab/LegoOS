@@ -46,7 +46,7 @@ u32 mlx4_bitmap_alloc(struct mlx4_bitmap *bitmap)
 
 	spin_lock(&bitmap->lock);
 
-	pr_debug("%s max %d last %d\n", __func__, bitmap->max, bitmap->last);
+	//pr_debug("%s max %d last %d\n", __func__, bitmap->max, bitmap->last);
 	obj = find_next_zero_bit(bitmap->table, bitmap->max, bitmap->last);
 	if (obj >= bitmap->max) {
 		bitmap->top = (bitmap->top + bitmap->max + bitmap->reserved_top)
@@ -85,7 +85,7 @@ u32 mlx4_bitmap_alloc_range(struct mlx4_bitmap *bitmap, int cnt, int align)
 
 	spin_lock(&bitmap->lock);
 
-	pr_debug("%s cnt %d align %d last %d\n", __func__, cnt, align, bitmap->table);
+	//pr_debug("%s cnt %d align %d last %d\n", __func__, cnt, align, bitmap->table);
 	obj = bitmap_find_next_zero_area(bitmap->table, bitmap->max,
 				bitmap->last, cnt, align - 1);
 	if (obj >= bitmap->max) {
@@ -173,7 +173,7 @@ int mlx4_buf_alloc(struct mlx4_dev *dev, int size, int max_direct,
 {
 	dma_addr_t t;
 
-	pr_debug("%s dev %p pdev %p size %d max_direct %d\n", __func__, dev, dev->pdev, size, max_direct);
+	//pr_debug("%s dev %p pdev %p size %d max_direct %d\n", __func__, dev, dev->pdev, size, max_direct);
 	if (size <= max_direct) {
 		buf->nbufs        = 1;
 		buf->npages       = 1;
@@ -241,7 +241,7 @@ int mlx4_buf_alloc(struct mlx4_dev *dev, int size, int max_direct,
 #endif
 	}
 
-	pr_debug("%s exit normal\n", __func__);
+	//pr_debug("%s exit normal\n", __func__);
 	return 0;
 
 err_free:
@@ -275,7 +275,7 @@ static struct mlx4_db_pgdir *mlx4_alloc_db_pgdir(struct pci_dev *dma_device)
 {
 	struct mlx4_db_pgdir *pgdir;
 
-	pr_debug("%s\n", __func__);
+	//pr_debug("%s\n", __func__);
 	pgdir = kzalloc(sizeof *pgdir, GFP_KERNEL);
 	if (!pgdir)
 		return NULL;
@@ -299,7 +299,7 @@ static int mlx4_alloc_db_from_pgdir(struct mlx4_db_pgdir *pgdir,
 	int o;
 	int i;
 
-	pr_debug("%s pgdir %p\n", __func__, pgdir);
+	//pr_debug("%s pgdir %p\n", __func__, pgdir);
 	for (o = order; o <= 1; ++o) {
 		i = find_first_bit(pgdir->bits[o], MLX4_DB_PER_PAGE >> o);
 		if (i < MLX4_DB_PER_PAGE >> o)
@@ -331,9 +331,9 @@ int mlx4_db_alloc(struct mlx4_dev *dev, struct mlx4_db *db, int order)
 	struct mlx4_db_pgdir *pgdir;
 	int ret = 0;
 
-	pr_debug("%s priv %p\n", __func__, priv);
+	//pr_debug("%s priv %p\n", __func__, priv);
 	mutex_lock(&priv->pgdir_mutex);
-	pr_debug("%s priv %p locked\n", __func__, priv);
+	//pr_debug("%s priv %p locked\n", __func__, priv);
 
 	list_for_each_entry(pgdir, &priv->pgdir_list, list)
 		if (!mlx4_alloc_db_from_pgdir(pgdir, db, order))

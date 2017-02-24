@@ -201,6 +201,8 @@ static int ib_link_query_port(struct ib_device *ibdev, u8 port,
 	props->max_vl_num	= out_mad->data[37] >> 4;
 	props->init_type_reply	= out_mad->data[41] >> 4;
 
+	pr_info("%s lid %d sm_lid %d state %x max_mtu %d active_speed\n", 
+		__func__, props->lid, props->sm_lid, props->state, props->max_mtu, props->active_speed); 
 	/* Check if extended speeds (EDR/FDR/...) are supported */
 	if (props->port_cap_flags & IB_PORT_EXTENDED_SPEEDS_SUP) {
 		ext_active_speed = out_mad->data[62] >> 4;
@@ -251,8 +253,10 @@ static int mlx4_ib_query_port(struct ib_device *ibdev, u8 port,
 
 	in_mad  = kzalloc(sizeof *in_mad, GFP_KERNEL);
 	out_mad = kmalloc(sizeof *out_mad, GFP_KERNEL);
-	if (!in_mad || !out_mad)
+	if (!in_mad || !out_mad) {
+		pr_info("%s allocation error %d\n", __func__, err);
 		goto out;
+	}
 
 	memset(props, 0, sizeof *props);
 
@@ -261,10 +265,14 @@ static int mlx4_ib_query_port(struct ib_device *ibdev, u8 port,
 	in_mad->attr_mod = cpu_to_be32(port);
 
 	err = mlx4_MAD_IFC(to_mdev(ibdev), 1, 1, port, NULL, NULL, in_mad, out_mad);
-	if (err)
+	if (err) {
+		pr_info("%s MAD_IFC failed %d\n", __func__, err);
 		goto out;
+	}
 
 	err = ib_link_query_port(ibdev, port, props, in_mad, out_mad);
+	if (err)
+		pr_info("%s ib_link_query_port failed %d\n", __func__, err);
 
 out:
 	kfree(in_mad);
@@ -413,6 +421,7 @@ static int mlx4_ib_modify_port(struct ib_device *ibdev, u8 port, int mask,
 	u32 cap_mask;
 	int err;
 
+	pr_info("%s mask %x\n", __func__, mask);
 	mutex_lock(&to_mdev(ibdev)->cap_mask_mutex);
 
 	err = mlx4_ib_query_port(ibdev, port, &attr);
@@ -550,7 +559,6 @@ void *mlx4_ib_add(struct mlx4_dev *dev)
 	int i;
 	int err;
 
-
 	mlx4_foreach_ib_transport_port(i, dev)
 		num_ports++;
 
@@ -597,12 +605,12 @@ void *mlx4_ib_add(struct mlx4_dev *dev)
 	//ibdev->ib_dev.query_gid		= mlx4_ib_query_gid;
 	ibdev->ib_dev.query_pkey	= mlx4_ib_query_pkey;
 	//ibdev->ib_dev.modify_device	= mlx4_ib_modify_device;
-	//ibdev->ib_dev.modify_port	= mlx4_ib_modify_port;
+	ibdev->ib_dev.modify_port	= mlx4_ib_modify_port;
 	ibdev->ib_dev.alloc_pd		= mlx4_ib_alloc_pd;
 	ibdev->ib_dev.dealloc_pd	= mlx4_ib_dealloc_pd;
-	//ibdev->ib_dev.create_ah		= mlx4_ib_create_ah;
-	//ibdev->ib_dev.query_ah		= mlx4_ib_query_ah;
-	//ibdev->ib_dev.destroy_ah	= mlx4_ib_destroy_ah;
+	ibdev->ib_dev.create_ah		= mlx4_ib_create_ah;
+	ibdev->ib_dev.query_ah		= mlx4_ib_query_ah;
+	ibdev->ib_dev.destroy_ah	= mlx4_ib_destroy_ah;
 	//ibdev->ib_dev.create_srq	= mlx4_ib_create_srq;
 	//ibdev->ib_dev.modify_srq	= mlx4_ib_modify_srq;
 	//ibdev->ib_dev.query_srq		= mlx4_ib_query_srq;
@@ -626,7 +634,7 @@ void *mlx4_ib_add(struct mlx4_dev *dev)
 	//ibdev->ib_dev.alloc_fast_reg_mr = mlx4_ib_alloc_fast_reg_mr;
 	//ibdev->ib_dev.alloc_fast_reg_page_list = mlx4_ib_alloc_fast_reg_page_list;
 	//ibdev->ib_dev.free_fast_reg_page_list  = mlx4_ib_free_fast_reg_page_list;
-	//ibdev->ib_dev.process_mad	= mlx4_ib_process_mad;
+	ibdev->ib_dev.process_mad	= mlx4_ib_process_mad;
 
 	//ibdev->ib_dev.alloc_fmr		= mlx4_ib_fmr_alloc;
 	//ibdev->ib_dev.map_phys_fmr	= mlx4_ib_map_phys_fmr;
@@ -646,8 +654,10 @@ void *mlx4_ib_add(struct mlx4_dev *dev)
 	if (ib_register_device(&ibdev->ib_dev))
 		goto err_counter;
 
-	//if (mlx4_ib_mad_init(ibdev))
-	//	goto err_reg;
+	if (mlx4_ib_mad_init(ibdev)) {
+		pr_info("%s ib_mad_init fails\n", __func__);
+		goto err_reg;
+	}
 
 	ibdev->ib_active = true;
  

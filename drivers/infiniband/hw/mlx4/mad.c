@@ -115,6 +115,7 @@ int mlx4_MAD_IFC(struct mlx4_ib_dev *dev, int ignore_mkey, int ignore_bkey,
 		in_modifier |= in_wc->slid << 16;
 	}
 
+	//pr_info("%s inmod %x opmod %x\n", __func__, in_modifier, op_modifier);
 	err = mlx4_cmd_box(dev->dev, inmailbox->dma, outmailbox->dma,
 			   in_modifier, op_modifier,
 			   MLX4_CMD_MAD_IFC, MLX4_CMD_TIME_CLASS_C);
@@ -128,12 +129,14 @@ int mlx4_MAD_IFC(struct mlx4_ib_dev *dev, int ignore_mkey, int ignore_bkey,
 	return err;
 }
 
-#if 0
+#if 1
 static void update_sm_ah(struct mlx4_ib_dev *dev, u8 port_num, u16 lid, u8 sl)
 {
 	struct ib_ah *new_ah;
 	struct ib_ah_attr ah_attr;
 
+	pr_info("%s need ah back\n", __func__);
+#if 0
 	if (!dev->send_agent[port_num - 1][0])
 		return;
 
@@ -152,6 +155,7 @@ static void update_sm_ah(struct mlx4_ib_dev *dev, u8 port_num, u16 lid, u8 sl)
 		ib_destroy_ah(dev->sm_ah[port_num - 1]);
 	dev->sm_ah[port_num - 1] = new_ah;
 	spin_unlock(&dev->sm_lock);
+#endif
 }
 
 /*
@@ -163,9 +167,11 @@ static void smp_snoop(struct ib_device *ibdev, u8 port_num, struct ib_mad *mad,
 {
 	struct ib_event event;
 
+	//pr_info("%s\n", __func__);
 	if ((mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_LID_ROUTED ||
 	     mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) &&
 	    mad->mad_hdr.method == IB_MGMT_METHOD_SET) {
+		//pr_info("%s mad set\n", __func__);
 		if (mad->mad_hdr.attr_id == IB_SMP_ATTR_PORT_INFO) {
 			struct ib_port_info *pinfo =
 				(struct ib_port_info *) ((struct ib_smp *) mad)->data;
@@ -220,7 +226,7 @@ static void forward_trap(struct mlx4_ib_dev *dev, u8 port_num, struct ib_mad *ma
 
 	if (agent) {
 		send_buf = ib_create_send_mad(agent, qpn, 0, 0, IB_MGMT_MAD_HDR,
-					      IB_MGMT_MAD_DATA, GFP_ATOMIC);
+				      IB_MGMT_MAD_DATA, GFP_ATOMIC);
 		if (IS_ERR(send_buf))
 			return;
 		/*
@@ -231,10 +237,11 @@ static void forward_trap(struct mlx4_ib_dev *dev, u8 port_num, struct ib_mad *ma
 		 */
 		spin_lock(&dev->sm_lock);
 		memcpy(send_buf->mad, mad, sizeof *mad);
-		if ((send_buf->ah = dev->sm_ah[port_num - 1]))
-			ret = ib_post_send_mad(send_buf, NULL);
-		else
-			ret = -EINVAL;
+		pr_info("%s need ah back\n", __func__);
+//		if ((send_buf->ah = dev->sm_ah[port_num - 1]))
+//			ret = ib_post_send_mad(send_buf, NULL);
+//		else
+//			ret = -EINVAL;
 		spin_unlock(&dev->sm_lock);
 
 		if (ret)
@@ -250,6 +257,7 @@ static int ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 	int err;
 	struct ib_port_attr pattr;
 
+	//pr_info("%s inwcslid %d\n", __func__, in_wc->slid);
 	slid = in_wc ? in_wc->slid : be16_to_cpu(IB_LID_PERMISSIVE);
 
 	if (in_mad->mad_hdr.method == IB_MGMT_METHOD_TRAP && slid == 0) {
@@ -257,6 +265,10 @@ static int ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 		return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 	}
 
+	pr_info("%s mad_hdr %p base_version %x mgmt_class %x class_version %x method %x status %x class_specific %x TID %x attr_id %x attr_mod %x\n",
+		__func__, &(in_mad->mad_hdr), in_mad->mad_hdr.base_version, in_mad->mad_hdr.mgmt_class, in_mad->mad_hdr.class_version, 
+		in_mad->mad_hdr.method, in_mad->mad_hdr.status, in_mad->mad_hdr.class_specific, in_mad->mad_hdr.tid, in_mad->mad_hdr.attr_id, 
+		in_mad->mad_hdr.attr_mod);
 	if (in_mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_LID_ROUTED ||
 	    in_mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
 		if (in_mad->mad_hdr.method   != IB_MGMT_METHOD_GET &&
@@ -285,18 +297,22 @@ static int ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 	    in_mad->mad_hdr.attr_id == IB_SMP_ATTR_PORT_INFO &&
 	    !ib_query_port(ibdev, port_num, &pattr))
 		prev_lid = pattr.lid;
+	//pr_info("%s current lid %d port_num %d\n", __func__, pattr.lid);
 
 	err = mlx4_MAD_IFC(to_mdev(ibdev),
 			   mad_flags & IB_MAD_IGNORE_MKEY,
 			   mad_flags & IB_MAD_IGNORE_BKEY,
 			   port_num, in_wc, in_grh, in_mad, out_mad);
-	if (err)
+	if (err) {
+		pr_info("%s mad_ifc fails\n", __func__);
 		return IB_MAD_RESULT_FAILURE;
+	}
 
 	if (!out_mad->mad_hdr.status) {
 		smp_snoop(ibdev, port_num, in_mad, prev_lid);
 		node_desc_override(ibdev, out_mad);
 	}
+	//pr_info("%s out mad status %x\n", __func__, out_mad->mad_hdr.status);
 
 	/* set return bit in status of directed route responses */
 	if (in_mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
@@ -322,6 +338,7 @@ static void edit_counter(struct mlx4_counter *cnt,
 			     be64_to_cpu(cnt->rx_frames));
 }
 
+#if 0
 static int iboe_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 			struct ib_wc *in_wc, struct ib_grh *in_grh,
 			struct ib_mad *in_mad, struct ib_mad *out_mad)
@@ -361,6 +378,7 @@ static int iboe_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 
 	return err;
 }
+#endif
 
 int mlx4_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 			struct ib_wc *in_wc, struct ib_grh *in_grh,
@@ -383,6 +401,8 @@ int mlx4_ib_mad_init(struct mlx4_ib_dev *dev)
 	int ret;
 	enum rdma_link_layer ll;
 
+	pr_info("%s\n", __func__);
+	dev->num_ports = 1;
 	for (p = 0; p < dev->num_ports; ++p) {
 		for (q = 0; q <= 1; ++q) {
 				agent = ib_register_mad_agent(&dev->ib_dev, p + 1,
@@ -391,6 +411,7 @@ int mlx4_ib_mad_init(struct mlx4_ib_dev *dev)
 							      NULL, NULL);
 				if (IS_ERR(agent)) {
 					ret = PTR_ERR(agent);
+					pr_info("%s register agent error\n", __func__);
 					goto err;
 				}
 				dev->send_agent[p][q] = agent;
@@ -422,8 +443,8 @@ void mlx4_ib_mad_cleanup(struct mlx4_ib_dev *dev)
 			}
 		}
 
-		if (dev->sm_ah[p])
-			ib_destroy_ah(dev->sm_ah[p]);
+	//	if (dev->sm_ah[p])
+	//		ib_destroy_ah(dev->sm_ah[p]);
 	}
 }
 #endif

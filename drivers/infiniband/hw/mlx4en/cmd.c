@@ -226,7 +226,7 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	int err = 0;
 	unsigned long end;
 
-	pr_debug("%s in_modifier %d\n", __func__, in_modifier);
+	//pr_debug("%s in_modifier %d %x\n", __func__, in_modifier, in_modifier);
 // XXX	down(&priv->cmd.poll_sem);
 
 	err = mlx4_cmd_post(dev, in_param, out_param ? *out_param : 0,
@@ -235,9 +235,10 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 		goto out;
 
 	end = msecs_to_jiffies(timeout) + jiffies;
-	while (cmd_pending(dev) && time_before(jiffies, end))
+	while (cmd_pending(dev) && time_before(jiffies, end)) {
 		// XXX was this: cond_resched();
 		udelay(1000);
+	}
 
 	if (cmd_pending(dev)) {
 		pr_debug("%s cmd pending\n", __func__);

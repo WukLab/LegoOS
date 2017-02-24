@@ -401,7 +401,7 @@ static int msi_capability_init(struct pci_dev *dev, int nvec)
 		entry->mask_pos = dev->msi_cap + PCI_MSI_MASK_32;
 	/* All MSIs are unmasked by default, Mask them all */
 	if (entry->msi_attrib.maskbit)
-		pci_conf_read(dev, entry->mask_pos, (entry->masked));
+		entry->masked = pci_conf_read(dev, entry->mask_pos, 3);
 	mask = msi_capable_mask(control);
 	msi_mask_irq(entry, mask, mask);
 

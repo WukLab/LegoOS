@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include <rdma/ib_addr.h>
+//#include <rdma/ib_addr.h>
 #include <rdma/ib_cache.h>
 
 #include <lego/slab.h>
@@ -39,6 +39,7 @@
 
 #include "mlx4_ib.h"
 
+#if 0
 int mlx4_ib_resolve_grh(struct mlx4_ib_dev *dev, const struct ib_ah_attr *ah_attr,
 			u8 *mac, int *is_mcast, u8 port)
 {
@@ -57,6 +58,7 @@ int mlx4_ib_resolve_grh(struct mlx4_ib_dev *dev, const struct ib_ah_attr *ah_att
 
 	return 0;
 }
+#endif
 
 static struct ib_ah *create_ib_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr,
 				  struct mlx4_ib_ah *ah)
@@ -67,6 +69,7 @@ static struct ib_ah *create_ib_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr,
 	ah->av.ib.g_slid  = ah_attr->src_path_bits;
 	ah->av.ib.sl_tclass_flowlabel = cpu_to_be32(ah_attr->sl << 28);
 	if (ah_attr->ah_flags & IB_AH_GRH) {
+		pr_info("%s IB_AH_GRH\n", __func__);
 		ah->av.ib.g_slid   |= 0x80;
 		ah->av.ib.gid_index = ah_attr->grh.sgid_index;
 		ah->av.ib.hop_limit = ah_attr->grh.hop_limit;
@@ -77,57 +80,14 @@ static struct ib_ah *create_ib_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr,
 	}
 
 	ah->av.ib.dlid    = cpu_to_be16(ah_attr->dlid);
+	pr_info("%s ah port_pd %p g_slid %x dlid %d\n",
+			__func__, ah->av.ib.port_pd, ah->av.ib.g_slid, ah->av.ib.dlid);
 	if (ah_attr->static_rate) {
 		ah->av.ib.stat_rate = ah_attr->static_rate + MLX4_STAT_RATE_OFFSET;
 		while (ah->av.ib.stat_rate > IB_RATE_2_5_GBPS + MLX4_STAT_RATE_OFFSET &&
 		       !(1 << ah->av.ib.stat_rate & dev->caps.stat_rate_support))
 			--ah->av.ib.stat_rate;
 	}
-
-	return &ah->ibah;
-}
-
-static struct ib_ah *create_iboe_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr,
-				    struct mlx4_ib_ah *ah)
-{
-	struct mlx4_ib_dev *ibdev = to_mdev(pd->device);
-	struct mlx4_dev *dev = ibdev->dev;
-	union ib_gid sgid;
-	u8 mac[6];
-	int err;
-	int is_mcast;
-	u16 vlan_tag;
-
-	err = mlx4_ib_resolve_grh(ibdev, ah_attr, mac, &is_mcast, ah_attr->port_num);
-	if (err)
-		return ERR_PTR(err);
-
-	memcpy(ah->av.eth.mac, mac, 6);
-	err = ib_get_cached_gid(pd->device, ah_attr->port_num, ah_attr->grh.sgid_index, &sgid);
-	if (err)
-		return ERR_PTR(err);
-	vlan_tag = rdma_get_vlan_id(&sgid);
-	if (vlan_tag < 0x1000)
-		vlan_tag |= (ah_attr->sl & 7) << 13;
-	ah->av.eth.port_pd = cpu_to_be32(to_mpd(pd)->pdn | (ah_attr->port_num << 24));
-	ah->av.eth.gid_index = ah_attr->grh.sgid_index;
-	ah->av.eth.vlan = cpu_to_be16(vlan_tag);
-	ah->av.eth.hop_limit = ah_attr->grh.hop_limit;
-	if (ah_attr->static_rate) {
-		ah->av.eth.stat_rate = ah_attr->static_rate + MLX4_STAT_RATE_OFFSET;
-		while (ah->av.eth.stat_rate > IB_RATE_2_5_GBPS + MLX4_STAT_RATE_OFFSET &&
-		       !(1 << ah->av.eth.stat_rate & dev->caps.stat_rate_support))
-			--ah->av.eth.stat_rate;
-	}
-
-	/*
-	 * HW requires multicast LID so we just choose one.
-	 */
-	if (is_mcast)
-		ah->av.ib.dlid = cpu_to_be16(0xc000);
-
-	memcpy(ah->av.eth.dgid, ah_attr->grh.dgid.raw, 16);
-	ah->av.eth.sl_tclass_flowlabel = cpu_to_be32(ah_attr->sl << 28);
 
 	return &ah->ibah;
 }

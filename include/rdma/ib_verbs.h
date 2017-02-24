@@ -913,13 +913,13 @@ struct ib_xrcd {
 	struct mutex		tgt_qp_mutex;
 	struct list_head	tgt_qp_list;
 };
+#endif
 
 struct ib_ah {
 	struct ib_device	*device;
 	struct ib_pd		*pd;
-	struct ib_uobject	*uobject;
+	//struct ib_uobject	*uobject;
 };
-#endif
 
 typedef void (*ib_comp_handler)(struct ib_cq *cq, void *cq_context);
 
@@ -1108,7 +1108,6 @@ struct ib_device {
 					       struct ib_ucontext *context,
 					       struct ib_udata *udata);
 	int                        (*dealloc_pd)(struct ib_pd *pd);
-#if 0					
 	struct ib_ah *             (*create_ah)(struct ib_pd *pd,
 						struct ib_ah_attr *ah_attr);
 	int                        (*modify_ah)(struct ib_ah *ah,
@@ -1116,6 +1115,7 @@ struct ib_device {
 	int                        (*query_ah)(struct ib_ah *ah,
 					       struct ib_ah_attr *ah_attr);
 	int                        (*destroy_ah)(struct ib_ah *ah);
+#if 0					
 	struct ib_srq *            (*create_srq)(struct ib_pd *pd,
 						 struct ib_srq_init_attr *srq_init_attr,
 						 struct ib_udata *udata);
@@ -1201,6 +1201,7 @@ struct ib_device {
 	int                        (*detach_mcast)(struct ib_qp *qp,
 						   union ib_gid *gid,
 						   u16 lid);
+#endif
 	int                        (*process_mad)(struct ib_device *device,
 						  int process_mad_flags,
 						  u8 port_num,
@@ -1208,6 +1209,7 @@ struct ib_device {
 						  struct ib_grh *in_grh,
 						  struct ib_mad *in_mad,
 						  struct ib_mad *out_mad);
+#if 0
 	struct ib_xrcd *	   (*alloc_xrcd)(struct ib_device *device,
 						 struct ib_ucontext *ucontext,
 						 struct ib_udata *udata);
@@ -1324,7 +1326,6 @@ struct ib_pd *ib_alloc_pd(struct ib_device *device);
  */
 int ib_dealloc_pd(struct ib_pd *pd);
 
-#if 0
 /**
  * ib_create_ah - Creates an address handle for the given address vector.
  * @pd: The protection domain associated with the address handle.
@@ -1388,6 +1389,7 @@ int ib_query_ah(struct ib_ah *ah, struct ib_ah_attr *ah_attr);
  */
 int ib_destroy_ah(struct ib_ah *ah);
 
+#if 0
 /**
  * ib_create_srq - Creates a SRQ associated with the specified protection
  *   domain.
@@ -1706,7 +1708,7 @@ static inline u64 ib_dma_map_single(struct ib_device *dev,
 				    void *cpu_addr, size_t size,
 				    enum dma_data_direction direction)
 {
-	pr_debug("%s dev %p dmadev %p\n", __func__, dev, dev->dma_device);
+	//pr_debug("%s dev %p dmadev %p cpu_addr %p size %d\n", __func__, dev, dev->dma_device, cpu_addr, size);
 //	if (dev->dma_ops)
 //		return dev->dma_ops->map_single(dev, cpu_addr, size, direction);
 	return dma_map_single(dev->dma_device, cpu_addr, size, direction);

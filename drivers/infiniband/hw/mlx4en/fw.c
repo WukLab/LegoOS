@@ -852,6 +852,7 @@ int mlx4_INIT_PORT(struct mlx4_dev *dev, int port)
 	u32 flags;
 	u16 field;
 
+	pr_info("%s\n", __func__);
 	if (dev->flags & MLX4_FLAG_OLD_PORT_CMDS) {
 #define INIT_PORT_IN_SIZE          256
 #define INIT_PORT_FLAGS_OFFSET     0x00

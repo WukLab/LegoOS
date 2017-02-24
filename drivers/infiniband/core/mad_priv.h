@@ -36,9 +36,9 @@
 #ifndef __IB_MAD_PRIV_H__
 #define __IB_MAD_PRIV_H__
 
-#include <linux/completion.h>
-#include <linux/err.h>
-#include <linux/workqueue.h>
+//#include <lego/completion.h>
+#include <lego/err.h>
+#include <lego/workqueue.h>
 #include <rdma/ib_mad.h>
 #include <rdma/ib_smi.h>
 
@@ -102,14 +102,14 @@ struct ib_mad_agent_private {
 	struct list_head send_list;
 	struct list_head wait_list;
 	struct list_head done_list;
-	struct delayed_work timed_work;
+//	struct delayed_work timed_work;
 	unsigned long timeout;
 	struct list_head local_list;
 	struct work_struct local_work;
 	struct list_head rmpp_list;
 
 	atomic_t refcount;
-	struct completion comp;
+//	struct completion comp;
 };
 
 struct ib_mad_snoop_private {
@@ -118,7 +118,7 @@ struct ib_mad_snoop_private {
 	int snoop_index;
 	int mad_snoop_flags;
 	atomic_t refcount;
-	struct completion comp;
+//	struct completion comp;
 };
 
 struct ib_mad_send_wr_private {
