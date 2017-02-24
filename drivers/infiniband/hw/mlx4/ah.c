@@ -80,8 +80,8 @@ static struct ib_ah *create_ib_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr,
 	}
 
 	ah->av.ib.dlid    = cpu_to_be16(ah_attr->dlid);
-	pr_info("%s ah port_pd %p g_slid %x dlid %d\n",
-			__func__, ah->av.ib.port_pd, ah->av.ib.g_slid, ah->av.ib.dlid);
+	//pr_info("%s ah port_pd %p g_slid %x dlid %d\n",
+	//		__func__, ah->av.ib.port_pd, ah->av.ib.g_slid, ah->av.ib.dlid);
 	if (ah_attr->static_rate) {
 		ah->av.ib.stat_rate = ah_attr->static_rate + MLX4_STAT_RATE_OFFSET;
 		while (ah->av.ib.stat_rate > IB_RATE_2_5_GBPS + MLX4_STAT_RATE_OFFSET &&

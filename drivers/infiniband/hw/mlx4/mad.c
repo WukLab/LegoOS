@@ -265,10 +265,10 @@ static int ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 		return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 	}
 
-	pr_info("%s mad_hdr %p base_version %x mgmt_class %x class_version %x method %x status %x class_specific %x TID %x attr_id %x attr_mod %x\n",
-		__func__, &(in_mad->mad_hdr), in_mad->mad_hdr.base_version, in_mad->mad_hdr.mgmt_class, in_mad->mad_hdr.class_version, 
-		in_mad->mad_hdr.method, in_mad->mad_hdr.status, in_mad->mad_hdr.class_specific, in_mad->mad_hdr.tid, in_mad->mad_hdr.attr_id, 
-		in_mad->mad_hdr.attr_mod);
+	//pr_info("%s mad_hdr %p base_version %x mgmt_class %x class_version %x method %x status %x class_specific %x TID %x attr_id %x attr_mod %x\n",
+	//	__func__, &(in_mad->mad_hdr), in_mad->mad_hdr.base_version, in_mad->mad_hdr.mgmt_class, in_mad->mad_hdr.class_version, 
+	//	in_mad->mad_hdr.method, in_mad->mad_hdr.status, in_mad->mad_hdr.class_specific, in_mad->mad_hdr.tid, in_mad->mad_hdr.attr_id, 
+	//	in_mad->mad_hdr.attr_mod);
 	if (in_mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_LID_ROUTED ||
 	    in_mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
 		if (in_mad->mad_hdr.method   != IB_MGMT_METHOD_GET &&
@@ -401,8 +401,7 @@ int mlx4_ib_mad_init(struct mlx4_ib_dev *dev)
 	int ret;
 	enum rdma_link_layer ll;
 
-	pr_info("%s\n", __func__);
-	dev->num_ports = 1;
+	//pr_info("%s\n", __func__);
 	for (p = 0; p < dev->num_ports; ++p) {
 		for (q = 0; q <= 1; ++q) {
 				agent = ib_register_mad_agent(&dev->ib_dev, p + 1,

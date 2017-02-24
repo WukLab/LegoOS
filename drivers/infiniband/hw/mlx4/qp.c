@@ -994,7 +994,7 @@ static int __mlx4_ib_modify_qp(struct ib_qp *ibqp,
 	}
 
 	if (cur_state == IB_QPS_INIT && new_state == IB_QPS_RTR) {
-		pr_debug("%s RTR\n", __func__);
+		//pr_debug("%s RTR\n", __func__);
 		if (dev->counters[qp->port - 1] != -1) {
 			context->pri_path.counter_index =
 						dev->counters[qp->port - 1];
@@ -1172,7 +1172,7 @@ static int __mlx4_ib_modify_qp(struct ib_qp *ibqp,
 	if (is_qp0(dev, qp)) {
 		//pr_debug("%s is qp0\n", __func__);
 		if (cur_state != IB_QPS_RTR && new_state == IB_QPS_RTR) {
-			pr_debug("%s qp0 change to RTR\n", __func__);
+			//pr_debug("%s qp0 change to RTR\n", __func__);
 			if (mlx4_INIT_PORT(dev->dev, qp->port))
 				printk(KERN_WARNING "INIT_PORT failed for port %d\n",
 				       qp->port);
@@ -1204,7 +1204,7 @@ static int __mlx4_ib_modify_qp(struct ib_qp *ibqp,
 
 out:
 	kfree(context);
-	pr_debug("%s exit err %d\n", __func__, err);
+	//pr_debug("%s exit err %d\n", __func__, err);
 	return err;
 }
 
@@ -1220,7 +1220,7 @@ int mlx4_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 	cur_state = attr_mask & IB_QP_CUR_STATE ? attr->cur_qp_state : qp->state;
 	new_state = attr_mask & IB_QP_STATE ? attr->qp_state : cur_state;
-	pr_debug("%s curr_state %lx new_state %lx\n", __func__, cur_state, new_state);
+	//pr_debug("%s curr_state %lx new_state %lx\n", __func__, cur_state, new_state);
 
 	if (!ib_modify_qp_is_ok(cur_state, new_state, ibqp->qp_type, attr_mask)) {
 		pr_debug("%s ib_modify_qp_is_ok error\n", __func__);
@@ -1285,7 +1285,7 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 	int is_grh = 0;
 	u16 vlan;
 
-	pr_info("%s\n", __func__);
+	//pr_info("%s\n", __func__);
 	send_size = 0;
 	for (i = 0; i < wr->num_sge; ++i)
 		send_size += wr->sg_list[i].length;
@@ -1355,7 +1355,7 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 
 	header_size = ib_ud_header_pack(&sqp->ud_header, sqp->header_buf);
 
-	if (1) {
+	if (0) {
 		printk(KERN_ERR "built UD header of size %d:\n", header_size);
 		for (i = 0; i < header_size / 4; ++i) {
 			if (i % 8 == 0)

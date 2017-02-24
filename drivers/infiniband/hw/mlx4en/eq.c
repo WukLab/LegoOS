@@ -312,8 +312,8 @@ static int mlx4_HW2SW_EQ(struct mlx4_dev *dev, struct mlx4_cmd_mailbox *mailbox,
 
 static int mlx4_num_eq_uar(struct mlx4_dev *dev)
 {
-	pr_debug("%s num_comp_vectors %d reserved_eqs %d comp_pool %d\n",
-			__func__, dev->caps.num_comp_vectors, dev->caps.reserved_eqs, dev->caps.comp_pool);
+	//pr_debug("%s num_comp_vectors %d reserved_eqs %d comp_pool %d\n",
+	//		__func__, dev->caps.num_comp_vectors, dev->caps.reserved_eqs, dev->caps.comp_pool);
 	/*
 	 * Each UAR holds 4 EQ doorbells.  To figure out how many UARs
 	 * we need to map, take the difference of highest index and
@@ -574,7 +574,7 @@ int mlx4_init_eq_table(struct mlx4_dev *dev)
 	int err;
 	int i;
 
-	pr_debug("%s num_eq_uar %d\n", __func__, mlx4_num_eq_uar(dev));
+	//pr_debug("%s num_eq_uar %d\n", __func__, mlx4_num_eq_uar(dev));
 	priv->eq_table.uar_map = kcalloc(sizeof *priv->eq_table.uar_map,
 					 mlx4_num_eq_uar(dev), GFP_KERNEL);
 	if (!priv->eq_table.uar_map) {

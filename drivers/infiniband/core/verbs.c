@@ -189,8 +189,8 @@ int ib_init_ah_from_wc(struct ib_device *device, u8 port_num, struct ib_wc *wc,
 	ah_attr->src_path_bits = wc->dlid_path_bits;
 	ah_attr->port_num = port_num;
 
-	pr_info("%s dlid %d sl %d src_path_bits %x port %d\n",
-		__func__, ah_attr->dlid, ah_attr->sl, ah_attr->src_path_bits, ah_attr->port_num);
+	//pr_info("%s dlid %d sl %d src_path_bits %x port %d\n",
+	//	__func__, ah_attr->dlid, ah_attr->sl, ah_attr->src_path_bits, ah_attr->port_num);
 
 	if (wc->wc_flags & IB_WC_GRH) {
 		pr_info("%s IB_WC_GRH\n", __func__);
@@ -383,7 +383,7 @@ struct ib_qp *ib_create_qp(struct ib_pd *pd,
 		qp->qp_type    = qp_init_attr->qp_type;
 
 		atomic_set(&qp->usecnt, 0);
-		pr_debug("%s setting qp %p device %p\n", __func__, qp, qp->device);
+		//pr_debug("%s setting qp %p device %p\n", __func__, qp, qp->device);
 #if 0
 		if (qp_init_attr->qp_type == IB_QPT_XRC_TGT) {
 			qp->event_handler = __ib_shared_qp_event_handler;
@@ -774,7 +774,7 @@ int ib_query_qp(struct ib_qp *qp,
 		int qp_attr_mask,
 		struct ib_qp_init_attr *qp_init_attr)
 {
-	pr_debug("%s qp %p device %p realqp %p\n", __func__, qp, qp->device, qp->real_qp);
+	//pr_debug("%s qp %p device %p realqp %p\n", __func__, qp, qp->device, qp->real_qp);
 	return qp->device->query_qp ?
 		qp->device->query_qp(qp->real_qp, qp_attr, qp_attr_mask, qp_init_attr) :
 		-ENOSYS;
