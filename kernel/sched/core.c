@@ -31,12 +31,6 @@ unsigned long long __weak sched_clock(void)
 					* (NSEC_PER_SEC / HZ);
 }
 
-void returned_kthread(void)
-{
-	pr_err("TODO: kill kernel thread code needed. Can not reach here\n");
-	hlt();
-}
-
 void user_thread_bug_now(void)
 {
 	panic("%s\n", __func__);
@@ -53,6 +47,23 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 
 static LIST_HEAD(rq_list);
 static DEFINE_SPINLOCK(rq_lock);
+
+/*
+ * wake_up_new_task - wake up a newly created task for the first time.
+ *
+ * This function will do some initial scheduler statistics housekeeping
+ * that must be done for every newly created context, then puts the task
+ * on the runqueue and wakes it.
+ */
+void wake_up_new_task(struct task_struct *p)
+{
+	p->on_rq = 1;
+	p->state = TASK_RUNNING;
+
+	spin_lock(&rq_lock);
+	list_add_tail(&p->run_list, &rq_list);
+	spin_unlock(&rq_lock);
+}
 
 /*
  * Called from fork()/clone(), to setup a new task to scheduler.
@@ -75,7 +86,9 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 
 void sched_remove_from_rq(struct task_struct *p)
 {
+	spin_lock(&rq_lock);
 	list_del(&p->run_list);
+	spin_unlock(&rq_lock);
 }
 
 /**

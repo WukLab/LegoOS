@@ -294,6 +294,8 @@ pid_t do_fork(unsigned long clone_flags,
 	p = copy_process(clone_flags, stack_start, stack_size, NUMA_NO_NODE, tls);
 	if (IS_ERR(p))
 		return PTR_ERR(p);
+
+	wake_up_new_task(p);
 	return p->pid;
 }
 
@@ -303,6 +305,7 @@ pid_t do_fork(unsigned long clone_flags,
  * @arg: data pointer for @fn()
  * @flags: CLONE flags
  *
+ * Create a new kernel thread and put it to run.
  * Return the pid of newly created thread on success.
  */
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)

@@ -266,6 +266,12 @@ ENTRY(ret_from_fork)
 	movq	%r12, %rdi
 	call	*%rbx
 
-	/* TODO: kernel thread should not reach here */
-	call	returned_kthread
+	/*
+	 * TODO:
+	 * Currently, we let a returning kernel thread
+	 * jump into do_exit(0) directly. Is their anyother
+	 * way to do? Like linux's kthread?
+	 */
+	movq	$0, %rdi
+	call	do_exit
 END(ret_from_fork)

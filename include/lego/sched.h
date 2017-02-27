@@ -201,5 +201,9 @@ unsigned long long sched_clock(void);
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 
 void schedule(void);
+void wake_up_new_task(struct task_struct *p);
+
+/* kernel/exit.c */
+void do_exit(long code);
 
 #endif /* _LEGO_SCHED_H_ */

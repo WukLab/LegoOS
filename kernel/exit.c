@@ -10,4 +10,10 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 
-
+void do_exit(long code)
+{
+	sched_remove_from_rq(current);
+	current->state = TASK_DEAD;
+	schedule();
+	BUG();
+}
