@@ -60,6 +60,10 @@
 #define TASK_NEW		2048
 #define TASK_STATE_MAX		4096
 
+/* Convenience macros for the sake of wake_up */
+#define TASK_NORMAL		(TASK_INTERRUPTIBLE | TASK_UNINTERRUPTIBLE)
+#define TASK_ALL		(TASK_NORMAL | __TASK_STOPPED | __TASK_TRACED)
+
 /*
  * task->flags
  */
@@ -201,6 +205,7 @@ unsigned long long sched_clock(void);
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 
 void schedule(void);
+int wake_up_process(struct task_struct *p);
 void wake_up_new_task(struct task_struct *p);
 
 /* kernel/exit.c */
