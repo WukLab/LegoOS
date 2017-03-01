@@ -22,7 +22,7 @@
 
 #include "tick-internal.h"
 
-DEFINE_PER_CPU(struct tick_device, tick_devices);
+__DEFINE_PER_CPU(struct tick_device, tick_devices);
 
 /*
  * Tick next event: keeps track of the tick time
@@ -77,7 +77,7 @@ int tick_oneshot_mode_active(void)
 
 	local_irq_save(flags);
 	cpu = smp_processor_id();
-	dev = per_cpu_ptr(tick_devices, cpu);
+	dev = __per_cpu_ptr(tick_devices, cpu);
 	ret = dev->mode == TICKDEV_MODE_ONESHOT;
 	local_irq_restore(flags);
 
@@ -198,7 +198,7 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	int cpu;
 
 	cpu = smp_processor_id();
-	td = per_cpu_ptr(tick_devices, cpu);
+	td = __per_cpu_ptr(tick_devices, cpu);
 	curdev = td->evtdev;
 
 	/* cpu local device ? */

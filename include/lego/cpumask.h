@@ -60,7 +60,12 @@ static inline const struct cpumask *get_cpu_mask(unsigned int cpu)
  */
 #define cpumask_bits(maskp)	((maskp)->bits)
 
-#define nr_cpu_ids		NR_CPUS
+#if NR_CPUS == 1
+#define nr_cpu_ids		1
+#else
+extern int nr_cpu_ids;
+#endif
+
 #define nr_cpumask_bits		NR_CPUS
 
 /*

@@ -47,6 +47,7 @@
 # define __acquire(x) (void)0
 # define __release(x) (void)0
 # define __cond_lock(x,c) (c)
+# define __percpu
 #endif
 
 #define GCC_VERSION				\
@@ -72,8 +73,6 @@
 #define __read_mostly		__section(.data..read_mostly)
 #define __init_task_data	__section(.data..init_task)
 #define __lockfunc		__section(.spinlock.text)
-
-#define __percpu		__section(.data..percpu)
 
 /*
  * ____cacheline_aligned just make the marked data cache line aligned

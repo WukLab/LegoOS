@@ -45,7 +45,7 @@ nodemask_t node_states[NR_NODE_STATES] __read_mostly = {
 int nr_node_ids __read_mostly = MAX_NUMNODES;
 int nr_online_nodes __read_mostly = 1;
 
-static void __init setup_nr_node_ids(void)
+void __init setup_nr_node_ids(void)
 {
 	unsigned int highest;
 
@@ -519,8 +519,6 @@ void __init free_area_init_nodes(unsigned long *max_zone_pfn)
 		pr_info("  node %3d: [mem %#018Lx-%#018Lx]\n", nid,
 			(u64)start_pfn << PAGE_SHIFT,
 			((u64)end_pfn << PAGE_SHIFT) - 1);
-
-	setup_nr_node_ids();
 
 	for_each_online_node(nid) {
 		pg_data_t *pgdat = NODE_DATA(nid);

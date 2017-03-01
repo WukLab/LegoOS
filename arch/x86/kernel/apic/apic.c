@@ -793,7 +793,7 @@ static struct clock_event_device lapic_clockevent = {
 	.irq			= -1,
 };
 
-static DEFINE_PER_CPU(struct clock_event_device, lapic_events);
+static __DEFINE_PER_CPU(struct clock_event_device, lapic_events);
 
 /**
  * apic_timer_interrupt
@@ -816,7 +816,7 @@ apic_timer_interrupt(struct pt_regs *regs)
 	ack_APIC_irq();
 
 	cpu = smp_processor_id();
-	levt = per_cpu_ptr(lapic_events, cpu);
+	levt = __per_cpu_ptr(lapic_events, cpu);
 
 	if (unlikely(!levt->event_handler)) {
 		pr_warn("Spurious LAPIC timer interrupt on cpu %d\n", cpu);
@@ -847,7 +847,7 @@ static void setup_cpu_local_APIC_timer(void)
 	int cpu = smp_processor_id();
 	struct clock_event_device *levt;
 
-	levt = per_cpu_ptr(lapic_events, cpu);
+	levt = __per_cpu_ptr(lapic_events, cpu);
 
 	if (cpu_has(X86_FEATURE_ARAT)) {
 		lapic_clockevent.features &= ~CLOCK_EVT_FEAT_C3STOP;
@@ -947,7 +947,7 @@ static int __init calibrate_APIC_clock(void)
 	long delta, deltatsc;
 
 	cpu = smp_processor_id();
-	levt = per_cpu_ptr(lapic_events, cpu);
+	levt = __per_cpu_ptr(lapic_events, cpu);
 
 	/*
 	 * Check if lapic timer has already been calibrated by platform

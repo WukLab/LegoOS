@@ -242,4 +242,10 @@ static inline int num_node_state(enum node_states state)
 #define for_each_node(node)		for_each_node_state(node, N_POSSIBLE)
 #define for_each_online_node(node)	for_each_node_state(node, N_ONLINE)
 
+#if MAX_NUMNODES > 1
+void __init setup_nr_node_ids(void);
+#else
+static inline void setup_nr_node_ids(void) { }
+#endif
+
 #endif /* _LEGO_NODEMASK_H_ */

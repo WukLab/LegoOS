@@ -13,6 +13,9 @@
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
 
+/* Setup number of possible processor ids */
+int nr_cpu_ids __read_mostly = NR_CPUS;
+
 struct task_struct idle_threads[NR_CPUS];
 
 struct task_struct *idle_thread_get(unsigned int cpu)

@@ -26,7 +26,7 @@
  * on exact cacheline boundaries, to eliminate cacheline ping-pong.
  */
 
-DEFINE_PER_CPU(struct tss_struct, cpu_tss) = { {
+__DEFINE_PER_CPU(struct tss_struct, cpu_tss) = { {
 	.x86_tss = {
 		.sp0 = TOP_OF_INIT_STACK,
 	 },
@@ -70,7 +70,7 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 {
 	struct thread_struct *next = &next_p->thread;
 	int cpu = smp_processor_id();
-	struct tss_struct *tss = per_cpu_ptr(cpu_tss, cpu);
+	struct tss_struct *tss = __per_cpu_ptr(cpu_tss, cpu);
 
 	/*
 	 * Replace tss sp0,

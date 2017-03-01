@@ -71,6 +71,11 @@ static int __init parse_kernel_param(char *param, char *val)
 	return 0;
 }
 
+static void inline setup_nr_cpu_ids(void)
+{
+	nr_cpu_ids = find_last_bit(cpumask_bits(cpu_possible_mask), NR_CPUS) + 1;
+}
+
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
@@ -99,6 +104,9 @@ asmlinkage void __init start_kernel(void)
 
 	/* Architecture-Specific Initialization */
 	setup_arch();
+	setup_nr_cpu_ids();
+	setup_nr_node_ids();
+	setup_per_cpu_areas();
 
 	/*
 	 * JUST A NOTE:
