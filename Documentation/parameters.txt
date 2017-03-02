@@ -38,3 +38,8 @@ LegoOS parameters
 	early_ioremap_debug
 			Enable to print early_ioremap() debug information.
 			This may generate a mount of messages, you are warned.
+
+	smpboot_verbosity=
+			[X86]
+			smpboot_verbosity=debug
+			Enable to print info from arch/x86/kernel/smpboot.c

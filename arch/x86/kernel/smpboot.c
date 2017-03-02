@@ -14,12 +14,37 @@
 #include <asm/bootparam.h>
 #include <asm/trampoline.h>
 
+#include <lego/init.h>
 #include <lego/sched.h>
 #include <lego/delay.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/nodemask.h>
 #include <lego/early_ioremap.h>
+
+/*
+ * Debugging macros
+ */
+#define SMPBOOT_QUIET	0
+#define SMPBOOT_DEBUG	1
+
+#define smpboot_printk(s, a...)				\
+	do {						\
+		if (smpboot_verbosity == SMPBOOT_DEBUG)	\
+			pr_info(s, ##a);		\
+	} while (0)
+
+unsigned int smpboot_verbosity = SMPBOOT_QUIET;
+
+static int __init smpboot_set_verbosity(char *arg)
+{
+	if (strcmp("debug", arg) == 0)
+		smpboot_verbosity = SMPBOOT_DEBUG;
+	else
+		return -EINVAL;
+	return 0;
+}
+__setup("smpboot", smpboot_set_verbosity);
 
 unsigned int trampoline_base;
 unsigned int trampoline_size;
@@ -71,7 +96,6 @@ static void __init smp_quirk_init_udelay(void)
 	init_udelay = UDELAY_10MS_DEFAULT;
 }
 
-
 /*
  * Wakeup secondary CPUs or application CPUs via INIT
  */
@@ -81,26 +105,23 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 	int num_starts, j;
 
 	/*
-	 * Turn INIT on target chip
-	 */
-	/*
 	 * Send IPI
 	 */
 	apic_icr_write(APIC_INT_LEVELTRIG | APIC_INT_ASSERT | APIC_DM_INIT,
 		       phys_apicid);
 
-	pr_debug("Waiting for send to finish...\n");
+	smpboot_printk("Waiting for send to finish...\n");
 	send_status = safe_apic_wait_icr_idle();
 
 	udelay(init_udelay);
 
-	pr_debug("Deasserting INIT\n");
+	smpboot_printk("Deasserting INIT\n");
 
 	/* Target chip */
 	/* Send IPI */
 	apic_icr_write(APIC_INT_LEVELTRIG | APIC_DM_INIT, phys_apicid);
 
-	pr_debug("Waiting for send to finish...\n");
+	smpboot_printk("Waiting for send to finish...\n");
 	send_status = safe_apic_wait_icr_idle();
 
 	/*
@@ -117,12 +138,12 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 	/*
 	 * Run STARTUP IPI loop.
 	 */
-	pr_debug("#startup loops: %d\n", num_starts);
+	smpboot_printk("#startup loops: %d\n", num_starts);
 
 	for (j = 1; j <= num_starts; j++) {
-		pr_debug("Sending STARTUP #%d\n", j);
+		smpboot_printk("Sending STARTUP #%d\n", j);
 		apic_read(APIC_ESR);
-		pr_debug("After apic_write\n");
+		smpboot_printk("After apic_write\n");
 
 		/*
 		 * STARTUP IPI
@@ -142,9 +163,9 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 		else
 			udelay(300);
 
-		pr_debug("Startup point 1\n");
+		smpboot_printk("Startup point 1\n");
 
-		pr_debug("Waiting for send to finish...\n");
+		smpboot_printk("Waiting for send to finish...\n");
 		send_status = safe_apic_wait_icr_idle();
 
 		/*
@@ -159,7 +180,7 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 		if (send_status || accept_status)
 			break;
 	}
-	pr_debug("After Startup\n");
+	smpboot_printk("After Startup\n");
 
 	if (send_status)
 		pr_err("APIC never delivered???\n");
