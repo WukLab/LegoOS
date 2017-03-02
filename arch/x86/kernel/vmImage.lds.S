@@ -29,11 +29,10 @@ OUTPUT_ARCH(i386)
 #endif
 
 #define PT_LOAD	1
-
 PHDRS {
 	text PT_LOAD FLAGS(5);          /* R_E */
 	data PT_LOAD FLAGS(6);          /* RW_ */
-	percpu PT_LOAD FLAGS(6);	/* RW_ */
+	percpu PT_LOAD FLAGS(6);        /* RW_ */
 	init PT_LOAD FLAGS(7);          /* RWE */
 }
 
@@ -46,7 +45,7 @@ SECTIONS {
 	phys_startup_32 = ABSOLUTE(startup_32 - LOAD_OFFSET);
 #endif
 
-	.text : {
+	.text : AT(ADDR(.text) - LOAD_OFFSET) {
 		__text = .;
 
 		/* Bootstrapping code */
@@ -60,14 +59,14 @@ SECTIONS {
 	} :text
 
 	. = ALIGN(PAGE_SIZE);
-	.rodata : {
+	.rodata : AT(ADDR(.rodata) - LOAD_OFFSET) {
 		__srodata = .;
 		*(.rodata*)
 		__erodata = .;
 	}
 
 	. = ALIGN(PAGE_SIZE);
-	.data : {
+	.data : AT(ADDR(.data) - LOAD_OFFSET) {
 		__sdata = .;
 
 		/*
@@ -94,13 +93,11 @@ SECTIONS {
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data..unlikely)
 
-		/* Any remaining data sections */
-		. = ALIGN(L1_CACHE_BYTES);
-		*(.data*)
 		__edata = .;
 	} :data
 
 	/* Init-code and data will be freed later */
+	. = ALIGN(PAGE_SIZE);
 	__sinit = .;
 
 	/*
@@ -113,21 +110,21 @@ SECTIONS {
 		"per-CPU data too large - increase CONFIG_PHYSICAL_START")
 
 	. = ALIGN(PAGE_SIZE);
-	.init.text : {
+	.init.text : AT(ADDR(.init.text) - LOAD_OFFSET) {
 		__sinittext = .;
 		*(.init.text)
 		__einittext = .;
 	} :init
 
 	. = ALIGN(L1_CACHE_BYTES);
-	.init.data : {
+	.init.data : AT(ADDR(.init.data) - LOAD_OFFSET) {
 		__sinitdata = .;
 		*(.init.data)
 		__einitdata = .;
 	}
 
 	. = ALIGN(L1_CACHE_BYTES);
-	.init.rodata : {
+	.init.rodata : AT(ADDR(.init.rodata) - LOAD_OFFSET) {
 		__sinitrodata = .;
 		*(.init.rodata)
 		__einitrodata = .;
@@ -138,21 +135,21 @@ SECTIONS {
 	 * __setup(str, fn);
 	 */
 	. = ALIGN(L1_CACHE_BYTES);
-	.init.setup : {
+	.init.setup : AT(ADDR(.init.setup) - LOAD_OFFSET) {
 		__sinitsetup = .;
 		*(.init.setup)
 		__einitsetup = .;
 	}
 
 	. = ALIGN(L1_CACHE_BYTES);
-	.x86_cpu_vendor.init : {
+	.x86_cpu_vendor.init : AT(ADDR(.x86_cpu_vendor.init) - LOAD_OFFSET) {
 		__x86_cpu_vendor_start = .;
 		*(.x86_cpu_vendor.init)
 		__x86_cpu_vendor_end = .;
 	}
 
 	. = ALIGN(L1_CACHE_BYTES);
-	.apicdrivers : {
+	.apicdrivers : AT(ADDR(.apicdrivers) - LOAD_OFFSET) {
 		__apicdrivers = .;
 		*(.apicdrivers)
 		__apicdrivers_end = .;
@@ -161,7 +158,7 @@ SECTIONS {
 	__einit = .;
 
 	/* Checked during boot-time */
-	.signature : {
+	.signature : AT(ADDR(.signature) - LOAD_OFFSET) {
 		kernel_signature = .;
 		LONG(0x5a5aaa55)
 	}
@@ -170,7 +167,7 @@ SECTIONS {
 
 	/* BSS */
 	. = ALIGN(PAGE_SIZE);
-	.bss : {
+	.bss : AT(ADDR(.bss) - LOAD_OFFSET) {
 		__bss_start = .;
 		*(.bss..page_aligned)
 		*(.bss*)
@@ -184,7 +181,7 @@ SECTIONS {
 	 * Use extend_brk() to allocate brk at run time
 	 */
 	. = ALIGN(PAGE_SIZE);
-	.brk : {
+	.brk : AT(ADDR(.brk) - LOAD_OFFSET) {
 		__brk_start = .;
 		. += 64 * 1024;
 		*(.brk_reservation)	/* areas brk users have reserved */
@@ -193,8 +190,4 @@ SECTIONS {
 
 	. = ALIGN(PAGE_SIZE);
 	__end = .;
-
-	/* Debug info */
-        STABS_DEBUG
-        DWARF_DEBUG
 }

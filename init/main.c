@@ -34,9 +34,6 @@
 #include <lego/pci.h>
 #include <lego/net.h>
 
-DEFINE_PER_CPU(long, BBB);
-DEFINE_PER_CPU_READ_MOSTLY(int, AAA);
-
 /* Screen information used by kernel */
 struct screen_info screen_info;
 

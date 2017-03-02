@@ -22,8 +22,6 @@
  */
 #define PERCPU_INPUT(cacheline)						\
 	__per_cpu_start = .;						\
-	*(.data..percpu..first)						\
-	. = ALIGN(PAGE_SIZE);						\
 	*(.data..percpu..page_aligned)					\
 	. = ALIGN(cacheline);						\
 	*(.data..percpu..read_mostly)					\
@@ -62,7 +60,6 @@
 		PERCPU_INPUT(cacheline)					\
 	} phdr								\
 	. = __per_cpu_load + SIZEOF(.data..percpu);
-
 
 /*
  * DWARF debug sections.
