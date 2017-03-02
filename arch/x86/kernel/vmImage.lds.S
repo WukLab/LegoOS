@@ -11,6 +11,7 @@
 
 #include <asm/page.h>
 #include <lego/compiler.h>
+#include <lego/vmImage.lds.h>
 
 /* in case the preprocessor is a 32bit one */
 #undef i386
@@ -26,6 +27,15 @@ ENTRY(startup_32)
 OUTPUT_ARCH(i386)
 # define LOAD_OFFSET	__PAGE_OFFSET
 #endif
+
+#define PT_LOAD	1
+
+PHDRS {
+	text PT_LOAD FLAGS(5);          /* R_E */
+	data PT_LOAD FLAGS(6);          /* RW_ */
+	percpu PT_LOAD FLAGS(6);	/* RW_ */
+	init PT_LOAD FLAGS(7);          /* RWE */
+}
 
 SECTIONS {
 	. = LOAD_OFFSET + CONFIG_PHYSICAL_START;
@@ -47,7 +57,7 @@ SECTIONS {
 		__stext = .;
 		*(.text*)
 		__etext = .;
-	}
+	} :text
 
 	. = ALIGN(PAGE_SIZE);
 	.rodata : {
@@ -61,66 +71,53 @@ SECTIONS {
 		__sdata = .;
 
 		/*
-		 * __init_task_data
-		 *
 		 * the init task, which needs to be aligned
 		 * with THREAD_SIZE (16KB in 64bit)
 		 */
 		. = ALIGN(THREAD_SIZE);
 		*(.data..init_task)
 
-		/*
-		 * __page_aligned_data
-		 */
 		. = ALIGN(PAGE_SIZE);
 		*(.data..page_aligned)
 
-		/*
-		 * __read_mostly
-		 */
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data..read_mostly)
 
-		/*
-		 * __cacheline_aligned
-		 */
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data..cacheline_aligned)
 
+		/* Normal data */
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data)
 
-		/*
-		 * TODO:
-		 * Per-CPU variable
-		 * Maybe replaced if I build a REAL per-cpu!
-		 */
-		. = ALIGN(L1_CACHE_BYTES);
-		__spercpu = .;
-		*(.data..percpu)
-		__epercpu = .;
-
-		/* WARN_ONCE etc. */
+		/* variables inside WARN_ONCE etc. */
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data..unlikely)
 
+		/* Any remaining data sections */
 		. = ALIGN(L1_CACHE_BYTES);
 		*(.data*)
 		__edata = .;
-	}
+	} :data
+
+	/* Init-code and data will be freed later */
+	__sinit = .;
 
 	/*
-	 * init part can be freed and reused later
+	 * percpu offsets are zero-based on SMP.  PERCPU_VADDR() changes the
+	 * output PHDR, so the next output section - .init.text - should
+	 * start another segment - init.
 	 */
-
-	__sinit = .;
+	PERCPU_VADDR(L1_CACHE_BYTES, 0, :percpu)
+	ASSERT(SIZEOF(.data..percpu) < CONFIG_PHYSICAL_START,
+		"per-CPU data too large - increase CONFIG_PHYSICAL_START")
 
 	. = ALIGN(PAGE_SIZE);
 	.init.text : {
 		__sinittext = .;
 		*(.init.text)
 		__einittext = .;
-	}
+	} :init
 
 	. = ALIGN(L1_CACHE_BYTES);
 	.init.data : {
@@ -163,16 +160,21 @@ SECTIONS {
 
 	__einit = .;
 
+	/* Checked during boot-time */
 	.signature : {
 		kernel_signature = .;
 		LONG(0x5a5aaa55)
 	}
 
+	/* Real-content ends here */
+
+	/* BSS */
 	. = ALIGN(PAGE_SIZE);
 	.bss : {
 		__bss_start = .;
 		*(.bss..page_aligned)
 		*(.bss*)
+		. = ALIGN(PAGE_SIZE);
 		__bss_end = .;
 	}
 
@@ -190,6 +192,9 @@ SECTIONS {
 	}
 
 	. = ALIGN(PAGE_SIZE);
-
 	__end = .;
+
+	/* Debug info */
+        STABS_DEBUG
+        DWARF_DEBUG
 }

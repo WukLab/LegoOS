@@ -14,6 +14,16 @@
 #include <lego/compiler.h>
 #include <asm/percpu.h>
 
+/*
+ * Percpu allocator can serve percpu allocations before slab is
+ * initialized which allows slab to depend on the percpu allocator.
+ * The following two parameters decide how much resource to
+ * preallocate for this.  Keep PERCPU_DYNAMIC_RESERVE equal to or
+ * larger than PERCPU_DYNAMIC_EARLY_SIZE.
+ */
+#define PERCPU_DYNAMIC_EARLY_SLOTS	128
+#define PERCPU_DYNAMIC_EARLY_SIZE	(12 << 10)
+
 #ifdef CONFIG_SMP
 
 /*
@@ -54,12 +64,10 @@ extern void setup_per_cpu_areas(void);
 
 #endif	/* SMP */
 
-#ifndef PER_CPU_BASE_SECTION
 #ifdef CONFIG_SMP
 #define PER_CPU_BASE_SECTION ".data..percpu"
 #else
 #define PER_CPU_BASE_SECTION ".data"
-#endif
 #endif
 
 #define raw_cpu_generic_read(pcp)					\
@@ -827,10 +835,66 @@ do {									\
 
 #endif /* __ASSEMBLY__ */
 
-void __init setup_per_cpu_areas(void);
-
 /* We can use this directly for local CPU (faster). */
 DECLARE_PER_CPU_READ_MOSTLY(unsigned long, this_cpu_off);
+
+/* minimum unit size, also is the maximum supported allocation size */
+#define PCPU_MIN_UNIT_SIZE		PFN_ALIGN(32 << 10)
+
+/*
+ * PERCPU_DYNAMIC_RESERVE indicates the amount of free area to piggy
+ * back on the first chunk for dynamic percpu allocation if arch is
+ * manually allocating and mapping it for faster access (as a part of
+ * large page mapping for example).
+ *
+ * The following values give between one and two pages of free space
+ * after typical minimal boot (2-way SMP, single disk and NIC) with
+ * both defconfig and a distro config on x86_64 and 32.  More
+ * intelligent way to determine this would be nice.
+ */
+#if BITS_PER_LONG > 32
+#define PERCPU_DYNAMIC_RESERVE		(28 << 10)
+#else
+#define PERCPU_DYNAMIC_RESERVE		(20 << 10)
+#endif
+
+extern void *pcpu_base_addr;
+extern const unsigned long *pcpu_unit_offsets;
+
+struct pcpu_group_info {
+	int			nr_units;	/* aligned # of units */
+	unsigned long		base_offset;	/* base address offset */
+	unsigned int		*cpu_map;	/* unit->cpu map, empty
+						 * entries contain NR_CPUS */
+};
+
+struct pcpu_alloc_info {
+	size_t			static_size;
+	size_t			reserved_size;
+	size_t			dyn_size;
+	size_t			unit_size;
+	size_t			atom_size;
+	size_t			alloc_size;
+	size_t			__ai_size;	/* internal, don't use */
+	int			nr_groups;	/* 0 if grouping unnecessary */
+	struct pcpu_group_info	groups[];
+};
+
+typedef void *(*pcpu_fc_alloc_fn_t)(unsigned int cpu, size_t size,
+				     size_t align);
+typedef void (*pcpu_fc_free_fn_t)(void *ptr, size_t size);
+typedef int (pcpu_fc_cpu_distance_fn_t)(unsigned int from, unsigned int to);
+
+extern int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
+				size_t atom_size,
+				pcpu_fc_cpu_distance_fn_t cpu_distance_fn,
+				pcpu_fc_alloc_fn_t alloc_fn,
+				pcpu_fc_free_fn_t free_fn);
+
+void __init setup_per_cpu_areas(void);
+
+
+
 
 /* XXX REMOVEME: Legacy APIs */
 #define __DEFINE_PER_CPU(type, name) \

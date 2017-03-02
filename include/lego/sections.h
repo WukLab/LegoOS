@@ -25,6 +25,7 @@ extern char __sinitdata[], __einitdata[];
 extern char __bss_start[], __bss_end[];
 extern char __brk_start[], __brk_limit[];
 extern char __end[];
+extern char __per_cpu_load[], __per_cpu_start[], __per_cpu_end[];
 
 static inline int init_kernel_text(unsigned long addr)
 {

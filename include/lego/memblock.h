@@ -11,6 +11,7 @@
 #define _LEGO_MEMBLOCK_H_
 
 #include <lego/types.h>
+#include <lego/numa.h>
 
 #define INIT_MEMBLOCK_REGIONS	128
 
@@ -223,6 +224,14 @@ static inline void * __init memblock_virt_alloc_node_nopanic(
 	return memblock_virt_alloc_try_nid_nopanic(size, 0, 0,
 						    BOOTMEM_ALLOC_ACCESSIBLE,
 						    nid);
+}
+
+static inline void *__init memblock_virt_alloc_nopanic(phys_addr_t size,
+						       phys_addr_t align)
+{
+	return memblock_virt_alloc_try_nid_nopanic(size, align, 0,
+						    BOOTMEM_ALLOC_ACCESSIBLE,
+						    NUMA_NO_NODE);
 }
 
 void __memblock_free_early(phys_addr_t base, phys_addr_t size);
