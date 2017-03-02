@@ -41,7 +41,7 @@ void __init copy_trampoline_code(void)
 	memcpy(dst, &trampoline_start, trampoline_size);
 	early_iounmap(dst, trampoline_size);
 
-	printk("Trampoline: [%p - %p] -> [%#x - %#x]\n",
+	printk("Copy Trampoline Code: [%p - %p] -> [%#x - %#x]\n",
 		&trampoline_start, &trampoline_end,
 		trampoline_base, trampoline_base + trampoline_size);
 }
@@ -195,8 +195,10 @@ int native_cpu_up(int cpu, struct task_struct *idle)
 		return -EIO;
 	}
 
+#if 0
 	while (!cpu_online(cpu))
 		cpu_relax();
+#endif
 
 	return 0;
 }

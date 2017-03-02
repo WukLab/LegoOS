@@ -121,25 +121,21 @@ asmlinkage void __init start_kernel(void)
 	 * buddy allocator is avaiable afterwards:
 	 */
 	memory_init();
-
-	/*
-	 * Make IRQ subsystem functional
-	 * and then enable interrupt.
-	 */
 	irq_init();
-	local_irq_enable();
 
 	timekeeping_init();
 	time_init();
 	calibrate_delay();
 
+	/*
+	 * Prepare for SMP bootup
+	 * Safe to enable interrupts afterwards
+	 */
 	smp_prepare_cpus(setup_max_cpus);
-	local_irq_enable();
-
-#if 0
-	/* not ready to init smp */
 	smp_init();
-#endif
+
+	/* Safe to enable interrupt */
+	local_irq_enable();
 
 	//ib_cache_setup();
 	ib_mad_init();
