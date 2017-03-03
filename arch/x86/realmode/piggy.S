@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+	.section ".init.trampoline","ax"
 .globl trampoline_start, trampoline_end
 trampoline_start:
 .incbin "arch/x86/realmode/trampoline/trampoline.bin"

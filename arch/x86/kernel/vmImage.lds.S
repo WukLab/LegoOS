@@ -142,6 +142,13 @@ SECTIONS {
 	}
 
 	. = ALIGN(L1_CACHE_BYTES);
+	.init.trampoline : AT(ADDR(.init.trampoline) - LOAD_OFFSET) {
+		__sinittrampoline = .;
+		*(.init.trampoline)
+		__einittrampoline = .;
+	}
+
+	. = ALIGN(L1_CACHE_BYTES);
 	.x86_cpu_vendor.init : AT(ADDR(.x86_cpu_vendor.init) - LOAD_OFFSET) {
 		__x86_cpu_vendor_start = .;
 		*(.x86_cpu_vendor.init)
