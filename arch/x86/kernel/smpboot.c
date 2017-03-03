@@ -96,7 +96,11 @@ static void __init smp_quirk_init_udelay(void)
 	init_udelay = UDELAY_10MS_DEFAULT;
 }
 
-/*
+/**
+ * wakeup_cpu_via_init
+ * @phys_apicid: physical apic id of the secondary cpu
+ * @start_ip: physical address where secondary cpu will start to run
+ *
  * Wakeup secondary CPUs or application CPUs via INIT
  */
 static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)

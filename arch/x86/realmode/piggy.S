@@ -7,17 +7,7 @@
  * (at your option) any later version.
  */
 
-#include <asm/page.h>
-#include <asm/pgtable.h>
-#include <lego/linkage.h>
-
-	.section ".init.data", "aw", @progbits
-	.code16
-GLOBAL(trampoline_start)
-1:
-	xor	%ax, %ax
-	hlt
-	jmp	1b
-
-	.align PAGE_SIZE
-GLOBAL(trampoline_end)
+.globl trampoline_start, trampoline_end
+trampoline_start:
+.incbin "arch/x86/realmode/trampoline/trampoline.bin"
+trampoline_end:
