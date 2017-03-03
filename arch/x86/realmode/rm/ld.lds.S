@@ -19,21 +19,27 @@ SECTIONS
 {
 	. = 0;
 	.text :	{
-		_text = .;
-		*(.text*)
-		_etext = .;
+		*(.text)
 	}
 
-	.rodata : {
-		_rodata = .;
-		*(.rodata*)
-		_erodata = .;
+	. = ALIGN(64);
+	.text32 : {
+		*(.text32*)
 	}
 
+	. = ALIGN(64);
+	.text64 : {
+		*(.text64*)
+	}
+
+	. = ALIGN(64);
 	.data :	{
-		_data = .;
 		*(.data*)
-		_edata = .;
+	}
+
+	. = ALIGN(64);
+	.rodata : {
+		*(.rodata*)
 	}
 
 	. = ALIGN(64);
@@ -42,6 +48,4 @@ SECTIONS
 		*(.bss*)
 		_ebss = .;
 	}
-
-	_end = .;
 }

@@ -7,8 +7,13 @@
  * (at your option) any later version.
  */
 
+/*
+ * :-)
+ * piggyback the realmode trampoline code
+ */
+
 	.section ".init.trampoline","ax"
 .globl trampoline_start, trampoline_end
 trampoline_start:
-.incbin "arch/x86/realmode/trampoline/trampoline.bin"
+.incbin "arch/x86/realmode/rm/trampoline.bin"
 trampoline_end:
