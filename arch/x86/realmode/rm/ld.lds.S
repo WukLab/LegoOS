@@ -33,13 +33,18 @@ SECTIONS
 	}
 
 	. = ALIGN(64);
+	.rodata : {
+		*(.rodata*)
+	}
+
+	. = ALIGN(64);
 	.data :	{
 		*(.data*)
 	}
 
-	. = ALIGN(64);
-	.rodata : {
-		*(.rodata*)
+	.signature : {
+		trampoline_signature = .;
+		LONG(0x5a5aaa55)
 	}
 
 	. = ALIGN(64);
