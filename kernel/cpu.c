@@ -8,6 +8,7 @@
  */
 
 #include <lego/smp.h>
+#include <lego/sched.h>
 #include <lego/cpumask.h>
 
 /*
@@ -49,3 +50,9 @@ void __init boot_cpumask_init(void)
 
 /* TODO: init */
 cpumask_var_t node_to_cpumask_map[MAX_NUMNODES];
+
+
+void cpu_up(int cpu, struct task_struct *idle)
+{
+	native_cpu_up(cpu, idle);
+}

@@ -7,18 +7,32 @@
  * (at your option) any later version.
  */
 
+/*
+ * Trampoline code used to boot secondary CPUs.
+ * Invoked by BSP by sending APIC INIT to this CPU.
+ *
+ * This file actually is a combination of:
+ *	arch/x86/boot/pmjump.S:			(16bit->32bit transition)
+ *	arch/x86/boot/compressed/head_64.S:	(32bit->64bit transition)
+ *
+ * At last it will jump to [arch/x86/kernel/head_64.S] to enter kernel.
+ */
+
 #include <lego/linkage.h>
+#include <asm/msr.h>
 #include <asm/page.h>
+#include <asm/setup.h>
 #include <asm/segment.h>
 #include <asm/processor-flags.h>
 
-	.code16
+#define NR_PGTABLE 6
 
 	.section ".text","ax"
+	.code16
 ENTRY(_start)
 	cli
+	wbinvd
 
-	# Normalize
 	xorl	%eax, %eax
 	mov	%cs, %ax
 	mov	%ax, %ds
@@ -56,8 +70,8 @@ ENTRY(_start)
 2:	.long	startup_32		# offset
 	.word	__KERNEL32_CS		# segment
 
-	.code32
 	.section ".text32","ax"
+	.code32
 	.balign 4
 ENTRY(startup_32)
 	movl	%edx, %ss
@@ -65,19 +79,117 @@ ENTRY(startup_32)
 	movl	%edx, %es
 	movl	%edx, %fs
 	movl	%edx, %gs
-1:
-	hlt
-	jmp 1b
+
+	# Get the address where we are loaded
+	call	1f
+1:	popl	%ebp
+	subl	$1b, %ebp
+
+	# Setup mini stack
+	leal	rm_stack_end(%ebp), %esp
+
+	# Enable PAE mode
+	movl	%cr4, %eax
+	orl     $X86_CR4_PAE, %eax
+	movl    %eax, %cr4
+
+	/*
+	 * Build early 4GB boot pagetable
+	 * Identity mapping, using 2MB page size.
+	 *
+	 * Level 4: entry 0
+	 * Level 3: entry 0~3
+	 * Level 2: entry 0~511, need 4 full level-2 pgtables
+	 */
+
+	/* Clear pagetables */
+	leal	pgtable(%ebp), %edi
+	xorl	%eax, %eax
+	movl	$((NR_PGTABLE * 4096) / 4), %ecx
+	rep
+	stosl
+
+	/* Build Level 4 */
+	leal	pgtable + 0(%ebp), %edi
+	leal	0x1007(%edi), %eax
+	movl	%eax, 0(%edi)
+
+	/* Build Level 3 */
+	leal	pgtable + 0x1000(%ebp), %edi
+	leal	0x1007(%edi), %eax
+	movl	$4, %ecx
+1:	movl	%eax, 0x00(%edi)
+	addl	$0x00001000, %eax
+	addl	$8, %edi
+	decl	%ecx
+	jnz	1b
+
+	/* Build Level 2 */
+	leal	pgtable + 0x2000(%ebp), %edi
+	movl	$0x00000183, %eax
+	movl	$2048, %ecx
+1:	movl	%eax, 0(%edi)
+	addl	$0x00200000, %eax
+	addl	$8, %edi
+	decl	%ecx
+	jnz	1b
+
+	/* Enable the boot page tables */
+	leal	pgtable(%ebp), %eax
+	movl	%eax, %cr3
+
+	/*
+	 * Set IA32_EFER.LME = 1
+	 * Enable Long mode in EFER (Extended Feature Enable Register)
+	 */
+	movl	$MSR_EFER, %ecx
+	rdmsr
+	btsl	$_EFER_LME, %eax
+	wrmsr
+
+	# Enable paging and in turn activate Long Mode
+	movl	$(X86_CR0_PG | X86_CR0_WP | X86_CR0_PE), %eax
+	movl	%eax, %cr0
+
+	/*
+	 * Setup for the jump to 64bit mode
+	 *
+	 * When the jump is performend we will be in long mode but
+	 * in 32bit compatibility mode with EFER.LME = 1, CS.L = 0, CS.D = 1
+	 * (and in turn EFER.LMA = 1).	To jump into 64bit mode we use
+	 * the new gdt/idt that has __KERNEL_CS with CS.L = 1.
+	 * We place all of the values on our mini stack so lret can
+	 * used to perform that far jump.
+	 */
+	pushl	$__KERNEL_CS
+	leal	startup_64(%ebp), %eax
+	pushl	%eax
+
+	# Transition to 64-bit mode
+	lret
 
 	.code64
 	.section ".text64","ax"
 	.balign 4
 ENTRY(startup_64)
+	cld
 
-1:
-	hlt
-	jmp 1b
+	/* Setup data segments. */
+	xorl	%eax, %eax
+	movl	%eax, %ds
+	movl	%eax, %es
+	movl	%eax, %ss
+	movl	%eax, %fs
+	movl	%eax, %gs
 
+	/*
+	 * Jump to kernel
+	 * arch/x86/kernel/head_64.S
+	 */
+	movq	$(CONFIG_PHYSICAL_START + SECONDARY_STARTUP_64_ALIGN), %rax
+	jmpq	*%rax
+
+# DATA Section
 	.data
 	# Duplicate the global descriptor table
 	# so the kernel can live anywhere
@@ -98,23 +210,17 @@ tr_gdt_end:
 	.balign	16
 tr_idt_desc: .fill 1, 6, 0		# IDT 0,0
 
-	.balign	16
-HEAP:
-	.long	rm_heap
-heap_end:
-	.long	rm_stack
-
-# Both pa_startup_32 and pa_tr_gdt can only be
-# changed once. Use pa_changed to indicate this change.
-pa_startup_32:
-	.long	startup_32
+	.balign 8
 pa_changed:
 	.long	0
 
+# BSS Section
 	.bss
 	.balign	16
-rm_heap:
-	.space	2048
 rm_stack:
-	.space	2048
+	.space	128
 rm_stack_end:
+
+	.align PAGE_SIZE
+pgtable:
+	.space NR_PGTABLE * PAGE_SIZE

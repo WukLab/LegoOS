@@ -10,6 +10,8 @@
 #ifndef _ASM_X86_SETUP_H_
 #define _ASM_X86_SETUP_H_
 
+#define SECONDARY_STARTUP_64_ALIGN 0x200
+
 /*
  * The setup.h is used by both 16-bit setup kernel image
  * and the setup.c in 64-bit kernel.
@@ -60,6 +62,9 @@ void *extend_brk(size_t size, size_t align);
 	}
 
 void  __init early_alloc_pgt_buf(void);
+
+extern unsigned long initial_code;
+extern unsigned long initial_stack;
 
 #endif /* __ASSEMBLY */
 

@@ -11,6 +11,7 @@
 #include <asm/numa.h>
 #include <asm/apic.h>
 #include <asm/setup.h>
+#include <asm/pgtable.h>
 #include <asm/bootparam.h>
 #include <asm/trampoline.h>
 
@@ -194,9 +195,18 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 	return (send_status | accept_status);
 }
 
+static void start_secondary_cpu(void)
+{
+	hlt();
+}
+
 static int do_cpu_up(int apicid, int cpu, struct task_struct *idle)
 {
 	unsigned long start_ip = trampoline_base;
+
+	idle->thread.sp = (unsigned long)task_pt_regs(idle);
+	initial_stack  = idle->thread.sp;
+	initial_code = (unsigned long)start_secondary_cpu;
 
 	wakeup_cpu_via_init(apicid, start_ip);
 
@@ -224,7 +234,6 @@ int native_cpu_up(int cpu, struct task_struct *idle)
 	while (!cpu_online(cpu))
 		cpu_relax();
 #endif
-
 	return 0;
 }
 

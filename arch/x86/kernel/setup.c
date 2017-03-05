@@ -258,9 +258,5 @@ void __init setup_arch(void)
 
 	register_refined_jiffies(CLOCK_TICK_RATE);
 
-	/*
-	 * Prepare trampoline for APs
-	 * and then boot them up
-	 */
 	copy_trampoline_code();
 }

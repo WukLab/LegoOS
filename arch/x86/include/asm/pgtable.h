@@ -468,5 +468,20 @@ static inline void load_cr3(pgd_t *pgdir)
 
 extern void __init init_mem_mapping(void);
 
+/*
+ * clone_pgd_range(pgd_t *dst, pgd_t *src, int count);
+ *
+ *  dst - pointer to pgd range anwhere on a pgd page
+ *  src - ""
+ *  count - the number of pgds to copy.
+ *
+ * dst and src can be on the same page, but the range must not overlap,
+ * and must not cross a page boundary.
+ */
+static inline void clone_pgd_range(pgd_t *dst, pgd_t *src, int count)
+{
+       memcpy(dst, src, count * sizeof(pgd_t));
+}
+
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_PGTABLE_H_ */

@@ -10,6 +10,7 @@
  */
 
 #include <asm/page.h>
+#include <asm/setup.h>
 #include <lego/compiler.h>
 #include <lego/vmImage.lds.h>
 
@@ -50,7 +51,7 @@ SECTIONS {
 
 		/* Bootstrapping code */
 		*(.head.text)
-		. = ALIGN(8);
+		. = ALIGN(L1_CACHE_BYTES);
 
 		/* Whole story */
 		__stext = .;

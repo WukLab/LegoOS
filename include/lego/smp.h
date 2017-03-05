@@ -15,10 +15,7 @@
 
 #include <asm/smp.h>
 
-static inline void cpu_up(int cpu, struct task_struct *tidle)
-{
-	native_cpu_up(cpu, tidle);
-}
+void cpu_up(int cpu, struct task_struct *tidle);
 
 void __init smp_prepare_cpus(unsigned int maxcpus);
 void __init smp_init(void);

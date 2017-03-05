@@ -202,6 +202,11 @@ int copy_thread_tls(unsigned long, unsigned long, unsigned long,
 /* Scheduler clock - returns current time in nanosec units */
 unsigned long long sched_clock(void);
 
+struct task_struct *copy_process(unsigned long clone_flags,
+				 unsigned long stack_start,
+				 unsigned long stack_size,
+				 int node, int tls);
+
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 
 void schedule(void);

@@ -12,8 +12,9 @@
  * piggyback the realmode trampoline code
  */
 
+#include <lego/linkage.h>
+
 	.section ".init.trampoline","ax"
-.globl trampoline_start, trampoline_end
-trampoline_start:
+GLOBAL(trampoline_start)
 .incbin "arch/x86/realmode/rm/trampoline.bin"
-trampoline_end:
+GLOBAL(trampoline_end)

@@ -196,10 +196,10 @@ good_mm:
 	return 0;
 }
 
-static struct task_struct *copy_process(unsigned long clone_flags,
-					unsigned long stack_start,
-					unsigned long stack_size,
-					int node, int tls)
+struct task_struct *copy_process(unsigned long clone_flags,
+				 unsigned long stack_start,
+				 unsigned long stack_size,
+				 int node, int tls)
 {
 	struct task_struct *p;
 	int retval;

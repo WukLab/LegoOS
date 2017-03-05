@@ -9,6 +9,7 @@
 
 #include <asm/msr.h>
 #include <asm/page.h>
+#include <asm/setup.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
 #include <asm/irq_vectors.h>
@@ -22,6 +23,8 @@ L4_PAGE_OFFSET = pgd_index(__PAGE_OFFSET)
 L3_PAGE_OFFSET = pud_index(__PAGE_OFFSET)
 L4_START_KERNEL = pgd_index(__START_KERNEL_map)
 L3_START_KERNEL = pud_index(__START_KERNEL_map)
+
+#define pa(x)	((x) - __START_KERNEL_map)
 
 	.text
 	.section ".head.text","ax"
@@ -112,8 +115,18 @@ ENTRY(startup_64)
 	addq	%rbp, phys_base(%rip)
 
 	movq	$(early_level4_pgt - __START_KERNEL_map), %rax
-	jmp 1f
+	jmp	1f
 
+	/*
+	 * This is triky.
+	 * Since the above code won't be too big, so the align
+	 * actually means the *absolute* offset from the beginning.
+	 *
+	 * Hence the trampoline code can jump to:
+	 *	CONFIG_PHYSICAL_START + SECONDARY_STARTUP_64_ALIGN
+	 * directly...
+	 */
+	.align SECONDARY_STARTUP_64_ALIGN
 ENTRY(secondary_startup_64)
 	/*
 	 * At this point the CPU runs in 64bit mode CS.L = 1 CS.D = 0,
@@ -144,6 +157,7 @@ ENTRY(secondary_startup_64)
 
 	/* Setup early boot stage 4 level pagetables. */
 	addq	phys_base(%rip), %rax
+
 	movq	%rax, %cr3
 
 	/* Ensure I am executing from virtual addresses */
@@ -174,7 +188,7 @@ ENTRY(secondary_startup_64)
 	movq	%rax, %cr0
 
 	/* Setup a boot time stack */
-	movq	stack_start(%rip), %rsp
+	movq	initial_stack(%rip), %rsp
 
 	/* zero EFLAGS after setting rsp */
 	pushq $0
@@ -234,9 +248,14 @@ ENTRY(secondary_startup_64)
 
 	.data
 	.balign 8
+
+	/*
+	 * initial_code and initial_stack differ for BSP and secondary CPUs
+	 * They will be replaced by do_cpu_up().
+	 */
 GLOBAL(initial_code)
 	.quad	x86_64_start_kernel
-GLOBAL(stack_start)
+GLOBAL(initial_stack)
 	.quad	init_thread_union+THREAD_SIZE-8
 	.word	0
 
@@ -344,7 +363,21 @@ NEXT_PAGE(early_dynamic_pgts)
 
 	.data
 NEXT_PAGE(init_level4_pgt)
-	.fill	512,8,0
+	.quad   level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE
+	.org    init_level4_pgt + L4_PAGE_OFFSET*8, 0
+	.quad   level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE
+	.org    init_level4_pgt + L4_START_KERNEL*8, 0
+	/* (2^48-(2*1024*1024*1024))/(2^39) = 511 */
+	.quad   level3_kernel_pgt - __START_KERNEL_map + _PAGE_TABLE
+
+NEXT_PAGE(level3_ident_pgt)
+	.quad	level2_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE
+	.fill	511, 8, 0
+NEXT_PAGE(level2_ident_pgt)
+	/* Since I easily can, map the first 1G.
+	 * Don't set NX because code runs from these pages.
+	 */
+	PMDS(0, __PAGE_KERNEL_IDENT_LARGE_EXEC, PTRS_PER_PMD)
 
 /*
  * 0-510:	.fill L3_START_KERNEL

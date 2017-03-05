@@ -34,8 +34,10 @@ if [ "$1" == "linux" ]; then
 	SERIAL=$LINUX_SERIAL
 fi
 
-qemu-system-x86_64 -s \
+qemu-system-x86_64 -s  \
 	-kernel $KERNEL -append "$KERNEL_PARAM" \
+	-no-reboot \
+	-d int,cpu_reset -D $OUTPUT_DIR/qemu.log \
 	$SERIAL \
 	-cpu Haswell,+tsc \
 	-m 16G \
