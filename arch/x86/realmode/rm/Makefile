@@ -11,6 +11,7 @@ LDFLAGS_trampoline.elf := -T
 TRAMPOLINE_OBJS = $(obj)/ld.lds $(obj)/trampoline.o
 
 targets := $(patsubst $(obj)/%,%,$(TRAMPOLINE_OBJS))
+targets += trampoline.bin trampoline.elf
 
 # This is the linked trampoline object
 $(obj)/trampoline.elf: $(TRAMPOLINE_OBJS) FORCE
