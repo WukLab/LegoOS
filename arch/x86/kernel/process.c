@@ -26,11 +26,11 @@
  * on exact cacheline boundaries, to eliminate cacheline ping-pong.
  */
 
-__DEFINE_PER_CPU(struct tss_struct, cpu_tss) = { {
+DEFINE_PER_CPU(struct tss_struct, cpu_tss) = {
 	.x86_tss = {
 		.sp0 = TOP_OF_INIT_STACK,
-	 },
-} };
+	},
+};
 
 int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 		unsigned long arg, struct task_struct *p, unsigned long tls)
@@ -70,7 +70,7 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 {
 	struct thread_struct *next = &next_p->thread;
 	int cpu = smp_processor_id();
-	struct tss_struct *tss = __per_cpu_ptr(cpu_tss, cpu);
+	struct tss_struct *tss = &per_cpu(cpu_tss, cpu);
 
 	/*
 	 * Replace tss sp0,

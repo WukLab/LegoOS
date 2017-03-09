@@ -163,7 +163,7 @@ struct tss_struct {
 	unsigned long		io_bitmap[IO_BITMAP_LONGS + 1];
 } ____cacheline_aligned;
 
-__DECLARE_PER_CPU(struct tss_struct, cpu_tss);
+DECLARE_PER_CPU(struct tss_struct, cpu_tss);
 
 typedef struct {
 	unsigned long		seg;
@@ -203,7 +203,7 @@ static inline void load_sp0(struct tss_struct *tss,
 static inline unsigned long current_top_of_stack(void)
 {
 	int cpu = smp_processor_id();
-	struct tss_struct *tss = __per_cpu_ptr(cpu_tss, cpu);
+	struct tss_struct *tss = &per_cpu(cpu_tss, cpu);
 
 	return tss->x86_tss.sp0;
 }

@@ -446,7 +446,7 @@ NEXT_PAGE(level1_fixmap_pgt)
 	.globl early_gdt_descr
 early_gdt_descr:
 	.word	GDT_ENTRIES*8-1
-	.quad	gdt_page
+	.quad	temp_gdt_page
 
 ENTRY(phys_base)
 	/* This must match the first entry in level2_kernel_pgt */

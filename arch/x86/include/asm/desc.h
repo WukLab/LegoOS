@@ -105,11 +105,12 @@ struct gdt_page {
 	struct desc_struct gdt[GDT_ENTRIES];
 } __attribute__((aligned(PAGE_SIZE)));
 
-extern struct gdt_page gdt_page;
+extern struct gdt_page temp_gdt_page;
+DECLARE_PER_CPU_PAGE_ALIGNED(struct gdt_page, cpu_gdt_page);
 
 static inline struct desc_struct *get_cpu_gdt_table(unsigned int cpu)
 {
-	return gdt_page.gdt;
+	return per_cpu(cpu_gdt_page, cpu).gdt;
 }
 
 #ifdef CONFIG_X86_64
@@ -345,5 +346,8 @@ static inline void alloc_system_vector(int vector)
 		alloc_system_vector(n);				\
 		set_intr_gate(n, addr);				\
 	} while (0)
+
+void load_percpu_segment(int cpu);
+void switch_to_new_gdt(int cpu);
 
 #endif /* _ASM_X86_DESC_H_ */

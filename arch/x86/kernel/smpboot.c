@@ -204,11 +204,9 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
  */
 static void start_secondary_cpu(void)
 {
-	int cpu = smp_processor_id();
+	cpu_init();
 
-	pr_info("CPU%2d Alive\n", cpu);
-
-	set_cpu_online(cpu, true);
+	set_cpu_online(smp_processor_id(), true);
 	hlt();
 }
 

@@ -301,6 +301,18 @@ void __init early_cpu_init(void)
 	print_cpu_info(c);
 }
 
+void switch_to_new_gdt(int cpu)
+{
+	struct desc_ptr gdt_descr;
+
+	gdt_descr.address = (long)get_cpu_gdt_table(cpu);
+	gdt_descr.size = GDT_SIZE - 1;
+	load_gdt(&gdt_descr);
+
+	/* Reload %gs per-cpu base */
+	load_percpu_segment(cpu);
+}
+
 /*
  * cpu_init() initializes state that is per-CPU. Some data is already
  * initialized (naturally) in the bootstrap process, such as the GDT
@@ -313,8 +325,15 @@ void cpu_init(void)
 	int cpu = smp_processor_id();
 	struct tss_struct *tss;
 
-	tss = __per_cpu_ptr(cpu_tss, cpu);
+	pr_debug("Initializing CPU#%d\n", cpu);
 
+	/* Initialize the per-CPU GDT table */
+	switch_to_new_gdt(cpu);
+
+	/* All CPUs share the same IDT table */
+	load_idt((const struct desc_ptr *)&idt_desc);
+
+	tss = &per_cpu(cpu_tss, cpu);
 	tss->x86_tss.io_bitmap_base = offsetof(struct tss_struct, io_bitmap);
 
 	/*
@@ -331,4 +350,6 @@ void cpu_init(void)
 
 	/* Then setup the TR register to point to TSS segment */
 	load_tr_desc();
+
+	current->active_mm = &init_mm;
 }
