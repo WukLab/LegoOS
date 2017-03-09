@@ -29,15 +29,9 @@
 /*
  * per_cpu_offset() is the offset that has to be added to a
  * percpu variable to get to the instance for a certain processor.
- *
- * Most arches use the __per_cpu_offset array for those offsets but
- * some arches have their own ways of determining the offset (x86_64, s390).
  */
-#ifndef __per_cpu_offset
 extern unsigned long __per_cpu_offset[NR_CPUS];
-
 #define per_cpu_offset(x) (__per_cpu_offset[x])
-#endif
 
 /*
  * Determine the offset for the currently active processor.
@@ -49,14 +43,6 @@ extern unsigned long __per_cpu_offset[NR_CPUS];
 #define __my_cpu_offset	per_cpu_offset(raw_smp_processor_id())
 #endif
 #define my_cpu_offset __my_cpu_offset
-
-/*
- * Arch may define arch_raw_cpu_ptr() to provide more efficient address
- * translations for raw_cpu_ptr().
- */
-#ifndef arch_raw_cpu_ptr
-#define arch_raw_cpu_ptr(ptr) SHIFT_PERCPU_PTR(ptr, __my_cpu_offset)
-#endif
 
 #ifdef CONFIG_HAVE_SETUP_PER_CPU_AREA
 extern void setup_per_cpu_areas(void);
@@ -562,7 +548,7 @@ do {									\
 #define this_cpu_ptr(ptr) raw_cpu_ptr(ptr)
 #endif
 
-#else	/* CONFIG_SMP */
+#else	/* !CONFIG_SMP */
 
 #define VERIFY_PERCPU_PTR(__p)						\
 ({									\

@@ -39,7 +39,7 @@ struct cpumask __cpu_active_mask __read_mostly;
 
 void __init boot_cpumask_init(void)
 {
-	int cpu = smp_processor_id();
+	int cpu = 0;
 
 	/* Mark the boot cpu "present", "online" etc for SMP and UP case */
 	set_cpu_online(cpu, true);

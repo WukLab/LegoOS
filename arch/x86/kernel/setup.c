@@ -250,11 +250,10 @@ void __init setup_arch(void)
 
 	/*
 	 * Load interrupt handlers after init_mem_mapping()
-	 * Because we want the early page fault handlers to
-	 * handle the __va() page fault before trap_init().
+	 * Because we want the early page fault handlers to handle the __va()
+	 * page fault before trap_init().
 	 */
 	trap_init();
-	cpu_init();
 
 	register_refined_jiffies(CLOCK_TICK_RATE);
 

@@ -11,6 +11,7 @@
 #include <asm/asm.h>
 #include <asm/page.h>
 #include <asm/numa.h>
+#include <asm/traps.h>
 #include <asm/setup.h>
 
 #include <lego/mm.h>
@@ -107,6 +108,12 @@ asmlinkage void __init start_kernel(void)
 	setup_nr_cpu_ids();
 	setup_nr_node_ids();
 	setup_per_cpu_areas();
+
+	/*
+	 * cpu_init will use smp_processor_id(), which
+	 * MUST come after setting up per-cpu areas
+	 */
+	cpu_init();
 
 	/*
 	 * JUST A NOTE:

@@ -217,6 +217,17 @@ ENTRY(secondary_startup_64)
 	movl	%eax,%gs
 
 	/*
+	 * Set up %gs.
+	 *
+	 * Note that, on SMP, the boot cpu uses
+	 * init data section till per cpu areas are set up.
+	 */
+	movl	$MSR_GS_BASE, %ecx
+	movl	initial_gs(%rip),%eax
+	movl	initial_gs+4(%rip),%edx
+	wrmsr
+
+	/*
 	 * rsi is pointer to real mode structure with interesting info.
 	 * pass it to C
 	 */
@@ -258,6 +269,8 @@ GLOBAL(initial_code)
 GLOBAL(initial_stack)
 	.quad	init_thread_union+THREAD_SIZE-8
 	.word	0
+GLOBAL(initial_gs)
+	.quad	0
 
 	.section ".init.text"
 ENTRY(early_idt_handler_array)

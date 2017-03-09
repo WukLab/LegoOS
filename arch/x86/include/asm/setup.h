@@ -65,6 +65,7 @@ void  __init early_alloc_pgt_buf(void);
 
 extern unsigned long initial_code;
 extern unsigned long initial_stack;
+extern unsigned long initial_gs;
 
 #endif /* __ASSEMBLY */
 

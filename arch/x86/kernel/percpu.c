@@ -18,6 +18,20 @@
 #include <asm/page.h>
 #include <asm/numa.h>
 
+#ifdef CONFIG_X86_64
+#define BOOT_PERCPU_OFFSET	((unsigned long)__per_cpu_load)
+#else
+#define BOOT_PERCPU_OFFSET	0
+#endif
+
+DEFINE_PER_CPU_READ_MOSTLY(unsigned long, this_cpu_off) = BOOT_PERCPU_OFFSET;
+
+unsigned long __per_cpu_offset[NR_CPUS] = {
+	[0 ... NR_CPUS-1] = BOOT_PERCPU_OFFSET,
+};
+
+DEFINE_PER_CPU_READ_MOSTLY(int, cpu_number);
+
 static int __init pcpu_cpu_distance(unsigned int from, unsigned int to)
 {
 #if 0
@@ -76,11 +90,18 @@ static void __init pcpu_fc_free(void *ptr, size_t size)
 	memblock_free_early(__pa(ptr), size);
 }
 
+void load_percpu_segment(int cpu)
+{
+	wrmsrl(MSR_GS_BASE, (unsigned long)per_cpu_offset(cpu));
+}
+
 void __init setup_per_cpu_areas(void)
 {
 	const size_t dyn_size = PERCPU_DYNAMIC_RESERVE;
 	size_t atom_size = PMD_SIZE;
 	int ret;
+	unsigned int cpu;
+	unsigned long delta;
 
 	pr_info("NR_CPUS:%d nr_cpumask_bits:%d nr_cpu_ids:%d nr_node_ids:%d\n",
 		NR_CPUS, nr_cpumask_bits, nr_cpu_ids, nr_node_ids);
@@ -90,4 +111,14 @@ void __init setup_per_cpu_areas(void)
 				    pcpu_fc_alloc, pcpu_fc_free);
 	if (ret < 0)
 		panic("cannot initliaze percpu area (err=%d)", ret);
+
+	delta = (unsigned long)pcpu_base_addr - (unsigned long)__per_cpu_start;
+	for_each_possible_cpu(cpu) {
+		per_cpu_offset(cpu) = delta + pcpu_unit_offsets[cpu];
+		per_cpu(this_cpu_off, cpu) = per_cpu_offset(cpu);
+		per_cpu(cpu_number, cpu) = cpu;
+	}
+
+	/* Reload percpu %gs on CPU0 */
+	load_percpu_segment(0);
 }

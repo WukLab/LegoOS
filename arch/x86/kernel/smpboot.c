@@ -20,6 +20,7 @@
 #include <lego/delay.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
+#include <lego/percpu.h>
 #include <lego/nodemask.h>
 #include <lego/early_ioremap.h>
 
@@ -195,8 +196,19 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 	return (send_status | accept_status);
 }
 
+/**
+ * start_secondary_cpu
+ *
+ * This is the first C function a secondary CPU will run.
+ * We jump from arch/x86/kernel/head_64.S
+ */
 static void start_secondary_cpu(void)
 {
+	int cpu = smp_processor_id();
+
+	pr_info("CPU%2d Alive\n", cpu);
+
+	set_cpu_online(cpu, true);
 	hlt();
 }
 
@@ -207,6 +219,7 @@ static int do_cpu_up(int apicid, int cpu, struct task_struct *idle)
 	idle->thread.sp = (unsigned long)task_pt_regs(idle);
 	initial_stack  = idle->thread.sp;
 	initial_code = (unsigned long)start_secondary_cpu;
+	initial_gs = per_cpu_offset(cpu);
 
 	wakeup_cpu_via_init(apicid, start_ip);
 
@@ -230,10 +243,9 @@ int native_cpu_up(int cpu, struct task_struct *idle)
 		return -EIO;
 	}
 
-#if 0
 	while (!cpu_online(cpu))
 		cpu_relax();
-#endif
+
 	return 0;
 }
 

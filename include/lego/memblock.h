@@ -234,6 +234,14 @@ static inline void *__init memblock_virt_alloc_nopanic(phys_addr_t size,
 						    NUMA_NO_NODE);
 }
 
+static inline void * __init memblock_virt_alloc(phys_addr_t size,
+						phys_addr_t align)
+{
+	return memblock_virt_alloc_try_nid_nopanic(size, align, 0,
+					    BOOTMEM_ALLOC_ACCESSIBLE,
+					    NUMA_NO_NODE);
+}
+
 void __memblock_free_early(phys_addr_t base, phys_addr_t size);
 
 static inline void __init memblock_free_early(

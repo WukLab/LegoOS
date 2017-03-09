@@ -10,11 +10,18 @@
 #ifndef _ASM_X86_SMP_H_
 #define _ASM_X86_SMP_H_
 
+#include <lego/percpu.h>
+
 struct task_struct;
 
 int native_cpu_up(int cpu, struct task_struct *tidle);
 
-/* TODO */
+DECLARE_PER_CPU_READ_MOSTLY(int, cpu_number);
+
+#ifdef CONFIG_SMP
+#define smp_processor_id()	(this_cpu_read(cpu_number))
+#else
 #define smp_processor_id()	0
+#endif
 
 #endif /* _ASM_X86_SMP_H_ */
