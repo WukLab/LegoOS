@@ -34,14 +34,10 @@ DEFINE_PER_CPU_READ_MOSTLY(int, cpu_number);
 
 static int __init pcpu_cpu_distance(unsigned int from, unsigned int to)
 {
-#if 0
-	if (early_cpu_to_node(from) == early_cpu_to_node(to))
+	if (cpu_to_node(from) == cpu_to_node(to))
 		return LOCAL_DISTANCE;
 	else
 		return REMOTE_DISTANCE;
-#else
-	return LOCAL_DISTANCE;
-#endif
 }
 
 /**
