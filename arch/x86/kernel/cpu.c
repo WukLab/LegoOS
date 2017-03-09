@@ -321,9 +321,9 @@ void switch_to_new_gdt(int cpu)
  */
 void cpu_init(void)
 {
-	int i;
 	int cpu = smp_processor_id();
 	struct tss_struct *tss;
+	int i;
 
 	pr_debug("Initializing CPU#%d\n", cpu);
 

@@ -681,6 +681,7 @@ endif # CONFIG_MODULES
 # make distclean Remove editor backup files, patch leftover files and the like
 
 MRPROPER_DIRS	+= include/config include/generated arch/*/include/generated
+MRPROPER_DIRS	+= test-output
 MRPROPER_FILES	+= .config .config.old tags TAGS tags-e
 MRPROPER_FILES  += output output_ttyS0 output_ttyS1
 
