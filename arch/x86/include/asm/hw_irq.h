@@ -11,6 +11,8 @@
 #define _ASM_X86_HW_IRQ_H_
 
 #include <asm/ptrace.h>
+#include <asm/irq_regs.h>
+#include <lego/percpu.h>
 
 /* Interrupt handlers registered during init_IRQ */
 extern asmlinkage void smp__apic_timer_interrupt(void);
@@ -60,13 +62,10 @@ static inline void unlock_vector_lock(void) {}
 #define VECTOR_RETRIGGERED	((void *)~0UL)
 
 typedef struct irq_desc* vector_irq_t[NR_VECTORS];
-struct irq_desc **per_cpu_vector_irq(int cpu);
+DECLARE_PER_CPU(vector_irq_t, vector_irq);
 
 extern char irq_entries_start[];
 
 void ack_bad_irq(unsigned int irq);
-
-struct pt_regs *get_irq_regs(void);
-struct pt_regs *set_irq_regs(struct pt_regs *new_regs);
 
 #endif /* _ASM_X86_HW_IRQ_H_ */

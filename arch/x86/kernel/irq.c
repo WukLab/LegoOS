@@ -10,34 +10,15 @@
 #include <lego/err.h>
 #include <lego/smp.h>
 #include <lego/irq.h>
-#include <lego/irqdesc.h>
 #include <lego/kernel.h>
+#include <lego/percpu.h>
+#include <lego/irqdesc.h>
 
 #include <asm/apic.h>
 #include <asm/ptrace.h>
 #include <asm/hw_irq.h>
 
-/* TODO Per-CPU */
-struct pt_regs *irq_regs[NR_CPUS];
-
-struct pt_regs *get_irq_regs(void)
-{
-	int cpu = smp_processor_id();
-
-	BUG_ON(!cpu_online(cpu));
-	return irq_regs[cpu];
-}
-
-struct pt_regs *set_irq_regs(struct pt_regs *new_regs)
-{
-	int cpu = smp_processor_id();
-	struct pt_regs *old_regs;
-
-	old_regs = get_irq_regs();
-	irq_regs[cpu] = new_regs;
-
-	return old_regs;
-}
+DEFINE_PER_CPU(struct pt_regs *, irq_regs);
 
 /*
  * 'what should we do if we get a hw irq event on an illegal vector'.
@@ -73,14 +54,12 @@ do_IRQ(struct pt_regs *regs)
 {
 	unsigned int vector;
 	struct irq_desc *desc;
-	struct irq_desc **vector_irq;
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
 	/* Pushed in the prologue */
 	vector = ~regs->orig_ax;
 
-	vector_irq = per_cpu_vector_irq(smp_processor_id());
-	desc = vector_irq[vector];
+	desc = __this_cpu_read(vector_irq[vector]);
 
 	if (IS_ERR_OR_NULL(desc)) {
 		ack_APIC_irq();

@@ -35,6 +35,8 @@
 #include <lego/pci.h>
 #include <lego/net.h>
 
+enum system_states system_state __read_mostly;
+
 /* Screen information used by kernel */
 struct screen_info screen_info;
 
@@ -110,7 +112,8 @@ asmlinkage void __init start_kernel(void)
 	setup_per_cpu_areas();
 
 	/*
-	 * cpu_init will use smp_processor_id(), which
+	 * Init CPU0
+	 * cpu_init() will use smp_processor_id(), which
 	 * MUST come after setting up per-cpu areas
 	 */
 	cpu_init();

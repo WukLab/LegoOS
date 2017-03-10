@@ -11,6 +11,7 @@
 #include <asm/numa.h>
 #include <asm/apic.h>
 #include <asm/setup.h>
+#include <asm/hw_irq.h>
 #include <asm/pgtable.h>
 #include <asm/bootparam.h>
 #include <asm/trampoline.h>
@@ -196,18 +197,35 @@ static int wakeup_cpu_via_init(int phys_apicid, unsigned long start_ip)
 	return (send_status | accept_status);
 }
 
-/**
- * start_secondary_cpu
- *
- * This is the first C function a secondary CPU will run.
- * We jump from arch/x86/kernel/head_64.S
- */
 static void start_secondary_cpu(void)
 {
+	/* Don't put *anything* before cpu_init() */
 	cpu_init();
 
+	apic_ap_setup();
+
+	/* Initialize the vectors on this cpu */
+	setup_vector_irq(smp_processor_id());
 	set_cpu_online(smp_processor_id(), true);
+
+	/* enable local interrupts */
+	local_irq_enable();
+
+	setup_secondary_APIC_clock();
+
 	hlt();
+}
+
+/* reduce the number of lines printed when booting a large cpu count system */
+static void announce_cpu(int cpu, int apicid)
+{
+	int node = cpu_to_node(cpu);
+
+	if (cpu == 1)
+		printk(KERN_INFO "x86: Booting SMP configuration:\n");
+
+	pr_info("Booting Node %d Processor %d APIC 0x%x\n",
+		node, cpu, apicid);
 }
 
 static int do_cpu_up(int apicid, int cpu, struct task_struct *idle)
@@ -218,6 +236,9 @@ static int do_cpu_up(int apicid, int cpu, struct task_struct *idle)
 	initial_stack  = idle->thread.sp;
 	initial_code = (unsigned long)start_secondary_cpu;
 	initial_gs = per_cpu_offset(cpu);
+
+	/* So we see what's up */
+	announce_cpu(cpu, apicid);
 
 	wakeup_cpu_via_init(apicid, start_ip);
 
@@ -234,7 +255,6 @@ int native_cpu_up(int cpu, struct task_struct *idle)
 	int ret;
 	int apicid = cpu_to_apicid(cpu);
 
-	pr_debug("++++++++++++++++++++=_---CPU UP  %u\n", cpu);
 	ret = do_cpu_up(apicid, cpu, idle);
 	if (ret) {
 		pr_err("native_cpu_up failed(%d) to wakeup CPU#%u\n", ret, cpu);

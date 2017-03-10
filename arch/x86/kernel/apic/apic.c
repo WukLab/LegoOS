@@ -793,7 +793,7 @@ static struct clock_event_device lapic_clockevent = {
 	.irq			= -1,
 };
 
-static __DEFINE_PER_CPU(struct clock_event_device, lapic_events);
+static DEFINE_PER_CPU(struct clock_event_device, lapic_events);
 
 /**
  * apic_timer_interrupt
@@ -805,18 +805,15 @@ static __DEFINE_PER_CPU(struct clock_event_device, lapic_events);
 asmlinkage __visible void
 apic_timer_interrupt(struct pt_regs *regs)
 {
+	int cpu = smp_processor_id();
+	struct clock_event_device *levt = &per_cpu(lapic_events, cpu);
 	struct pt_regs *old_regs = set_irq_regs(regs);
-	struct clock_event_device *levt;
-	int cpu;
 
 	/*
 	 * NOTE! We'd better ACK the irq immediately,
 	 * because timer handling can be slow.
 	 */
 	ack_APIC_irq();
-
-	cpu = smp_processor_id();
-	levt = __per_cpu_ptr(lapic_events, cpu);
 
 	if (unlikely(!levt->event_handler)) {
 		pr_warn("Spurious LAPIC timer interrupt on cpu %d\n", cpu);
@@ -835,19 +832,15 @@ apic_timer_interrupt(struct pt_regs *regs)
 	set_irq_regs(old_regs);
 }
 
-/**
- * setup_cpu_local_APIC_timer
- *
+/*
  * Setup the local APIC timer for this CPU.
  * Copy the initialized values from the boot CPU
  * and register the clock event in the framework.
  */
-static void setup_cpu_local_APIC_timer(void)
+static void setup_APIC_timer(void)
 {
 	int cpu = smp_processor_id();
-	struct clock_event_device *levt;
-
-	levt = __per_cpu_ptr(lapic_events, cpu);
+	struct clock_event_device *levt = this_cpu_ptr(&lapic_events);
 
 	if (cpu_has(X86_FEATURE_ARAT)) {
 		lapic_clockevent.features &= ~CLOCK_EVT_FEAT_C3STOP;
@@ -940,14 +933,10 @@ static void __init lapic_cal_handler(struct clock_event_device *dev)
 
 static int __init calibrate_APIC_clock(void)
 {
-	int cpu;
-	struct clock_event_device *levt;
+	struct clock_event_device *levt = this_cpu_ptr(&lapic_events);
 	void (*real_handler)(struct clock_event_device *dev);
 	unsigned long deltaj;
 	long delta, deltatsc;
-
-	cpu = smp_processor_id();
-	levt = __per_cpu_ptr(lapic_events, cpu);
 
 	/*
 	 * Check if lapic timer has already been calibrated by platform
@@ -1092,12 +1081,22 @@ static int __init calibrate_APIC_clock(void)
 	return 0;
 }
 
+/*
+ * Setup the boot APIC
+ *
+ * Calibrate and verify the result.
+ */
 void __init setup_boot_APIC_clock(void)
 {
 	WARN_ON(calibrate_APIC_clock());
 
 	/* Setup the lapic at BSP */
-	setup_cpu_local_APIC_timer();
+	setup_APIC_timer();
+}
+
+void setup_secondary_APIC_clock(void)
+{
+	setup_APIC_timer();
 }
 
 /**
@@ -1132,4 +1131,13 @@ int __init apic_bsp_setup(void)
 	setup_boot_APIC_clock();
 
 	return id;
+}
+
+/*
+ * APIC setup function for application processors. Called from smpboot.c
+ */
+void __init apic_ap_setup(void)
+{
+	setup_local_APIC();
+	end_local_APIC_setup();
 }

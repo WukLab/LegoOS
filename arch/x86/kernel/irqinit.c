@@ -27,14 +27,9 @@ static struct irqaction irq2 = {
 	.flags = IRQF_NO_THREAD,
 };
 
-/* TODO: per-cpu */
-struct irq_desc *vector_irqs[NR_CPUS][NR_VECTORS];
-
-struct irq_desc **per_cpu_vector_irq(int cpu)
-{
-	BUG_ON(!cpu_online(cpu));
-	return vector_irqs[cpu];
-}
+DEFINE_PER_CPU(vector_irq_t, vector_irq) = {
+	[0 ... NR_VECTORS - 1] = VECTOR_UNUSED,
+};
 
 /*
  * Dealing with legacy i8259 chip
@@ -81,12 +76,8 @@ void __init arch_irq_init(void)
 	 * then this vector space can be freed and re-used dynamically as the
 	 * irq's migrate etc.
 	 */
-	for (i = 0; i < nr_legacy_irqs(); i++) {
-		struct irq_desc **vector_irq;
-
-		vector_irq = per_cpu_vector_irq(0);
-		vector_irq[ISA_IRQ_VECTOR(i)] = irq_to_desc(i);
-	}
+	for (i = 0; i < nr_legacy_irqs(); i++)
+		per_cpu(vector_irq, 0)[ISA_IRQ_VECTOR(i)] = irq_to_desc(i);
 
 	/*
 	 * SMP

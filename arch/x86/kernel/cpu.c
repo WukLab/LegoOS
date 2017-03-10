@@ -325,8 +325,6 @@ void cpu_init(void)
 	struct tss_struct *tss;
 	int i;
 
-	pr_debug("Initializing CPU#%d\n", cpu);
-
 	/* Initialize the per-CPU GDT table */
 	switch_to_new_gdt(cpu);
 

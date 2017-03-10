@@ -291,4 +291,13 @@ void sort(void *base, size_t num, size_t size,
 extern const char lego_banner[];
 extern const char lego_proc_banner[];
 
+/* Values used for system_state */
+extern enum system_states {
+	SYSTEM_BOOTING,
+	SYSTEM_RUNNING,
+	SYSTEM_HALT,
+	SYSTEM_POWER_OFF,
+	SYSTEM_RESTART,
+} system_state;
+
 #endif /* _LEGO_KERNEL_H_ */

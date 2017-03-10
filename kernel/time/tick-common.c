@@ -22,7 +22,7 @@
 
 #include "tick-internal.h"
 
-__DEFINE_PER_CPU(struct tick_device, tick_devices);
+DEFINE_PER_CPU(struct tick_device, tick_devices);
 
 /*
  * Tick next event: keeps track of the tick time
@@ -72,12 +72,11 @@ static bool tick_check_percpu(struct clock_event_device *curdev,
 int tick_oneshot_mode_active(void)
 {
 	unsigned long flags;
-	int ret, cpu;
+	int ret;
 	struct tick_device *dev;
 
 	local_irq_save(flags);
-	cpu = smp_processor_id();
-	dev = __per_cpu_ptr(tick_devices, cpu);
+	dev = this_cpu_ptr(&tick_devices);
 	ret = dev->mode == TICKDEV_MODE_ONESHOT;
 	local_irq_restore(flags);
 
@@ -198,7 +197,7 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	int cpu;
 
 	cpu = smp_processor_id();
-	td = __per_cpu_ptr(tick_devices, cpu);
+	td = &per_cpu(tick_devices, cpu);
 	curdev = td->evtdev;
 
 	/* cpu local device ? */
@@ -228,14 +227,15 @@ out:
 }
 
 /*
- * Noop handler when we shut down an event device
+ * Noop handler when we shut down an event device.
+ * It may run several times during intermediate state.
  */
 void tick_handle_noop(struct clock_event_device *dev)
 {
 	pr_info("[%s] jiffies: %lu\n", __func__, jiffies);
 }
 
-static int rlimit;
+static atomic_t rlimit = { 0 };
 
 /**
  * tick_handle_periodic - Event handler for periodic ticks
@@ -247,7 +247,7 @@ static int rlimit;
  * handler will call back to this function to let kernel handle
  * general timing bookkeeping job.
  *
- * Only one CPU will update the jiffies.
+ * Only one CPU will update the jiffies (Default is CPU0).
  */
 void tick_handle_periodic(struct clock_event_device *dev)
 {
@@ -263,8 +263,10 @@ void tick_handle_periodic(struct clock_event_device *dev)
 		update_wall_time();
 	}
 
-	if (++rlimit == HZ) {
-		rlimit = 0;
-		pr_info("[%s] jiffies: %lu\n", __func__, jiffies);
+	if (atomic_add_return(1, &rlimit) == num_online_cpus() * HZ) {
+		pr_info("[%s] CPU%2d jiffies=%lu \n",
+			__func__, smp_processor_id(), jiffies);
+
+		atomic_set(&rlimit, 0);
 	}
 }

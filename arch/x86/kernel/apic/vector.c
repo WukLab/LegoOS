@@ -10,6 +10,7 @@
 #include <lego/smp.h>
 #include <lego/irq.h>
 #include <lego/slab.h>
+#include <lego/percpu.h>
 #include <lego/irqdesc.h>
 #include <lego/irqdomain.h>
 #include <lego/spinlock.h>
@@ -76,11 +77,8 @@ static void clear_irq_vector(int irq, struct apic_chip_data *data)
 		return;
 
 	vector = data->cfg.vector;
-	for_each_cpu_and(cpu, data->domain, cpu_online_mask) {
-		struct irq_desc **vector_irq = per_cpu_vector_irq(cpu);
-
-		vector_irq[vector] = VECTOR_UNUSED;
-	}
+	for_each_cpu_and(cpu, data->domain, cpu_online_mask)
+		per_cpu(vector_irq, cpu)[vector] = VECTOR_UNUSED;
 
 	data->cfg.vector = 0;
 	cpumask_clear(data->domain);
@@ -97,11 +95,9 @@ static void clear_irq_vector(int irq, struct apic_chip_data *data)
 	for_each_cpu_and(cpu, data->old_domain, cpu_online_mask) {
 		for (vector = FIRST_EXTERNAL_VECTOR; vector < NR_VECTORS;
 		     vector++) {
-			struct irq_desc **vector_irq = per_cpu_vector_irq(cpu);
-
-			if (vector_irq[vector] != desc)
+			if (per_cpu(vector_irq, cpu)[vector] != desc)
 				continue;
-			vector_irq[vector] = VECTOR_UNUSED;
+			per_cpu(vector_irq, cpu)[vector] = VECTOR_UNUSED;
 			break;
 		}
 	}
@@ -184,9 +180,7 @@ next:
 			goto next;
 
 		for_each_cpu(new_cpu, vector_searchmask) {
-			struct irq_desc **vector_irq = per_cpu_vector_irq(new_cpu);
-
-			if (!IS_ERR_OR_NULL(vector_irq[vector]))
+			if (!IS_ERR_OR_NULL(per_cpu(vector_irq, new_cpu)[vector]))
 				goto next;
 		}
 
@@ -197,11 +191,8 @@ next:
 		/* Schedule the old vector for cleanup on all cpus */
 		if (d->cfg.vector)
 			cpumask_copy(d->old_domain, d->domain);
-		for_each_cpu(new_cpu, vector_searchmask) {
-			struct irq_desc **vector_irq = per_cpu_vector_irq(new_cpu);
-
-			vector_irq[vector] = irq_to_desc(irq);
-		}
+		for_each_cpu(new_cpu, vector_searchmask)
+			per_cpu(vector_irq, new_cpu)[vector] = irq_to_desc(irq);
 		goto update;
 
 next_cpu:
@@ -461,3 +452,52 @@ void irq_complete_move(struct irq_cfg *cfg)
 	__irq_complete_move(cfg, vector);
 }
 #endif
+
+/* Initialize vector_irq on a new cpu */
+static void __setup_vector_irq(int cpu)
+{
+	struct apic_chip_data *data;
+	struct irq_desc *desc;
+	int irq, vector;
+
+	/* Mark the inuse vectors */
+	for_each_irq_desc(irq, desc) {
+		struct irq_data *idata = irq_desc_get_irq_data(desc);
+
+		data = apic_chip_data(idata);
+		if (!data || !cpumask_test_cpu(cpu, data->domain))
+			continue;
+		vector = data->cfg.vector;
+		per_cpu(vector_irq, cpu)[vector] = desc;
+	}
+	/* Mark the free vectors */
+	for (vector = 0; vector < NR_VECTORS; ++vector) {
+		desc = per_cpu(vector_irq, cpu)[vector];
+		if (IS_ERR_OR_NULL(desc))
+			continue;
+
+		data = apic_chip_data(irq_desc_get_irq_data(desc));
+		if (!cpumask_test_cpu(cpu, data->domain))
+			per_cpu(vector_irq, cpu)[vector] = VECTOR_UNUSED;
+	}
+}
+
+/*
+ * Setup the vector to irq mappings. Must be called with vector_lock held.
+ */
+void setup_vector_irq(int cpu)
+{
+	int irq;
+
+	/*
+	 * On most of the platforms, legacy PIC delivers the interrupts on the
+	 * boot cpu. But there are certain platforms where PIC interrupts are
+	 * delivered to multiple cpu's. If the legacy IRQ is handled by the
+	 * legacy PIC, for the new cpu that is coming online, setup the static
+	 * legacy vector to irq mapping:
+	 */
+	for (irq = 0; irq < nr_legacy_irqs(); irq++)
+		per_cpu(vector_irq, cpu)[ISA_IRQ_VECTOR(irq)] = irq_to_desc(irq);
+
+	__setup_vector_irq(cpu);
+}

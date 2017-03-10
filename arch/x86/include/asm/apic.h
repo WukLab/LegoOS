@@ -535,6 +535,9 @@ int cpu_to_apicid(int cpu);
 int apic_register_new_cpu(int apicid, int enabled);
 
 int __init apic_bsp_setup(void);
+void __init apic_ap_setup(void);
+
+void setup_secondary_APIC_clock(void);
 
 extern unsigned int boot_cpu_physical_apicid;
 
