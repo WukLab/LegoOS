@@ -216,12 +216,7 @@ ENTRY(secondary_startup_64)
 	movl	%eax,%fs
 	movl	%eax,%gs
 
-	/*
-	 * Set up %gs.
-	 *
-	 * Note that, on SMP, the boot cpu uses
-	 * init data section till per cpu areas are set up.
-	 */
+	/* Set up %gs for per-cpu data structure */
 	movl	$MSR_GS_BASE, %ecx
 	movl	initial_gs(%rip),%eax
 	movl	initial_gs+4(%rip),%edx

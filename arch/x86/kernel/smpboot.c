@@ -7,6 +7,10 @@
  * (at your option) any later version.
  */
 
+/*
+ * Code to prepare and boot secondary cores on a SMP machine
+ */
+
 #include <asm/ipi.h>
 #include <asm/numa.h>
 #include <asm/apic.h>
@@ -208,12 +212,13 @@ static void start_secondary_cpu(void)
 	setup_vector_irq(smp_processor_id());
 	set_cpu_online(smp_processor_id(), true);
 
-	/* enable local interrupts */
+	/* Enable local interrupts */
 	local_irq_enable();
 
+	/* Enable local APIC-timer */
 	setup_secondary_APIC_clock();
 
-	hlt();
+	cpu_idle();
 }
 
 /* reduce the number of lines printed when booting a large cpu count system */
