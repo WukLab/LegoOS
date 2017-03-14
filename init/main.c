@@ -79,6 +79,39 @@ static void inline setup_nr_cpu_ids(void)
 	nr_cpu_ids = find_last_bit(cpumask_bits(cpu_possible_mask), NR_CPUS) + 1;
 }
 
+int kthread_1(void *unused)
+{
+	int i = 0;
+
+	pr_info("%s: parameter: %d\n", __func__, *(int *)unused);
+	while (1) {
+		mdelay(1000);
+		pr_info("%s (pid: %d): %5d, CPU%d\n",
+			__func__, current->pid, i++, smp_processor_id());
+		schedule();
+	}
+}
+
+int kthread_2(void *unused)
+{
+	int i = 0;
+
+	pr_info("%s: parameter: %d\n", __func__, *(int *)unused);
+	while (1) {
+		mdelay(1000);
+		pr_info("%s (pid: %d): %5d, CPU%d\n",
+			__func__, current->pid, i++, smp_processor_id());
+		schedule();
+	}
+}
+
+static void rest_init(void)
+{
+	int x = 100, y = 200;
+	kernel_thread(kthread_1, &x, 0);
+	kernel_thread(kthread_2, &y, 0);
+}
+
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
@@ -147,13 +180,10 @@ asmlinkage void __init start_kernel(void)
 	sched_init();
 
 	/*
-	 * Prepare for SMP bootup
-	 * Safe to enable interrupts afterwards
+	 * Boot all possible CPUs
 	 */
 	smp_prepare_cpus(setup_max_cpus);
 	smp_init();
-
-	/* Safe to enable interrupt */
 	local_irq_enable();
 
 	//ib_cache_setup();
@@ -170,5 +200,7 @@ asmlinkage void __init start_kernel(void)
 	lego_ib_init();
 	//init_lwip();
 
+	/* STOP DBEYOND THIS POINT */
+	rest_init();
 	hlt();
 }

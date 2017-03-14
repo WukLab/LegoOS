@@ -35,15 +35,6 @@ void user_thread_bug_now(void)
 	panic("%s: not implemented now\n", __func__);
 }
 
-/**
- * schedule_tail - first thing a freshly forked thread must call.
- * @prev: the thread we just switched away from.
- */
-asmlinkage __visible void schedule_tail(struct task_struct *prev)
-{
-	printk("  %s is invoked\n", __func__);
-}
-
 static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
 {
 #ifdef CONFIG_SMP
@@ -74,11 +65,7 @@ enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	if ((p->state & TASK_UNINTERRUPTIBLE) != 0)
 		rq->nr_uninterruptible--;
 
-	if (flags & ENQUEUE_HEAD)
-		list_add(&rq->rq, &p->run_list);
-	else
-		list_add_tail(&rq->rq, &p->run_list);
-
+	list_add_tail(&p->run_list, &rq->rq);
 	rq->nr_running++;
 }
 
@@ -116,21 +103,18 @@ pick_next_task(struct rq *rq, struct task_struct *prev)
 	if (list_empty(&rq->rq))
 		/* rq empty, return idle thread */
 		return rq->idle;
-	else {
-		next = container_of((&rq->rq)->next, struct task_struct, run_list);
 
-		/* only one task on the rq */
-		if (next == prev)
-			return next;
-	}
-
-	if (prev->on_rq) {
-		/* FIFO or RR, move it to tail */
-		list_move_tail(&prev->run_list, &rq->rq);
-	} else {
+	if (likely(prev->on_rq)) {
+		if (prev != rq->idle)
+			/*
+			 * Move this task to the tail of this rq
+			 * if and only if this task is not a idle task
+			 */
+			list_move_tail(&prev->run_list, &rq->rq);
+	} else
 		WARN_ON(1);
-	}
 
+	next = container_of((&rq->rq)->next, struct task_struct, run_list);
 	return next;
 }
 
@@ -145,8 +129,7 @@ static void switch_mm_irqs_off(struct mm_struct *prev,
  * finish_task_switch - clean up after a task-switch
  * @prev: the thread we just switched away from.
  *
- * finish_task_switch must be called after the context switch, paired
- * with a prepare_task_switch call before the context switch.
+ * finish_task_switch must be called after the context switch
  *
  * The context switch have flipped the stack from under us and restored the
  * local variables which were saved when this task called schedule() in the
@@ -176,6 +159,23 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	return rq;
 }
 
+void balance_callback(struct rq *rq)
+{
+	/* Do some SMP runqueue balancing */
+}
+
+/**
+ * schedule_tail - first thing a freshly forked thread must call.
+ * @prev: the thread we just switched away from.
+ */
+asmlinkage __visible void schedule_tail(struct task_struct *prev)
+{
+	struct rq *rq;
+
+	rq = finish_task_switch(prev);
+	balance_callback(rq);
+}
+
 /*
  * context_switch - switch to the new MM and the new thread's register state.
  */
@@ -189,11 +189,6 @@ context_switch(struct rq *rq, struct task_struct *prev, struct task_struct *next
 	barrier();
 
 	return finish_task_switch(prev);
-}
-
-void balance_callback(struct rq *rq)
-{
-
 }
 
 void schedule(void)
@@ -210,7 +205,7 @@ void schedule(void)
 	spin_lock(&rq->lock);
 
 	if (prev->state) {
-		pr_warn("CAUTION: NOT FULLY TESTED CASE\n");
+		WARN(1, "CAUTION: NOT FULLY TESTED CASE\n");
 		deactivate_task(rq, prev, 0);
 		prev->on_rq = 0;
 
@@ -243,7 +238,7 @@ void schedule(void)
  */
 void scheduler_tick(void)
 {
-
+	schedule();
 }
 
 /**
