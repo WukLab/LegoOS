@@ -10,13 +10,12 @@
 #include <lego/time.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
+#include <lego/percpu.h>
 #include <lego/jiffies.h>
+#include <lego/cpumask.h>
 #include <lego/spinlock.h>
 
-/*
- * TODO:
- *	Rewrite runqueue
- */
+DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 /**
  * sched_clock
@@ -63,25 +62,6 @@ void wake_up_new_task(struct task_struct *p)
 	spin_lock(&rq_lock);
 	list_add_tail(&p->run_list, &rq_list);
 	spin_unlock(&rq_lock);
-}
-
-/*
- * Called from fork()/clone(), to setup a new task to scheduler.
- */
-int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
-{
-	p->on_rq = 0;
-	p->static_prio = 0;
-	INIT_LIST_HEAD(&p->run_list);
-
-	/*
-	 * We mark the process as NEW here. This guarantees that
-	 * nobody will actually run it, and a signal or other external
-	 * event cannot wake it up and insert it on the runqueue either.
-	 */
-	p->state = TASK_NEW;
-
-	return 0;
 }
 
 void sched_remove_from_rq(struct task_struct *p)
@@ -175,4 +155,107 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 int wake_up_process(struct task_struct *p)
 {
 	return try_to_wake_up(p, TASK_NORMAL, 0);
+}
+
+static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
+{
+#ifdef CONFIG_SMP
+	task_thread_info(p)->cpu = cpu;
+	p->wake_cpu = cpu;
+#endif
+}
+
+/*
+ * Perform scheduler related setup for a newly forked process p.
+ * p is forked by current.
+ *
+ * __sched_fork() is basic setup used by init_idle() too:
+ */
+static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
+{
+	p->on_rq = 0;
+	p->static_prio = 0;
+}
+
+/*
+ * fork()-time setup:
+ */
+int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
+{
+	int cpu = smp_processor_id();
+
+	__sched_fork(clone_flags, p);
+
+	INIT_LIST_HEAD(&p->run_list);
+
+	/*
+	 * We mark the process as NEW here. This guarantees that
+	 * nobody will actually run it, and a signal or other external
+	 * event cannot wake it up and insert it on the runqueue either.
+	 */
+	p->state = TASK_NEW;
+
+	__set_task_cpu(p, cpu);
+
+#if defined(CONFIG_SMP)
+	p->on_cpu = 0;
+#endif
+
+	return 0;
+}
+
+void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask)
+{
+	cpumask_copy(&p->cpus_allowed, new_mask);
+	p->nr_cpus_allowed = cpumask_weight(new_mask);
+}
+
+/**
+ * sched_init_idle - set up an idle thread for a given CPU
+ * @idle: task in question
+ * @cpu: CPU the idle task belongs to
+ */
+void __init sched_init_idle(struct task_struct *idle, int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	__sched_fork(0, idle);
+
+	idle->state = TASK_RUNNING;
+	idle->flags |= PF_IDLE;
+
+	set_cpus_allowed_common(idle, cpumask_of(cpu));
+
+	__set_task_cpu(idle, cpu);
+
+	rq->curr = rq->idle = idle;
+	idle->on_rq = TASK_ON_RQ_QUEUED;
+#ifdef CONFIG_SMP
+	idle->on_cpu = 1;
+#endif
+	sprintf(idle->comm, "swapper/%d", cpu);
+}
+
+void __init sched_init(void)
+{
+	int i;
+
+	for_each_possible_cpu(i) {
+		struct rq *rq;
+
+		rq = cpu_rq(i);
+		spin_lock_init(&rq->lock);
+		rq->nr_running = 0;
+		rq->cpu = i;
+		rq->online = 0;
+		atomic_set(&rq->nr_iowait, 0);
+	}
+
+	/*
+	 * Make us the idle thread. Technically, schedule() should not be
+	 * called from this thread, however somewhere below it might be,
+	 * but because we are the idle thread, we just pick up running again
+	 * when this runqueue becomes "idle".
+	 */
+	sched_init_idle(current, smp_processor_id());
 }

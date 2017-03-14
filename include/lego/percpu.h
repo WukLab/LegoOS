@@ -12,6 +12,7 @@
 
 #include <lego/cpumask.h>
 #include <lego/compiler.h>
+
 #include <asm/percpu.h>
 
 /*
@@ -413,6 +414,16 @@ do {									\
 #ifndef this_cpu_cmpxchg_double_8
 #define this_cpu_cmpxchg_double_8(pcp1, pcp2, oval1, oval2, nval1, nval2) \
 	this_cpu_generic_cmpxchg_double(pcp1, pcp2, oval1, oval2, nval1, nval2)
+#endif
+
+#ifdef CONFIG_SMP
+#define PER_CPU_SHARED_ALIGNED_SECTION	"..shared_aligned"
+#define PER_CPU_ALIGNED_SECTION		"..shared_aligned"
+#define PER_CPU_FIRST_SECTION		"..first"
+#else
+#define PER_CPU_SHARED_ALIGNED_SECTION	""
+#define PER_CPU_ALIGNED_SECTION		"..shared_aligned"
+#define PER_CPU_FIRST_SECTION		""
 #endif
 
 /*
@@ -878,18 +889,5 @@ extern int __init pcpu_embed_first_chunk(size_t reserved_size, size_t dyn_size,
 				pcpu_fc_free_fn_t free_fn);
 
 void __init setup_per_cpu_areas(void);
-
-
-
-
-/* XXX REMOVEME: Legacy APIs */
-#define __DEFINE_PER_CPU(type, name) \
-	__typeof__(type) name[NR_CPUS] __percpu
-
-#define __DECLARE_PER_CPU(type, name) \
-	extern __DEFINE_PER_CPU(type, name)
-
-#define __per_cpu_ptr(var, cpu) \
-	((void *)(&(var) + cpu))
 
 #endif /* _LEGO_PERCPU_H_ */

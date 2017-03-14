@@ -13,7 +13,7 @@
 #define INIT_TASK(task)							\
 {									\
 	.state		= 0,						\
-	.comm		= "swapper/0",					\
+	.comm		= "swapper",					\
 	.flags		= PF_KTHREAD,					\
 	.mm		= &init_mm,					\
 	.active_mm	= &init_mm,					\

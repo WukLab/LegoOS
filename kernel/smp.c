@@ -18,33 +18,34 @@
 /* Setup number of possible processor ids */
 int nr_cpu_ids __read_mostly = NR_CPUS;
 
-struct task_struct *idle_threads[NR_CPUS];
+DEFINE_PER_CPU(struct task_struct *, idle_threads);
 
-struct task_struct *idle_thread_get(unsigned int cpu)
-{
-	BUG_ON(cpu >= NR_CPUS);
-	return idle_threads[cpu];
-}
-
-static inline void idle_init(int cpu)
+/*
+ * Initialize an idle thread for a CPU
+ */
+static void __init init_idle(int cpu)
 {
 	struct task_struct *tsk;
 
 	tsk = copy_process(CLONE_VM, 0, 0, cpu_to_node(cpu), 0);
 	if (!tsk)
 		panic("fail to init idle thread for cpu %d\n", cpu);
-	sprintf(tsk->comm, "swapper/%d", cpu);
 
-	idle_threads[cpu] = tsk;
+	sched_init_idle(tsk, cpu);
+	per_cpu(idle_threads, cpu) = tsk;
 }
 
-static void init_idle_threads(void)
+static void __init init_idle_threads(void)
 {
 	int cpu;
 
+	/* CPU0 */
+	BUG_ON(!cpu_online(smp_processor_id()));
+	per_cpu(idle_threads, smp_processor_id()) = current;
+
 	for_each_present_cpu(cpu) {
 		if (!cpu_online(cpu))
-			idle_init(cpu);
+			init_idle(cpu);
 	}
 }
 
@@ -53,12 +54,10 @@ void __init smp_init(void)
 {
 	int cpu;
 
-	pr_info("Bringing up secondary CPUs ...\n");
-
 	init_idle_threads();
 
 	for_each_present_cpu(cpu) {
 		if (!cpu_online(cpu))
-			cpu_up(cpu, idle_thread_get(cpu));
+			cpu_up(cpu, per_cpu(idle_threads, cpu));
 	}
 }

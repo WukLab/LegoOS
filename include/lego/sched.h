@@ -17,6 +17,7 @@
 #include <asm/switch_to.h>
 #include <asm/thread_info.h>
 
+#include <lego/rq.h>
 #include <lego/mm.h>
 #include <lego/magic.h>
 #include <lego/types.h>
@@ -116,6 +117,14 @@ struct task_struct {
 	int static_prio;
 	struct list_head run_list;
 
+#ifdef CONFIG_SMP
+	int on_cpu;
+	int wake_cpu;
+#endif
+
+	int nr_cpus_allowed;
+	cpumask_t cpus_allowed;
+
 	/* list of all task_structs in the system */
 	struct list_head tasks;
 
@@ -208,6 +217,9 @@ struct task_struct *copy_process(unsigned long clone_flags,
 				 int node, int tls);
 
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
+
+void __init sched_init(void);
+void __init sched_init_idle(struct task_struct *idle, int cpu);
 
 void schedule(void);
 int wake_up_process(struct task_struct *p);

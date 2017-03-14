@@ -22,11 +22,14 @@
  */
 #define PERCPU_INPUT(cacheline)						\
 	__per_cpu_start = .;						\
+	*(.data..percpu..first)						\
+	. = ALIGN(PAGE_SIZE);						\
 	*(.data..percpu..page_aligned)					\
 	. = ALIGN(cacheline);						\
 	*(.data..percpu..read_mostly)					\
 	. = ALIGN(cacheline);						\
 	*(.data..percpu)						\
+	. = ALIGN(cacheline);						\
 	*(.data..percpu..shared_aligned)				\
 	__per_cpu_end = .;
 

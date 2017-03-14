@@ -131,11 +131,20 @@ asmlinkage void __init start_kernel(void)
 	 * buddy allocator is avaiable afterwards:
 	 */
 	memory_init();
+
 	irq_init();
 
 	timekeeping_init();
 	time_init();
 	calibrate_delay();
+
+	/*
+	 * Set up the scheduler prior starting any interrupts,
+	 * such as timer interrupt. Full topology setup happens
+	 * at smp_init(), but meanwhile we still have a functioning
+	 * scheduler:
+	 */
+	sched_init();
 
 	/*
 	 * Prepare for SMP bootup
