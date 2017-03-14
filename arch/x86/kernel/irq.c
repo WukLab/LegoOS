@@ -52,12 +52,10 @@ void ack_bad_irq(unsigned int irq)
 asmlinkage __visible unsigned int
 do_IRQ(struct pt_regs *regs)
 {
-	unsigned int vector;
-	struct irq_desc *desc;
 	struct pt_regs *old_regs = set_irq_regs(regs);
-
-	/* Pushed in the prologue */
-	vector = ~regs->orig_ax;
+	struct irq_desc * desc;
+	/* high bit used in ret_from_ code  */
+	unsigned vector = ~regs->orig_ax;
 
 	desc = __this_cpu_read(vector_irq[vector]);
 
@@ -68,17 +66,16 @@ do_IRQ(struct pt_regs *regs)
 			pr_emerg("%s: cpu: %d vector: %d "
 				"no irq handler for vector\n",
 				__func__, smp_processor_id(), vector);
+		} else {
+			__this_cpu_write(vector_irq[vector], VECTOR_UNUSED);
 		}
 		return 1;
 	}
 
-	/*
-	 * Now call the chained handlers...
-	 */
+	/* Now call the chained handlers... */
 	desc->handle_irq(desc);
 
 	set_irq_regs(old_regs);
-
 	return 0;
 }
 

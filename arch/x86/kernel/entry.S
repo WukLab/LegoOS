@@ -32,7 +32,6 @@ ENTRY(\sym)
 	/*
 	 * Save all registers in pt_regs
 	 */
-	cld
 	ALLOC_PT_GPREGS_ON_STACK
 	SAVE_C_REGS
 	SAVE_EXTRA_REGS
@@ -47,6 +46,9 @@ ENTRY(\sym)
 	.endif
 
 	call	\do_sym
+
+	/* Disable interrupts */
+	cli
 
 	RESTORE_EXTRA_REGS
 	RESTORE_C_REGS

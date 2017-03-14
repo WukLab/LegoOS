@@ -38,6 +38,12 @@ irqreturn_t handle_irq_event_percpu(struct irq_desc *desc)
 
 		res = action->handler(irq, action->dev_id);
 
+		/*
+		 * TODO:
+		 * Check potential bugs for do_IRQ and entry.S
+		 * because in my early debug, the handler for io-apic and apic timer will
+		 * enable interrupts every time it got a chance to run.
+		 */
 		if (WARN_ONCE(!irqs_disabled(),"irq %u handler %pF enabled interrupts\n",
 			      irq, action->handler))
 			local_irq_disable();

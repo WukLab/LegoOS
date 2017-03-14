@@ -20,7 +20,7 @@ fi
 
 LEGO_KERNEL="arch/x86/boot/bzImage"
 LINUX_KERNEL="/boot/vmlinuz-3.10.0-327.el7.x86_64"
-KERNEL_PARAM="console=ttyS0 earlyprintk=serial,ttyS0,115200"
+KERNEL_PARAM="console=ttyS0 earlyprintk=serial,ttyS0,115200 apic=verbose"
 
 LEGO_SERIAL="-serial file:$OUTPUT_DIR/ttyS0 -serial file:$OUTPUT_DIR/ttyS1"
 LINUX_SERIAL="-serial stdio"
