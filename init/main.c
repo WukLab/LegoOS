@@ -110,6 +110,7 @@ static void rest_init(void)
 	int x = 100, y = 200;
 	kernel_thread(kthread_1, &x, 0);
 	kernel_thread(kthread_2, &y, 0);
+	schedule();
 }
 
 asmlinkage void __init start_kernel(void)
@@ -179,12 +180,16 @@ asmlinkage void __init start_kernel(void)
 	 */
 	sched_init();
 
+	if (WARN(!irqs_disabled(),
+		 "Interrupts were enabled *very* early, fixing it\n"))
+		local_irq_disable();
+
 	/*
 	 * Boot all possible CPUs
 	 */
 	smp_prepare_cpus(setup_max_cpus);
-	smp_init();
 	local_irq_enable();
+	smp_init();
 
 	//ib_cache_setup();
 	ib_mad_init();

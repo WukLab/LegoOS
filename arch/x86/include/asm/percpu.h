@@ -21,6 +21,14 @@
 #define __percpu_mov_op		movl
 #endif
 
+#ifdef __ASSEMBLY__
+#ifdef CONFIG_SMP
+# define PER_CPU_VAR(var)	%__percpu_seg:var
+#else
+# define PER_CPU_VAR(var)	var
+#endif /* CONFIG_SMP */
+#endif /* __ASSEMBLY__ */
+
 #ifdef CONFIG_SMP
 #define __percpu_prefix		"%%"__stringify(__percpu_seg)":"
 #define __my_cpu_offset		this_cpu_read(this_cpu_off)

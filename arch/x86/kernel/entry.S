@@ -133,17 +133,23 @@ ret_from_intr:
 
 	/* Interrupt came from user space */
 retint_user:
-	#swapgs
+	movq	%rsp, %rdi
+	call	prepare_exit_to_usermode
+	#TODO SWAPGS
 	jmp	restore_regs_and_iret
 
-/* Returning to kernel space */
+	/* Returning to kernel space */
 retint_kernel:
 #ifdef CONFIG_PREEMPT
-	/*
-	 * Check if we need preemption
-	 *
-	 * Gotcha! This is where preemption happens!
-	 */
+	/* Interrupts are off */
+	/* Check if we need preemption */
+	bt	$9, EFLAGS(%rsp)		/* were interrupts off? */
+	jnc	1f
+0:	cmpl	$0, PER_CPU_VAR(__preempt_count)
+	jnz	1f
+	call	preempt_schedule_irq
+	jmp	0b
+1:
 #endif
 
 /*
@@ -155,6 +161,9 @@ restore_regs_and_iret:
 restore_c_regs_and_iret:
 	RESTORE_C_REGS
 	REMOVE_PT_GPREGS_FROM_STACK 8
+	/*
+	 * The iretq could re-enable interrupts:
+	 */
 	iretq
 END(common_interrupt)
 

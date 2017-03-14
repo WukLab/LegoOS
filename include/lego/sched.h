@@ -20,7 +20,7 @@
 #include <lego/rq.h>
 #include <lego/mm.h>
 #include <lego/magic.h>
-#include <lego/types.h>
+#include <lego/preempt.h>
 
 /*
  * Clone Flags:

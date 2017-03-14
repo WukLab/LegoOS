@@ -15,6 +15,13 @@
 #include <lego/cpumask.h>
 #include <lego/spinlock.h>
 
+/*
+ * Disable preemption until the scheduler is running
+ */
+#define INIT_PREEMPT_COUNT 1
+DEFINE_PER_CPU(int, __preempt_count) = INIT_PREEMPT_COUNT;
+
+/* Per-CPU Runqueue */
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 /**
@@ -234,11 +241,30 @@ void schedule(void)
 
 /*
  * This function gets called by the timer code, with HZ frequency.
- * We call it with interrupts disabled.
+ * NOTE:
+ *  1) We call it with interrupts disabled.
+ *  2) We can not call schedule() here.
  */
 void scheduler_tick(void)
 {
-	schedule();
+}
+
+/*
+ * this is the entry point to schedule() from kernel preemption
+ * off of irq context.
+ * Note, that this is called and return with irqs disabled. This will
+ * protect us against recursive calling from irq.
+ */
+asmlinkage __visible void preempt_schedule_irq(void)
+{
+	/* Catch callers which need to be fixed */
+	BUG_ON(preempt_count() || !irqs_disabled());
+
+	do {
+		local_irq_enable();
+		schedule();
+		local_irq_disable();
+	} while (need_resched());
 }
 
 /**

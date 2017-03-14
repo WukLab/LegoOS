@@ -1363,8 +1363,8 @@ static inline void __init check_timer(void)
 	apic2 = ioapic_i8259.apic;
 
 	apic_printk(APIC_QUIET, "..TIMER: vector=0x%02X "
-		    "apic1=%d pin1=%d apic2=%d pin2=%d\n",
-		    cfg->vector, apic1, pin1, apic2, pin2);
+		    "apic1=%d pin1=%d apic2=%d pin2=%d irqs_disabled()=%d\n",
+		    cfg->vector, apic1, pin1, apic2, pin2, !!irqs_disabled());
 
 	/*
 	 * Some BIOS writers are clueless and report the ExtINTA
