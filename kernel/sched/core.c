@@ -32,7 +32,7 @@ unsigned long long __weak sched_clock(void)
 
 void user_thread_bug_now(void)
 {
-	panic("%s\n", __func__);
+	panic("%s: not implemented now\n", __func__);
 }
 
 /**
@@ -44,8 +44,43 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 	printk("  %s is invoked\n", __func__);
 }
 
-static LIST_HEAD(rq_list);
-static DEFINE_SPINLOCK(rq_lock);
+static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
+{
+#ifdef CONFIG_SMP
+	task_thread_info(p)->cpu = cpu;
+	p->wake_cpu = cpu;
+#endif
+}
+
+static inline void
+dequeue_task(struct rq *rq, struct task_struct *p, int flags)
+{
+	list_del_init(&p->run_list);
+	rq->nr_running--;
+}
+
+static inline void
+deactivate_task(struct rq *rq, struct task_struct *p, int flags)
+{
+	if ((p->state & TASK_UNINTERRUPTIBLE) != 0)
+		rq->nr_uninterruptible++;
+
+	dequeue_task(rq, p, flags);
+}
+
+static inline void
+enqueue_task(struct rq *rq, struct task_struct *p, int flags)
+{
+	if ((p->state & TASK_UNINTERRUPTIBLE) != 0)
+		rq->nr_uninterruptible--;
+
+	if (flags & ENQUEUE_HEAD)
+		list_add(&rq->rq, &p->run_list);
+	else
+		list_add_tail(&rq->rq, &p->run_list);
+
+	rq->nr_running++;
+}
 
 /*
  * wake_up_new_task - wake up a newly created task for the first time.
@@ -56,43 +91,45 @@ static DEFINE_SPINLOCK(rq_lock);
  */
 void wake_up_new_task(struct task_struct *p)
 {
-	p->on_rq = 1;
-	p->state = TASK_RUNNING;
+	struct rq *rq;
 
-	spin_lock(&rq_lock);
-	list_add_tail(&p->run_list, &rq_list);
-	spin_unlock(&rq_lock);
+	p->state = TASK_RUNNING;
+	__set_task_cpu(p, task_cpu(p));
+
+	rq = task_rq(p);
+	spin_lock(&rq->lock);
+	enqueue_task(rq, p, 0);
+	p->on_rq = TASK_ON_RQ_QUEUED;
+	spin_unlock(&rq->lock);
 }
 
 void sched_remove_from_rq(struct task_struct *p)
 {
-	spin_lock(&rq_lock);
-	list_del(&p->run_list);
-	spin_unlock(&rq_lock);
+	panic("%s: not implemented\n", __func__);
 }
 
-/**
- * pick_next_task	-	Pick up the highest-prio task:
- *
- * Get next highest-prio task to run from @rq
- * and put the @prev back to @rq
- */
-static struct task_struct *pick_next_task( struct task_struct *prev)
+static inline struct task_struct *
+pick_next_task(struct rq *rq, struct task_struct *prev)
 {
-	struct task_struct *next = NULL;
+	struct task_struct *next;
 
-	spin_lock(&rq_lock);
-	if (!list_empty(&rq_list)) {
-		struct list_head *list;
+	if (list_empty(&rq->rq))
+		/* rq empty, return idle thread */
+		return rq->idle;
+	else {
+		next = container_of((&rq->rq)->next, struct task_struct, run_list);
 
-		list = rq_list.next;
-		list_del(list);
-		next = container_of(list, struct task_struct, run_list);
+		/* only one task on the rq */
+		if (next == prev)
+			return next;
+	}
 
-		list_add(&prev->run_list, &rq_list);
-	} else
-		next = &init_task;
-	spin_unlock(&rq_lock);
+	if (prev->on_rq) {
+		/* FIFO or RR, move it to tail */
+		list_move_tail(&prev->run_list, &rq->rq);
+	} else {
+		WARN_ON(1);
+	}
 
 	return next;
 }
@@ -104,18 +141,109 @@ static void switch_mm_irqs_off(struct mm_struct *prev,
 	load_cr3(next->pgd);
 }
 
+/**
+ * finish_task_switch - clean up after a task-switch
+ * @prev: the thread we just switched away from.
+ *
+ * finish_task_switch must be called after the context switch, paired
+ * with a prepare_task_switch call before the context switch.
+ *
+ * The context switch have flipped the stack from under us and restored the
+ * local variables which were saved when this task called schedule() in the
+ * past. prev == current is still correct but we need to recalculate this_rq
+ * because prev may have moved to another CPU.
+ */
+static struct rq *finish_task_switch(struct task_struct *prev)
+	__releases(rq->lock)
+{
+	struct rq *rq = this_rq();
+
+#ifdef CONFIG_SMP
+	/*
+	 * After ->on_cpu is cleared, the task can be moved to a different CPU.
+	 * We must ensure this doesn't happen until the switch is completely
+	 * finished.
+	 *
+	 * In particular, the load of prev->state in finish_task_switch() must
+	 * happen before this.
+	 *
+	 * Pairs with the smp_cond_load_acquire() in try_to_wake_up().
+	 */
+	smp_store_release(&prev->on_cpu, 0);
+#endif
+
+	spin_unlock_irq(&rq->lock);
+	return rq;
+}
+
+/*
+ * context_switch - switch to the new MM and the new thread's register state.
+ */
+static __always_inline struct rq *
+context_switch(struct rq *rq, struct task_struct *prev, struct task_struct *next)
+{
+	switch_mm_irqs_off(prev->mm, next->mm, next);
+
+	/* Here we switch the register state and the stack: */
+	switch_to(prev, next, prev);
+	barrier();
+
+	return finish_task_switch(prev);
+}
+
+void balance_callback(struct rq *rq)
+{
+
+}
+
 void schedule(void)
 {
 	struct task_struct *next, *prev;
+	struct rq *rq;
+	int cpu;
 
-	prev = current;
-	next = pick_next_task(prev);
+	cpu = smp_processor_id();
+	rq = cpu_rq(cpu);
+	prev = rq->curr;
+
+	local_irq_disable();
+	spin_lock(&rq->lock);
+
+	if (prev->state) {
+		pr_warn("CAUTION: NOT FULLY TESTED CASE\n");
+		deactivate_task(rq, prev, 0);
+		prev->on_rq = 0;
+
+		if (prev->in_iowait)
+			atomic_inc(&rq->nr_iowait);
+	}
+
+	/*
+	 * Pick the next runnable task
+	 * move prev accordingly
+	 */
+	next = pick_next_task(rq, prev);
 
 	if (likely(prev != next)) {
-		switch_mm_irqs_off(prev->mm, next->mm, next);
-		switch_to(prev, next, prev);
-		barrier();
+		rq->nr_switches++;
+		rq->curr = next;
+
+		/* Also unlocks the rq: */
+		rq = context_switch(rq, prev, next);
+	} else {
+		spin_unlock_irq(&rq->lock);
 	}
+
+	balance_callback(rq);
+}
+
+/*
+ * This function gets called by the timer code, with HZ frequency.
+ * We call it with interrupts disabled.
+ */
+void scheduler_tick(void)
+{
+
 }
 
 /**
@@ -155,14 +283,6 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 int wake_up_process(struct task_struct *p)
 {
 	return try_to_wake_up(p, TASK_NORMAL, 0);
-}
-
-static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
-{
-#ifdef CONFIG_SMP
-	task_thread_info(p)->cpu = cpu;
-	p->wake_cpu = cpu;
-#endif
 }
 
 /*
@@ -228,7 +348,12 @@ void __init sched_init_idle(struct task_struct *idle, int cpu)
 
 	__set_task_cpu(idle, cpu);
 
+	/*
+	 * Initially, all RQ's curr is being
+	 * set to idle thread:
+	 */
 	rq->curr = rq->idle = idle;
+
 	idle->on_rq = TASK_ON_RQ_QUEUED;
 #ifdef CONFIG_SMP
 	idle->on_cpu = 1;
@@ -246,6 +371,9 @@ void __init sched_init(void)
 		rq = cpu_rq(i);
 		spin_lock_init(&rq->lock);
 		rq->nr_running = 0;
+		rq->nr_switches = 0;
+		rq->nr_uninterruptible = 0;
+		INIT_LIST_HEAD(&rq->rq);
 		rq->cpu = i;
 		rq->online = 0;
 		atomic_set(&rq->nr_iowait, 0);

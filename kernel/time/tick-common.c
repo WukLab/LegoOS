@@ -235,8 +235,6 @@ void tick_handle_noop(struct clock_event_device *dev)
 	pr_info("[%s] jiffies: %lu\n", __func__, jiffies);
 }
 
-static atomic_t rlimit = { 0 };
-
 /**
  * tick_handle_periodic - Event handler for periodic ticks
  *
@@ -263,10 +261,5 @@ void tick_handle_periodic(struct clock_event_device *dev)
 		update_wall_time();
 	}
 
-	if (atomic_add_return(1, &rlimit) == num_online_cpus() * HZ) {
-		pr_info("[%s] CPU%2d jiffies=%lu \n",
-			__func__, smp_processor_id(), jiffies);
-
-		atomic_set(&rlimit, 0);
-	}
+	scheduler_tick();
 }

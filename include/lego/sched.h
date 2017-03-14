@@ -98,38 +98,41 @@
 
 struct task_struct {
 	/* -1 unrunnable, 0 runnable, >0 stopped */
-	volatile long state;
+	volatile long		state;
 
 	/* kernel mode stack */
-	void *stack;
+	void			*stack;
 
 	/* per-process flags */
-	unsigned int flags;
+	unsigned int		flags;
 
 	/* task exit state */
-	int exit_state;
-	int exit_code, exit_signal;
+	int			exit_state;
+	int			exit_code;
+	int			exit_signal;
 
-	char comm[TASK_COMM_LEN];
+	char			comm[TASK_COMM_LEN];
 
-	/* scheduler related */
-	int on_rq;
-	int static_prio;
-	struct list_head run_list;
-
-#ifdef CONFIG_SMP
-	int on_cpu;
-	int wake_cpu;
-#endif
-
-	int nr_cpus_allowed;
-	cpumask_t cpus_allowed;
+	/* runqueue related: */
+	int			on_rq;
+	int			static_prio;
+	struct list_head	run_list;
 
 	/* list of all task_structs in the system */
-	struct list_head tasks;
+	struct list_head	tasks;
 
-	pid_t pid;
-	pid_t tgid;
+#ifdef CONFIG_SMP
+	int			on_cpu;
+	int			wake_cpu;
+#endif
+
+	int			nr_cpus_allowed;
+	cpumask_t		cpus_allowed;
+
+	int			in_iowait;
+
+	pid_t			pid;
+	pid_t			tgid;
 
 	/*
 	 * pointers to (original) parent process, youngest child,
@@ -222,6 +225,7 @@ void __init sched_init(void);
 void __init sched_init_idle(struct task_struct *idle, int cpu);
 
 void schedule(void);
+void scheduler_tick(void);
 int wake_up_process(struct task_struct *p);
 void wake_up_new_task(struct task_struct *p);
 
@@ -277,5 +281,19 @@ static __always_inline bool need_resched(void)
 {
 	return unlikely(tif_need_resched());
 }
+
+/*
+ * Wrappers for p->thread_info->cpu access. No-op on UP.
+ */
+#ifdef CONFIG_SMP
+static inline unsigned int task_cpu(const struct task_struct *p)
+{
+	return task_thread_info(p)->cpu;
+}
+void set_task_cpu(struct task_struct *p, unsigned int cpu);
+#else
+static inline unsigned int task_cpu(const struct task_struct *p) { return 0; }
+static inline void set_task_cpu(struct task_struct *p, unsigned int cpu){ }
+#endif /* CONFIG_SMP */
 
 #endif /* _LEGO_SCHED_H_ */

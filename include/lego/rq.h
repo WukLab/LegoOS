@@ -29,8 +29,9 @@ struct task_struct;
  */
 struct rq {
 	/* runqueue lock: */
-	spinlock_t lock;
-	unsigned int nr_running;
+	spinlock_t		lock;
+	unsigned int		nr_running;
+	unsigned int		nr_switches;
 
 	/*
 	 * This is part of a global counter where only the total sum
@@ -38,17 +39,19 @@ struct rq {
 	 * one CPU and if it got migrated afterwards it may decrease
 	 * it on another CPU. Always updated under the runqueue lock:
 	 */
-	unsigned long nr_uninterruptible;
+	unsigned long		nr_uninterruptible;
 
-	struct task_struct *curr, *idle, *stop;
+	struct task_struct	*curr, *idle, *stop;
+
+	struct list_head	rq;
 
 #ifdef CONFIG_SMP
 	/* cpu of this runqueue: */
-	int cpu;
-	int online;
+	int			cpu;
+	int			online;
 #endif
 
-	atomic_t nr_iowait;
+	atomic_t		nr_iowait;
 };
 
 static inline int cpu_of(struct rq *rq)
@@ -64,5 +67,9 @@ DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 #define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
 #define this_rq()		this_cpu_ptr(&runqueues)
+#define task_rq(p)		cpu_rq(task_cpu(p))
+#define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
+
+#define ENQUEUE_HEAD		0x00000001
 
 #endif /* _LEGO_RQ_H_ */

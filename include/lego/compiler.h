@@ -328,6 +328,11 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
 #define compiletime_assert(condition, msg)			\
 	_compiletime_assert(condition, msg, __compiletime_assert_, __LINE__)
 
+/* Is this type a native word size -- useful for atomic operations */
+#ifndef __native_word
+# define __native_word(t) (sizeof(t) == sizeof(char) || sizeof(t) == sizeof(short) || sizeof(t) == sizeof(int) || sizeof(t) == sizeof(long))
+#endif
+
 #define compiletime_assert_atomic_type(t)				\
 	compiletime_assert(__native_word(t),				\
 		"Need native word sized stores/loads for atomicity.")
@@ -366,5 +371,16 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
 	__asm__ ("" : "=r"(__ptr) : "0"(ptr));				\
 	(typeof(ptr)) (__ptr + (off));					\
 })
+
+/*
+ * Some barriers for x86:
+ */
+
+#define smp_store_release(p, v)						\
+do {									\
+	compiletime_assert_atomic_type(*p);				\
+	barrier();							\
+	WRITE_ONCE(*p, v);						\
+} while (0)
 
 #endif /* _LEGO_COMPILER_H_ */

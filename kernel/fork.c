@@ -230,7 +230,10 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	INIT_LIST_HEAD(&p->children);
 	INIT_LIST_HEAD(&p->sibling);
 
-	/* Setup scheduler, assign this task to a CPU */
+	/*
+	 * Setup scheduler:
+	 * assign this task to a CPU
+	 */
 	retval = setup_sched_fork(clone_flags, p);
 	if (retval)
 		goto out_free;
