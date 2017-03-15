@@ -383,4 +383,10 @@ do {									\
 	WRITE_ONCE(*p, v);						\
 } while (0)
 
+#ifdef CONFIG_SMP
+#define smp_store_mb(var, value)	do { (void)xchg(&var, value); } while (0)
+#else
+#define smp_store_mb(var, value)	do { WRITE_ONCE(var, value); barrier(); } while (0)
+#endif
+
 #endif /* _LEGO_COMPILER_H_ */

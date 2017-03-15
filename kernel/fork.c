@@ -51,6 +51,12 @@ void setup_task_stack_end_magic(struct task_struct *tsk)
 	*stackend = STACK_END_MAGIC;
 }
 
+void __put_task_struct(struct task_struct *tsk)
+{
+	WARN_ON(atomic_read(&tsk->usage));
+	WARN_ON(tsk == current);
+}
+
 /*
  * Duplicate a new task_struct based on parent task_struct.
  * Allocate a new kernel stack and setup stack_info to make current work.

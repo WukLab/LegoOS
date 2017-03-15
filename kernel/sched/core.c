@@ -112,14 +112,15 @@ pick_next_task(struct rq *rq, struct task_struct *prev)
 		return rq->idle;
 
 	if (likely(prev->on_rq)) {
-		if (prev != rq->idle)
+		if (prev != rq->idle) {
 			/*
+			 * Round-Robin Policy
 			 * Move this task to the tail of this rq
 			 * if and only if this task is not a idle task
 			 */
 			list_move_tail(&prev->run_list, &rq->rq);
-	} else
-		WARN_ON(1);
+		}
+	}
 
 	next = container_of((&rq->rq)->next, struct task_struct, run_list);
 	return next;
@@ -153,16 +154,20 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	 * After ->on_cpu is cleared, the task can be moved to a different CPU.
 	 * We must ensure this doesn't happen until the switch is completely
 	 * finished.
-	 *
-	 * In particular, the load of prev->state in finish_task_switch() must
-	 * happen before this.
-	 *
-	 * Pairs with the smp_cond_load_acquire() in try_to_wake_up().
 	 */
 	smp_store_release(&prev->on_cpu, 0);
 #endif
 
 	spin_unlock_irq(&rq->lock);
+
+	/*
+	 * If a task dies, then it sets TASK_DEAD in tsk->state and calls
+	 * schedule one last time. The schedule call will never return.
+	 */
+	if (unlikely(prev->state == TASK_DEAD)) {
+		put_task_struct(prev);
+	}
+
 	return rq;
 }
 
@@ -198,7 +203,7 @@ context_switch(struct rq *rq, struct task_struct *prev, struct task_struct *next
 	return finish_task_switch(prev);
 }
 
-void schedule(void)
+static void __schedule(bool preempt)
 {
 	struct task_struct *next, *prev;
 	struct rq *rq;
@@ -211,8 +216,7 @@ void schedule(void)
 	local_irq_disable();
 	spin_lock(&rq->lock);
 
-	if (prev->state) {
-		WARN(1, "CAUTION: NOT FULLY TESTED CASE\n");
+	if (!preempt && prev->state) {
 		deactivate_task(rq, prev, 0);
 		prev->on_rq = 0;
 
@@ -239,18 +243,15 @@ void schedule(void)
 	balance_callback(rq);
 }
 
-/*
- * This function gets called by the timer code, with HZ frequency.
- * NOTE:
- *  1) We call it with interrupts disabled.
- *  2) We can not call schedule() here.
- */
-void scheduler_tick(void)
+asmlinkage __visible void schedule(void)
 {
+	do {
+		__schedule(false);
+	} while (need_resched());
 }
 
 /*
- * this is the entry point to schedule() from kernel preemption
+ * This is the entry point to schedule() from kernel preemption
  * off of irq context.
  * Note, that this is called and return with irqs disabled. This will
  * protect us against recursive calling from irq.
@@ -262,9 +263,34 @@ asmlinkage __visible void preempt_schedule_irq(void)
 
 	do {
 		local_irq_enable();
-		schedule();
+		__schedule(true);
 		local_irq_disable();
 	} while (need_resched());
+}
+
+void __noreturn do_task_dead(void)
+{
+	/* Causes final put_task_struct in finish_task_switch(): */
+	__set_current_state(TASK_DEAD);
+	__schedule(false);
+	BUG();
+
+	/*
+	 * Avoid "noreturn function does return"
+	 * but don't continue if BUG() is a NOP:
+	 */
+	for (;;)
+		cpu_relax();
+}
+
+/*
+ * This function gets called by the timer code, with HZ frequency.
+ * NOTE:
+ *  1) We call it with interrupts disabled.
+ *  2) We can not call schedule() here.
+ */
+void scheduler_tick(void)
+{
 }
 
 /**

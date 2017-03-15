@@ -12,8 +12,12 @@
 
 void do_exit(long code)
 {
-	sched_remove_from_rq(current);
-	current->state = TASK_DEAD;
-	schedule();
-	BUG();
+	struct task_struct *tsk = current;
+
+	if (unlikely(!tsk->pid))
+		panic("Attempted to kill the idle task!");
+
+	tsk->exit_code = code;
+
+	do_task_dead();
 }

@@ -88,7 +88,8 @@ int kthread_1(void *unused)
 		mdelay(1000);
 		pr_info("%s (pid: %d): %5d, CPU%d\n",
 			__func__, current->pid, i++, smp_processor_id());
-		schedule();
+		//schedule();
+		break;
 	}
 }
 
@@ -109,7 +110,7 @@ static void rest_init(void)
 {
 	int x = 100, y = 200;
 	kernel_thread(kthread_1, &x, 0);
-	kernel_thread(kthread_2, &y, 0);
+	//kernel_thread(kthread_2, &y, 0);
 	schedule();
 }
 

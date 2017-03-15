@@ -66,6 +66,43 @@
 #define TASK_ALL		(TASK_NORMAL | __TASK_STOPPED | __TASK_TRACED)
 
 /*
+ * set_current_state() includes a barrier so that the write of current->state
+ * is correctly serialised wrt the caller's subsequent test of whether to
+ * actually sleep:
+ *
+ *   for (;;) {
+ *	set_current_state(TASK_UNINTERRUPTIBLE);
+ *	if (!need_sleep)
+ *		break;
+ *
+ *	schedule();
+ *   }
+ *   __set_current_state(TASK_RUNNING);
+ *
+ * If the caller does not need such serialisation (because, for instance, the
+ * condition test and condition change and wakeup are under the same lock) then
+ * use __set_current_state().
+ *
+ * The above is typically ordered against the wakeup, which does:
+ *
+ *	need_sleep = false;
+ *	wake_up_state(p, TASK_UNINTERRUPTIBLE);
+ *
+ * Where wake_up_state() (and all other wakeup primitives) imply enough
+ * barriers to order the store of the variable against wakeup.
+ *
+ * Wakeup will do: if (@state & p->state) p->state = TASK_RUNNING, that is,
+ * once it observes the TASK_UNINTERRUPTIBLE store the waking CPU can issue a
+ * TASK_RUNNING store which can collide with __set_current_state(TASK_RUNNING).
+ *
+ * This is obviously fine, since they both store the exact same value.
+ *
+ * Also see the comments of try_to_wake_up().
+ */
+#define __set_current_state(state_value) do { current->state = (state_value); } while (0)
+#define set_current_state(state_value)	 smp_store_mb(current->state, (state_value))
+
+/*
  * task->flags
  */
 #define PF_IDLE			0x00000002	/* I am an IDLE thread */
@@ -105,6 +142,8 @@ struct task_struct {
 
 	/* per-process flags */
 	unsigned int		flags;
+
+	atomic_t		usage;
 
 	/* task exit state */
 	int			exit_state;
@@ -229,8 +268,8 @@ void scheduler_tick(void);
 int wake_up_process(struct task_struct *p);
 void wake_up_new_task(struct task_struct *p);
 
-/* kernel/exit.c */
 void do_exit(long code);
+void __noreturn do_task_dead(void);
 
 void cpu_idle(void);
 
@@ -295,5 +334,18 @@ void set_task_cpu(struct task_struct *p, unsigned int cpu);
 static inline unsigned int task_cpu(const struct task_struct *p) { return 0; }
 static inline void set_task_cpu(struct task_struct *p, unsigned int cpu){ }
 #endif /* CONFIG_SMP */
+
+void __put_task_struct(struct task_struct *t);
+
+static inline void put_task_struct(struct task_struct *t)
+{
+	if (atomic_dec_and_test(&t->usage))
+		__put_task_struct(t);
+}
+
+static inline void get_task_struct(struct task_struct *t)
+{
+	atomic_inc(&t->usage);
+}
 
 #endif /* _LEGO_SCHED_H_ */
