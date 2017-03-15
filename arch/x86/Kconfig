@@ -65,6 +65,14 @@ config PHYSICAL_ALIGN
 
 	  Don't change this unless you know what you are doing.
 
+config TRAMPOLINE_START
+	hex "Physical address where the trampoline code is copied" if EXPERT
+	default "0x90000"
+	---help---
+	  This gives the physical address where the realmode trampoline code
+	  is loaded. The trampoline code will run from here. Note that this
+	  is the realmode code, used to boot secondary cores.
+
 source "init/Kconfig"
 
 menu "Processor type and features"

@@ -64,7 +64,7 @@ void __init copy_trampoline_code(void)
 {
 	void *dst;
 
-	trampoline_base = boot_params.trampoline_base;
+	trampoline_base = (unsigned int)CONFIG_TRAMPOLINE_START;
 	trampoline_size = (unsigned int)((void *)&trampoline_end - (void *)&trampoline_start);
 
 	dst = early_ioremap(trampoline_base, trampoline_size);
