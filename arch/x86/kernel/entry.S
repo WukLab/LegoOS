@@ -149,7 +149,7 @@ retint_kernel:
 0:	cmpl	$0, PER_CPU_VAR(__preempt_count)
 	jnz	1f
 	call	preempt_schedule_irq
-	/*TODO: jmp 0b ? Need dec preempt_count in schedule */
+	/* TODO: jmp	0b */
 1:
 #endif
 

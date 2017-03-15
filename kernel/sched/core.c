@@ -7,6 +7,8 @@
  * (at your option) any later version.
  */
 
+#define pr_fmt(fmt) "sched: " fmt
+
 #include <lego/time.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
@@ -199,6 +201,45 @@ context_switch(struct rq *rq, struct task_struct *prev, struct task_struct *next
 	return finish_task_switch(prev);
 }
 
+/*
+ * __schedule() is the main scheduler function.
+ *
+ * The main means of driving the scheduler and thus entering this function are:
+ *
+ *   1. Explicit blocking: mutex, semaphore, waitqueue, etc.
+ *
+ *   2. TIF_NEED_RESCHED flag is checked on interrupt and userspace return
+ *      paths. For example, see arch/x86/kernel/entry.S.
+ *
+ *      To drive preemption between tasks, the scheduler sets the flag in timer
+ *      interrupt handler scheduler_tick().
+ *
+ *   3. Wakeups don't really cause entry into schedule(). They add a
+ *      task to the run-queue and that's it.
+ *
+ *      Now, if the new task added to the run-queue preempts the current
+ *      task, then the wakeup sets TIF_NEED_RESCHED and schedule() gets
+ *      called on the nearest possible occasion:
+ *
+ *       - If the kernel is preemptible (CONFIG_PREEMPT=y):
+ *
+ *         - in syscall or exception context, at the next outmost
+ *           preempt_enable(). (this might be as soon as the wake_up()'s
+ *           spin_unlock()!)
+ *
+ *         - in IRQ context, return from interrupt-handler to
+ *           preemptible context
+ *
+ *       - If the kernel is not preemptible (CONFIG_PREEMPT is not set)
+ *         then at the next:
+ *
+ *          - cond_resched() call
+ *          - explicit schedule() call
+ *          - return from syscall or exception to user-space
+ *          - return from interrupt-handler to user-space
+ *
+ * WARNING: must be called with preemption disabled!
+ */
 static void __schedule(bool preempt)
 {
 	struct task_struct *next, *prev;
@@ -242,7 +283,9 @@ static void __schedule(bool preempt)
 asmlinkage __visible void schedule(void)
 {
 	do {
+		preempt_disable();
 		__schedule(false);
+		preempt_enable_no_resched();
 	} while (need_resched());
 }
 
@@ -258,9 +301,11 @@ asmlinkage __visible void preempt_schedule_irq(void)
 	BUG_ON(preempt_count() || !irqs_disabled());
 
 	do {
+		preempt_disable();
 		local_irq_enable();
 		__schedule(true);
 		local_irq_disable();
+		preempt_enable_no_resched();
 	} while (need_resched());
 }
 
@@ -268,13 +313,10 @@ void __noreturn do_task_dead(void)
 {
 	/* Causes final put_task_struct in finish_task_switch(): */
 	__set_current_state(TASK_DEAD);
+
 	__schedule(false);
 	BUG();
 
-	/*
-	 * Avoid "noreturn function does return"
-	 * but don't continue if BUG() is a NOP:
-	 */
 	for (;;)
 		cpu_relax();
 }
@@ -283,7 +325,7 @@ void __noreturn do_task_dead(void)
  * This function gets called by the timer code, with HZ frequency.
  * NOTE:
  *  1) We call it with interrupts disabled.
- *  2) We can not call schedule() here.
+ *  2) We can not call schedule() here, we set TIF_NEED_RESCHED if needed
  */
 void scheduler_tick(void)
 {
@@ -433,4 +475,6 @@ void __init sched_init(void)
 	 * when this runqueue becomes "idle".
 	 */
 	sched_init_idle(current, smp_processor_id());
+
+	pr_info("scheduler running");
 }

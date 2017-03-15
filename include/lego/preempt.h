@@ -36,12 +36,12 @@ static __always_inline int preempt_count(void)
 	return this_cpu_read(__preempt_count);
 }
 
-static __always_inline void __preempt_count_add(int val)
+static __always_inline void preempt_count_add(int val)
 {
 	raw_cpu_add_4(__preempt_count, val);
 }
 
-static __always_inline void __preempt_count_sub(int val)
+static __always_inline void preempt_count_sub(int val)
 {
 	raw_cpu_add_4(__preempt_count, -val);
 }
@@ -50,21 +50,33 @@ static __always_inline void __preempt_count_sub(int val)
 #define preempt_count_dec()	preempt_count_sub(1)
 
 #ifdef CONFIG_PREEMPT
-#define preempt_enable()				\
-do {							\
-	barrier();					\
-	preempt_count_dec();				\
-} while (0)
+
 #define preempt_disable()				\
 do {							\
 	preempt_count_inc();				\
 	barrier();					\
 } while (0)
-#define preemptible()		(preempt_count() == 0 && !irqs_disabled())
+
+#define preempt_enable()				\
+do {							\
+	barrier();					\
+	if (unlikely(preempt_count_dec_and_test()))	\
+		__preempt_schedule();			\
+} while (0)
+
+#define preempt_enable_no_resched()			\
+do {							\
+	barrier();					\
+	preempt_count_dec();				\
+} while (0)
+
+#define preemptible()			(preempt_count() == 0 && !irqs_disabled())
+
 #else /* !CONFIG_PREEMPT */
-#define preempt_enable()	barrier()
-#define preempt_disable()	barrier()
-#define preemptible()		0
+#define preempt_disable()		barrier()
+#define preempt_enable()		barrier()
+#define preempt_enable_no_resched()	barrier();
+#define preemptible()			0
 #endif /* CONFIG_PREEMPT */
 
 #endif /* _LEGO_PREEMPT_H_ */
