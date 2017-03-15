@@ -235,5 +235,6 @@ endmenu
 
 source "mm/Kconfig"
 source "kernel/Kconfig.hz"
+source "kernel/Kconfig.preempt"
 source "drivers/Kconfig"
 source "net/Kconfig"

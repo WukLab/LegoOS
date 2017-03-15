@@ -79,6 +79,12 @@ CONFIG_HZ=100
 # CONFIG_SCHED_HRTICK is not set
 
 #
+# Preemption Configuration
+#
+CONFIG_PREEMPT_NONE=y
+# CONFIG_PREEMPT is not set
+
+#
 # Device Drivers
 #
 # CONFIG_INFINIBAND is not set
