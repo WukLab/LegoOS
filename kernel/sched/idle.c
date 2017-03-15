@@ -17,8 +17,8 @@ void __weak arch_cpu_idle(void) { }
 static void do_idle(void)
 {
 	while (!need_resched()) {
-		arch_cpu_idle_enter();
-		cpu_relax();
+		/* NOTE: no locks or semaphores should be used here */
+		arch_safe_halt();
 	}
 
 	schedule();

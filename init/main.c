@@ -83,35 +83,32 @@ int kthread_1(void *unused)
 {
 	int i = 0;
 
-	pr_info("%s: parameter: %d\n", __func__, *(int *)unused);
-	while (1) {
-		mdelay(1000);
+	while (i < 5) {
 		pr_info("%s (pid: %d): %5d, CPU%d\n",
 			__func__, current->pid, i++, smp_processor_id());
-		//schedule();
-		break;
+		schedule();
 	}
+
+	return 100;
 }
 
 int kthread_2(void *unused)
 {
 	int i = 0;
 
-	pr_info("%s: parameter: %d\n", __func__, *(int *)unused);
-	while (1) {
-		mdelay(1000);
+	while (i < 5) {
 		pr_info("%s (pid: %d): %5d, CPU%d\n",
 			__func__, current->pid, i++, smp_processor_id());
 		schedule();
 	}
+
+	return 200;
 }
 
 static void rest_init(void)
 {
-	int x = 100, y = 200;
-	kernel_thread(kthread_1, &x, 0);
-	//kernel_thread(kthread_2, &y, 0);
-	schedule();
+	kernel_thread(kthread_1, NULL, 0);
+	kernel_thread(kthread_2, NULL, 0);
 }
 
 asmlinkage void __init start_kernel(void)
@@ -208,5 +205,8 @@ asmlinkage void __init start_kernel(void)
 
 	/* STOP DBEYOND THIS POINT */
 	rest_init();
+#ifndef CONFIG_PREEMPT
+	schedule();
+#endif
 	hlt();
 }

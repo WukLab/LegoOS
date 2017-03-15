@@ -29,6 +29,8 @@
 #endif /* CONFIG_SMP */
 #endif /* __ASSEMBLY__ */
 
+#ifndef __ASSEMBLY__
+
 #ifdef CONFIG_SMP
 #define __percpu_prefix		"%%"__stringify(__percpu_seg)":"
 #define __my_cpu_offset		this_cpu_read(this_cpu_off)
@@ -504,4 +506,5 @@ static inline bool x86_this_cpu_variable_test_bit(int nr,
 	 ? x86_this_cpu_constant_test_bit((nr), (addr))	\
 	 : x86_this_cpu_variable_test_bit((nr), (addr)))
 
+#endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_PERCPU_H_ */

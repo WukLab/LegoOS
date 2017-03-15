@@ -81,8 +81,8 @@ CONFIG_HZ=100
 #
 # Preemption Configuration
 #
-CONFIG_PREEMPT_NONE=y
-# CONFIG_PREEMPT is not set
+# CONFIG_PREEMPT_NONE is not set
+CONFIG_PREEMPT=y
 
 #
 # Device Drivers

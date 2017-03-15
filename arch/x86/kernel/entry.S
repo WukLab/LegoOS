@@ -12,6 +12,7 @@
  */
 
 #include <asm/ptrace.h>
+#include <asm/percpu.h>
 #include <asm/irq_vectors.h>
 
 #include <lego/linkage.h>
@@ -148,7 +149,7 @@ retint_kernel:
 0:	cmpl	$0, PER_CPU_VAR(__preempt_count)
 	jnz	1f
 	call	preempt_schedule_irq
-	jmp	0b
+	/*TODO: jmp 0b ? Need dec preempt_count in schedule */
 1:
 #endif
 
@@ -283,6 +284,6 @@ ENTRY(ret_from_fork)
 	 * jump into do_exit(0) directly. Is their anyother
 	 * way to do? Like linux's kthread?
 	 */
-	movq	$0, %rdi
+	movq	%rax, %rdi
 	call	do_exit
 END(ret_from_fork)

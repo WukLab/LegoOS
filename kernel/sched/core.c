@@ -15,10 +15,6 @@
 #include <lego/cpumask.h>
 #include <lego/spinlock.h>
 
-/*
- * Disable preemption until the scheduler is running
- */
-#define INIT_PREEMPT_COUNT 1
 DEFINE_PER_CPU(int, __preempt_count) = INIT_PREEMPT_COUNT;
 
 /* Per-CPU Runqueue */
@@ -405,6 +401,10 @@ void __init sched_init_idle(struct task_struct *idle, int cpu)
 #ifdef CONFIG_SMP
 	idle->on_cpu = 1;
 #endif
+
+	/* Reset preempt count and inturn enable preemption */
+	init_idle_preempt_count(idle, cpu);
+
 	sprintf(idle->comm, "swapper/%d", cpu);
 }
 
