@@ -81,4 +81,115 @@ static inline int atomic_dec_if_positive(atomic_t *v)
 	return dec;
 }
 
+/* atomic_long */
+
+typedef atomic64_t atomic_long_t;
+
+#define ATOMIC_LONG_INIT(i)	ATOMIC64_INIT(i)
+
+static inline long atomic_long_read(atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return (long)atomic64_read(v);
+}
+
+static inline void atomic_long_set(atomic_long_t *l, long i)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	atomic64_set(v, i);
+}
+
+static inline void atomic_long_inc(atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	atomic64_inc(v);
+}
+
+static inline void atomic_long_dec(atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	atomic64_dec(v);
+}
+
+static inline void atomic_long_add(long i, atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	atomic64_add(i, v);
+}
+
+static inline void atomic_long_sub(long i, atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	atomic64_sub(i, v);
+}
+
+static inline int atomic_long_sub_and_test(long i, atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return atomic64_sub_and_test(i, v);
+}
+
+static inline int atomic_long_dec_and_test(atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return atomic64_dec_and_test(v);
+}
+
+static inline int atomic_long_inc_and_test(atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return atomic64_inc_and_test(v);
+}
+
+static inline int atomic_long_add_negative(long i, atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return atomic64_add_negative(i, v);
+}
+
+static inline long atomic_long_add_return(long i, atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return (long)atomic64_add_return(i, v);
+}
+
+static inline long atomic_long_sub_return(long i, atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return (long)atomic64_sub_return(i, v);
+}
+
+static inline long atomic_long_inc_return(atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return (long)atomic64_inc_return(v);
+}
+
+static inline long atomic_long_dec_return(atomic_long_t *l)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return (long)atomic64_dec_return(v);
+}
+
+static inline long atomic_long_add_unless(atomic_long_t *l, long a, long u)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return (long)atomic64_add_unless(v, a, u);
+}
+
 #endif /* _LEGO_ATOMIC_H_ */

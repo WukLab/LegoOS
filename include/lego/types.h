@@ -71,6 +71,12 @@ typedef struct {
 	int counter;
 } atomic_t;
 
+#ifdef CONFIG_64BIT
+typedef struct {
+	long counter;
+} atomic64_t;
+#endif
+
 struct list_head {
 	struct list_head *next, *prev;
 };

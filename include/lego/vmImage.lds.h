@@ -10,6 +10,15 @@
 #ifndef _LEGO_VMIMAGE_LDS_H_
 #define _LEGO_VMIMAGE_LDS_H_
 
+/* Align . to a 8 byte boundary equals to maximum function alignment. */
+#define ALIGN_FUNCTION()  . = ALIGN(8)
+
+#define SCHED_TEXT							\
+		ALIGN_FUNCTION();					\
+		__sched_text_start = .;					\
+		*(.sched.text)						\
+		__sched_text_end = .;					\
+
 /**
  * PERCPU_INPUT - the percpu input sections
  * @cacheline: cacheline size

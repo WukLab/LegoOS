@@ -12,6 +12,7 @@
 
 #include <asm/asm.h>
 #include <asm/cmpxchg.h>
+#include <asm/atomic64.h>
 
 #include <lego/types.h>
 #include <lego/compiler.h>

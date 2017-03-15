@@ -56,6 +56,7 @@ SECTIONS {
 		/* Whole story */
 		__stext = .;
 		*(.text*)
+		SCHED_TEXT
 		__etext = .;
 	} :text
 

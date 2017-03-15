@@ -10,6 +10,7 @@
 #define pr_fmt(fmt) "sched: " fmt
 
 #include <lego/time.h>
+#include <lego/mutex.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/percpu.h>
