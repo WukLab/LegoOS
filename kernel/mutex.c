@@ -10,7 +10,19 @@
 
 #include <lego/sched.h>
 #include <lego/mutex.h>
+#include <lego/atomic.h>
 #include <lego/kernel.h>
+
+void __mutex_init(struct mutex *lock, const char *name)
+{
+	atomic_long_set(&lock->owner, 0);
+	spin_lock_init(&lock->wait_lock);
+	INIT_LIST_HEAD(&lock->wait_list);
+
+#ifdef CONFIG_DEBUG_MUTEXES
+	lock->magic = lock;
+#endif
+}
 
 /**
  * mutex_lock - acquire the mutex
