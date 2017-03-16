@@ -12,9 +12,9 @@
 #include <lego/kernel.h>
 #include <lego/printk.h>
 #include <lego/linkage.h>
+#include <lego/spinlock.h>
 
-#define KMBUF_LEN 1024
-static unsigned char KMBUF[KMBUF_LEN];
+#define LOG_LINE_MAX	1024
 
 static inline int printk_get_level(const char *buffer)
 {
@@ -39,6 +39,8 @@ static size_t print_time(unsigned char *buf, u64 ts)
 		(unsigned long)ts, rem_nsec / 1000);
 }
 
+static DEFINE_SPINLOCK(printk_lock);
+
 /**
  * printk - print a kernel message
  * @fmt: format string
@@ -48,34 +50,42 @@ static size_t print_time(unsigned char *buf, u64 ts)
 asmlinkage __printf(1, 2)
 int printk(const char *fmt, ...)
 {
-	va_list args;
-	size_t time_len, fmt_len, len;
-	unsigned char *buf = KMBUF;
+	static char TEXTBUF[LOG_LINE_MAX];
+	unsigned char *text = TEXTBUF;
 	unsigned char *output_buf;
+	size_t time_len, fmt_len, len, ret_len;
+	va_list args;
+	unsigned long flags;
 
-	time_len = print_time(buf, sched_clock());
-	buf += time_len;
+	spin_lock_irqsave(&printk_lock, flags);
+
+	time_len = print_time(text, sched_clock());
+	text += time_len;
 
 	va_start(args, fmt);
-	fmt_len = vsnprintf(buf, KMBUF_LEN - time_len, fmt, args);
+	fmt_len = vsnprintf(text, LOG_LINE_MAX - time_len, fmt, args);
 	va_end(args);
 
-	switch (printk_get_level(buf)) {
+	switch (printk_get_level(text)) {
 	case '0' ... '7':
 	case 'd':
-		output_buf = KMBUF;
+		output_buf = TEXTBUF;
 		len = time_len + fmt_len - 2;
-		memmove(buf, buf + 2, fmt_len - 2);
+		memmove(text, text + 2, fmt_len - 2);
 		break;
 	case 'c':
-		output_buf = buf;
+		/* Contiguous printk(). Do not print prefix */
+		output_buf = text;
 		len = fmt_len - 2;
-		memmove(buf, buf + 2, fmt_len - 2);
+		memmove(text, text+ 2, fmt_len - 2);
 		break;
 	default:
-		output_buf = KMBUF;
+		output_buf = TEXTBUF;
 		len = time_len + fmt_len;
 	};
 
-	return tty_write(output_buf, len);
+	ret_len = tty_write(output_buf, len);
+	spin_unlock_irqrestore(&printk_lock, flags);
+
+	return ret_len;
 }

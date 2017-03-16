@@ -1,0 +1,22 @@
+menu "TTY Layer Configurations"
+
+config TTY_VT
+	bool "Virtual Terminal Output"
+	default n
+	help
+	  If you say Y here, the printk() function will emit the formatted
+	  string to Virtual Terminal (VT) layer. It may slightly slow the
+	  printk() function call. If you are running this in a monitor-less
+	  machine, say N.
+
+	  Currently, the VT layer only supports VGA device.
+
+config TTY_SERIAL
+	bool "Serial Output"
+	default y
+	help
+	  If you say Y here, the printk() function will emit the formatted
+	  string to Serial layer. If you are debugging Lego via serial port,
+	  you must say Y here.
+
+endmenu

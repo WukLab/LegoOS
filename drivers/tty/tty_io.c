@@ -74,9 +74,13 @@ static inline ssize_t __tty_write(struct tty_struct *tty,
 	return ret;
 }
 
-struct tty_struct *tty_map[2] = {
-	[0] = &serial_tty_struct,
-	[1] = &vt_tty_struct,
+#define TTY_MAP_SERIAL	0
+#define TTY_MAP_VT	1
+#define NR_TTY_MAP	2
+
+struct tty_struct *tty_map[NR_TTY_MAP] = {
+	[TTY_MAP_SERIAL]	= &serial_tty_struct,
+	[TTY_MAP_VT]		= &vt_tty_struct,
 };
 
 /**
@@ -90,17 +94,25 @@ ssize_t tty_write(const char *buf, size_t count)
 {
 	struct tty_struct *tty;
 	ssize_t ret;
-	int i;
 
-	/*
-	 * TODO
-	 */
-	for (i = 0; i < 2; i++) {
-		tty = tty_map[i];
-		if (!tty || !tty->ops->write)
-			return -EIO;
-		ret = __tty_write(tty, buf, count);
-	}
+#if !defined(CONFIG_TTY_SERIAL) && !defined(CONFIG_TTY_VT)
+	compiletime_assert(0, "Enable at least one of them");
+#endif
+
+#ifdef CONFIG_TTY_SERIAL
+	tty = tty_map[TTY_MAP_SERIAL];
+	if (!tty || !tty->ops->write)
+		return -EIO;
+	ret = __tty_write(tty, buf, count);
+#endif
+
+#ifdef CONFIG_TTY_VT
+	tty = tty_map[TTY_MAP_VT];
+	if (!tty || !tty->ops->write)
+		return -EIO;
+	ret = __tty_write(tty, buf, count);
+#endif
+
 	return ret;
 }
 

@@ -133,6 +133,7 @@
  * noinline_for_stack instead.  For documentation reasons.
  */
 #define __noinline		__attribute__((__noinline__))
+#define noinline		__attribute__((__noinline__))
 #define __noinline_for_stack	__noinline
 
 #define __always_inline		inline __attribute__((always_inline))

@@ -24,6 +24,26 @@ void __mutex_init(struct mutex *lock, const char *name)
 #endif
 }
 
+static noinline void __sched
+__mutex_lock(struct mutex *lock, long state, unsigned long ip)
+{
+
+}
+
+static noinline void __sched
+__mutex_lock_slowpath(struct mutex *lock)
+{
+	__mutex_lock(lock, TASK_UNINTERRUPTIBLE, _RET_IP_);
+}
+
+/*
+ * Release the lock, slowpath:
+ */
+static noinline void __sched
+__mutex_unlock_slowpath(struct mutex *lock, unsigned long ip)
+{
+}
+
 /*
  * Optimistic trylock that only works in the uncontended case. Make sure to
  * follow with a __mutex_trylock() before failing.
@@ -71,10 +91,8 @@ static __always_inline bool __mutex_unlock_fast(struct mutex *lock)
  */
 void __sched mutex_lock(struct mutex *lock)
 {
-#if 0
 	if (!__mutex_trylock_fast(lock))
 		__mutex_lock_slowpath(lock);
-#endif
 }
 
 /**
@@ -90,9 +108,7 @@ void __sched mutex_lock(struct mutex *lock)
  */
 void __sched mutex_unlock(struct mutex *lock)
 {
-#if 0
 	if (__mutex_unlock_fast(lock))
 		return;
 	__mutex_unlock_slowpath(lock, _RET_IP_);
-#endif
 }
