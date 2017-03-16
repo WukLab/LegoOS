@@ -24,6 +24,30 @@ void __mutex_init(struct mutex *lock, const char *name)
 #endif
 }
 
+/*
+ * Optimistic trylock that only works in the uncontended case. Make sure to
+ * follow with a __mutex_trylock() before failing.
+ */
+static __always_inline bool __mutex_trylock_fast(struct mutex *lock)
+{
+	unsigned long curr = (unsigned long)current;
+
+	if (!atomic_long_cmpxchg(&lock->owner, 0UL, curr))
+		return true;
+
+	return false;
+}
+
+static __always_inline bool __mutex_unlock_fast(struct mutex *lock)
+{
+	unsigned long curr = (unsigned long)current;
+
+	if (atomic_long_cmpxchg(&lock->owner, curr, 0UL) == curr)
+		return true;
+
+	return false;
+}
+
 /**
  * mutex_lock - acquire the mutex
  * @lock: the mutex to be acquired

@@ -192,4 +192,11 @@ static inline long atomic_long_add_unless(atomic_long_t *l, long a, long u)
 	return (long)atomic64_add_unless(v, a, u);
 }
 
+static inline long atomic_long_cmpxchg(atomic_long_t *l, long old, long new)
+{
+	atomic64_t *v = (atomic64_t *)l;
+
+	return (long)atomic64_cmpxchg(v, old, new);
+}
+
 #endif /* _LEGO_ATOMIC_H_ */
