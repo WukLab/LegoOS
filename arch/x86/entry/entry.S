@@ -18,7 +18,7 @@
 #include <lego/linkage.h>
 #include <generated/asm-offsets.h>
 
-#include "entry.h"
+#include "abi.h"
 
 /*
  * IDT_ENTRY - Intel Reserved Vector Handler

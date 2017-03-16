@@ -74,6 +74,7 @@ KBUILD_CFLAGS += -fno-asynchronous-unwind-tables
 drivers-y	:= arch/x86/pci/
 libs-y		:= arch/x86/lib/
 core-y		:= arch/x86/kernel/
+core-y		+= arch/x86/entry/
 core-y		+= arch/x86/mm/
 core-y		+= arch/x86/realmode/
 
