@@ -51,7 +51,7 @@ config PHYSICAL_START
 	  1MB limit.
 
 config PHYSICAL_ALIGN
-	hex "Alignment value to which kernel should be aligned"
+	hex "Alignment value to which kernel should be aligned" if EXPERT
 	default "0x200000"
 	range 0x2000 0x1000000 if X86_32
 	range 0x200000 0x1000000 if X86_64
@@ -72,6 +72,11 @@ config TRAMPOLINE_START
 	  This gives the physical address where the realmode trampoline code
 	  is loaded. The trampoline code will run from here. Note that this
 	  is the realmode code, used to boot secondary cores.
+
+config ILLEGAL_POINTER_VALUE
+       hex
+       default 0 if X86_32
+       default 0xdead000000000000 if X86_64
 
 source "init/Kconfig"
 
@@ -109,6 +114,7 @@ config SMP
 
 config MAXSMP
 	bool "Enable Maximum number of SMP Processors and NUMA Nodes"
+	default n
 	depends on X86_64 && SMP
 	---help---
 	  Enable maximum number of CPUS and NUMA Nodes for this architecture.
@@ -234,7 +240,12 @@ config PCI_MSI
 endmenu
 
 source "mm/Kconfig"
+
+source "fs/Kconfig"
+
 source "kernel/Kconfig.hz"
 source "kernel/Kconfig.preempt"
-source "drivers/Kconfig"
+
 source "net/Kconfig"
+
+source "drivers/Kconfig"
