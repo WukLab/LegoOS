@@ -451,6 +451,10 @@ void __init sched_init_idle(struct task_struct *idle, int cpu)
 	sprintf(idle->comm, "swapper/%d", cpu);
 }
 
+/*
+ * Initialize the scheduler data structures
+ * and enable the preemption in boot cpu 0.
+ */
 void __init sched_init(void)
 {
 	int i;
@@ -477,5 +481,5 @@ void __init sched_init(void)
 	 */
 	sched_init_idle(current, smp_processor_id());
 
-	pr_info("scheduler running");
+	pr_info("Scheduler is up and running\n");
 }

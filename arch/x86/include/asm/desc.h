@@ -105,7 +105,6 @@ struct gdt_page {
 	struct desc_struct gdt[GDT_ENTRIES];
 } __attribute__((aligned(PAGE_SIZE)));
 
-extern struct gdt_page temp_gdt_page;
 DECLARE_PER_CPU_PAGE_ALIGNED(struct gdt_page, cpu_gdt_page);
 
 static inline struct desc_struct *get_cpu_gdt_table(unsigned int cpu)

@@ -11,6 +11,7 @@
 
 #include <asm/page.h>
 #include <asm/setup.h>
+#include <asm/percpu.h>
 #include <lego/compiler.h>
 #include <lego/vmImage.lds.h>
 
@@ -206,6 +207,11 @@ SECTIONS {
 /*
  * Per-cpu symbols which need to be offset from __per_cpu_load
  * for the boot processor.
+ *
+ * Used by head.S
  */
-#define INIT_PER_CPU(x) init_per_cpu__##x = x + __per_cpu_load
+#define INIT_PER_CPU(x)		\
+	INIT_PER_CPU_VAR(x) = x + __per_cpu_load
+
 INIT_PER_CPU(per_cpu_head_start);
+INIT_PER_CPU(cpu_gdt_page);
