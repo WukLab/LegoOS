@@ -51,31 +51,39 @@ static __always_inline void preempt_count_sub(int val)
 
 #ifdef CONFIG_PREEMPT
 
-#define preempt_disable()				\
-do {							\
-	preempt_count_inc();				\
-	barrier();					\
+#define preempt_disable()					\
+do {								\
+	preempt_count_inc();					\
+	barrier();						\
 } while (0)
 
-#define preempt_enable()				\
-do {							\
-	barrier();					\
-	if (unlikely(preempt_count_dec_and_test()))	\
-		__preempt_schedule();			\
+#define preempt_enable_no_resched()				\
+do {								\
+	barrier();						\
+	preempt_count_dec();					\
 } while (0)
 
-#define preempt_enable_no_resched()			\
-do {							\
-	barrier();					\
-	preempt_count_dec();				\
+#define preempt_check_resched()		barrier()
+
+/*
+ * XXX:
+ * Current preempt_enable() will decrease preempt_count only.
+ * Do we really need to check if we need to do schedule again?
+ */
+#define preempt_enable()					\
+do {								\
+	preempt_enable_no_resched();				\
+	barrier();						\
+	preempt_check_resched();				\
 } while (0)
 
 #define preemptible()			(preempt_count() == 0 && !irqs_disabled())
 
-#else /* !CONFIG_PREEMPT */
+#else
 #define preempt_disable()		barrier()
+#define preempt_enable_no_resched()	barrier()
+#define preempt_check_resched()		barrier()
 #define preempt_enable()		barrier()
-#define preempt_enable_no_resched()	barrier();
 #define preemptible()			0
 #endif /* CONFIG_PREEMPT */
 

@@ -26,6 +26,9 @@
 
 DEFINE_PER_CPU_READ_MOSTLY(unsigned long, this_cpu_off) = BOOT_PERCPU_OFFSET;
 
+DEFINE_PER_CPU_FIRST(int, per_cpu_head_start)
+		__aligned(PAGE_SIZE) __visible;
+
 unsigned long __per_cpu_offset[NR_CPUS] = {
 	[0 ... NR_CPUS-1] = BOOT_PERCPU_OFFSET,
 };

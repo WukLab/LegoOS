@@ -26,8 +26,14 @@
 # define PER_CPU_VAR(var)	%__percpu_seg:var
 #else
 # define PER_CPU_VAR(var)	var
-#endif /* CONFIG_SMP */
-#endif /* __ASSEMBLY__ */
+#endif
+#endif
+
+#if defined(CONFIG_X86_64) && defined(CONFIG_SMP)
+#define INIT_PER_CPU_VAR(var)	init_per_cpu__##var
+#else
+#define INIT_PER_CPU_VAR(var)	var
+#endif
 
 #ifndef __ASSEMBLY__
 

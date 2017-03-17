@@ -459,6 +459,16 @@ do {									\
 	DEFINE_PER_CPU_SECTION(type, name, "")
 
 /*
+ * Declaration/definition used for per-CPU variables that must come first in
+ * the set of variables.
+ */
+#define DECLARE_PER_CPU_FIRST(type, name)				\
+	DECLARE_PER_CPU_SECTION(type, name, PER_CPU_FIRST_SECTION)
+
+#define DEFINE_PER_CPU_FIRST(type, name)				\
+	DEFINE_PER_CPU_SECTION(type, name, PER_CPU_FIRST_SECTION)
+
+/*
  * Declaration/definition used for per-CPU variables that must be cacheline
  * aligned under SMP conditions so that, whilst a particular instance of the
  * data corresponds to a particular CPU, inefficiencies due to direct access by

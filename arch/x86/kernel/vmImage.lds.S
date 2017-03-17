@@ -98,9 +98,11 @@ SECTIONS {
 		__edata = .;
 	} :data
 
-	/* Init-code and data will be freed later */
+	/* Init code and data - will be freed after init */
 	. = ALIGN(PAGE_SIZE);
-	__sinit = .;
+	.init.begin : AT(ADDR(.init.begin) - LOAD_OFFSET) {
+		__sinit = .;
+	}
 
 	/*
 	 * percpu offsets are zero-based on SMP.  PERCPU_VADDR() changes the
@@ -200,3 +202,10 @@ SECTIONS {
 	. = ALIGN(PAGE_SIZE);
 	__end = .;
 }
+
+/*
+ * Per-cpu symbols which need to be offset from __per_cpu_load
+ * for the boot processor.
+ */
+#define INIT_PER_CPU(x) init_per_cpu__##x = x + __per_cpu_load
+INIT_PER_CPU(per_cpu_head_start);

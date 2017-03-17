@@ -10,6 +10,7 @@
 #include <asm/msr.h>
 #include <asm/page.h>
 #include <asm/setup.h>
+#include <asm/percpu.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
 #include <asm/irq_vectors.h>
@@ -265,7 +266,7 @@ GLOBAL(initial_stack)
 	.quad	init_thread_union+THREAD_SIZE-8
 	.word	0
 GLOBAL(initial_gs)
-	.quad	0
+	.quad	INIT_PER_CPU_VAR(per_cpu_head_start)
 
 	.section ".init.text"
 ENTRY(early_idt_handler_array)

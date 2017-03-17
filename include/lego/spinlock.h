@@ -7,10 +7,24 @@
  * (at your option) any later version.
  */
 
+/*
+ * Spinlock is used to protect your critical code.
+ *
+ * Preemption is disabled before acquiring the lock, otherwise it's prone
+ * to reach deadlock state. Use the disable irq version if you must have
+ * an atomic context.
+ *
+ * It is dangerous and not efficient to run any *non-atomic* code, such as
+ * sleep(), disk op inside critical section protected by spinlock.
+ *
+ * Great article at: www.makelinux.net/ldd3/chp-5-sect-5
+ */
+
 #ifndef _LEGO_SPINLOCK_H_
 #define _LEGO_SPINLOCK_H_
 
 #include <lego/irq.h>
+#include <lego/preempt.h>
 #include <lego/typecheck.h>
 
 #include <asm/spinlock.h>
@@ -54,12 +68,14 @@ typedef struct spinlock {
 
 static inline void spin_lock(spinlock_t *lock)
 {
+	preempt_disable();
 	arch_spin_lock(&lock->arch_lock);
 }
 
 static inline void spin_lock_irq(spinlock_t *lock)
 {
 	local_irq_disable();
+	preempt_disable();
 	arch_spin_lock(&lock->arch_lock);
 }
 
@@ -67,39 +83,47 @@ static inline void spin_lock_irq(spinlock_t *lock)
 	do {						\
 		typecheck(unsigned long, (flags));	\
 		local_irq_save((flags));		\
+		preempt_disable();			\
 		arch_spin_lock(&(lock)->arch_lock);	\
 	} while (0)
 
 static inline void spin_unlock(spinlock_t *lock)
 {
 	arch_spin_unlock(&lock->arch_lock);
+	preempt_enable();
 }
 
 static inline void spin_unlock_irq(spinlock_t *lock)
 {
 	arch_spin_unlock(&lock->arch_lock);
 	local_irq_enable();
+	preempt_enable();
 }
 
 static inline void spin_unlock_irqrestore(spinlock_t *lock,  unsigned long flags)
 {
 	arch_spin_unlock(&lock->arch_lock);
 	local_irq_restore(flags);
+	preempt_enable();
 }
 
 static inline int spin_trylock(spinlock_t *lock)
 {
+	preempt_disable();
 	if (arch_spin_trylock(&lock->arch_lock))
 		return 1;
+	preempt_enable();
 	return 0;
 }
 
 static inline int spin_trylock_irq(spinlock_t *lock)
 {
 	local_irq_disable();
+	preempt_disable();
 	if (arch_spin_trylock(&lock->arch_lock))
 		return 1;
 	local_irq_enable();
+	preempt_enable();
 	return 0;
 }
 
@@ -107,9 +131,11 @@ static inline int spin_trylock_irq(spinlock_t *lock)
 ({							\
 	typecheck(unsigned long, (flags));		\
 	local_irq_save((flags));			\
+	preempt_disable();				\
 	arch_spin_trylock(&(lock)->arch_flags) ? 1 :	\
 	({						\
 		local_irq_restore((flags));		\
+		preempt_enable();			\
 		0;					\
 	});						\
 })
