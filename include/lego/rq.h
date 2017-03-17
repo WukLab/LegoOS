@@ -16,8 +16,6 @@
 
 #include <lego/spinlock.h>
 
-#define TASK_ON_RQ_QUEUED	1
-
 struct task_struct;
 
 /*

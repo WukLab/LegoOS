@@ -41,14 +41,6 @@ void user_thread_bug_now(void)
 	panic("%s: not implemented now\n", __func__);
 }
 
-static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
-{
-#ifdef CONFIG_SMP
-	task_thread_info(p)->cpu = cpu;
-	p->wake_cpu = cpu;
-#endif
-}
-
 static inline void
 dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 {
@@ -73,6 +65,147 @@ enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 
 	list_add_tail(&p->run_list, &rq->rq);
 	rq->nr_running++;
+}
+
+static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
+{
+#ifdef CONFIG_SMP
+	/*
+	 * After ->cpu is set up to a new value, task_rq_lock(p, ...) can be
+	 * successfuly executed on another CPU. We must ensure that updates of
+	 * per-task data have been completed by this moment.
+	 */
+	smp_wmb();
+	task_thread_info(p)->cpu = cpu;
+	p->wake_cpu = cpu;
+#endif
+}
+
+void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask)
+{
+	cpumask_copy(&p->cpus_allowed, new_mask);
+	p->nr_cpus_allowed = cpumask_weight(new_mask);
+}
+
+void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
+{
+	WARN_ON_ONCE(p->state != TASK_RUNNING && !p->on_rq);
+	__set_task_cpu(p, new_cpu);
+}
+
+/*
+ * Move a queued task to a new rq
+ * Must enter with old rq's lock held!
+ *
+ * Returns (locked) new rq. Old rq's lock is released
+ */
+static struct rq *
+move_queued_task(struct rq *rq, struct task_struct *p, int new_cpu)
+{
+	/* pop from old rq */
+	p->on_rq = TASK_ON_RQ_MIGRATING;
+	dequeue_task(rq, p, 0);
+	set_task_cpu(p, new_cpu);
+	spin_unlock(&rq->lock);
+
+	/* push to new rq */
+	rq = cpu_rq(new_cpu);
+	spin_lock(&rq->lock);
+	BUG_ON(task_cpu(p) != new_cpu);
+	enqueue_task(rq, p, 0);
+	p->on_rq = TASK_ON_RQ_QUEUED;
+
+	return rq;
+}
+
+/*
+ * Move (not current) task off this CPU, onto the destination CPU. We're doing
+ * this because either it can't run here any more (set_cpus_allowed()
+ * away from this CPU, or CPU going down), or because we're
+ * attempting to rebalance this task on exec (sched_exec).
+ *
+ * So we race with normal scheduler movements, but that's OK, as long
+ * as the task is no longer on this CPU.
+ */
+static struct rq *
+__migrate_task(struct rq *rq, struct task_struct *p, int dest_cpu)
+{
+	if (unlikely(!cpu_online(dest_cpu)))
+		return rq;
+
+	/* Affinity changed (again). */
+	if (!cpumask_test_cpu(dest_cpu, &p->cpus_allowed))
+		return rq;
+
+	rq = move_queued_task(rq, p, dest_cpu);
+
+	return rq;
+}
+
+/*
+ * task_rq_lock - lock the rq @p resides on, also disable interrupts.
+ */
+static struct rq *task_rq_lock(struct task_struct *p, unsigned long *flags)
+	__acquires(rq->lock)
+{
+	struct rq *rq;
+
+	for (;;) {
+		local_irq_save(*flags);
+		rq = task_rq(p);
+		spin_lock(&rq->lock);
+		/*
+		 *	move_queued_task()		task_rq_lock()
+		 *
+		 *	ACQUIRE (rq->lock)
+		 *	[S] ->on_rq = MIGRATING		[L] rq = task_rq()
+		 *	WMB (__set_task_cpu())		ACQUIRE (rq->lock);
+		 *	[S] ->cpu = new_cpu		[L] task_rq()
+		 *					[L] ->on_rq
+		 *	RELEASE (rq->lock)
+		 *
+		 * If we observe the old cpu in task_rq_lock, the acquire of
+		 * the old rq->lock will fully serialize against the stores.
+		 *
+		 * If we observe the new CPU in task_rq_lock, the acquire will
+		 * pair with the WMB to ensure we must then also see migrating.
+		 */
+		if (likely(rq == task_rq(p) && !task_on_rq_migrating(p))) {
+			return rq;
+		}
+		spin_unlock(&rq->lock);
+		local_irq_restore(*flags);
+
+		while (unlikely(task_on_rq_migrating(p)))
+			cpu_relax();
+	}
+}
+
+static void task_rq_unlock(struct rq *rq, struct task_struct *p,
+			   unsigned long *flags) __releases(rq->lock)
+{
+	spin_unlock(&rq->lock);
+	local_irq_restore(*flags);
+}
+
+/*
+ * Change a given task's CPU affinity. Migrate the thread to a
+ * proper CPU and schedule it away if the CPU it's executing on
+ * is removed from the allowed bitmask.
+ *
+ * NOTE: the caller must have a valid reference to the task, the
+ * task must not exit() & deallocate itself prematurely. The
+ * call is not atomic; no spinlocks may be held.
+ */
+static int __set_cpus_allowed_ptr(struct task_struct *p,
+				  const struct cpumask *new_mask, bool check)
+{
+	return 0;
+}
+
+int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
+{
+	return __set_cpus_allowed_ptr(p, new_mask, false);
 }
 
 /*
@@ -408,12 +541,6 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 #endif
 
 	return 0;
-}
-
-void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask)
-{
-	cpumask_copy(&p->cpus_allowed, new_mask);
-	p->nr_cpus_allowed = cpumask_weight(new_mask);
 }
 
 /**

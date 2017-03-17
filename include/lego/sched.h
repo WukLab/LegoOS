@@ -202,6 +202,54 @@ union thread_union {
 #define task_stack_page(task)	((void *)((task)->stack))
 
 /*
+ * flag set/clear/test wrappers
+ * - pass TIF_xxxx constants to these functions
+ */
+
+static inline void set_ti_thread_flag(struct thread_info *ti, int flag)
+{
+	set_bit(flag, (unsigned long *)&ti->flags);
+}
+
+static inline void clear_ti_thread_flag(struct thread_info *ti, int flag)
+{
+	clear_bit(flag, (unsigned long *)&ti->flags);
+}
+
+static inline int test_and_set_ti_thread_flag(struct thread_info *ti, int flag)
+{
+	return test_and_set_bit(flag, (unsigned long *)&ti->flags);
+}
+
+static inline int test_and_clear_ti_thread_flag(struct thread_info *ti, int flag)
+{
+	return test_and_clear_bit(flag, (unsigned long *)&ti->flags);
+}
+
+static inline int test_ti_thread_flag(struct thread_info *ti, int flag)
+{
+	return test_bit(flag, (unsigned long *)&ti->flags);
+}
+
+#define set_thread_flag(flag) \
+	set_ti_thread_flag(current_thread_info(), flag)
+#define clear_thread_flag(flag) \
+	clear_ti_thread_flag(current_thread_info(), flag)
+#define test_and_set_thread_flag(flag) \
+	test_and_set_ti_thread_flag(current_thread_info(), flag)
+#define test_and_clear_thread_flag(flag) \
+	test_and_clear_ti_thread_flag(current_thread_info(), flag)
+#define test_thread_flag(flag) \
+	test_ti_thread_flag(current_thread_info(), flag)
+
+#define tif_need_resched()	test_thread_flag(TIF_NEED_RESCHED)
+
+static __always_inline bool need_resched(void)
+{
+	return unlikely(tif_need_resched());
+}
+
+/*
  * Return the address of the last usable long on the stack.
  *
  * When the stack grows down, this is just above the thread
@@ -270,70 +318,7 @@ void wake_up_new_task(struct task_struct *p);
 
 void do_exit(long code);
 void __noreturn do_task_dead(void);
-
 void cpu_idle(void);
-
-/*
- * flag set/clear/test wrappers
- * - pass TIF_xxxx constants to these functions
- */
-
-static inline void set_ti_thread_flag(struct thread_info *ti, int flag)
-{
-	set_bit(flag, (unsigned long *)&ti->flags);
-}
-
-static inline void clear_ti_thread_flag(struct thread_info *ti, int flag)
-{
-	clear_bit(flag, (unsigned long *)&ti->flags);
-}
-
-static inline int test_and_set_ti_thread_flag(struct thread_info *ti, int flag)
-{
-	return test_and_set_bit(flag, (unsigned long *)&ti->flags);
-}
-
-static inline int test_and_clear_ti_thread_flag(struct thread_info *ti, int flag)
-{
-	return test_and_clear_bit(flag, (unsigned long *)&ti->flags);
-}
-
-static inline int test_ti_thread_flag(struct thread_info *ti, int flag)
-{
-	return test_bit(flag, (unsigned long *)&ti->flags);
-}
-
-#define set_thread_flag(flag) \
-	set_ti_thread_flag(current_thread_info(), flag)
-#define clear_thread_flag(flag) \
-	clear_ti_thread_flag(current_thread_info(), flag)
-#define test_and_set_thread_flag(flag) \
-	test_and_set_ti_thread_flag(current_thread_info(), flag)
-#define test_and_clear_thread_flag(flag) \
-	test_and_clear_ti_thread_flag(current_thread_info(), flag)
-#define test_thread_flag(flag) \
-	test_ti_thread_flag(current_thread_info(), flag)
-
-#define tif_need_resched()	test_thread_flag(TIF_NEED_RESCHED)
-
-static __always_inline bool need_resched(void)
-{
-	return unlikely(tif_need_resched());
-}
-
-/*
- * Wrappers for p->thread_info->cpu access. No-op on UP.
- */
-#ifdef CONFIG_SMP
-static inline unsigned int task_cpu(const struct task_struct *p)
-{
-	return task_thread_info(p)->cpu;
-}
-void set_task_cpu(struct task_struct *p, unsigned int cpu);
-#else
-static inline unsigned int task_cpu(const struct task_struct *p) { return 0; }
-static inline void set_task_cpu(struct task_struct *p, unsigned int cpu){ }
-#endif /* CONFIG_SMP */
 
 void __put_task_struct(struct task_struct *t);
 
@@ -348,6 +333,20 @@ static inline void get_task_struct(struct task_struct *t)
 	atomic_inc(&t->usage);
 }
 
+/*
+ * Wrappers for p->thread_info->cpu access. No-op on UP.
+ */
+#ifdef CONFIG_SMP
+static inline unsigned int task_cpu(const struct task_struct *p)
+{
+	return task_thread_info(p)->cpu;
+}
+void set_task_cpu(struct task_struct *p, unsigned int new_cpu);
+#else
+static inline unsigned int task_cpu(const struct task_struct *p) { return 0; }
+static inline void set_task_cpu(struct task_struct *p, unsigned int new_cpu){ }
+#endif /* CONFIG_SMP */
+
 /* Attach to any functions which should be ignored in wchan output. */
 #define __sched		__attribute__((__section__(".sched.text")))
 
@@ -356,5 +355,19 @@ extern char __sched_text_start[], __sched_text_end[];
 
 /* Is this address in the __sched functions? */
 int in_sched_functions(unsigned long addr);
+
+/* task_struct::on_rq states: */
+#define TASK_ON_RQ_QUEUED	1
+#define TASK_ON_RQ_MIGRATING	2
+
+static inline int task_on_rq_queued(struct task_struct *p)
+{
+	return p->on_rq == TASK_ON_RQ_QUEUED;
+}
+
+static inline int task_on_rq_migrating(struct task_struct *p)
+{
+	return p->on_rq == TASK_ON_RQ_MIGRATING;
+}
 
 #endif /* _LEGO_SCHED_H_ */

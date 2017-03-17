@@ -257,14 +257,23 @@ ENTRY(secondary_startup_64)
 	.balign 8
 
 	/*
-	 * initial_code and initial_stack differ for BSP and secondary CPUs
-	 * They will be replaced by do_cpu_up().
+	 * initial_code, initial_stack, initial_gs differ
+	 * for BSP and secondary CPUs. They will be replaced by do_cpu_up()
+	 * before booting secondary CPUs.
 	 */
 GLOBAL(initial_code)
 	.quad	x86_64_start_kernel
 GLOBAL(initial_stack)
 	.quad	init_thread_union+THREAD_SIZE-8
 	.word	0
+
+	/*
+	 * Make the per-cpu variable work on BSP before
+	 * initilizing per-cpu setup.
+	 *
+	 * This is not a real variable, it is symbol defined
+	 * and exported by linker script.
+	 */
 GLOBAL(initial_gs)
 	.quad	INIT_PER_CPU_VAR(per_cpu_head_start)
 
