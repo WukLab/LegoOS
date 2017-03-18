@@ -345,7 +345,7 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu);
 #else
 static inline unsigned int task_cpu(const struct task_struct *p) { return 0; }
 static inline void set_task_cpu(struct task_struct *p, unsigned int new_cpu){ }
-#endif /* CONFIG_SMP */
+#endif
 
 /* Attach to any functions which should be ignored in wchan output. */
 #define __sched		__attribute__((__section__(".sched.text")))
@@ -368,6 +368,15 @@ static inline int task_on_rq_queued(struct task_struct *p)
 static inline int task_on_rq_migrating(struct task_struct *p)
 {
 	return p->on_rq == TASK_ON_RQ_MIGRATING;
+}
+
+static inline int task_running(struct rq *rq, struct task_struct *p)
+{
+#ifdef CONFIG_SMP
+	return p->on_cpu;
+#else
+	return task_current(rq, p);
+#endif
 }
 
 #endif /* _LEGO_SCHED_H_ */

@@ -1,5 +1,3 @@
-LegoOS parameters
-
 	earlyprintk=	[X86]
 			earlyprintk=serial[,ttySn[,baudrate]]
 			earlyprintk=serial[,0x...[,baudrate]]
@@ -36,10 +34,16 @@ LegoOS parameters
 			when initialising the APIC and IO-APIC components.
 
 	early_ioremap_debug
+			[KNL]
 			Enable to print early_ioremap() debug information.
 			This may generate a mount of messages, you are warned.
 
-	smpboot_verbosity=
-			[X86]
-			smpboot_verbosity=debug
+	smpboot_verbosity=debug
+			[KNL, X86]
 			Enable to print info from arch/x86/kernel/smpboot.c
+			Used to debug booting secondary cpus.
+
+	memblock=debug	[KNL]
+			Enable memblock debug messages. Enable this if you want
+			to check the memblock allocation and the memory regions managed
+			by our zoned page allocator.

@@ -14,11 +14,23 @@
 #include <lego/mm.h>
 #include <lego/bug.h>
 #include <lego/numa.h>
+#include <lego/init.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
 
 int memblock_debug __initdata = 0;
+static int __init early_memblock(char *p)
+{
+	if (strcmp("debug", p) == 0) {
+		memblock_debug = 1;
+		return 0;
+	} else {
+		pr_warn("memblock debug level: %s, not recognised\n", p);
+		return -EINVAL;
+	}
+}
+__setup("memblock", early_memblock);
 
 static struct memblock_region memblock_memory_init_regions[INIT_MEMBLOCK_REGIONS] __initdata;
 static struct memblock_region memblock_reserved_init_regions[INIT_MEMBLOCK_REGIONS] __initdata;
@@ -1226,11 +1238,11 @@ static unsigned long __init free_low_memory_core_early(void)
 	phys_addr_t start, end;
 	u64 i;
 
-	__memblock_dump_all();
+	memblock_dump_all();
 
-	pr_info("Physical Memory Reserved:\n");
+	memblock_dbg("Physical Memory Reserved:\n");
 	for_each_reserved_mem_region(i, &start, &end) {
-		pr_info("  [%#016llx-%#016llx]\n", start, end);
+		memblock_dbg("  [%#016llx-%#016llx]\n", start, end);
 		reserve_bootmem_region(start, end);
 	}
 
@@ -1239,9 +1251,9 @@ static unsigned long __init free_low_memory_core_early(void)
 	 *  because in some case like Node0 doesn't have RAM installed
 	 *  low ram will be on Node1
 	 */
-	pr_info("Physical Memory Managed by Buddy:\n");
+	memblock_dbg("Physical Memory Managed by Buddy:\n");
 	for_each_free_mem_range(i, NUMA_NO_NODE, MEMBLOCK_NONE, &start, &end, NULL) {
-		pr_info("  [%#016llx-%#016llx]\n", start, end);
+		memblock_dbg("  [%#016llx-%#016llx]\n", start, end);
 		count += __free_memory_core(start, end);
 	}
 	return count;

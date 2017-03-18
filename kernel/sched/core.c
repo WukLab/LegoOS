@@ -23,6 +23,12 @@ DEFINE_PER_CPU(int, __preempt_count) = INIT_PREEMPT_COUNT;
 /* Per-CPU Runqueue */
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
+int in_sched_functions(unsigned long addr)
+{
+	return (addr >= (unsigned long)__sched_text_start
+		&& addr < (unsigned long)__sched_text_end);
+}
+
 /**
  * sched_clock
  *
@@ -127,8 +133,7 @@ move_queued_task(struct rq *rq, struct task_struct *p, int new_cpu)
  * So we race with normal scheduler movements, but that's OK, as long
  * as the task is no longer on this CPU.
  */
-static struct rq *
-__migrate_task(struct rq *rq, struct task_struct *p, int dest_cpu)
+struct rq * __migrate_task(struct rq *rq, struct task_struct *p, int dest_cpu)
 {
 	if (unlikely(!cpu_online(dest_cpu)))
 		return rq;
@@ -197,15 +202,53 @@ static void task_rq_unlock(struct rq *rq, struct task_struct *p,
  * task must not exit() & deallocate itself prematurely. The
  * call is not atomic; no spinlocks may be held.
  */
-static int __set_cpus_allowed_ptr(struct task_struct *p,
-				  const struct cpumask *new_mask, bool check)
-{
-	return 0;
-}
-
 int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
 {
-	return __set_cpus_allowed_ptr(p, new_mask, false);
+	struct rq *rq;
+	unsigned long flags;
+	unsigned long dest_cpu;
+	int ret = 0;
+
+	rq = task_rq_lock(p, &flags);
+
+	/*
+	 * We are not able to migrate a running task
+	 * Linux can, with a migration thread's help
+	 */
+	if (task_running(rq, p)) {
+		ret = -EAGAIN;
+		goto out;
+	}
+
+	/* Does this thread allowed to migrate? */
+	if (p->flags & PF_NO_SETAFFINITY) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (cpumask_equal(&p->cpus_allowed, new_mask))
+		goto out;
+
+	if (!cpumask_intersects(new_mask, cpu_online_mask)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* Can the task run on the task's current CPU? If so, we're done */
+	if (cpumask_test_cpu(task_cpu(p), new_mask))
+		goto out;
+
+	/*
+	 * The thread is moved to another rq if it is
+	 * already queued in its current rq:
+	 */
+	dest_cpu = cpumask_any_and(cpu_online_mask, new_mask);
+	if (task_on_rq_queued(p))
+		rq = move_queued_task(rq, p, dest_cpu);
+
+out:
+	task_rq_unlock(rq, p, &flags);
+	return ret;
 }
 
 /*
@@ -374,7 +417,7 @@ context_switch(struct rq *rq, struct task_struct *prev, struct task_struct *next
  *
  * WARNING: must be called with preemption disabled!
  */
-static void __schedule(bool preempt)
+static void __sched __schedule(bool preempt)
 {
 	struct task_struct *next, *prev;
 	struct rq *rq;
@@ -414,7 +457,7 @@ static void __schedule(bool preempt)
 	balance_callback(rq);
 }
 
-asmlinkage __visible void schedule(void)
+asmlinkage __visible void __sched schedule(void)
 {
 	do {
 		preempt_disable();
@@ -429,7 +472,7 @@ asmlinkage __visible void schedule(void)
  * Note, that this is called and return with irqs disabled. This will
  * protect us against recursive calling from irq.
  */
-asmlinkage __visible void preempt_schedule_irq(void)
+asmlinkage __visible void __sched preempt_schedule_irq(void)
 {
 	/* Catch callers which need to be fixed */
 	BUG_ON(preempt_count() || !irqs_disabled());
