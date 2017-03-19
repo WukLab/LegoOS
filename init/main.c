@@ -86,14 +86,14 @@ pid_t k2_pid;
 int kthread_1(void *unused)
 {
 	while (1) {
-		if (cnt <= 5)
-			schedule();
-		else {
+		if (cnt == 5) {
 			sched_setaffinity(k2_pid, cpumask_of(12));
 			break;
 		}
+		schedule();
 	}
 
+	pr_info("%s: exit\n", __func__);
 	return 0;
 }
 
@@ -110,7 +110,8 @@ int kthread_2(void *unused)
 		schedule();
 	}
 
-	return 200;
+	pr_info("%s: exit\n", __func__);
+	return 0;
 }
 
 static void rest_init(void)

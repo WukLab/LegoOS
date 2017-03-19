@@ -244,8 +244,17 @@ int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
 	 * already queued in its current rq:
 	 */
 	dest_cpu = cpumask_any_and(cpu_online_mask, new_mask);
-	if (task_on_rq_queued(p))
+	if (task_on_rq_queued(p)) {
 		rq = move_queued_task(rq, p, dest_cpu);
+
+	/*
+	 * If preemption is not configured, we should let dest cpu
+	 * know that there is one new task waiting to be scheduled:
+	 */
+#ifndef CONFIG_PREEMPT
+		set_tsk_need_resched(rq->idle);
+#endif
+	}
 
 out:
 	task_rq_unlock(rq, p, &flags);
@@ -485,6 +494,7 @@ static void __sched __schedule(bool preempt)
 	 * move prev accordingly
 	 */
 	next = pick_next_task(rq, prev);
+	clear_tsk_need_resched(prev);
 
 	if (likely(prev != next)) {
 		rq->nr_switches++;
