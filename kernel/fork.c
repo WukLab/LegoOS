@@ -253,7 +253,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	if (retval)
 		goto out_cleanup_mm;
 
-	pid = alloc_pid();
+	pid = alloc_pid(p);
 	if (!pid)
 		goto out_cleanup_thread;
 
@@ -280,6 +280,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 
 	return p;
 
+	free_pid(pid);
 out_cleanup_thread:
 out_cleanup_mm:
 	if (p->mm)

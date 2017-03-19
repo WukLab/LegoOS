@@ -316,6 +316,7 @@ void scheduler_tick(void);
 int wake_up_process(struct task_struct *p);
 void wake_up_new_task(struct task_struct *p);
 int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask);
+long sched_setaffinity(pid_t pid, const struct cpumask *new_mask);
 
 void do_exit(long code);
 void __noreturn do_task_dead(void);

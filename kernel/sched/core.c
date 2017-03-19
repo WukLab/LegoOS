@@ -9,6 +9,7 @@
 
 #define pr_fmt(fmt) "sched: " fmt
 
+#include <lego/pid.h>
 #include <lego/time.h>
 #include <lego/mutex.h>
 #include <lego/sched.h>
@@ -248,6 +249,38 @@ int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
 
 out:
 	task_rq_unlock(rq, p, &flags);
+	return ret;
+}
+
+/**
+ * sched_setaffinity	-	Set cpu affinity for a task
+ * @pid: the task pid in question
+ * @new_mask: the new cpumask affinity
+ *
+ * Return: 0 on success, EAGAIN if the pid is currently running
+ * on this cpu.
+ */
+long sched_setaffinity(pid_t pid, const struct cpumask *new_mask)
+{
+	int ret;
+	struct task_struct *p;
+
+	p = find_task_by_pid(pid);
+	if (!p)
+		return -ESRCH;
+
+	/* Prevent p going away */
+	get_task_struct(p);
+
+	if (p->flags & PF_NO_SETAFFINITY) {
+		ret = -EINVAL;
+		goto out_put_task;
+	}
+
+	ret = set_cpus_allowed_ptr(p, new_mask);
+
+out_put_task:
+	put_task_struct(p);
 	return ret;
 }
 

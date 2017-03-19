@@ -10,7 +10,13 @@
 #ifndef _LEGO_PID_H_
 #define _LEGO_PID_H_
 
-pid_t alloc_pid(void);
+#include <lego/sched.h>
+
+pid_t alloc_pid(struct task_struct *p);
 void free_pid(pid_t pid);
+
+struct task_struct *find_task_by_pid(pid_t pid);
+
+void __init pid_init(void);
 
 #endif /* _LEGO_PID_H_ */
