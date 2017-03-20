@@ -560,6 +560,10 @@ asmlinkage __visible void __sched preempt_schedule_irq(void)
 	} while (need_resched());
 }
 
+/**
+ * Called while a thread has done its job
+ * WARNING: Must enter with preemption disabled!
+ */
 void __noreturn do_task_dead(void)
 {
 	/* Causes final put_task_struct in finish_task_switch(): */

@@ -17,7 +17,14 @@ void do_exit(long code)
 	if (unlikely(!tsk->pid))
 		panic("Attempted to kill the idle task!");
 
+	if (unlikely(in_atomic())) {
+		pr_info("note: %s[%d] exited with preempt_count %d\n",
+			current->comm, current->pid, preempt_count());
+		preempt_count_set(0);
+	}
+
 	tsk->exit_code = code;
 
+	preempt_disable();
 	do_task_dead();
 }

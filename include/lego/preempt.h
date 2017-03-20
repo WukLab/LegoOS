@@ -54,8 +54,16 @@ static __always_inline void preempt_count_sub(int val)
 #define preempt_count_inc()	preempt_count_add(1)
 #define preempt_count_dec()	preempt_count_sub(1)
 
-#ifdef CONFIG_PREEMPT
+/*
+ * Are we running in atomic context?  WARNING: this macro cannot
+ * always detect atomic context; in particular, it cannot know about
+ * held spinlocks in non-preemptible kernels.  Thus it should not be
+ * used in the general case to determine whether sleeping is possible.
+ * Do not use in_atomic() in driver code.
+ */
+#define in_atomic()	(preempt_count() != 0)
 
+#ifdef CONFIG_PREEMPT
 #define preempt_disable()					\
 do {								\
 	preempt_count_inc();					\
@@ -84,7 +92,7 @@ do {								\
 
 #define preemptible()			(preempt_count() == 0 && !irqs_disabled())
 
-#else
+#else /* !CONFIG_PREEMPT */
 #define preempt_disable()		barrier()
 #define preempt_enable_no_resched()	barrier()
 #define preempt_check_resched()		barrier()

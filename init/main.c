@@ -85,12 +85,20 @@ pid_t k2_pid;
 
 int kthread_1(void *unused)
 {
+	struct task_struct *p = current;
+
 	while (1) {
+		pr_info("%s: pid: %d, comm: %s, cpu: %d\n",
+			__func__, p->pid, p->comm, smp_processor_id());
 		if (cnt == 5) {
 			sched_setaffinity(k2_pid, cpumask_of(12));
 			break;
 		}
+#ifndef CONFIG_PREEMPT
 		schedule();
+#else
+		mdelay(100);
+#endif
 	}
 
 	pr_info("%s: exit\n", __func__);
@@ -107,7 +115,11 @@ int kthread_2(void *unused)
 		cnt++;
 		pr_info("%s: pid: %d, comm: %s, cpu: %d\n",
 			__func__, p->pid, p->comm, smp_processor_id());
+#ifndef CONFIG_PREEMPT
 		schedule();
+#else
+		mdelay(200);
+#endif
 	}
 
 	pr_info("%s: exit\n", __func__);
