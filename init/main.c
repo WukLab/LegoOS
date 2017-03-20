@@ -220,5 +220,5 @@ asmlinkage void __init start_kernel(void)
 #ifndef CONFIG_PREEMPT
 	schedule();
 #endif
-	hlt();
+	cpu_idle();
 }

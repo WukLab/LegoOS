@@ -36,6 +36,11 @@ static __always_inline int preempt_count(void)
 	return this_cpu_read(__preempt_count);
 }
 
+static __always_inline void preempt_count_set(int val)
+{
+	this_cpu_write(__preempt_count, val);
+}
+
 static __always_inline void preempt_count_add(int val)
 {
 	raw_cpu_add_4(__preempt_count, val);

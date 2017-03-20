@@ -366,6 +366,23 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 {
 	struct rq *rq = this_rq();
 
+#ifdef CONFIG_PREEMPT
+	/*
+	 * The previous task will have left us with a preempt_count of 2
+	 * because it left us after:
+	 *
+	 *	schedule()
+	 *	  preempt_disable();			// 1
+	 *	  __schedule()
+	 *	    spin_lock_irq(&rq->lock)		// 2
+	 */
+	if (WARN_ONCE(preempt_count() != 2,
+		      "corrupted preempt_count: %s/%d/0x%x\n",
+		      current->comm, current->pid, preempt_count()))
+		preempt_count_set(2);
+
+#endif
+
 #ifdef CONFIG_SMP
 	/*
 	 * After ->on_cpu is cleared, the task can be moved to a different CPU.
@@ -401,7 +418,12 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 {
 	struct rq *rq;
 
+	/*
+	 * finish_task_switch() will drop rq->lock() and lower preempt_count
+	 * and the preempt_enable() will end up enabling preemption.
+	 */
 	rq = finish_task_switch(prev);
+	preempt_enable();
 	balance_callback(rq);
 }
 
