@@ -16,6 +16,7 @@
 #ifndef __ASSEMBLY__
 
 #include <asm/asm.h>
+#include <asm/cmpxchg.h>
 #include <lego/spinlock.h>
 
 extern pud_t level3_kernel_pgt[512];
@@ -359,6 +360,11 @@ static inline int pmd_none(pmd_t pmd)
 	return (val & ~_PAGE_KNL_ERRATUM_MASK) == 0;
 }
 
+static inline int pmd_bad(pmd_t pmd)
+{
+	return (pmd_flags(pmd) & ~_PAGE_USER) != _KERNPG_TABLE;
+}
+
 /*
  * the pmd page can be thought of an array like this: pmd_t[PTRS_PER_PMD]
  *
@@ -391,9 +397,19 @@ static inline int pud_present(pud_t pud)
 	return pud_flags(pud) & _PAGE_PRESENT;
 }
 
+static inline int pud_bad(pud_t pud)
+{
+	return (pud_flags(pud) & ~(_KERNPG_TABLE | _PAGE_USER)) != 0;
+}
+
 static inline int pgd_present(pgd_t pgd)
 {
 	return pgd_flags(pgd) & _PAGE_PRESENT;
+}
+
+static inline int pgd_bad(pgd_t pgd)
+{
+	return (pgd_flags(pgd) & ~_PAGE_USER) != _KERNPG_TABLE;
 }
 
 static inline int pgd_none(pgd_t pgd)
@@ -481,6 +497,101 @@ extern void __init init_mem_mapping(void);
 static inline void clone_pgd_range(pgd_t *dst, pgd_t *src, int count)
 {
        memcpy(dst, src, count * sizeof(pgd_t));
+}
+
+/* local pte updates need not use xchg for locking */
+static inline pte_t native_local_ptep_get_and_clear(pte_t *ptep)
+{
+	pte_t res = *ptep;
+
+	/* Pure native function needs no input for mm, addr */
+	pte_clear(ptep);
+	return res;
+}
+
+#ifdef CONFIG_SMP
+static inline pte_t native_ptep_get_and_clear(pte_t *xp)
+{
+	return __pte(xchg(&xp->pte, 0));
+}
+#else
+#define native_ptep_get_and_clear(xp) native_local_ptep_get_and_clear(xp)
+#endif
+
+static inline pte_t ptep_get_and_clear(unsigned long addr, pte_t *ptep)
+{
+	pte_t pte = native_ptep_get_and_clear(ptep);
+	return pte;
+}
+
+#define pte_ERROR(e)					\
+	pr_err("%s:%d: bad pte %p(%016lx)\n",		\
+	       __FILE__, __LINE__, &(e), pte_val(e))
+#define pmd_ERROR(e)					\
+	pr_err("%s:%d: bad pmd %p(%016lx)\n",		\
+	       __FILE__, __LINE__, &(e), pmd_val(e))
+#define pud_ERROR(e)					\
+	pr_err("%s:%d: bad pud %p(%016lx)\n",		\
+	       __FILE__, __LINE__, &(e), pud_val(e))
+#define pgd_ERROR(e)					\
+	pr_err("%s:%d: bad pgd %p(%016lx)\n",		\
+	       __FILE__, __LINE__, &(e), pgd_val(e))
+
+/*
+ * If a p?d_bad entry is found while walking page tables, report
+ * the error, before resetting entry to p?d_none.  Usually (but
+ * very seldom) called out from the p?d_none_or_clear_bad macros.
+ */
+
+static inline void pgd_clear_bad(pgd_t *pgd)
+{
+	pgd_ERROR(*pgd);
+	pgd_clear(pgd);
+}
+
+static inline void pud_clear_bad(pud_t *pud)
+{
+	pud_ERROR(*pud);
+	pud_clear(pud);
+}
+
+static inline void pmd_clear_bad(pmd_t *pmd)
+{
+	pmd_ERROR(*pmd);
+	pmd_clear(pmd);
+}
+
+static inline int pgd_none_or_clear_bad(pgd_t *pgd)
+{
+	if (pgd_none(*pgd))
+		return 1;
+	if (unlikely(pgd_bad(*pgd))) {
+		pgd_clear_bad(pgd);
+		return 1;
+	}
+	return 0;
+}
+
+static inline int pud_none_or_clear_bad(pud_t *pud)
+{
+	if (pud_none(*pud))
+		return 1;
+	if (unlikely(pud_bad(*pud))) {
+		pud_clear_bad(pud);
+		return 1;
+	}
+	return 0;
+}
+
+static inline int pmd_none_or_clear_bad(pmd_t *pmd)
+{
+	if (pmd_none(*pmd))
+		return 1;
+	if (unlikely(pmd_bad(*pmd))) {
+		pmd_clear_bad(pmd);
+		return 1;
+	}
+	return 0;
 }
 
 #endif /* __ASSEMBLY__ */

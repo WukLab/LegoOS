@@ -63,15 +63,20 @@
  */
 
 #include <lego/mm.h>
+#include <lego/slab.h>
 #include <lego/list.h>
 #include <lego/acpi.h>
+#include <lego/sched.h>
 #include <lego/mutex.h>
+#include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/percpu.h>
+#include <lego/vmalloc.h>
 #include <lego/cpumask.h>
 #include <lego/spinlock.h>
 #include <lego/nodemask.h>
 #include <lego/memblock.h>
+#include <asm/numa.h>
 
 #define PCPU_SLOT_BASE_SHIFT		5	/* 1-31 shares the same slot */
 #define PCPU_DFL_MAP_ALLOC		16	/* start a map with 16 ents */
@@ -79,6 +84,22 @@
 #define PCPU_ATOMIC_MAP_MARGIN_HIGH	64
 #define PCPU_EMPTY_POP_PAGES_LOW	2
 #define PCPU_EMPTY_POP_PAGES_HIGH	4
+
+#ifdef CONFIG_SMP
+/* default addr <-> pcpu_ptr mapping, override in asm/percpu.h if necessary */
+#define __addr_to_pcpu_ptr(addr)					\
+	(void __percpu *)((unsigned long)(addr) -			\
+			  (unsigned long)pcpu_base_addr	+		\
+			  (unsigned long)__per_cpu_start)
+#define __pcpu_ptr_to_addr(ptr)						\
+	(void __force *)((unsigned long)(ptr) +				\
+			 (unsigned long)pcpu_base_addr -		\
+			 (unsigned long)__per_cpu_start)
+#else
+/* on UP, it's always identity mapped */
+#define __addr_to_pcpu_ptr(addr)	(void __percpu *)(addr)
+#define __pcpu_ptr_to_addr(ptr)		(void __force *)(ptr)
+#endif
 
 struct pcpu_chunk {
 	struct list_head	list;		/* linked to pcpu_slot lists */
@@ -131,6 +152,9 @@ static struct pcpu_chunk *pcpu_reserved_chunk;
 static int pcpu_reserved_chunk_limit;
 
 static struct list_head *pcpu_slot __read_mostly;	/* chunk list slots */
+
+static DEFINE_SPINLOCK(pcpu_lock);	/* all internal data structures */
+static DEFINE_MUTEX(pcpu_alloc_mutex);	/* chunk create/destroy, [de]pop, map ext */
 
 /* chunks which need their map areas extended, protected by pcpu_lock */
 static LIST_HEAD(pcpu_map_extend_chunks);
@@ -325,6 +349,8 @@ static struct pcpu_alloc_info * __init pcpu_build_alloc_info(
 	min_unit_size = max_t(size_t, size_sum, PCPU_MIN_UNIT_SIZE);
 
 	alloc_size = roundup(min_unit_size, atom_size);
+
+	/* Units Per Allocation (chunk) ? */
 	upa = alloc_size / min_unit_size;
 	while (alloc_size % upa || (offset_in_page(alloc_size / upa)))
 		upa--;
@@ -862,4 +888,780 @@ out_free:
 	if (areas)
 		memblock_free_early(__pa(areas), areas_size);
 	return rc;
+}
+
+/*
+ * (Un)populated page region iterators.  Iterate over (un)populated
+ * page regions between @start and @end in @chunk.  @rs and @re should
+ * be integer variables and will be set to start and end page index of
+ * the current region.
+ */
+#define pcpu_for_each_unpop_region(chunk, rs, re, start, end)		    \
+	for ((rs) = (start), pcpu_next_unpop((chunk), &(rs), &(re), (end)); \
+	     (rs) < (re);						    \
+	     (rs) = (re) + 1, pcpu_next_unpop((chunk), &(rs), &(re), (end)))
+
+#define pcpu_for_each_pop_region(chunk, rs, re, start, end)		    \
+	for ((rs) = (start), pcpu_next_pop((chunk), &(rs), &(re), (end));   \
+	     (rs) < (re);						    \
+	     (rs) = (re) + 1, pcpu_next_pop((chunk), &(rs), &(re), (end)))
+
+/* set the pointer to a chunk in a page struct */
+static void pcpu_set_page_chunk(struct page *page, struct pcpu_chunk *pcpu)
+{
+	page->index = (unsigned long)pcpu;
+}
+
+/* obtain pointer to a chunk from a page struct */
+__used static struct pcpu_chunk *pcpu_get_page_chunk(struct page *page)
+{
+	return (struct pcpu_chunk *)page->index;
+}
+
+static int __maybe_unused pcpu_page_idx(unsigned int cpu, int page_idx)
+{
+	return pcpu_unit_map[cpu] * pcpu_unit_pages + page_idx;
+}
+
+static unsigned long pcpu_chunk_addr(struct pcpu_chunk *chunk,
+				     unsigned int cpu, int page_idx)
+{
+	return (unsigned long)chunk->base_addr + pcpu_unit_offsets[cpu] +
+		(page_idx << PAGE_SHIFT);
+}
+
+static void __maybe_unused pcpu_next_unpop(struct pcpu_chunk *chunk,
+					   int *rs, int *re, int end)
+{
+	*rs = find_next_zero_bit(chunk->populated, end, *rs);
+	*re = find_next_bit(chunk->populated, end, *rs + 1);
+}
+
+static void __maybe_unused pcpu_next_pop(struct pcpu_chunk *chunk,
+					 int *rs, int *re, int end)
+{
+	*rs = find_next_bit(chunk->populated, end, *rs);
+	*re = find_next_zero_bit(chunk->populated, end, *rs + 1);
+}
+
+/**
+ * pcpu_mem_zalloc - allocate memory
+ * @size: bytes to allocate
+ *
+ * Allocate @size bytes.  If @size is smaller than PAGE_SIZE,
+ * kzalloc() is used; otherwise, vzalloc() is used.  The returned
+ * memory is always zeroed.
+ *
+ * CONTEXT:
+ * Does GFP_KERNEL allocation.
+ *
+ * RETURNS:
+ * Pointer to the allocated area on success, NULL on failure.
+ */
+static void *pcpu_mem_zalloc(size_t size)
+{
+	/* TODO */
+#if 0
+	if (size <= PAGE_SIZE)
+		return kzalloc(size, GFP_KERNEL);
+	else
+		return vzalloc(size);
+#else
+	return kzalloc(size, GFP_KERNEL);
+#endif
+}
+
+/**
+ * pcpu_mem_free - free memory
+ * @ptr: memory to free
+ *
+ * Free @ptr.  @ptr should have been allocated using pcpu_mem_zalloc().
+ */
+static void pcpu_mem_free(void *ptr)
+{
+#if 0
+	kvfree(ptr);
+#else
+	kfree(ptr);
+#endif
+}
+
+static struct pcpu_chunk *pcpu_alloc_chunk(void)
+{
+	struct pcpu_chunk *chunk;
+
+	chunk = pcpu_mem_zalloc(pcpu_chunk_struct_size);
+	if (!chunk)
+		return NULL;
+
+	chunk->map = pcpu_mem_zalloc(PCPU_DFL_MAP_ALLOC *
+						sizeof(chunk->map[0]));
+	if (!chunk->map) {
+		pcpu_mem_free(chunk);
+		return NULL;
+	}
+
+	chunk->map_alloc = PCPU_DFL_MAP_ALLOC;
+	chunk->map[0] = 0;
+	chunk->map[1] = pcpu_unit_size | 1;
+	chunk->map_used = 1;
+
+	INIT_LIST_HEAD(&chunk->list);
+	INIT_LIST_HEAD(&chunk->map_extend_list);
+	chunk->free_size = pcpu_unit_size;
+	chunk->contig_hint = pcpu_unit_size;
+
+	return chunk;
+}
+
+static void pcpu_free_chunk(struct pcpu_chunk *chunk)
+{
+	if (!chunk)
+		return;
+	pcpu_mem_free(chunk->map);
+	pcpu_mem_free(chunk);
+}
+
+/**
+ * is_kernel_percpu_address - test whether address is from static percpu area
+ * @addr: address to test
+ *
+ * Test whether @addr belongs to in-kernel static percpu area.  Module
+ * static percpu areas are not considered.  For those, use
+ * is_module_percpu_address().
+ *
+ * RETURNS:
+ * %true if @addr is from in-kernel static percpu area, %false otherwise.
+ */
+bool is_kernel_percpu_address(unsigned long addr)
+{
+#ifdef CONFIG_SMP
+	const size_t static_size = __per_cpu_end - __per_cpu_start;
+	void __percpu *base = __addr_to_pcpu_ptr(pcpu_base_addr);
+	unsigned int cpu;
+
+	for_each_possible_cpu(cpu) {
+		void *start = per_cpu_ptr(base, cpu);
+
+		if ((void *)addr >= start && (void *)addr < start + static_size)
+			return true;
+        }
+#endif
+	/* on UP, can't distinguish from other static vars, always false */
+	return false;
+}
+
+/*
+ * Chunk management implementation.
+ *
+ * To allow different implementations, chunk alloc/free and
+ * [de]population are implemented in a separate file which is pulled
+ * into this file and compiled together.  The following functions
+ * should be implemented.
+ *
+ * pcpu_populate_chunk		- populate the specified range of a chunk
+ * pcpu_create_chunk		- create a new chunk
+ * pcpu_destroy_chunk		- destroy a chunk, always preceded by full depop
+ * pcpu_addr_to_page		- translate address to physical address
+ */
+static int pcpu_populate_chunk(struct pcpu_chunk *chunk, int off, int size);
+static struct pcpu_chunk *pcpu_create_chunk(void);
+static void pcpu_destroy_chunk(struct pcpu_chunk *chunk);
+static struct page *pcpu_addr_to_page(void *addr);
+
+#include "percpu-vm.c"
+
+/**
+ * per_cpu_ptr_to_phys - convert translated percpu address to physical address
+ * @addr: the address to be converted to physical address
+ *
+ * Given @addr which is dereferenceable address obtained via one of
+ * percpu access macros, this function translates it into its physical
+ * address.  The caller is responsible for ensuring @addr stays valid
+ * until this function finishes.
+ *
+ * percpu allocator has special setup for the first chunk, which currently
+ * supports either embedding in linear address space or vmalloc mapping,
+ * and, from the second one, the backing allocator (currently either vm or
+ * km) provides translation.
+ *
+ * The addr can be translated simply without checking if it falls into the
+ * first chunk. But the current code reflects better how percpu allocator
+ * actually works, and the verification can discover both bugs in percpu
+ * allocator itself and per_cpu_ptr_to_phys() callers. So we keep current
+ * code.
+ *
+ * RETURNS:
+ * The physical address for @addr.
+ */
+phys_addr_t per_cpu_ptr_to_phys(void *addr)
+{
+	void __percpu *base = __addr_to_pcpu_ptr(pcpu_base_addr);
+	bool in_first_chunk = false;
+	unsigned long first_low, first_high;
+	unsigned int cpu;
+
+	/*
+	 * The following test on unit_low/high isn't strictly
+	 * necessary but will speed up lookups of addresses which
+	 * aren't in the first chunk.
+	 */
+	first_low = pcpu_chunk_addr(pcpu_first_chunk, pcpu_low_unit_cpu, 0);
+	first_high = pcpu_chunk_addr(pcpu_first_chunk, pcpu_high_unit_cpu,
+				     pcpu_unit_pages);
+	if ((unsigned long)addr >= first_low &&
+	    (unsigned long)addr < first_high) {
+		for_each_possible_cpu(cpu) {
+			void *start = per_cpu_ptr(base, cpu);
+
+			if (addr >= start && addr < start + pcpu_unit_size) {
+				in_first_chunk = true;
+				break;
+			}
+		}
+	}
+
+	if (in_first_chunk) {
+		if (!is_vmalloc_addr(addr))
+			return __pa(addr);
+		else
+			return page_to_phys(vmalloc_to_page(addr)) +
+			       offset_in_page(addr);
+	} else
+		return page_to_phys(pcpu_addr_to_page(addr)) +
+		       offset_in_page(addr);
+}
+
+/**
+ * pcpu_need_to_extend - determine whether chunk area map needs to be extended
+ * @chunk: chunk of interest
+ * @is_atomic: the allocation context
+ *
+ * Determine whether area map of @chunk needs to be extended.  If
+ * @is_atomic, only the amount necessary for a new allocation is
+ * considered; however, async extension is scheduled if the left amount is
+ * low.  If !@is_atomic, it aims for more empty space.  Combined, this
+ * ensures that the map is likely to have enough available space to
+ * accomodate atomic allocations which can't extend maps directly.
+ *
+ * CONTEXT:
+ * pcpu_lock.
+ *
+ * RETURNS:
+ * New target map allocation length if extension is necessary, 0
+ * otherwise.
+ */
+static int pcpu_need_to_extend(struct pcpu_chunk *chunk, bool is_atomic)
+{
+	int margin, new_alloc;
+
+	if (is_atomic) {
+		margin = 3;
+
+		if (chunk->map_alloc <
+		    chunk->map_used + PCPU_ATOMIC_MAP_MARGIN_LOW) {
+			if (list_empty(&chunk->map_extend_list)) {
+				list_add_tail(&chunk->map_extend_list,
+					      &pcpu_map_extend_chunks);
+			}
+		}
+	} else {
+		margin = PCPU_ATOMIC_MAP_MARGIN_HIGH;
+	}
+
+	if (chunk->map_alloc >= chunk->map_used + margin)
+		return 0;
+
+	new_alloc = PCPU_DFL_MAP_ALLOC;
+	while (new_alloc < chunk->map_used + margin)
+		new_alloc *= 2;
+
+	return new_alloc;
+}
+
+/**
+ * pcpu_extend_area_map - extend area map of a chunk
+ * @chunk: chunk of interest
+ * @new_alloc: new target allocation length of the area map
+ *
+ * Extend area map of @chunk to have @new_alloc entries.
+ *
+ * CONTEXT:
+ * Does GFP_KERNEL allocation.  Grabs and releases pcpu_lock.
+ *
+ * RETURNS:
+ * 0 on success, -errno on failure.
+ */
+static int pcpu_extend_area_map(struct pcpu_chunk *chunk, int new_alloc)
+{
+	int *old = NULL, *new = NULL;
+	size_t old_size = 0, new_size = new_alloc * sizeof(new[0]);
+	unsigned long flags;
+
+	new = pcpu_mem_zalloc(new_size);
+	if (!new)
+		return -ENOMEM;
+
+	/* acquire pcpu_lock and switch to new area map */
+	spin_lock_irqsave(&pcpu_lock, flags);
+
+	if (new_alloc <= chunk->map_alloc)
+		goto out_unlock;
+
+	old_size = chunk->map_alloc * sizeof(chunk->map[0]);
+	old = chunk->map;
+
+	memcpy(new, old, old_size);
+
+	chunk->map_alloc = new_alloc;
+	chunk->map = new;
+	new = NULL;
+
+out_unlock:
+	spin_unlock_irqrestore(&pcpu_lock, flags);
+
+	/*
+	 * pcpu_mem_free() might end up calling vfree() which uses
+	 * IRQ-unsafe lock and thus can't be called under pcpu_lock.
+	 */
+	pcpu_mem_free(old);
+	pcpu_mem_free(new);
+
+	return 0;
+}
+
+/**
+ * pcpu_fit_in_area - try to fit the requested allocation in a candidate area
+ * @chunk: chunk the candidate area belongs to
+ * @off: the offset to the start of the candidate area
+ * @this_size: the size of the candidate area
+ * @size: the size of the target allocation
+ * @align: the alignment of the target allocation
+ * @pop_only: only allocate from already populated region
+ *
+ * We're trying to allocate @size bytes aligned at @align.  @chunk's area
+ * at @off sized @this_size is a candidate.  This function determines
+ * whether the target allocation fits in the candidate area and returns the
+ * number of bytes to pad after @off.  If the target area doesn't fit, -1
+ * is returned.
+ *
+ * If @pop_only is %true, this function only considers the already
+ * populated part of the candidate area.
+ */
+static int pcpu_fit_in_area(struct pcpu_chunk *chunk, int off, int this_size,
+			    int size, int align, bool pop_only)
+{
+	int cand_off = off;
+
+	while (true) {
+		int head = ALIGN(cand_off, align) - off;
+		int page_start, page_end, rs, re;
+
+		if (this_size < head + size)
+			return -1;
+
+		if (!pop_only)
+			return head;
+
+		/*
+		 * If the first unpopulated page is beyond the end of the
+		 * allocation, the whole allocation is populated;
+		 * otherwise, retry from the end of the unpopulated area.
+		 */
+		page_start = PFN_DOWN(head + off);
+		page_end = PFN_UP(head + off + size);
+
+		rs = page_start;
+		pcpu_next_unpop(chunk, &rs, &re, PFN_UP(off + this_size));
+		if (rs >= page_end)
+			return head;
+		cand_off = re * PAGE_SIZE;
+	}
+}
+
+/**
+ * pcpu_alloc_area - allocate area from a pcpu_chunk
+ * @chunk: chunk of interest
+ * @size: wanted size in bytes
+ * @align: wanted align
+ * @pop_only: allocate only from the populated area
+ * @occ_pages_p: out param for the number of pages the area occupies
+ *
+ * Try to allocate @size bytes area aligned at @align from @chunk.
+ * Note that this function only allocates the offset.  It doesn't
+ * populate or map the area.
+ *
+ * @chunk->map must have at least two free slots.
+ *
+ * CONTEXT:
+ * pcpu_lock.
+ *
+ * RETURNS:
+ * Allocated offset in @chunk on success, -1 if no matching area is
+ * found.
+ */
+static int pcpu_alloc_area(struct pcpu_chunk *chunk, int size, int align,
+			   bool pop_only, int *occ_pages_p)
+{
+	int oslot = pcpu_chunk_slot(chunk);
+	int max_contig = 0;
+	int i, off;
+	bool seen_free = false;
+	int *p;
+
+	for (i = chunk->first_free, p = chunk->map + i; i < chunk->map_used; i++, p++) {
+		int head, tail;
+		int this_size;
+
+		off = *p;
+		if (off & 1)
+			continue;
+
+		this_size = (p[1] & ~1) - off;
+
+		head = pcpu_fit_in_area(chunk, off, this_size, size, align,
+					pop_only);
+		if (head < 0) {
+			if (!seen_free) {
+				chunk->first_free = i;
+				seen_free = true;
+			}
+			max_contig = max(this_size, max_contig);
+			continue;
+		}
+
+		/*
+		 * If head is small or the previous block is free,
+		 * merge'em.  Note that 'small' is defined as smaller
+		 * than sizeof(int), which is very small but isn't too
+		 * uncommon for percpu allocations.
+		 */
+		if (head && (head < sizeof(int) || !(p[-1] & 1))) {
+			*p = off += head;
+			if (p[-1] & 1)
+				chunk->free_size -= head;
+			else
+				max_contig = max(*p - p[-1], max_contig);
+			this_size -= head;
+			head = 0;
+		}
+
+		/* if tail is small, just keep it around */
+		tail = this_size - head - size;
+		if (tail < sizeof(int)) {
+			tail = 0;
+			size = this_size - head;
+		}
+
+		/* split if warranted */
+		if (head || tail) {
+			int nr_extra = !!head + !!tail;
+
+			/* insert new subblocks */
+			memmove(p + nr_extra + 1, p + 1,
+				sizeof(chunk->map[0]) * (chunk->map_used - i));
+			chunk->map_used += nr_extra;
+
+			if (head) {
+				if (!seen_free) {
+					chunk->first_free = i;
+					seen_free = true;
+				}
+				*++p = off += head;
+				++i;
+				max_contig = max(head, max_contig);
+			}
+			if (tail) {
+				p[1] = off + size;
+				max_contig = max(tail, max_contig);
+			}
+		}
+
+		if (!seen_free)
+			chunk->first_free = i + 1;
+
+		/* update hint and mark allocated */
+		if (i + 1 == chunk->map_used)
+			chunk->contig_hint = max_contig; /* fully scanned */
+		else
+			chunk->contig_hint = max(chunk->contig_hint,
+						 max_contig);
+
+		chunk->free_size -= size;
+		*p |= 1;
+
+		*occ_pages_p = pcpu_count_occupied_pages(chunk, i);
+		pcpu_chunk_relocate(chunk, oslot);
+		return off;
+	}
+
+	chunk->contig_hint = max_contig;	/* fully scanned */
+	pcpu_chunk_relocate(chunk, oslot);
+
+	/* tell the upper layer that this chunk has no matching area */
+	return -1;
+}
+
+/**
+ * pcpu_free_area - free area to a pcpu_chunk
+ * @chunk: chunk of interest
+ * @freeme: offset of area to free
+ * @occ_pages_p: out param for the number of pages the area occupies
+ *
+ * Free area starting from @freeme to @chunk.  Note that this function
+ * only modifies the allocation map.  It doesn't depopulate or unmap
+ * the area.
+ *
+ * CONTEXT:
+ * pcpu_lock.
+ */
+static void pcpu_free_area(struct pcpu_chunk *chunk, int freeme,
+			   int *occ_pages_p)
+{
+	int oslot = pcpu_chunk_slot(chunk);
+	int off = 0;
+	unsigned i, j;
+	int to_free = 0;
+	int *p;
+
+	freeme |= 1;	/* we are searching for <given offset, in use> pair */
+
+	i = 0;
+	j = chunk->map_used;
+	while (i != j) {
+		unsigned k = (i + j) / 2;
+		off = chunk->map[k];
+		if (off < freeme)
+			i = k + 1;
+		else if (off > freeme)
+			j = k;
+		else
+			i = j = k;
+	}
+	BUG_ON(off != freeme);
+
+	if (i < chunk->first_free)
+		chunk->first_free = i;
+
+	p = chunk->map + i;
+	*p = off &= ~1;
+	chunk->free_size += (p[1] & ~1) - off;
+
+	*occ_pages_p = pcpu_count_occupied_pages(chunk, i);
+
+	/* merge with next? */
+	if (!(p[1] & 1))
+		to_free++;
+	/* merge with previous? */
+	if (i > 0 && !(p[-1] & 1)) {
+		to_free++;
+		i--;
+		p--;
+	}
+	if (to_free) {
+		chunk->map_used -= to_free;
+		memmove(p + 1, p + 1 + to_free,
+			(chunk->map_used - i) * sizeof(chunk->map[0]));
+	}
+
+	chunk->contig_hint = max(chunk->map[i + 1] - chunk->map[i] - 1, chunk->contig_hint);
+	pcpu_chunk_relocate(chunk, oslot);
+}
+
+/**
+ * pcpu_chunk_populated - post-population bookkeeping
+ * @chunk: pcpu_chunk which got populated
+ * @page_start: the start page
+ * @page_end: the end page
+ *
+ * Pages in [@page_start,@page_end) have been populated to @chunk.  Update
+ * the bookkeeping information accordingly.  Must be called after each
+ * successful population.
+ */
+static void pcpu_chunk_populated(struct pcpu_chunk *chunk,
+				 int page_start, int page_end)
+{
+	int nr = page_end - page_start;
+
+	bitmap_set(chunk->populated, page_start, nr);
+	chunk->nr_populated += nr;
+	pcpu_nr_empty_pop_pages += nr;
+}
+
+/**
+ * pcpu_alloc - the percpu allocator
+ * @size: size of area to allocate in bytes
+ * @align: alignment of area (max PAGE_SIZE)
+ * @reserved: allocate from the reserved chunk if available
+ * @gfp: allocation flags
+ *
+ * Allocate percpu area of @size bytes aligned at @align.  If @gfp doesn't
+ * contain %GFP_KERNEL, the allocation is atomic.
+ *
+ * RETURNS:
+ * Percpu pointer to the allocated area on success, NULL on failure.
+ */
+static void __percpu *pcpu_alloc(size_t size, size_t align, bool reserved,
+				 gfp_t gfp)
+{
+	static int warn_limit = 10;
+	struct pcpu_chunk *chunk;
+	const char *err;
+	int occ_pages = 0;
+	int slot, off, new_alloc, cpu, ret;
+	unsigned long flags;
+	void __percpu *ptr;
+	bool is_atomic = (gfp & GFP_KERNEL) != GFP_KERNEL;
+
+	/*
+	 * We want the lowest bit of offset available for in-use/free
+	 * indicator, so force >= 16bit alignment and make size even.
+	 */
+	if (unlikely(align < 2))
+		align = 2;
+
+	size = ALIGN(size, 2);
+
+	if (unlikely(!size || size > PCPU_MIN_UNIT_SIZE || align > PAGE_SIZE ||
+		     !is_power_of_2(align))) {
+		WARN(true, "illegal size (%zu) or align (%zu) for percpu allocation\n",
+		     size, align);
+		return NULL;
+	}
+
+	if (!is_atomic)
+		mutex_lock(&pcpu_alloc_mutex);
+
+	spin_lock_irqsave(&pcpu_lock, flags);
+
+restart:
+	/* search through normal chunks */
+	for (slot = pcpu_size_to_slot(size); slot < pcpu_nr_slots; slot++) {
+		list_for_each_entry(chunk, &pcpu_slot[slot], list) {
+			if (size > chunk->contig_hint)
+				continue;
+
+			new_alloc = pcpu_need_to_extend(chunk, is_atomic);
+			if (new_alloc) {
+				if (is_atomic)
+					continue;
+				spin_unlock_irqrestore(&pcpu_lock, flags);
+				if (pcpu_extend_area_map(chunk,
+							 new_alloc) < 0) {
+					err = "failed to extend area map";
+					goto fail;
+				}
+				spin_lock_irqsave(&pcpu_lock, flags);
+				/*
+				 * pcpu_lock has been dropped, need to
+				 * restart cpu_slot list walking.
+				 */
+				goto restart;
+			}
+
+			off = pcpu_alloc_area(chunk, size, align, is_atomic,
+					      &occ_pages);
+			if (off >= 0)
+				goto area_found;
+		}
+	}
+
+	spin_unlock_irqrestore(&pcpu_lock, flags);
+
+	if (list_empty(&pcpu_slot[pcpu_nr_slots - 1])) {
+		chunk = pcpu_create_chunk();
+		if (!chunk) {
+			err = "failed to allocate new chunk";
+			goto fail;
+		}
+
+		spin_lock_irqsave(&pcpu_lock, flags);
+		pcpu_chunk_relocate(chunk, -1);
+	} else {
+		spin_lock_irqsave(&pcpu_lock, flags);
+	}
+
+	goto restart;
+
+area_found:
+	spin_unlock_irqrestore(&pcpu_lock, flags);
+
+	/* populate if not all pages are already there */
+	if (!is_atomic) {
+		int page_start, page_end, rs, re;
+
+		page_start = PFN_DOWN(off);
+		page_end = PFN_UP(off + size);
+
+		pcpu_for_each_unpop_region(chunk, rs, re, page_start, page_end) {
+			WARN_ON(chunk->immutable);
+
+			ret = pcpu_populate_chunk(chunk, rs, re);
+
+			spin_lock_irqsave(&pcpu_lock, flags);
+			if (ret) {
+				pcpu_free_area(chunk, off, &occ_pages);
+				err = "failed to populate";
+				goto fail_unlock;
+			}
+			pcpu_chunk_populated(chunk, rs, re);
+			spin_unlock_irqrestore(&pcpu_lock, flags);
+		}
+
+		mutex_unlock(&pcpu_alloc_mutex);
+	}
+
+	if (chunk != pcpu_reserved_chunk)
+		pcpu_nr_empty_pop_pages -= occ_pages;
+
+	/* clear the areas and return address relative to base address */
+	for_each_possible_cpu(cpu)
+		memset((void *)pcpu_chunk_addr(chunk, cpu, 0) + off, 0, size);
+
+	ptr = __addr_to_pcpu_ptr(chunk->base_addr + off);
+	return ptr;
+
+fail_unlock:
+	spin_unlock_irqrestore(&pcpu_lock, flags);
+fail:
+	if (!is_atomic && warn_limit) {
+		pr_warn("allocation failed, size=%zu align=%zu atomic=%d, %s\n",
+			size, align, is_atomic, err);
+		dump_stack();
+		if (!--warn_limit)
+			pr_info("limit reached, disable warning\n");
+	}
+	if (!is_atomic)
+		mutex_unlock(&pcpu_alloc_mutex);
+	return NULL;
+}
+
+/**
+ * __alloc_percpu_gfp - allocate dynamic percpu area
+ * @size: size of area to allocate in bytes
+ * @align: alignment of area (max PAGE_SIZE)
+ * @gfp: allocation flags
+ *
+ * Allocate zero-filled percpu area of @size bytes aligned at @align.  If
+ * @gfp doesn't contain %GFP_KERNEL, the allocation doesn't block and can
+ * be called from any context but is a lot more likely to fail.
+ *
+ * RETURNS:
+ * Percpu pointer to the allocated area on success, NULL on failure.
+ */
+void __percpu *__alloc_percpu_gfp(size_t size, size_t align, gfp_t gfp)
+{
+	return pcpu_alloc(size, align, false, gfp);
+}
+
+/**
+ * __alloc_percpu - allocate dynamic percpu area
+ * @size: size of area to allocate in bytes
+ * @align: alignment of area (max PAGE_SIZE)
+ *
+ * Equivalent to __alloc_percpu_gfp(size, align, %GFP_KERNEL).
+ */
+void __percpu *__alloc_percpu(size_t size, size_t align)
+{
+	return pcpu_alloc(size, align, false, GFP_KERNEL);
 }

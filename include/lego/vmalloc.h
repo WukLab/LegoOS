@@ -14,7 +14,9 @@
 #include <lego/rbtree.h>
 #include <lego/kernel.h>
 
-#define VM_IOREMAP		0x00000001
+/* bits in flags of vmalloc's vm_struct below */
+#define VM_IOREMAP		0x00000001	/* ioremap() and friends */
+#define VM_ALLOC		0x00000002	/* vmalloc() */
 #define VM_MAP			0x00000004	/* vmap()ed pages */
 #define VM_NO_GUARD		0x00000040	/* don't add guard page */
 #define VM_VPAGES		0x00000010	/* buffer for pages was vmalloc'ed */
@@ -61,5 +63,26 @@ static inline size_t get_vm_area_size(const struct vm_struct *area)
 void *vmap(struct page **pages, unsigned int count,
 	   unsigned long flags, pgprot_t prot);
 void vunmap(const void *addr);
+
+struct vm_struct **pcpu_get_vm_areas(const unsigned long *offsets,
+				     const size_t *sizes, int nr_vms,
+				     size_t align);
+
+void pcpu_free_vm_areas(struct vm_struct **vms, int nr_vms);
+
+/* Support for virtually mapped pages */
+struct page *vmalloc_to_page(const void *addr);
+
+static inline bool is_vmalloc_addr(const void *x)
+{
+	unsigned long addr = (unsigned long)x;
+
+	return addr >= VMALLOC_START && addr < VMALLOC_END;
+}
+
+int map_kernel_range_noflush(unsigned long start, unsigned long size,
+				    pgprot_t prot, struct page **pages);
+void unmap_kernel_range_noflush(unsigned long addr, unsigned long size);
+void unmap_kernel_range(unsigned long addr, unsigned long size);
 
 #endif /* _LEGO_VMALLOC_H_ */

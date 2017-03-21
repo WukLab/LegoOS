@@ -34,7 +34,9 @@ struct page {
 
 	union {
 		pgoff_t index;		/* Our offset within mapping.
-					 * Point to mm_struct if pgd page */
+					 * Point to mm_struct if pgd page
+					 * Point to pcp chunk if used by pcp
+					 */
 		void *freelist;		/* slab first free object */
 	};
 

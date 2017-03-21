@@ -16,6 +16,7 @@
 #include <lego/err.h>
 #include <lego/numa.h>
 #include <lego/list.h>
+#include <lego/slab.h>
 #include <lego/rbtree.h>
 #include <lego/kernel.h>
 #include <lego/vmalloc.h>
@@ -32,6 +33,8 @@ static unsigned long cached_hole_size;
 static unsigned long cached_vstart;
 static unsigned long cached_align;
 
+static unsigned long vmap_area_pcpu_hole = VMALLOC_END;
+
 /* TODO: Use kmalloc and kfree once slab is built */
 static struct vmap_area *get_next_vmap_area(void)
 {
@@ -41,6 +44,15 @@ static struct vmap_area *get_next_vmap_area(void)
 static void free_vmap_area(struct vmap_area *va)
 {
 	free_page((unsigned long)va);
+
+	/*
+	 * Track the highest possible candidate for pcpu area
+	 * allocation.  Areas outside of vmalloc area can be returned
+	 * here too, consider only end addresses which fall inside
+	 * vmalloc area proper.
+	 */
+	if (va->va_end > VMALLOC_START && va->va_end <= VMALLOC_END)
+		vmap_area_pcpu_hole = max(vmap_area_pcpu_hole, va->va_end);
 }
 
 static struct vm_struct *get_next_vm_struct(void)
@@ -349,14 +361,312 @@ void free_vm_area(struct vm_struct *area)
 	free_vm_struct(area);
 }
 
-#if 0
+static struct vmap_area *node_to_va(struct rb_node *n)
+{
+	return rb_entry_safe(n, struct vmap_area, rb_node);
+}
+
+/**
+ * pvm_find_next_prev - find the next and prev vmap_area surrounding @end
+ * @end: target address
+ * @pnext: out arg for the next vmap_area
+ * @pprev: out arg for the previous vmap_area
+ *
+ * Returns: %true if either or both of next and prev are found,
+ *	    %false if no vmap_area exists
+ *
+ * Find vmap_areas end addresses of which enclose @end.  ie. if not
+ * NULL, *pnext->va_end > @end and *pprev->va_end <= @end.
+ */
+static bool pvm_find_next_prev(unsigned long end,
+			       struct vmap_area **pnext,
+			       struct vmap_area **pprev)
+{
+	struct rb_node *n = vmap_area_root.rb_node;
+	struct vmap_area *va = NULL;
+
+	while (n) {
+		va = rb_entry(n, struct vmap_area, rb_node);
+		if (end < va->va_end)
+			n = n->rb_left;
+		else if (end > va->va_end)
+			n = n->rb_right;
+		else
+			break;
+	}
+
+	if (!va)
+		return false;
+
+	if (va->va_end > end) {
+		*pnext = va;
+		*pprev = node_to_va(rb_prev(&(*pnext)->rb_node));
+	} else {
+		*pprev = va;
+		*pnext = node_to_va(rb_next(&(*pprev)->rb_node));
+	}
+	return true;
+}
+
+/**
+ * pvm_determine_end - find the highest aligned address between two vmap_areas
+ * @pnext: in/out arg for the next vmap_area
+ * @pprev: in/out arg for the previous vmap_area
+ * @align: alignment
+ *
+ * Returns: determined end address
+ *
+ * Find the highest aligned address between *@pnext and *@pprev below
+ * VMALLOC_END.  *@pnext and *@pprev are adjusted so that the aligned
+ * down address is between the end addresses of the two vmap_areas.
+ *
+ * Please note that the address returned by this function may fall
+ * inside *@pnext vmap_area.  The caller is responsible for checking
+ * that.
+ */
+static unsigned long pvm_determine_end(struct vmap_area **pnext,
+				       struct vmap_area **pprev,
+				       unsigned long align)
+{
+	const unsigned long vmalloc_end = VMALLOC_END & ~(align - 1);
+	unsigned long addr;
+
+	if (*pnext)
+		addr = min((*pnext)->va_start & ~(align - 1), vmalloc_end);
+	else
+		addr = vmalloc_end;
+
+	while (*pprev && (*pprev)->va_end > addr) {
+		*pnext = *pprev;
+		*pprev = node_to_va(rb_prev(&(*pnext)->rb_node));
+	}
+
+	return addr;
+}
+
+/**
+ * pcpu_get_vm_areas - allocate vmalloc areas for percpu allocator
+ * @offsets: array containing offset of each area
+ * @sizes: array containing size of each area
+ * @nr_vms: the number of areas to allocate
+ * @align: alignment, all entries in @offsets and @sizes must be aligned to this
+ *
+ * Returns: kmalloc'd vm_struct pointer array pointing to allocated
+ *	    vm_structs on success, %NULL on failure
+ *
+ * Percpu allocator wants to use congruent vm areas so that it can
+ * maintain the offsets among percpu areas.  This function allocates
+ * congruent vmalloc areas for it with GFP_KERNEL.  These areas tend to
+ * be scattered pretty far, distance between two areas easily going up
+ * to gigabytes.  To avoid interacting with regular vmallocs, these
+ * areas are allocated from top.
+ *
+ * Despite its complicated look, this allocator is rather simple.  It
+ * does everything top-down and scans areas from the end looking for
+ * matching slot.  While scanning, if any of the areas overlaps with
+ * existing vmap_area, the base address is pulled down to fit the
+ * area.  Scanning is repeated till all the areas fit and then all
+ * necessary data structres are inserted and the result is returned.
+ */
+struct vm_struct **pcpu_get_vm_areas(const unsigned long *offsets,
+				     const size_t *sizes, int nr_vms,
+				     size_t align)
+{
+	const unsigned long vmalloc_start = ALIGN(VMALLOC_START, align);
+	const unsigned long vmalloc_end = VMALLOC_END & ~(align - 1);
+	struct vmap_area **vas, *prev, *next;
+	struct vm_struct **vms;
+	int area, area2, last_area, term_area;
+	unsigned long base, start, end, last_end;
+
+	/* verify parameters and allocate data structures */
+	BUG_ON(offset_in_page(align) || !is_power_of_2(align));
+	for (last_area = 0, area = 0; area < nr_vms; area++) {
+		start = offsets[area];
+		end = start + sizes[area];
+
+		/* is everything aligned properly? */
+		BUG_ON(!IS_ALIGNED(offsets[area], align));
+		BUG_ON(!IS_ALIGNED(sizes[area], align));
+
+		/* detect the area with the highest address */
+		if (start > offsets[last_area])
+			last_area = area;
+
+		for (area2 = 0; area2 < nr_vms; area2++) {
+			unsigned long start2 = offsets[area2];
+			unsigned long end2 = start2 + sizes[area2];
+
+			if (area2 == area)
+				continue;
+
+			BUG_ON(start2 >= start && start2 < end);
+			BUG_ON(end2 <= end && end2 > start);
+		}
+	}
+	last_end = offsets[last_area] + sizes[last_area];
+
+	if (vmalloc_end - vmalloc_start < last_end) {
+		WARN_ON(true);
+		return NULL;
+	}
+
+	vms = kcalloc(nr_vms, sizeof(vms[0]), GFP_KERNEL);
+	vas = kcalloc(nr_vms, sizeof(vas[0]), GFP_KERNEL);
+	if (!vas || !vms)
+		goto err_free2;
+
+	for (area = 0; area < nr_vms; area++) {
+		vas[area] = kzalloc(sizeof(struct vmap_area), GFP_KERNEL);
+		vms[area] = kzalloc(sizeof(struct vm_struct), GFP_KERNEL);
+		if (!vas[area] || !vms[area])
+			goto err_free;
+	}
+
+	spin_lock(&vmap_area_lock);
+
+	/* start scanning - we scan from the top, begin with the last area */
+	area = term_area = last_area;
+	start = offsets[area];
+	end = start + sizes[area];
+
+	if (!pvm_find_next_prev(vmap_area_pcpu_hole, &next, &prev)) {
+		base = vmalloc_end - last_end;
+		goto found;
+	}
+	base = pvm_determine_end(&next, &prev, align) - end;
+
+	while (true) {
+		BUG_ON(next && next->va_end <= base + end);
+		BUG_ON(prev && prev->va_end > base + end);
+
+		/*
+		 * base might have underflowed, add last_end before
+		 * comparing.
+		 */
+		if (base + last_end < vmalloc_start + last_end) {
+			spin_unlock(&vmap_area_lock);
+			goto err_free;
+		}
+
+		/*
+		 * If next overlaps, move base downwards so that it's
+		 * right below next and then recheck.
+		 */
+		if (next && next->va_start < base + end) {
+			base = pvm_determine_end(&next, &prev, align) - end;
+			term_area = area;
+			continue;
+		}
+
+		/*
+		 * If prev overlaps, shift down next and prev and move
+		 * base so that it's right below new next and then
+		 * recheck.
+		 */
+		if (prev && prev->va_end > base + start)  {
+			next = prev;
+			prev = node_to_va(rb_prev(&next->rb_node));
+			base = pvm_determine_end(&next, &prev, align) - end;
+			term_area = area;
+			continue;
+		}
+
+		/*
+		 * This area fits, move on to the previous one.  If
+		 * the previous one is the terminal one, we're done.
+		 */
+		area = (area + nr_vms - 1) % nr_vms;
+		if (area == term_area)
+			break;
+		start = offsets[area];
+		end = start + sizes[area];
+		pvm_find_next_prev(base + end, &next, &prev);
+	}
+found:
+	/* we've found a fitting base, insert all va's */
+	for (area = 0; area < nr_vms; area++) {
+		struct vmap_area *va = vas[area];
+
+		va->va_start = base + offsets[area];
+		va->va_end = va->va_start + sizes[area];
+		__insert_vmap_area(va);
+	}
+
+	vmap_area_pcpu_hole = base + offsets[last_area];
+
+	spin_unlock(&vmap_area_lock);
+
+	/* insert all vm's */
+	for (area = 0; area < nr_vms; area++)
+		setup_vmalloc_vm(vms[area], vas[area], VM_ALLOC,
+				 pcpu_get_vm_areas);
+
+	kfree(vas);
+	return vms;
+
+err_free:
+	for (area = 0; area < nr_vms; area++) {
+		kfree(vas[area]);
+		kfree(vms[area]);
+	}
+err_free2:
+	kfree(vas);
+	kfree(vms);
+	return NULL;
+}
+
+/**
+ * pcpu_free_vm_areas - free vmalloc areas for percpu allocator
+ * @vms: vm_struct pointer array returned by pcpu_get_vm_areas()
+ * @nr_vms: the number of allocated areas
+ *
+ * Free vm_structs and the array allocated by pcpu_get_vm_areas().
+ */
+void pcpu_free_vm_areas(struct vm_struct **vms, int nr_vms)
+{
+	int i;
+
+	for (i = 0; i < nr_vms; i++)
+		free_vm_area(vms[i]);
+	kfree(vms);
+}
+
+/*
+ * Walk a vmap address to the struct page it maps.
+ */
+struct page *vmalloc_to_page(const void *vmalloc_addr)
+{
+	unsigned long addr = (unsigned long) vmalloc_addr;
+	struct page *page = NULL;
+	pgd_t *pgd = pgd_offset_k(addr);
+
+	BUG_ON(!is_vmalloc_addr(vmalloc_addr));
+
+	if (!pgd_none(*pgd)) {
+		pud_t *pud = pud_offset(pgd, addr);
+		if (!pud_none(*pud)) {
+			pmd_t *pmd = pmd_offset(pud, addr);
+			if (!pmd_none(*pmd)) {
+				pte_t *ptep, pte;
+
+				ptep = pte_offset_kernel(pmd, addr);
+				pte = *ptep;
+				if (pte_present(pte))
+					page = pte_page(pte);
+			}
+		}
+	}
+	return page;
+}
+
 static void vunmap_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end)
 {
 	pte_t *pte;
 
 	pte = pte_offset_kernel(pmd, addr);
 	do {
-		pte_t ptent = ptep_get_and_clear(&init_mm, addr, pte);
+		pte_t ptent = ptep_get_and_clear(addr, pte);
 		WARN_ON(!pte_none(ptent) && !pte_present(ptent));
 	} while (pte++, addr += PAGE_SIZE, addr != end);
 }
@@ -403,7 +713,6 @@ static void vunmap_page_range(unsigned long addr, unsigned long end)
 		vunmap_pud_range(pgd, addr, next);
 	} while (pgd++, addr = next, addr != end);
 }
-#endif
 
 static int vmap_pte_range(pmd_t *pmd, unsigned long addr,
 		unsigned long end, pgprot_t prot, struct page **pages, int *nr)
@@ -498,7 +807,7 @@ static int vmap_page_range(unsigned long start, unsigned long end,
 	int ret;
 
 	ret = vmap_page_range_noflush(start, end, prot, pages);
-//	flush_cache_vmap(start, end);
+
 	return ret;
 }
 
@@ -540,9 +849,6 @@ static void __vunmap(const void *addr, int deallocate_pages)
 		return;
 	}
 
-//	debug_check_no_locks_freed(addr, area->size);
-//	debug_check_no_obj_freed(addr, area->size);
-
 	if (deallocate_pages) {
 		int i;
 
@@ -574,8 +880,6 @@ static void __vunmap(const void *addr, int deallocate_pages)
  */
 void vunmap(const void *addr)
 {
-//	BUG_ON(in_interrupt());
-//	might_sleep();
 	if (addr)
 		__vunmap(addr, 0);
 }
@@ -595,13 +899,8 @@ void *vmap(struct page **pages, unsigned int count,
 {
 	struct vm_struct *area;
 
-//	might_sleep();
-
-//	if (count > totalram_pages)
-//		return NULL;
-
-	area = get_vm_area_caller((count << PAGE_SHIFT), flags, NULL);
-//			__builtin_return_address(0));
+	area = get_vm_area_caller((count << PAGE_SHIFT), flags,
+			__builtin_return_address(0));
 	if (!area)
 		return NULL;
 
@@ -611,4 +910,48 @@ void *vmap(struct page **pages, unsigned int count,
 	}
 
 	return area->addr;
+}
+
+/**
+ * map_kernel_range_noflush - map kernel VM area with the specified pages
+ * @addr: start of the VM area to map
+ * @size: size of the VM area to map
+ * @prot: page protection flags to use
+ * @pages: pages to map
+ *
+ * Map PFN_UP(@size) pages at @addr.  The VM area @addr and @size
+ * specify should have been allocated using get_vm_area() and its
+ * friends.
+ *
+ * NOTE:
+ * This function does NOT do any cache flushing.  The caller is
+ * responsible for calling flush_cache_vmap() on to-be-mapped areas
+ * before calling this function.
+ *
+ * RETURNS:
+ * The number of pages mapped on success, -errno on failure.
+ */
+int map_kernel_range_noflush(unsigned long addr, unsigned long size,
+			     pgprot_t prot, struct page **pages)
+{
+	return vmap_page_range_noflush(addr, addr + size, prot, pages);
+}
+
+/**
+ * unmap_kernel_range_noflush - unmap kernel VM area
+ * @addr: start of the VM area to unmap
+ * @size: size of the VM area to unmap
+ *
+ * Unmap PFN_UP(@size) pages at @addr.  The VM area @addr and @size
+ * specify should have been allocated using get_vm_area() and its
+ * friends.
+ *
+ * NOTE:
+ * This function does NOT do any cache flushing.  The caller is
+ * responsible for calling flush_cache_vunmap() on to-be-mapped areas
+ * before calling this function and flush_tlb_kernel_range() after.
+ */
+void unmap_kernel_range_noflush(unsigned long addr, unsigned long size)
+{
+	vunmap_page_range(addr, addr + size);
 }
