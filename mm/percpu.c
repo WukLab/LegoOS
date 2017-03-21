@@ -1669,3 +1669,16 @@ void __percpu *__alloc_percpu(size_t size, size_t align)
 {
 	return pcpu_alloc(size, align, false, GFP_KERNEL);
 }
+
+/**
+ * free_percpu - free percpu area
+ * @ptr: pointer to area to free
+ *
+ * Free percpu area @ptr.
+ *
+ * CONTEXT:
+ * Can be called from atomic context.
+ */
+void free_percpu(void __percpu *ptr)
+{
+}

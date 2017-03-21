@@ -902,7 +902,7 @@ void __init setup_per_cpu_areas(void);
 
 void __percpu *__alloc_percpu_gfp(size_t size, size_t align, gfp_t gfp);
 void __percpu *__alloc_percpu(size_t size, size_t align);
-
+void free_percpu(void __percpu *ptr);
 
 #define alloc_percpu_gfp(type, gfp)					\
 	(typeof(type) __percpu *)__alloc_percpu_gfp(sizeof(type),	\
