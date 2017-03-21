@@ -891,6 +891,24 @@ out_free:
 }
 
 /*
+ * Dynamic Per-CPU Allocation
+ */
+
+static void __maybe_unused pcpu_next_unpop(struct pcpu_chunk *chunk,
+					   int *rs, int *re, int end)
+{
+	*rs = find_next_zero_bit(chunk->populated, end, *rs);
+	*re = find_next_bit(chunk->populated, end, *rs + 1);
+}
+
+static void __maybe_unused pcpu_next_pop(struct pcpu_chunk *chunk,
+					 int *rs, int *re, int end)
+{
+	*rs = find_next_bit(chunk->populated, end, *rs);
+	*re = find_next_zero_bit(chunk->populated, end, *rs + 1);
+}
+
+/*
  * (Un)populated page region iterators.  Iterate over (un)populated
  * page regions between @start and @end in @chunk.  @rs and @re should
  * be integer variables and will be set to start and end page index of
@@ -928,20 +946,6 @@ static unsigned long pcpu_chunk_addr(struct pcpu_chunk *chunk,
 {
 	return (unsigned long)chunk->base_addr + pcpu_unit_offsets[cpu] +
 		(page_idx << PAGE_SHIFT);
-}
-
-static void __maybe_unused pcpu_next_unpop(struct pcpu_chunk *chunk,
-					   int *rs, int *re, int end)
-{
-	*rs = find_next_zero_bit(chunk->populated, end, *rs);
-	*re = find_next_bit(chunk->populated, end, *rs + 1);
-}
-
-static void __maybe_unused pcpu_next_pop(struct pcpu_chunk *chunk,
-					 int *rs, int *re, int end)
-{
-	*rs = find_next_bit(chunk->populated, end, *rs);
-	*re = find_next_zero_bit(chunk->populated, end, *rs + 1);
 }
 
 /**
