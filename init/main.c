@@ -155,6 +155,9 @@ asmlinkage void __init start_kernel(void)
 	strlcpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
 	pr_info("Command line: %s\n", command_line);
 
+	/* Things to be done before parsing cmdline */
+	early_setup_arch();
+
 	/* Parse setup parameters */
 	parse_args(command_line, parse_kernel_param);
 

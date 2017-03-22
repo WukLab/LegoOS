@@ -12,9 +12,65 @@
 #include <asm/setup.h>
 
 #include <lego/bug.h>
+#include <lego/init.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
+
+static void __init e820_add_region(u64 start, u64 size, int type);
+u64 __init e820_remove_range(u64 start, u64 size, unsigned old_type,
+			     int checktype);
+static int userdef __initdata;
+static int userdef_error __initdata;
+
+static int __init parse_memmap_one(char *p)
+{
+	char *oldp;
+	u64 start_at, mem_size;
+
+	if (!p)
+		return -EINVAL;
+
+	oldp = p;
+	mem_size = memparse(p, &p);
+	if (p == oldp)
+		return -EINVAL;
+
+	userdef = 1;
+	if (*p == '@') {
+		start_at = memparse(p+1, &p);
+		e820_add_region(start_at, mem_size, E820_RAM);
+	} else if (*p == '#') {
+		start_at = memparse(p+1, &p);
+		e820_add_region(start_at, mem_size, E820_ACPI);
+	} else if (*p == '$') {
+		start_at = memparse(p+1, &p);
+		e820_add_region(start_at, mem_size, E820_RESERVED);
+	} else if (*p == '!') {
+		start_at = memparse(p+1, &p);
+		e820_add_region(start_at, mem_size, E820_PRAM);
+	} else {
+		userdef_error = 1;
+	}
+
+	return *p == '\0' ? 0 : -EINVAL;
+}
+
+static int __init parse_memmap_opt(char *str)
+{
+	while (str) {
+		char *k = strchr(str, ',');
+
+		if (k)
+			*k++ = 0;
+
+		parse_memmap_one(str);
+		str = k;
+	}
+
+	return 0;
+}
+__setup("memmap", parse_memmap_opt);
 
 /*
  * The e820 map is the map that gets modified e.g. with command line parameters
@@ -337,24 +393,6 @@ static int __init __append_e820_map(struct e820entry *biosmap, int nr_map)
 	return 0;
 }
 
-/*
- * Copy the BIOS e820 map into a safe place.
- *
- * Sanity-check it while we're at it..
- *
- * If we're lucky and live on a modern system, the setup code
- * will have given us a memory map that we can use to properly
- * set up memory.  If we aren't, we'll fake a memory map.
- */
-static int __init append_e820_map(struct e820entry *biosmap, int nr_map)
-{
-	/* Only one memory region (or negative)? Ignore it */
-	if (nr_map < 2)
-		return -1;
-
-	return __append_e820_map(biosmap, nr_map);
-}
-
 static void __init e820_print_type(u32 type)
 {
 	switch (type) {
@@ -382,6 +420,85 @@ static void __init e820_print_type(u32 type)
 		printk(KERN_CONT "type %u", type);
 		break;
 	}
+}
+
+/* make e820 not cover the range */
+u64 __init e820_remove_range(u64 start, u64 size, unsigned old_type,
+			     int checktype)
+{
+	int i;
+	u64 end;
+	u64 real_removed_size = 0;
+
+	if (size > (ULLONG_MAX - start))
+		size = ULLONG_MAX - start;
+
+	end = start + size;
+	printk(KERN_DEBUG "e820: remove [mem %#010Lx-%#010Lx] ",
+	       (unsigned long long) start, (unsigned long long) (end - 1));
+	if (checktype)
+		e820_print_type(old_type);
+	printk(KERN_CONT "\n");
+
+	for (i = 0; i < e820.nr_map; i++) {
+		struct e820entry *ei = &e820.map[i];
+		u64 final_start, final_end;
+		u64 ei_end;
+
+		if (checktype && ei->type != old_type)
+			continue;
+
+		ei_end = ei->addr + ei->size;
+		/* totally covered? */
+		if (ei->addr >= start && ei_end <= end) {
+			real_removed_size += ei->size;
+			memset(ei, 0, sizeof(struct e820entry));
+			continue;
+		}
+
+		/* new range is totally covered? */
+		if (ei->addr < start && ei_end > end) {
+			e820_add_region(end, ei_end - end, ei->type);
+			ei->size = start - ei->addr;
+			real_removed_size += size;
+			continue;
+		}
+
+		/* partially covered */
+		final_start = max(start, ei->addr);
+		final_end = min(end, ei_end);
+		if (final_start >= final_end)
+			continue;
+		real_removed_size += final_end - final_start;
+
+		/*
+		 * left range could be head or tail, so need to update
+		 * size at first.
+		 */
+		ei->size -= final_end - final_start;
+		if (ei->addr < final_start)
+			continue;
+		ei->addr = final_end;
+	}
+	return real_removed_size;
+}
+
+/*
+ * Copy the BIOS e820 map into a safe place.
+ *
+ * Sanity-check it while we're at it..
+ *
+ * If we're lucky and live on a modern system, the setup code
+ * will have given us a memory map that we can use to properly
+ * set up memory.  If we aren't, we'll fake a memory map.
+ */
+static int __init append_e820_map(struct e820entry *biosmap, int nr_map)
+{
+	/* Only one memory region (or negative)? Ignore it */
+	if (nr_map < 2)
+		return -1;
+
+	return __append_e820_map(biosmap, nr_map);
 }
 
 void __init e820_print_map(char *who)
@@ -513,4 +630,16 @@ static unsigned long __init e820_end_pfn(unsigned long limit_pfn, unsigned type)
 unsigned long __init e820_end_of_ram_pfn(void)
 {
 	return e820_end_pfn(MAX_ARCH_PFN, E820_RAM);
+}
+
+void __init finish_e820_parsing(void)
+{
+	if (userdef && !userdef_error) {
+		if (sanitize_e820_map(e820.map, ARRAY_SIZE(e820.map),
+					&e820.nr_map) < 0)
+			panic("Invalid user supplied memory map");
+
+		printk(KERN_INFO "e820: user-defined physical RAM map:\n");
+		e820_print_map("user");
+	}
 }

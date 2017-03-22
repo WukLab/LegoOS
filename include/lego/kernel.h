@@ -291,6 +291,8 @@ void sort(void *base, size_t num, size_t size,
 extern const char lego_banner[];
 extern const char lego_proc_banner[];
 
+unsigned long long memparse(const char *ptr, char **retptr);
+
 /* Values used for system_state */
 extern enum system_states {
 	SYSTEM_BOOTING,

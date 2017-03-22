@@ -86,6 +86,7 @@ extern int e820_all_mapped(u64 start, u64 end, unsigned type);
 #define BIOS_ROM_END		0xffffffff
 
 void __init setup_physical_memory(void);
+void __init finish_e820_parsing(void);
 void __init e820_fill_memblock(void);
 unsigned long __init e820_end_of_ram_pfn(void);
 

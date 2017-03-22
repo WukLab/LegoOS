@@ -32,6 +32,7 @@
 extern struct boot_params boot_params;
 
 void __init setup_arch(void);
+void __init early_setup_arch(void);
 asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data);
 
 /* exceedingly early brk-like allocator */

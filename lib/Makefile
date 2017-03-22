@@ -10,3 +10,4 @@ obj-y += rbtree.o
 obj-y += scatterlist.o
 obj-y += bcd.o
 obj-y += cpumask.o
+obj-y += cmdline.o

@@ -160,6 +160,14 @@ static void __init reserve_brk(void)
 	_brk_start = 0;
 }
 
+void __init early_setup_arch(void)
+{
+	/*
+	 * Parse e820 table
+	 */
+	setup_physical_memory();
+}
+
 /*
  * setup_arch
  * x86-64 specific initiliazation
@@ -190,13 +198,10 @@ void __init setup_arch(void)
 
 	reserve_standard_io_resources();
 
-	/*
-	 * Parse e820 table
-	 */
-	setup_physical_memory();
-	max_pfn = e820_end_of_ram_pfn();
-
 	early_ioremap_init();
+
+	finish_e820_parsing();
+	max_pfn = e820_end_of_ram_pfn();
 
 	/*
 	 * Pass all RAM info into memblock
