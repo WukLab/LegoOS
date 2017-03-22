@@ -149,7 +149,8 @@ struct rq * __migrate_task(struct rq *rq, struct task_struct *p, int dest_cpu)
 }
 
 /*
- * task_rq_lock - lock the rq @p resides on, also disable interrupts.
+ * task_rq_lock - lock the rq @p resides on
+ * NOTE: Return with interrupt disabled
  */
 static struct rq *task_rq_lock(struct task_struct *p, unsigned long *flags)
 	__acquires(rq->lock)
@@ -187,11 +188,45 @@ static struct rq *task_rq_lock(struct task_struct *p, unsigned long *flags)
 	}
 }
 
+/*
+ * task_rq_unlock - unlock the rq @p resides on
+ * NOTE: Return with interrupt restored
+ */
 static void task_rq_unlock(struct rq *rq, struct task_struct *p,
 			   unsigned long *flags) __releases(rq->lock)
 {
 	spin_unlock(&rq->lock);
 	local_irq_restore(*flags);
+}
+
+/*
+ * __task_rq_lock - lock the rq @p resides on
+ */
+static struct rq *__task_rq_lock(struct task_struct *p)
+			__acquires(rq->lock)
+{
+	struct rq *rq;
+
+	for (;;) {
+		rq = task_rq(p);
+		spin_lock(&rq->lock);
+		if (likely(rq == task_rq(p) && !task_on_rq_migrating(p))) {
+			return rq;
+		}
+		spin_unlock(&rq->lock);
+
+		while (unlikely(task_on_rq_migrating(p)))
+			cpu_relax();
+	}
+}
+
+/*
+ * __task_rq_unlock - unlock the rq @p resides on
+ */
+static void __task_rq_unlock(struct rq *rq)
+			__releases(rq->lock)
+{
+	spin_unlock(&rq->lock);
 }
 
 /*
@@ -291,27 +326,6 @@ long sched_setaffinity(pid_t pid, const struct cpumask *new_mask)
 out_put_task:
 	put_task_struct(p);
 	return ret;
-}
-
-/*
- * wake_up_new_task - wake up a newly created task for the first time.
- *
- * This function will do some initial scheduler statistics housekeeping
- * that must be done for every newly created context, then puts the task
- * on the runqueue and wakes it.
- */
-void wake_up_new_task(struct task_struct *p)
-{
-	struct rq *rq;
-
-	p->state = TASK_RUNNING;
-	__set_task_cpu(p, task_cpu(p));
-
-	rq = task_rq(p);
-	spin_lock(&rq->lock);
-	enqueue_task(rq, p, 0);
-	p->on_rq = TASK_ON_RQ_QUEUED;
-	spin_unlock(&rq->lock);
 }
 
 void sched_remove_from_rq(struct task_struct *p)
@@ -586,6 +600,67 @@ void scheduler_tick(void)
 {
 }
 
+static inline
+int select_task_rq(struct task_struct *p, int cpu)
+{
+	if (WARN_ON(!cpumask_test_cpu(cpu, &p->cpus_allowed) ||
+		     !cpu_online(cpu)))
+		cpu = cpumask_any(&p->cpus_allowed);
+	return cpu;
+}
+
+/*
+ * Mark the task runnable and perform wakeup-preemption.
+ */
+static void ttwu_do_wakeup(struct rq *rq, struct task_struct *p, int wake_flags)
+{
+	p->state = TASK_RUNNING;
+#ifdef CONFIG_SMP
+	/* Where, TODO here */
+#endif
+}
+
+/*
+ * Called in case the task @p isn't fully descheduled from its runqueue,
+ * in this case we must do a remote wakeup. Its a 'light' wakeup though,
+ * since all we need to do is flip p->state to TASK_RUNNING, since
+ * the task is still ->on_rq.
+ */
+static int ttwu_remote(struct task_struct *p, int wake_flags)
+{
+	struct rq *rq;
+	int ret = 0;
+
+	rq = __task_rq_lock(p);
+	if (task_on_rq_queued(p)) {
+		ttwu_do_wakeup(rq, p, wake_flags);
+		ret = 1;
+	}
+	__task_rq_unlock(rq);
+
+	return ret;
+}
+
+static void
+ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags)
+{
+	enqueue_task(rq, p, 0);
+	p->on_rq = TASK_ON_RQ_QUEUED;
+
+	/*TODO: If a worker is waking up, notify the workqueue: */
+
+	ttwu_do_wakeup(rq, p, wake_flags);
+}
+
+static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	spin_lock(&rq->lock);
+	ttwu_do_activate(rq, p, wake_flags);
+	spin_unlock(&rq->lock);
+}
+
 /**
  * try_to_wake_up - wake up a thread
  * @p: the thread to be awakened
@@ -605,7 +680,35 @@ void scheduler_tick(void)
 static int
 try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {
-	return 1;
+	int cpu, success = 0;
+
+	if (!(p->state & state))
+		goto out;
+
+	success = 1;
+	cpu = task_cpu(p);
+
+	if (p->on_rq && ttwu_remote(p, wake_flags))
+		goto out;
+
+#ifdef CONFIG_SMP
+	/*
+	 * If the owning (remote) cpu is still in the middle of schedule() with
+	 * this task as prev, wait until its done referencing the task.
+	 */
+	while (p->on_cpu)
+		cpu_relax();
+
+	p->state = TASK_WAKING;
+
+	cpu = select_task_rq(p, p->wake_cpu);
+	if (task_cpu(p) != cpu)
+		set_task_cpu(p, cpu);
+#endif
+
+	ttwu_queue(p, cpu, wake_flags);
+out:
+	return success;
 }
 
 /**
@@ -623,6 +726,32 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 int wake_up_process(struct task_struct *p)
 {
 	return try_to_wake_up(p, TASK_NORMAL, 0);
+}
+
+int wake_up_state(struct task_struct *p, unsigned int state)
+{
+	return try_to_wake_up(p, state, 0);
+}
+
+/*
+ * wake_up_new_task - wake up a newly created task for the first time.
+ *
+ * This function will do some initial scheduler statistics housekeeping
+ * that must be done for every newly created context, then puts the task
+ * on the runqueue and wakes it.
+ */
+void wake_up_new_task(struct task_struct *p)
+{
+	struct rq *rq;
+
+	p->state = TASK_RUNNING;
+	__set_task_cpu(p, task_cpu(p));
+
+	rq = task_rq(p);
+	spin_lock(&rq->lock);
+	enqueue_task(rq, p, 0);
+	p->on_rq = TASK_ON_RQ_QUEUED;
+	spin_unlock(&rq->lock);
 }
 
 /*
