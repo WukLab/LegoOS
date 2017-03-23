@@ -1,0 +1,2 @@
+source "components/processor/Kconfig"
+source "components/memory/Kconfig"

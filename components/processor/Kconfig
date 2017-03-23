@@ -1,0 +1,9 @@
+menu "Lego Processor Component Configurations"
+
+config COMP_PROCESSOR
+	def_bool n
+	---help---
+	  Configure this if you are going to build a processor-component
+	  controller of Lego OS.
+
+endmenu

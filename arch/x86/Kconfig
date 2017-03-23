@@ -239,6 +239,7 @@ config PCI_MSI
 
 endmenu
 
+source "components/Kconfig"
 source "mm/Kconfig"
 
 source "fs/Kconfig"
