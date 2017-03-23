@@ -7,6 +7,13 @@
  * (at your option) any later version.
  */
 
+/*
+ * About kernel sleeping and wait queue:
+ *	http://www.makelinux.net/ldd3/chp-6-sect-2
+ *
+ * YS: Oh, sleeping.. yummy :-)
+ */
+
 #ifndef _LEGO_WAIT_H_
 #define _LEGO_WAIT_H_
 

@@ -517,6 +517,29 @@ static void __sched __schedule(bool preempt)
 	local_irq_disable();
 	spin_lock(&rq->lock);
 
+	/*
+	 *		CPU0, task p
+	 *
+	 *		current->state = TASK_UNINTERRUPTIBLE;
+	 *		  .
+	 *		  .
+	 *  <int>
+	 * preempt_schedule_irq()
+	 *  <eoi>
+	 *		  .
+	 *		  .
+	 *		schedule()
+	 *
+	 * If the current task just changed task state and was
+	 * intending to sleep, but got preempted in the middle.
+	 * In this case, we should NOT deactivate this task by
+	 * preemption.
+	 *
+	 * Preemption means
+	 *	DO NOT TOUCH ANYTHING
+	 *	DO NOT CHANGE ANY STATES
+	 * of the previous task.
+	 */
 	if (!preempt && prev->state) {
 		deactivate_task(rq, prev, 0);
 		prev->on_rq = 0;
