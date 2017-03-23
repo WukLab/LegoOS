@@ -61,9 +61,28 @@
 #define TASK_NEW		2048
 #define TASK_STATE_MAX		4096
 
+#define TASK_STATE_TO_CHAR_STR		"RSDTtXZxKWPNn"
+
+/* Convenience macros for the sake of set_current_state: */
+#define TASK_KILLABLE			(TASK_WAKEKILL | TASK_UNINTERRUPTIBLE)
+#define TASK_STOPPED			(TASK_WAKEKILL | __TASK_STOPPED)
+#define TASK_TRACED			(TASK_WAKEKILL | __TASK_TRACED)
+
+#define TASK_IDLE			(TASK_UNINTERRUPTIBLE | TASK_NOLOAD)
+
 /* Convenience macros for the sake of wake_up */
 #define TASK_NORMAL		(TASK_INTERRUPTIBLE | TASK_UNINTERRUPTIBLE)
 #define TASK_ALL		(TASK_NORMAL | __TASK_STOPPED | __TASK_TRACED)
+
+#define task_is_traced(task)		((task->state & __TASK_TRACED) != 0)
+
+#define task_is_stopped(task)		((task->state & __TASK_STOPPED) != 0)
+
+#define task_is_stopped_or_traced(task)	((task->state & (__TASK_STOPPED | __TASK_TRACED)) != 0)
+
+#define task_contributes_to_load(task)	((task->state & TASK_UNINTERRUPTIBLE) != 0 && \
+					 (task->flags & PF_FROZEN) == 0 && \
+					 (task->state & TASK_NOLOAD) == 0)
 
 /*
  * set_current_state() includes a barrier so that the write of current->state
@@ -360,6 +379,7 @@ void scheduler_tick(void);
 int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask);
 long sched_setaffinity(pid_t pid, const struct cpumask *new_mask);
 
+int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags);
 int wake_up_state(struct task_struct *p, unsigned int state);
 int wake_up_process(struct task_struct *p);
 void wake_up_new_task(struct task_struct *p);
@@ -425,6 +445,13 @@ static inline int task_running(struct rq *rq, struct task_struct *p)
 #else
 	return task_current(rq, p);
 #endif
+}
+
+static inline int signal_pending_state(long state, struct task_struct *p)
+{
+	if (!(state & (TASK_INTERRUPTIBLE | TASK_WAKEKILL)))
+		return 0;
+	return 0;
 }
 
 #endif /* _LEGO_SCHED_H_ */

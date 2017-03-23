@@ -49,6 +49,10 @@
 #define S64_MAX			((s64)(U64_MAX>>1))
 #define S64_MIN			((s64)(-S64_MAX - 1))
 
+#define might_resched()		do { } while (0)
+#define might_sleep()		do { might_resched(); } while (0)
+#define might_sleep_if(cond)	do { if (cond) might_sleep(); } while (0)
+
 /*
  * This looks more complex than it should be. But we need to
  * get the type for the ~ right in round_down (it needs to be

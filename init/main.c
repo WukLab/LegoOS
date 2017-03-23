@@ -19,6 +19,7 @@
 #include <lego/list.h>
 #include <lego/slab.h>
 #include <lego/time.h>
+#include <lego/wait.h>
 #include <lego/delay.h>
 #include <lego/sched.h>
 #include <lego/string.h>
@@ -80,56 +81,33 @@ static void inline setup_nr_cpu_ids(void)
 	nr_cpu_ids = find_last_bit(cpumask_bits(cpu_possible_mask), NR_CPUS) + 1;
 }
 
-int cnt;
-pid_t k2_pid;
+DEFINE_WAIT_QUEUE_HEAD(wait_head);
+int foo = 0;
 
 int kthread_1(void *unused)
 {
-	struct task_struct *p = current;
+	pr_info("%s run\n", __func__);
+	mdelay(3000);
+	foo = 1;
+	wake_up(&wait_head);
+	pr_info("%s exit\n", __func__);
 
-	while (1) {
-		pr_info("%s: pid: %d, comm: %s, cpu: %d\n",
-			__func__, p->pid, p->comm, smp_processor_id());
-		if (cnt == 5) {
-			sched_setaffinity(k2_pid, cpumask_of(12));
-			break;
-		}
-#ifndef CONFIG_PREEMPT
-		schedule();
-#else
-		mdelay(100);
-#endif
-	}
-
-	pr_info("%s: exit\n", __func__);
 	return 0;
 }
 
 int kthread_2(void *unused)
 {
-	struct task_struct *p = current;
+	pr_info("%s run\n", __func__);
+	wait_event(wait_head, foo);
+	pr_info("%s exit\n", __func__);
 
-	while (1) {
-		if (cnt == 10)
-			break;
-		cnt++;
-		pr_info("%s: pid: %d, comm: %s, cpu: %d\n",
-			__func__, p->pid, p->comm, smp_processor_id());
-#ifndef CONFIG_PREEMPT
-		schedule();
-#else
-		mdelay(200);
-#endif
-	}
-
-	pr_info("%s: exit\n", __func__);
 	return 0;
 }
 
 static void rest_init(void)
 {
 	kernel_thread(kthread_1, NULL, 0);
-	k2_pid = kernel_thread(kthread_2, NULL, 0);
+	kernel_thread(kthread_2, NULL, 0);
 }
 
 asmlinkage void __init start_kernel(void)
