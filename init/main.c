@@ -29,6 +29,7 @@
 #include <lego/nodemask.h>
 #include <lego/spinlock.h>
 #include <lego/irqdomain.h>
+#include <lego/completion.h>
 
 #include <asm/io.h>
 #include <asm/asm.h>
@@ -81,15 +82,13 @@ static void inline setup_nr_cpu_ids(void)
 	nr_cpu_ids = find_last_bit(cpumask_bits(cpu_possible_mask), NR_CPUS) + 1;
 }
 
-DEFINE_WAIT_QUEUE_HEAD(wait_head);
-int foo = 0;
+DEFINE_COMPLETION(completion);
 
 int kthread_1(void *unused)
 {
 	pr_info("%s run\n", __func__);
 	mdelay(3000);
-	foo = 1;
-	wake_up(&wait_head);
+	complete(&completion);
 	pr_info("%s exit\n", __func__);
 
 	return 0;
@@ -98,7 +97,7 @@ int kthread_1(void *unused)
 int kthread_2(void *unused)
 {
 	pr_info("%s run\n", __func__);
-	wait_event(wait_head, foo);
+	wait_for_completion(&completion);
 	pr_info("%s exit\n", __func__);
 
 	return 0;

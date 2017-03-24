@@ -374,6 +374,9 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 void __init sched_init(void);
 void __init sched_init_idle(struct task_struct *idle, int cpu);
 
+#define	MAX_SCHEDULE_TIMEOUT		LONG_MAX
+
+long schedule_timeout(long timeout);
 void schedule(void);
 void scheduler_tick(void);
 int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask);
