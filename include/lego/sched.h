@@ -118,8 +118,15 @@
  *
  * Also see the comments of try_to_wake_up().
  */
-#define __set_current_state(state_value) do { current->state = (state_value); } while (0)
-#define set_current_state(state_value)	 smp_store_mb(current->state, (state_value))
+#define __set_current_state(state_value)		\
+do {							\
+	current->state = (state_value);			\
+} while (0)
+
+#define set_current_state(state_value)			\
+do {							\
+	smp_store_mb(current->state, (state_value));	\
+} while (0)
 
 /*
  * task->flags
@@ -150,7 +157,10 @@
 #define PF_NO_SETAFFINITY	0x04000000	/* Userland is not allowed to meddle with cpus_allowed */
 
 /* Task command name length */
-#define TASK_COMM_LEN 16
+#define TASK_COMM_LEN		16
+
+/* Maximum timeout period */
+#define	MAX_SCHEDULE_TIMEOUT	LONG_MAX
 
 struct task_struct {
 	/* -1 unrunnable, 0 runnable, >0 stopped */
@@ -373,8 +383,6 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 
 void __init sched_init(void);
 void __init sched_init_idle(struct task_struct *idle, int cpu);
-
-#define	MAX_SCHEDULE_TIMEOUT		LONG_MAX
 
 long schedule_timeout(long timeout);
 void schedule(void);

@@ -7,7 +7,23 @@
  * (at your option) any later version.
  */
 
+#include <lego/irq.h>
+#include <lego/list.h>
 #include <lego/sched.h>
+#include <lego/timer.h>
+#include <lego/kernel.h>
+#include <lego/percpu.h>
+#include <lego/spinlock.h>
+
+struct timer_base {
+	spinlock_t		lock;
+	struct timer_list	*running_timer;
+	unsigned long		clk;
+	unsigned long		next_expiry;
+	unsigned int		cpu;
+	bool			is_idle;
+	struct list_head	list;
+} ____cacheline_aligned;
 
 /**
  * schedule_timeout - sleep until timeout
@@ -40,7 +56,6 @@
  */
 signed long __sched schedule_timeout(signed long timeout)
 {
-	
 	switch (timeout)
 	{
 	case MAX_SCHEDULE_TIMEOUT:
