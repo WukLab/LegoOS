@@ -17,3 +17,4 @@ obj-y += fork.o
 obj-y += pid.o
 obj-y += exit.o
 obj-y += mutex.o
+obj-y += sys.o
