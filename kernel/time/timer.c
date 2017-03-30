@@ -89,5 +89,5 @@ signed long __sched schedule_timeout(signed long timeout)
 	schedule();
 
 out:
-	return timeout < 0 ? 0 : timeout;
+	return 0;
 }
