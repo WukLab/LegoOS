@@ -10,6 +10,12 @@
 #include <lego/sched.h>
 #include <lego/syscalls.h>
 
+/* Non-implemented system calls get redirected here. */
+asmlinkage long sys_ni_syscall(void)
+{
+	return -ENOSYS;
+}
+
 SYSCALL_DEFINE2(testhh, int, foo, long, bar)
 {
 	return current->pid;

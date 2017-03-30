@@ -10,6 +10,11 @@
 #include <lego/kbuild.h>
 #include <lego/sched.h>
 
+#define __SYSCALL_64(nr, sym, qual) [nr] = 1,
+static char syscalls_64[] = {
+#include <asm/syscalls_64.h>
+};
+
 /*
  * Generate definitions needed by assembly language modules.
  * This code generates raw asm output which is post-processed to extract
@@ -43,4 +48,8 @@ void GoSpurs(void)
 	ENTRY(r15);
 	ENTRY(flags);
 #undef ENTRY
+
+	DEFINE(__NR_syscall_max, sizeof(syscalls_64) - 1);
+	DEFINE(NR_syscalls, sizeof(syscalls_64));
+
 }

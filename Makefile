@@ -217,6 +217,8 @@ CHECKFLAGS	= -D__Sandix__ -DSandix -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void
 
 LEGO_INCLUDE	:= -I$(srctree)/arch/$(SRCARCH)/include \
+                   -I$(objtree)/arch/$(SRCARCH)/include/generated \
+                   -I$(objtree)/arch/$(SRCARCH)/include/generated/uapi \
                    $(if $(KBUILD_SRC), -I$(srctree)/include) \
 		   -I$(objtree)/include \
 		   -include $(srctree)/include/lego/kconfig.h
