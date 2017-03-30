@@ -97,6 +97,9 @@ PHONY += install
 install:
 	$(Q)$(MAKE) $(build)=$(boot) $@
 
+archprepare:
+	$(Q)$(MAKE) $(build)=arch/x86/entry/syscalls all
+
 archclean:
 	$(Q)rm -rf $(objtree)/arch/i386
 	$(Q)rm -rf $(objtree)/arch/x86_64
