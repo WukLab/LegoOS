@@ -8,9 +8,11 @@
  */
 
 #include <asm/asm.h>
+#include <asm/msr.h>
 #include <asm/page.h>
 #include <asm/desc.h>
 #include <asm/pgtable.h>
+#include <asm/syscalls.h>
 #include <asm/processor.h>
 
 #include <lego/smp.h>
@@ -313,6 +315,22 @@ void switch_to_new_gdt(int cpu)
 	load_percpu_segment(cpu);
 }
 
+static void syscall_init(void)
+{
+	wrmsr(MSR_STAR, 0, (__USER32_CS << 16) | __KERNEL_CS);
+	wrmsrl(MSR_LSTAR, (unsigned long)entry_SYSCALL_64);
+
+	wrmsrl(MSR_CSTAR, (unsigned long)ignore_sysret);
+	wrmsrl(MSR_IA32_SYSENTER_CS, (u64)GDT_ENTRY_INVALID_SEG);
+	wrmsrl(MSR_IA32_SYSENTER_ESP, 0ULL);
+	wrmsrl(MSR_IA32_SYSENTER_EIP, 0ULL);
+
+	/* Flags to clear on syscall */
+	wrmsrl(MSR_SYSCALL_MASK,
+	       X86_EFLAGS_TF|X86_EFLAGS_DF|X86_EFLAGS_IF|
+	       X86_EFLAGS_IOPL|X86_EFLAGS_AC|X86_EFLAGS_NT);
+}
+
 /*
  * cpu_init() initializes state that is per-CPU. Some data is already
  * initialized (naturally) in the bootstrap process, such as the GDT
@@ -330,6 +348,8 @@ void cpu_init(void)
 
 	/* All CPUs share the same IDT table */
 	load_idt((const struct desc_ptr *)&idt_desc);
+
+	syscall_init();
 
 	tss = &per_cpu(cpu_tss, cpu);
 	tss->x86_tss.io_bitmap_base = offsetof(struct tss_struct, io_bitmap);

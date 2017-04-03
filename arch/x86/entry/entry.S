@@ -13,12 +13,100 @@
 
 #include <asm/ptrace.h>
 #include <asm/percpu.h>
+#include <asm/segment.h>
 #include <asm/irq_vectors.h>
 
+#include <lego/errno.h>
 #include <lego/linkage.h>
 #include <generated/asm-offsets.h>
 
 #include "abi.h"
+
+#define SWAPGS
+
+ENTRY(ignore_sysret)
+	mov	$-ENOSYS, %eax
+	sysret
+END(ignore_sysret)
+
+/*
+ * 64-bit SYSCALL instruction entry. Up to 6 arguments in registers.
+ *
+ * This is the only entry point used for 64-bit system calls.  The
+ * hardware interface is reasonably well designed and the register to
+ * argument mapping Linux uses fits well with the registers that are
+ * available when SYSCALL is used.
+ *
+ * SYSCALL instructions can be found inlined in libc implementations as
+ * well as some other programs and libraries.  There are also a handful
+ * of SYSCALL instructions in the vDSO used, for example, as a
+ * clock_gettimeofday fallback.
+ *
+ * 64-bit SYSCALL saves rip to rcx, clears rflags.RF, then saves rflags to r11,
+ * then loads new ss, cs, and rip from previously programmed MSRs.
+ * rflags gets masked by a value from another MSR (so CLD and CLAC
+ * are not needed). SYSCALL does not save anything on the stack
+ * and does not change rsp.
+ *
+ * Registers on entry:
+ * rax  system call number
+ * rcx  return address
+ * r11  saved rflags (note: r11 is callee-clobbered register in C ABI)
+ * rdi  arg0
+ * rsi  arg1
+ * rdx  arg2
+ * r10  arg3 (needs to be moved to rcx to conform to C ABI)
+ * r8   arg4
+ * r9   arg5
+ * (note: r12-r15, rbp, rbx are callee-preserved in C ABI)
+ *
+ * Only called from user space.
+ *
+ * When user can change pt_regs->foo always force IRET. That is because
+ * it deals with uncanonical addresses better. SYSRET has trouble
+ * with them due to bugs in both AMD and Intel CPUs.
+ */
+
+/* Interrupts are off on entry */
+ENTRY(entry_SYSCALL_64)
+	SWAPGS
+
+	movq	%rsp, PER_CPU_VAR(rsp_scratch)
+
+	/* Construct struct pt_regs on stack */
+	pushq	$__USER_DS			/* pt_regs->ss */
+	pushq	PER_CPU_VAR(rsp_scratch)	/* pt_regs->sp */
+	pushq	%r11				/* pt_regs->flags */
+	pushq	$__USER_CS			/* pt_regs->cs */
+	pushq	%rcx				/* pt_regs->ip */
+	pushq	%rax				/* pt_regs->orig_ax */
+	pushq	%rdi				/* pt_regs->di */
+	pushq	%rsi				/* pt_regs->si */
+	pushq	%rdx				/* pt_regs->dx */
+	pushq	%rcx				/* pt_regs->cx */
+	pushq	$-ENOSYS			/* pt_regs->ax */
+	pushq	%r8				/* pt_regs->r8 */
+	pushq	%r9				/* pt_regs->r9 */
+	pushq	%r10				/* pt_regs->r10 */
+	pushq	%r11				/* pt_regs->r11 */
+	sub	$(6*8), %rsp			/* pt_regs->bp, bx, r12-15 not saved */
+
+	/*
+	 * Easy case: enable interrupts and issue the syscall
+	 */
+	sti
+	cmpq	$__NR_syscall_max, %rax
+	ja	1f				/* return -ENOSYS (already in pt_regs->ax) */
+	movq	%r10, %rcx
+
+	/*
+	 * This call instruction is handled specially in stub_ptregs_64.
+	 * It might end up jumping to the slow path.  If it jumps, RAX
+	 * and all argument registers are clobbered.
+	 */
+	call	*sys_call_table(, %rax, 8)
+
+END(entry_SYSCALL_64)
 
 /*
  * IDT_ENTRY - Intel Reserved Vector Handler
@@ -100,7 +188,7 @@ IDT_ENTRY virtualization_exception	do_virtualization_exception	has_error_code=0
 	 * IRQ from user mode.
 	 * Switch to kernel gsbase.
 	 */
-	#SWAPGS
+	SWAPGS
 
 1:
 	/*
@@ -136,7 +224,7 @@ ret_from_intr:
 retint_user:
 	movq	%rsp, %rdi
 	call	prepare_exit_to_usermode
-	#TODO SWAPGS
+	SWAPGS
 	jmp	restore_regs_and_iret
 
 	/* Returning to kernel space */

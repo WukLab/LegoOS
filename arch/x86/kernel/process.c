@@ -18,6 +18,8 @@
 #include <asm/processor.h>
 #include <asm/switch_to.h>
 
+__visible DEFINE_PER_CPU(unsigned long, rsp_scratch);
+
 /*
  * per-CPU TSS segments. Threads are completely 'soft' on LegoOS,
  * no more per-task TSS's. The TSS size is kept cacheline-aligned

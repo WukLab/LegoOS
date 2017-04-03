@@ -262,4 +262,7 @@ static inline unsigned long current_top_of_stack(void)
 void __init early_cpu_init(void);
 void cpu_init(void);
 
+/* entry.S, for syscall  */
+asmlinkage void ignore_sysret(void);
+
 #endif /* _ASM_X86_PROCESSOR_H_ */

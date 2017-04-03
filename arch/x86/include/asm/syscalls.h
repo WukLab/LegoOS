@@ -12,6 +12,8 @@
 
 #include <lego/linkage.h>
 
+void entry_SYSCALL_64(void);
+
 typedef asmlinkage long (*sys_call_ptr_t)(unsigned long, unsigned long,
 					  unsigned long, unsigned long,
 					  unsigned long, unsigned long);
