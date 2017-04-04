@@ -7,11 +7,13 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_PANIC_H_
-#define _LEGO_PANIC_H_
+#ifndef _LEGO_PTRACE_H_
+#define _LEGO_PTRACE_H_
 
-#include <lego/compiler.h>
+#include <asm/ptrace.h>
 
-__printf(1, 2) void panic(const char *fmt, ...) __cold;
+#ifndef current_pt_regs
+#define current_pt_regs()	task_pt_regs(current)
+#endif
 
-#endif /* _LEGO_PANIC_H_ */
+#endif /* _LEGO_PTRACE_H_ */

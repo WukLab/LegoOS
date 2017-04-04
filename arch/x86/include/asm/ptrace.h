@@ -12,6 +12,8 @@
 
 #ifndef __ASSEMBLY__
 
+#include <asm/processor.h>
+
 struct pt_regs {
 	/*
 	 * C ABI says these regs are callee-preserved.
@@ -61,6 +63,20 @@ kernel_stack_pointer(struct pt_regs *regs)
 {
 	return regs->sp;
 }
+
+static inline unsigned long regs_return_value(struct pt_regs *regs)
+{
+	return regs->ax;
+}
+
+static inline int user_mode(struct pt_regs *regs)
+{
+	return !!(regs->cs & 3);
+}
+
+#define GET_IP(regs) ((regs)->ip)
+#define GET_FP(regs) ((regs)->bp)
+#define GET_USP(regs) ((regs)->sp)
 
 #endif /* __ASSEMBLY__ */
 

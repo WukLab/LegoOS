@@ -97,12 +97,18 @@ static int run_init_process(const char *init_filename)
 		(const char *const *)envp_init);
 }
 
+/*
+ * This is our first kernel thread,
+ * which will run the first user-level progam init:
+ */
 static int kernel_init(void *unused)
 {
-	run_init_process("/sbin/init");
-	//panic("/sbin/init is not working" );
+	if (!run_init_process("/sbin/init"))
+		/* Return to userspace */
+		return 0;
 
-	return 0;
+	panic("No working init found!");
+	return -EFAULT;
 }
 
 static void rest_init(void)

@@ -366,22 +366,19 @@ ENTRY(ret_from_fork)
 	jnz	1f			/* kernel threads are uncommon */
 
 2:
-	/*
-	 * User thread
-	 * or the return path of kernel thread
-	 */
-	call	user_thread_bug_now
+	leaq	0(%rsp), %rdi		/* pt_regs pointer */
+	call	syscall_return_slowpath	/* return with IRQs disabled */
+	SWAPGS
+	jmp	restore_regs_and_iret
 1:
 	/* kernel thread */
 	movq	%r12, %rdi
 	call	*%rbx
-
 	/*
-	 * TODO:
-	 * Currently, we let a returning kernel thread
-	 * jump into do_exit(0) directly. Is their anyother
-	 * way to do? Like linux's kthread?
+	 * A kernel thread is allowed to return here after successfully
+	 * calling do_execve().  Exit to userspace to complete the execve()
+	 * syscall:
 	 */
-	movq	%rax, %rdi
-	call	do_exit
+	movq	$0, RAX(%rsp)
+	jmp	2b
 END(ret_from_fork)

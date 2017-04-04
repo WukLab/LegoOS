@@ -253,6 +253,8 @@ static inline unsigned long current_top_of_stack(void)
  */
 #define TASK_SIZE	((1UL << 47) - PAGE_SIZE)
 #define STACK_TOP	TASK_SIZE
+#define TASK_SIZE_MAX	TASK_SIZE
+#define STACK_TOP_MAX	TASK_SIZE
 
 #define INIT_THREAD  {				\
 	.sp0		= TOP_OF_INIT_STACK,	\
@@ -266,6 +268,7 @@ void cpu_init(void);
 /* entry.S, for syscall  */
 asmlinkage void ignore_sysret(void);
 
+struct pt_regs;
 void start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp);
 
 #endif /* _ASM_X86_PROCESSOR_H_ */

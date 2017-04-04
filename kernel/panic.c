@@ -10,6 +10,7 @@
 #include <asm/asm.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
+#include <lego/ptrace.h>
 
 void panic(const char *fmt, ...)
 {
@@ -21,7 +22,7 @@ void panic(const char *fmt, ...)
 	va_end(args);
 
 	pr_emerg("Kernel Panic - : %s\n", buf);
-	dump_stack();
+	show_regs(current_pt_regs());
 	pr_emerg("---[ end Kernel panic - not syncing: %s\n", buf);
 
 	hlt();

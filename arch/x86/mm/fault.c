@@ -10,12 +10,12 @@
 #include <asm/asm.h>
 #include <asm/page.h>
 #include <asm/traps.h>
-#include <asm/ptrace.h>
 #include <asm/current.h>
 
 #include <lego/mm.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
+#include <lego/ptrace.h>
 
 /*
  * Page fault error code bits:
@@ -36,6 +36,11 @@ enum x86_pf_error_code {
 	PF_PK		=		1 << 5,
 };
 
+static int fault_in_kernel_space(unsigned long address)
+{
+	return address >= TASK_SIZE_MAX;
+}
+
 static void show_fault_oops(struct task_struct *task, struct pt_regs *regs, unsigned long address)
 {
 	printk(KERN_ALERT "BUG: unable to handle kernel ");
@@ -48,15 +53,25 @@ static void show_fault_oops(struct task_struct *task, struct pt_regs *regs, unsi
 	printk(KERN_ALERT "IP: [<%p>] %pS\n", (void *)address, (void *)address);
 }
 
+/*
+ * This routine handles page faults.  It determines the address,
+ * and the problem, and then passes it off to one of the appropriate
+ * routines.
+ */
 dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 {
-	struct task_struct *task;
+	struct task_struct *tsk = current;
 	unsigned long address = read_cr2();
 
-	task = current;
+	if (user_mode(regs)) {
+		pr_info("Faulting from usermode\n");
+		show_regs(regs);
+	}
 
-	show_fault_oops(task, regs, address);
-	show_regs(regs);
+	if (fault_in_kernel_space(address) && !user_mode(regs)) {
+		show_fault_oops(tsk, regs, address);
+		show_regs(regs);
+	}
 
 	hlt();
 }
