@@ -856,7 +856,7 @@ static void setup_APIC_timer(void)
 	levt->cpumask = cpumask_of(cpu);
 
 	if (cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER)) {
-		apic_printk(APIC_VERBOSE,
+		printk_once(
 			"TSC deadline mode is supported by your CPU. "
 			"But Lego currently does not support one-shot tick mode. "
 			"Fall back to TSC periodic mode\n");

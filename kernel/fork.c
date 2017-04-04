@@ -132,7 +132,7 @@ static int mm_init(struct mm_struct *mm, struct task_struct *p)
 	spin_lock_init(&mm->page_table_lock);
 
 	mm->pgd = pgd_alloc(mm);
-	if (!mm->pgd)
+	if (unlikely(!mm->pgd))
 		goto out;
 
 	return 0;
