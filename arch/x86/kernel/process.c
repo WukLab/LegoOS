@@ -14,6 +14,7 @@
 
 #include <asm/asm.h>
 #include <asm/msr.h>
+#include <asm/segment.h>
 #include <asm/ptrace.h>
 #include <asm/processor.h>
 #include <asm/switch_to.h>
@@ -80,4 +81,17 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	load_sp0(tss, next);
 
 	return prev_p;
+}
+
+void start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp)
+{
+	loadsegment(fs, 0);
+	loadsegment(es, 0);
+	loadsegment(ds, 0);
+	load_gs_index(0);
+	regs->ip		= new_ip;
+	regs->sp		= new_sp;
+	regs->cs		= __USER_CS;
+	regs->ss		= __USER_DS;
+	regs->flags		= X86_EFLAGS_IF;
 }

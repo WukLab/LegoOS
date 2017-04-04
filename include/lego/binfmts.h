@@ -7,11 +7,11 @@
  * (at your option) any later version.
  */
 
-#include <lego/kernel.h>
+#ifndef _LEGO_BINFMTS_H_
+#define _LEGO_BINFMTS_H_
 
 int do_execve(const char *filename,
 	      const char * const *argv,
-	      const char * const *envp)
-{
-	return 0;
-}
+	      const char * const *envp);
+
+#endif /* _LEGO_BINFMTS_H_ */

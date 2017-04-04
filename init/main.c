@@ -25,6 +25,7 @@
 #include <lego/string.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>
+#include <lego/binfmts.h>
 #include <lego/cpumask.h>
 #include <lego/nodemask.h>
 #include <lego/spinlock.h>
@@ -82,31 +83,31 @@ static void inline setup_nr_cpu_ids(void)
 	nr_cpu_ids = find_last_bit(cpumask_bits(cpu_possible_mask), NR_CPUS) + 1;
 }
 
-DEFINE_COMPLETION(completion);
+#define MAX_INIT_ARGS	CONFIG_INIT_ENV_ARG_LIMIT
+#define MAX_INIT_ENVS	CONFIG_INIT_ENV_ARG_LIMIT
 
-int kthread_1(void *unused)
+static const char *argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
+const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
+
+static int run_init_process(const char *init_filename)
 {
-	pr_info("%s run\n", __func__);
-	mdelay(3000);
-	complete(&completion);
-	pr_info("%s exit\n", __func__);
-
-	return 0;
+	argv_init[0] = init_filename;
+	return do_execve(init_filename,
+		(const char *const *)argv_init,
+		(const char *const *)envp_init);
 }
 
-int kthread_2(void *unused)
+static int kernel_init(void *unused)
 {
-	pr_info("%s run\n", __func__);
-	wait_for_completion(&completion);
-	pr_info("%s exit\n", __func__);
+	run_init_process("/sbin/init");
+	//panic("/sbin/init is not working" );
 
 	return 0;
 }
 
 static void rest_init(void)
 {
-	kernel_thread(kthread_1, NULL, 0);
-	kernel_thread(kthread_2, NULL, 0);
+	kernel_thread(kernel_init, NULL, CLONE_FS);
 }
 
 asmlinkage void __init start_kernel(void)

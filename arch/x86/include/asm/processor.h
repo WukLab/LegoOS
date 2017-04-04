@@ -11,6 +11,7 @@
 #define _ASM_X86_PROCESSOR_H_
 
 #include <asm/smp.h>
+#include <asm/ptrace.h>
 #include <asm/thread_info.h>
 #include <asm/processor-flags.h>
 #include <asm/processor-features.h>
@@ -264,5 +265,7 @@ void cpu_init(void);
 
 /* entry.S, for syscall  */
 asmlinkage void ignore_sysret(void);
+
+void start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp);
 
 #endif /* _ASM_X86_PROCESSOR_H_ */

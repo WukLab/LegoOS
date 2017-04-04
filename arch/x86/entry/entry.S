@@ -97,14 +97,24 @@ ENTRY(entry_SYSCALL_64)
 	sti
 	cmpq	$__NR_syscall_max, %rax
 	ja	1f				/* return -ENOSYS (already in pt_regs->ax) */
-	movq	%r10, %rcx
 
-	/*
-	 * This call instruction is handled specially in stub_ptregs_64.
-	 * It might end up jumping to the slow path.  If it jumps, RAX
-	 * and all argument registers are clobbered.
-	 */
+	movq	%r10, %rcx
 	call	*sys_call_table(, %rax, 8)
+	movq	%rax, RAX(%rsp)
+
+1:
+	/*
+	 * If we get here, then we know that pt_regs is clean for SYSRET64.
+	 * If we see that no exit work is required (which we are required
+	 * to check with IRQs off), then we can go straight to SYSRET64.
+	 */
+	cli
+	movq	RIP(%rsp), %rcx
+	movq	EFLAGS(%rsp), %r11
+	RESTORE_C_REGS_EXCEPT_RCX_R11
+	movq	RSP(%rsp), %rsp
+	SWAPGS
+	sysretq
 
 END(entry_SYSCALL_64)
 

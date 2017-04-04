@@ -233,4 +233,14 @@
 #define savesegment(seg, value)				\
 	asm("mov %%" #seg ",%0":"=r" (value) : : "memory")
 
+#define loadsegment(seg, value)				\
+	asm("mov %0, %%" #seg"": : "r"(value) : "memory")
+
+#ifndef __ASSEMBLY__
+static inline void load_gs_index(unsigned int value)
+{
+
+}
+#endif
+
 #endif /* _ASM_X86_SEGMENT_H_ */
