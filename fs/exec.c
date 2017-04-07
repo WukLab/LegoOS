@@ -11,11 +11,11 @@
 #include <lego/ptrace.h>
 #include <lego/kernel.h>
 
-unsigned long stack[1024];
+unsigned long stack[8];
 
 void user_level_program(void)
 {
-	printk("%s:%d\n", __func__, __LINE__);
+	hlt();
 }
 
 int do_execve(const char *filename,
@@ -24,7 +24,6 @@ int do_execve(const char *filename,
 {
 	struct pt_regs *regs = current_pt_regs();
 
-	user_level_program();
-	start_thread(regs, (unsigned long)user_level_program, 0xef100);
+	start_thread(regs, (unsigned long)0xC0001000, (unsigned long)&stack[4]);
 	return 0;
 }
