@@ -204,8 +204,10 @@ void __init setup_arch(void)
 	max_pfn = e820_end_of_ram_pfn();
 
 	/*
-	 * Pass all RAM info into memblock
-	 * Now memblock is fully functional:
+	 * Offload user-defined e820 table to memblock.
+	 * Note that e820 table does not say anything about node-memory
+	 * affinity, hence memblock does not hold any node info at this point.
+	 * The node info is set below either by x86_numa_init() or flat 0.
 	 */
 	e820_fill_memblock();
 
@@ -250,6 +252,10 @@ void __init setup_arch(void)
 	 */
 	init_cpu_to_node();
 
+	/*
+	 * At this point, node-affinity is known, which we fetched from ACPI
+	 * tables. So, the last step is let memblock know:
+	 */
 #ifdef CONFIG_NUMA
 	x86_numa_init();
 #else

@@ -244,7 +244,7 @@ static int __init slit_valid(struct acpi_table_slit *slit)
 }
 
 /* SLIT: System Locality Information Table */
-static int __init __used acpi_parse_slit(struct acpi_table_header *table)
+static int __init acpi_parse_slit(struct acpi_table_header *table)
 {
 	int i, j;
 	struct acpi_table_slit *slit = (struct acpi_table_slit *)table;
