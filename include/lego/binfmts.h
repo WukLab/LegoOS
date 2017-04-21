@@ -10,8 +10,40 @@
 #ifndef _LEGO_BINFMTS_H_
 #define _LEGO_BINFMTS_H_
 
+#include <lego/mm.h>
+#include <lego/sched.h>
+
 int do_execve(const char *filename,
 	      const char * const *argv,
 	      const char * const *envp);
+
+/*
+ * These are the maximum length and maximum number of strings passed to the
+ * execve() system call.  MAX_ARG_STRLEN is essentially random but serves to
+ * prevent the kernel from being unduly impacted by misaddressed pointers.
+ * MAX_ARG_STRINGS is chosen to fit in a signed 32-bit integer.
+ */
+#define MAX_ARG_STRLEN		(PAGE_SIZE * 32)
+#define MAX_ARG_STRINGS		0x7FFFFFFF
+
+/* sizeof(lego_binprm->buf) */
+#define BINPRM_BUF_SIZE		128
+
+/*
+ * This structure is used to hold the arguments that are used when loading binaries.
+ */
+struct lego_binprm {
+	char			buf[BINPRM_BUF_SIZE];
+	struct mm_struct	*mm;
+
+	/* Current top of mem */
+	unsigned long		p;
+};
+
+struct lego_binfmt {
+	struct list_head lh;
+	int (*load_binary)(struct lego_binprm *);
+	int (*core_dump)(void);
+};
 
 #endif /* _LEGO_BINFMTS_H_ */

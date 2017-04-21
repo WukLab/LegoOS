@@ -10,6 +10,7 @@
 #include <lego/sched.h>
 #include <lego/ptrace.h>
 #include <lego/kernel.h>
+#include <lego/binfmts.h>
 
 unsigned long stack[8];
 

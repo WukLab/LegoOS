@@ -83,7 +83,18 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	return prev_p;
 }
 
-void start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp)
+/**
+ * start_thread	- Starting a new user thread
+ * @regs: pointer to pt_regs
+ * @new_ip: the first instruction IP of user thread
+ * @new_sp: the new stack pointer of user thread
+ *
+ * We do not return to usermode here, we simply replace the return IP of the
+ * regs frame. While the kernel thread returns, it will simply merge to syscall
+ * return path (check ret_from_fork() in entry.S for detial).
+ */
+void start_thread(struct pt_regs *regs, unsigned long new_ip,
+		  unsigned long new_sp)
 {
 	loadsegment(fs, 0);
 	loadsegment(es, 0);
