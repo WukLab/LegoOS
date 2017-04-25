@@ -11,12 +11,27 @@
 #include <lego/ptrace.h>
 #include <lego/kernel.h>
 #include <lego/binfmts.h>
+#include <lego/spinlock.h>
 
-unsigned long stack[8];
+static LIST_HEAD(formats);
+static DEFINE_SPINLOCK(binfmt_lock);
 
-void user_level_program(void)
+void __register_binfmt(struct lego_binfmt *fmt, int insert)
 {
-	hlt();
+	BUG_ON(!fmt);
+	if (WARN_ON(!fmt->load_binary))
+		return;
+	spin_lock(&binfmt_lock);
+	insert ? list_add(&fmt->lh, &formats) :
+		 list_add_tail(&fmt->lh, &formats);
+	spin_unlock(&binfmt_lock);
+}
+
+void unregister_binfmt(struct lego_binfmt *fmt)
+{
+	spin_lock(&binfmt_lock);
+	list_del(&fmt->lh);
+	spin_unlock(&binfmt_lock);
 }
 
 int do_execve(const char *filename,
@@ -25,6 +40,6 @@ int do_execve(const char *filename,
 {
 	struct pt_regs *regs = current_pt_regs();
 
-	start_thread(regs, (unsigned long)0xC0001000, (unsigned long)&stack[4]);
+	start_thread(regs, (unsigned long)0xC0001000, (unsigned long)0xC0002000);
 	return 0;
 }
