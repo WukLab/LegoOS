@@ -32,6 +32,9 @@
 #include <lego/irqdomain.h>
 #include <lego/completion.h>
 
+#include <lego/comp_processor.h>
+#include <lego/comp_memory.h>
+
 #include <asm/io.h>
 #include <asm/asm.h>
 #include <asm/page.h>
@@ -115,6 +118,10 @@ static int kernel_init(void *unused)
 static void rest_init(void)
 {
 	kernel_thread(kernel_init, NULL, CLONE_FS);
+
+#ifndef CONFIG_PREEMPT
+	schedule();
+#endif
 }
 
 asmlinkage void __init start_kernel(void)
@@ -213,10 +220,14 @@ asmlinkage void __init start_kernel(void)
 	lego_ib_init();
 	//init_lwip();
 
+#ifdef CONFIG_COMP_PROCESSOR
+	processor_component_init();
+#endif
+#ifdef CONFIG_COMP_MEMORY
+	memory_component_init();
+#endif
+
 	/* STOP DBEYOND THIS POINT */
 	rest_init();
-#ifndef CONFIG_PREEMPT
-	schedule();
-#endif
 	cpu_idle();
 }

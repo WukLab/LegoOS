@@ -7,14 +7,13 @@
  * (at your option) any later version.
  */
 
-/*
- * Lego Processor Last-Level Cache Management
- */
+/* Internal header file */
 
-#include <lego/mm.h>
-#include <lego/kernel.h>
+#ifndef _PROCESSOR_COMPONENT_PROCESSOR_H_
+#define _PROCESSOR_COMPONENT_PROCESSOR_H_
 
-void __init processor_cache_init(void)
-{
+#include <lego/compiler.h>
 
-}
+void __init processor_cache_init(void);
+
+#endif /* _PROCESSOR_COMPONENT_PROCESSOR_H_ */

@@ -1,1 +1,1 @@
-obj-y := cache.o
+obj-y := init.o cache.o
