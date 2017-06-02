@@ -16,6 +16,7 @@
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
+#include <lego/comp_processor.h>
 
 static void __init e820_add_region(u64 start, u64 size, int type);
 u64 __init e820_remove_range(u64 start, u64 size, unsigned old_type,
@@ -46,6 +47,7 @@ static int __init parse_memmap_one(char *p)
 	} else if (*p == '$') {
 		start_at = memparse(p+1, &p);
 		e820_add_region(start_at, mem_size, E820_RESERVED);
+		processor_cache_range_register(start_at, mem_size);
 	} else if (*p == '!') {
 		start_at = memparse(p+1, &p);
 		e820_add_region(start_at, mem_size, E820_PRAM);
@@ -87,8 +89,7 @@ struct e820map e820_saved;
  * This function checks if any part of the range <start,end> is mapped
  * with type.
  */
-int
-e820_any_mapped(u64 start, u64 end, unsigned type)
+int e820_any_mapped(u64 start, u64 end, unsigned type)
 {
 	int i;
 
