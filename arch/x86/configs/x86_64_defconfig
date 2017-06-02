@@ -18,6 +18,7 @@ CONFIG_ILLEGAL_POINTER_VALUE=0xdead000000000000
 #
 # Misc Configurations
 #
+CONFIG_INIT_ENV_ARG_LIMIT=32
 CONFIG_CROSS_COMPILE=""
 CONFIG_LOCALVERSION=""
 # CONFIG_LOCALVERSION_AUTO is not set
@@ -53,6 +54,16 @@ CONFIG_ARCH_SPARSEMEM_DEFAULT=y
 CONFIG_ARCH_SELECT_MEMORY_MODEL=y
 CONFIG_HPET_TIMER=y
 CONFIG_PCI_MSI=y
+
+#
+# Lego Processor Component Configurations
+#
+# CONFIG_COMP_PROCESSOR is not set
+
+#
+# Lego Memory Component Configurations
+#
+# CONFIG_COMP_MEMORY is not set
 
 #
 # Memory Management

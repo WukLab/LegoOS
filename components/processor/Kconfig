@@ -1,9 +1,20 @@
 menu "Lego Processor Component Configurations"
 
 config COMP_PROCESSOR
-	def_bool n
+	bool "Configure Lego as processor component"
+	default n
 	---help---
-	  Configure this if you are going to build a processor-component
+	  Say Y if you are going to build a processor-component
 	  controller of Lego OS.
+
+if COMP_PROCESSOR
+
+config PROCESSOR_LLC_ASSOCIATIVITY
+	int
+	default 8
+	---help---
+	  Configure the LLC cache associativity for processor components.
+
+endif
 
 endmenu
