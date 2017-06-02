@@ -41,5 +41,12 @@ int do_execve(const char *filename,
 	struct pt_regs *regs = current_pt_regs();
 
 	start_thread(regs, (unsigned long)0xC0001000, (unsigned long)0xC0002000);
+
+	/* Return to the newly replaced program */
 	return 0;
+}
+
+void __init exec_init(void)
+{
+	register_binfmt(&elf_format);
 }

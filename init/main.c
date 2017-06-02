@@ -108,6 +108,7 @@ static int kernel_init(void *unused)
 		return 0;
 
 	panic("No working init found!");
+
 	return -EFAULT;
 }
 
@@ -200,16 +201,14 @@ asmlinkage void __init start_kernel(void)
 	local_irq_enable();
 	smp_init();
 
+	/* Register binfmt handlers */
+	exec_init();
+
 	//ib_cache_setup();
 	ib_mad_init();
 	pr_info("after ib_mad_init\n");
-	schedule();
 	pr_info("before pci init\n");
 	pci_init();
-	//for (i = 0; i < 5; i++) {
-	//mdelay(1000);
-	//}
-	schedule();
 	pr_info("before lego ib init\n");
 	lego_ib_init();
 	//init_lwip();

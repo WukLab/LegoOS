@@ -46,4 +46,22 @@ struct lego_binfmt {
 	int (*core_dump)(void);
 };
 
+void __init exec_init(void);
+void unregister_binfmt(struct lego_binfmt *);
+void __register_binfmt(struct lego_binfmt *fmt, int insert);
+
+/* Registration of default binfmt handlers */
+static inline void register_binfmt(struct lego_binfmt *fmt)
+{
+	__register_binfmt(fmt, 0);
+}
+
+/* Same as above, but adds a new binfmt at the top of the list */
+static inline void insert_binfmt(struct lego_binfmt *fmt)
+{
+	__register_binfmt(fmt, 1);
+}
+
+extern struct lego_binfmt elf_format;
+
 #endif /* _LEGO_BINFMTS_H_ */
