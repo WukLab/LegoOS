@@ -27,6 +27,7 @@ void __init processor_cache_init(void)
 	pr_info("    start:            %#llx\n", llc_cache_start);
 	pr_info("    size:             %#llx\n", llc_cache_size);
 	pr_info("    associativity:    %d\n", llc_cache_associativity);
+	pr_info("    cacheline size:   %lu B\n", PAGE_SIZE);
 }
 
 /**

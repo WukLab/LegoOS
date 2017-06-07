@@ -7,8 +7,15 @@
  * (at your option) any later version.
  */
 
+#include <lego/kernel.h>
 #include "processor.h"
 
+/**
+ * processor_component_init
+ *
+ * Initiliaze all processor component contained subsystems.
+ * System will just panic if any of them failed.
+ */
 void __init processor_component_init(void)
 {
 	processor_cache_init();

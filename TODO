@@ -1,2 +1,6 @@
 - build_all_zonelists(), based on node order or zone order
-- PCI MSI
+- PCI MSI (may used by IB)
+* timer
+* mutex
+- watchdog and NMI handler (detect deadlock and dump backtrace)
+- optimize scheduler (add scheduling class?)
