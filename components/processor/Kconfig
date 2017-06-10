@@ -15,6 +15,16 @@ config PROCESSOR_LLC_ASSOCIATIVITY
 	---help---
 	  Configure the LLC cache associativity for processor components.
 
-endif
+config PROCESSOR_LLC_METADATA_SIZE
+	int
+	default 8 if 64BIT
+	default 4
 
+	---help---
+	  This defines the metadata byte size for each cache line. The metadata
+	  includes: tag bits, valid bit, dirty bit, etc.
+
+	  Default is 8 bytes if the kernel is configured as 64bit.
+
+endif
 endmenu
