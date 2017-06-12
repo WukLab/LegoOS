@@ -472,20 +472,6 @@ extern char __sched_text_start[], __sched_text_end[];
 /* Is this address in the __sched functions? */
 int in_sched_functions(unsigned long addr);
 
-/* task_struct::on_rq states: */
-#define TASK_ON_RQ_QUEUED	1
-#define TASK_ON_RQ_MIGRATING	2
-
-static inline int task_on_rq_queued(struct task_struct *p)
-{
-	return p->on_rq == TASK_ON_RQ_QUEUED;
-}
-
-static inline int task_on_rq_migrating(struct task_struct *p)
-{
-	return p->on_rq == TASK_ON_RQ_MIGRATING;
-}
-
 static inline int signal_pending_state(long state, struct task_struct *p)
 {
 	if (!(state & (TASK_INTERRUPTIBLE | TASK_WAKEKILL)))
