@@ -17,7 +17,10 @@ void __init processor_component_init(void);
 int __init processor_cache_range_register(u64 start, u64 size);
 #else
 static inline void processor_component_init(void) { }
-static inline int processor_cache_range_register(u64 s, u64 s) { return 0; }
+static inline int processor_cache_range_register(u64 start, u64 size)
+{
+	return 0;
+}
 #endif
 
 #endif /* _LEGO_COMP_PROCESSOR_H_ */

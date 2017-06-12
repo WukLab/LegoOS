@@ -117,7 +117,7 @@ CONFIG_PREEMPT=y
 #
 # TTY Layer Configurations
 #
-# CONFIG_TTY_VT is not set
+CONFIG_TTY_VT=y
 CONFIG_TTY_SERIAL=y
 # CONFIG_INFINIBAND is not set
 # CONFIG_E1000 is not set
