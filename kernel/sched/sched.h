@@ -7,16 +7,12 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_RQ_H_
-#define _LEGO_RQ_H_
+#ifndef _KERNEL_SCHED_SCHED_H_
+#define _KERNEL_SCHED_SCHED_H_
 
-#ifndef _LEGO_SCHED_H_
-# error Please include sched.h directly
-#endif
-
-#include <lego/spinlock.h>
-
-struct task_struct;
+/* task_struct::on_rq states: */
+#define TASK_ON_RQ_QUEUED	1
+#define TASK_ON_RQ_MIGRATING	2
 
 /*
  * This is the main, per-CPU runqueue data structure.
@@ -70,4 +66,17 @@ DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 #define ENQUEUE_HEAD		0x00000001
 
-#endif /* _LEGO_RQ_H_ */
+static inline int task_running(struct rq *rq, struct task_struct *p)
+{
+#ifdef CONFIG_SMP
+	return p->on_cpu;
+#else
+	return task_current(rq, p);
+#endif
+}
+
+struct sched_class {
+	const struct sched_class *next;
+};
+
+#endif /* _KERNEL_SCHED_SCHED_H_ */

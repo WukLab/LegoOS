@@ -10,6 +10,8 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 
+#include "sched.h"
+
 /* Weak implementations for optional arch specific functions */
 void __weak arch_cpu_idle_enter(void) { }
 void __weak arch_cpu_idle(void) { }

@@ -19,6 +19,8 @@
 #include <lego/cpumask.h>
 #include <lego/spinlock.h>
 
+#include "sched.h"
+
 DEFINE_PER_CPU(int, __preempt_count) = INIT_PREEMPT_COUNT;
 
 /* Per-CPU Runqueue */

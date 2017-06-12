@@ -17,9 +17,9 @@
 #include <asm/switch_to.h>
 #include <asm/thread_info.h>
 
-#include <lego/rq.h>
 #include <lego/mm.h>
 #include <lego/magic.h>
+#include <lego/rbtree.h>
 #include <lego/preempt.h>
 
 /*
@@ -162,17 +162,62 @@ do {							\
 /* Maximum timeout period */
 #define	MAX_SCHEDULE_TIMEOUT	LONG_MAX
 
+#ifdef CONFIG_SCHEDSTATS
+struct sched_statistics {
+	u64			wait_start;
+	u64			wait_max;
+	u64			wait_count;
+	u64			wait_sum;
+	u64			iowait_count;
+	u64			iowait_sum;
+
+	u64			sleep_start;
+	u64			sleep_max;
+	u64			sum_sleep_runtime;
+
+	u64			block_start;
+	u64			block_max;
+	u64			exec_max;
+	u64			slice_max;
+
+	u64			nr_wakeups;
+	u64			nr_wakeups_sync;
+	u64			nr_wakeups_local;
+	u64			nr_wakeups_remote;
+	u64			nr_wakeups_idle;
+};
+#endif
+
+struct sched_entity {
+	struct rb_node		run_node;
+	unsigned int		on_rq;
+
+	u64			exec_start;
+	u64			sum_exec_runtime;
+	u64			vruntime;
+	u64			prev_sum_exec_runtime;
+
+#ifdef CONFIG_SCHEDSTATS
+	struct sched_statistics statistics;
+#endif
+};
+
 struct task_struct {
-	/* -1 unrunnable, 0 runnable, >0 stopped */
-	volatile long		state;
-
-	/* kernel mode stack */
-	void			*stack;
-
-	/* per-process flags */
-	unsigned int		flags;
-
+	volatile long		state;		/* -1 unrunnable, 0 runnable, >0 stopped */
+	void			*stack;		/* kernel mode stack */
 	atomic_t		usage;
+	unsigned int		flags;		/* per-process flags */
+
+#ifdef CONFIG_SMP
+	int			on_cpu;
+	int			wake_cpu;
+	struct task_struct	*last_wakee;
+#endif
+
+	int			on_rq;
+	int			prio, static_prio;
+	struct sched_entity	se;
+	const struct sched_class *sched_class;
 
 	/* task exit state */
 	int			exit_state;
@@ -181,18 +226,10 @@ struct task_struct {
 
 	char			comm[TASK_COMM_LEN];
 
-	/* runqueue related: */
-	int			on_rq;
-	int			static_prio;
 	struct list_head	run_list;
 
 	/* list of all task_structs in the system */
 	struct list_head	tasks;
-
-#ifdef CONFIG_SMP
-	int			on_cpu;
-	int			wake_cpu;
-#endif
 
 	int			nr_cpus_allowed;
 	cpumask_t		cpus_allowed;
@@ -447,15 +484,6 @@ static inline int task_on_rq_queued(struct task_struct *p)
 static inline int task_on_rq_migrating(struct task_struct *p)
 {
 	return p->on_rq == TASK_ON_RQ_MIGRATING;
-}
-
-static inline int task_running(struct rq *rq, struct task_struct *p)
-{
-#ifdef CONFIG_SMP
-	return p->on_cpu;
-#else
-	return task_current(rq, p);
-#endif
 }
 
 static inline int signal_pending_state(long state, struct task_struct *p)
