@@ -1064,18 +1064,11 @@ void __init sched_init(void)
 		rq->nr_running = 0;
 		rq->nr_switches = 0;
 		rq->nr_uninterruptible = 0;
-		INIT_LIST_HEAD(&rq->rq);
 		rq->cpu = i;
 		rq->online = 0;
 		atomic_set(&rq->nr_iowait, 0);
 	}
 
-	/*
-	 * Make us the idle thread. Technically, schedule() should not be
-	 * called from this thread, however somewhere below it might be,
-	 * but because we are the idle thread, we just pick up running again
-	 * when this runqueue becomes "idle".
-	 */
 	sched_init_idle(current, smp_processor_id());
 
 	pr_info("Scheduler is up and running\n");

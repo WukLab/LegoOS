@@ -73,8 +73,6 @@ struct rq {
 
 	struct task_struct	*curr, *idle, *stop;
 
-	struct list_head	rq;
-
 	unsigned int		clock_skip_update;
 	u64			clock;
 	u64			clock_task;

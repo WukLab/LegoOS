@@ -15,7 +15,34 @@
 #include <lego/sched.h>
 #include "sched.h"
 
+/*
+ * Adding/removing a task to/from a priority array:
+ */
+static void
+enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
+{
+}
+
+static void
+dequeue_task_rt(struct rq *rq, struct task_struct *p, int flags)
+{
+}
+
+static void put_prev_task_rt(struct rq *rq, struct task_struct *p)
+{
+}
+
+static struct task_struct *
+pick_next_task_rt(struct rq *rq, struct task_struct *prev)
+{
+	return NULL;
+}
 
 const struct sched_class rt_sched_class = {
-	.next			= &idle_sched_class,
+	.next			= &fair_sched_class,
+	.enqueue_task		= enqueue_task_rt,
+	.dequeue_task		= dequeue_task_rt,
+
+	.pick_next_task		= pick_next_task_rt,
+	.put_prev_task		= put_prev_task_rt,
 };
