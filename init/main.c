@@ -228,6 +228,6 @@ asmlinkage void __init start_kernel(void)
 #endif
 
 	/* STOP DBEYOND THIS POINT */
-	//rest_init();
+	rest_init();
 	cpu_idle();
 }

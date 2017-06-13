@@ -250,9 +250,13 @@ struct task_struct {
 	int			exit_code;
 	int			exit_signal;
 
-	char			comm[TASK_COMM_LEN];
+	/* scheduler bits, serialized by scheduler locks */
+	unsigned		sched_reset_on_fork:1;
+	unsigned		sched_contributes_to_load:1;
+	unsigned		sched_migrated:1;
+	unsigned		:0; /* force alignment to the next boundary */
 
-	struct list_head	run_list;
+	char			comm[TASK_COMM_LEN];
 
 	/* list of all task_structs in the system */
 	struct list_head	tasks;
@@ -500,18 +504,6 @@ static inline int signal_pending_state(long state, struct task_struct *p)
 	if (!(state & (TASK_INTERRUPTIBLE | TASK_WAKEKILL)))
 		return 0;
 	return 0;
-}
-
-static inline int rt_prio(int prio)
-{
-	if (unlikely(prio < MAX_RT_PRIO))
-		return 1;
-	return 0;
-}
-
-static inline int rt_task(struct task_struct *p)
-{
-	return rt_prio(p->prio);
 }
 
 #endif /* _LEGO_SCHED_H_ */

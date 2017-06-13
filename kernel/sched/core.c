@@ -9,10 +9,12 @@
 
 #define pr_fmt(fmt) "sched: " fmt
 
+#include <lego/smp.h>
 #include <lego/pid.h>
 #include <lego/time.h>
 #include <lego/mutex.h>
 #include <lego/sched.h>
+#include <lego/sched_rt.h>
 #include <lego/kernel.h>
 #include <lego/percpu.h>
 #include <lego/jiffies.h>
@@ -238,7 +240,7 @@ static void task_rq_unlock(struct rq *rq, struct task_struct *p,
  * __task_rq_lock - lock the rq @p resides on
  */
 static struct rq *__task_rq_lock(struct task_struct *p)
-			__acquires(rq->lock)
+				 __acquires(rq->lock)
 {
 	struct rq *rq;
 
@@ -258,8 +260,8 @@ static struct rq *__task_rq_lock(struct task_struct *p)
 /*
  * __task_rq_unlock - unlock the rq @p resides on
  */
-static void __task_rq_unlock(struct rq *rq)
-			__releases(rq->lock)
+static inline void __task_rq_unlock(struct rq *rq)
+				    __releases(rq->lock)
 {
 	spin_unlock(&rq->lock);
 }
@@ -476,6 +478,10 @@ int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
 
 void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 {
+	/*
+	 * We should never call set_task_cpu() on a blocked task,
+	 * ttwu() will sort out the placement.
+	 */
 	WARN_ON_ONCE(p->state != TASK_RUNNING && !p->on_rq);
 	__set_task_cpu(p, new_cpu);
 }
@@ -960,14 +966,19 @@ void wake_up_new_task(struct task_struct *p)
 {
 	struct rq *rq;
 
-	p->state = TASK_RUNNING;
-	__set_task_cpu(p, task_cpu(p));
+#ifdef CONFIG_SMP
+	/*
+	 * Fork balancing, do it here and not earlier because:
+	 *  - cpus_allowed can change in the fork path
+	 *  - any previously selected cpu might disappear through hotplug
+	 */
+	set_task_cpu(p, task_cpu(p));
+#endif
 
-	rq = task_rq(p);
-	spin_lock(&rq->lock);
-	enqueue_task(rq, p, 0);
+	rq = __task_rq_lock(p);
+	activate_task(rq, p, 0);
 	p->on_rq = TASK_ON_RQ_QUEUED;
-	spin_unlock(&rq->lock);
+	__task_rq_unlock(rq);
 }
 
 /*
@@ -978,7 +989,16 @@ void wake_up_new_task(struct task_struct *p)
  */
 static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
-	p->on_rq = 0;
+	p->on_rq			= 0;
+
+	p->se.on_rq			= 0;
+	p->se.exec_start		= 0;
+	p->se.sum_exec_runtime		= 0;
+	p->se.prev_sum_exec_runtime	= 0;
+	p->se.vruntime			= 0;
+
+	INIT_LIST_HEAD(&p->rt.run_list);
+
 	p->static_prio = 0;
 }
 
@@ -987,18 +1007,46 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
  */
 int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
-	int cpu = smp_processor_id();
+	int cpu = get_cpu();
 
 	__sched_fork(clone_flags, p);
 
-	INIT_LIST_HEAD(&p->run_list);
-
 	/*
-	 * We mark the process as NEW here. This guarantees that
+	 * We mark the process as running here. This guarantees that
 	 * nobody will actually run it, and a signal or other external
 	 * event cannot wake it up and insert it on the runqueue either.
 	 */
-	p->state = TASK_NEW;
+	p->state = TASK_RUNNING;
+
+	/*
+	 * Make sure we do not leak PI boosting priority to the child.
+	 */
+	p->prio = current->normal_prio;
+
+	/*
+	 * Revert to default priority/policy on fork if requested.
+	 */
+	if (unlikely(p->sched_reset_on_fork)) {
+		if (task_has_rt_policy(p)) {
+			p->policy = SCHED_NORMAL;
+			p->static_prio = NICE_TO_PRIO(0);
+			p->rt_priority = 0;
+		} else if (PRIO_TO_NICE(p->static_prio) < 0)
+			p->static_prio = NICE_TO_PRIO(0);
+
+		p->prio = p->normal_prio = __normal_prio(p);
+
+		/*
+		 * We don't need the reset flag anymore after the fork. It has
+		 * fulfilled its duty:
+		 */
+		p->sched_reset_on_fork = 0;
+	}
+
+	if (rt_prio(p->prio))
+		p->sched_class = &rt_sched_class;
+	else
+		p->sched_class = &fair_sched_class;
 
 	__set_task_cpu(p, cpu);
 
@@ -1006,6 +1054,7 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->on_cpu = 0;
 #endif
 
+	put_cpu();
 	return 0;
 }
 

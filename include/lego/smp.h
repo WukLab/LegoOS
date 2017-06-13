@@ -11,7 +11,7 @@
 #define _LEGO_SMP_H_
 
 #include <lego/sched.h>
-#include <lego/compiler.h>
+#include <lego/preempt.h>
 
 #include <asm/smp.h>
 
@@ -19,5 +19,8 @@ void cpu_up(int cpu, struct task_struct *tidle);
 
 void __init smp_prepare_cpus(unsigned int maxcpus);
 void __init smp_init(void);
+
+#define get_cpu()		({ preempt_disable(); smp_processor_id(); })
+#define put_cpu()		preempt_enable()
 
 #endif /* _LEGO_SMP_H_ */
