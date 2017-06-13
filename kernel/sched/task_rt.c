@@ -17,5 +17,5 @@
 
 
 const struct sched_class rt_sched_class = {
-	.next			= &fair_sched_class,
+	.next			= &idle_sched_class,
 };

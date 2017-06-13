@@ -45,20 +45,60 @@ unsigned long long __weak sched_clock(void)
 					* (NSEC_PER_SEC / HZ);
 }
 
+/* TODO: more highrec and accurate clock impl */
+u64 sched_clock_cpu(int cpu)
+{
+	return sched_clock();
+}
+
 void user_thread_bug_now(void)
 {
 	panic("%s: not implemented now\n", __func__);
 }
 
-static inline void
-dequeue_task(struct rq *rq, struct task_struct *p, int flags)
+static inline void update_rq_clock_task(struct rq *rq, s64 delta)
 {
-	list_del_init(&p->run_list);
-	rq->nr_running--;
+	rq->clock_task += delta;
+}
+
+void update_rq_clock(struct rq *rq)
+{
+	s64 delta;
+
+	if (rq->clock_skip_update & RQCF_ACT_SKIP)
+		return;
+
+	delta = sched_clock_cpu(cpu_of(rq)) - rq->clock;
+	if (delta < 0)
+		return;
+
+	rq->clock += delta;
+	update_rq_clock_task(rq, delta);
 }
 
 static inline void
-deactivate_task(struct rq *rq, struct task_struct *p, int flags)
+enqueue_task(struct rq *rq, struct task_struct *p, int flags)
+{
+	update_rq_clock(rq);
+	p->sched_class->enqueue_task(rq, p, flags);
+}
+
+static inline void
+dequeue_task(struct rq *rq, struct task_struct *p, int flags)
+{
+	update_rq_clock(rq);
+	p->sched_class->dequeue_task(rq, p, flags);
+}
+
+void activate_task(struct rq *rq, struct task_struct *p, int flags)
+{
+	if ((p->state & TASK_UNINTERRUPTIBLE) != 0)
+		rq->nr_uninterruptible--;
+
+	enqueue_task(rq, p, flags);
+}
+
+void deactivate_task(struct rq *rq, struct task_struct *p, int flags)
 {
 	if ((p->state & TASK_UNINTERRUPTIBLE) != 0)
 		rq->nr_uninterruptible++;
@@ -66,88 +106,81 @@ deactivate_task(struct rq *rq, struct task_struct *p, int flags)
 	dequeue_task(rq, p, flags);
 }
 
-static inline void
-enqueue_task(struct rq *rq, struct task_struct *p, int flags)
+/*
+ * __normal_prio - return the priority that is based on the static prio
+ */
+static inline int __normal_prio(struct task_struct *p)
 {
-	if ((p->state & TASK_UNINTERRUPTIBLE) != 0)
-		rq->nr_uninterruptible--;
-
-	list_add_tail(&p->run_list, &rq->rq);
-	rq->nr_running++;
+	return p->static_prio;
 }
 
-static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
+/*
+ * Calculate the expected normal priority: i.e. priority
+ * without taking RT-inheritance into account. Might be
+ * boosted by interactivity modifiers. Changes upon fork,
+ * setprio syscalls, and whenever the interactivity
+ * estimator recalculates.
+ */
+static inline int normal_prio(struct task_struct *p)
 {
-#ifdef CONFIG_SMP
+	int prio;
+
+	if (task_has_rt_policy(p))
+		prio = MAX_RT_PRIO-1 - p->rt_priority;
+	else
+		prio = __normal_prio(p);
+	return prio;
+}
+
+/*
+ * Calculate the current priority, i.e. the priority
+ * taken into account by the scheduler. This value might
+ * be boosted by RT tasks, or might be boosted by
+ * interactivity modifiers. Will be RT if the task got
+ * RT-boosted. If not then it returns p->normal_prio.
+ */
+int effective_prio(struct task_struct *p)
+{
+	p->normal_prio = normal_prio(p);
 	/*
-	 * After ->cpu is set up to a new value, task_rq_lock(p, ...) can be
-	 * successfuly executed on another CPU. We must ensure that updates of
-	 * per-task data have been completed by this moment.
+	 * If we are RT tasks or we were boosted to RT priority,
+	 * keep the priority unchanged. Otherwise, update priority
+	 * to the normal priority:
 	 */
-	smp_wmb();
-	task_thread_info(p)->cpu = cpu;
-	p->wake_cpu = cpu;
-#endif
+	if (!rt_prio(p->prio))
+		return p->normal_prio;
+	return p->prio;
 }
 
-void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask)
+/**
+ * task_curr - is this task currently executing on a CPU?
+ * @p: the task in question.
+ *
+ * Return: 1 if the task is currently executing. 0 otherwise.
+ */
+inline int task_curr(const struct task_struct *p)
 {
-	cpumask_copy(&p->cpus_allowed, new_mask);
-	p->nr_cpus_allowed = cpumask_weight(new_mask);
-}
-
-void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
-{
-	WARN_ON_ONCE(p->state != TASK_RUNNING && !p->on_rq);
-	__set_task_cpu(p, new_cpu);
+	return cpu_curr(task_cpu(p)) == p;
 }
 
 /*
- * Move a queued task to a new rq
- * Must enter with old rq's lock held!
+ * switched_from, switched_to and prio_changed must _NOT_ drop rq->lock,
+ * use the balance_callback list if you want balancing.
  *
- * Returns (locked) new rq. Old rq's lock is released
+ * this means any call to check_class_changed() must be followed by a call to
+ * balance_callback().
  */
-static struct rq *
-move_queued_task(struct rq *rq, struct task_struct *p, int new_cpu)
+static inline void check_class_changed(struct rq *rq, struct task_struct *p,
+				       const struct sched_class *prev_class,
+				       int oldprio)
 {
-	/* pop from old rq */
-	p->on_rq = TASK_ON_RQ_MIGRATING;
-	dequeue_task(rq, p, 0);
-	set_task_cpu(p, new_cpu);
-	spin_unlock(&rq->lock);
+	if (prev_class != p->sched_class) {
+		if (prev_class->switched_from)
+			prev_class->switched_from(rq, p);
 
-	/* push to new rq */
-	rq = cpu_rq(new_cpu);
-	spin_lock(&rq->lock);
-	BUG_ON(task_cpu(p) != new_cpu);
-	enqueue_task(rq, p, 0);
-	p->on_rq = TASK_ON_RQ_QUEUED;
-
-	return rq;
-}
-
-/*
- * Move (not current) task off this CPU, onto the destination CPU. We're doing
- * this because either it can't run here any more (set_cpus_allowed()
- * away from this CPU, or CPU going down), or because we're
- * attempting to rebalance this task on exec (sched_exec).
- *
- * So we race with normal scheduler movements, but that's OK, as long
- * as the task is no longer on this CPU.
- */
-struct rq * __migrate_task(struct rq *rq, struct task_struct *p, int dest_cpu)
-{
-	if (unlikely(!cpu_online(dest_cpu)))
-		return rq;
-
-	/* Affinity changed (again). */
-	if (!cpumask_test_cpu(dest_cpu, &p->cpus_allowed))
-		return rq;
-
-	rq = move_queued_task(rq, p, dest_cpu);
-
-	return rq;
+		p->sched_class->switched_to(rq, p);
+	} else if (oldprio != p->prio)
+		p->sched_class->prio_changed(rq, p, oldprio);
 }
 
 /*
@@ -231,6 +264,151 @@ static void __task_rq_unlock(struct rq *rq)
 	spin_unlock(&rq->lock);
 }
 
+static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
+{
+#ifdef CONFIG_SMP
+	/*
+	 * After ->cpu is set up to a new value, task_rq_lock(p, ...) can be
+	 * successfuly executed on another CPU. We must ensure that updates of
+	 * per-task data have been completed by this moment.
+	 */
+	smp_wmb();
+	task_thread_info(p)->cpu = cpu;
+	p->wake_cpu = cpu;
+#endif
+}
+
+#ifdef CONFIG_SMP
+/*
+ * This is how migration works:
+ *
+ * 1) we invoke migration_cpu_stop() on the target CPU using
+ *    stop_one_cpu().
+ * 2) stopper starts to run (implicitly forcing the migrated thread
+ *    off the CPU)
+ * 3) it checks whether the migrated task is still in the wrong runqueue.
+ * 4) if it's in the wrong runqueue then the migration thread removes
+ *    it and puts it into the right queue.
+ * 5) stopper completes and stop_one_cpu() returns and the migration
+ *    is done.
+ */
+
+/*
+ * Move a queued task to a new rq
+ * Must enter with old rq's lock held!
+ *
+ * Returns (locked) new rq. Old rq's lock is released
+ */
+static struct rq *
+move_queued_task(struct rq *rq, struct task_struct *p, int new_cpu)
+{
+	/* pop from old rq */
+	p->on_rq = TASK_ON_RQ_MIGRATING;
+	dequeue_task(rq, p, 0);
+	set_task_cpu(p, new_cpu);
+	spin_unlock(&rq->lock);
+
+	/* push to new rq */
+	rq = cpu_rq(new_cpu);
+	spin_lock(&rq->lock);
+	BUG_ON(task_cpu(p) != new_cpu);
+	enqueue_task(rq, p, 0);
+	p->on_rq = TASK_ON_RQ_QUEUED;
+
+	return rq;
+}
+
+struct migration_arg {
+	struct task_struct *task;
+	int dest_cpu;
+};
+
+/*
+ * Move (not current) task off this CPU, onto the destination CPU. We're doing
+ * this because either it can't run here any more (set_cpus_allowed()
+ * away from this CPU, or CPU going down), or because we're
+ * attempting to rebalance this task on exec (sched_exec).
+ *
+ * So we race with normal scheduler movements, but that's OK, as long
+ * as the task is no longer on this CPU.
+ */
+struct rq *__migrate_task(struct rq *rq, struct task_struct *p, int dest_cpu)
+{
+	if (unlikely(!cpu_online(dest_cpu)))
+		return rq;
+
+	/* Affinity changed (again). */
+	if (!cpumask_test_cpu(dest_cpu, &p->cpus_allowed))
+		return rq;
+
+	rq = move_queued_task(rq, p, dest_cpu);
+
+	return rq;
+}
+
+/*
+ * migration_cpu_stop - this will be executed by a highprio stopper thread
+ * and performs thread migration by bumping thread off CPU then
+ * 'pushing' onto another runqueue.
+ */
+static int migration_cpu_stop(void *data)
+{
+	struct migration_arg *arg = data;
+	struct task_struct *p = arg->task;
+	struct rq *rq = this_rq();
+
+	/*
+	 * The original target cpu might have gone down and we might
+	 * be on another cpu but it doesn't matter.
+	 */
+	local_irq_disable();
+
+	spin_lock(&rq->lock);
+	/*
+	 * If task_rq(p) != rq, it cannot be migrated here, because we're
+	 * holding rq->lock, if p->on_rq == 0 it cannot get enqueued because
+	 * we're holding p->pi_lock.
+	 */
+	if (task_rq(p) == rq && task_on_rq_queued(p))
+		rq = __migrate_task(rq, p, arg->dest_cpu);
+	spin_unlock(&rq->lock);
+
+	local_irq_enable();
+	return 0;
+}
+
+void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask)
+{
+	cpumask_copy(&p->cpus_allowed, new_mask);
+	p->nr_cpus_allowed = cpumask_weight(new_mask);
+}
+
+void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
+{
+	struct rq *rq = task_rq(p);
+	bool queued, running;
+
+	queued = task_on_rq_queued(p);
+	running = task_current(rq, p);
+
+	if (queued)
+		dequeue_task(rq, p, DEQUEUE_SAVE);
+	if (running)
+		put_prev_task(rq, p);
+
+	p->sched_class->set_cpus_allowed(p, new_mask);
+
+	if (running)
+		p->sched_class->set_curr_task(rq);
+	if (queued)
+		enqueue_task(rq, p, ENQUEUE_RESTORE);
+}
+
+static inline int stop_one_cpu(unsigned int cpu, int (*fn)(void *data), void *arg)
+{
+	return 0;
+}
+
 /*
  * Change a given task's CPU affinity. Migrate the thread to a
  * proper CPU and schedule it away if the CPU it's executing on
@@ -240,26 +418,21 @@ static void __task_rq_unlock(struct rq *rq)
  * task must not exit() & deallocate itself prematurely. The
  * call is not atomic; no spinlocks may be held.
  */
-int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
+static int __set_cpus_allowed_ptr(struct task_struct *p,
+				  const struct cpumask *new_mask, bool check)
 {
-	struct rq *rq;
 	unsigned long flags;
-	unsigned long dest_cpu;
+	struct rq *rq;
+	unsigned int dest_cpu;
 	int ret = 0;
 
 	rq = task_rq_lock(p, &flags);
 
 	/*
-	 * We are not able to migrate a running task
-	 * Linux can, with a migration thread's help
+	 * Must re-check here, to close a race against __kthread_bind(),
+	 * sched_setaffinity() is not guaranteed to observe the flag.
 	 */
-	if (task_running(rq, p)) {
-		ret = -EAGAIN;
-		goto out;
-	}
-
-	/* Does this thread allowed to migrate? */
-	if (p->flags & PF_NO_SETAFFINITY) {
+	if (check && (p->flags & PF_NO_SETAFFINITY)) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -267,36 +440,56 @@ int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
 	if (cpumask_equal(&p->cpus_allowed, new_mask))
 		goto out;
 
-	if (!cpumask_intersects(new_mask, cpu_online_mask)) {
+	if (!cpumask_intersects(new_mask, cpu_active_mask)) {
 		ret = -EINVAL;
 		goto out;
 	}
+
+	do_set_cpus_allowed(p, new_mask);
 
 	/* Can the task run on the task's current CPU? If so, we're done */
 	if (cpumask_test_cpu(task_cpu(p), new_mask))
 		goto out;
 
-	/*
-	 * The thread is moved to another rq if it is
-	 * already queued in its current rq:
-	 */
-	dest_cpu = cpumask_any_and(cpu_online_mask, new_mask);
-	if (task_on_rq_queued(p)) {
-		rq = move_queued_task(rq, p, dest_cpu);
+	dest_cpu = cpumask_any_and(cpu_active_mask, new_mask);
+	if (task_running(rq, p) || p->state == TASK_WAKING) {
+		struct migration_arg arg = { p, dest_cpu };
+		/* Need help from migration thread: drop lock and wait. */
+		task_rq_unlock(rq, p, &flags);
 
-	/*
-	 * If preemption is not configured, we should let dest cpu
-	 * know that there is one new task waiting to be scheduled:
-	 */
-#ifndef CONFIG_PREEMPT
-		set_tsk_need_resched(rq->idle);
-#endif
-	}
+		/* TODO */
+		stop_one_cpu(cpu_of(rq), migration_cpu_stop, &arg);
+		return 0;
+	} else if (task_on_rq_queued(p))
+		rq = move_queued_task(rq, p, dest_cpu);
 
 out:
 	task_rq_unlock(rq, p, &flags);
+
 	return ret;
 }
+
+int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
+{
+	return __set_cpus_allowed_ptr(p, new_mask, false);
+}
+
+void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
+{
+	WARN_ON_ONCE(p->state != TASK_RUNNING && !p->on_rq);
+	__set_task_cpu(p, new_cpu);
+}
+
+#else
+
+static inline int
+__set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask,
+		       bool check)
+{
+	return set_cpus_allowed_ptr(p, new_mask);
+}
+
+#endif
 
 /**
  * sched_setaffinity	-	Set cpu affinity for a task
@@ -335,28 +528,27 @@ void sched_remove_from_rq(struct task_struct *p)
 	panic("%s: not implemented\n", __func__);
 }
 
+/*
+ * Pick up the highest-prio task:
+ */
 static inline struct task_struct *
 pick_next_task(struct rq *rq, struct task_struct *prev)
 {
-	struct task_struct *next;
+	struct task_struct *p;
+	const struct sched_class *class;
 
-	if (list_empty(&rq->rq))
-		/* rq empty, return idle thread */
-		return rq->idle;
-
-	if (likely(prev->on_rq)) {
-		if (prev != rq->idle) {
-			/*
-			 * Round-Robin Policy
-			 * Move this task to the tail of this rq
-			 * if and only if this task is not a idle task
-			 */
-			list_move_tail(&prev->run_list, &rq->rq);
+again:
+	for_each_class(class) {
+		p = class->pick_next_task(rq, prev);
+		if (p) {
+			if (unlikely(p == RETRY_TASK))
+				goto again;
+			return p;
 		}
 	}
 
-	next = container_of((&rq->rq)->next, struct task_struct, run_list);
-	return next;
+	/* idle class will always have a runnable task */
+	BUG();
 }
 
 static void switch_mm_irqs_off(struct mm_struct *prev,
@@ -543,19 +735,19 @@ static void __sched __schedule(bool preempt)
 	 * of the previous task.
 	 */
 	if (!preempt && prev->state) {
-		deactivate_task(rq, prev, 0);
+		deactivate_task(rq, prev, DEQUEUE_SLEEP);
 		prev->on_rq = 0;
 
 		if (prev->in_iowait)
 			atomic_inc(&rq->nr_iowait);
 	}
 
-	/*
-	 * Pick the next runnable task
-	 * move prev accordingly
-	 */
+	if (task_on_rq_queued(prev))
+		update_rq_clock(rq);
+
 	next = pick_next_task(rq, prev);
 	clear_tsk_need_resched(prev);
+	rq->clock_skip_update = 0;
 
 	if (likely(prev != next)) {
 		rq->nr_switches++;
@@ -830,8 +1022,11 @@ void __init sched_init_idle(struct task_struct *idle, int cpu)
 
 	idle->state = TASK_RUNNING;
 	idle->flags |= PF_IDLE;
+	idle->se.exec_start = sched_clock();
 
+#ifdef CONFIG_SMP
 	set_cpus_allowed_common(idle, cpumask_of(cpu));
+#endif
 
 	__set_task_cpu(idle, cpu);
 
@@ -840,7 +1035,6 @@ void __init sched_init_idle(struct task_struct *idle, int cpu)
 	 * set to idle thread:
 	 */
 	rq->curr = rq->idle = idle;
-
 	idle->on_rq = TASK_ON_RQ_QUEUED;
 #ifdef CONFIG_SMP
 	idle->on_cpu = 1;
@@ -848,6 +1042,8 @@ void __init sched_init_idle(struct task_struct *idle, int cpu)
 
 	/* Reset preempt count and inturn enable preemption */
 	init_idle_preempt_count(idle, cpu);
+
+	idle->sched_class = &idle_sched_class;
 
 	sprintf(idle->comm, "swapper/%d", cpu);
 }

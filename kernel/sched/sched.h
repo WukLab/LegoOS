@@ -14,6 +14,31 @@
 #define TASK_ON_RQ_QUEUED	1
 #define TASK_ON_RQ_MIGRATING	2
 
+static inline int idle_policy(int policy)
+{
+	return policy == SCHED_IDLE;
+}
+static inline int fair_policy(int policy)
+{
+	return policy == SCHED_NORMAL || policy == SCHED_BATCH;
+}
+
+static inline int rt_policy(int policy)
+{
+	return policy == SCHED_FIFO || policy == SCHED_RR;
+}
+
+static inline bool valid_policy(int policy)
+{
+	return idle_policy(policy) || fair_policy(policy) ||
+		rt_policy(policy);
+}
+
+static inline int task_has_rt_policy(struct task_struct *p)
+{
+	return rt_policy(p->policy);
+}
+
 struct cfs_rq {
 
 };
@@ -109,7 +134,10 @@ DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 #define task_rq(p)		cpu_rq(task_cpu(p))
 #define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
 
-#define ENQUEUE_HEAD		0x00000001
+static inline int task_current(struct rq *rq, struct task_struct *p)
+{
+	return rq->curr == p;
+}
 
 static inline int task_running(struct rq *rq, struct task_struct *p)
 {
@@ -119,6 +147,21 @@ static inline int task_running(struct rq *rq, struct task_struct *p)
 	return task_current(rq, p);
 #endif
 }
+
+#define ENQUEUE_WAKEUP		0x01
+#define ENQUEUE_HEAD		0x02
+#ifdef CONFIG_SMP
+#define ENQUEUE_WAKING		0x04	/* sched_class::task_waking was called */
+#else
+#define ENQUEUE_WAKING		0x00
+#endif
+#define ENQUEUE_REPLENISH	0x08
+#define ENQUEUE_RESTORE		0x10
+
+#define DEQUEUE_SLEEP		0x01
+#define DEQUEUE_SAVE		0x02
+
+#define RETRY_TASK		((void *)-1UL)
 
 struct sched_class {
 	const struct sched_class *next;
@@ -187,5 +230,36 @@ extern const struct sched_class fair_sched_class;
 extern const struct sched_class idle_sched_class;
 
 void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask);
+
+#ifdef CONFIG_SMP
+void do_set_cpus_allowed(struct task_struct *p,
+			 const struct cpumask *new_mask);
+
+int set_cpus_allowed_ptr(struct task_struct *p,
+			 const struct cpumask *new_mask);
+#else
+static inline void do_set_cpus_allowed(struct task_struct *p,
+				       const struct cpumask *new_mask)
+{
+}
+static inline int set_cpus_allowed_ptr(struct task_struct *p,
+				       const struct cpumask *new_mask)
+{
+	if (!cpumask_test_cpu(0, new_mask))
+		return -EINVAL;
+	return 0;
+}
+#endif
+
+#define RQCF_REQ_SKIP	0x01
+#define RQCF_ACT_SKIP	0x02
+
+static inline void rq_clock_skip_update(struct rq *rq, bool skip)
+{
+	if (skip)
+		rq->clock_skip_update |= RQCF_REQ_SKIP;
+	else
+		rq->clock_skip_update &= ~RQCF_REQ_SKIP;
+}
 
 #endif /* _KERNEL_SCHED_SCHED_H_ */
