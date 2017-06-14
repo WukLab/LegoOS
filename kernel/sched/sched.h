@@ -10,9 +10,23 @@
 #ifndef _KERNEL_SCHED_SCHED_H_
 #define _KERNEL_SCHED_SCHED_H_
 
+#include <lego/rbtree.h>
+#include <lego/sched.h>
+#include <lego/sched_rt.h>
+
 /* task_struct::on_rq states: */
 #define TASK_ON_RQ_QUEUED	1
 #define TASK_ON_RQ_MIGRATING	2
+
+static inline int task_on_rq_queued(struct task_struct *p)
+{
+	return p->on_rq == TASK_ON_RQ_QUEUED;
+}
+
+static inline int task_on_rq_migrating(struct task_struct *p)
+{
+	return p->on_rq == TASK_ON_RQ_MIGRATING;
+}
 
 static inline int idle_policy(int policy)
 {
@@ -39,12 +53,53 @@ static inline int task_has_rt_policy(struct task_struct *p)
 	return rt_policy(p->policy);
 }
 
+/* Priority-queue data structure of the RT scheduling class: */
+struct rt_prio_array {
+	DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1); /* include 1 bit for delimiter */
+	struct list_head queue[MAX_RT_PRIO];
+};
+
+/* CFS-related fields in a runqueue */
 struct cfs_rq {
+	unsigned int		nr_running, h_nr_running;
+
+	u64			exec_clock;
+	u64			min_vruntime;
+
+	struct rb_root		tasks_timeline;
+	struct rb_node		*rb_leftmost;
+
+	/*
+	 * 'curr' points to currently running entity on this cfs_rq.
+	 * It is set to NULL otherwise (i.e when none are currently running).
+	 */
+	struct sched_entity 	*curr, *next, *last, *skip;
 
 };
 
+/* Real-Time classes' related field in a runqueue: */
 struct rt_rq {
+	struct rt_prio_array	active;
+	unsigned int		rt_nr_running;
 
+#ifdef CONFIG_SMP
+#endif
+
+	int			rt_queued;
+	int			rt_throttled;
+	int			rt_time;
+	int			rt_runtime;
+	/* nests inside the rq lock: */
+	spinlock_t		rt_runtime_lock;
+};
+
+/* Deadline class' related fields in a runqueue */
+struct dl_rq {
+	/* runqueue is an rbtree, ordered by deadline */
+	struct rb_root		rb_root;
+	struct rb_node		*rb_leftmost;
+
+	unsigned long		dl_nr_running;
 };
 
 /*
@@ -62,6 +117,7 @@ struct rq {
 
 	struct cfs_rq		cfs;
 	struct rt_rq		rt;
+	struct dl_rq		dl;
 
 	/*
 	 * This is part of a global counter where only the total sum
@@ -95,15 +151,16 @@ static inline int cpu_of(struct rq *rq)
 #endif
 }
 
-static inline int task_on_rq_queued(struct task_struct *p)
-{
-	return p->on_rq == TASK_ON_RQ_QUEUED;
-}
+DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
-static inline int task_on_rq_migrating(struct task_struct *p)
-{
-	return p->on_rq == TASK_ON_RQ_MIGRATING;
-}
+#define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
+#define this_rq()		this_cpu_ptr(&runqueues)
+#define task_rq(p)		cpu_rq(task_cpu(p))
+#define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
+
+void init_cfs_rq(struct cfs_rq *cfs_rq);
+void init_rt_rq(struct rt_rq *rt_rq);
+void init_dl_rq(struct dl_rq *dl_rq);
 
 static inline u64 rq_clock(struct rq *rq)
 {
@@ -124,13 +181,6 @@ static inline void sub_nr_running(struct rq *rq, unsigned count)
 {
 	rq->nr_running -= count;
 }
-
-DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
-
-#define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
-#define this_rq()		this_cpu_ptr(&runqueues)
-#define task_rq(p)		cpu_rq(task_cpu(p))
-#define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
 
 static inline int task_current(struct rq *rq, struct task_struct *p)
 {

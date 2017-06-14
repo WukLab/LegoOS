@@ -199,6 +199,11 @@ struct sched_statistics {
 };
 #endif
 
+/*
+ * sched_entity contains data shared by all scheduling class.
+ * If a particular class need additional data, it will introduce another
+ * structure, e.g., sched_rt_entity and sched_dl_entity.
+ */
 struct sched_entity {
 	struct rb_node		run_node;
 	unsigned int		on_rq;
@@ -222,6 +227,9 @@ struct sched_rt_entity {
 	struct sched_rt_entity	*back;
 };
 
+struct sched_dl_entity {
+};
+
 struct task_struct {
 	volatile long		state;		/* -1 unrunnable, 0 runnable, >0 stopped */
 	void			*stack;		/* kernel mode stack */
@@ -234,27 +242,29 @@ struct task_struct {
 	struct task_struct	*last_wakee;
 #endif
 
+/* Scheduling */
 	int			on_rq;
 	int			prio, static_prio, normal_prio;
 	unsigned int		rt_priority;
 	const struct sched_class *sched_class;
 	struct sched_entity	se;
 	struct sched_rt_entity	rt;
+	struct sched_dl_entity	dl;
 
 	int			policy;
 	int			nr_cpus_allowed;
 	cpumask_t		cpus_allowed;
 
-	/* task exit state */
-	int			exit_state;
-	int			exit_code;
-	int			exit_signal;
-
-	/* scheduler bits, serialized by scheduler locks */
+/* Scheduler bits, serialized by scheduler locks */
 	unsigned		sched_reset_on_fork:1;
 	unsigned		sched_contributes_to_load:1;
 	unsigned		sched_migrated:1;
 	unsigned		:0; /* force alignment to the next boundary */
+
+/* Exit state */
+	int			exit_state;
+	int			exit_code;
+	int			exit_signal;
 
 	char			comm[TASK_COMM_LEN];
 

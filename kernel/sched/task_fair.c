@@ -30,6 +30,12 @@ pick_next_task_fair(struct rq *rq, struct task_struct *prev)
 	return NULL;
 }
 
+void init_cfs_rq(struct cfs_rq *cfs_rq)
+{
+	cfs_rq->tasks_timeline = RB_ROOT;
+	cfs_rq->min_vruntime = (u64)(-(1LL << 20));
+}
+
 const struct sched_class fair_sched_class = {
 	.next			= &idle_sched_class,
 

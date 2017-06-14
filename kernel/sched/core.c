@@ -997,6 +997,7 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->se.prev_sum_exec_runtime	= 0;
 	p->se.vruntime			= 0;
 
+	/* sched class related init: */
 	INIT_LIST_HEAD(&p->rt.run_list);
 
 	p->static_prio = 0;
@@ -1047,6 +1048,9 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 		p->sched_class = &rt_sched_class;
 	else
 		p->sched_class = &fair_sched_class;
+
+	/* TODO: use rt first */
+	p->sched_class = &rt_sched_class;
 
 	__set_task_cpu(p, cpu);
 
@@ -1113,9 +1117,16 @@ void __init sched_init(void)
 		rq->nr_running = 0;
 		rq->nr_switches = 0;
 		rq->nr_uninterruptible = 0;
+		atomic_set(&rq->nr_iowait, 0);
+
+		init_cfs_rq(&rq->cfs);
+		init_rt_rq(&rq->rt);
+		init_dl_rq(&rq->dl);
+
+#ifdef CONFIG_SMP
 		rq->cpu = i;
 		rq->online = 0;
-		atomic_set(&rq->nr_iowait, 0);
+#endif
 	}
 
 	sched_init_idle(current, smp_processor_id());
