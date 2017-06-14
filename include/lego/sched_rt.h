@@ -35,4 +35,23 @@ static inline int rt_task(struct task_struct *p)
  */
 #define RR_TIMESLICE		(100 * HZ / 1000)
 
+static inline int sched_find_first_bit(const unsigned long *b)
+{
+#if BITS_PER_LONG == 64
+	if (b[0])
+		return __ffs(b[0]);
+	return __ffs(b[1]) + 64;
+#elif BITS_PER_LONG == 32
+	if (b[0])
+		return __ffs(b[0]);
+	if (b[1])
+		return __ffs(b[1]) + 32;
+	if (b[2])
+		return __ffs(b[2]) + 64;
+	return __ffs(b[3]) + 96;
+#else
+#error BITS_PER_LONG not defined
+#endif
+}
+
 #endif /* _LEGO_SCHED_RT_H_ */

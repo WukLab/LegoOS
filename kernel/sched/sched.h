@@ -219,6 +219,8 @@ struct sched_class {
 	void (*yield_task)(struct rq *rq);
 	bool (*yield_to_task)(struct rq *rq, struct task_struct *p, bool preempt);
 
+	void (*check_preempt_curr)(struct rq *rq, struct task_struct *p, int flags);
+
 	/*
 	 * It is the responsibility of the pick_next_task() method that will
 	 * return the next task to call put_prev_task() on the @prev task or
@@ -309,5 +311,7 @@ static inline void rq_clock_skip_update(struct rq *rq, bool skip)
 	else
 		rq->clock_skip_update &= ~RQCF_REQ_SKIP;
 }
+
+void resched_curr(struct rq *rq);
 
 #endif /* _KERNEL_SCHED_SCHED_H_ */

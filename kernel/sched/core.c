@@ -823,6 +823,32 @@ void scheduler_tick(void)
 {
 }
 
+/*
+ * resched_curr - mark rq's current task 'to be rescheduled now'.
+ *
+ * On UP this means the setting of the need_resched flag, on SMP it
+ * might also involve a cross-CPU call to trigger the scheduler on
+ * the target CPU.
+ */
+void resched_curr(struct rq *rq)
+{
+	struct task_struct *curr = rq->curr;
+	int cpu;
+
+	if (test_tsk_need_resched(curr))
+		return;
+
+	cpu = cpu_of(rq);
+
+	if (cpu == smp_processor_id()) {
+		set_tsk_need_resched(curr);
+		return;
+	}
+
+	set_tsk_need_resched(curr);
+	//smp_send_reschedule(cpu);
+}
+
 static inline
 int select_task_rq(struct task_struct *p, int cpu)
 {
@@ -1048,9 +1074,6 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 		p->sched_class = &rt_sched_class;
 	else
 		p->sched_class = &fair_sched_class;
-
-	/* TODO: use rt first */
-	p->sched_class = &rt_sched_class;
 
 	__set_task_cpu(p, cpu);
 
