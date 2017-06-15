@@ -244,12 +244,15 @@ retint_kernel:
 #ifdef CONFIG_PREEMPT
 	/* Interrupts are off */
 	/* Check if we need preemption */
-	bt	$9, EFLAGS(%rsp)		/* were interrupts off? */
+	bt	$9, EFLAGS(%rsp)			/* was interrupt off? */
 	jnc	1f
-0:	cmpl	$0, PER_CPU_VAR(__preempt_count)
+0:	cmpl	$0, PER_CPU_VAR(__preempt_count)	/* was preemption disabled? */
 	jnz	1f
-	call	preempt_schedule_irq
-	/* TODO: jmp	0b */
+	GET_THREAD_INFO(%rcx)
+	bt	$TIF_NEED_RESCHED, TI_flags(%rcx)	/* was need_resched set? */
+	jnc	1f
+	call	preempt_schedule_irq			/* Do preemption */
+	jmp	0b
 1:
 #endif
 

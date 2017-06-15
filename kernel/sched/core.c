@@ -777,6 +777,19 @@ asmlinkage __visible void __sched schedule(void)
 	} while (need_resched());
 }
 
+/**
+ * schedule_preempt_disabled - called with preemption disabled
+ *
+ * Returns with preemption disabled. Note: preempt_count must be 1
+ */
+void __sched schedule_preempt_disabled(void)
+{
+	BUG_ON(preempt_count() != 1);
+	preempt_enable_no_resched();
+	schedule();
+	preempt_disable();
+}
+
 /*
  * This is the entry point to schedule() from kernel preemption
  * off of irq context.
@@ -787,6 +800,8 @@ asmlinkage __visible void __sched preempt_schedule_irq(void)
 {
 	/* Catch callers which need to be fixed */
 	BUG_ON(preempt_count() || !irqs_disabled());
+
+	pr_info("%s:%d, need_resched(): %d\n", __func__, smp_processor_id(), need_resched());
 
 	do {
 		preempt_disable();
@@ -821,6 +836,14 @@ void __noreturn do_task_dead(void)
  */
 void scheduler_tick(void)
 {
+	int cpu = smp_processor_id();
+	struct rq *rq = cpu_rq(cpu);
+	struct task_struct *curr = rq->curr;
+
+	spin_lock(&rq->lock);
+	update_rq_clock(rq);
+	curr->sched_class->task_tick(rq, curr, 0);
+	spin_unlock(&rq->lock);
 }
 
 /*
@@ -845,6 +868,7 @@ void resched_curr(struct rq *rq)
 		return;
 	}
 
+	/*TODO resched remote CPU */
 	set_tsk_need_resched(curr);
 	//smp_send_reschedule(cpu);
 }
@@ -1116,7 +1140,12 @@ void __init sched_init_idle(struct task_struct *idle, int cpu)
 	idle->on_cpu = 1;
 #endif
 
-	/* Reset preempt count and inturn enable preemption */
+	/*
+	 * Reset preempt count and in turn enable preemption
+	 *
+	 * It is safe to enable preemption during this time because
+	 * we know nothing is going to happen to this CPU at this time.
+	 */
 	init_idle_preempt_count(idle, cpu);
 
 	idle->sched_class = &idle_sched_class;
@@ -1152,6 +1181,7 @@ void __init sched_init(void)
 #endif
 	}
 
+	/* At last, set cpu0's idle thread */
 	sched_init_idle(current, smp_processor_id());
 
 	pr_info("Scheduler is up and running\n");

@@ -26,6 +26,7 @@
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/percpu.h>
+#include <lego/preempt.h>
 #include <lego/nodemask.h>
 #include <lego/early_ioremap.h>
 
@@ -205,6 +206,7 @@ static void start_secondary_cpu(void)
 {
 	/* Don't put *anything* before cpu_init() */
 	cpu_init();
+	preempt_disable();
 
 	apic_ap_setup();
 

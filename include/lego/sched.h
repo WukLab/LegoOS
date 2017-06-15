@@ -459,8 +459,12 @@ void __init sched_init(void);
 void __init sched_init_idle(struct task_struct *idle, int cpu);
 
 long schedule_timeout(long timeout);
-void schedule(void);
+asmlinkage void schedule(void);
+void schedule_preempt_disabled(void);
+
+/* Called periodically in every tick */
 void scheduler_tick(void);
+
 int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask);
 long sched_setaffinity(pid_t pid, const struct cpumask *new_mask);
 

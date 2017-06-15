@@ -175,5 +175,9 @@ static inline unsigned long current_stack_pointer(void)
  */
 #define ASM_THREAD_INFO(field, reg, off) ((field)+(off)-THREAD_SIZE)(reg)
 
+#define GET_THREAD_INFO(reg)		\
+	movq	$-THREAD_SIZE, reg;	\
+	andq	%rsp, reg		\
+
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_THREAD_INFO_H_ */
