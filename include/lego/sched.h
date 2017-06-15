@@ -465,6 +465,13 @@ void schedule_preempt_disabled(void);
 /* Called periodically in every tick */
 void scheduler_tick(void);
 
+/* Reschedule IPI */
+#ifdef CONFIG_SMP
+void scheduler_ipi(void);
+#else
+static inline void scheduler_ipi(void) { }
+#endif
+
 int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask);
 long sched_setaffinity(pid_t pid, const struct cpumask *new_mask);
 

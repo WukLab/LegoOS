@@ -76,7 +76,7 @@ void __default_send_IPI_dest_field(unsigned int mask, int vector, unsigned int d
 
 static inline unsigned int x86_cpu_to_apicid(int cpu)
 {
-	return 0;
+	return cpu_to_apicid(cpu);
 }
 
 void default_send_IPI_single_phys(int cpu, int vector)

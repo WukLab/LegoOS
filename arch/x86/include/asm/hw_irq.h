@@ -23,6 +23,7 @@ extern asmlinkage void smp__irq_work_interrupt(void);
 extern asmlinkage void smp__call_function_interrupt(void);
 extern asmlinkage void smp__call_function_single_interrupt(void);
 extern asmlinkage void smp__reboot_interrupt(void);
+extern asmlinkage void smp__reschedule_interrupt(void);
 
 extern asmlinkage unsigned int do_IRQ(struct pt_regs *regs);
 

@@ -24,4 +24,28 @@ DECLARE_PER_CPU_READ_MOSTLY(int, cpu_number);
 #define smp_processor_id()	0
 #endif
 
+struct smp_ops {
+	void (*smp_send_reschedule)(int cpu);
+
+	void (*send_call_func_ipi)(const struct cpumask *mask);
+	void (*send_call_func_single_ipi)(int cpu);
+};
+
+extern struct smp_ops smp_ops;
+
+static inline void smp_send_reschedule(int cpu)
+{
+	smp_ops.smp_send_reschedule(cpu);
+}
+
+static inline void arch_send_call_function_single_ipi(int cpu)
+{
+	smp_ops.send_call_func_single_ipi(cpu);
+}
+
+static inline void arch_send_call_function_ipi_mask(const struct cpumask *mask)
+{
+	smp_ops.send_call_func_ipi(mask);
+}
+
 #endif /* _ASM_X86_SMP_H_ */

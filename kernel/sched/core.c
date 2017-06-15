@@ -866,10 +866,8 @@ void resched_curr(struct rq *rq)
 		return;
 	}
 
-	/*TODO resched remote CPU */
-	WARN_ON(1, "impl this");
 	set_tsk_need_resched(curr);
-	//smp_send_reschedule(cpu);
+	smp_send_reschedule(cpu);
 }
 
 static inline
@@ -931,6 +929,17 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
 	spin_lock(&rq->lock);
 	ttwu_do_activate(rq, p, wake_flags);
 	spin_unlock(&rq->lock);
+}
+
+void scheduler_ipi(void)
+{
+/*TODO what is this.. */
+/*
+	if (llist_empty(&this_rq()->wake_list))
+		return;
+
+	sched_ttwu_pending();
+*/
 }
 
 /**

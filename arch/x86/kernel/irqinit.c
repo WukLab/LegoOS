@@ -79,11 +79,13 @@ void __init arch_irq_init(void)
 	for (i = 0; i < nr_legacy_irqs(); i++)
 		per_cpu(vector_irq, 0)[ISA_IRQ_VECTOR(i)] = irq_to_desc(i);
 
-	/*
-	 * SMP
-	 */
-
 #ifdef CONFIG_SMP
+	/*
+	 * The reschedule interrupt is a CPU-to-CPU reschedule-helper
+	 * IPI, driven by wakeup.
+	 */
+	alloc_intr_gate(RESCHEDULE_VECTOR, smp__reschedule_interrupt);
+
 	/* IPI for generic function call */
 	alloc_intr_gate(CALL_FUNCTION_VECTOR, smp__call_function_interrupt);
 

@@ -312,6 +312,7 @@ ENTRY(\smp__sym)
 END(\smp__sym)
 .endm
 
+apicinterrupt RESCHEDULE_VECTOR			reschedule_interrupt		smp__reschedule_interrupt
 apicinterrupt REBOOT_VECTOR			reboot_interrupt		smp__reboot_interrupt
 apicinterrupt LOCAL_TIMER_VECTOR		apic_timer_interrupt		smp__apic_timer_interrupt
 apicinterrupt X86_PLATFORM_IPI_VECTOR		x86_platform_ipi		smp__x86_platform_ipi
