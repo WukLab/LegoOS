@@ -801,8 +801,6 @@ asmlinkage __visible void __sched preempt_schedule_irq(void)
 	/* Catch callers which need to be fixed */
 	BUG_ON(preempt_count() || !irqs_disabled());
 
-	pr_info("%s:%d, need_resched(): %d\n", __func__, smp_processor_id(), need_resched());
-
 	do {
 		preempt_disable();
 		local_irq_enable();
@@ -869,6 +867,7 @@ void resched_curr(struct rq *rq)
 	}
 
 	/*TODO resched remote CPU */
+	WARN_ON(1, "impl this");
 	set_tsk_need_resched(curr);
 	//smp_send_reschedule(cpu);
 }

@@ -17,6 +17,7 @@
  * TODO(Wed Jun 14 15:09:26 EDT 2017)
  * I am making prio, normal_prio and static_prio as 0, which is the highest
  * real-time priority here. This makes everything goes into sched_rt first.
+ * The policy is SCHED_RR, so at least it can keep things going...
  *
  * May need to change this back to MAX_PRIO-20, which is the default setting,
  * when we have a CFS scheduler.
@@ -30,7 +31,7 @@
 	.prio		= 0,						\
 	.static_prio	= 0,						\
 	.normal_prio	= 0,						\
-	.policy		= SCHED_NORMAL,					\
+	.policy		= SCHED_RR,					\
 	.cpus_allowed	= CPU_MASK_ALL,					\
 	.nr_cpus_allowed= NR_CPUS,					\
 	.mm		= &init_mm,					\
