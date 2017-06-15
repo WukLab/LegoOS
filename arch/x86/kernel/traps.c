@@ -37,6 +37,7 @@ struct desc_ptr idt_desc = {
 static void do_error_trap(struct pt_regs *regs, long error_code, char *str,
 			  unsigned long trapnr, int signr)
 {
+	show_regs(regs);
 	printk("%s, trapnr=%lu\n", str, trapnr);
 }
 

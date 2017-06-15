@@ -537,4 +537,27 @@ static inline const struct cpumask *cpumask_of_node(int node)
 	return node_to_cpumask_map[node];
 }
 
+#if NR_CPUS <= BITS_PER_LONG
+#define CPU_MASK_ALL							\
+(cpumask_t) { {								\
+	[BITS_TO_LONGS(NR_CPUS)-1] = BITMAP_LAST_WORD_MASK(NR_CPUS)	\
+} }
+#else
+#define CPU_MASK_ALL							\
+(cpumask_t) { {								\
+	[0 ... BITS_TO_LONGS(NR_CPUS)-2] = ~0UL,			\
+	[BITS_TO_LONGS(NR_CPUS)-1] = BITMAP_LAST_WORD_MASK(NR_CPUS)	\
+} }
+#endif /* NR_CPUS > BITS_PER_LONG */
+
+#define CPU_MASK_NONE							\
+(cpumask_t) { {								\
+	[0 ... BITS_TO_LONGS(NR_CPUS)-1] =  0UL				\
+} }
+
+#define CPU_MASK_CPU0							\
+(cpumask_t) { {								\
+	[0] =  1UL							\
+} }
+
 #endif /* _LEGO_CPUMASK_H_ */

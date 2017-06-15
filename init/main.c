@@ -119,9 +119,14 @@ static void rest_init(void)
 {
 	kernel_thread(kernel_init, NULL, CLONE_FS);
 
-#ifndef CONFIG_PREEMPT
-	schedule();
-#endif
+	/*
+	 * The boot idle thread must execute schedule()
+	 * at least once to get things moving:
+	 */
+	schedule_preempt_disabled();
+
+	/* Call into cpu_idle with preempt disabled */
+	cpu_idle();
 }
 
 asmlinkage void __init start_kernel(void)
@@ -196,7 +201,11 @@ asmlinkage void __init start_kernel(void)
 	 * scheduler:
 	 */
 	sched_init();
-
+	/*
+	 * Disable preemption - early bootup scheduling is extremely
+	 * fragile until we cpu_idle() for the first time.
+	 */
+	preempt_disable();
 	if (WARN(!irqs_disabled(),
 		 "Interrupts were enabled *very* early, fixing it\n"))
 		local_irq_disable();
@@ -227,7 +236,6 @@ asmlinkage void __init start_kernel(void)
 	memory_component_init();
 #endif
 
-	/* STOP DBEYOND THIS POINT */
+	/* STOP! WE ARE ALIVE NOW */
 	rest_init();
-	cpu_idle();
 }

@@ -7,20 +7,15 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_SMP_H_
-#define _LEGO_SMP_H_
 
 #include <lego/sched.h>
-#include <lego/preempt.h>
+#include "sched.h"
 
-#include <asm/smp.h>
+void init_dl_rq(struct dl_rq *dl_rq)
+{
 
-void cpu_up(int cpu, struct task_struct *tidle);
+}
 
-void __init smp_prepare_cpus(unsigned int maxcpus);
-void __init smp_init(void);
-
-#define get_cpu()		({ preempt_disable(); smp_processor_id(); })
-#define put_cpu()		preempt_enable()
-
-#endif /* _LEGO_SMP_H_ */
+const struct sched_class dl_sched_class = {
+	.next			= &rt_sched_class,
+};
