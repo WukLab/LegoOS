@@ -11,10 +11,12 @@
  * - INTERRUPT:		Define interrupt entry points
  */
 
+#include <asm/page.h>
 #include <asm/ptrace.h>
 #include <asm/percpu.h>
 #include <asm/segment.h>
 #include <asm/irq_vectors.h>
+#include <asm/thread_info.h>
 
 #include <lego/errno.h>
 #include <lego/linkage.h>
