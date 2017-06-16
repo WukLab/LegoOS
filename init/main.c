@@ -26,6 +26,7 @@
 #include <lego/atomic.h>
 #include <lego/kernel.h>
 #include <lego/binfmts.h>
+#include <lego/jiffies.h>
 #include <lego/cpumask.h>
 #include <lego/nodemask.h>
 #include <lego/spinlock.h>

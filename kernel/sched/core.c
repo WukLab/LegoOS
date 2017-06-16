@@ -78,6 +78,24 @@ void update_rq_clock(struct rq *rq)
 	update_rq_clock_task(rq, delta);
 }
 
+static void set_load_weight(struct task_struct *p)
+{
+	int prio = p->static_prio - MAX_RT_PRIO;
+	struct load_weight *load = &p->se.load;
+
+	/*
+	 * SCHED_IDLE tasks get minimal weight:
+	 */
+	if (idle_policy(p->policy)) {
+		load->weight = WEIGHT_IDLEPRIO;
+		load->inv_weight = WMULT_IDLEPRIO;
+		return;
+	}
+
+	load->weight = sched_prio_to_weight[prio];
+	load->inv_weight = sched_prio_to_wmult[prio];
+}
+
 static inline void
 enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
@@ -870,15 +888,6 @@ void resched_curr(struct rq *rq)
 	smp_send_reschedule(cpu);
 }
 
-static inline
-int select_task_rq(struct task_struct *p, int cpu)
-{
-	if (WARN_ON(!cpumask_test_cpu(cpu, &p->cpus_allowed) ||
-		     !cpu_online(cpu)))
-		cpu = cpumask_any(&p->cpus_allowed);
-	return cpu;
-}
-
 /*
  * Mark the task runnable and perform wakeup-preemption.
  */
@@ -942,6 +951,40 @@ void scheduler_ipi(void)
 */
 }
 
+static int select_fallback_rq(int cpu, struct task_struct *p)
+{
+	WARN(1, "Not implemented");
+	return cpu;
+}
+
+/*
+ * The caller (fork, wakeup) owns p->pi_lock, ->cpus_allowed is stable.
+ */
+static inline
+int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
+{
+	if (p->nr_cpus_allowed > 1)
+		cpu = p->sched_class->select_task_rq(p, cpu, sd_flags, wake_flags);
+	else
+		cpu = cpumask_any(&p->cpus_allowed);
+
+	/*
+	 * In order not to call set_task_cpu() on a blocking task we need
+	 * to rely on ttwu() to place the task on a valid ->cpus_allowed
+	 * cpu.
+	 *
+	 * Since this is common to all placement strategies, this lives here.
+	 *
+	 * [ this allows ->select_task() to simply return task_cpu(p) and
+	 *   not worry about this generic constraint ]
+	 */
+	if (unlikely(!cpumask_test_cpu(cpu, &p->cpus_allowed) ||
+		     !cpu_online(cpu)))
+		cpu = select_fallback_rq(task_cpu(p), p);
+
+	return cpu;
+}
+
 /**
  * try_to_wake_up - wake up a thread
  * @p: the thread to be awakened
@@ -981,7 +1024,7 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 
 	p->state = TASK_WAKING;
 
-	cpu = select_task_rq(p, p->wake_cpu);
+	cpu = select_task_rq(p, p->wake_cpu, SD_BALANCE_WAKE, wake_flags);
 	if (task_cpu(p) != cpu)
 		set_task_cpu(p, cpu);
 #endif
@@ -1024,19 +1067,45 @@ void wake_up_new_task(struct task_struct *p)
 {
 	struct rq *rq;
 
+	p->state = TASK_RUNNING;
 #ifdef CONFIG_SMP
 	/*
 	 * Fork balancing, do it here and not earlier because:
 	 *  - cpus_allowed can change in the fork path
 	 *  - any previously selected cpu might disappear through hotplug
 	 */
-	set_task_cpu(p, task_cpu(p));
+	set_task_cpu(p, select_task_rq(p, task_cpu(p), SD_BALANCE_FORK, 0));
 #endif
 
 	rq = __task_rq_lock(p);
 	activate_task(rq, p, 0);
 	p->on_rq = TASK_ON_RQ_QUEUED;
 	__task_rq_unlock(rq);
+}
+
+void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
+{
+	const struct sched_class *class;
+
+	if (p->sched_class == rq->curr->sched_class) {
+		rq->curr->sched_class->check_preempt_curr(rq, p, flags);
+	} else {
+		for_each_class(class) {
+			if (class == rq->curr->sched_class)
+				break;
+			if (class == p->sched_class) {
+				resched_curr(rq);
+				break;
+			}
+		}
+	}
+
+	/*
+	 * A queue event has occurred, and we're going to schedule.  In
+	 * this case, we can save a useless back to back clock update.
+	 */
+	if (task_on_rq_queued(rq->curr) && test_tsk_need_resched(rq->curr))
+		rq_clock_skip_update(rq, true);
 }
 
 /*
@@ -1055,10 +1124,9 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->se.prev_sum_exec_runtime	= 0;
 	p->se.vruntime			= 0;
 
-	/* sched class related init: */
 	INIT_LIST_HEAD(&p->rt.run_list);
-
-	p->static_prio = 0;
+	p->rt.timeout			= 0;
+	p->rt.time_slice		= sysctl_sched_rr_timeslice;
 }
 
 /*
@@ -1071,11 +1139,11 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 	__sched_fork(clone_flags, p);
 
 	/*
-	 * We mark the process as running here. This guarantees that
+	 * We mark the process as NEW here. This guarantees that
 	 * nobody will actually run it, and a signal or other external
 	 * event cannot wake it up and insert it on the runqueue either.
 	 */
-	p->state = TASK_RUNNING;
+	p->state = TASK_NEW;
 
 	/*
 	 * Make sure we do not leak PI boosting priority to the child.
@@ -1094,6 +1162,7 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 			p->static_prio = NICE_TO_PRIO(0);
 
 		p->prio = p->normal_prio = __normal_prio(p);
+		set_load_weight(p);
 
 		/*
 		 * We don't need the reset flag anymore after the fork. It has
@@ -1104,10 +1173,14 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 
 	if (rt_prio(p->prio))
 		p->sched_class = &rt_sched_class;
-	else
+	else {
 		p->sched_class = &fair_sched_class;
+		set_load_weight(p);
+	}
 
 	__set_task_cpu(p, cpu);
+	if (p->sched_class->task_fork)
+		p->sched_class->task_fork(p);
 
 #if defined(CONFIG_SMP)
 	p->on_cpu = 0;
@@ -1194,3 +1267,44 @@ void __init sched_init(void)
 
 	pr_info("Scheduler is up and running\n");
 }
+
+/*
+ * Nice levels are multiplicative, with a gentle 10% change for every
+ * nice level changed. I.e. when a CPU-bound task goes from nice 0 to
+ * nice 1, it will get ~10% less CPU time than another CPU-bound task
+ * that remained on nice 0.
+ *
+ * The "10% effect" is relative and cumulative: from _any_ nice level,
+ * if you go up 1 level, it's -10% CPU usage, if you go down 1 level
+ * it's +10% CPU usage. (to achieve that we use a multiplier of 1.25.
+ * If a task goes up by ~10% and another task goes down by ~10% then
+ * the relative distance between them is ~25%.)
+ */
+const int sched_prio_to_weight[40] = {
+ /* -20 */     88761,     71755,     56483,     46273,     36291,
+ /* -15 */     29154,     23254,     18705,     14949,     11916,
+ /* -10 */      9548,      7620,      6100,      4904,      3906,
+ /*  -5 */      3121,      2501,      1991,      1586,      1277,
+ /*   0 */      1024,       820,       655,       526,       423,
+ /*   5 */       335,       272,       215,       172,       137,
+ /*  10 */       110,        87,        70,        56,        45,
+ /*  15 */        36,        29,        23,        18,        15,
+};
+
+/*
+ * Inverse (2^32/x) values of the sched_prio_to_weight[] array, precalculated.
+ *
+ * In cases where the weight does not change often, we can use the
+ * precalculated inverse to speed up arithmetics by turning divisions
+ * into multiplications:
+ */
+const u32 sched_prio_to_wmult[40] = {
+ /* -20 */     48388,     59856,     76040,     92818,    118348,
+ /* -15 */    147320,    184698,    229616,    287308,    360437,
+ /* -10 */    449829,    563644,    704093,    875809,   1099582,
+ /*  -5 */   1376151,   1717300,   2157191,   2708050,   3363326,
+ /*   0 */   4194304,   5237765,   6557202,   8165337,  10153587,
+ /*   5 */  12820798,  15790321,  19976592,  24970740,  31350126,
+ /*  10 */  39045157,  49367440,  61356676,  76695844,  95443717,
+ /*  15 */ 119304647, 148102320, 186737708, 238609294, 286331153,
+};

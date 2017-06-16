@@ -16,7 +16,8 @@
 #include <lego/sched_rt.h>
 #include "sched.h"
 
-int sched_rr_timeslice = RR_TIMESLICE;
+/* Timeslice a real-time round-robin task can run */
+int sysctl_sched_rr_timeslice = RR_TIMESLICE;
 
 static inline struct task_struct *rt_task_of(struct sched_rt_entity *rt_se)
 {
@@ -328,7 +329,7 @@ static unsigned int get_rr_interval_rt(struct rq *rq, struct task_struct *task)
 	 * Time slice is 0 for SCHED_FIFO tasks
 	 */
 	if (task->policy == SCHED_RR)
-		return sched_rr_timeslice;
+		return sysctl_sched_rr_timeslice;
 	else
 		return 0;
 }
@@ -370,7 +371,7 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 	if (--p->rt.time_slice)
 		return;
 
-	p->rt.time_slice = sched_rr_timeslice;
+	p->rt.time_slice = sysctl_sched_rr_timeslice;
 
 	if (rt_se->run_list.prev != rt_se->run_list.next) {
 		requeue_rt_entity(rt_rq, rt_se, 0);
@@ -378,6 +379,15 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 		return;
 	}
 }
+
+#ifdef CONFIG_SMP
+static int
+select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags)
+{
+	/* TODO a way to distribute tasks across CPUS! */
+	return cpu;
+}
+#endif
 
 const struct sched_class rt_sched_class = {
 	.next			= &fair_sched_class,
@@ -391,6 +401,7 @@ const struct sched_class rt_sched_class = {
 	.put_prev_task		= put_prev_task_rt,
 
 #ifdef CONFIG_SMP
+	.select_task_rq		= select_task_rq_rt,
 	.set_cpus_allowed	= set_cpus_allowed_common,
 #endif
 
