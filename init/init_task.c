@@ -13,25 +13,26 @@
 #include <lego/sched.h>
 #include <lego/sched_rt.h>
 
-/*
- * TODO(Wed Jun 14 15:09:26 EDT 2017)
- * I am making prio, normal_prio and static_prio as 0, which is the highest
- * real-time priority here. This makes everything goes into sched_rt first.
- * The policy is SCHED_RR, so at least it can keep things going...
- *
- * May need to change this back to MAX_PRIO-20, which is the default setting,
- * when we have a CFS scheduler.
- */
+#if 0
+#define INIT_SCHED_POLICY						\
+	.prio		= MAX_PRIO-20,					\
+	.static_prio	= MAX_PRIO-20,					\
+	.normal_prio	= MAX_PRIO-20,					\
+	.policy		= SCHED_NORMAL,
+#else
+#define INIT_SCHED_POLICY						\
+	.prio		= 0,						\
+	.static_prio	= 0,						\
+	.normal_prio	= 0,						\
+	.policy		= SCHED_RR,
+#endif
 
 #define INIT_TASK(tsk)							\
 {									\
 	.state		= 0,						\
 	.comm		= "swapper",					\
 	.flags		= PF_KTHREAD,					\
-	.prio		= 0,						\
-	.static_prio	= 0,						\
-	.normal_prio	= 0,						\
-	.policy		= SCHED_RR,					\
+	INIT_SCHED_POLICY						\
 	.cpus_allowed	= CPU_MASK_ALL,					\
 	.nr_cpus_allowed= NR_CPUS,					\
 	.mm		= &init_mm,					\

@@ -10,9 +10,24 @@
 #ifndef _KERNEL_SCHED_SCHED_H_
 #define _KERNEL_SCHED_SCHED_H_
 
+#include <lego/time.h>
 #include <lego/rbtree.h>
 #include <lego/sched.h>
 #include <lego/sched_rt.h>
+
+/*
+ * Helpers for converting nanosecond timing to jiffy resolution
+ */
+#define NS_TO_JIFFIES(TIME)	((unsigned long)(TIME) / (NSEC_PER_SEC / HZ))
+
+/*
+ * Task weight (visible to users) and its load (invisible to users) have
+ * independent resolution, but they should be well calibrated.
+ *
+ *  sched_prio_to_weight[USER_PRIO(NICE_TO_PRIO(0))] == NICE_0_LOAD
+ */
+#define NICE_0_LOAD_SHIFT	(10)
+#define NICE_0_LOAD		(1L << NICE_0_LOAD_SHIFT)
 
 /* task_struct::on_rq states: */
 #define TASK_ON_RQ_QUEUED	1
@@ -61,7 +76,8 @@ struct rt_prio_array {
 
 /* CFS-related fields in a runqueue */
 struct cfs_rq {
-	unsigned int		nr_running, h_nr_running;
+	struct load_weight	load;
+	unsigned int		nr_running;
 
 	u64			exec_clock;
 	u64			min_vruntime;
@@ -113,7 +129,11 @@ struct rq {
 	/* runqueue lock: */
 	spinlock_t		lock;
 	unsigned int		nr_running;
-	unsigned int		nr_switches;
+
+	/* capture load from *all* tasks on this cpu: */
+	struct load_weight	load;
+	unsigned long		nr_load_updates;
+	u64			nr_switches;
 
 	struct cfs_rq		cfs;
 	struct rt_rq		rt;
@@ -196,18 +216,55 @@ static inline int task_running(struct rq *rq, struct task_struct *p)
 #endif
 }
 
-#define ENQUEUE_WAKEUP		0x01
-#define ENQUEUE_HEAD		0x02
-#ifdef CONFIG_SMP
-#define ENQUEUE_WAKING		0x04	/* sched_class::task_waking was called */
-#else
-#define ENQUEUE_WAKING		0x00
-#endif
-#define ENQUEUE_REPLENISH	0x08
-#define ENQUEUE_RESTORE		0x10
+/*
+ * To aid in avoiding the subversion of "niceness" due to uneven distribution
+ * of tasks with abnormal "nice" values across CPUs the contribution that
+ * each task makes to its run queue's load is weighted according to its
+ * scheduling class and "nice" value. For SCHED_NORMAL tasks this is just a
+ * scaled version of the new time slice allocation that they receive on time
+ * slice expiry etc.
+ */
+
+#define WEIGHT_IDLEPRIO                3
+#define WMULT_IDLEPRIO         1431655765
+
+extern const int sched_prio_to_weight[40];
+extern const u32 sched_prio_to_wmult[40];
+
+/*
+ * {de,en}queue flags:
+ *
+ * DEQUEUE_SLEEP  - task is no longer runnable
+ * ENQUEUE_WAKEUP - task just became runnable
+ *
+ * SAVE/RESTORE - an otherwise spurious dequeue/enqueue, done to ensure tasks
+ *                are in a known state which allows modification. Such pairs
+ *                should preserve as much state as possible.
+ *
+ * MOVE - paired with SAVE/RESTORE, explicitly does not preserve the location
+ *        in the runqueue.
+ *
+ * ENQUEUE_HEAD      - place at front of runqueue (tail if not specified)
+ * ENQUEUE_REPLENISH - CBS (replenish runtime and postpone deadline)
+ * ENQUEUE_MIGRATED  - the task was migrated during wakeup
+ *
+ */
 
 #define DEQUEUE_SLEEP		0x01
-#define DEQUEUE_SAVE		0x02
+#define DEQUEUE_SAVE		0x02 /* matches ENQUEUE_RESTORE */
+#define DEQUEUE_MOVE		0x04 /* matches ENQUEUE_MOVE */
+
+#define ENQUEUE_WAKEUP		0x01
+#define ENQUEUE_RESTORE		0x02
+#define ENQUEUE_MOVE		0x04
+
+#define ENQUEUE_HEAD		0x08
+#define ENQUEUE_REPLENISH	0x10
+#ifdef CONFIG_SMP
+#define ENQUEUE_MIGRATED	0x20
+#else
+#define ENQUEUE_MIGRATED	0x00
+#endif
 
 #define RETRY_TASK		((void *)-1UL)
 
@@ -312,6 +369,14 @@ static inline void rq_clock_skip_update(struct rq *rq, bool skip)
 		rq->clock_skip_update &= ~RQCF_REQ_SKIP;
 }
 
+extern int sysctl_sched_rr_timeslice;
+extern unsigned int sysctl_sched_latency;
+extern unsigned int sysctl_sched_min_granularity;
+extern unsigned int sysctl_sched_child_runs_first;
+extern unsigned int sysctl_sched_wakeup_granularity;
+
+void update_rq_clock(struct rq *rq);
+void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags);
 void resched_curr(struct rq *rq);
 
 #endif /* _KERNEL_SCHED_SCHED_H_ */
