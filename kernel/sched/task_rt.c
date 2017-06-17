@@ -222,6 +222,7 @@ static void put_prev_task_rt(struct rq *rq, struct task_struct *p)
 
 /*
  * Preempt the current task with a newly woken task if needed:
+ * (invoked during wake up a new task)
  */
 static void check_preempt_curr_rt(struct rq *rq, struct task_struct *p, int flags)
 {

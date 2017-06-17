@@ -481,7 +481,6 @@ static inline void scheduler_ipi(void) { }
 int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask);
 long sched_setaffinity(pid_t pid, const struct cpumask *new_mask);
 
-int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags);
 int wake_up_state(struct task_struct *p, unsigned int state);
 int wake_up_process(struct task_struct *p);
 void wake_up_new_task(struct task_struct *p);

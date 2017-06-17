@@ -11,6 +11,7 @@
 #include <lego/list.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
+#include "sched.h"
 
 int default_wake_function(wait_queue_t *curr, unsigned mode, int wake_flags,
 			  void *key)

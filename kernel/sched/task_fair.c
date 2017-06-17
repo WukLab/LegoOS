@@ -727,17 +727,115 @@ static void set_curr_task_fair(struct rq *rq)
 	set_next_entity(cfs_rq, se);
 }
 
-/*
- * Preempt the current task with a newly woken task if needed:
- */
-static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_flags)
+static inline void set_last_buddy(struct sched_entity *se)
 {
-	/* TODO */
+	if (unlikely(task_of(se)->policy == SCHED_IDLE))
+		return;
+	cfs_rq_of(se)->last = se;
+}
+
+static inline void set_next_buddy(struct sched_entity *se)
+{
+	if (unlikely(task_of(se)->policy == SCHED_IDLE))
+		return;
+	cfs_rq_of(se)->next = se;
+}
+
+static inline void set_skip_buddy(struct sched_entity *se)
+{
+	cfs_rq_of(se)->skip = se;
 }
 
 /*
  * Preempt the current task with a newly woken task if needed:
+ * (invoked during wake up a new task)
  */
+static void
+check_preempt_curr_fair(struct rq *rq, struct task_struct *p, int wake_flags)
+{
+	struct task_struct *curr = rq->curr;
+	struct sched_entity *se = &curr->se, *pse = &p->se;
+	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
+	int scale = cfs_rq->nr_running >= sched_nr_latency;
+	int next_buddy_marked = 0;
+	int FEAT_NEXT_BUDDY = false;
+	int FEAT_LAST_BUDDY = true;
+
+	if (unlikely(se == pse))
+		return;
+
+	/*
+	 * Prefer to schedule the task we woke last (assuming it failed
+	 * wakeup-preemption), since its likely going to consume data we
+	 * touched, increases cache locality.
+	 */
+	if (FEAT_NEXT_BUDDY && scale && !(wake_flags & WF_FORK)) {
+		set_next_buddy(pse);
+		next_buddy_marked = 1;
+	}
+
+	/*
+	 * We can come here with TIF_NEED_RESCHED already set from new task
+	 * wake up path.
+	 *
+	 * Note: this also catches the edge-case of curr being in a throttled
+	 * group (e.g. via set_curr_task), since update_curr() (in the
+	 * enqueue of curr) will have resulted in resched being set.  This
+	 * prevents us from potentially nominating it as a false LAST_BUDDY
+	 * below.
+	 */
+	if (test_tsk_need_resched(curr))
+		return;
+
+	/* Idle tasks are by definition preempted by non-idle tasks. */
+	if (unlikely(curr->policy == SCHED_IDLE) &&
+	    likely(p->policy != SCHED_IDLE))
+		goto preempt;
+
+	/*
+	 * Batch and idle tasks do not preempt non-idle tasks (their preemption
+	 * is driven by the tick):
+	 */
+	if (unlikely(p->policy != SCHED_NORMAL))
+		return;
+
+	update_curr(cfs_rq_of(se));
+	BUG_ON(!pse);
+	if (wakeup_preempt_entity(se, pse) == 1) {
+		/*
+		 * Bias pick_next to pick the sched entity that is
+		 * triggering this preemption.
+		 */
+		if (!next_buddy_marked)
+			set_next_buddy(pse);
+		goto preempt;
+	}
+
+	return;
+
+preempt:
+	resched_curr(rq);
+	/*
+	 * Only set the backward buddy when the current task is still
+	 * on the rq. This can happen when a wakeup gets interleaved
+	 * with schedule on the ->pre_schedule() or idle_balance()
+	 * point, either of which can * drop the rq lock.
+	 *
+	 * Also, during early boot the idle thread is in the fair class,
+	 * for obvious reasons its a bad idea to schedule back to it.
+	 */
+	if (unlikely(!se->on_rq || curr == rq->idle))
+		return;
+
+	/*
+	 * Prefer to schedule the task that ran last (when we did
+	 * wake-preempt) as that likely will touch the same data, increases
+	 * cache locality.
+	 */
+	if (FEAT_LAST_BUDDY && scale)
+		set_last_buddy(se);
+}
+
 static void
 check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 {
@@ -896,7 +994,7 @@ const struct sched_class fair_sched_class = {
 	.enqueue_task		= enqueue_task_fair,
 	.dequeue_task		= dequeue_task_fair,
 
-	.check_preempt_curr	= check_preempt_wakeup,
+	.check_preempt_curr	= check_preempt_curr_fair,
 
 	.pick_next_task		= pick_next_task_fair,
 	.put_prev_task		= put_prev_task_fair,

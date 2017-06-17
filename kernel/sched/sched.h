@@ -217,6 +217,13 @@ static inline int task_running(struct rq *rq, struct task_struct *p)
 }
 
 /*
+ * wake flags
+ */
+#define WF_SYNC		0x01		/* waker goes to sleep after wakeup */
+#define WF_FORK		0x02		/* child wakeup after fork */
+#define WF_MIGRATED	0x4		/* internal use, task got migrated */
+
+/*
  * To aid in avoiding the subversion of "niceness" due to uneven distribution
  * of tasks with abnormal "nice" values across CPUs the contribution that
  * each task makes to its run queue's load is weighted according to its
@@ -378,5 +385,6 @@ extern unsigned int sysctl_sched_wakeup_granularity;
 void update_rq_clock(struct rq *rq);
 void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags);
 void resched_curr(struct rq *rq);
+int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags);
 
 #endif /* _KERNEL_SCHED_SCHED_H_ */

@@ -985,21 +985,45 @@ int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
 	return cpu;
 }
 
+void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
+{
+	const struct sched_class *class;
+
+	if (p->sched_class == rq->curr->sched_class) {
+		rq->curr->sched_class->check_preempt_curr(rq, p, flags);
+	} else {
+		for_each_class(class) {
+			if (class == rq->curr->sched_class)
+				break;
+			if (class == p->sched_class) {
+				resched_curr(rq);
+				break;
+			}
+		}
+	}
+
+	/*
+	 * A queue event has occurred, and we're going to schedule.  In
+	 * this case, we can save a useless back to back clock update.
+	 */
+	if (task_on_rq_queued(rq->curr) && test_tsk_need_resched(rq->curr))
+		rq_clock_skip_update(rq, true);
+}
+
 /**
  * try_to_wake_up - wake up a thread
  * @p: the thread to be awakened
  * @state: the mask of task states that can be woken
  * @wake_flags: wake modifier flags (WF_*)
  *
- * If (@state & @p->state) @p->state = TASK_RUNNING.
+ * Put it on the run-queue if it's not already there. The "current"
+ * thread is always on the run-queue (except when the actual
+ * re-schedule is in progress), and as such you're allowed to do
+ * the simpler "current->state = TASK_RUNNING" to mark yourself
+ * runnable without the overhead of this.
  *
- * If the task was not queued/runnable, also place it back on a runqueue.
- *
- * Atomic against schedule() which would dequeue a task, also see
- * set_current_state().
- *
- * Return: %true if @p->state changes (an actual wakeup was done),
- *	   %false otherwise.
+ * Return: %true if @p was woken up, %false if it was already running.
+ * or @state didn't match @p's state.
  */
 int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {
@@ -1068,6 +1092,8 @@ void wake_up_new_task(struct task_struct *p)
 	struct rq *rq;
 
 	p->state = TASK_RUNNING;
+
+	/* Select a CPU for new thread to run */
 #ifdef CONFIG_SMP
 	/*
 	 * Fork balancing, do it here and not earlier because:
@@ -1080,32 +1106,11 @@ void wake_up_new_task(struct task_struct *p)
 	rq = __task_rq_lock(p);
 	activate_task(rq, p, 0);
 	p->on_rq = TASK_ON_RQ_QUEUED;
+
+	/* preempt current if needed */
+	check_preempt_curr(rq, p, WF_FORK);
+
 	__task_rq_unlock(rq);
-}
-
-void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
-{
-	const struct sched_class *class;
-
-	if (p->sched_class == rq->curr->sched_class) {
-		rq->curr->sched_class->check_preempt_curr(rq, p, flags);
-	} else {
-		for_each_class(class) {
-			if (class == rq->curr->sched_class)
-				break;
-			if (class == p->sched_class) {
-				resched_curr(rq);
-				break;
-			}
-		}
-	}
-
-	/*
-	 * A queue event has occurred, and we're going to schedule.  In
-	 * this case, we can save a useless back to back clock update.
-	 */
-	if (task_on_rq_queued(rq->curr) && test_tsk_need_resched(rq->curr))
-		rq_clock_skip_update(rq, true);
 }
 
 /*
