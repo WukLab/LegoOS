@@ -13,14 +13,6 @@ menuconfig INFINIBAND
 
 if INFINIBAND
 
-config INFINIBAND_CLIENT
-	tristate "InfiniBand client side of rc"
-	depends on INFINIBAND
-
-config INFINIBAND_SERVER
-	tristate "InfiniBand server side of rc"
-	depends on INFINIBAND
-
 source "drivers/infiniband/hw/mlx4/Kconfig"
 
 source "drivers/infiniband/ulp/ipoib/Kconfig"

@@ -42,7 +42,8 @@
 //#include <lego/radix-tree.h>
 //#include <lego/timer.h>
 //#include <lego/semaphore.h>
-//#include <lego/workqueue.h>
+#include <lego/workqueue.h>
+#include <lego/completion.h>
 
 #include <lego/mlx4/device.h>
 #include <lego/mlx4/driver.h>
@@ -310,6 +311,7 @@ struct mlx4_sense {
 	u8			do_sense_port[MLX4_MAX_PORTS + 1];
 	u8			sense_allowed[MLX4_MAX_PORTS + 1];
 //	struct delayed_work	sense_poll;
+	struct work_struct	sense_poll;
 };
 
 struct mlx4_msix_ctl {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005 Intel Inc. All rights reserved.
+ * Copyright (c) 2006 Cisco Systems.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,29 +30,18 @@
  * SOFTWARE.
  */
 
-#ifndef __MAD_RMPP_H__
-#define __MAD_RMPP_H__
+#ifndef IBV_PINGPONG_H
+#define IBV_PINGPONG_H
 
-enum {
-	IB_RMPP_RESULT_PROCESSED,
-	IB_RMPP_RESULT_CONSUMED,
-	IB_RMPP_RESULT_INTERNAL,
-	IB_RMPP_RESULT_UNHANDLED
-};
+#include <sys/param.h>
 
-int ib_send_rmpp_mad(struct ib_mad_send_wr_private *mad_send_wr);
+#include <infiniband/verbs.h>
 
-struct ib_mad_recv_wc *
-ib_process_rmpp_recv_wc(struct ib_mad_agent_private *agent,
-			struct ib_mad_recv_wc *mad_recv_wc);
+enum ibv_mtu pp_mtu_to_enum(int mtu);
+uint16_t pp_get_local_lid(struct ibv_context *context, int port);
+int pp_get_port_info(struct ibv_context *context, int port,
+		     struct ibv_port_attr *attr);
+void wire_gid_to_gid(const char *wgid, union ibv_gid *gid);
+void gid_to_wire_gid(const union ibv_gid *gid, char wgid[]);
 
-int ib_process_rmpp_send_wc(struct ib_mad_send_wr_private *mad_send_wr,
-			    struct ib_mad_send_wc *mad_send_wc);
-
-void ib_rmpp_send_handler(struct ib_mad_send_wc *mad_send_wc);
-
-void ib_cancel_rmpp_recvs(struct ib_mad_agent_private *agent);
-
-int ib_retry_rmpp(struct ib_mad_send_wr_private *mad_send_wr);
-
-#endif	/* __MAD_RMPP_H__ */
+#endif /* IBV_PINGPONG_H */

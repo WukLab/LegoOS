@@ -31,6 +31,10 @@
 #include <lego/nodemask.h>
 #include <lego/spinlock.h>
 #include <lego/irqdomain.h>
+#include <lego/pci.h>
+#include <lego/net.h>
+#include <lego/memory.h>
+#include <lego/workqueue.h>
 #include <lego/completion.h>
 
 #include <lego/comp_processor.h>
@@ -130,6 +134,27 @@ static void rest_init(void)
 	cpu_idle();
 }
 
+static void work_handler(struct work_struct *_work)
+{
+	pr_info("%s\n", __func__);
+}
+
+static void test_workqueue(void)
+{
+	struct workqueue_struct *wq;
+	struct work_struct work;
+
+	wq = create_workqueue("test_wq");
+	if (!wq) {
+		pr_info("cannot create workq\n");
+		return;
+	}
+
+	INIT_WORK(&work, work_handler);
+	queue_work(wq, &work);
+
+	return;
+}
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
@@ -218,17 +243,28 @@ asmlinkage void __init start_kernel(void)
 	local_irq_enable();
 	smp_init();
 
-	/* Register binfmt handlers */
-	exec_init();
+	init_workqueues();
+	//test_workqueue();
 
-	//ib_cache_setup();
+#ifdef CONFIG_INFINIBAND
 	ib_mad_init();
 	pr_info("after ib_mad_init\n");
+#endif
+
 	pr_info("before pci init\n");
 	pci_init();
+
+#ifdef CONFIG_INFINIBAND
+	pr_info("before cmb init\n");
+	ib_cm_init();
 	pr_info("before lego ib init\n");
-	lego_ib_init();
-	//init_lwip();
+	kernel_thread(lego_ib_init, NULL, 0);
+#endif
+
+#ifdef CONFIG_MEMCOMPONENT
+	pr_info("before memcomponent init\n");
+	memcomponent_init();
+#endif
 
 #ifdef CONFIG_COMP_PROCESSOR
 	processor_component_init();

@@ -35,7 +35,7 @@
 
 #include <lego/pci.h>
 #include <lego/mm.h>
-//#include <lego/completion.h>
+#include <lego/completion.h>
 #include <lego/rbtree.h>
 //#include <lego/radix-tree.h>
 
@@ -395,7 +395,7 @@ struct mlx4_cq {
 	unsigned		vector;
 
 	atomic_t		refcount;
-//	struct completion	free;
+	struct completion	free;
 	struct rb_node		node;
 };
 
@@ -405,7 +405,7 @@ struct mlx4_qp {
 	int			qpn;
 
 	atomic_t		refcount;
-//	struct completion	free;
+	struct completion	free;
 	struct rb_node		node;
 };
 
@@ -418,7 +418,7 @@ struct mlx4_srq {
 	int			wqe_shift;
 
 	atomic_t		refcount;
-//	struct completion	free;
+	struct completion	free;
 };
 
 struct mlx4_av {

@@ -3483,7 +3483,7 @@ err:
 	return ret;
 }
 
-static void __exit cma_cleanup(void)
+static void cma_cleanup(void)
 {
 	ibnl_remove_client(RDMA_NL_RDMA_CM);
 	ib_unregister_client(&cma_client);
@@ -3497,6 +3497,3 @@ static void __exit cma_cleanup(void)
 	idr_destroy(&ipoib_ps);
 	idr_destroy(&ib_ps);
 }
-
-module_init(cma_init);
-module_exit(cma_cleanup);

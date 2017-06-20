@@ -14,6 +14,7 @@
 
 #include <lego/types.h>
 #include <lego/spinlock.h>
+#include <lego/rbtree.h>
 
 /*
  * Each physical page in the system has a struct page associated with
@@ -44,6 +45,10 @@ struct page {
 	unsigned long private;
 	atomic_t _mapcount;
 	atomic_t _refcount;
+
+#ifdef CONFIG_MEMCOMPONENT
+	
+#endif
 };
 
 /*
@@ -54,20 +59,35 @@ struct page {
  */
 struct vm_area_struct {
 
+	/* data structures for managing 
+	 * application process address 
+	 * space, for processor
+	 */
+	struct mm_struct *vm_mm;	/* The app address space we belong to. */
+
 	unsigned long vm_start;		/* Our start address within vm_mm. */
-	unsigned long vm_end;		/* The first byte after our end address
-					   within vm_mm. */
+	unsigned long vm_end;		/* The first byte after our end address */
 
 	/* linked list of VM areas per task, sorted by address */
 	struct vm_area_struct *vm_next, *vm_prev;
 
-	struct mm_struct *vm_mm;	/* The address space we belong to. */
 	pgprot_t vm_page_prot;		/* Access permissions of this VMA. */
 	unsigned long vm_flags;		/* Flags, see mm.h. */
 
 	/* Information about our backing store: */
+	char *vm_file;			/* mmap filename */					
 	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE
 					   units */
+
+	struct rb_node vm_rb;		/* rb tree to link vma to app mm */
+
+	/* data structures for managing
+	 * local kernel addresses
+	 * and local link of all vmas
+	 */
+	unsigned long local_vm_start;
+	unsigned long local_vm_end;
+	struct rb_node local_vm_rb;		/* rb tree to link vma to current */
 
 };
 
@@ -105,6 +125,15 @@ struct mm_struct {
 
 	unsigned long flags; /* Must use atomic bitops to access the bits */
 
+	unsigned long mmap_base;                /* base of mmap area */
+	unsigned long cached_hole_size;         /* if non-zero, the largest hole below free_area_cache */
+	unsigned long free_area_cache;          /* first hole of size cached_hole_size or larger */
+
+	struct vm_area_struct * mmap_cache;     /* last find_vma result */
+	struct rb_root mm_rb;
+
+	int gpid;
+	struct list_head list;
 };
 
 #endif /* _LEGO_MM_TYPES_H */
