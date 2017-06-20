@@ -1105,8 +1105,8 @@ struct ib_device {
 						  u8 port_num, int port_modify_mask,
 						  struct ib_port_modify *port_modify);
 	struct ib_pd *             (*alloc_pd)(struct ib_device *device,
-					       struct ib_ucontext *context,
-					       struct ib_udata *udata);
+					       void *context,
+					       void *udata);
 	int                        (*dealloc_pd)(struct ib_pd *pd);
 	struct ib_ah *             (*create_ah)(struct ib_pd *pd,
 						struct ib_ah_attr *ah_attr);

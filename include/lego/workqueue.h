@@ -4,11 +4,19 @@
 //#include <lego/timer.h>
 //#include <lego/threads.h>
 #include <lego/atomic.h>
+#include <lego/cpumask.h>
+#include <lego/smp.h>
 
 struct workqueue_struct;
 
 typedef void (*work_func_t)(struct work_struct *work);
 void delayed_work_timer_fn(unsigned long __data);
+
+/*
+ * The first word is the work queue pointer and the flags rolled into
+ * one
+ */
+#define work_data_bits(work) ((unsigned long *)(&(work)->data))
 
 enum {
 	WORK_STRUCT_PENDING_BIT	= 0,	/* work item is pending execution */
@@ -23,6 +31,10 @@ enum {
 	WORK_STRUCT_PWQ		= 1 << WORK_STRUCT_PWQ_BIT,
 	WORK_STRUCT_LINKED	= 1 << WORK_STRUCT_LINKED_BIT,
 	WORK_STRUCT_STATIC	= 0,
+
+	/* special cpu IDs */
+	WORK_CPU_UNBOUND	= NR_CPUS,
+	WORK_CPU_END		= NR_CPUS + 1,
 
 	/*
 	 * Reserve 7 bits off of pwq pointer w/ debugobjects turned off.
@@ -62,20 +74,47 @@ enum {
 };
 
 struct work_struct {
-	atomic_t data;
+	atomic_long_t data;
 	struct list_head entry;
 	work_func_t func;
 };
 
-#define WORK_DATA_INIT()	ATOMIC_INIT(WORK_STRUCT_NO_POOL)
+/*
+ * A struct for workqueue attributes.  This can be used to change
+ * attributes of an unbound workqueue.
+ *
+ * Unlike other fields, ->no_numa isn't a property of a worker_pool.  It
+ * only modifies how apply_workqueue_attrs() select pools and thus doesn't
+ * participate in pool hash calculations or equality comparisons.
+ */
+struct workqueue_attrs {
+	int			nice;		/* nice level */
+	cpumask_var_t		cpumask;	/* allowed CPUs */
+	bool			no_numa;	/* disable NUMA affinity */
+};
+
+#define WORK_DATA_INIT()	ATOMIC_LONG_INIT(WORK_STRUCT_NO_POOL)
 #define WORK_DATA_STATIC_INIT()	\
-	ATOMIC_INIT(WORK_STRUCT_NO_POOL | WORK_STRUCT_STATIC)
+	ATOMIC_LONG_INIT(WORK_STRUCT_NO_POOL | WORK_STRUCT_STATIC)
 
 #define __WORK_INITIALIZER(n, f) {					\
 	.data = WORK_DATA_STATIC_INIT(),				\
 	.entry	= { &(n).entry, &(n).entry },				\
 	.func = (f),							\
 	}
+
+#define DECLARE_WORK(n, f)						\
+	struct work_struct n = __WORK_INITIALIZER(n, f)
+
+#if 0
+struct delayed_work {
+	struct work_struct work;
+//	struct timer_list timer;
+
+	/* target workqueue and CPU ->timer uses to queue ->work */
+	struct workqueue_struct *wq;
+	int cpu;
+};
 
 #define __DELAYED_WORK_INITIALIZER(n, f, tflags) {			\
 	.work = __WORK_INITIALIZER((n).work, (f)),			\
@@ -84,23 +123,20 @@ struct work_struct {
 				     (tflags) | TIMER_IRQSAFE),		\
 	}
 
-#define DECLARE_WORK(n, f)						\
-	struct work_struct n = __WORK_INITIALIZER(n, f)
-
 #define DECLARE_DELAYED_WORK(n, f)					\
 	struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, 0)
+#endif
 
 static inline void __init_work(struct work_struct *work) { }
 
 #define INIT_WORK(_work, _func)				\
 	do {								\
 		__init_work(_work);				\
-		(_work)->data = (atomic_t) WORK_DATA_INIT();	\
+		(_work)->data = (atomic_long_t) WORK_DATA_INIT();	\
 		INIT_LIST_HEAD(&(_work)->entry);			\
 		(_work)->func = (_func);				\
 	} while (0)
 
-#if 0
 extern struct workqueue_struct *
 __alloc_workqueue(unsigned int flags, int max_active);
 
@@ -109,6 +145,65 @@ __alloc_workqueue(unsigned int flags, int max_active);
 	__alloc_workqueue(0, 1)
 #define create_singlethread_workqueue(name)				\
 	__alloc_workqueue(0, 1)
+
+/*
+ * Workqueue flags and constants.  For details, please refer to
+ * Documentation/workqueue.txt.
+ */
+enum {
+	WQ_NON_REENTRANT	= 1 << 0, /* guarantee non-reentrance */
+	WQ_UNBOUND		= 1 << 1, /* not bound to any cpu */
+	WQ_FREEZABLE		= 1 << 2, /* freeze during suspend */
+	WQ_MEM_RECLAIM		= 1 << 3, /* may be used for memory reclaim */
+	WQ_HIGHPRI		= 1 << 4, /* high priority */
+	WQ_CPU_INTENSIVE	= 1 << 5, /* cpu instensive workqueue */
+	WQ_SYSFS		= 1 << 6, /* visible in sysfs, see wq_sysfs_register() */
+
+	/*
+	 * Per-cpu workqueues are generally preferred because they tend to
+	 * show better performance thanks to cache locality.  Per-cpu
+	 * workqueues exclude the scheduler from choosing the CPU to
+	 * execute the worker threads, which has an unfortunate side effect
+	 * of increasing power consumption.
+	 *
+	 * The scheduler considers a CPU idle if it doesn't have any task
+	 * to execute and tries to keep idle cores idle to conserve power;
+	 * however, for example, a per-cpu work item scheduled from an
+	 * interrupt handler on an idle CPU will force the scheduler to
+	 * excute the work item on that CPU breaking the idleness, which in
+	 * turn may lead to more scheduling choices which are sub-optimal
+	 * in terms of power consumption.
+	 *
+	 * Workqueues marked with WQ_POWER_EFFICIENT are per-cpu by default
+	 * but become unbound if workqueue.power_efficient kernel param is
+	 * specified.  Per-cpu workqueues which are identified to
+	 * contribute significantly to power-consumption are identified and
+	 * marked with this flag and enabling the power_efficient mode
+	 * leads to noticeable power saving at the cost of small
+	 * performance disadvantage.
+	 *
+	 * http://thread.gmane.org/gmane.lego.kernel/1480396
+	 */
+	WQ_POWER_EFFICIENT	= 1 << 7,
+
+	__WQ_DRAINING		= 1 << 16, /* internal: workqueue is draining */
+	__WQ_ORDERED		= 1 << 17, /* internal: workqueue is ordered */
+
+	WQ_MAX_ACTIVE		= 512,	  /* I like 512, better ideas? */
+	WQ_MAX_UNBOUND_PER_CPU	= 4,	  /* 4 * #cpus for unbound wq */
+	WQ_DFL_ACTIVE		= WQ_MAX_ACTIVE / 2,
+};
+
+/* unbound wq's aren't per-cpu, scale max_active according to #cpus */
+#define WQ_UNBOUND_MAX_ACTIVE	\
+	max_t(int, WQ_MAX_ACTIVE, num_possible_cpus() * WQ_MAX_UNBOUND_PER_CPU)
+
+extern bool queue_work_on(int cpu, struct workqueue_struct *wq,
+			struct work_struct *work);
+#if 0
+extern bool queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
+			struct delayed_work *work, unsigned long delay);
+#endif
 
 /**
  * queue_work - queue work on a workqueue
@@ -120,8 +215,29 @@ __alloc_workqueue(unsigned int flags, int max_active);
  * We queue the work to the CPU on which it was submitted, but if the CPU dies
  * it can be processed by another CPU.
  */
-extern bool queue_work(struct workqueue_struct *wq,
-			      struct work_struct *work);
+static inline bool queue_work(struct workqueue_struct *wq,
+			      struct work_struct *work)
+{
+	return queue_work_on(smp_processor_id(), wq, work);
+}
+
+#if 0
+/**
+ * queue_delayed_work - queue work on a workqueue after delay
+ * @wq: workqueue to use
+ * @dwork: delayable work to queue
+ * @delay: number of jiffies to wait before queueing
+ *
+ * Equivalent to queue_delayed_work_on() but tries to use the local CPU.
+ */
+static inline bool queue_delayed_work(struct workqueue_struct *wq,
+				      struct delayed_work *dwork,
+				      unsigned long delay)
+{
+	return queue_delayed_work_on(WORK_CPU_UNBOUND, wq, dwork, delay);
+}
 #endif
+
+int init_workqueues(void);
 
 #endif //_LEGO_WORKQUEUE_H

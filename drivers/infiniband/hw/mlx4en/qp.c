@@ -125,8 +125,8 @@ void mlx4_qp_event(struct mlx4_dev *dev, u32 qpn, int event_type)
 
 	qp->event(qp, event_type);
 
-//	if (atomic_dec_and_test(&qp->refcount))
-//		complete(&qp->free);
+	if (atomic_dec_and_test(&qp->refcount))
+		complete(&qp->free);
 }
 
 int mlx4_qp_modify(struct mlx4_dev *dev, struct mlx4_mtt *mtt,
@@ -276,7 +276,7 @@ int mlx4_qp_alloc(struct mlx4_dev *dev, int qpn, struct mlx4_qp *qp)
 	spin_unlock_irq(&qp_table->lock);
 
 	atomic_set(&qp->refcount, 1);
-//	init_completion(&qp->free);
+	init_completion(&qp->free);
 
 	return 0;
 
@@ -313,9 +313,9 @@ void mlx4_qp_free(struct mlx4_dev *dev, struct mlx4_qp *qp)
 {
 	struct mlx4_qp_table *qp_table = &mlx4_priv(dev)->qp_table;
 
-//	if (atomic_dec_and_test(&qp->refcount))
-//		complete(&qp->free);
-//	wait_for_completion(&qp->free);
+	if (atomic_dec_and_test(&qp->refcount))
+		complete(&qp->free);
+	wait_for_completion(&qp->free);
 
 	mlx4_table_put(dev, &qp_table->cmpt_table, qp->qpn);
 	mlx4_table_put(dev, &qp_table->rdmarc_table, qp->qpn);

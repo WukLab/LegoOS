@@ -82,6 +82,7 @@ int ib_get_cached_gid(struct ib_device *device,
 		return -EINVAL;
 
 //	read_lock_irqsave(&device->cache.lock, flags);
+	spin_lock_irqsave(&device->cache.lock, flags);
 
 	cache = device->cache.gid_cache[port_num - start_port(device)];
 
@@ -91,6 +92,7 @@ int ib_get_cached_gid(struct ib_device *device,
 		*gid = cache->table[index];
 
 //	read_unlock_irqrestore(&device->cache.lock, flags);
+	spin_unlock_irqrestore(&device->cache.lock, flags);
 
 	return ret;
 }
@@ -110,6 +112,7 @@ int ib_find_cached_gid(struct ib_device *device,
 		*index = -1;
 
 //	read_lock_irqsave(&device->cache.lock, flags);
+	spin_lock_irqsave(&device->cache.lock, flags);
 
 	for (p = 0; p <= end_port(device) - start_port(device); ++p) {
 		cache = device->cache.gid_cache[p];
@@ -125,6 +128,7 @@ int ib_find_cached_gid(struct ib_device *device,
 	}
 found:
 //	read_unlock_irqrestore(&device->cache.lock, flags);
+	spin_unlock_irqrestore(&device->cache.lock, flags);
 
 	return ret;
 }
@@ -142,6 +146,7 @@ int ib_get_cached_pkey(struct ib_device *device,
 		return -EINVAL;
 
 //	read_lock_irqsave(&device->cache.lock, flags);
+	spin_lock_irqsave(&device->cache.lock, flags);
 
 	cache = device->cache.pkey_cache[port_num - start_port(device)];
 
@@ -151,6 +156,7 @@ int ib_get_cached_pkey(struct ib_device *device,
 		*pkey = cache->table[index];
 
 //	read_unlock_irqrestore(&device->cache.lock, flags);
+	spin_unlock_irqrestore(&device->cache.lock, flags);
 
 	return ret;
 }
@@ -169,6 +175,7 @@ int ib_find_cached_pkey(struct ib_device *device,
 		return -EINVAL;
 
 //	read_lock_irqsave(&device->cache.lock, flags);
+	spin_lock_irqsave(&device->cache.lock, flags);
 
 	cache = device->cache.pkey_cache[port_num - start_port(device)];
 
@@ -182,6 +189,7 @@ int ib_find_cached_pkey(struct ib_device *device,
 		}
 
 //	read_unlock_irqrestore(&device->cache.lock, flags);
+	spin_unlock_irqrestore(&device->cache.lock, flags);
 
 	return ret;
 }
@@ -197,8 +205,10 @@ int ib_get_cached_lmc(struct ib_device *device,
 		return -EINVAL;
 
 //	read_lock_irqsave(&device->cache.lock, flags);
+	spin_lock_irqsave(&device->cache.lock, flags);
 	*lmc = device->cache.lmc_cache[port_num - start_port(device)];
 //	read_unlock_irqrestore(&device->cache.lock, flags);
+	spin_unlock_irqrestore(&device->cache.lock, flags);
 
 	return ret;
 }
@@ -256,6 +266,7 @@ static void ib_cache_update(struct ib_device *device,
 	}
 
 //	write_lock_irq(&device->cache.lock);
+	spin_lock_irq(&device->cache.lock);
 
 	old_pkey_cache = device->cache.pkey_cache[port - start_port(device)];
 	old_gid_cache  = device->cache.gid_cache [port - start_port(device)];
@@ -266,6 +277,7 @@ static void ib_cache_update(struct ib_device *device,
 	device->cache.lmc_cache[port - start_port(device)] = tprops->lmc;
 
 //	write_unlock_irq(&device->cache.lock);
+	spin_unlock_irq(&device->cache.lock);
 
 	kfree(old_pkey_cache);
 	kfree(old_gid_cache);
@@ -301,13 +313,10 @@ static void ib_cache_event(struct ib_event_handler *handler,
 	    event->event == IB_EVENT_GID_CHANGE) {
 		work = kmalloc(sizeof *work, GFP_ATOMIC);
 		if (work) {
-			pr_info("%s need workqueue back\n", __func__);
-/*
 			INIT_WORK(&work->work, ib_cache_task);
 			work->device   = event->device;
 			work->port_num = event->element.port_num;
 			queue_work(ib_wq, &work->work);
-*/
 		}
 	}
 }
@@ -317,6 +326,7 @@ static void ib_cache_setup_one(struct ib_device *device)
 	int p;
 
 //	rwlock_init(&device->cache.lock);
+	spin_lock_init(&device->cache.lock);
 
 	device->cache.pkey_cache =
 		kmalloc(sizeof *device->cache.pkey_cache *

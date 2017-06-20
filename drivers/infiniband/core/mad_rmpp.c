@@ -32,6 +32,7 @@
  */
 
 #include <lego/slab.h>
+#include <lego/jiffies.h>
 
 #include "mad_priv.h"
 #include "mad_rmpp.h"
@@ -48,7 +49,9 @@ struct mad_rmpp_recv {
 	struct list_head list;
 //	struct delayed_work timeout_work;
 //	struct delayed_work cleanup_work;
-//	struct completion comp;
+	struct work_struct timeout_work;
+	struct work_struct cleanup_work;
+	struct completion comp;
 	enum rmpp_state state;
 	spinlock_t lock;
 	atomic_t refcount;
@@ -71,14 +74,14 @@ struct mad_rmpp_recv {
 
 static inline void deref_rmpp_recv(struct mad_rmpp_recv *rmpp_recv)
 {
-//	if (atomic_dec_and_test(&rmpp_recv->refcount))
-//		complete(&rmpp_recv->comp);
+	if (atomic_dec_and_test(&rmpp_recv->refcount))
+		complete(&rmpp_recv->comp);
 }
 
 static void destroy_rmpp_recv(struct mad_rmpp_recv *rmpp_recv)
 {
 	deref_rmpp_recv(rmpp_recv);
-//	wait_for_completion(&rmpp_recv->comp);
+	wait_for_completion(&rmpp_recv->comp);
 	ib_destroy_ah(rmpp_recv->ah);
 	kfree(rmpp_recv);
 }
@@ -96,12 +99,12 @@ void ib_cancel_rmpp_recvs(struct ib_mad_agent_private *agent)
 	}
 	spin_unlock_irqrestore(&agent->lock, flags);
 
-	list_for_each_entry(rmpp_recv, &agent->rmpp_list, list) {
-		cancel_delayed_work(&rmpp_recv->timeout_work);
-		cancel_delayed_work(&rmpp_recv->cleanup_work);
-	}
+// XXX	list_for_each_entry(rmpp_recv, &agent->rmpp_list, list) {
+//		cancel_delayed_work(&rmpp_recv->timeout_work);
+//		cancel_delayed_work(&rmpp_recv->cleanup_work);
+//	}
 
-	flush_workqueue(agent->qp_info->port_priv->wq);
+//	flush_workqueue(agent->qp_info->port_priv->wq);
 
 	list_for_each_entry_safe(rmpp_recv, temp_rmpp_recv,
 				 &agent->rmpp_list, list) {
@@ -241,7 +244,8 @@ static void nack_recv(struct ib_mad_agent_private *agent,
 static void recv_timeout_handler(struct work_struct *work)
 {
 	struct mad_rmpp_recv *rmpp_recv =
-		container_of(work, struct mad_rmpp_recv, timeout_work.work);
+		container_of(work, struct mad_rmpp_recv, timeout_work);
+		//container_of(work, struct mad_rmpp_recv, timeout_work.work);
 	struct ib_mad_recv_wc *rmpp_wc;
 	unsigned long flags;
 
@@ -263,7 +267,8 @@ static void recv_timeout_handler(struct work_struct *work)
 static void recv_cleanup_handler(struct work_struct *work)
 {
 	struct mad_rmpp_recv *rmpp_recv =
-		container_of(work, struct mad_rmpp_recv, cleanup_work.work);
+		container_of(work, struct mad_rmpp_recv, cleanup_work);
+		//container_of(work, struct mad_rmpp_recv, cleanup_work.work);
 	unsigned long flags;
 
 	spin_lock_irqsave(&rmpp_recv->agent->lock, flags);
@@ -295,9 +300,11 @@ create_rmpp_recv(struct ib_mad_agent_private *agent,
 		goto error;
 
 	rmpp_recv->agent = agent;
-//	init_completion(&rmpp_recv->comp);
+	init_completion(&rmpp_recv->comp);
 //	INIT_DELAYED_WORK(&rmpp_recv->timeout_work, recv_timeout_handler);
 //	INIT_DELAYED_WORK(&rmpp_recv->cleanup_work, recv_cleanup_handler);
+	INIT_WORK(&rmpp_recv->timeout_work, recv_timeout_handler);
+	INIT_WORK(&rmpp_recv->cleanup_work, recv_cleanup_handler);
 	spin_lock_init(&rmpp_recv->lock);
 	rmpp_recv->state = RMPP_STATE_ACTIVE;
 	atomic_set(&rmpp_recv->refcount, 1);
@@ -448,14 +455,16 @@ static struct ib_mad_recv_wc * complete_rmpp(struct mad_rmpp_recv *rmpp_recv)
 	struct ib_mad_recv_wc *rmpp_wc;
 
 	ack_recv(rmpp_recv, rmpp_recv->rmpp_wc);
-	if (rmpp_recv->seg_num > 1)
-		cancel_delayed_work(&rmpp_recv->timeout_work);
+//	if (rmpp_recv->seg_num > 1)
+//		cancel_delayed_work(&rmpp_recv->timeout_work);
 
 	rmpp_wc = rmpp_recv->rmpp_wc;
 	rmpp_wc->mad_len = get_mad_len(rmpp_recv);
 	/* 10 seconds until we can find the packet lifetime */
-	queue_delayed_work(rmpp_recv->agent->qp_info->port_priv->wq,
-			   &rmpp_recv->cleanup_work, msecs_to_jiffies(10000));
+	//queue_delayed_work(rmpp_recv->agent->qp_info->port_priv->wq,
+	//		   &rmpp_recv->cleanup_work, msecs_to_jiffies(10000));
+	queue_work(rmpp_recv->agent->qp_info->port_priv->wq,
+			   &rmpp_recv->cleanup_work);
 	return rmpp_wc;
 }
 
@@ -547,9 +556,11 @@ start_rmpp(struct ib_mad_agent_private *agent,
 	} else {
 		spin_unlock_irqrestore(&agent->lock, flags);
 		/* 40 seconds until we can find the packet lifetimes */
-		queue_delayed_work(agent->qp_info->port_priv->wq,
-				   &rmpp_recv->timeout_work,
-				   msecs_to_jiffies(40000));
+		queue_work(agent->qp_info->port_priv->wq,
+				   &rmpp_recv->timeout_work);
+		//queue_delayed_work(agent->qp_info->port_priv->wq,
+		//		   &rmpp_recv->timeout_work,
+		//		   msecs_to_jiffies(40000));
 		rmpp_recv->newwin += window_size(agent);
 		ack_recv(rmpp_recv, mad_recv_wc);
 		mad_recv_wc = NULL;

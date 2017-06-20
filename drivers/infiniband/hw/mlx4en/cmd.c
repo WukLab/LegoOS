@@ -107,7 +107,7 @@ enum {
 };
 
 struct mlx4_cmd_context {
-//	struct completion	done;
+	struct completion	done;
 	int			result;
 	int			next;
 	u64			out_param;
@@ -172,7 +172,8 @@ static int mlx4_cmd_post(struct mlx4_dev *dev, u64 in_param, u64 out_param,
 	while (cmd_pending(dev)) {
 		if (time_after_eq(jiffies, end))
 			goto out;
-		// XXX was this: cond_resched();
+		//cond_resched();
+		//schedule();
 		udelay(1000);
 	}
 
@@ -227,7 +228,7 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	unsigned long end;
 
 	//pr_debug("%s in_modifier %d %x\n", __func__, in_modifier, in_modifier);
-// XXX	down(&priv->cmd.poll_sem);
+	//down(&priv->cmd.poll_sem);
 
 	err = mlx4_cmd_post(dev, in_param, out_param ? *out_param : 0,
 			    in_modifier, op_modifier, op, CMD_POLL_TOKEN, 0);
@@ -236,7 +237,8 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 
 	end = msecs_to_jiffies(timeout) + jiffies;
 	while (cmd_pending(dev) && time_before(jiffies, end)) {
-		// XXX was this: cond_resched();
+		// cond_resched();
+		//schedule();
 		udelay(1000);
 	}
 
@@ -258,12 +260,10 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 
 	//pr_debug("%s return %d\n", __func__, err);
 out:
-// XXX	up(&priv->cmd.poll_sem);
+	//up(&priv->cmd.poll_sem);
 	return err;
 }
 
-#if 0
-XXX
 void mlx4_cmd_event(struct mlx4_dev *dev, u16 token, u8 status, u64 out_param)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
@@ -288,7 +288,7 @@ static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	struct mlx4_cmd_context *context;
 	int err = 0;
 
-	down(&cmd->event_sem);
+//	down(&cmd->event_sem);
 
 	spin_lock(&cmd->context_lock);
 	BUG_ON(cmd->free_head < 0);
@@ -320,10 +320,9 @@ out:
 	cmd->free_head = context - cmd->context;
 	spin_unlock(&cmd->context_lock);
 
-	up(&cmd->event_sem);
+//	up(&cmd->event_sem);
 	return err;
 }
-#endif
 
 int __mlx4_cmd(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	       int out_is_imm, u32 in_modifier, u8 op_modifier,
@@ -331,10 +330,10 @@ int __mlx4_cmd(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 {
 	//pr_debug("%s in_param %lx in_modifier %x op_modifier %x op %x\n",
 	//		__func__, in_param, in_modifier, op_modifier, op);
-// XXX	if (mlx4_priv(dev)->cmd.use_events)
-//		return mlx4_cmd_wait(dev, in_param, out_param, out_is_imm,
-//				     in_modifier, op_modifier, op, timeout);
-//	else
+	//if (mlx4_priv(dev)->cmd.use_events)
+	//	return mlx4_cmd_wait(dev, in_param, out_param, out_is_imm,
+	//			     in_modifier, op_modifier, op, timeout);
+	//else
 		return mlx4_cmd_poll(dev, in_param, out_param, out_is_imm,
 				     in_modifier, op_modifier, op, timeout);
 }
@@ -460,8 +459,6 @@ struct mlx4_cmd_mailbox *mlx4_alloc_cmd_mailbox(struct mlx4_dev *dev)
 
 void mlx4_free_cmd_mailbox(struct mlx4_dev *dev, struct mlx4_cmd_mailbox *mailbox)
 {
-	return;
-// XXX
 	if (!mailbox)
 		return;
 

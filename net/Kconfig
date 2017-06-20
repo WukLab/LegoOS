@@ -1,8 +1,25 @@
 menu "Networking"
 
-menuconfig LWIP
+config LWIP
 	tristate "lwip TCP/IP layer"
 	---help---
 	  lwip TCP/IP layer.
+
+if INFINIBAND
+
+config FIT
+	bool "FIT IB layer"
+	default y
+	depends on INFINIBAND
+
+config INFINIBAND_CLIENT
+	tristate "InfiniBand client side of rc"
+	depends on INFINIBAND
+
+config INFINIBAND_SERVER
+	tristate "InfiniBand server side of rc"
+	depends on INFINIBAND
+
+endif
 
 endmenu

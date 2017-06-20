@@ -130,5 +130,16 @@ typedef s32	__kernel_clockid_t;
 typedef __kernel_time_t		time_t;
 typedef __kernel_clock_t	clock_t;
 
+/**
+ * struct callback_head - callback structure for use with RCU and task_work
+ * @next: next update requests in a list
+ * @func: actual update function to call after the grace period.
+ */
+struct callback_head {
+	struct callback_head *next;
+	void (*func)(struct callback_head *head);
+};
+#define rcu_head callback_head
+
 #endif /* __ASSEMBLY__ */
 #endif /* _LEGO_TYPES_H_ */

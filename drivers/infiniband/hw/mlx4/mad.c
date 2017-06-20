@@ -135,8 +135,6 @@ static void update_sm_ah(struct mlx4_ib_dev *dev, u8 port_num, u16 lid, u8 sl)
 	struct ib_ah *new_ah;
 	struct ib_ah_attr ah_attr;
 
-	pr_info("%s need ah back\n", __func__);
-#if 0
 	if (!dev->send_agent[port_num - 1][0])
 		return;
 
@@ -150,12 +148,12 @@ static void update_sm_ah(struct mlx4_ib_dev *dev, u8 port_num, u16 lid, u8 sl)
 	if (IS_ERR(new_ah))
 		return;
 
+	pr_info("%s new ah %p\n", __func__, new_ah);
 	spin_lock(&dev->sm_lock);
 	if (dev->sm_ah[port_num - 1])
 		ib_destroy_ah(dev->sm_ah[port_num - 1]);
 	dev->sm_ah[port_num - 1] = new_ah;
 	spin_unlock(&dev->sm_lock);
-#endif
 }
 
 /*
@@ -167,7 +165,7 @@ static void smp_snoop(struct ib_device *ibdev, u8 port_num, struct ib_mad *mad,
 {
 	struct ib_event event;
 
-	//pr_info("%s\n", __func__);
+	pr_info("%s\n", __func__);
 	if ((mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_LID_ROUTED ||
 	     mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) &&
 	    mad->mad_hdr.method == IB_MGMT_METHOD_SET) {
@@ -237,11 +235,11 @@ static void forward_trap(struct mlx4_ib_dev *dev, u8 port_num, struct ib_mad *ma
 		 */
 		spin_lock(&dev->sm_lock);
 		memcpy(send_buf->mad, mad, sizeof *mad);
-		pr_info("%s need ah back\n", __func__);
-//		if ((send_buf->ah = dev->sm_ah[port_num - 1]))
-//			ret = ib_post_send_mad(send_buf, NULL);
-//		else
-//			ret = -EINVAL;
+		pr_info("%s sendbufah %p devsmah %p\n", __func__, send_buf->ah, dev->sm_ah[port_num - 1]);
+		if ((send_buf->ah = dev->sm_ah[port_num - 1]))
+			ret = ib_post_send_mad(send_buf, NULL);
+		else
+			ret = -EINVAL;
 		spin_unlock(&dev->sm_lock);
 
 		if (ret)
@@ -265,10 +263,10 @@ static int ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 		return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 	}
 
-	//pr_info("%s mad_hdr %p base_version %x mgmt_class %x class_version %x method %x status %x class_specific %x TID %x attr_id %x attr_mod %x\n",
-	//	__func__, &(in_mad->mad_hdr), in_mad->mad_hdr.base_version, in_mad->mad_hdr.mgmt_class, in_mad->mad_hdr.class_version, 
-	//	in_mad->mad_hdr.method, in_mad->mad_hdr.status, in_mad->mad_hdr.class_specific, in_mad->mad_hdr.tid, in_mad->mad_hdr.attr_id, 
-	//	in_mad->mad_hdr.attr_mod);
+	pr_info("%s mad_hdr %p base_version %x mgmt_class %x class_version %x method %x status %x class_specific %x TID %x attr_id %x attr_mod %x\n",
+		__func__, &(in_mad->mad_hdr), in_mad->mad_hdr.base_version, in_mad->mad_hdr.mgmt_class, in_mad->mad_hdr.class_version, 
+		in_mad->mad_hdr.method, in_mad->mad_hdr.status, in_mad->mad_hdr.class_specific, in_mad->mad_hdr.tid, in_mad->mad_hdr.attr_id, 
+		in_mad->mad_hdr.attr_mod);
 	if (in_mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_LID_ROUTED ||
 	    in_mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
 		if (in_mad->mad_hdr.method   != IB_MGMT_METHOD_GET &&
@@ -312,7 +310,7 @@ static int ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 		smp_snoop(ibdev, port_num, in_mad, prev_lid);
 		node_desc_override(ibdev, out_mad);
 	}
-	//pr_info("%s out mad status %x\n", __func__, out_mad->mad_hdr.status);
+	pr_info("%s out mad status %x\n", __func__, out_mad->mad_hdr.status);
 
 	/* set return bit in status of directed route responses */
 	if (in_mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
