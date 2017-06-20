@@ -802,7 +802,9 @@ asmlinkage __visible void __sched schedule(void)
  */
 void __sched schedule_preempt_disabled(void)
 {
+#ifdef CONFIG_PREEMPT
 	BUG_ON(preempt_count() != 1);
+#endif
 	preempt_enable_no_resched();
 	schedule();
 	preempt_disable();
