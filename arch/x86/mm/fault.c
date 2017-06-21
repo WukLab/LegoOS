@@ -18,6 +18,8 @@
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
 
+#include <lego/memory.h>
+
 /*
  * Page fault error code bits:
  *
@@ -279,5 +281,8 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 			show_fault_oops(current, regs, address);
 	}
 
+#ifdef CONFIG_MEMCOMPONENT
+	mem_handle_fault(task, address);
+#endif
 	hlt();
 }

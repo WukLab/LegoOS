@@ -82,7 +82,7 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 			 struct ib_wc *wc, struct ib_device *device,
 			 int port_num, int qpn)
 {
-	//pr_info("%s qpn %d port %d\n", __func__, qpn, port_num);
+	pr_info("%s qpn %d port %d\n", __func__, qpn, port_num);
 	struct ib_agent_port_private *port_priv;
 	struct ib_mad_agent *agent;
 	struct ib_mad_send_buf *send_buf;
@@ -139,7 +139,7 @@ err1:
 static void agent_send_handler(struct ib_mad_agent *mad_agent,
 			       struct ib_mad_send_wc *mad_send_wc)
 {
-	//pr_info("%s\n", __func__);
+	pr_info("%s\n", __func__);
 	ib_destroy_ah(mad_send_wc->send_buf->ah);
 	ib_free_send_mad(mad_send_wc->send_buf);
 }
@@ -150,6 +150,7 @@ int ib_agent_port_open(struct ib_device *device, int port_num)
 	unsigned long flags;
 	int ret;
 
+	pr_info("%s\n", __func__);
 	/* Create new device info */
 	port_priv = kzalloc(sizeof *port_priv, GFP_KERNEL);
 	if (!port_priv) {

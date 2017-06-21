@@ -472,7 +472,7 @@ static int create_qp_common(struct mlx4_ib_dev *dev, struct ib_pd *pd,
 	int qpn;
 	int err;
 
-	pr_debug("%s mlxdev %p qp %p mqp %p\n", __func__, dev, qp, &qp->mqp); 
+	//pr_debug("%s mlxdev %p qp %p mqp %p\n", __func__, dev, qp, &qp->mqp); 
 	mutex_init(&qp->mutex);
 	spin_lock_init(&qp->sq.lock);
 	spin_lock_init(&qp->rq.lock);
@@ -1713,12 +1713,13 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 			}
 			break;
 
-#if 0
+#if 1
 		case IB_QPT_UD:
 			set_datagram_seg(wqe, wr);
 			wqe  += sizeof (struct mlx4_wqe_datagram_seg);
 			size += sizeof (struct mlx4_wqe_datagram_seg) / 16;
 
+/*
 			if (wr->opcode == IB_WR_LSO) {
 				err = build_lso_seg(wqe, wr, qp, &seglen, &lso_hdr_sz, &blh);
 				if (unlikely(err)) {
@@ -1729,12 +1730,13 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 				wqe  += seglen;
 				size += seglen / 16;
 			}
+*/
 			break;
 #endif
 
 		case IB_QPT_SMI:
 		case IB_QPT_GSI:
-			//pr_info("%s queue type SMI/GSI %d\n", __func__, ibqp->qp_type);
+			pr_info("%s queue type SMI/GSI %d\n", __func__, ibqp->qp_type);
 			err = build_mlx_header(to_msqp(qp), wr, ctrl, &seglen);
 			if (unlikely(err)) {
 				*bad_wr = wr;

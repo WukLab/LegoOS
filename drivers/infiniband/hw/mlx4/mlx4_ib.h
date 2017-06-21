@@ -179,7 +179,7 @@ struct mlx4_ib_dev {
 	MLX4_DECLARE_DOORBELL_LOCK(uar_lock);
 
 	struct ib_mad_agent    *send_agent[MLX4_MAX_PORTS][2];
-//	struct ib_ah	       *sm_ah[MLX4_MAX_PORTS];
+	struct ib_ah	       *sm_ah[MLX4_MAX_PORTS];
 	spinlock_t		sm_lock;
 
 	struct mutex		cap_mask_mutex;

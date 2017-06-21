@@ -32,28 +32,24 @@
  * SOFTWARE.
  */
 
-#include <linux/module.h>
-#include <linux/init.h>
-#include <linux/err.h>
-#include <linux/random.h>
-#include <linux/spinlock.h>
-#include <linux/slab.h>
-#include <linux/dma-mapping.h>
-#include <linux/kref.h>
-#include <linux/idr.h>
-#include <linux/workqueue.h>
+#include <lego/init.h>
+#include <lego/err.h>
+//#include <lego/random.h>
+#include <lego/spinlock.h>
+#include <lego/slab.h>
+#include <lego/dma-mapping.h>
+//#include <lego/kref.h>
+//#include <lego/idr.h>
+#include <lego/workqueue.h>
 
 #include <rdma/ib_pack.h>
 #include <rdma/ib_cache.h>
-#include "sa.h"
-
-MODULE_AUTHOR("Roland Dreier");
-MODULE_DESCRIPTION("InfiniBand subnet administration query support");
-MODULE_LICENSE("Dual BSD/GPL");
+#include <rdma/ib_sa.h>
+//#include "sa.h"
 
 struct ib_sa_sm_ah {
 	struct ib_ah        *ah;
-	struct kref          ref;
+	// XXX struct kref          ref;
 	u16		     pkey_index;
 	u8		     src_path_mask;
 };
@@ -100,6 +96,7 @@ struct ib_sa_mcmember_query {
 	struct ib_sa_query sa_query;
 };
 
+#if 0
 static void ib_sa_add_one(struct ib_device *device);
 static void ib_sa_remove_one(struct ib_device *device);
 
@@ -108,9 +105,10 @@ static struct ib_client sa_client = {
 	.add    = ib_sa_add_one,
 	.remove = ib_sa_remove_one
 };
+#endif
 
 static DEFINE_SPINLOCK(idr_lock);
-static DEFINE_IDR(query_idr);
+//static DEFINE_IDR(query_idr);
 
 static DEFINE_SPINLOCK(tid_lock);
 static u32 tid;
@@ -347,6 +345,7 @@ static const struct ib_field service_rec_table[] = {
 	  .size_bits    = 2*64 },
 };
 
+#if 0
 static void free_sm_ah(struct kref *kref)
 {
 	struct ib_sa_sm_ah *sm_ah = container_of(kref, struct ib_sa_sm_ah, ref);
@@ -435,14 +434,12 @@ void ib_sa_register_client(struct ib_sa_client *client)
 	atomic_set(&client->users, 1);
 	init_completion(&client->comp);
 }
-EXPORT_SYMBOL(ib_sa_register_client);
 
 void ib_sa_unregister_client(struct ib_sa_client *client)
 {
 	ib_sa_client_put(client);
 	wait_for_completion(&client->comp);
 }
-EXPORT_SYMBOL(ib_sa_unregister_client);
 
 /**
  * ib_sa_cancel_query - try to cancel an SA query
@@ -470,7 +467,7 @@ void ib_sa_cancel_query(int id, struct ib_sa_query *query)
 
 	ib_cancel_mad(agent, mad_buf);
 }
-EXPORT_SYMBOL(ib_sa_cancel_query);
+#endif
 
 static u8 get_src_path_mask(struct ib_device *device, u8 port_num)
 {
@@ -479,9 +476,10 @@ static u8 get_src_path_mask(struct ib_device *device, u8 port_num)
 	unsigned long flags;
 	u8 src_path_mask;
 
-	sa_dev = ib_get_client_data(device, &sa_client);
-	if (!sa_dev)
-		return 0x7f;
+	pr_info("%s need back\n");
+	//sa_dev = ib_get_client_data(device, &sa_client);
+	//if (!sa_dev)
+	//	return 0x7f;
 
 	port  = &sa_dev->port[port_num - sa_dev->start_port];
 	spin_lock_irqsave(&port->ah_lock, flags);
@@ -506,9 +504,7 @@ int ib_init_ah_from_path(struct ib_device *device, u8 port_num,
 	ah_attr->port_num = port_num;
 	ah_attr->static_rate = rec->rate;
 
-	force_grh = rdma_port_get_link_layer(device, port_num) == IB_LINK_LAYER_ETHERNET;
-
-	if (rec->hop_limit > 0 || force_grh) {
+	if (rec->hop_limit > 0) {
 		ah_attr->ah_flags = IB_AH_GRH;
 		ah_attr->grh.dgid = rec->dgid;
 
@@ -524,8 +520,8 @@ int ib_init_ah_from_path(struct ib_device *device, u8 port_num,
 	}
 	return 0;
 }
-EXPORT_SYMBOL(ib_init_ah_from_path);
 
+#if 0
 static int alloc_mad(struct ib_sa_query *query, gfp_t gfp_mask)
 {
 	unsigned long flags;
@@ -614,7 +610,6 @@ void ib_sa_unpack_path(void *attribute, struct ib_sa_path_rec *rec)
 {
 	ib_unpack(path_rec_table, ARRAY_SIZE(path_rec_table), attribute, rec);
 }
-EXPORT_SYMBOL(ib_sa_unpack_path);
 
 static void ib_sa_path_rec_callback(struct ib_sa_query *sa_query,
 				    int status,
@@ -729,7 +724,6 @@ err1:
 	kfree(query);
 	return ret;
 }
-EXPORT_SYMBOL(ib_sa_path_rec_get);
 
 static void ib_sa_service_rec_callback(struct ib_sa_query *sa_query,
 				    int status,
@@ -852,7 +846,6 @@ err1:
 	kfree(query);
 	return ret;
 }
-EXPORT_SYMBOL(ib_sa_service_rec_query);
 
 static void ib_sa_mcmember_rec_callback(struct ib_sa_query *sa_query,
 					int status,
@@ -1093,22 +1086,17 @@ static void ib_sa_remove_one(struct ib_device *device)
 	kfree(sa_dev);
 }
 
-static int __init ib_sa_init(void)
+int ib_sa_init(void)
 {
 	int ret;
 
-	get_random_bytes(&tid, sizeof tid);
+	// XXX get_random_bytes(&tid, sizeof tid);
+	tid = 1;
 
 	ret = ib_register_client(&sa_client);
 	if (ret) {
 		printk(KERN_ERR "Couldn't register ib_sa client\n");
 		goto err1;
-	}
-
-	ret = mcast_init();
-	if (ret) {
-		printk(KERN_ERR "Couldn't initialize multicast handling\n");
-		goto err2;
 	}
 
 	return 0;
@@ -1118,12 +1106,8 @@ err1:
 	return ret;
 }
 
-static void __exit ib_sa_cleanup(void)
+void ib_sa_cleanup(void)
 {
-	mcast_cleanup();
 	ib_unregister_client(&sa_client);
-	idr_destroy(&query_idr);
 }
-
-module_init(ib_sa_init);
-module_exit(ib_sa_cleanup);
+#endif

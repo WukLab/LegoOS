@@ -98,19 +98,19 @@ static void cq_table_rb_insert(struct rb_root *root, u32 cqn, struct mlx4_cq *ne
 	struct rb_node *parent = NULL;
 	struct mlx4_cq *entry;
 
-	pr_debug("%s root %p, link %p cqn %d, new_entry %p\n", __func__, root, root->rb_node, cqn, new_entry);
+	//pr_debug("%s root %p, link %p cqn %d, new_entry %p\n", __func__, root, root->rb_node, cqn, new_entry);
 	while (*link) {
 		parent = *link;
 		entry = rb_entry(parent, struct mlx4_cq, node);
-		pr_debug("%s entry %p entrycqn %d\n", __func__, entry, entry->cqn);
+		//pr_debug("%s entry %p entrycqn %d\n", __func__, entry, entry->cqn);
 		if (entry->cqn > cqn)
 			link = &(*link)->rb_left;
 		else
 			link = &(*link)->rb_right;
 	}
 
-	pr_debug("%s new_netry %p node %p parent %p root %p\n",
-			__func__, new_entry, &new_entry->node, parent, root);
+	//pr_debug("%s new_netry %p node %p parent %p root %p\n",
+	//		__func__, new_entry, &new_entry->node, parent, root);
 	rb_link_node(&new_entry->node, parent, link);
 	rb_insert_color(&new_entry->node, root);
 }
@@ -172,8 +172,8 @@ void mlx4_cq_event(struct mlx4_dev *dev, u32 cqn, int event_type)
 
 	cq->event(cq, event_type);
 
-// XXX	if (atomic_dec_and_test(&cq->refcount))
-//		complete(&cq->free);
+	if (atomic_dec_and_test(&cq->refcount))
+		complete(&cq->free);
 }
 
 static int mlx4_SW2HW_CQ(struct mlx4_dev *dev, struct mlx4_cmd_mailbox *mailbox,
@@ -310,7 +310,7 @@ int mlx4_cq_alloc(struct mlx4_dev *dev, int nent, struct mlx4_mtt *mtt,
 	cq->arm_sn     = 1;
 	cq->uar        = uar;
 	atomic_set(&cq->refcount, 1);
-// XXX	init_completion(&cq->free);
+	init_completion(&cq->free);
 
 	return 0;
 
@@ -347,9 +347,9 @@ void mlx4_cq_free(struct mlx4_dev *dev, struct mlx4_cq *cq)
 	cq_table_rb_delete(&cq_table->tree, cq->cqn);
 	spin_unlock_irq(&cq_table->lock);
 
-// XXX	if (atomic_dec_and_test(&cq->refcount))
-//		complete(&cq->free);
-//	wait_for_completion(&cq->free);
+	if (atomic_dec_and_test(&cq->refcount))
+		complete(&cq->free);
+	wait_for_completion(&cq->free);
 
 	mlx4_table_put(dev, &cq_table->table, cq->cqn);
 	mlx4_bitmap_free(&cq_table->bitmap, cq->cqn);
