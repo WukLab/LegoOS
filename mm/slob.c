@@ -10,6 +10,125 @@
 #include <lego/mm.h>
 #include <lego/bug.h>
 #include <lego/kernel.h>
+#include <lego/slab.h>
+#include <lego/init.h>
+#include <lego/list.h>
+
+/*
+ * slob_block has a field 'units', which indicates size of block if +ve,
+ * or offset of next block if -ve (in SLOB_UNITs).
+ *
+ * Free blocks of size 1 unit simply contain the offset of the next block.
+ * Those with larger size contain their size in the first SLOB_UNIT of
+ * memory, and the offset of the next free block in the second SLOB_UNIT.
+ */
+#if PAGE_SIZE <= (32767 * 2)
+typedef s16 slobidx_t;
+#else
+typedef s32 slobidx_t;
+#endif
+
+struct slob_block {
+	slobidx_t units;
+};
+typedef struct slob_block slob_t;
+
+/*
+ * All partially free slob pages go on these lists.
+ */
+#define SLOB_BREAK1 256
+#define SLOB_BREAK2 1024
+static LIST_HEAD(free_slob_small);
+static LIST_HEAD(free_slob_medium);
+static LIST_HEAD(free_slob_large);
+
+/*
+ * slob_page_free: true for pages on free_slob_pages list.
+ */
+static inline int slob_page_free(struct page *sp)
+{
+	return PageSlobFree(sp);
+}
+
+static void set_slob_page_free(struct page *sp, struct list_head *list)
+{
+	list_add(&sp->lru, list);
+	__SetPageSlobFree(sp);
+}
+
+static inline void clear_slob_page_free(struct page *sp)
+{
+	list_del(&sp->lru);
+	__ClearPageSlobFree(sp);
+}
+
+#define SLOB_UNIT sizeof(slob_t)
+#define SLOB_UNITS(size) DIV_ROUND_UP(size, SLOB_UNIT)
+
+/*
+ * slob_lock protects all slob allocator structures.
+ */
+static DEFINE_SPINLOCK(slob_lock);
+
+/*
+ * Encode the given size and next info into a free slob block s.
+ */
+static void set_slob(slob_t *s, slobidx_t size, slob_t *next)
+{
+	slob_t *base = (slob_t *)((unsigned long)s & PAGE_MASK);
+	slobidx_t offset = next - base;
+
+	if (size > 1) {
+		s[0].units = size;
+		s[1].units = offset;
+	} else
+		s[0].units = -offset;
+}
+
+/*
+ * Return the size of a slob block.
+ */
+static slobidx_t slob_units(slob_t *s)
+{
+	if (s->units > 0)
+		return s->units;
+	return 1;
+}
+
+/*
+ * Return the next free slob block pointer after this one.
+ */
+static slob_t *slob_next(slob_t *s)
+{
+	slob_t *base = (slob_t *)((unsigned long)s & PAGE_MASK);
+	slobidx_t next;
+
+	if (s[0].units < 0)
+		next = -s[0].units;
+	else
+		next = s[1].units;
+	return base+next;
+}
+
+/*
+ * Returns true if s is the last free block in its page.
+ */
+static int slob_last(slob_t *s)
+{
+	return !((unsigned long)slob_next(s) & ~PAGE_MASK);
+}
+
+static void *slob_new_pages(gfp_t gfp, int order, int node)
+{
+	void *page;
+	if (node != NUMA_NO_NODE)
+		page = __alloc_pages_node(node, gfp, order);
+	else
+		page = alloc_pages(gfp, order);
+	if (!page)
+		return NULL;
+	return page_address(page);
+}
 
 void kfree(const void *p)
 {
