@@ -122,7 +122,7 @@ static int kernel_init(void *unused)
 
 static void rest_init(void)
 {
-	kernel_thread(kernel_init, NULL, CLONE_FS);
+	//kernel_thread(kernel_init, NULL, CLONE_FS);
 
 	/*
 	 * The boot idle thread must execute schedule()

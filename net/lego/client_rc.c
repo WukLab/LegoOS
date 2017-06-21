@@ -444,6 +444,7 @@ int routine(int ctxid)
 	int			 gidx = -1;
 	int			rr;
 	char *buf;
+	int i;
 
 	printk(KERN_CRIT "routine %d\n", ctxid);
 
@@ -489,6 +490,7 @@ retry:
 				gidx))
 		return 1;
 
+	for (i = 0; i < 10; i++)
 	send_msg(0, NULL, 4);
 
 	return 0;
@@ -526,7 +528,10 @@ int lego_ib_init(void)
 		pr_err("couldn't register IB client\n");
 		return ret;
 	}
-	
+
+	while (1) {
+		udelay(1000);
+	}
 	return 0;
 }
 

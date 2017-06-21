@@ -379,8 +379,8 @@ int ib_register_client(struct ib_client *client)
 		}
 	}
 
-	pr_info("%s exit\n", __func__);
 	mutex_unlock(&device_mutex);
+	pr_info("%s exit\n", __func__);
 	return 0;
 }
 
