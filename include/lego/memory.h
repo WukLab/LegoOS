@@ -16,8 +16,8 @@ void memcomponent_init(void);
 void memory_cleanup(void);
 void mem_handle_fault(struct task_struct *task, unsigned long address);
 #else
-static inline void  memcomponent_init(void) { return 0; }
-static inline void  memcomponent_cleanup(void) { return 0; }
-static inline void mem_handle_fault(struct task_struct *task, unsigned long address) { return 0; }
+static inline void  memcomponent_init(void) { }
+static inline void  memcomponent_cleanup(void) { }
+static inline void mem_handle_fault(struct task_struct *task, unsigned long address) { }
 #endif
 

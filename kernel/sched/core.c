@@ -631,6 +631,9 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	 * schedule one last time. The schedule call will never return.
 	 */
 	if (unlikely(prev->state == TASK_DEAD)) {
+		if (prev->sched_class->task_dead)
+			prev->sched_class->task_dead(prev);
+
 		put_task_struct(prev);
 	}
 
@@ -842,6 +845,7 @@ void __noreturn do_task_dead(void)
 	__schedule(false);
 	BUG();
 
+	/* Avoid "noreturn function does return".  */
 	for (;;)
 		cpu_relax();
 }
@@ -1197,6 +1201,13 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 	return 0;
 }
 
+void set_task_comm(struct task_struct *tsk, const char *buf)
+{
+	task_lock(tsk);
+	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
+	task_unlock(tsk);
+}
+
 /**
  * sched_init_idle - set up an idle thread for a given CPU
  * @idle: task in question
@@ -1239,6 +1250,11 @@ void __init sched_init_idle(struct task_struct *idle, int cpu)
 	idle->sched_class = &idle_sched_class;
 
 	sprintf(idle->comm, "swapper/%d", cpu);
+}
+
+void setup_init_idleclass(struct task_struct *idle)
+{
+	idle->sched_class = &idle_sched_class;
 }
 
 /*
