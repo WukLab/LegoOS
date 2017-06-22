@@ -405,12 +405,13 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 	printk(KERN_CRIT "%s conn %d post %d buffers\n", __func__, connection_id, depth);
 	for(i=0;i<depth;i++)
 	{
-		struct ib_sge sge[2];
+		struct ib_sge sge[1];
 
-		header = kmalloc(sizeof(struct ibapi_header), GFP_KERNEL);
-		header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct ibapi_header));
 		buf = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
 		addr = client_ib_reg_mr_addr(ctx, buf, size);
+/*
+		header = kmalloc(sizeof(struct ibapi_header), GFP_KERNEL);
+		header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct ibapi_header));
 		p_r_i_struct = (struct ibapi_post_receive_intermediate_struct *)kmalloc(sizeof(struct ibapi_post_receive_intermediate_struct), GFP_KERNEL);
 		p_r_i_struct->header = (uintptr_t)header_addr;
 		p_r_i_struct->msg = (uintptr_t)addr;
@@ -418,16 +419,16 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 		sge[0].addr = (uintptr_t)header_addr;
 		sge[0].length = sizeof(struct ibapi_header);
 		sge[0].lkey = ctx->proc->lkey;
-
-		sge[1].addr = (uintptr_t)addr;
-		sge[1].length = size;
-		sge[1].lkey = ctx->proc->lkey;
+*/
+		sge[0].addr = (uintptr_t)addr;
+		sge[0].length = size;
+		sge[0].lkey = ctx->proc->lkey;
 
 		struct ib_recv_wr wr, *bad_wr = NULL;
-		wr.wr_id = (uint64_t)p_r_i_struct;
+		wr.wr_id = size; //(uint64_t)p_r_i_struct;
 		wr.next = NULL;
 		wr.sg_list = sge;
-		wr.num_sge = 2;
+		wr.num_sge = 1;
 		ret = ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
 		if (ret) {
 			printk(KERN_CRIT "ERROR: %s post recv error %d conn %d i %d\n", 
@@ -827,6 +828,8 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 
 			if((int) wc[i].opcode == IB_WC_RECV)
 			{
+				printk(KERN_CRIT "%s received IB_WC_RECV size %d\n", wc[i].wr_id);
+			/*
 				struct ibapi_post_receive_intermediate_struct *p_r_i_struct = (struct ibapi_post_receive_intermediate_struct*)wc[i].wr_id;
 				struct ibapi_header temp_header;
 
@@ -841,6 +844,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
 							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey);
 				}
+			*/
 			}
 			else if((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM)
 			{
@@ -1257,6 +1261,62 @@ int client_send_test(ppc *ctx, int connection_id, int type, void *addr, int size
 			{
 				printk(KERN_ALERT "send failed at connection %d as %d\n", connection_id, wc[i].status);
 				spin_unlock(&connection_lock[connection_id]);
+				return 2;
+			}
+		}
+	}
+	else
+	{
+		printk(KERN_INFO "%s send fail %d\n", __func__, connection_id);
+	}
+	spin_unlock(&connection_lock[connection_id]);
+	return ret;
+}
+
+int client_send_message_lego(ppc *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority)
+{	
+	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_sge sge[1];
+	int ret;
+	int ne, i;
+	struct ib_wc wc[2];
+	struct ibapi_header output_header;
+	void *output_header_addr;
+
+	printk(KERN_CRIT "%s conn %d addr %p size %d sendcq %p\n", __func__, connection_id, addr, size, ctx->send_cq[connection_id]);
+	spin_lock(&connection_lock[connection_id]);
+
+	memset(&wr, 0, sizeof(wr));
+	memset(sge, 0, sizeof(struct ib_sge)*2);
+
+	wr.wr_id = type;
+	wr.opcode = IB_WR_SEND;
+	wr.sg_list = sge;
+	wr.num_sge = 1;
+	wr.send_flags = IB_SEND_SIGNALED;
+
+	sge[0].addr = (uintptr_t)client_ib_reg_mr_addr(ctx, addr, size);
+	sge[0].length = size;
+	sge[0].lkey = ctx->proc->lkey;
+
+	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+	printk(KERN_CRIT "%s headeraddr %p %p bufaddr %p %p lkey %d\n",
+		__func__, &output_header, output_header_addr, addr, sge[1].addr, ctx->proc->lkey);
+	if(ret==0)
+	{
+		do{
+			ne = ib_poll_cq(ctx->send_cq[connection_id], 1, wc);
+			if(ne < 0)
+			{
+				printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
+				return 1;
+			}
+		}while(ne<1);
+		for(i=0;i<ne;i++)
+		{
+			if(wc[i].status!=IB_WC_SUCCESS)
+			{
+				printk(KERN_ALERT "send failed at connection %d as %d\n", connection_id, wc[i].status);
 				return 2;
 			}
 		}
