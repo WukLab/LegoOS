@@ -320,13 +320,15 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 	struct client_ibv_mr *ret;
 	struct ib_mr *proc;
 	
+	/*
 	if(pr_test==0)
 	{
 		access =IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC; 
 		proc_test = ib_get_dma_mr(ctx->pd,access);
 		pr_test++;
 	}
-	proc = proc_test;
+	*/
+	proc = ctx->proc; //proc_test;
 
 	ret = (struct client_ibv_mr *)kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
 	
@@ -340,7 +342,7 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 	ret->lkey = proc->lkey;
 	ret->rkey = proc->rkey;
 	ret->node_id = ctx->node_id;
-	printk(KERN_CRIT "%s length %d addr:%x lkey:%x rkey:%x\n", __func__, (int) length, (unsigned int)ret->addr, ret->lkey, ret->rkey);
+	printk(KERN_CRIT "%s length %d addr:%x lkey:%d rkey:%d\n", __func__, (int) length, (unsigned int)ret->addr, ret->lkey, ret->rkey);
 	return ret;
 }
 
