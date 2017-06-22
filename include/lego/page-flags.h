@@ -35,6 +35,8 @@ enum pageflags {
 	PG_reserved,
 	PG_private,
 	PG_unevictable,
+	PG_slab,
+	PG_slob_free,
 
 	__NR_PAGEFLAGS,
 };
@@ -112,6 +114,8 @@ PAGE_FLAG(Referenced, referenced)
 PAGE_FLAG(Dirty, dirty)
 PAGE_FLAG(Reserved, reserved)
 PAGE_FLAG(Private, private)
+PAGE_FLAG(Slab, slab)
+PAGE_FLAG(SlobFree, slob_free)
 
 /*
  * For pages that are never mapped to userspace, page->mapcount may be

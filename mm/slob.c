@@ -135,7 +135,7 @@ static void slob_free_pages(void *b, int order)
 	free_pages((unsigned long)b, order);
 }
 
-static void *slob_page_alloc(strcut page *sp, size_t size, int align)
+static void *slob_page_alloc(struct page *sp, size_t size, int align)
 {
 	slob_t *prev, *cur, *aligned = NULL;
 	int delta = 0, units = SLOB_UNITS(size);
@@ -351,10 +351,6 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 	int align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
 	void *ret;
 
-	gfp &= gfp_allowed_mask;
-
-	lockdep_trace_alloc(gfp);
-
 	if (size < PAGE_SIZE - align) {
 		if (!size)
 			return ZERO_SIZE_PTR;
@@ -392,12 +388,12 @@ void kfree(const void *block)
 		__free_pages(sp, compound_order(sp));
 }
 
-void kfree(const void *p)
-{
-#if 0
-	panic("kfree() is not ready! Use kfree_tmp() instead!\n");
-#endif
-}
+//void kfree(const void *p)
+//{
+//#if 0
+//	panic("kfree() is not ready! Use kfree_tmp() instead!\n");
+//#endif
+//}
 
 void kfree_tmp(size_t size, const void *p)
 {

@@ -12,6 +12,24 @@
 
 #include <lego/mm.h>
 
+#define ARCH_KMALLOC_MINALIGN __alignof__(unsigned long long)
+#ifndef ARCH_SLAB_MINALIGN
+#define ARCH_SLAB_MINALIGN __alignof__(unsigned long long)
+#endif
+
+/*
+ * ZERO_SIZE_PTR will be returned for zero sized kmalloc requests.
+ * 
+ * Dereferencing ZERO_SIZE_PTR will lead to a distinct access fault.
+ * 
+ * ZERO_SIZE_PTR can be passed to kfree though in the same way that NULL can.
+ * Both make kfree a no-op.
+ */
+#define ZERO_SIZE_PTR ((void *)16)
+
+#define ZERO_OR_NULL_PTR(x) ((unsigned long)(x) <= \
+						(unsigned long)ZERO_SIZE_PTR)
+
 void kfree(const void *p);
 void *kmalloc(size_t size, gfp_t flags);
 
