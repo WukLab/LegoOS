@@ -276,15 +276,22 @@ int pp_close_ctx(int ctxid)
 
 static int pp_post_recv(int ctxid, int n)
 {
-	struct ib_sge list = {
-		.addr	= ctx[ctxid]->uaddr, //(uintptr_t) ctx[ctxid]->buf,
-		.length = ctx[ctxid]->size,
-		.lkey	= ctx[ctxid]->mr->lkey
-	};
+	struct ib_sge list[2]; // = {
+	list[0].addr	= ctx[ctxid]->uaddr; //(uintptr_t) ctx[ctxid]->buf,
+	list[0].length = ctx[ctxid]->size;
+	list[0].lkey	= ctx[ctxid]->mr->lkey;
+	//};
+	struct page *pp =  alloc_pages(GFP_KERNEL, 2);
+	void *temp = (char *)page_address(pp); //kmalloc(4096, GFP_KERNEL);
+        list[1].addr = ib_dma_map_single(ib_dev, temp, 4096, DMA_BIDIRECTIONAL);
+	list[1].length = 4096;
+	list[1].lkey	= ctx[ctxid]->mr->lkey;
+
+	printk(KERN_CRIT "%s addr1 %lx addr2 %lx lkey %d\n", list[0].addr, list[1].addr, ctx[ctxid]->mr->lkey);
 	struct ib_recv_wr wr = {
 		.wr_id	    = PINGPONG_RECV_WRID,
 		.sg_list    = &list,
-		.num_sge    = 1,
+		.num_sge    = 2,
 	};
 	struct ib_recv_wr *bad_wr;
 	int i;
