@@ -130,6 +130,268 @@ static void *slob_new_pages(gfp_t gfp, int order, int node)
 	return page_address(page);
 }
 
+static void slob_free_pages(void *b, int order)
+{
+	free_pages((unsigned long)b, order);
+}
+
+static void *slob_page_alloc(strcut page *sp, size_t size, int align)
+{
+	slob_t *prev, *cur, *aligned = NULL;
+	int delta = 0, units = SLOB_UNITS(size);
+
+	for (prev = NULL, cur = sp->freelist; ; prev = cur, cur = slob_next(cur)) {
+		slobidx_t avail = slob_units(cur);
+
+		if (align) {
+			aligned = (slob_t *)ALIGN((unsigned long)cur, align);
+			delta = aligned - cur;
+		}
+		if (avail >= units + delta) { /* room enough? */
+			slob_t *next;
+
+			if (delta) { /* need to fragment head to align? */
+				next = slob_next(cur);
+				set_slob(aligned, avail - delta, next);
+				set_slob(cur, delta, aligned);
+				prev = cur;
+				cur = aligned;
+				avail = slob_units(cur);
+			}
+
+			next = slob_next(cur);
+			if (avail == units) { /* exact fit? unlink. */
+				if (prev)
+					set_slob(prev, slob_units(prev), next);
+				else
+					sp->freelist = next;
+			} else { /* fragment */
+				if (prev)
+					set_slob(prev, slob_units(prev), cur + units);
+				else
+					sp->freelist = cur + units;
+				set_slob(cur + units, avail - units, next);
+			}
+
+			sp->units -= units;
+			if (!sp->units)
+				clear_slob_page_free(sp);
+			return cur;
+		}
+		if (slob_last(cur))
+			return NULL;
+	}
+}
+
+/*
+ * slob_alloc: entry point into the slob allocator.
+ */
+static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
+{
+	struct page *sp;
+	struct list_head *prev;
+	struct list_head *slob_list;
+	slob_t *b = NULL;
+	unsigned long flags;
+
+	if (size < SLOB_BREAK1)
+		slob_list = &free_slob_small;
+	else if (size < SLOB_BREAK2)
+		slob_list = &free_slob_medium;
+	else
+		slob_list = &free_slob_large;
+
+	spin_lock_irqsave(&slob_lock, flags);
+	/* Iterate through each partially free page, try to find room */
+	list_for_each_entry(sp, slob_list, lru) {
+#ifdef CONFIG_NUMA
+		/*
+		 * If there's a node specification, search for a partial
+		 * page with a matching node id in the freelist.
+		 */
+		if (node != NUMA_NO_NODE && page_to_nid(sp) != node)
+			continue;
+#endif
+		/* Enough room on this page? */
+		if (sp->units < SLOB_UNITS(size))
+			continue;
+
+		/* Attempt to alloc */
+		prev = sp->lru.prev;
+		b = slob_page_alloc(sp, size, align);
+		if (!b)
+			continue;
+
+		/* Improve fragment distribution and reduce our average
+		 * search time by starting our next search here. (see
+		 * Knuth vol 1, sec 2.5, pg 449) */
+		if (prev != slob_list->prev &&
+				slob_list->next != prev->next)
+			list_move_tail(slob_list, prev->next);
+		break;
+	}
+	spin_unlock_irqrestore(&slob_lock, flags);
+
+	/* Not enough space: must allocate a new page */
+	if (!b) {
+		b = slob_new_pages(gfp & ~__GFP_ZERO, 0, node);
+		if (!b)
+			return NULL;
+		sp = virt_to_page(b);
+		__SetPageSlab(sp);
+
+		spin_lock_irqsave(&slob_lock, flags);
+		sp->units = SLOB_UNITS(PAGE_SIZE);
+		sp->freelist = b;
+		INIT_LIST_HEAD(&sp->lru);
+		set_slob(b, SLOB_UNITS(PAGE_SIZE), b + SLOB_UNITS(PAGE_SIZE));
+		set_slob_page_free(sp, slob_list);
+		b = slob_page_alloc(sp, size, align);
+		BUG_ON(!b);
+		spin_unlock_irqrestore(&slob_lock, flags);
+	}
+	if (unlikely((gfp & __GFP_ZERO) && b))
+		memset(b, 0, size);
+	return b;
+}
+
+/*
+ * slob_free: entry point into the slob allocator.
+ */
+static void slob_free(void *block, int size)
+{
+	struct page *sp;
+	slob_t *prev, *next, *b = (slob_t *)block;
+	slobidx_t units;
+	unsigned long flags;
+	struct list_head *slob_list;
+
+	if (unlikely(ZERO_OR_NULL_PTR(block)))
+		return;
+	BUG_ON(!size);
+
+	sp = virt_to_page(block);
+	units = SLOB_UNITS(size);
+
+	spin_lock_irqsave(&slob_lock, flags);
+
+	if (sp->units + units == SLOB_UNITS(PAGE_SIZE)) {
+		/* Go directly to page allocator. Do not pass slob allocator */
+		if (slob_page_free(sp))
+			clear_slob_page_free(sp);
+		spin_unlock_irqrestore(&slob_lock, flags);
+		__ClearPageSlab(sp);
+		page_mapcount_reset(sp);
+		slob_free_pages(b, 0);
+		return;
+	}
+
+	if (!slob_page_free(sp)) {
+		/* This slob page is about to become partially free. Easy! */
+		sp->units = units;
+		sp->freelist = b;
+		set_slob(b, units,
+			(void *)((unsigned long)(b +
+					SLOB_UNITS(PAGE_SIZE)) & PAGE_MASK));
+		if (size < SLOB_BREAK1)
+			slob_list = &free_slob_small;
+		else if (size < SLOB_BREAK2)
+			slob_list = &free_slob_medium;
+		else
+			slob_list = &free_slob_large;
+		set_slob_page_free(sp, slob_list);
+		goto out;
+	}
+
+	/*
+	 * Otherwise the page is already partially free, so find reinsertion
+	 * point.
+	 */
+	sp->units += units;
+
+	if (b < (slob_t *)sp->freelist) {
+		if (b + units == sp->freelist) {
+			units += slob_units(sp->freelist);
+			sp->freelist = slob_next(sp->freelist);
+		}
+		set_slob(b, units, sp->freelist);
+		sp->freelist = b;
+	} else {
+		prev = sp->freelist;
+		next = slob_next(prev);
+		while (b > next) {
+			prev = next;
+			next = slob_next(prev);
+		}
+
+		if (!slob_last(prev) && b + units == next) {
+			units += slob_units(next);
+			set_slob(b, units, slob_next(next));
+		} else
+			set_slob(b, units, next);
+
+		if (prev + slob_units(prev) == b) {
+			units = slob_units(b) + slob_units(prev);
+			set_slob(prev, units, slob_next(b));
+		} else
+			set_slob(prev, slob_units(prev), b);
+	}
+out:
+	spin_unlock_irqrestore(&slob_lock, flags);
+}
+
+/*
+ * End of slob allocator proper. Begin kmem_cache_alloc and kmalloc frontend.
+ */
+
+static __always_inline void *
+__do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
+{
+	unsigned int *m;
+	int align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
+	void *ret;
+
+	gfp &= gfp_allowed_mask;
+
+	lockdep_trace_alloc(gfp);
+
+	if (size < PAGE_SIZE - align) {
+		if (!size)
+			return ZERO_SIZE_PTR;
+
+		m = slob_alloc(size + align, gfp, align, node);
+
+		if (!m)
+			return NULL;
+		*m = size;
+		ret = (void *)m + align;
+	} else {
+		unsigned int order = get_order(size);
+
+		if (likely(order))
+			gfp |= __GFP_COMP;
+		ret = slob_new_pages(gfp, order, node);
+
+	}
+	return ret;
+}
+
+void kfree(const void *block)
+{
+	struct page *sp;
+
+	if (unlikely(ZERO_OR_NULL_PTR(block)))
+		return;
+
+	sp = virt_to_page(block);
+	if (PageSlab(sp)) {
+		int align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
+		unsigned int *m = (unsigned int *)(block - align);
+		slob_free(m, *m + align);
+	} else
+		__free_pages(sp, compound_order(sp));
+}
+
 void kfree(const void *p)
 {
 #if 0
