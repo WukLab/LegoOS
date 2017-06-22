@@ -123,7 +123,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	ctx->send_state = (enum s_state *)kmalloc(num_connections * sizeof(enum s_state), GFP_KERNEL);	
 	ctx->recv_state = (enum r_state *)kmalloc(num_connections * sizeof(enum r_state), GFP_KERNEL);
 
-	printk(KERN_CRIT "%s proc lkey %d\n", __func__, ctx->proc->lkey);
+	printk(KERN_CRIT "%s proc lkey %d rkey %d\n", __func__, ctx->proc->lkey, ctx->proc->rkey);
 
 	//Customized part
 	ctx->num_alive_connection = (atomic_t *)kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
@@ -340,7 +340,7 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 	ret->lkey = proc->lkey;
 	ret->rkey = proc->rkey;
 	ret->node_id = ctx->node_id;
-	//test_printk(KERN_CRIT "length %d addr:%x lkey:%x rkey:%x\n", (int) length, (unsigned int)ret->addr, ret->lkey, ret->rkey);
+	printk(KERN_CRIT "%s length %d addr:%x lkey:%x rkey:%x\n", __func__, (int) length, (unsigned int)ret->addr, ret->lkey, ret->rkey);
 	return ret;
 }
 
@@ -431,6 +431,7 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 			printk(KERN_CRIT "ERROR: %s post recv error %d conn %d i %d\n", 
 				__func__, ret, connection_id, i);
 		}
+		printk(KERN_CRIT "%s header_addr %p addr %p lkey %d\n", __func__, header_addr, addr, ctx->proc->lkey);
 	}
 
 	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, FIT_STAT_CLEAR));
@@ -1243,6 +1244,7 @@ int client_send_test(ppc *ctx, int connection_id, int type, void *addr, int size
 			if(ne < 0)
 			{
 				printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
+				spin_unlock(&connection_lock[connection_id]);
 				return 1;
 			}
 		}while(ne<1);
@@ -1251,6 +1253,7 @@ int client_send_test(ppc *ctx, int connection_id, int type, void *addr, int size
 			if(wc[i].status!=IB_WC_SUCCESS)
 			{
 				printk(KERN_ALERT "send failed at connection %d as %d\n", connection_id, wc[i].status);
+				spin_unlock(&connection_lock[connection_id]);
 				return 2;
 			}
 		}
