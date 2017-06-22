@@ -433,7 +433,8 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 			printk(KERN_CRIT "ERROR: %s post recv error %d conn %d i %d\n", 
 				__func__, ret, connection_id, i);
 		}
-		printk(KERN_CRIT "%s header_addr %p addr %p lkey %d\n", __func__, header_addr, addr, ctx->proc->lkey);
+		printk(KERN_CRIT "%s header %p header_addr %p buf %p addr %p lkey %d\n", 
+				__func__, header, header_addr, buf, addr, ctx->proc->lkey);
 	}
 
 	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, FIT_STAT_CLEAR));
@@ -1300,6 +1301,8 @@ int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, i
 	sge[1].lkey = ctx->proc->lkey;
 
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
+	printk(KERN_CRIT "%s headeraddr %p %p bufaddr %p %p lkey %d\n",
+		__func__, &output_header, output_header_addr, addr, sge[1].addr, ctx->proc->lkey);
 	if(ret==0)
 	{
 		do{
@@ -1344,8 +1347,8 @@ int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
 				__func__, ctx->local_rdma_ring_mrs[i].addr,
 				ctx->local_rdma_ring_mrs[i].lkey, 
 				ctx->local_rdma_ring_mrs[i].rkey, connection_id);
-		ret = client_send_test(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);
-		//ret = client_send_message_sge(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);
+		//ret = client_send_test(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);
+		ret = client_send_message_sge(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);
 	}
 	kfree(msg);
 
