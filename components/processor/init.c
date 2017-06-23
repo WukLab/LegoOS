@@ -18,5 +18,5 @@
  */
 void __init processor_component_init(void)
 {
-	processor_cache_init();
+	pcache_init();
 }

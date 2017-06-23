@@ -14,10 +14,11 @@
 
 #ifdef CONFIG_COMP_PROCESSOR
 void __init processor_component_init(void);
-int __init processor_cache_range_register(u64 start, u64 size);
+int __init pcache_range_register(u64 start, u64 size);
+int pcache_fill(unsigned long missing_vaddr);
 #else
 static inline void processor_component_init(void) { }
-static inline int processor_cache_range_register(u64 start, u64 size)
+static inline int pcache_range_register(u64 start, u64 size)
 {
 	return 0;
 }
