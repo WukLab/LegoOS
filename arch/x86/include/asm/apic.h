@@ -538,6 +538,7 @@ int __init apic_bsp_setup(void);
 void __init apic_ap_setup(void);
 
 void setup_secondary_APIC_clock(void);
+void disable_local_APIC(void);
 
 extern unsigned int boot_cpu_physical_apicid;
 

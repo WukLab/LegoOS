@@ -22,6 +22,11 @@ reboot_interrupt(struct pt_regs *regs)
 	ack_APIC_irq();
 	pr_info("CPU(%d) PID(%d) in %s() IPI handler\n",
 		smp_processor_id(), current->pid, __func__);
+
+	local_irq_disable();
+	set_cpu_online(smp_processor_id(), false);
+	for (;;)
+		hlt();
 }
 
 asmlinkage __visible void
@@ -65,6 +70,12 @@ static void native_smp_send_reschedule(int cpu)
 	apic->send_IPI_mask(cpumask_of(cpu), RESCHEDULE_VECTOR);
 }
 
+static void native_stop_other_cpus(int wait)
+{
+	if (num_online_cpus() > 1)
+		apic->send_IPI_allbutself(REBOOT_VECTOR);
+}
+
 void native_send_call_func_single_ipi(int cpu)
 {
 	apic->send_IPI_mask(cpumask_of(cpu), CALL_FUNCTION_SINGLE_VECTOR);
@@ -85,6 +96,8 @@ void native_send_call_func_ipi(const struct cpumask *mask)
 
 struct smp_ops smp_ops = {
 	.smp_send_reschedule		= native_smp_send_reschedule,
+
+	.stop_other_cpus		= native_stop_other_cpus,
 
 	.send_call_func_ipi		= native_send_call_func_ipi,
 	.send_call_func_single_ipi	= native_send_call_func_single_ipi,

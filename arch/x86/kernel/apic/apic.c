@@ -388,6 +388,28 @@ void clear_local_APIC(void)
 	apic_read(APIC_ESR);
 }
 
+/**
+ * disable_local_APIC - clear and disable the local APIC
+ */
+void disable_local_APIC(void)
+{
+	unsigned int value;
+
+	/* APIC hasn't been mapped yet */
+	if (!x2apic_mode && !apic_phys)
+		return;
+
+	clear_local_APIC();
+
+	/*
+	 * Disable APIC (implies clearing of registers
+	 * for 82489DX!).
+	 */
+	value = apic_read(APIC_SPIV);
+	value &= ~APIC_SPIV_APIC_ENABLED;
+	apic_write(APIC_SPIV, value);
+}
+
 static void lapic_setup_esr(void)
 {
 	unsigned int oldvalue, value, maxlvt;

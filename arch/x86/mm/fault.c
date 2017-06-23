@@ -280,7 +280,6 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	pcache_fill(address);
 	hlt();
 #else
-	printk("User-mode page fault is only allowed at processor component.");
-	hlt();
+	panic("User-mode page fault is only allowed at processor component.");
 #endif
 }
