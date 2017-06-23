@@ -45,7 +45,7 @@ struct page {
 	unsigned long private;
 	atomic_t _mapcount;
 	atomic_t _refcount;
-
+	int units;
 #ifdef CONFIG_MEMCOMPONENT
 	
 #endif

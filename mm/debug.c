@@ -19,6 +19,8 @@
 	{1UL << PG_active,		"active"	},		\
 	{1UL << PG_reserved,		"reserved"	},		\
 	{1UL << PG_private,		"private"	},		\
+	{1UL << PG_slab,		"slab"	},		\
+	{1UL << PG_slob_free,		"slob_free"	},		\
 	{1UL << PG_unevictable,		"unevictable"	}
 
 const struct trace_print_flags pageflag_names[] = {

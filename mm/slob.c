@@ -127,7 +127,7 @@ static void *slob_new_pages(gfp_t gfp, int order, int node)
 		page = alloc_pages(gfp, order);
 	if (!page)
 		return NULL;
-	return page_address(page);
+	return page_address((struct page *)page);
 }
 
 static void slob_free_pages(void *b, int order)
@@ -364,8 +364,8 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 	} else {
 		unsigned int order = get_order(size);
 
-		if (likely(order))
-			gfp |= __GFP_COMP;
+		//if (likely(order))
+		//	gfp |= __GFP_COMP;
 		ret = slob_new_pages(gfp, order, node);
 
 	}
@@ -385,7 +385,8 @@ void kfree(const void *block)
 		unsigned int *m = (unsigned int *)(block - align);
 		slob_free(m, *m + align);
 	} else
-		__free_pages(sp, compound_order(sp));
+		WARN(1, "Page is not slab");
+		//__free_pages(sp, compound_order(sp));
 }
 
 //void kfree(const void *p)
