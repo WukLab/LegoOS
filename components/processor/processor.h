@@ -14,6 +14,6 @@
 
 #include <lego/compiler.h>
 
-void __init processor_cache_init(void);
+void __init pcache_init(void);
 
 #endif /* _PROCESSOR_COMPONENT_PROCESSOR_H_ */
