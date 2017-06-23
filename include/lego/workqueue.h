@@ -8,6 +8,7 @@
 #include <lego/smp.h>
 
 struct workqueue_struct;
+struct work_struct;
 
 typedef void (*work_func_t)(struct work_struct *work);
 void delayed_work_timer_fn(unsigned long __data);

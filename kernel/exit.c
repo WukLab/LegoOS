@@ -10,7 +10,7 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 
-void do_exit(long code)
+void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;
 

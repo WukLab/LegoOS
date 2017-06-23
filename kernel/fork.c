@@ -235,6 +235,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	p->flags |= PF_FORKNOEXEC;
 	INIT_LIST_HEAD(&p->children);
 	INIT_LIST_HEAD(&p->sibling);
+	spin_lock_init(&p->alloc_lock);
 
 	/*
 	 * Setup scheduler:
@@ -253,9 +254,12 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	if (retval)
 		goto out_cleanup_mm;
 
-	pid = alloc_pid(p);
-	if (!pid)
-		goto out_cleanup_thread;
+	/* clone idle thread, whose pid is 0 */
+	if (!(clone_flags & CLONE_IDLE_THREAD)) {
+		pid = alloc_pid(p);
+		if (!pid)
+			goto out_cleanup_thread;
+	}
 
 	p->pid = pid;
 	if (clone_flags & CLONE_THREAD) {
