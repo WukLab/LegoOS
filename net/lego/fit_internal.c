@@ -399,15 +399,18 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 	uintptr_t header_addr;
 	struct ibapi_post_receive_intermediate_struct *p_r_i_struct;
 	uintptr_t addr;
-	int size = sizeof(struct client_ibv_mr);
+	int size = 4096; //sizeof(struct client_ibv_mr);
 	int ret;
+	struct page *pp;
+        pp = alloc_pages(GFP_KERNEL, 1);
 
 	printk(KERN_CRIT "%s conn %d post %d buffers\n", __func__, connection_id, depth);
 	for(i=0;i<depth;i++)
 	{
 		struct ib_sge sge[1];
 
-		buf = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
+        	buf = (char *)page_address(pp);
+		//buf = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
 		addr = client_ib_reg_mr_addr(ctx, buf, size);
 /*
 		header = kmalloc(sizeof(struct ibapi_header), GFP_KERNEL);
@@ -542,7 +545,7 @@ retry:
 		}
 
 		/* post receive buffers to get remote ring mrs, always through first conn */
-		if (i == 0)
+		//if (i == 0)
 			client_post_receives_message_with_buffer(ctx, cur_connection, ctx->num_node - 1);
 
 		/* post receive buffers for IMM */
@@ -1332,7 +1335,7 @@ int client_send_message_lego(ppc *ctx, int connection_id, int type, void *addr, 
 int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority)
 {	
 	struct ib_send_wr wr, *bad_wr = NULL;
-	struct ib_sge sge[2];
+	struct ib_sge sge[1];
 	int ret;
 	int ne, i;
 	struct ib_wc wc[2];
@@ -1348,17 +1351,19 @@ int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, i
 	wr.wr_id = type;
 	wr.opcode = IB_WR_SEND;
 	wr.sg_list = sge;
-	wr.num_sge = 2;
+	wr.num_sge = 1;
 	wr.send_flags = IB_SEND_SIGNALED;
 
+/*
 	client_setup_ibapi_header(ctx->node_id, inbox_addr, inbox_semaphore, size, priority, type, &output_header);
 	output_header_addr = (void *)client_ib_reg_mr_addr(ctx, &output_header, sizeof(struct ibapi_header));
 	sge[0].addr = (uintptr_t)output_header_addr;
 	sge[0].length = sizeof(struct ibapi_header);
 	sge[0].lkey = ctx->proc->lkey;
-	sge[1].addr = (uintptr_t)client_ib_reg_mr_addr(ctx, addr, size);
-	sge[1].length = size;
-	sge[1].lkey = ctx->proc->lkey;
+*/
+	sge[0].addr = (uintptr_t)client_ib_reg_mr_addr(ctx, addr, size);
+	sge[0].length = size;
+	sge[0].lkey = ctx->proc->lkey;
 
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
 	printk(KERN_CRIT "%s headeraddr %p %p bufaddr %p %p lkey %d\n",
@@ -1509,7 +1514,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		}
 	//}
 	printk(KERN_CRIT "%s all connections completed\n", __func__);
-	schedule();
+	//schedule();
 
 	if (ctx->node_id == 0)
 		send_rdma_ring_mr_to_other_nodes(ctx);
@@ -1517,7 +1522,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		client_poll_cq_pass(&thread_pass_poll_cq);
 	printk(KERN_CRIT "%s sent rdma ring mrs\n", __func__);
 
-	schedule();
+	//schedule();
 
 	while (num_recvd_rdma_ring_mrs < ctx->num_node - 1)
 		//cpu_relax();
