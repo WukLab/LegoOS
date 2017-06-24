@@ -221,10 +221,10 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			.qp_state = IB_QPS_INIT,
 			.pkey_index = 0,
 			.port_num = port,
-			.qp_access_flags = IB_ACCESS_REMOTE_WRITE|IB_ACCESS_REMOTE_READ|IB_ACCESS_LOCAL_WRITE|IB_ACCESS_REMOTE_ATOMIC,
-			.path_mtu = IB_MTU_4096,
-			.retry_cnt = 7,
-			.rnr_retry = 7
+			.qp_access_flags = 0 //IB_ACCESS_REMOTE_WRITE|IB_ACCESS_REMOTE_READ|IB_ACCESS_LOCAL_WRITE|IB_ACCESS_REMOTE_ATOMIC,
+			//.path_mtu = IB_MTU_4096,
+			//.retry_cnt = 7,
+			//.rnr_retry = 7
 		};
 		if(ib_modify_qp(ctx->qp[i], &attr1,
 					IB_QP_STATE		|
@@ -407,7 +407,7 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 	printk(KERN_CRIT "%s conn %d post %d buffers\n", __func__, connection_id, depth);
 	for(i=0;i<depth;i++)
 	{
-		struct ib_sge sge[1];
+		struct ib_sge sge;
 
         	buf = (char *)page_address(pp);
 		//buf = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
@@ -423,14 +423,14 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 		sge[0].length = sizeof(struct ibapi_header);
 		sge[0].lkey = ctx->proc->lkey;
 */
-		sge[0].addr = (uintptr_t)addr;
-		sge[0].length = size;
-		sge[0].lkey = ctx->proc->lkey;
+		sge.addr = (uintptr_t)addr;
+		sge.length = size;
+		sge.lkey = ctx->proc->lkey;
 
 		struct ib_recv_wr wr, *bad_wr = NULL;
 		wr.wr_id = size; //(uint64_t)p_r_i_struct;
 		wr.next = NULL;
-		wr.sg_list = sge;
+		wr.sg_list = &sge;
 		wr.num_sge = 1;
 		ret = ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
 		if (ret) {
@@ -546,10 +546,10 @@ retry:
 
 		/* post receive buffers to get remote ring mrs, always through first conn */
 		//if (i == 0)
-			client_post_receives_message_with_buffer(ctx, cur_connection, ctx->num_node - 1);
+			client_post_receives_message_with_buffer(ctx, cur_connection, 10); //ctx->num_node - 1);
 
 		/* post receive buffers for IMM */
-		client_post_receives_message(ctx, cur_connection, ctx->rx_depth);
+		//client_post_receives_message(ctx, cur_connection, ctx->rx_depth);
 
 		atomic_inc(&ctx->num_alive_connection[rem_node_id]);
 		atomic_inc(&ctx->alive_connection);
