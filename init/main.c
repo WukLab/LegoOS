@@ -102,9 +102,6 @@ const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 
 static int run_init_process(const char *init_filename)
 {
-	pr_info("Will run init daemon from: %s\n", init_filename);
-	for (;;) { cpu_relax(); schedule(); }
-
 	argv_init[0] = init_filename;
 	return do_execve(init_filename,
 		(const char *const *)argv_init,
@@ -142,6 +139,7 @@ static int kernel_init(void *unused)
 {
 	/* Wait until kthreadd is all set-up. */
 	wait_for_completion(&kthreadd_done);
+	set_task_comm(current, "kernel_init");
 
 	init_workqueues();
 	//test_workqueue();

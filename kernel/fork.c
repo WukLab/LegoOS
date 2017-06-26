@@ -209,7 +209,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 {
 	struct task_struct *p;
 	int retval;
-	int pid;
+	int pid = 0;
 
 	/*
 	 * Thread groups must share signals as well, and detached threads

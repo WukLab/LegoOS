@@ -363,11 +363,12 @@ void show_regs(struct pt_regs *regs)
 
 	show_general_task_info(task);
 
-	__show_regs(regs, 1);
+	__show_regs(regs, !user_mode(regs));
 
-	show_stack_content(current, regs);
-
-	show_call_trace(current, regs);
-
-	show_code(regs);
+	/* print stack, calltrace and code if in kernel mode */
+	if (!user_mode(regs)) {
+		show_stack_content(current, regs);
+		show_call_trace(current, regs);
+		show_code(regs);
+	}
 }

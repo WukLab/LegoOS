@@ -17,7 +17,8 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
-
+#include <lego/comp_memory.h>
+#include <lego/comp_processor.h>
 #include <lego/memory.h>
 
 /*
@@ -258,15 +259,6 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 {
 	unsigned long address = read_cr2();
 
-	pr_info("CPU%d error_code: %#lx address: %#lx\n",
-		smp_processor_id(), error_code, address);
-	dump_pagetable(address);
-
-	if (user_mode(regs)) {
-		pr_info("Faulting from usermode\n");
-		show_regs(regs);
-	}
-
 	if (unlikely(fault_in_kernel_space(address))) {
 		if (!(error_code & (PF_RSVD | PF_USER | PF_PROT))) {
 			if (vmalloc_fault(address) >= 0)
@@ -281,8 +273,13 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 			show_fault_oops(current, regs, address);
 	}
 
-#ifdef CONFIG_MEMCOMPONENT
-	mem_handle_fault(task, address);
-#endif
+	pr_info("UserPageFault(CPU%d),ErrorCode:%#lx,Address:%#lx\n",
+		smp_processor_id(), error_code, address);
+	dump_pagetable(address);
+#ifdef CONFIG_COMP_PROCESSOR
+	pcache_fill(address);
 	hlt();
+#else
+	panic("User-mode page fault is only allowed at processor component.");
+#endif
 }
