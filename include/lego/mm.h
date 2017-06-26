@@ -429,10 +429,17 @@ pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
 }
 
 static inline pte_t *
+pte_alloc(struct mm_struct *mm, pmd_t *pmd, unsigned long address)
+{
+	return (unlikely(pmd_none(*pmd) && __pte_alloc(mm, pmd, address))?
+		NULL : pte_offset(pmd, address));
+}
+
+static inline pte_t *
 pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 {
 	return (unlikely(pmd_none(*pmd)) && __pte_alloc_kernel(pmd, address))?
-		NULL : pte_offset_kernel(pmd, address);
+		NULL : pte_offset(pmd, address);
 }
 
 #define nth_page(page,n)	pfn_to_page(page_to_pfn((page)) + (n))

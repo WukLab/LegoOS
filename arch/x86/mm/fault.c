@@ -258,6 +258,13 @@ static noinline int vmalloc_fault(unsigned long address)
 dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 {
 	unsigned long address = read_cr2();
+	unsigned long page;
+	int ret;
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *ptep;
+	pte_t pte;
 
 	if (unlikely(fault_in_kernel_space(address))) {
 		if (!(error_code & (PF_RSVD | PF_USER | PF_PROT))) {
@@ -275,11 +282,32 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 
 	pr_info("UserPageFault(CPU%d),ErrorCode:%#lx,Address:%#lx\n",
 		smp_processor_id(), error_code, address);
-	dump_pagetable(address);
-#ifdef CONFIG_COMP_PROCESSOR
-	pcache_fill(address);
-	hlt();
+
+#ifndef CONFIG_COMP_PROCESSOR
+	panic("User-mode pgfault is only allowed at processor-component.");
 #else
-	panic("User-mode page fault is only allowed at processor component.");
+	ret = pcache_fill(address, &page);
+	if (ret && ret != -EAGAIN) {
+		/* pcache fail to handle this fault*/
+		panic("pcache failt to handle: ret: %d\n", ret);
+	}
+
+	/* establish pgtable mapping */
+	pgd = pgd_offset(current->mm, address);
+	pud = pud_alloc(current->mm, pgd, address);
+	if (unlikely(!pud))
+		goto oom;
+	pmd = pmd_alloc(current->mm, pud, address);
+	if (unlikely(!pmd))
+		goto oom;
+	ptep = pte_alloc(current->mm, pmd, address);
+	if (unlikely(!ptep))
+		goto oom;
+
+	pte_set(ptep, pte);
+	return;
+
+oom:
+	panic("oom\n");
 #endif
 }
