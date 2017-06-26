@@ -48,6 +48,8 @@
 #include <asm/traps.h>
 #include <asm/setup.h>
 
+
+static void test_kmalloc(void);
 enum system_states system_state __read_mostly;
 
 /* Screen information used by kernel */
@@ -170,9 +172,19 @@ static int kernel_init(void *unused)
 #ifdef CONFIG_COMP_MEMORY
 	memory_component_init();
 #endif
-
+	//test_kmalloc();
 	run_init_process("/etc/init");
 	return 0;
+}
+
+
+static void test_kmalloc(void)
+{
+	void *apage;
+	printk(KERN_DEBUG "start malloc testing\n");
+	apage = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	printk(KERN_DEBUG "There are %zu bytes allocated\n", ksize(apage));
+	kfree(apage);
 }
 
 static void rest_init(void)

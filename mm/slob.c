@@ -388,6 +388,7 @@ void kfree(const void *block)
 		WARN(1, "Page is not slab");
 		//__free_pages(sp, compound_order(sp));
 }
+
 size_t ksize(const void *block)
 {
 	struct page *sp;
@@ -406,6 +407,7 @@ size_t ksize(const void *block)
 	m = (unsigned int *)(block - align);
 	return SLOB_UNITS(*m) * SLOB_UNIT;
 }
+
 //void kfree(const void *p)
 //{
 //#if 0
