@@ -453,12 +453,13 @@ void kfree_tmp(size_t size, const void *p)
  */
 void *kmalloc(size_t size, gfp_t flags)
 {
-	unsigned int order = get_order(size);
+	return __do_kmalloc_node(size, flags, NUMA_NO_NODE, _RET_IP_);
+	//unsigned int order = get_order(size);
 
-	if (unlikely((order >= MAX_ORDER))) {
-		WARN_ON(1);
-		return NULL;
-	}
+	//if (unlikely((order >= MAX_ORDER))) {
+	//	WARN_ON(1);
+	//	return NULL;
+	//}
 
-	return (void *)__get_free_pages(GFP_KERNEL, order);
+	//return (void *)__get_free_pages(GFP_KERNEL, order);
 }

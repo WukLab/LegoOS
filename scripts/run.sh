@@ -35,6 +35,7 @@ if [ "$1" == "linux" ]; then
 fi
 
 qemu-system-x86_64 -s  \
+	-nographic \
 	-kernel $KERNEL -append "$KERNEL_PARAM" \
 	-no-reboot \
 	-d int,cpu_reset -D $OUTPUT_DIR/qemu.log \
