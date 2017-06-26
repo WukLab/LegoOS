@@ -388,7 +388,24 @@ void kfree(const void *block)
 		WARN(1, "Page is not slab");
 		//__free_pages(sp, compound_order(sp));
 }
+size_t ksize(const void *block)
+{
+	struct page *sp;
+	int align;
+	unsigned int *m;
 
+	BUG_ON(!block);
+	if (unlikely(block == ZERO_SIZE_PTR))
+		return 0;
+
+	sp = virt_to_page(block);
+	if (unlikely(!PageSlab(sp)))
+		WARN(1, "Page is not slab");
+
+	align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
+	m = (unsigned int *)(block - align);
+	return SLOB_UNITS(*m) * SLOB_UNIT;
+}
 //void kfree(const void *p)
 //{
 //#if 0
