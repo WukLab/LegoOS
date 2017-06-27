@@ -57,7 +57,7 @@ static void show_fault_oops(struct task_struct *task, struct pt_regs *regs, unsi
 	printk(KERN_ALERT "IP: [<%p>] %pS\n", (void *)address, (void *)address);
 }
 
-static void dump_pagetable(unsigned long address)
+__used static void dump_pagetable(unsigned long address)
 {
 	pgd_t *base = __va(read_cr3() & PHYSICAL_PAGE_MASK);
 	pgd_t *pgd = base + pgd_index(address);
@@ -258,6 +258,7 @@ static noinline int vmalloc_fault(unsigned long address)
 dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 {
 	unsigned long address = read_cr2();
+#ifdef CONFIG_COMP_PROCESSOR
 	unsigned long page;
 	int ret;
 	pgd_t *pgd;
@@ -265,6 +266,7 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	pmd_t *pmd;
 	pte_t *ptep;
 	pte_t pte;
+#endif
 
 	if (unlikely(fault_in_kernel_space(address))) {
 		if (!(error_code & (PF_RSVD | PF_USER | PF_PROT))) {

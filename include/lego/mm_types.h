@@ -16,6 +16,8 @@
 #include <lego/spinlock.h>
 #include <lego/rbtree.h>
 
+typedef unsigned long vm_flags_t;
+
 /*
  * Each physical page in the system has a struct page associated with
  * it to keep track of whatever it is we are using the page for at the
