@@ -195,7 +195,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			.send_cq = ctx->send_cq[i],//ctx->cq
 			.recv_cq = ctx->cq[i%NUM_POLLING_THREADS],
 			.cap = {
-				.max_send_wr = 1, //rx_depth + 2,
+				.max_send_wr = rx_depth + 2,
 				//.max_send_wr = 12000,
 				.max_recv_wr = rx_depth,
 				.max_send_sge = 10,
