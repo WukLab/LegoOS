@@ -11,7 +11,7 @@
 #include <lego/init.h>
 #include <lego/mm.h>
 #include <lego/net.h>
-//#include <lego/kthread.h>
+#include <lego/kthread.h>
 #include <lego/workqueue.h>
 //#include <lego/semaphore.h>
 //#include <lego/completion.h>
@@ -1461,7 +1461,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	//Start handling completion cq
 	thread_pass_poll_cq.ctx = ctx;
 	thread_pass_poll_cq.target_cq = ctx->cq[0];
-	kthread_run(client_poll_cq_pass, &thread_pass_poll_cq, 0);
+	kthread_run(client_poll_cq_pass, &thread_pass_poll_cq, "recvpollcq");
 	//wake_up_process(thread);
 	
 	printk(KERN_CRIT "%s created poll cq thread\n", __func__);
@@ -1513,6 +1513,11 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	printk(KERN_CRIT "%s all connections completed\n", __func__);
 	//schedule();
 
+	for (i = 0; i < 30000; i++) {
+		udelay(1000);
+	}
+
+	printk(KERN_CRIT "now sending mr info\n");
 	//if (ctx->node_id == 0)
 		send_rdma_ring_mr_to_other_nodes(ctx);
 	//else
