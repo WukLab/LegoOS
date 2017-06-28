@@ -400,20 +400,19 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 	uintptr_t header_addr;
 	struct ibapi_post_receive_intermediate_struct *p_r_i_struct;
 	uintptr_t addr;
-	int size = 4096*2; //sizeof(struct client_ibv_mr);
+	int size = sizeof(struct client_ibv_mr);
 	int ret;
         pp = alloc_pages(GFP_KERNEL, 2);
 
 	printk(KERN_CRIT "%s conn %d post %d buffers\n", __func__, connection_id, depth);
 	for(i=0;i<depth;i++)
 	{
-		struct ib_sge sge;
+		struct ib_sge sge[2];
 
-        	buf = (char *)page_address(pp);
-		memset(buf, 0x7b, size);
-		//buf = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
+        	//buf = (char *)page_address(pp);
+		//memset(buf, 0x7b, size);
+		buf = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
 		addr = client_ib_reg_mr_addr(ctx, buf, size);
-/*
 		header = kmalloc(sizeof(struct ibapi_header), GFP_KERNEL);
 		header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct ibapi_header));
 		p_r_i_struct = (struct ibapi_post_receive_intermediate_struct *)kmalloc(sizeof(struct ibapi_post_receive_intermediate_struct), GFP_KERNEL);
@@ -423,16 +422,15 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 		sge[0].addr = (uintptr_t)header_addr;
 		sge[0].length = sizeof(struct ibapi_header);
 		sge[0].lkey = ctx->proc->lkey;
-*/
-		sge.addr = (uintptr_t)addr;
-		sge.length = size;
-		sge.lkey = ctx->proc->lkey;
+		sge[1].addr = (uintptr_t)addr;
+		sge[1].length = size;
+		sge[1].lkey = ctx->proc->lkey;
 
 		struct ib_recv_wr wr, *bad_wr = NULL;
-		wr.wr_id = size; //(uint64_t)p_r_i_struct;
+		wr.wr_id = (uint64_t)p_r_i_struct;
 		wr.next = NULL;
-		wr.sg_list = &sge;
-		wr.num_sge = 1;
+		wr.sg_list = sge;
+		wr.num_sge = 2;
 		ret = ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
 		if (ret) {
 			printk(KERN_CRIT "ERROR: %s post recv error %d conn %d i %d\n", 
@@ -833,7 +831,6 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 			if((int) wc[i].opcode == IB_WC_RECV)
 			{
 				printk(KERN_CRIT "%s received IB_WC_RECV size %d\n", wc[i].wr_id);
-			/*
 				struct ibapi_post_receive_intermediate_struct *p_r_i_struct = (struct ibapi_post_receive_intermediate_struct*)wc[i].wr_id;
 				struct ibapi_header temp_header;
 
@@ -848,7 +845,6 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
 							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey);
 				}
-			*/
 			}
 			else if((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM)
 			{
@@ -1336,7 +1332,7 @@ int client_send_message_lego(ppc *ctx, int connection_id, int type, void *addr, 
 int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority)
 {	
 	struct ib_send_wr wr, *bad_wr = NULL;
-	struct ib_sge sge[1];
+	struct ib_sge sge[2];
 	int ret;
 	int ne, i;
 	struct ib_wc wc[2];
@@ -1352,19 +1348,17 @@ int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, i
 	wr.wr_id = type;
 	wr.opcode = IB_WR_SEND;
 	wr.sg_list = sge;
-	wr.num_sge = 1;
+	wr.num_sge = 2;
 	wr.send_flags = IB_SEND_SIGNALED;
 
-/*
 	client_setup_ibapi_header(ctx->node_id, inbox_addr, inbox_semaphore, size, priority, type, &output_header);
 	output_header_addr = (void *)client_ib_reg_mr_addr(ctx, &output_header, sizeof(struct ibapi_header));
 	sge[0].addr = (uintptr_t)output_header_addr;
 	sge[0].length = sizeof(struct ibapi_header);
 	sge[0].lkey = ctx->proc->lkey;
-*/
-	sge[0].addr = (uintptr_t)client_ib_reg_mr_addr(ctx, addr, size);
-	sge[0].length = size;
-	sge[0].lkey = ctx->proc->lkey;
+	sge[1].addr = (uintptr_t)client_ib_reg_mr_addr(ctx, addr, size);
+	sge[1].length = size;
+	sge[1].lkey = ctx->proc->lkey;
 
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
 	printk(KERN_CRIT "%s headeraddr %p %p bufaddr %p %p lkey %d\n",
