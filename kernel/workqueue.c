@@ -208,7 +208,7 @@ struct worker {
 
 struct worker_pool *global_pool;
 
-static DEFINE_SPINLOCK(wq_pool_lock);	/* protects pools and workqueues list */
+//static DEFINE_SPINLOCK(wq_pool_lock);	/* protects pools and workqueues list */
 static DEFINE_MUTEX(wq_pool_mutex);	/* protects pools and workqueues list */
 static LIST_HEAD(workqueues);		/* PL: list of all workqueues */
 
@@ -270,17 +270,18 @@ static bool need_more_worker(struct worker_pool *pool)
 	return !list_empty(&pool->worklist) && __need_more_worker(pool);
 }
 
-/* Can I start working?  Called from busy but !running workers. */
-static bool may_start_working(struct worker_pool *pool)
-{
-	return pool->nr_idle;
-}
-
 /* Do I need to keep working?  Called from currently running workers. */
 static bool keep_working(struct worker_pool *pool)
 {
 	return !list_empty(&pool->worklist) &&
 		atomic_read(&pool->nr_running) <= 1;
+}
+
+#if 0
+/* Can I start working?  Called from busy but !running workers. */
+static bool may_start_working(struct worker_pool *pool)
+{
+	return pool->nr_idle;
 }
 
 /* Do we need a new worker?  Called from manager. */
@@ -289,7 +290,6 @@ static bool need_to_create_worker(struct worker_pool *pool)
 	return need_more_worker(pool) && !may_start_working(pool);
 }
 
-#if 0
 /* Do I need to be the manager? */
 static bool need_to_manage_workers(struct worker_pool *pool)
 {
@@ -320,7 +320,7 @@ static bool too_many_workers(struct worker_pool *pool)
  */
 
 /* Return the first worker.  Safe with preemption disabled */
-static struct worker *first_worker(struct worker_pool *pool)
+__used static struct worker *first_worker(struct worker_pool *pool)
 {
 	if (unlikely(list_empty(&pool->idle_list)))
 		return NULL;
@@ -513,9 +513,11 @@ struct workqueue_struct *__alloc_workqueue(unsigned int flags,
 err_free_wq:
 	kfree(wq);
 	return NULL;
+#if 0
 err_destroy:
 	//destroy_workqueue(wq);
 	return NULL;
+#endif
 }
 
 static inline void set_work_data(struct work_struct *work, unsigned long data,
@@ -561,7 +563,7 @@ static void set_work_pool_and_clear_pending(struct work_struct *work,
 static void insert_work(struct pool_workqueue *pwq, struct work_struct *work,
 			struct list_head *head, unsigned int extra_flags)
 {
-	struct worker_pool *pool = pwq->pool;
+//	struct worker_pool *pool = pwq->pool;
 
 	/* we own @work, set data and link */
 	set_work_pwq(work, pwq, extra_flags);
@@ -597,7 +599,7 @@ static void __queue_work(int cpu, struct workqueue_struct *wq,
 	 */
 	//WARN_ON_ONCE(!irqs_disabled());
 
-retry:
+//retry:
 	if (req_cpu == WORK_CPU_UNBOUND)
 		cpu = smp_processor_id();
 
@@ -744,7 +746,7 @@ static void process_one_work(struct worker *worker, struct work_struct *work)
 {
 	struct pool_workqueue *pwq = get_work_pwq(work);
 	struct worker_pool *pool = worker->pool;
-	bool cpu_intensive = pwq->wq->flags & WQ_CPU_INTENSIVE;
+	//bool cpu_intensive = pwq->wq->flags & WQ_CPU_INTENSIVE;
 	//int work_color;
 
 	pr_info("%s pid %d worker %p work %p cpu %d\n", 
@@ -934,14 +936,14 @@ static int worker_thread(void *__worker)
 	struct worker *worker = __worker;
 	struct worker_pool *pool = worker->pool;
 
-	pr_info("%s pid %d worker %d pool %p\n", __func__, current->pid, worker, pool);
+	pr_info("%s pid %d worker %p pool %p\n", __func__, current->pid, worker, pool);
 	/* tell the scheduler that this is a workqueue worker */
 // XXX	worker->task->flags |= PF_WQ_WORKER;
 woke_up:
 	spin_lock_irq(&pool->lock);
 
 	worker_leave_idle(worker);
-recheck:
+//recheck:
 	/* no more worker necessary? */
 	if (!need_more_worker(pool))
 		goto sleep;
@@ -999,6 +1001,8 @@ sleep:
 	spin_unlock_irq(&pool->lock);
 	schedule();
 	goto woke_up;
+
+	return 0;
 }
 
 /**

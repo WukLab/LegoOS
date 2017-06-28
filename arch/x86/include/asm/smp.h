@@ -27,6 +27,8 @@ DECLARE_PER_CPU_READ_MOSTLY(int, cpu_number);
 struct smp_ops {
 	void (*smp_send_reschedule)(int cpu);
 
+	void (*stop_other_cpus)(int wait);
+
 	void (*send_call_func_ipi)(const struct cpumask *mask);
 	void (*send_call_func_single_ipi)(int cpu);
 };
@@ -36,6 +38,11 @@ extern struct smp_ops smp_ops;
 static inline void smp_send_reschedule(int cpu)
 {
 	smp_ops.smp_send_reschedule(cpu);
+}
+
+static inline void smp_send_stop(void)
+{
+	smp_ops.stop_other_cpus(0);
 }
 
 static inline void arch_send_call_function_single_ipi(int cpu)

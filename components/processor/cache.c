@@ -11,6 +11,8 @@
  * Lego Processor Last-Level Cache Management
  */
 
+#define pr_fmt(fmt)  "P$: " fmt
+
 #include <lego/mm.h>
 #include <lego/log2.h>
 #include <lego/kernel.h>
@@ -22,12 +24,12 @@ static u64 llc_cache_registered_size;
 static u64 llc_cache_size;
 
 static u32 llc_cacheline_size = PAGE_SIZE;
-static u32 llc_cachemeta_size = CONFIG_PROCESSOR_LLC_METADATA_SIZE;
+static u32 llc_cachemeta_size = CONFIG_PCACHE_METADATA_SIZE;
 
 /* nr_cachelines = nr_cachesets * associativity */
 static u64 nr_cachelines;
 static u64 nr_cachesets;
-static u32 llc_cache_associativity = CONFIG_PROCESSOR_LLC_ASSOCIATIVITY;
+static u32 llc_cache_associativity = 1 << CONFIG_PCACHE_ASSOCIATIVITY_SHIFT;
 
 static u64 nr_pages_cacheline;
 static u64 nr_pages_metadata;
@@ -36,19 +38,60 @@ static u64 phys_start_metadata;
 
 /* Address bits usage */
 static u64 nr_bits_cacheline;
-static u64 nr_bits_setindex;
+static u64 nr_bits_set;
 static u64 nr_bits_tag;
 
-void __init processor_cache_init(void)
+static u64 pcache_cacheline_mask;
+static u64 pcache_set_mask;
+static u64 pcache_tag_mask;
+
+static u64 pcache_way_cache_stride;
+static u64 pcache_way_meta_stride;
+
+static inline unsigned long addr2set(unsigned long addr)
+{
+	return (addr & pcache_set_mask) >> nr_bits_cacheline;
+}
+
+/*
+ * Walk through all N-way cachelines within a set
+ * @addr: the address in question
+ * @cache: physical address of the cacheline 
+ * @meta: physical address of the metadata
+ * @way: current way number (maximum is llc_cache_associativity)
+ */
+#define for_each_way_set(addr, cache, meta, way)			\
+	for (cache = (addr & pcache_set_mask) + phys_start_cacheline,	\
+	     meta = addr2set(addr) + phys_start_metadata, way = 0;	\
+	     way < llc_cache_associativity;				\
+	     way++,							\
+	     cache += pcache_way_cache_stride, 				\
+	     meta += pcache_way_meta_stride)
+
+/*
+ * Fill a cacheline given a missing virtual address
+ * Return 0 on success, others on failure
+ */
+int pcache_fill(unsigned long missing_vaddr, unsigned long *cache_paddr)
+{
+	unsigned long cache, meta;
+	unsigned int way;
+
+	pr_info("missing_vaddr: %#lx\n", missing_vaddr);
+	for_each_way_set(missing_vaddr, cache, meta, way) {
+		pr_info(" cache: %#lx, meta %#lx, way: %u\n", cache, meta, way);
+	}
+
+	return 0;
+}
+
+void __init pcache_init(void)
 {
 	u64 nr_cachelines_per_page, nr_units;
 	u64 unit_size;
 
 	if (llc_cache_start == 0 || llc_cache_registered_size == 0)
 		panic("Processor cache not registered.");
-
-	if (!is_power_of_2(llc_cache_associativity))
-		panic("Associativity is not a power of 2.");
 
 	nr_cachelines_per_page = PAGE_SIZE / llc_cachemeta_size;
 	unit_size = nr_cachelines_per_page * llc_cacheline_size;
@@ -74,37 +117,54 @@ void __init processor_cache_init(void)
 	phys_start_metadata = phys_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
 
 	nr_bits_cacheline = ilog2(llc_cacheline_size);
-	nr_bits_setindex = ilog2(nr_cachesets);
-	nr_bits_tag = 64 - nr_bits_cacheline - nr_bits_setindex;
+	nr_bits_set = ilog2(nr_cachesets);
+	nr_bits_tag = 64 - nr_bits_cacheline - nr_bits_set;
 
 	pr_info("Processor LLC Configurations:\n");
 	pr_info("    Start:             %#llx\n",	llc_cache_start);
 	pr_info("    Registered Size:   %#llx\n",	llc_cache_registered_size);
-	pr_info("    Used Size:         %#llx\n",	llc_cache_size);
+	pr_info("    Actual Used Size:  %#llx\n",	llc_cache_size);
 	pr_info("    NR cachelines:     %llu\n",	nr_cachelines);
 	pr_info("    Associativity:     %u\n",		llc_cache_associativity);
 	pr_info("    NR Sets:           %llu\n",	nr_cachesets);
 	pr_info("    Cacheline size:    %u B\n",	llc_cacheline_size);
 	pr_info("    Metadata size:     %u B\n",	llc_cachemeta_size);
-	pr_info("    NR cacheline bits: %llu\n",	nr_bits_cacheline);
-	pr_info("    NR set-index bits: %llu\n",	nr_bits_setindex);
-	pr_info("    NR tag bits:       %llu\n",	nr_bits_tag);
+
+	pcache_cacheline_mask = (1ULL << nr_bits_cacheline) - 1;
+	pcache_set_mask = ((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1) & ~pcache_cacheline_mask;
+	pcache_tag_mask = ~((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1);
+
+	pr_info("    NR cacheline bits: %2llu [%2llu - %2llu] %#llx\n",
+		nr_bits_cacheline,
+		0ULL,
+		nr_bits_cacheline - 1,
+		pcache_cacheline_mask);
+	pr_info("    NR set-index bits: %2llu [%2llu - %2llu] %#llx\n",
+		nr_bits_set,
+		nr_bits_cacheline,
+		nr_bits_cacheline + nr_bits_set - 1,
+		pcache_set_mask);
+	pr_info("    NR tag bits:       %2llu [%2llu - %2llu] %#llx\n",
+		nr_bits_tag,
+		nr_bits_cacheline + nr_bits_set,
+		nr_bits_cacheline + nr_bits_set + nr_bits_tag - 1,
+		pcache_tag_mask);
 
 	pr_info("    NR pages for data: %llu\n",	nr_pages_cacheline);
 	pr_info("    NR pages for meta: %llu\n",	nr_pages_metadata);
-	pr_info("    cacheline range:   [%#18llx - %#18llx]\n",
+	pr_info("    Cacheline range:   [%#18llx - %#18llx]\n",
 		phys_start_cacheline, phys_start_metadata - 1);
-	pr_info("    metadata range:    [%#18llx - %#18llx]\n",
+	pr_info("    Metadata range:    [%#18llx - %#18llx]\n",
 		phys_start_metadata, phys_start_metadata + nr_pages_metadata * PAGE_SIZE - 1);
-}
 
-int cacheline_fill(unsigned long missing_vaddr)
-{
-	return 0;
+	pcache_way_cache_stride = nr_cachesets * llc_cacheline_size;
+	pcache_way_meta_stride =  nr_cachesets * llc_cachemeta_size;
+	pr_info("    Way cache stride:  %#llx\n", pcache_way_cache_stride);
+	pr_info("    Way meta stride:   %#llx\n", pcache_way_meta_stride);
 }
 
 /**
- * processor_cache_range_register
+ * pcache_range_register
  * @start: physical address of the first byte of the cache
  * @size: size of the cache
  *
@@ -113,7 +173,7 @@ int cacheline_fill(unsigned long missing_vaddr)
  * memory is initialized. For x86, this is registered during the parsing of
  * memmap=N$N command line option.
  */
-int __init processor_cache_range_register(u64 start, u64 size)
+int __init pcache_range_register(u64 start, u64 size)
 {
 	if (WARN_ON(!start && !size))
 		return -EINVAL;

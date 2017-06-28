@@ -44,6 +44,7 @@
 #define CLONE_PTRACE		0x00002000	/* set if we want to let tracing continue on the child too */
 #define CLONE_PARENT		0x00008000	/* set if we want to have the same parent as the cloner */
 #define CLONE_THREAD		0x00010000	/* Same thread group? */
+#define CLONE_IDLE_THREAD	0x80000000	/* set if we want to clone an idle thread */
 
 /*
  * task->state and task->exit_state
@@ -173,6 +174,10 @@ do {							\
 /* Maximum timeout period */
 #define	MAX_SCHEDULE_TIMEOUT	LONG_MAX
 
+struct sched_param {
+	int sched_priority;
+};
+
 struct load_weight {
 	unsigned long		weight;
 	u32			inv_weight;
@@ -297,6 +302,12 @@ struct task_struct {
 	struct task_struct *group_leader;	/* threadgroup leader */
 
 	struct mm_struct *mm, *active_mm;
+
+	/*
+	 * Protection of (de-)allocation: mm, files, fs, tty, keyrings,
+	 * mems_allowed, mempolicy
+	 */
+	spinlock_t alloc_lock;
 
 	/* CPU-specific state of this task */
 	struct thread_struct thread;
@@ -441,6 +452,7 @@ static inline void dump_stack(void)
 	show_call_trace(current, NULL);
 }
 
+void setup_init_idleclass(struct task_struct *idle);
 void setup_task_stack_end_magic(struct task_struct *tsk);
 
 asmlinkage void schedule_tail(struct task_struct *prev);
@@ -501,6 +513,28 @@ static inline void get_task_struct(struct task_struct *t)
 {
 	atomic_inc(&t->usage);
 }
+
+/*
+ * Protects ->fs, ->files, ->mm, ->group_info, ->comm, keyring
+ * subscriptions and synchronises with wait4().  Also used in procfs.  Also
+ * pins the final release of task.io_context.  Also protects ->cpuset and
+ * ->cgroup.subsys[]. And ->vfork_done.
+ *
+ * Nests both inside and outside of read_lock(&tasklist_lock).
+ * It must not be nested with write_lock_irq(&tasklist_lock),
+ * neither inside nor outside.
+ */
+static inline void task_lock(struct task_struct *p)
+{
+	spin_lock(&p->alloc_lock);
+}
+
+static inline void task_unlock(struct task_struct *p)
+{
+	spin_unlock(&p->alloc_lock);
+}
+
+void set_task_comm(struct task_struct *tsk, const char *buf);
 
 /*
  * Wrappers for p->thread_info->cpu access. No-op on UP.

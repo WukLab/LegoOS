@@ -47,7 +47,7 @@ static int __init parse_memmap_one(char *p)
 	} else if (*p == '$') {
 		start_at = memparse(p+1, &p);
 		e820_add_region(start_at, mem_size, E820_RESERVED);
-		processor_cache_range_register(start_at, mem_size);
+		pcache_range_register(start_at, mem_size);
 	} else if (*p == '!') {
 		start_at = memparse(p+1, &p);
 		e820_add_region(start_at, mem_size, E820_PRAM);

@@ -372,10 +372,11 @@ ENTRY(ret_from_fork)
 	jnz	1f			/* kernel threads are uncommon */
 
 2:
-	leaq	0(%rsp), %rdi		/* pt_regs pointer */
+	movq    %rsp, %rdi
 	call	syscall_return_slowpath	/* return with IRQs disabled */
 	SWAPGS
 	jmp	restore_regs_and_iret
+
 1:
 	/* kernel thread */
 	movq	%r12, %rdi

@@ -27,6 +27,7 @@
 #include <lego/kernel.h>
 #include <lego/binfmts.h>
 #include <lego/jiffies.h>
+#include <lego/kthread.h>
 #include <lego/cpumask.h>
 #include <lego/nodemask.h>
 #include <lego/spinlock.h>
@@ -105,34 +106,7 @@ static int run_init_process(const char *init_filename)
 		(const char *const *)envp_init);
 }
 
-/*
- * This is our first kernel thread,
- * which will run the first user-level progam init:
- */
-static int kernel_init(void *unused)
-{
-	if (!run_init_process("/sbin/init"))
-		/* Return to userspace */
-		return 0;
-
-	panic("No working init found!");
-
-	return -EFAULT;
-}
-
-static void rest_init(void)
-{
-	//kernel_thread(kernel_init, NULL, CLONE_FS);
-
-	/*
-	 * The boot idle thread must execute schedule()
-	 * at least once to get things moving:
-	 */
-	schedule_preempt_disabled();
-
-	/* Call into cpu_idle with preempt disabled */
-	cpu_idle();
-}
+static __initdata DEFINE_COMPLETION(kthreadd_done);
 
 static void work_handler(struct work_struct *_work)
 {
@@ -155,6 +129,77 @@ static void test_workqueue(void)
 
 	return;
 }
+
+/*
+ * This is our first kernel thread (pid 1),
+ */
+static int kernel_init(void *unused)
+{
+	/* Wait until kthreadd is all set-up. */
+	wait_for_completion(&kthreadd_done);
+	set_task_comm(current, "kernel_init");
+
+	init_workqueues();
+	//test_workqueue();
+
+#ifdef CONFIG_INFINIBAND
+	ib_mad_init();
+	pr_info("after ib_mad_init\n");
+#endif
+
+	pr_info("before pci init\n");
+	pci_init();
+
+#ifdef CONFIG_INFINIBAND
+	pr_info("before cmb init\n");
+	ib_cm_init();
+	pr_info("before lego ib init\n");
+	kthread_run(lego_ib_init, NULL, "ib-initd");
+#endif
+
+#ifdef CONFIG_MEMCOMPONENT
+	pr_info("before memcomponent init\n");
+	memcomponent_init();
+#endif
+
+#ifdef CONFIG_COMP_PROCESSOR
+	processor_component_init();
+#endif
+#ifdef CONFIG_COMP_MEMORY
+	memory_component_init();
+#endif
+
+	run_init_process("/etc/init");
+	return 0;
+}
+
+static void rest_init(void)
+{
+	int pid;
+
+	/*
+	 * We need to spawn init first so that it obtains pid 1, however
+	 * the init task will end up wanting to create kthreads, which, if
+	 * we schedule it before we create kthreadd, will OOPS.
+	 */
+	kernel_thread(kernel_init, NULL, CLONE_FS);
+
+	pid = kernel_thread(kthreadd, NULL, CLONE_FS);
+	kthreadd_task = find_task_by_pid(pid);
+	complete(&kthreadd_done);
+
+	/*
+	 * The boot idle thread must execute schedule()
+	 * at least once to get things moving (the preempt
+	 * count must be 1 here):
+	 */
+	setup_init_idleclass(current);
+	schedule_preempt_disabled();
+
+	/* Call into cpu_idle with preempt disabled */
+	cpu_idle();
+}
+
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
@@ -227,11 +272,13 @@ asmlinkage void __init start_kernel(void)
 	 * scheduler:
 	 */
 	sched_init();
+
 	/*
 	 * Disable preemption - early bootup scheduling is extremely
 	 * fragile until we cpu_idle() for the first time.
 	 */
 	preempt_disable();
+
 	if (WARN(!irqs_disabled(),
 		 "Interrupts were enabled *very* early, fixing it\n"))
 		local_irq_disable();
@@ -242,36 +289,6 @@ asmlinkage void __init start_kernel(void)
 	smp_prepare_cpus(setup_max_cpus);
 	local_irq_enable();
 	smp_init();
-
-	init_workqueues();
-	//test_workqueue();
-
-#ifdef CONFIG_INFINIBAND
-	ib_mad_init();
-	pr_info("after ib_mad_init\n");
-#endif
-
-	pr_info("before pci init\n");
-	pci_init();
-
-#ifdef CONFIG_INFINIBAND
-	pr_info("before cmb init\n");
-	ib_cm_init();
-	pr_info("before lego ib init\n");
-	kernel_thread(lego_ib_init, NULL, 0);
-#endif
-
-#ifdef CONFIG_MEMCOMPONENT
-	pr_info("before memcomponent init\n");
-	memcomponent_init();
-#endif
-
-#ifdef CONFIG_COMP_PROCESSOR
-	processor_component_init();
-#endif
-#ifdef CONFIG_COMP_MEMORY
-	memory_component_init();
-#endif
 
 	/* STOP! WE ARE ALIVE NOW */
 	rest_init();

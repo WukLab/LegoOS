@@ -7,24 +7,11 @@
  * (at your option) any later version.
  */
 
+#include <lego/mm.h>
+#include <lego/slab.h>
+#include <lego/rbtree.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
+#include <lego/netmacro.h>
 
-void __noreturn do_exit(long code)
-{
-	struct task_struct *tsk = current;
 
-	if (unlikely(!tsk->pid))
-		panic("Attempted to kill the idle task!");
-
-	if (unlikely(in_atomic())) {
-		pr_info("note: %s[%d] exited with preempt_count %d\n",
-			current->comm, current->pid, preempt_count());
-		preempt_count_set(0);
-	}
-
-	tsk->exit_code = code;
-
-	preempt_disable();
-	do_task_dead();
-}
