@@ -195,11 +195,11 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			.send_cq = ctx->send_cq[i],//ctx->cq
 			.recv_cq = ctx->cq[i%NUM_POLLING_THREADS],
 			.cap = {
-				.max_send_wr = rx_depth + 2,
+				.max_send_wr = 1, //rx_depth + 2,
 				//.max_send_wr = 12000,
 				.max_recv_wr = rx_depth,
-				.max_send_sge = 10,
-				.max_recv_sge = 1
+				.max_send_sge = 16,
+				.max_recv_sge = 16
 			},
 			.qp_type = IB_QPT_RC,
 			.sq_sig_type = IB_SIGNAL_REQ_WR
@@ -221,10 +221,10 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			.qp_state = IB_QPS_INIT,
 			.pkey_index = 0,
 			.port_num = port,
-			.qp_access_flags = 0 //IB_ACCESS_REMOTE_WRITE|IB_ACCESS_REMOTE_READ|IB_ACCESS_LOCAL_WRITE|IB_ACCESS_REMOTE_ATOMIC,
-			//.path_mtu = IB_MTU_4096,
-			//.retry_cnt = 7,
-			//.rnr_retry = 7
+			.qp_access_flags = IB_ACCESS_REMOTE_WRITE|IB_ACCESS_REMOTE_READ|IB_ACCESS_LOCAL_WRITE|IB_ACCESS_REMOTE_ATOMIC,
+			.path_mtu = IB_MTU_4096,
+			.retry_cnt = 7,
+			.rnr_retry = 7
 		};
 		if(ib_modify_qp(ctx->qp[i], &attr1,
 					IB_QP_STATE		|
@@ -546,12 +546,11 @@ retry:
 		}
 
 		/* post receive buffers to get remote ring mrs, always through first conn */
-		//if (i == 0)
-		if (mynodeid == 1)
+		if (i == 0)
 			client_post_receives_message_with_buffer(ctx, cur_connection, 10); //ctx->num_node - 1);
 
 		/* post receive buffers for IMM */
-		//client_post_receives_message(ctx, cur_connection, ctx->rx_depth);
+		client_post_receives_message(ctx, cur_connection, ctx->rx_depth);
 
 		atomic_inc(&ctx->num_alive_connection[rem_node_id]);
 		atomic_inc(&ctx->alive_connection);
