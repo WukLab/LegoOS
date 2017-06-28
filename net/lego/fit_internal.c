@@ -342,7 +342,7 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 	ret->lkey = proc->lkey;
 	ret->rkey = proc->rkey;
 	ret->node_id = ctx->node_id;
-	printk(KERN_CRIT "%s length %d addr:%x lkey:%d rkey:%d\n", __func__, (int) length, (unsigned int)ret->addr, ret->lkey, ret->rkey);
+	printk(KERN_CRIT "%s length %d addr %p retaddr:%x lkey:%d rkey:%d\n", __func__, (int) length, addr, (unsigned int)ret->addr, ret->lkey, ret->rkey);
 	return ret;
 }
 
@@ -830,13 +830,13 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 
 			if((int) wc[i].opcode == IB_WC_RECV)
 			{
-				printk(KERN_CRIT "%s received IB_WC_RECV size %d\n", wc[i].wr_id);
 				struct ibapi_post_receive_intermediate_struct *p_r_i_struct = (struct ibapi_post_receive_intermediate_struct*)wc[i].wr_id;
 				struct ibapi_header temp_header;
 
-				memcpy(&temp_header, (void *)p_r_i_struct->header + 40, sizeof(struct ibapi_header));
+				memcpy(&temp_header, (void *)p_r_i_struct->header, sizeof(struct ibapi_header));
 				addr = (char *)p_r_i_struct->msg;
 				type = temp_header.type;
+				printk(KERN_CRIT "%s received wr_id %lx type %d\n", __func__, wc[i].wr_id, type);
 
 				if (type == MSG_SEND_RDMA_RING_MR) {
 					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id], addr, sizeof(struct client_ibv_mr));
@@ -1339,7 +1339,7 @@ int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, i
 	struct ibapi_header output_header;
 	void *output_header_addr;
 
-	printk(KERN_CRIT "%s conn %d addr %p size %d sendcq %p\n", __func__, connection_id, addr, size, ctx->send_cq[connection_id]);
+	printk(KERN_CRIT "%s conn %d addr %p size %d sendcq %p type %d\n", __func__, connection_id, addr, size, ctx->send_cq[connection_id], type);
 	spin_lock(&connection_lock[connection_id]);
 
 	memset(&wr, 0, sizeof(wr));
@@ -1403,10 +1403,10 @@ int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
 			continue;
 		memcpy(msg, &ctx->local_rdma_ring_mrs[i], sizeof(struct client_ibv_mr)); 
 		connection_id = 0; // XXX NUM_PARALLEL_CONNECTION * i;
-		printk(KERN_CRIT "%s send ringmr addr %p lkey %lx rkey %lx conn %d\n",
+		printk(KERN_CRIT "%s send ringmr addr %p lkey %lx rkey %lx conn %d node %d\n",
 				__func__, ctx->local_rdma_ring_mrs[i].addr,
 				ctx->local_rdma_ring_mrs[i].lkey, 
-				ctx->local_rdma_ring_mrs[i].rkey, connection_id);
+				ctx->local_rdma_ring_mrs[i].rkey, connection_id, i);
 		//ret = client_send_test(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);
 		ret = client_send_message_sge(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);
 	}
@@ -1486,7 +1486,9 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		ctx->local_rdma_recv_rings[i] = client_alloc_memory_for_mr(IMM_PORT_CACHE_SIZE);
 		ret_mr = client_ib_reg_mr(ctx, ctx->local_rdma_recv_rings[i], IMM_RING_SIZE,
 				IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
-		memcpy(&ctx->local_rdma_ring_mrs[i], ret_mr, sizeof(struct client_ibv_mr *));
+		memcpy(&ctx->local_rdma_ring_mrs[i], ret_mr, sizeof(struct client_ibv_mr));
+		printk(KERN_CRIT "allocated local recv mr for node %d addr %p %p lkey %d rkey %d",
+				i, ctx->local_rdma_recv_rings[i], ret_mr->addr, ret_mr->lkey, ret_mr->rkey);
 	}
 	/* array to store rdma ring mr for all remote nodes */
 	ctx->remote_rdma_ring_mrs = (struct client_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct client_ibv_mr), GFP_KERNEL);
