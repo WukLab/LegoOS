@@ -39,7 +39,7 @@
 #define GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(id) (id&0x000000ff)
 
 #define LID_SEND_RECV_FORMAT "0000:0000:000000:000000:00000000000000000000000000000000"
-#define MAX_CONNECTION MAX_NODE * NUM_PARALLEL_CONNECTION //Assume that MAX_CONNECTION is smaller than 256
+#define MAX_CONNECTION (MAX_NODE -1) * NUM_PARALLEL_CONNECTION //Assume that MAX_CONNECTION is smaller than 256
 #define MAX_PARALLEL_THREAD 64
 #define WRAP_UP_NUM_FOR_WRID 256 //since there are 64 bits in wr_id, we are going to use 9-12 bits to do thread id waiting passing
 #define WRAP_UP_NUM_FOR_CIRCULAR_ID 256
