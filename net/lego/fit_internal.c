@@ -195,14 +195,14 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			.send_cq = ctx->send_cq[i],//ctx->cq
 			.recv_cq = ctx->cq[i%NUM_POLLING_THREADS],
 			.cap = {
-				.max_send_wr = rx_depth + 2,
+				.max_send_wr = 1, //rx_depth + 2,
 				//.max_send_wr = 12000,
 				.max_recv_wr = rx_depth,
-				.max_send_sge = 16,
-				.max_recv_sge = 16
+				.max_send_sge = 10,
+				.max_recv_sge = 1
 			},
 			.qp_type = IB_QPT_RC,
-			.sq_sig_type = IB_SIGNAL_REQ_WR
+			//.sq_sig_type = IB_SIGNAL_REQ_WR
 		};
 
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
@@ -453,7 +453,7 @@ int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, i
 		.path_mtu	= mtu,
 		.dest_qp_num	= destqpn,
 		.rq_psn		= 1,
-		.max_dest_rd_atomic	= 10,
+		.max_dest_rd_atomic	= 1,
 		.min_rnr_timer	= 12,
 		.ah_attr	= {
 			.dlid		= destlid,
@@ -478,11 +478,11 @@ int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, i
 
 
 	attr.qp_state	= IB_QPS_RTS;
-	attr.timeout	= 14;
+	attr.timeout	= 21;
 	attr.retry_cnt	= 7;
 	attr.rnr_retry	= 7;
 	attr.sq_psn	= 1;
-	attr.max_rd_atomic = 10; //was 1
+	attr.max_rd_atomic = 1; //was 1
 	if(ib_modify_qp(ctx->qp[connection_id], &attr,
 				IB_QP_STATE	|
 				IB_QP_TIMEOUT	|
