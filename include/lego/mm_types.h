@@ -47,50 +47,6 @@ struct page {
 	unsigned long private;
 	atomic_t _mapcount;
 	atomic_t _refcount;
-
-#ifdef CONFIG_MEMCOMPONENT
-	
-#endif
-};
-
-/*
- * This struct defines a memory VMM memory area. There is one of these
- * per VM-area/task.  A VM area is any part of the process virtual memory
- * space that has a special rule for the page-fault handlers (ie a shared
- * library, the executable area etc).
- */
-struct vm_area_struct {
-
-	/* data structures for managing 
-	 * application process address 
-	 * space, for processor
-	 */
-	struct mm_struct *vm_mm;	/* The app address space we belong to. */
-
-	unsigned long vm_start;		/* Our start address within vm_mm. */
-	unsigned long vm_end;		/* The first byte after our end address */
-
-	/* linked list of VM areas per task, sorted by address */
-	struct vm_area_struct *vm_next, *vm_prev;
-
-	pgprot_t vm_page_prot;		/* Access permissions of this VMA. */
-	unsigned long vm_flags;		/* Flags, see mm.h. */
-
-	/* Information about our backing store: */
-	char *vm_file;			/* mmap filename */					
-	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE
-					   units */
-
-	struct rb_node vm_rb;		/* rb tree to link vma to app mm */
-
-	/* data structures for managing
-	 * local kernel addresses
-	 * and local link of all vmas
-	 */
-	unsigned long local_vm_start;
-	unsigned long local_vm_end;
-	struct rb_node local_vm_rb;		/* rb tree to link vma to current */
-
 };
 
 enum {
@@ -102,7 +58,6 @@ enum {
 };
 
 struct mm_struct {
-	struct vm_area_struct *mmap;		/* list of VMAs */
 	unsigned long task_size;		/* size of task vm space */
 	unsigned long highest_vm_end;		/* highest vma end address */
 
