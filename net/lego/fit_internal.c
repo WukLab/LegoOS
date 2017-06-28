@@ -392,6 +392,7 @@ int client_post_receives_message(ppc *ctx, int connection_id, int depth)
 	return depth;
 }
 
+	struct page *pp;
 int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int depth)
 {
 	int i;
@@ -399,10 +400,9 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 	uintptr_t header_addr;
 	struct ibapi_post_receive_intermediate_struct *p_r_i_struct;
 	uintptr_t addr;
-	int size = 4096; //sizeof(struct client_ibv_mr);
+	int size = 4096*2; //sizeof(struct client_ibv_mr);
 	int ret;
-	struct page *pp;
-        pp = alloc_pages(GFP_KERNEL, 1);
+        pp = alloc_pages(GFP_KERNEL, 2);
 
 	printk(KERN_CRIT "%s conn %d post %d buffers\n", __func__, connection_id, depth);
 	for(i=0;i<depth;i++)
@@ -410,6 +410,7 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 		struct ib_sge sge;
 
         	buf = (char *)page_address(pp);
+		memset(buf, 0x7b, size);
 		//buf = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
 		addr = client_ib_reg_mr_addr(ctx, buf, size);
 /*
@@ -524,7 +525,7 @@ int get_global_qpn(int mynodeid, int remnodeid, int conn)
 
 int init_global_connt = 0;
 
-int client_add_newnode(ppc *ctx, int rem_node_id)
+int client_add_newnode(ppc *ctx, int rem_node_id, int mynodeid)
 {
 	int i;
 	int ret;
@@ -546,6 +547,7 @@ retry:
 
 		/* post receive buffers to get remote ring mrs, always through first conn */
 		//if (i == 0)
+		if (mynodeid == 1)
 			client_post_receives_message_with_buffer(ctx, cur_connection, 10); //ctx->num_node - 1);
 
 		/* post receive buffers for IMM */
@@ -1503,13 +1505,13 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	printk(KERN_CRIT "%s allocated local rdma buffers, about to connect qps\n", __func__);
 	ctx->node_id = mynodeid;
 	for (i = 0; i < mynodeid; i++) {
-		client_add_newnode(ctx, i);
+		client_add_newnode(ctx, i, mynodeid);
 		num_connected_nodes++;
 	}
 
 	//if (num_connected_nodes == mynodeid - 1) {
 		for (i = mynodeid + 1; i < MAX_NODE; i++) {
-			client_add_newnode(ctx, i);
+			client_add_newnode(ctx, i, mynodeid);
 			num_connected_nodes ++;
 		}
 	//}
