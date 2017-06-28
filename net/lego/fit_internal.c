@@ -841,9 +841,9 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				if (type == MSG_SEND_RDMA_RING_MR) {
 					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id], addr, sizeof(struct client_ibv_mr));
 					num_recvd_rdma_ring_mrs++;
-					printk(KERN_CRIT "node %d remote addr %p remote rkey %d\n", 
+					printk(KERN_CRIT "node %d remote addr %p remote rkey %d num_recvd_rdma_ring_mrs %d\n", 
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
-							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey);
+							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
 				}
 			}
 			else if((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM)
@@ -1461,7 +1461,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	//Start handling completion cq
 	thread_pass_poll_cq.ctx = ctx;
 	thread_pass_poll_cq.target_cq = ctx->cq[0];
-	//kernel_thread(client_poll_cq_pass, &thread_pass_poll_cq, 0);
+	kthread_run(client_poll_cq_pass, &thread_pass_poll_cq, 0);
 	//wake_up_process(thread);
 	
 	printk(KERN_CRIT "%s created poll cq thread\n", __func__);
@@ -1513,10 +1513,10 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	printk(KERN_CRIT "%s all connections completed\n", __func__);
 	//schedule();
 
-	if (ctx->node_id == 0)
+	//if (ctx->node_id == 0)
 		send_rdma_ring_mr_to_other_nodes(ctx);
-	else
-		client_poll_cq_pass(&thread_pass_poll_cq);
+	//else
+	//	client_poll_cq_pass(&thread_pass_poll_cq);
 	printk(KERN_CRIT "%s sent rdma ring mrs\n", __func__);
 
 	//schedule();
