@@ -1593,7 +1593,7 @@ int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
 		if (ctx->node_id == i)
 			continue;
 		memcpy(msg, &ctx->local_rdma_ring_mrs[i], sizeof(struct client_ibv_mr)); 
-		connection_id = 0; // XXX NUM_PARALLEL_CONNECTION * i;
+		connection_id = NUM_PARALLEL_CONNECTION * i;
 		printk(KERN_CRIT "%s send ringmr addr %p lkey %lx rkey %lx conn %d node %d\n",
 				__func__, ctx->local_rdma_ring_mrs[i].addr,
 				ctx->local_rdma_ring_mrs[i].lkey, 
