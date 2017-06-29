@@ -532,7 +532,7 @@ int client_add_newnode(ppc *ctx, int rem_node_id, int mynodeid)
 	int global_qpn;
 
 	for (i = 0; i < NUM_PARALLEL_CONNECTION; i++) {
-		cur_connection = init_global_connt; //(rem_node_id*ctx->num_parallel_connection)+atomic_read(&ctx->num_alive_connection[rem_node_id]);
+		cur_connection = (rem_node_id*ctx->num_parallel_connection)+atomic_read(&ctx->num_alive_connection[rem_node_id]);
 		global_qpn = get_global_qpn(ctx->node_id, rem_node_id, i);
 		printk(KERN_ALERT "%s: cur connection %d mynode %d remnode %d remotelid %d remoteqpn %d\n", 
 				__func__, cur_connection, ctx->node_id, rem_node_id, global_lid[rem_node_id], global_qpn);
