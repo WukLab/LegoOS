@@ -32,6 +32,7 @@
 
 void kfree(const void *p);
 void *kmalloc(size_t size, gfp_t flags);
+void *kmalloc_tmp(size_t size, gfp_t flags);
 size_t ksize(const void *);
 
 /**

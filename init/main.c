@@ -170,7 +170,7 @@ static int kernel_init(void *unused)
 #ifdef CONFIG_COMP_MEMORY
 	memory_component_init();
 #endif
-	//test_kmalloc();
+	test_kmalloc();
 	run_init_process("/etc/init");
 	return 0;
 }
@@ -178,11 +178,24 @@ static int kernel_init(void *unused)
 
 static void test_kmalloc(void)
 {
-	void *apage;
-	printk(KERN_DEBUG "start malloc testing\n");
-	apage = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	void *apage, *apage1, *apage2;
+	printk(KERN_DEBUG "start malloc test\n");
+	apage = kmalloc_tmp(1, GFP_KERNEL);
+	apage1 = kmalloc_tmp(PAGE_SIZE/4*3, GFP_KERNEL);
+	apage2 = kmalloc_tmp(PAGE_SIZE/2, GFP_KERNEL);
 	printk(KERN_DEBUG "There are %zu bytes allocated\n", ksize(apage));
+	printk(KERN_DEBUG "There are %zu bytes allocated\n", ksize(apage1));
+	printk(KERN_DEBUG "There are %zu bytes allocated\n", ksize(apage2));
 	kfree(apage);
+	kfree(apage1);
+	apage1 = kmalloc_tmp(PAGE_SIZE/3, GFP_KERNEL);
+	printk(KERN_DEBUG "There are %zu bytes allocated\n", ksize(apage1));
+	kfree(apage2);
+	apage2 = kmalloc_tmp(PAGE_SIZE + 3, GFP_KERNEL);
+	printk(KERN_DEBUG "There are %zu bytes allocated\n", ksize(apage2));
+	kfree(apage1);
+	kfree(apage2);
+	printk(KERN_DEBUG "done malloc test\n");
 }
 
 static void rest_init(void)

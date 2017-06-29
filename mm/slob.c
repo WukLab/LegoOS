@@ -121,12 +121,15 @@ static int slob_last(slob_t *s)
 static void *slob_new_pages(gfp_t gfp, int order, int node)
 {
 	void *page;
+#ifdef CONFIG_NUMA
 	if (node != NUMA_NO_NODE)
 		page = __alloc_pages_node(node, gfp, order);
 	else
+#endif
 		page = alloc_pages(gfp, order);
 	if (!page)
 		return NULL;
+	set_page_private((struct page *)page, order);	//set page order
 	return page_address((struct page *)page);
 }
 
@@ -193,6 +196,7 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
 	struct list_head *slob_list;
 	slob_t *b = NULL;
 	unsigned long flags;
+	int counter = 0;
 
 	if (size < SLOB_BREAK1)
 		slob_list = &free_slob_small;
@@ -204,6 +208,7 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
 	spin_lock_irqsave(&slob_lock, flags);
 	/* Iterate through each partially free page, try to find room */
 	list_for_each_entry(sp, slob_list, lru) {
+printk("list search %d number of runs\n", counter++);
 #ifdef CONFIG_NUMA
 		/*
 		 * If there's a node specification, search for a partial
@@ -350,7 +355,7 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 	unsigned int *m;
 	int align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
 	void *ret;
-
+	printk("requested size: %zu\n", size);
 	if (size < PAGE_SIZE - align) {
 		if (!size)
 			return ZERO_SIZE_PTR;
@@ -363,12 +368,12 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 		ret = (void *)m + align;
 	} else {
 		unsigned int order = get_order(size);
-
 		//if (likely(order))
 		//	gfp |= __GFP_COMP;
 		ret = slob_new_pages(gfp, order, node);
 
 	}
+	printk("allocated size: %zu, %p\n", ksize(ret), ret);
 	return ret;
 }
 
@@ -376,17 +381,20 @@ void kfree(const void *block)
 {
 	struct page *sp;
 
-	if (unlikely(ZERO_OR_NULL_PTR(block)))
+	if (unlikely(ZERO_OR_NULL_PTR(block))) {
+		WARN(1, "freeing a null pointer\n");
 		return;
+	}
 
 	sp = virt_to_page(block);
 	if (PageSlab(sp)) {
 		int align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
 		unsigned int *m = (unsigned int *)(block - align);
 		slob_free(m, *m + align);
-	} else
-		WARN(1, "Page is not slab");
-		//__free_pages(sp, compound_order(sp));
+	} else {
+		__free_pages(sp, page_private(sp));
+		set_page_private(sp, 0);
+	}
 }
 
 size_t ksize(const void *block)
@@ -401,7 +409,7 @@ size_t ksize(const void *block)
 
 	sp = virt_to_page(block);
 	if (unlikely(!PageSlab(sp)))
-		WARN(1, "Page is not slab");
+		return PAGE_SIZE << page_private(sp);
 
 	align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
 	m = (unsigned int *)(block - align);
@@ -473,12 +481,18 @@ void kfree_tmp(size_t size, const void *p)
 void *kmalloc(size_t size, gfp_t flags)
 {
 	return __do_kmalloc_node(size, flags, NUMA_NO_NODE, _RET_IP_);
-	//unsigned int order = get_order(size);
+//	unsigned int order = get_order(size);
+//
+//	if (unlikely((order >= MAX_ORDER))) {
+//		WARN_ON(1);
+//		return NULL;
+//	}
+//
+//	return (void *)__get_free_pages(GFP_KERNEL, order);
+}
 
-	//if (unlikely((order >= MAX_ORDER))) {
-	//	WARN_ON(1);
-	//	return NULL;
-	//}
 
-	//return (void *)__get_free_pages(GFP_KERNEL, order);
+void *kmalloc_tmp(size_t size, gfp_t flags)
+{
+	return __do_kmalloc_node(size, flags, NUMA_NO_NODE, _RET_IP_);
 }
