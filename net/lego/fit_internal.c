@@ -603,6 +603,8 @@ int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *ch
 	 */
 	int ne, i;
 	struct ib_wc wc[2];
+
+	printk(KERN_CRIT "%s\n", __func__);
 	do{
 		ne = ib_poll_cq(tar_cq, 1, wc);
 		if(ne < 0)
@@ -638,7 +640,7 @@ int client_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connectio
 	int flag=0;
 
 	printk(KERN_CRIT "%s conn %d rkey %d mraddr %lx addr %p size %d offset %d imm %d\n", 
-			__func__, input_mr_rkey, input_mr_addr, addr, size, offset, imm);
+			__func__, connection_id, input_mr_rkey, input_mr_addr, addr, size, offset, imm);
 retry_send_imm_request:
 	memset(&wr, 0, sizeof(struct ib_send_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
@@ -660,15 +662,8 @@ retry_send_imm_request:
 		sge[0].addr = temp_header_addr;
 		sge[0].length = sizeof(struct imm_message_metadata);
 		sge[0].lkey = ctx->proc->lkey;
-		if(userspace_flag == FIT_KERNELSPACE_FLAG)
-		{
-			temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
-			sge[1].addr = temp_addr;
-		}
-		else
-		{
-			sge[1].addr = (uintptr_t)addr;
-		}
+		temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
+		sge[1].addr = temp_addr;
 		sge[1].length = size;
 		sge[1].lkey = ctx->proc->lkey;
 	}
@@ -676,20 +671,13 @@ retry_send_imm_request:
 	{
 		wr.wr_id = (uint64_t)&poll_status;
 		wr.send_flags = IB_SEND_SIGNALED;
-		
+
 		wr.num_sge = 1;
 		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 
 		wr.ex.imm_data = imm;
-		if(userspace_flag == FIT_KERNELSPACE_FLAG)
-		{
-			temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
-			sge[0].addr = temp_addr;
-		}
-		else
-		{
-			sge[0].addr = (uintptr_t)addr;
-		}
+		temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
+		sge[0].addr = temp_addr;
 		sge[0].length = size;
 		sge[0].lkey = ctx->proc->lkey;
 	}
@@ -700,6 +688,8 @@ retry_send_imm_request:
 	}
 
 	spin_lock(&connection_lock[connection_id]);
+	printk(KERN_CRIT "%s about to post send conn %d wr_id %d num_sge %d\n",
+			__func__, connection_id, wr.wr_id, wr.num_sge);
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
 	
 	if(!ret)
@@ -734,6 +724,7 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 	int last_ack;
 	int ack_flag=0;
 
+	printk(KERN_CRIT "%s port %d\n", __func__, port);
 	while(1)
 	{
 		spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
