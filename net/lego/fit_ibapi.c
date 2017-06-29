@@ -227,6 +227,24 @@ int lego_ib_init(void)
 	atomic_set(&global_reqid, 0);
 	
 	ibapi_establish_conn(1, MY_NODE_ID);
+
+	/* begin testing */
+	char *buf = kmalloc(10, GFP_KERNEL);
+	char *retb = kmalloc(10, GFP_KERNEL);
+	uintptr_t desc;
+	if (MY_NODE_ID == 1) {
+		ret = ibapi_receive_message(0, buf, 10, &desc);
+		printk(KERN_CRIT "received message ret %d %c\n", ret, buf[0]);
+		retb[0] = '1';
+		ret = ibapi_reply_message(retb, 10, desc);
+		printk(KERN_CRIT "replied message ret %d\n", ret);
+	}
+	else {
+		buf[0] = 'a';
+		buf[1] = 'b';
+		ret = ibapi_send_reply_imm(1, buf, 10, retb, 10);
+		printk(KERN_CRIT "ibapi_send_reply_imm return %d val %c\n", ret, retb[0]);
+	}
 	return 0;
 }
 
