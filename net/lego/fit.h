@@ -82,7 +82,7 @@
 #define IMM_SEND_SLEEP_TIME_THRESHOLD 20
 #define IMM_PORT_CACHE_SIZE 1024*1024*4
 #define RDMA_RING_SIZE 1024*1024*4
-#define IMM_ACK_PORTION = 8;
+#define IMM_ACK_PORTION 8
 
 //Lock related
 #define FIT_MAX_LOCK_NUM 64
@@ -423,9 +423,12 @@ struct pingpong_context {
 	int *atomic_buffer_cur_length;
 
 	void **local_rdma_recv_rings;
-	unsigned long *remote_rdma_ring_mrs_offset;
+	int *remote_rdma_ring_mrs_offset;
+	int *remote_last_ack_index;
 	spinlock_t *remote_imm_offset_lock;
 	struct client_ibv_mr *local_rdma_ring_mrs;
+	int *local_last_ack_index;
+	spinlock_t *local_last_ack_index_lock;
 	struct client_ibv_mr *remote_rdma_ring_mrs;
 
    	int (*send_handler)(char *addr, uint32_t size, int sender_id);

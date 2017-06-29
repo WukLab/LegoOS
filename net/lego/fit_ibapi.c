@@ -61,6 +61,32 @@ inline int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret
 	return ret;
 }
 
+#if 0
+int ibapi_register_application(unsigned int designed_port, unsigned int max_size_per_message, unsigned int max_user_per_node, char *name, uint64_t name_len)
+{
+	ppc *ctx = FIT_ctx;
+	return client_register_application(ctx, designed_port, max_size_per_message, max_user_per_node, name, name_len);
+}
+
+int ibapi_unregister_application(unsigned int designed_port)
+{
+	ppc *ctx = FIT_ctx;
+	return client_unregister_application(ctx, designed_port);
+}
+
+int ibapi_query_port(int target_node, int designed_port, int requery_flag)
+{	
+	ppc *ctx = FIT_ctx;
+	return client_query_port(ctx, target_node, designed_port, requery_flag);
+}
+#endif
+
+inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor)
+{
+	ppc *ctx = FIT_ctx;
+	return client_receive_message(ctx, designed_port, ret_addr, receive_size, descriptor, 0);
+}
+
 inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
 {
 	ppc *ctx = FIT_ctx;
@@ -102,6 +128,7 @@ void ibapi_free_recv_buf(void *input_buf)
 	//kmem_cache_free(post_receive_cache, input_buf);
 }
 
+#if 0
 int ibapi_reg_send_handler(int (*input_funptr)(char *addr, uint32_t size, int sender_id))
 {
 	ppc *ctx = FIT_ctx;
@@ -129,6 +156,7 @@ int ibapi_reg_send_reply_rdma_imm_handler(int (*input_funptr)(int sender_id, voi
 	ctx->send_reply_rdma_imm_handler = input_funptr;
 	return 0;
 }
+#endif
 
 int ibapi_num_connected_nodes(void)
 {

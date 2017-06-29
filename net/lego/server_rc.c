@@ -290,7 +290,7 @@ static int pp_post_recv(int ctxid, int n)
 	printk(KERN_CRIT "%s addr1 %lx addr2 %lx lkey %d\n", list[0].addr, list[1].addr, ctx[ctxid]->mr->lkey);
 	struct ib_recv_wr wr = {
 		.wr_id	    = PINGPONG_RECV_WRID,
-		.sg_list    = &list,
+		.sg_list    = list,
 		.num_sge    = 2,
 	};
 	struct ib_recv_wr *bad_wr;

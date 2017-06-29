@@ -39,9 +39,10 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid);
 int client_cleanup_module(void);
 
 //The below functions in ibapi are required to modify based on these four
-int client_query_port(ppc *ctx, int target_node, int desigend_port, int requery_flag);
+//int client_query_port(ppc *ctx, int target_node, int desigend_port, int requery_flag);
 int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int userspace_flag);
 int client_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag);
+int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag);
 
 int fit_internal_init(void);
 int fit_internal_cleanup(void);

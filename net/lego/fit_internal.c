@@ -59,8 +59,9 @@ spinlock_t connection_lock[MAX_CONNECTION];
 spinlock_t connection_lock_pedal[MAX_CONNECTION];
 spinlock_t multicast_lock; //only one multicast can be executed at a single time
 
-//struct send_and_reply_format request_list;
+struct send_and_reply_format request_list;
 
+int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority);
 #if 0
 //LOCK related
 #define HASH_TABLE_SIZE_BIT 16
@@ -636,6 +637,8 @@ int client_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connectio
 	int poll_status = SEND_REPLY_WAIT;
 	int flag=0;
 
+	printk(KERN_CRIT "%s conn %d rkey %d mraddr %lx addr %p size %d offset %d imm %d\n", 
+			__func__, input_mr_rkey, input_mr_addr, addr, size, offset, imm);
 retry_send_imm_request:
 	memset(&wr, 0, sizeof(struct ib_send_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
@@ -718,6 +721,109 @@ inline int client_get_connection_by_atomic_number(ppc *ctx, int target_node, int
 			+ NUM_PARALLEL_CONNECTION * target_node;
 }
 
+int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag)
+{
+	//This ret_addr is 
+	struct imm_message_metadata *tmp;
+	int get_size;
+	int offset;
+	int node_id;
+	int ret = 0;
+	struct imm_message_metadata *descriptor;
+	struct imm_header_from_cq_to_port *new_request;
+	int last_ack;
+	int ack_flag=0;
+
+	while(1)
+	{
+		spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
+		if(!list_empty(&(ctx->imm_waitqueue_perport[port].list)))
+		{
+			new_request = list_entry(ctx->imm_waitqueue_perport[port].list.next, struct imm_header_from_cq_to_port, list);
+			list_del(&new_request->list);	
+			spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
+			break;
+		}
+		spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
+		schedule();
+	}
+
+	offset = new_request->offset;
+	node_id = new_request->source_node_id;
+	//free list
+	// XXX kmem_cache_free(imm_header_from_cq_to_port_cache, new_request);
+
+	//get buffer from hash table based on node and port
+	
+	tmp = (struct imm_message_metadata *)(ctx->local_rdma_recv_rings[node_id] + offset);
+	get_size = tmp->size;
+	//Check size
+	if(get_size > receive_size)
+	{
+		return SEND_REPLY_SIZE_TOO_BIG;
+	}
+
+	//do data memcpy
+	memcpy(ret_addr, ((void *)tmp) + sizeof(struct imm_message_metadata), get_size);
+	//printk(KERN_CRIT "%s: hash-%p offset-%x tmp-%p recv %s testport-%d testnodeid-%d\n", __func__, current_hash_ptr->addr, offset, tmp, ret_addr, tmp->designed_port, tmp->source_node_id);
+
+	//Generate descriptor for future reply message
+	descriptor = (struct imm_message_metadata *)kmalloc(sizeof(struct imm_message_metadata), GFP_KERNEL); //kmem_cache_alloc(imm_message_metadata_cache, GFP_KERNEL);
+	BUG_ON(!descriptor);
+	/*
+	while(!descriptor)
+	{
+		printk(KERN_CRIT "%s: descriptor alloc fail\n", __func__);
+		descriptor = (struct imm_message_metadata *)kmalloc(sizeof(struct imm_message_metadata), GFP_KERNEL); //kmem_cache_alloc(imm_message_metadata_cache, GFP_KERNEL);
+	}
+	*/
+
+	//has to keep data in descriptor
+	memcpy(descriptor, tmp, sizeof(struct imm_message_metadata));
+	*reply_descriptor = (uintptr_t)descriptor;
+	
+	//do ack based on the last_ack_index, submit a request to waiting_queue_handler	
+	spin_lock(&ctx->local_last_ack_index_lock[node_id]);
+	last_ack = ctx->local_last_ack_index[node_id];
+	if( (offset>= last_ack && offset - last_ack >= IMM_PORT_CACHE_SIZE/IMM_ACK_PORTION ) ||
+	    (offset< last_ack && offset + IMM_PORT_CACHE_SIZE - last_ack >= IMM_PORT_CACHE_SIZE/IMM_ACK_PORTION))
+	{
+		ack_flag = 1;
+		ctx->local_last_ack_index[node_id] = offset;
+	}
+	spin_unlock(&ctx->local_last_ack_index_lock[node_id]);
+
+	if(ack_flag)
+	{	
+		struct send_and_reply_format *pass = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL);
+		//pass = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+		pass->msg = (char*)node_id; //(char*)current_hash_ptr;
+		pass->length = offset;
+		pass->type = MSG_DO_ACK_INTERNAL;
+
+		spin_lock(&wq_lock);
+		list_add_tail(&(pass->list), &request_list.list);
+		spin_unlock(&wq_lock);
+	}
+	
+	return get_size;
+}
+
+int client_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag)
+{
+	struct imm_message_metadata *tmp = (struct imm_message_metadata *)descriptor;
+	int re_connection_id = client_get_connection_by_atomic_number(ctx, tmp->source_node_id, LOW_PRIORITY);
+	unsigned long phys_addr;
+	void *real_addr;
+	struct ib_device *ibd = (struct ib_device *)ctx->context;
+
+	client_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->inbox_rkey, tmp->inbox_addr, addr, size, 0, tmp->inbox_semaphore | IMM_SEND_REPLY_RECV, FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);
+
+	return 0;
+}
+
+#if 0
 /*
  * LEGO
  * reply msg
@@ -765,6 +871,7 @@ int client_query_port(ppc *ctx, int target_node, int designed_port, int requery_
 	printk(KERN_CRIT "%s: FAIL\n", __func__);
 	return reply_mr_form.op_code;
 }
+#endif
 
 void *client_alloc_memory_for_mr(unsigned int length)
 {
@@ -845,6 +952,19 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
 							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
 				}
+				else if (type == MSG_DO_ACK_REMOTE) {
+					struct send_and_reply_format *recv;
+					recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+
+					recv->src_id = temp_header.src_id;
+					recv->msg = addr;
+					recv->type = type;
+
+					printk(KERN_CRIT "get ack from node %d\n", temp_header.src_id);
+					spin_lock(&wq_lock);
+					list_add_tail(&(recv->list), &request_list.list);
+					spin_unlock(&wq_lock);
+				}
 			}
 			else if((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM)
 			{
@@ -853,37 +973,41 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				{
 					if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND && wc[i].ex.imm_data & IMM_SEND_REPLY_RECV)//opcode
 					{
-						//printk(KERN_CRIT "%s: opcode from node %d\n", __func__, node_id);
+						printk(KERN_CRIT "%s: opcode from node %d\n", __func__, node_id);
 						semaphore = wc[i].ex.imm_data & IMM_GET_SEMAPHORE;
 						opcode = IMM_GET_OPCODE_NUMBER(wc[i].ex.imm_data);
-						//printk(KERN_CRIT "%s: case 1 semaphore-%d\n", __func__, semaphore);
+						printk(KERN_CRIT "%s: case 1 semaphore-%d\n", __func__, semaphore);
 						*(int *)(ctx->imm_inbox_semaphore[semaphore]) = -(opcode);
 						ctx->imm_inbox_semaphore[semaphore] = NULL;
 						clear_bit(semaphore, ctx->imm_inbox_semaphore_bitmap);
 					}
 					else if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND) // only send
 					{
-						// = (struct imm_message_metadata *)kmalloc(sizeof(struct imm_message_metadata), GFP_KERNEL);
+						struct imm_header_from_cq_to_port *tmp;
 						offset = wc[i].ex.imm_data & IMM_GET_OFFSET; 
 						port = IMM_GET_PORT_NUMBER(wc[i].ex.imm_data);
 
-						if(ctx->imm_perport_reg_num[port]<0)
-						{
-							printk(KERN_CRIT "%s: from node %d access to port %d is banned. This should not happen since sender should not be able to send this request out\n", __func__, node_id, port);
-						}
-						//printk(KERN_CRIT "%s: from node %d access to port %d imm-%x\n", __func__, node_id, port, wc[i].ex.imm_data);
+						printk(KERN_CRIT "%s: from node %d access to port %d imm-%x\n", __func__, node_id, port, wc[i].ex.imm_data);
+						tmp = (struct imm_header_from_cq_to_port *)kmalloc(sizeof(struct imm_header_from_cq_to_port), GFP_KERNEL); //kmem_cache_alloc(imm_header_from_cq_to_port_cache, GFP_KERNEL);
+						tmp->source_node_id = node_id;
+						tmp->offset = offset;
+						spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
+						list_add_tail(&(tmp->list), &ctx->imm_waitqueue_perport[port].list);
+						spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
+#if 0
 						//memcpy(descriptor, ctx->local_rdma_ring_mrs[node_id] + offset, sizeof(struct imm_message_metadata));
 						descriptor = (struct imm_message_metadata *)(ctx->local_rdma_recv_rings[node_id] + offset);
 						// XXX call LEGO handler	
 						ctx->send_reply_rdma_imm_handler(node_id, 
 								ctx->local_rdma_recv_rings[node_id] + offset + sizeof(struct imm_message_metadata),
 								descriptor->size, descriptor->inbox_addr, descriptor->inbox_rkey, descriptor->inbox_semaphore);
+#endif
 					}
 					else //handle reply
 					{
 						length = wc[i].byte_len;
 						semaphore = wc[i].ex.imm_data & IMM_GET_SEMAPHORE;
-						//printk(KERN_CRIT "%s: case 2 semaphore-%d len-%d\n", __func__, semaphore, wc[i].byte_len);
+						printk(KERN_CRIT "%s: case 2 semaphore-%d len-%d\n", __func__, semaphore, wc[i].byte_len);
 						//*(int *)(ctx->imm_inbox_semaphore[semaphore]) = wc[i].byte_len;
 						memcpy((void *)ctx->imm_inbox_semaphore[semaphore], &length, sizeof(int));
 
@@ -904,7 +1028,6 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				{
 					connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);	
 					client_post_receives_message(ctx, connection_id, ctx->rx_depth/4);
-					/*
 					recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
 					recv->length = ctx->rx_depth/4;
 					recv->src_id = connection_id;
@@ -913,7 +1036,6 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 					spin_lock(&wq_lock);
 					list_add_tail(&(recv->list), &request_list.list);
 					spin_unlock(&wq_lock);
-					*/
 				}
 			}
 			else
@@ -923,7 +1045,6 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 			}
 
 		}
-		schedule();
 	}
 	return 0;
 }
@@ -936,6 +1057,78 @@ int client_poll_cq_pass(void *in)
 	kfree(input);
 	printk(KERN_CRIT "%s: kill ctx %p cq %p\n", __func__, (void *)input->ctx, (void *)input->target_cq);
 	return 0;
+}
+
+int waiting_queue_handler(void *in)
+{
+	struct send_and_reply_format *new_request;
+	int local_flag;
+	ppc *ctx = (ppc *)in;
+	//allow_signal(SIGKILL);
+	
+	while(1)
+	{
+		while(list_empty(&(request_list.list)))
+		{
+			schedule();
+			//if(kthread_should_stop())
+			//{
+			//	printk(KERN_ALERT "Stop waiting_event_handler\n");
+			//	return 0;
+			//}
+		}
+		spin_lock(&wq_lock);
+		new_request = list_entry(request_list.list.next, struct send_and_reply_format, list);
+
+		spin_unlock(&wq_lock);
+		if(new_request->src_id == ctx->node_id)
+			local_flag = 1;
+		else
+			local_flag = 0;
+		switch(new_request->type)
+		{
+			case MSG_DO_RC_POST_RECEIVE:
+				//new_request->src_id keeps the connection_id (done by client_poll_cq)
+				client_post_receives_message(ctx, new_request->src_id, new_request->length);
+				break;
+			case MSG_DO_ACK_INTERNAL:
+				{
+					//First do check again
+					int offset = new_request->length;
+					//struct app_reg_port *ptr = (struct app_reg_port *)new_request->msg;
+					int target_node = (int) new_request->msg; //ptr->node;
+					//int target_port = ptr->port;
+					//printk(KERN_CRIT "%s: [generate ACK node-%d port-%d offset-%d]\n", __func__, target_node, target_port, offset);
+					struct imm_ack_form ack_packet;
+					uintptr_t tempaddr;
+					//ptr->last_ack_index = offset;
+					ack_packet.node_id= ctx->node_id;
+					//ack_packet.designed_port = target_port;
+					ack_packet.ack_offset = offset;
+					tempaddr = client_ib_reg_mr_addr(ctx, &ack_packet, sizeof(struct imm_ack_form));
+					client_send_message_sge(ctx, target_node, MSG_DO_ACK_REMOTE, (void *)tempaddr, sizeof(struct imm_ack_form), 0, 0, LOW_PRIORITY);
+					break;
+				}
+			case MSG_DO_ACK_REMOTE:
+				{
+
+					struct imm_ack_form *tmp = (struct imm_ack_form *)new_request->msg;
+					int last_ack = tmp->ack_offset;
+					ctx->remote_last_ack_index[tmp->node_id] = last_ack;
+					printk(KERN_CRIT "%s: [receive ACK node-%d port-%d offset-%d]\n", __func__, tmp->node_id, tmp->designed_port, tmp->ack_offset);
+					client_free_recv_buf(new_request->msg);
+					break;
+				}
+			default:
+				printk(KERN_ALERT "%s: receive weird event %d\n", __func__, new_request->type);
+		}
+		spin_lock(&wq_lock);
+		list_del(&new_request->list);
+		spin_unlock(&wq_lock);
+		// XXX kfree(new_request);
+
+		//kmem_cache_free(s_r_cache, new_request);
+	}
 }
 
 void client_setup_ibapi_header(uint32_t src_id, uint64_t inbox_addr, uint64_t inbox_semaphore, uint32_t length, int priority, int type, struct ibapi_header *output_header)
@@ -1056,6 +1249,7 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 	struct client_ibv_mr *remote_mr;
 	struct imm_message_metadata output_header;
 	unsigned long phys_addr;
+	int last_ack;
 	
 	if(size+sizeof(struct imm_message_metadata) > IMM_MAX_SIZE)
 	{
@@ -1076,12 +1270,18 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 	tar_offset_start = ctx->remote_rdma_ring_mrs_offset[target_node] - real_size;//Trace back to the real starting point
 	spin_unlock(&ctx->remote_imm_offset_lock[target_node]);
 
-	if(tar_offset_start==REG_DO_QUERY_FIRST)
+	printk(KERN_CRIT "%s tar_offset_start %d real_size %d last_ack_index %d\n", 
+			__func__, tar_offset_start, real_size, ctx->remote_last_ack_index[target_node]);
+	//make sure does not over write than lastack
+	while(1)
 	{
-		printk(KERN_CRIT "%s: can't find node %d\n", __func__, target_node);
-		return REG_DO_QUERY_FIRST;
+		last_ack = ctx->remote_last_ack_index[target_node];
+		if(tar_offset_start < last_ack && tar_offset_start + real_size > last_ack)
+			schedule();
+		else
+			break;
 	}
-	
+
 	remote_mr = &(ctx->remote_rdma_ring_mrs[target_node]);
 
 retry_send_reply_with_imm_request:
@@ -1453,7 +1653,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	}
 	//Initialize waiting_queue/request list related items
 	spin_lock_init(&wq_lock);
-//	INIT_LIST_HEAD(&(request_list.list));
+	INIT_LIST_HEAD(&(request_list.list));
 
 	//Initialize multicast spin_lock
 	spin_lock_init(&multicast_lock);
@@ -1463,10 +1663,12 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	thread_pass_poll_cq.target_cq = ctx->cq[0];
 	kthread_run(client_poll_cq_pass, &thread_pass_poll_cq, "recvpollcq");
 	//wake_up_process(thread);
-	
 	printk(KERN_CRIT "%s created poll cq thread\n", __func__);
+	
+	kthread_run(waiting_queue_handler, ctx, "wq_handler");
+	printk(KERN_CRIT "%s created wait queue thread\n", __func__);
 
-#if SEPARATE_SEND_POLL_THREAD
+#ifdef SEPARATE_SEND_POLL_THREAD
 	thread = kthread_create((void *)client_send_cq_poller, ctx, "separate_poll_send");
 	if(IS_ERR(thread))
 	{
@@ -1492,10 +1694,15 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	}
 	/* array to store rdma ring mr for all remote nodes */
 	ctx->remote_rdma_ring_mrs = (struct client_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct client_ibv_mr), GFP_KERNEL);
-	ctx->remote_rdma_ring_mrs_offset = (unsigned long *)kzalloc(MAX_NODE * sizeof(unsigned long), GFP_KERNEL);
+	ctx->remote_rdma_ring_mrs_offset = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
+	ctx->remote_last_ack_index = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
+	ctx->local_last_ack_index = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
+	ctx->local_last_ack_index_lock = (spinlock_t *)kmalloc(MAX_NODE * sizeof(spinlock_t), GFP_KERNEL);
 	ctx->remote_imm_offset_lock = (spinlock_t *)kmalloc(MAX_NODE * sizeof(spinlock_t), GFP_KERNEL); 
-	for(i=0; i<MAX_NODE; i++)
+	for(i=0; i<MAX_NODE; i++) {
 		spin_lock_init(&ctx->remote_imm_offset_lock[i]);
+		spin_lock_init(&ctx->local_last_ack_index_lock[i]);
+	}
 
 	printk(KERN_CRIT "%s allocated local rdma buffers, about to connect qps\n", __func__);
 	ctx->node_id = mynodeid;
