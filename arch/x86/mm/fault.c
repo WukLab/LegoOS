@@ -20,6 +20,7 @@
 #include <lego/comp_memory.h>
 #include <lego/comp_processor.h>
 #include <lego/memory.h>
+#include <lego/signal.h>
 
 /*
  * Page fault error code bits:
@@ -43,18 +44,6 @@ enum x86_pf_error_code {
 static int fault_in_kernel_space(unsigned long address)
 {
 	return address >= TASK_SIZE_MAX;
-}
-
-static void show_fault_oops(struct task_struct *task, struct pt_regs *regs, unsigned long address)
-{
-	printk(KERN_ALERT "BUG: unable to handle kernel ");
-	if (address < PAGE_SIZE)
-		printk(KERN_CONT "NULL pointer dereference");
-	else
-		printk(KERN_CONT "paging request");
-
-	printk(KERN_CONT   " at %p\n", (void *)address);
-	printk(KERN_ALERT "IP: [<%p>] %pS\n", (void *)address, (void *)address);
 }
 
 static void dump_pagetable(unsigned long address)
@@ -250,6 +239,71 @@ static noinline int vmalloc_fault(unsigned long address)
 	return 0;
 }
 
+static void show_fault_oops(struct pt_regs *regs, unsigned long error_code,
+			    unsigned long address)
+{
+	printk(KERN_ALERT "BUG: unable to handle kernel ");
+	if (address < PAGE_SIZE)
+		printk(KERN_CONT "NULL pointer dereference");
+	else
+		printk(KERN_CONT "paging request");
+
+	printk(KERN_CONT   " at %p\n", (void *)address);
+	printk(KERN_ALERT "IP: [<%p>] %pS\n", (void *)address, (void *)address);
+
+	dump_pagetable(address);
+}
+
+static int die_counter;
+
+int __die(const char *str, struct pt_regs *regs, long err)
+{
+	printk(KERN_DEFAULT
+	       "%s: %04lx [#%d]%s%s\n", str, err & 0xffff, ++die_counter,
+	       IS_ENABLED(CONFIG_PREEMPT) ? " PREEMPT"         : "",
+	       IS_ENABLED(CONFIG_SMP)     ? " SMP"             : "");
+
+	show_regs(regs);
+
+	/* Executive summary in case the oops scrolled away */
+	printk(KERN_ALERT "RIP ");
+	pr_cont(" [<%p>] %pS\n", (void *)regs->ip, (void *)regs->ip);
+	printk(" RSP <%016lx>\n", regs->sp);
+
+	return 0;
+}
+
+#define task_stack_end_corrupted(task) \
+		(*(end_of_stack(task)) != STACK_END_MAGIC)
+
+static noinline void
+no_context(struct pt_regs *regs, unsigned long error_code,
+	   unsigned long address, int signal)
+{
+	show_fault_oops(regs, error_code, address);
+
+	if (task_stack_end_corrupted(current))
+		printk(KERN_EMERG "Thread overran stack, or stack corrupted\n");
+
+	__die("Oops", regs, error_code);
+	/* Executive summary in case the body of the oops scrolled away */
+	printk(KERN_DEFAULT "CR2: %016lx\n", address);
+	hlt();
+}
+
+static noinline void
+bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
+		     unsigned long address, struct vm_area_struct *vma)
+{
+	/* User mode accesses just cause a SIGSEGV */
+	if (error_code & PF_USER) {
+		pr_info("%s:%d\n", __func__, __LINE__);
+		panic("die");
+	}
+
+	no_context(regs, error_code, address, SIGSEGV);
+}
+
 /*
  * This routine handles page faults.  It determines the address,
  * and the problem, and then passes it off to one of the appropriate
@@ -258,6 +312,7 @@ static noinline int vmalloc_fault(unsigned long address)
 dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 {
 	unsigned long address = read_cr2();
+#ifdef CONFIG_COMP_PROCESSOR
 	unsigned long page;
 	int ret;
 	pgd_t *pgd;
@@ -265,6 +320,7 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	pmd_t *pmd;
 	pte_t *ptep;
 	pte_t pte;
+#endif
 
 	if (unlikely(fault_in_kernel_space(address))) {
 		if (!(error_code & (PF_RSVD | PF_USER | PF_PROT))) {
@@ -276,8 +332,7 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 		if (spurious_fault(error_code, address))
 			return;
 
-		if (!(error_code & PF_USER))
-			show_fault_oops(current, regs, address);
+		bad_area_nosemaphore(regs, error_code, address, NULL);
 	}
 
 	pr_info("UserPageFault(CPU%d),ErrorCode:%#lx,Address:%#lx\n",

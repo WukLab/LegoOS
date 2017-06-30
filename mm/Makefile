@@ -2,7 +2,7 @@
 # LegoOS Memory Managment
 #
 
-obj-y := slab.o
+obj-y := slob.o
 obj-y += debug.o
 obj-y += memory.o
 obj-y += init-mm.o

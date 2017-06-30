@@ -17,7 +17,7 @@
 
 static inline struct task_struct *alloc_task_struct_node(int node)
 {
-	return kmalloc(GFP_KERNEL, sizeof(struct task_struct));
+	return kmalloc(sizeof(struct task_struct), GFP_KERNEL);
 }
 
 static inline void free_task_struct(struct task_struct *tsk)
@@ -124,7 +124,6 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 
 static int mm_init(struct mm_struct *mm, struct task_struct *p)
 {
-	mm->mmap = NULL;
 	atomic_set(&mm->mm_users, 1);
 	atomic_set(&mm->mm_count, 1);
 	mm->map_count = 0;

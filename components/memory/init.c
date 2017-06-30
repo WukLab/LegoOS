@@ -8,8 +8,9 @@
  */
 
 #include <lego/kernel.h>
+#include <lego/comp_memory.h>
 
 void __init memory_component_init(void)
 {
-
+	pr_info("Memory Component Init...\n");
 }

@@ -18,6 +18,7 @@
 #include <asm/thread_info.h>
 
 #include <lego/mm.h>
+#include <lego/llist.h>
 #include <lego/magic.h>
 #include <lego/rbtree.h>
 #include <lego/preempt.h>
@@ -251,6 +252,7 @@ struct task_struct {
 	int			on_cpu;
 	int			wake_cpu;
 	struct task_struct	*last_wakee;
+	struct llist_node	wake_entry;
 #endif
 
 /* Scheduling */
@@ -270,6 +272,7 @@ struct task_struct {
 	unsigned		sched_reset_on_fork:1;
 	unsigned		sched_contributes_to_load:1;
 	unsigned		sched_migrated:1;
+	unsigned		sched_remote_wakeup:1;
 	unsigned		:0; /* force alignment to the next boundary */
 
 /* Exit state */

@@ -20,6 +20,7 @@
 #include <lego/slab.h>
 #include <lego/time.h>
 #include <lego/wait.h>
+#include <lego/timer.h>
 #include <lego/delay.h>
 #include <lego/sched.h>
 #include <lego/string.h>
@@ -47,6 +48,7 @@
 #include <asm/numa.h>
 #include <asm/traps.h>
 #include <asm/setup.h>
+
 
 enum system_states system_state __read_mostly;
 
@@ -169,9 +171,9 @@ static int kernel_init(void *unused)
 	memory_component_init();
 #endif
 
-	//run_init_process("/etc/init");
-	while(1)
-		;
+
+	while (1) ;
+	run_init_process("/etc/init");
 	return 0;
 }
 
@@ -284,6 +286,9 @@ asmlinkage void __init start_kernel(void)
 	if (WARN(!irqs_disabled(),
 		 "Interrupts were enabled *very* early, fixing it\n"))
 		local_irq_disable();
+
+
+	init_timers();
 
 	/*
 	 * Boot all possible CPUs

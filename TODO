@@ -3,5 +3,4 @@
 * timer
 * mutex
 - watchdog and NMI handler (detect deadlock and dump backtrace)
-- optimize scheduler (add scheduling class?)
 - ktime, kernel timing code seems incomplete.

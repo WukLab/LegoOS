@@ -113,33 +113,19 @@ do {						\
  * appear at runtime.
  */
 
-#define __WARN()						\
-do {								\
-	printk("WARNING: at %s:%d/%s()!\n",			\
-		__FILE__, __LINE__, __func__);			\
-} while(0)
+__printf(3, 4)
+void warn_slowpath_fmt(const char *file, const int line,
+		       const char *fmt, ...);
+void warn_slowpath_null(const char *file, const int line);
 
-#define __WARN_printk(format...)				\
-do {								\
-	__WARN();						\
-	printk(format);						\
-} while (0)
+#define __WARN()		warn_slowpath_null(__FILE__, __LINE__)
+#define __WARN_printf(arg...)	warn_slowpath_fmt(__FILE__, __LINE__, arg)
 
 #define WARN(condition, format...) ({				\
 	int __ret_warn_on = !!(condition);			\
 	if (unlikely(__ret_warn_on))				\
-		__WARN_printk(format);				\
+		__WARN_printf(format);				\
 	unlikely(__ret_warn_on);				\
-})
-
-#define WARN_ONCE(condition, format...) ({			\
-	static bool __section(.data..unlikely) __warned;	\
-	int __ret_warn_once = !!(condition);			\
-								\
-	if (unlikely(__ret_warn_once))				\
-		if (WARN(!__warned, format))			\
-			__warned = true;			\
-	unlikely(__ret_warn_once);				\
 })
 
 #define WARN_ON(condition) ({					\
@@ -155,6 +141,16 @@ do {								\
 								\
 	if (unlikely(__ret_warn_once))				\
 		if (WARN_ON(!__warned)) 			\
+			__warned = true;			\
+	unlikely(__ret_warn_once);				\
+})
+
+#define WARN_ONCE(condition, format...) ({			\
+	static bool __section(.data..unlikely) __warned;	\
+	int __ret_warn_once = !!(condition);			\
+								\
+	if (unlikely(__ret_warn_once))				\
+		if (WARN(!__warned, format))			\
 			__warned = true;			\
 	unlikely(__ret_warn_once);				\
 })

@@ -53,7 +53,6 @@ reschedule_interrupt(struct pt_regs *regs)
 	scheduler_ipi();
 	pr_info("CPU(%d) PID(%d) in %s() IPI handler\n",
 		smp_processor_id(), current->pid, __func__);
-	hlt();
 }
 
 /*
