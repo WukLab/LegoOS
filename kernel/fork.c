@@ -17,7 +17,7 @@
 
 static inline struct task_struct *alloc_task_struct_node(int node)
 {
-	return kmalloc(GFP_KERNEL, sizeof(struct task_struct));
+	return kmalloc(sizeof(struct task_struct), GFP_KERNEL);
 }
 
 static inline void free_task_struct(struct task_struct *tsk)
