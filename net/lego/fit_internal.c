@@ -392,6 +392,7 @@ int client_post_receives_message(ppc *ctx, int connection_id, int depth)
 		wr.sg_list = NULL;
 		wr.num_sge = 0;
 		ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
+		printk(KERN_CRIT "%s postrecv %d buffers wr_id %d\n", __func__, depth, wr.wr_id);
 	}
 
 	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, FIT_STAT_CLEAR));
@@ -553,7 +554,7 @@ retry:
 
 		/* post receive buffers to get remote ring mrs, always through first conn */
 		if (i == 0)
-			client_post_receives_message_with_buffer(ctx, cur_connection, 10); //ctx->num_node - 1);
+			client_post_receives_message_with_buffer(ctx, cur_connection, 1); //ctx->num_node - 1);
 
 		/* post receive buffers for IMM */
 		client_post_receives_message(ctx, cur_connection, ctx->rx_depth);
@@ -749,7 +750,7 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 
 	offset = new_request->offset;
 	node_id = new_request->source_node_id;
-	printk(KERN_CRIT "%s got new req offset %d sourcenode %d\n", offset, node_id);
+	printk(KERN_CRIT "%s got new req offset %d sourcenode %d\n", __func__, offset, node_id);
 	//free list
 	// XXX kmem_cache_free(imm_header_from_cq_to_port_cache, new_request);
 
