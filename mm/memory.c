@@ -64,6 +64,22 @@ int __pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
 	return 0;
 }
 
+int __pte_alloc(struct mm_struct *mm, pmd_t *pmd, unsigned long address)
+{
+	pte_t *new = pte_alloc_one_kernel(mm, address);
+	if (!new)
+		return -ENOMEM;
+
+	barrier();
+	spin_lock(&mm->page_table_lock);
+	if (!pmd_present(*pmd))
+		pmd_populate_kernel(mm, pmd, new);
+	else	/* Another has populated it */
+		pte_free_kernel(mm, new);
+	spin_unlock(&mm->page_table_lock);
+	return 0;
+}
+
 int __pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 {
 	pte_t *new = pte_alloc_one_kernel(&init_mm, address);

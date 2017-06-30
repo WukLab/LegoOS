@@ -899,9 +899,11 @@ void resched_curr(struct rq *rq)
  */
 static void ttwu_do_wakeup(struct rq *rq, struct task_struct *p, int wake_flags)
 {
+	check_preempt_curr(rq, p, wake_flags);
 	p->state = TASK_RUNNING;
 #ifdef CONFIG_SMP
-	/* Where, TODO here */
+	if (p->sched_class->task_woken)
+		p->sched_class->task_woken(rq, p);
 #endif
 }
 
@@ -918,6 +920,8 @@ static int ttwu_remote(struct task_struct *p, int wake_flags)
 
 	rq = __task_rq_lock(p);
 	if (task_on_rq_queued(p)) {
+		/* check_preempt_curr() may use rq clock */
+		update_rq_clock(rq);
 		ttwu_do_wakeup(rq, p, wake_flags);
 		ret = 1;
 	}
@@ -926,14 +930,28 @@ static int ttwu_remote(struct task_struct *p, int wake_flags)
 	return ret;
 }
 
+static inline void ttwu_activate(struct rq *rq, struct task_struct *p, int en_flags)
+{
+	activate_task(rq, p, en_flags);
+	p->on_rq = TASK_ON_RQ_QUEUED;
+
+#if 0
+	/* if a worker is waking up, notify workqueue */
+	if (p->flags & PF_WQ_WORKER)
+		wq_worker_waking_up(p, cpu_of(rq));
+#endif
+}
+
 static void
 ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags)
 {
-	enqueue_task(rq, p, 0);
-	p->on_rq = TASK_ON_RQ_QUEUED;
+	int en_flags = ENQUEUE_WAKEUP;
 
-	/*TODO: If a worker is waking up, notify the workqueue: */
-
+#ifdef CONFIG_SMP
+	if (wake_flags & WF_MIGRATED)
+		en_flags |= ENQUEUE_MIGRATED;
+#endif
+	ttwu_activate(rq, p, en_flags);
 	ttwu_do_wakeup(rq, p, wake_flags);
 }
 
@@ -1055,8 +1073,10 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	p->state = TASK_WAKING;
 
 	cpu = select_task_rq(p, p->wake_cpu, SD_BALANCE_WAKE, wake_flags);
-	if (task_cpu(p) != cpu)
+	if (task_cpu(p) != cpu) {
+		wake_flags |= WF_MIGRATED;
 		set_task_cpu(p, cpu);
+	}
 #endif
 
 	ttwu_queue(p, cpu, wake_flags);

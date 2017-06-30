@@ -449,6 +449,11 @@ static inline pmd_t *pmd_offset(pud_t *pud, unsigned long address)
 	return (pmd_t *)pud_page_vaddr(*pud) + pmd_index(address);
 }
 
+static inline pte_t *pte_offset(pmd_t *pmd, unsigned long address)
+{
+	return (pte_t *)pmd_page_vaddr(*pmd) + pte_index(address);
+}
+
 static inline pte_t *pte_offset_kernel(pmd_t *pmd, unsigned long address)
 {
 	return (pte_t *)pmd_page_vaddr(*pmd) + pte_index(address);

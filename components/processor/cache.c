@@ -72,7 +72,7 @@ static inline unsigned long addr2set(unsigned long addr)
  * Fill a cacheline given a missing virtual address
  * Return 0 on success, others on failure
  */
-int pcache_fill(unsigned long missing_vaddr)
+int pcache_fill(unsigned long missing_vaddr, unsigned long *cache_paddr)
 {
 	unsigned long cache, meta;
 	unsigned int way;
