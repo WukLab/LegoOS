@@ -861,6 +861,19 @@ static void expire_timers(struct timer_base *base, struct hlist_head *head)
 	}
 }
 
+/*
+ * By using LVL_CLK_MASK and LVL_CLK_SHIFT, we check different
+ * levels with different granularities. With current setting,
+ * the 1st level is checked every HZ, the 2rd level is checked
+ * every 8HZ, 3rd level with every 64HZ...
+ *
+ * Eg. if base->clk is 0, then all LVL_DEPTH levels will be checked.
+ * If base->clk is 1, only 1st level's bucket will be checked.
+ * If base->clk is 8, both 1st and 2rd level's buckets will be checked.
+ * If base->clk is 17, then 1st, 2rd, and 3rd level's buckets will be checked.
+ *
+ * Hats off, elegant code.
+ */
 static int collect_expired_timers(struct timer_base *base,
 				  struct hlist_head *heads)
 {
@@ -911,6 +924,8 @@ void run_local_timers(void)
 			expire_timers(base, heads + levels);
 	}
 	base->running_timer = NULL;
+
+	/* Do NOT enable irq, we're in interrupt */
 	spin_unlock_irqrestore(&base->lock, flags);
 }
 
