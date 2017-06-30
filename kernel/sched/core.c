@@ -23,6 +23,8 @@
 
 #include "sched.h"
 
+bool sysctl_SCHED_FEATURE_TTWU_QUEUE = false;
+
 DEFINE_PER_CPU(int, __preempt_count) = INIT_PREEMPT_COUNT;
 
 /* Per-CPU Runqueue */
@@ -891,7 +893,6 @@ void resched_curr(struct rq *rq)
 	}
 
 	set_tsk_need_resched(curr);
-	smp_send_reschedule(cpu);
 }
 
 /*
@@ -905,29 +906,6 @@ static void ttwu_do_wakeup(struct rq *rq, struct task_struct *p, int wake_flags)
 	if (p->sched_class->task_woken)
 		p->sched_class->task_woken(rq, p);
 #endif
-}
-
-/*
- * Called in case the task @p isn't fully descheduled from its runqueue,
- * in this case we must do a remote wakeup. Its a 'light' wakeup though,
- * since all we need to do is flip p->state to TASK_RUNNING, since
- * the task is still ->on_rq.
- */
-static int ttwu_remote(struct task_struct *p, int wake_flags)
-{
-	struct rq *rq;
-	int ret = 0;
-
-	rq = __task_rq_lock(p);
-	if (task_on_rq_queued(p)) {
-		/* check_preempt_curr() may use rq clock */
-		update_rq_clock(rq);
-		ttwu_do_wakeup(rq, p, wake_flags);
-		ret = 1;
-	}
-	__task_rq_unlock(rq);
-
-	return ret;
 }
 
 static inline void ttwu_activate(struct rq *rq, struct task_struct *p, int en_flags)
@@ -955,29 +933,97 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags)
 	ttwu_do_wakeup(rq, p, wake_flags);
 }
 
+#ifdef CONFIG_SMP
+static void sched_ttwu_pending(void)
+{
+	struct rq *rq = this_rq();
+	struct llist_node *llist = llist_del_all(&rq->wake_list);
+	struct task_struct *p;
+	unsigned long flags;
+
+	if (!llist)
+		return;
+
+	spin_lock_irqsave(&rq->lock, flags);
+
+	while (llist) {
+		int wake_flags = 0;
+
+		p = llist_entry(llist, struct task_struct, wake_entry);
+		llist = llist_next(llist);
+
+		if (p->sched_remote_wakeup)
+			wake_flags = WF_MIGRATED;
+
+		ttwu_do_activate(rq, p, wake_flags);
+	}
+
+	spin_unlock_irqrestore(&rq->lock, flags);
+}
+
+void scheduler_ipi(void)
+{
+	if (llist_empty(&this_rq()->wake_list))
+		return;
+	sched_ttwu_pending();
+}
+
+static void ttwu_queue_remote(struct task_struct *p, int cpu, int wake_flags)
+{
+	p->sched_remote_wakeup = !!(wake_flags & WF_MIGRATED);
+
+	if (llist_add(&p->wake_entry, &cpu_rq(cpu)->wake_list))
+		smp_send_reschedule(cpu);
+}
+#endif
+
+/*
+ * Called in case the task @p isn't fully descheduled from its runqueue,
+ * in this case we must do a remote wakeup. Its a 'light' wakeup though,
+ * since all we need to do is flip p->state to TASK_RUNNING, since
+ * the task is still ->on_rq.
+ */
+static int ttwu_remote(struct task_struct *p, int wake_flags)
+{
+	struct rq *rq;
+	int ret = 0;
+
+	rq = __task_rq_lock(p);
+	if (task_on_rq_queued(p)) {
+		/* check_preempt_curr() may use rq clock */
+		update_rq_clock(rq);
+		ttwu_do_wakeup(rq, p, wake_flags);
+		ret = 1;
+	}
+	__task_rq_unlock(rq);
+
+	return ret;
+}
+
 static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
 {
 	struct rq *rq = cpu_rq(cpu);
+
+#ifdef CONFIG_SMP
+	if (sysctl_SCHED_FEATURE_TTWU_QUEUE) {
+		/*
+		 * Queue this task on remote rq and send reschedule IPI
+		 * in order to reduce rq lock contention.
+		 */
+		sched_clock_cpu(cpu); /* sync clocks x-cpu */
+		ttwu_queue_remote(p, cpu, wake_flags);
+		return;
+	}
+#endif
 
 	spin_lock(&rq->lock);
 	ttwu_do_activate(rq, p, wake_flags);
 	spin_unlock(&rq->lock);
 }
 
-void scheduler_ipi(void)
-{
-/*TODO what is this.. */
-/*
-	if (llist_empty(&this_rq()->wake_list))
-		return;
-
-	sched_ttwu_pending();
-*/
-}
-
 static int select_fallback_rq(int cpu, struct task_struct *p)
 {
-	WARN(1, "Not implemented");
+	WARN_ONCE(1, "cpu%d,pid%d/%s", cpu, p->pid, p->comm);
 	return cpu;
 }
 

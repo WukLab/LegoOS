@@ -969,6 +969,25 @@ static unsigned int get_rr_interval_fair(struct rq *rq, struct task_struct *task
 }
 
 #ifdef CONFIG_SMP
+static int find_lowest_rq(struct task_struct *p, int prev_cpu)
+{
+	int cpu, target = prev_cpu;
+	unsigned int nr_running_min = UINT_MAX;
+
+	for_each_online_cpu(cpu) {
+		struct cfs_rq *cfs_rq = &(cpu_rq(cpu)->cfs);
+
+		if (cfs_rq->nr_running == 0)
+			return cpu;
+
+		if (cfs_rq->nr_running < nr_running_min) {
+			nr_running_min = cfs_rq->nr_running;
+			target = cpu;
+		}
+	}
+	return target;
+}
+
 /*
  * select_task_rq_fair: Select target runqueue for the waking task in domains
  * that have the 'sd_flag' flag set. In practice, this is SD_BALANCE_WAKE,
@@ -984,7 +1003,12 @@ static unsigned int get_rr_interval_fair(struct rq *rq, struct task_struct *task
 static int
 select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_flags)
 {
-	return prev_cpu;
+	int new_cpu = prev_cpu;
+
+	/* Only fork time? */
+	if (sd_flag == SD_BALANCE_FORK)
+		new_cpu = find_lowest_rq(p, prev_cpu);
+	return new_cpu;
 }
 #endif
 

@@ -14,6 +14,60 @@
 #include <lego/atomic.h>
 
 /*
+ * 64-bit random ID for oopses:
+ */
+static u64 oops_id;
+
+void print_oops_end_marker(void)
+{
+	pr_warn("---[ end trace %016llx ]---\n", (unsigned long long)oops_id++);
+}
+
+struct warn_args {
+	const char *fmt;
+	va_list args;
+};
+
+static void __warn(const char *file, int line, void *caller,
+		   struct pt_regs *regs, struct warn_args *args)
+{
+	pr_warn("------------[ cut here ]------------\n");
+
+	if (file)
+		pr_warn("WARNING: CPU: %d PID: %d at %s:%d %pS\n",
+			smp_processor_id(), current->pid, file, line,
+			caller);
+	else
+		pr_warn("WARNING: CPU: %d PID: %d at %pS\n",
+			smp_processor_id(), current->pid, caller);
+
+	if (args)
+		vprintk(args->fmt, args->args);
+
+	if (regs)
+		show_regs(regs);
+	else
+		dump_stack();
+
+	print_oops_end_marker();
+}
+
+void warn_slowpath_fmt(const char *file, int line, const char *fmt, ...)
+{
+	struct warn_args args;
+
+	args.fmt = fmt;
+	va_start(args.args, fmt);
+	__warn(file, line, __builtin_return_address(0), NULL, &args);
+	va_end(args.args);
+}
+
+void warn_slowpath_null(const char *file, int line)
+{
+	__warn(file, line, __builtin_return_address(0), NULL, NULL);
+}
+
+/*
  * panic_cpu is used for synchronizing panic() execution.
  * It holds a CPU number which is executing panic() currently. A value of
  * PANIC_CPU_INVALID means no CPU has entered panic().

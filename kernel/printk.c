@@ -41,6 +41,8 @@ static size_t print_time(unsigned char *buf, u64 ts)
 
 static DEFINE_SPINLOCK(printk_lock);
 
+static char TEXTBUF[LOG_LINE_MAX];
+
 /**
  * printk - print a kernel message
  * @fmt: format string
@@ -50,7 +52,6 @@ static DEFINE_SPINLOCK(printk_lock);
 asmlinkage __printf(1, 2)
 int printk(const char *fmt, ...)
 {
-	static char TEXTBUF[LOG_LINE_MAX];
 	unsigned char *text = TEXTBUF;
 	unsigned char *output_buf;
 	size_t time_len, fmt_len, len, ret_len;
@@ -65,6 +66,44 @@ int printk(const char *fmt, ...)
 	va_start(args, fmt);
 	fmt_len = vsnprintf(text, LOG_LINE_MAX - time_len, fmt, args);
 	va_end(args);
+
+	switch (printk_get_level(text)) {
+	case '0' ... '7':
+	case 'd':
+		output_buf = TEXTBUF;
+		len = time_len + fmt_len - 2;
+		memmove(text, text + 2, fmt_len - 2);
+		break;
+	case 'c':
+		/* Contiguous printk(). Do not print prefix */
+		output_buf = text;
+		len = fmt_len - 2;
+		memmove(text, text+ 2, fmt_len - 2);
+		break;
+	default:
+		output_buf = TEXTBUF;
+		len = time_len + fmt_len;
+	};
+
+	ret_len = tty_write(output_buf, len);
+	spin_unlock_irqrestore(&printk_lock, flags);
+
+	return ret_len;
+}
+
+int vprintk(const char *fmt, va_list args)
+{
+	unsigned char *text = TEXTBUF;
+	unsigned char *output_buf;
+	size_t time_len, fmt_len, len, ret_len;
+	unsigned long flags;
+
+	spin_lock_irqsave(&printk_lock, flags);
+
+	time_len = print_time(text, sched_clock());
+	text += time_len;
+
+	fmt_len = vsnprintf(text, LOG_LINE_MAX - time_len, fmt, args);
 
 	switch (printk_get_level(text)) {
 	case '0' ... '7':

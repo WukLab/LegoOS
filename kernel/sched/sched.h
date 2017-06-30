@@ -159,6 +159,7 @@ struct rq {
 	/* cpu of this runqueue: */
 	int			cpu;
 	int			online;
+	struct llist_head	wake_list;
 #endif
 };
 
