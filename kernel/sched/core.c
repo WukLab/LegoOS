@@ -981,9 +981,6 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
 	return cpu;
 }
 
-/*
- * The caller (fork, wakeup) owns p->pi_lock, ->cpus_allowed is stable.
- */
 static inline
 int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
 {
@@ -1009,6 +1006,7 @@ int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
 	return cpu;
 }
 
+/* Check if @p should preempt current running thread */
 void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
 {
 	const struct sched_class *class;
@@ -1046,7 +1044,7 @@ void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
  * the simpler "current->state = TASK_RUNNING" to mark yourself
  * runnable without the overhead of this.
  *
- * Return: %true if @p was woken up, %false if it was already running.
+ * Return: 1 if @p was woken up, 0 if it was already running.
  * or @state didn't match @p's state.
  */
 int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)

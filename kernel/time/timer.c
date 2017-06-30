@@ -811,7 +811,7 @@ static void call_timer_fn(struct timer_list *timer, void (*fn)(unsigned long),
 
 	fn(data);
 
-	if (count != preempt_count()) {
+	if (unlikely(count != preempt_count())) {
 		WARN_ONCE(1, "timer: %pF preempt leak: %08x -> %08x\n",
 			  fn, count, preempt_count());
 		/*
@@ -821,6 +821,11 @@ static void call_timer_fn(struct timer_list *timer, void (*fn)(unsigned long),
 		 * than the BUG() we had.
 		 */
 		preempt_count_set(count);
+	}
+
+	if (unlikely(!irqs_disabled())) {
+		WARN_ONCE(1, "timer: %pF enabled interrupt\n", fn);
+		local_irq_disable();
 	}
 }
 
