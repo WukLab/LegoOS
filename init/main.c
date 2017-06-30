@@ -49,6 +49,7 @@
 #include <asm/traps.h>
 #include <asm/setup.h>
 
+
 enum system_states system_state __read_mostly;
 
 /* Screen information used by kernel */
@@ -169,7 +170,6 @@ static int kernel_init(void *unused)
 #ifdef CONFIG_COMP_MEMORY
 	memory_component_init();
 #endif
-
 	run_init_process("/etc/init");
 	return 0;
 }
