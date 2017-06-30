@@ -14,7 +14,11 @@
 #include <lego/kernel.h>
 
 struct timer_list {
-	struct list_head	entry;
+	/*
+	 * All fields that change during normal runtime grouped to the
+	 * same cacheline
+	 */
+	struct hlist_node	entry;
 	unsigned long		expires;
 	void			(*function)(unsigned long);
 	unsigned long		data;
@@ -69,5 +73,70 @@ struct timer_list {
 #define DEFINE_TIMER(_name, _function, _expires, _data)				\
 	struct timer_list _name =						\
 		TIMER_INITIALIZER(_name, _function, _expires, _data)
+
+void __init_timer(struct timer_list *timer, unsigned int flags);
+
+#define init_timer(timer)			__init_timer((timer), 0)
+#define init_timer_pinned(timer)		__init_timer((timer), TIMER_PINNED)
+#define init_timer_deferrable(timer)		__init_timer((timer), TIMER_DEFERRABLE)
+#define init_timer_pinned_deferrable(timer)	__init_timer((timer), TIMER_DEFERRABLE | TIMER_PINNED)
+
+#define __setup_timer(_timer, _fn, _data, _flags)			\
+	do {								\
+		__init_timer((_timer), (_flags));			\
+		(_timer)->function = (_fn);				\
+		(_timer)->data = (_data);				\
+	} while (0)
+
+#define setup_timer(timer, fn, data)					\
+	__setup_timer((timer), (fn), (data), 0)
+#define setup_pinned_timer(timer, fn, data)				\
+	__setup_timer((timer), (fn), (data), TIMER_PINNED)
+#define setup_deferrable_timer(timer, fn, data)				\
+	__setup_timer((timer), (fn), (data), TIMER_DEFERRABLE)
+#define setup_pinned_deferrable_timer(timer, fn, data)			\
+	__setup_timer((timer), (fn), (data), TIMER_DEFERRABLE | TIMER_PINNED)
+
+/**
+ * timer_pending - is a timer pending?
+ * @timer: the timer in question
+ *
+ * timer_pending will tell whether a given timer is currently pending,
+ * or not. Callers must ensure serialization wrt. other operations done
+ * to this timer, eg. interrupt contexts, or other CPUs on SMP.
+ *
+ * return value: 1 if the timer is pending, 0 if not.
+ */
+static inline int timer_pending(const struct timer_list * timer)
+{
+	return timer->entry.pprev != NULL;
+}
+
+unsigned long __round_jiffies(unsigned long j, int cpu);
+unsigned long round_jiffies(unsigned long j);
+unsigned long __round_jiffies_relative(unsigned long j, int cpu);
+unsigned long round_jiffies_relative(unsigned long j);
+unsigned long __round_jiffies_up_relative(unsigned long j, int cpu);
+unsigned long round_jiffies_up(unsigned long j);
+unsigned long round_jiffies_up_relative(unsigned long j);
+
+int mod_timer_pending(struct timer_list *timer, unsigned long expires);
+int mod_timer(struct timer_list *timer, unsigned long expires);
+void add_timer(struct timer_list *timer);
+void add_timer_on(struct timer_list *timer, int cpu);
+int del_timer(struct timer_list *timer);
+int try_to_del_timer_sync(struct timer_list *timer);
+
+#ifdef CONFIG_SMP
+int del_timer_sync(struct timer_list *timer);
+#else
+#define del_timer_sync(t)	del_timer(t)
+#endif
+
+void run_local_timers(void);
+
+void __init init_timers(void);
+void msleep(unsigned int msecs);
+unsigned long msleep_interruptible(unsigned int msecs);
 
 #endif /* _LEGO_TIMER_H_ */
