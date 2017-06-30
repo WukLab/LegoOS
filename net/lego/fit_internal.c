@@ -392,7 +392,7 @@ int client_post_receives_message(ppc *ctx, int connection_id, int depth)
 		wr.sg_list = NULL;
 		wr.num_sge = 0;
 		ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
-		printk(KERN_CRIT "%s postrecv %d buffers wr_id %d\n", __func__, depth, wr.wr_id);
+		//printk(KERN_CRIT "%s postrecv %d buffers wr_id %d\n", __func__, depth, wr.wr_id);
 	}
 
 	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, FIT_STAT_CLEAR));
@@ -1316,11 +1316,10 @@ retry_send_reply_with_imm_request:
 	set_current_state(TASK_RUNNING);
 #endif
 
-#ifdef CURELAX_MODEL
+#ifdef CPURELAX_MODEL
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
 	{
-		//cpu_relax();
-		schedule();
+		cpu_relax();
 	}
 #endif
 
