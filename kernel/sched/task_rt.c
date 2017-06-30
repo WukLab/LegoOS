@@ -382,11 +382,34 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 }
 
 #ifdef CONFIG_SMP
-static int
-select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags)
+static int find_lowest_rq(struct task_struct *p, int prev_cpu)
 {
-	/* TODO a way to distribute tasks across CPUS! */
-	return cpu;
+	int cpu, target = prev_cpu;
+	unsigned int nr_running_min = UINT_MAX;
+
+	for_each_online_cpu(cpu) {
+		struct rt_rq *rt_rq = &(cpu_rq(cpu)->rt);
+
+		if (rt_rq->rt_nr_running == 0)
+			return cpu;
+
+		if (rt_rq->rt_nr_running < nr_running_min) {
+			nr_running_min = rt_rq->rt_nr_running;
+			target = cpu;
+		}
+	}
+	return target;
+}
+
+static int
+select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int wake_flags)
+{
+	int new_cpu = cpu;
+
+	/* Only fork time? */
+	if (sd_flag == SD_BALANCE_FORK)
+		new_cpu = find_lowest_rq(p, cpu);
+	return new_cpu;
 }
 #endif
 

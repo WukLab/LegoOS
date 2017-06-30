@@ -50,6 +50,8 @@
 asmlinkage __printf(1, 2)
 int printk(const char *fmt, ...);
 
+int vprintk(const char *fmt, va_list args);
+
 #ifndef pr_fmt
 #define pr_fmt(fmt) fmt
 #endif
