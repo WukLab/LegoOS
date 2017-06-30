@@ -10,6 +10,8 @@
 #ifndef _LEGO_JIFFIES_H_
 #define _LEGO_JIFFIESS_H_
 
+#include <lego/time.h>
+
 #define HZ	CONFIG_HZ
 
 /*
@@ -115,6 +117,36 @@ int register_refined_jiffies(long clock_tick_rate);
 	 ((long)((a) - (b)) >= 0))
 #define time_before_eq(a,b)     time_after_eq(b,a)
 
-extern unsigned long msecs_to_jiffies(const unsigned int m);
+/*
+ * Calculate whether a is in the range of [b, c].
+ */
+#define time_in_range(a,b,c) \
+	(time_after_eq(a,b) && \
+	 time_before_eq(a,c))
+
+/*
+ * Calculate whether a is in the range of [b, c).
+ */
+#define time_in_range_open(a,b,c) \
+	(time_after_eq(a,b) && \
+	 time_before(a,c))
+
+/*
+ * These four macros compare jiffies and 'a' for convenience.
+ */
+
+/* time_is_before_jiffies(a) return true if a is before jiffies */
+#define time_is_before_jiffies(a) time_after(jiffies, a)
+
+/* time_is_after_jiffies(a) return true if a is after jiffies */
+#define time_is_after_jiffies(a) time_before(jiffies, a)
+
+/*
+ * Convert various time units to each other:
+ */
+unsigned int jiffies_to_msecs(const unsigned long j);
+unsigned int jiffies_to_usecs(const unsigned long j);
+
+unsigned long msecs_to_jiffies(const unsigned int m);
 
 #endif /* _LEGO_JIFFIES_H_ */

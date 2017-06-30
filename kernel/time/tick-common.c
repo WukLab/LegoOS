@@ -11,6 +11,7 @@
 #include <lego/irq.h>
 #include <lego/smp.h>
 #include <lego/time.h>
+#include <lego/timer.h>
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
 #include <lego/irqdesc.h>
@@ -261,5 +262,6 @@ void tick_handle_periodic(struct clock_event_device *dev)
 		update_wall_time();
 	}
 
+	run_local_timers();
 	scheduler_tick();
 }
