@@ -1319,7 +1319,8 @@ retry_send_reply_with_imm_request:
 #ifdef CURELAX_MODEL
 	while(wait_send_reply_id==SEND_REPLY_WAIT)
 	{
-		cpu_relax();
+		//cpu_relax();
+		schedule();
 	}
 #endif
 
@@ -1349,7 +1350,7 @@ retry_send_reply_with_imm_request:
 	if(wait_send_reply_id < 0)
 	{
 		printk(KERN_CRIT "%s: [significant error] send-reply-imm fail with connection-%d inbox-%d status-%d\n", __func__, connection_id, inbox_id, wait_send_reply_id);
-		goto retry_send_reply_with_imm_request;
+		//goto retry_send_reply_with_imm_request;
 	}
 
 	return wait_send_reply_id;
