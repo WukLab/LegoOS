@@ -88,7 +88,7 @@ int client_find_cq(ppc *ctx, struct ib_cq *tar_cq)
 	return -1;
 }
 
-struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev)
+struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev, int mynodeid)
 {
 	int i;
 	int num_connections = MAX_CONNECTION;
@@ -101,6 +101,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 		printk(KERN_ALERT "FAIL to initialize ctx in client_init_ctx\n");
 		return NULL;
 	}
+	ctx->node_id = mynodeid;
 	ctx->size = size;
 	ctx->send_flags = IB_SEND_SIGNALED;
 	ctx->rx_depth = rx_depth;
@@ -186,6 +187,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	//ctx->send_cq[0] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
 	for(i=0;i<num_connections;i++)
 	{
+		printk(KERN_CRIT "%s mynodeid %d i %d %d\n", __func__, ctx->node_id, i, i/NUM_PARALLEL_CONNECTION);
 		if (i/NUM_PARALLEL_CONNECTION == ctx->node_id)
 			continue;
 		ctx->send_state[i] = SS_INIT;
@@ -239,7 +241,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			ib_destroy_qp(ctx->qp[i]);
 			return NULL;
 		}
-		printk(KERN_CRIT "created qp %d\n", i);
+		printk(KERN_CRIT "%s created qp %d\n", __func__, i);
 	}
 
 	//Do IMM local ring setup (imm-send-reply)
@@ -271,7 +273,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	return ctx;
 }
 
-ppc *client_init_interface(int ib_port, struct ib_device *ib_dev)
+ppc *client_init_interface(int ib_port, struct ib_device *ib_dev, int mynodeid)
 {
 	int	size = 4096;
 	int	rx_depth = RECV_DEPTH;
@@ -283,7 +285,7 @@ ppc *client_init_interface(int ib_port, struct ib_device *ib_dev)
 	page_size = PAGE_SIZE;
 	rcnt = 0;
 	scnt = 0;
-	ctx = client_init_ctx(size,rx_depth,ib_port, ib_dev);
+	ctx = client_init_ctx(size,rx_depth,ib_port, ib_dev, mynodeid);
 	if(!ctx)
 	{
 		printk(KERN_ALERT "Fail to do client_init_ctx\n");
@@ -496,6 +498,8 @@ int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, i
 		printk(KERN_ALERT "Fail to modify QP to RTS at connection %d\n", connection_id);
 		return 2;
 	}
+
+	printk(KERN_CRIT "%s connected conn %d destqpn %d\n", __func__, connection_id, destqpn);
 	return 0;
 }
 
@@ -733,6 +737,7 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 		spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
 		if(!list_empty(&(ctx->imm_waitqueue_perport[port].list)))
 		{
+			printk(KERN_CRIT "%s port %d got req\n", __func__, port);
 			new_request = list_entry(ctx->imm_waitqueue_perport[port].list.next, struct imm_header_from_cq_to_port, list);
 			list_del(&new_request->list);	
 			spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
@@ -744,6 +749,7 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 
 	offset = new_request->offset;
 	node_id = new_request->source_node_id;
+	printk(KERN_CRIT "%s got new req offset %d sourcenode %d\n", offset, node_id);
 	//free list
 	// XXX kmem_cache_free(imm_header_from_cq_to_port_cache, new_request);
 
@@ -1060,6 +1066,7 @@ int waiting_queue_handler(void *in)
 	ppc *ctx = (ppc *)in;
 	//allow_signal(SIGKILL);
 	
+	printk(KERN_CRIT "%s\n", __func__);
 	while(1)
 	{
 		while(list_empty(&(request_list.list)))
@@ -1081,6 +1088,7 @@ int waiting_queue_handler(void *in)
 			local_flag = 0;
 		switch(new_request->type)
 		{
+			printk(KERN_CRIT "%s got new req type %d\n", __func__, new_request->type);
 			case MSG_DO_RC_POST_RECEIVE:
 				//new_request->src_id keeps the connection_id (done by client_poll_cq)
 				client_post_receives_message(ctx, new_request->src_id, new_request->length);
@@ -1576,7 +1584,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	printk(KERN_CRIT "Start establish connection node %d\n", mynodeid);
 	init_global_lid_qpn();
 
-	ctx = client_init_interface(ib_port, ib_dev);
+	ctx = client_init_interface(ib_port, ib_dev, mynodeid);
 	if(!ctx)
 	{
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
