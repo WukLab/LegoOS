@@ -227,4 +227,6 @@ void arch_pick_mmap_layout(struct lego_mm_struct *mm);
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 struct vm_area_struct *find_vma(struct lego_mm_struct *mm, unsigned long addr);
 
+int vm_brk(struct lego_task_struct *p, unsigned long addr, unsigned long len);
+
 #endif /* _LEGO_COMP_MEMORY_H_ */

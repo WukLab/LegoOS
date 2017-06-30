@@ -1335,3 +1335,8 @@ unsigned long vm_mmap(struct lego_task_struct *p, struct lego_file *file,
 
 	return vm_mmap_pgoff(p, file, addr, len, prot, flag, offset >> PAGE_SHIFT);
 }
+
+int vm_brk(struct lego_task_struct *p, unsigned long addr, unsigned long len)
+{
+	return 0;
+}
