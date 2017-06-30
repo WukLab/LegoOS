@@ -348,7 +348,7 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 	ret->lkey = proc->lkey;
 	ret->rkey = proc->rkey;
 	ret->node_id = ctx->node_id;
-	printk(KERN_CRIT "%s length %d addr %p retaddr:%x lkey:%d rkey:%d\n", __func__, (int) length, addr, (unsigned int)ret->addr, ret->lkey, ret->rkey);
+	//printk(KERN_CRIT "%s length %d addr %p retaddr:%x lkey:%d rkey:%d\n", __func__, (int) length, addr, (unsigned int)ret->addr, ret->lkey, ret->rkey);
 	return ret;
 }
 
@@ -1636,8 +1636,8 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		ret_mr = client_ib_reg_mr(ctx, ctx->local_rdma_recv_rings[i], IMM_RING_SIZE,
 				IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
 		memcpy(&ctx->local_rdma_ring_mrs[i], ret_mr, sizeof(struct client_ibv_mr));
-		printk(KERN_CRIT "allocated local recv mr for node %d addr %p %p lkey %d rkey %d",
-				i, ctx->local_rdma_recv_rings[i], ret_mr->addr, ret_mr->lkey, ret_mr->rkey);
+		//printk(KERN_CRIT "allocated local recv mr for node %d addr %p %p lkey %d rkey %d",
+		//		i, ctx->local_rdma_recv_rings[i], ret_mr->addr, ret_mr->lkey, ret_mr->rkey);
 	}
 	/* array to store rdma ring mr for all remote nodes */
 	ctx->remote_rdma_ring_mrs = (struct client_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct client_ibv_mr), GFP_KERNEL);

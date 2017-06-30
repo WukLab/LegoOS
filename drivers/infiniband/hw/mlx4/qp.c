@@ -1736,7 +1736,7 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 
 		case IB_QPT_SMI:
 		case IB_QPT_GSI:
-			pr_info("%s queue type SMI/GSI %d\n", __func__, ibqp->qp_type);
+			//pr_info("%s queue type SMI/GSI %d\n", __func__, ibqp->qp_type);
 			err = build_mlx_header(to_msqp(qp), wr, ctrl, &seglen);
 			if (unlikely(err)) {
 				*bad_wr = wr;
@@ -1991,7 +1991,7 @@ int mlx4_ib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *qp_attr, int qp_attr
 
 	if (qp->state == IB_QPS_RESET) {
 		qp_attr->qp_state = IB_QPS_RESET;
-		pr_debug("%s state RESET\n", __func__);
+		//pr_debug("%s state RESET\n", __func__);
 		goto done;
 	}
 
