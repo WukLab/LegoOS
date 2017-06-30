@@ -186,6 +186,8 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	//ctx->send_cq[0] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
 	for(i=0;i<num_connections;i++)
 	{
+		if (i/NUM_PARALLEL_CONNECTION == ctx->node_id)
+			continue;
 		ctx->send_state[i] = SS_INIT;
 		ctx->recv_state[i] = RS_INIT;
 
@@ -237,6 +239,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			ib_destroy_qp(ctx->qp[i]);
 			return NULL;
 		}
+		printk(KERN_CRIT "created qp %d\n", i);
 	}
 
 	//Do IMM local ring setup (imm-send-reply)
@@ -1452,62 +1455,6 @@ int client_send_test(ppc *ctx, int connection_id, int type, void *addr, int size
 			{
 				printk(KERN_ALERT "send failed at connection %d as %d\n", connection_id, wc[i].status);
 				spin_unlock(&connection_lock[connection_id]);
-				return 2;
-			}
-		}
-	}
-	else
-	{
-		printk(KERN_INFO "%s send fail %d\n", __func__, connection_id);
-	}
-	spin_unlock(&connection_lock[connection_id]);
-	return ret;
-}
-
-int client_send_message_lego(ppc *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority)
-{	
-	struct ib_send_wr wr, *bad_wr = NULL;
-	struct ib_sge sge[1];
-	int ret;
-	int ne, i;
-	struct ib_wc wc[2];
-	struct ibapi_header output_header;
-	void *output_header_addr;
-
-	printk(KERN_CRIT "%s conn %d addr %p size %d sendcq %p\n", __func__, connection_id, addr, size, ctx->send_cq[connection_id]);
-	spin_lock(&connection_lock[connection_id]);
-
-	memset(&wr, 0, sizeof(wr));
-	memset(sge, 0, sizeof(struct ib_sge)*2);
-
-	wr.wr_id = type;
-	wr.opcode = IB_WR_SEND;
-	wr.sg_list = sge;
-	wr.num_sge = 1;
-	wr.send_flags = IB_SEND_SIGNALED;
-
-	sge[0].addr = (uintptr_t)client_ib_reg_mr_addr(ctx, addr, size);
-	sge[0].length = size;
-	sge[0].lkey = ctx->proc->lkey;
-
-	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
-	printk(KERN_CRIT "%s headeraddr %p %p bufaddr %p %p lkey %d\n",
-		__func__, &output_header, output_header_addr, addr, sge[1].addr, ctx->proc->lkey);
-	if(ret==0)
-	{
-		do{
-			ne = ib_poll_cq(ctx->send_cq[connection_id], 1, wc);
-			if(ne < 0)
-			{
-				printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
-				return 1;
-			}
-		}while(ne<1);
-		for(i=0;i<ne;i++)
-		{
-			if(wc[i].status!=IB_WC_SUCCESS)
-			{
-				printk(KERN_ALERT "send failed at connection %d as %d\n", connection_id, wc[i].status);
 				return 2;
 			}
 		}
