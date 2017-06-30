@@ -208,7 +208,6 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
 	spin_lock_irqsave(&slob_lock, flags);
 	/* Iterate through each partially free page, try to find room */
 	list_for_each_entry(sp, slob_list, lru) {
-printk("list search %d number of runs\n", counter++);
 #ifdef CONFIG_NUMA
 		/*
 		 * If there's a node specification, search for a partial
@@ -355,7 +354,6 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 	unsigned int *m;
 	int align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
 	void *ret;
-	printk("requested size: %zu\n", size);
 	if (size < PAGE_SIZE - align) {
 		if (!size)
 			return ZERO_SIZE_PTR;
@@ -373,7 +371,6 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 		ret = slob_new_pages(gfp, order, node);
 
 	}
-	printk("allocated size: %zu, %p\n", ksize(ret), ret);
 	return ret;
 }
 
