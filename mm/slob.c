@@ -196,7 +196,6 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
 	struct list_head *slob_list;
 	slob_t *b = NULL;
 	unsigned long flags;
-	int counter = 0;
 
 	if (size < SLOB_BREAK1)
 		slob_list = &free_slob_small;
