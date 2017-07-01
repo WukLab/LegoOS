@@ -297,7 +297,7 @@ int ib_register_device(struct ib_device *device)
 
 	global_device = device;
 	//list_add_tail(&device->core_list, &device_list);
-	pr_debug("%s added device %p\n", __func__, device);
+	//pr_debug("%s added device %p\n", __func__, device);
 
 	device->reg_state = IB_DEV_REGISTERED;
 
@@ -326,7 +326,7 @@ void ib_unregister_device(struct ib_device *device)
 	struct ib_client_data *context, *tmp;
 	unsigned long flags;
 
-	pr_info("%s\n", __func__);
+	//pr_info("%s\n", __func__);
 	mutex_lock(&device_mutex);
 
 	list_for_each_entry_reverse(client, &client_list, list)
@@ -368,19 +368,19 @@ int ib_register_client(struct ib_client *client)
 	mutex_lock(&device_mutex);
 
 	list_add_tail(&client->list, &client_list);
-	pr_debug("%s added client %p\n", __func__, client);
+	//pr_debug("%s added client %p\n", __func__, client);
 	//list_for_each_entry(device, &device_list, core_list)
 	if (global_device != NULL) {
 		device = global_device;
-		pr_debug("%s device %p\n", __func__, device);
+		//pr_debug("%s device %p\n", __func__, device);
 		if (client->add && !add_client_context(device, client)) {
-			pr_debug("calling client add\n");
+			//pr_debug("calling client add\n");
 			client->add(device);
 		}
 	}
 
-	pr_info("%s exit\n", __func__);
 	mutex_unlock(&device_mutex);
+	//pr_info("%s exit\n", __func__);
 	return 0;
 }
 

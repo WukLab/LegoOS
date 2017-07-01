@@ -276,8 +276,8 @@ int mlx4_cq_alloc(struct mlx4_dev *dev, int nent, struct mlx4_mtt *mtt,
 	if (err)
 		goto err_put;
 
-	pr_debug("%s cq_table %p, tree %p cqn %p cq %p\n", 
-			__func__, cq_table, cq_table->tree, cq->cqn, cq);
+	//pr_debug("%s cq_table %p, tree %p cqn %p cq %p\n", 
+	//		__func__, cq_table, cq_table->tree, cq->cqn, cq);
 	spin_lock_irq(&cq_table->lock);
 	cq_table_rb_insert(&cq_table->tree, cq->cqn, cq);
 	spin_unlock_irq(&cq_table->lock);
@@ -365,7 +365,7 @@ int mlx4_init_cq_table(struct mlx4_dev *dev)
 
 	err = mlx4_bitmap_init(&cq_table->bitmap, dev->caps.num_cqs,
 			       dev->caps.num_cqs - 1, dev->caps.reserved_cqs, 0);
-	pr_debug("%s %d\n", __func__, err);
+	//pr_debug("%s %d\n", __func__, err);
 	if (err)
 		return err;
 

@@ -46,7 +46,7 @@
 //#include <lego/kref.h>
 #include <lego/list.h>
 //#include <lego/rwsem.h>
-//#include <lego/scatterlist.h>
+#include <lego/scatterlist.h>
 //#include <lego/workqueue.h>
 
 #include <lego/atomic.h>

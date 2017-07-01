@@ -325,8 +325,8 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	//INIT_DELAYED_WORK(&mad_agent_priv->timed_work, timeout_sends);
 	INIT_WORK(&mad_agent_priv->timed_work, timeout_sends);
 	INIT_LIST_HEAD(&mad_agent_priv->local_list);
-	pr_info("%s init local completion reg_req %p qpn %d qptype %d mad_agent_priv %p, local_work %p\n", 
-			__func__, reg_req, qpn, qp_type, mad_agent_priv, &mad_agent_priv->local_work);
+	//pr_info("%s init local completion reg_req %p qpn %d qptype %d mad_agent_priv %p, local_work %p\n", 
+	//		__func__, reg_req, qpn, qp_type, mad_agent_priv, &mad_agent_priv->local_work);
 	INIT_WORK(&mad_agent_priv->local_work, local_completions);
 	atomic_set(&mad_agent_priv->refcount, 1);
 	init_completion(&mad_agent_priv->comp);
@@ -701,7 +701,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	struct ib_wc mad_wc;
 	struct ib_send_wr *send_wr = &mad_send_wr->send_wr;
 
-	pr_info("%s mad_agent_priv %p\n", __func__, mad_agent_priv);
+	//pr_info("%s mad_agent_priv %p\n", __func__, mad_agent_priv);
 	if (device->node_type == RDMA_NODE_IB_SWITCH &&
 	    smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 		port_num = send_wr->wr.ud.port_num;
@@ -757,13 +757,13 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	ret = device->process_mad(device, 0, port_num, &mad_wc, NULL,
 				  (struct ib_mad *)smp,
 				  (struct ib_mad *)&mad_priv->mad);
-	pr_info("%s got mad ret %d\n", __func__, ret);
+	//pr_info("%s got mad ret %d\n", __func__, ret);
 	switch (ret)
 	{
 	case IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY:
 		if (ib_response_mad(&mad_priv->mad.mad) &&
 		    mad_agent_priv->agent.recv_handler) {
-			pr_info("%s got mad ret %d is response mad\n", __func__, ret);
+			//pr_info("%s got mad ret %d is response mad\n", __func__, ret);
 			local->mad_priv = mad_priv;
 			local->recv_mad_agent = mad_agent_priv;
 			/*
@@ -804,7 +804,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 		local->recv_mad_agent = recv_mad_agent;
 		break;
 	default:
-		pr_info("%s got mad ret %d result not success\n", __func__, ret);
+		//pr_info("%s got mad ret %d result not success\n", __func__, ret);
 		kfree(mad_priv);
 		//kmem_cache_free(ib_mad_cache, mad_priv);
 		kfree(local);
@@ -819,7 +819,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	spin_lock_irqsave(&mad_agent_priv->lock, flags);
 	list_add_tail(&local->completion_list, &mad_agent_priv->local_list);
 	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
-	pr_info("before mad queue_work\n");
+	//pr_info("before mad queue_work\n");
 	queue_work(mad_agent_priv->qp_info->port_priv->wq,
 		   &mad_agent_priv->local_work);
 	ret = 1;
@@ -1045,7 +1045,7 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 	qp_info = mad_send_wr->mad_agent_priv->qp_info;
 	mad_send_wr->send_wr.wr_id = (unsigned long)&mad_send_wr->mad_list;
 	mad_send_wr->mad_list.mad_queue = &qp_info->send_queue;
-	pr_info("%s wr_id %x qpn %d\n", __func__, mad_send_wr->send_wr.wr_id, mad_agent->qp->qp_num);
+	//pr_info("%s wr_id %x qpn %d\n", __func__, mad_send_wr->send_wr.wr_id, mad_agent->qp->qp_num);
 
 	mad_agent = mad_send_wr->send_buf.mad_agent;
 	sge = mad_send_wr->sg_list;
@@ -1108,7 +1108,7 @@ int ib_post_send_mad(struct ib_mad_send_buf *send_buf,
 					   struct ib_mad_send_wr_private,
 					   send_buf);
 		mad_agent_priv = mad_send_wr->mad_agent_priv;
-		pr_info("%s mad_agent_priv %p\n", __func__, mad_agent_priv);
+		//pr_info("%s mad_agent_priv %p\n", __func__, mad_agent_priv);
 
 		if (!send_buf->mad_agent->send_handler ||
 		    (send_buf->timeout_ms &&
@@ -1839,7 +1839,7 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 	struct ib_mad_send_wc mad_send_wc;
 	unsigned long flags;
 
-	pr_info("%s\n", __func__);
+	//pr_info("%s\n", __func__);
 	INIT_LIST_HEAD(&mad_recv_wc->rmpp_list);
 	list_add(&mad_recv_wc->recv_buf.list, &mad_recv_wc->rmpp_list);
 	if (mad_agent_priv->agent.rmpp_version) {
@@ -1898,8 +1898,8 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 
 	mad_priv_hdr = container_of(mad_list, struct ib_mad_private_header,
 				    mad_list);
-	pr_info("%s wc %p wr_id %x mad_list %p mad_priv_hdr %p qp %p qpn %d\n",
-		__func__, wc, wc->wr_id, mad_list, mad_priv_hdr, qp_info->qp, qp_info->qp->qp_num);
+	//pr_info("%s wc %p wr_id %x mad_list %p mad_priv_hdr %p qp %p qpn %d\n",
+	//	__func__, wc, wc->wr_id, mad_list, mad_priv_hdr, qp_info->qp, qp_info->qp->qp_num);
 	recv = container_of(mad_priv_hdr, struct ib_mad_private, header);
 	ib_dma_unmap_single(port_priv->device,
 			    recv->header.mapping,
@@ -2170,7 +2170,7 @@ static void ib_mad_send_done_handler(struct ib_mad_port_private *port_priv,
 	send_queue = mad_list->mad_queue;
 	qp_info = send_queue->qp_info;
 	
-	pr_info("%s qp %p qpn %d\n", __func__, qp_info->qp, qp_info->qp->qp_num);
+	//pr_info("%s qp %p qpn %d\n", __func__, qp_info->qp, qp_info->qp->qp_num);
 
 retry:
 	ib_dma_unmap_single(mad_send_wr->send_buf.mad_agent->device,
@@ -2298,7 +2298,7 @@ static void ib_mad_completion_handler(struct ib_mad_port_private *port_priv)
 	//struct ib_mad_port_private *port_priv;
 	struct ib_wc wc;
 
-	pr_info("%s\n", __func__);
+	//pr_info("%s\n", __func__);
 /* TODO: changing to busy poll before we have interrupt */
 //	port_priv = container_of(work, struct ib_mad_port_private, work);
 //	ib_req_notify_cq(port_priv->cq, IB_CQ_NEXT_COMP);
@@ -2311,12 +2311,12 @@ again:
 		if (wc.status == IB_WC_SUCCESS) {
 			switch (wc.opcode) {
 			case IB_WC_SEND:
-				pr_info("%s got successful send cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
+				//pr_info("%s got successful send cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
 				ib_mad_send_done_handler(port_priv, &wc);
 				break;
 			case IB_WC_RECV:
 				mad_got_one++;
-				pr_info("%s got successful recv cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
+				//pr_info("%s got successful recv cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
 				ib_mad_recv_done_handler(port_priv, &wc);
 				break;
 			default:
@@ -2751,7 +2751,7 @@ static int ib_mad_port_start(struct ib_mad_port_private *port_priv)
 	}
 
 	for (i = 0; i < IB_MAD_QPS_CORE; i++) {
-		pr_info("%s opening qp %d\n", __func__, i);
+		//pr_info("%s opening qp %d\n", __func__, i);
 		qp = port_priv->qp_info[i].qp;
 		if (!qp)
 			continue;
@@ -2800,7 +2800,7 @@ static int ib_mad_port_start(struct ib_mad_port_private *port_priv)
 		if (!port_priv->qp_info[i].qp)
 			continue;
 
-		pr_info("post_recv qp %d\n", i);
+		//pr_info("post_recv qp %d\n", i);
 		ret = ib_mad_post_receive_mads(&port_priv->qp_info[i], NULL);
 		if (ret) {
 			printk(KERN_ERR PFX "Couldn't post receive WRs\n");
@@ -2898,7 +2898,7 @@ static int ib_mad_port_open(struct ib_device *device,
 	unsigned long flags;
 	char name[sizeof "ib_mad123"];
 
-	pr_info("%s portnum %d\n", __func__, port_num);
+	//pr_info("%s portnum %d\n", __func__, port_num);
 	/* Create new device info */
 	port_priv = kzalloc(sizeof *port_priv, GFP_KERNEL);
 	if (!port_priv) {
@@ -2953,7 +2953,7 @@ static int ib_mad_port_open(struct ib_device *device,
 		goto error7;
 
 	snprintf(name, sizeof name, "ib_mad%d", port_num);
-	pr_info("%s create work\n", __func__);
+	//pr_info("%s create work\n", __func__);
 //	port_priv->wq = create_singlethread_workqueue(name);
 //	if (!port_priv->wq) {
 //		ret = -ENOMEM;
@@ -3048,7 +3048,7 @@ static void ib_mad_init_device(struct ib_device *device)
 	//device->phys_port_cnt = 1;
 	end   = device->phys_port_cnt;
 
-	pr_info("%s device %p\n", __func__, device);
+	//pr_info("%s device %p\n", __func__, device);
 	for (i = start; i <= end; i++) {
 		if (ib_mad_port_open(device, i)) {
 			printk(KERN_ERR PFX "Couldn't open %s port %d\n",
@@ -3111,7 +3111,7 @@ int ib_mad_init(void)
 {
 	int ret;
 
-	pr_info("%s\n", __func__);
+	//pr_info("%s\n", __func__);
 	mad_recvq_size = min(mad_recvq_size, IB_MAD_QP_MAX_SIZE);
 	mad_recvq_size = max(mad_recvq_size, IB_MAD_QP_MIN_SIZE);
 
@@ -3137,7 +3137,7 @@ int ib_mad_init(void)
 		ret = -EINVAL;
 		goto error2;
 	}
-	pr_info("%s exit\n", __func__);
+	//pr_info("%s exit\n", __func__);
 
 	return 0;
 

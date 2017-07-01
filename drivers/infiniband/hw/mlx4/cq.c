@@ -154,8 +154,8 @@ struct ib_cq *mlx4_ib_create_cq(struct ib_device *ibdev, int entries, int vector
 	spin_lock_init(&cq->lock);
 	cq->resize_buf = NULL;
 
-	pr_debug("%s dev %p, cq %p, db %p\n", 
-			__func__, dev->dev, cq, cq->db);
+	//pr_debug("%s dev %p, cq %p, db %p\n", 
+	//		__func__, dev->dev, cq, cq->db);
 	err = mlx4_db_alloc(dev->dev, &cq->db, 1);
 	if (err)
 		goto err_cq;
@@ -179,7 +179,7 @@ struct ib_cq *mlx4_ib_create_cq(struct ib_device *ibdev, int entries, int vector
 	cq->mcq.comp  = mlx4_ib_cq_comp;
 	cq->mcq.event = mlx4_ib_cq_event;
 
-	pr_debug("%s exit successfully created cq %d\n", __func__, cq->mcq.cqn);
+	//pr_debug("%s exit successfully created cq %d\n", __func__, cq->mcq.cqn);
 	return &cq->ibcq;
 
 err_dbmap:

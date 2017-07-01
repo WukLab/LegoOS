@@ -99,8 +99,8 @@ static void qp_table_rb_insert(struct rb_root *root, u32 qpn, struct mlx4_qp *ne
 			link = &(*link)->rb_right;
 	}
 
-	pr_debug("%s new_netry %p node %p parent %p root %p\n",
-			__func__, new_entry, &new_entry->node, parent, root);
+	//pr_debug("%s new_netry %p node %p parent %p root %p\n",
+	//		__func__, new_entry, &new_entry->node, parent, root);
 	rb_link_node(&new_entry->node, parent, link);
 	rb_insert_color(&new_entry->node, root);
 }
@@ -177,7 +177,7 @@ int mlx4_qp_modify(struct mlx4_dev *dev, struct mlx4_mtt *mtt,
 	struct mlx4_cmd_mailbox *mailbox;
 	int ret = 0;
 
-	pr_debug("%s curr_state %lx new_state %lx\n", __func__, cur_state, new_state);
+	//pr_debug("%s curr_state %lx new_state %lx\n", __func__, cur_state, new_state);
 	if (cur_state >= MLX4_QP_NUM_STATE || new_state >= MLX4_QP_NUM_STATE ||
 	    !op[cur_state][new_state])
 		return -EINVAL;
@@ -220,9 +220,9 @@ int mlx4_qp_reserve_range(struct mlx4_dev *dev, int cnt, int align, int *base)
 	struct mlx4_qp_table *qp_table = &priv->qp_table;
 	int qpn;
 
-	pr_debug("%s cnt %d align %d\n", __func__, cnt, align);
+	//pr_debug("%s cnt %d align %d\n", __func__, cnt, align);
 	qpn = mlx4_bitmap_alloc_range(&qp_table->bitmap, cnt, align);
-	pr_debug("%s got qpn %d\n", __func__, qpn);
+	//pr_debug("%s got qpn %d\n", __func__, qpn);
 	if (qpn == -1)
 		return -ENOMEM;
 
@@ -339,7 +339,7 @@ int mlx4_init_qp_table(struct mlx4_dev *dev)
 	spin_lock_init(&qp_table->lock);
 	dev->qp_table_tree = RB_ROOT;
 
-	pr_debug("%s\n", __func__);
+	//pr_debug("%s\n", __func__);
 	/*
 	 * We reserve 2 extra QPs per port for the special QPs.  The
 	 * block of special QPs must be aligned to a multiple of 8, so

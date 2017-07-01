@@ -27,7 +27,7 @@
 
 #define CIRCULAR_BUFFER_LENGTH 256
 
-#define MAX_NODE 2
+#define MAX_NODE 3
 #define MAX_NODE_BIT 5
 
 #define LISTEN_PORT 18500
@@ -67,10 +67,13 @@
 //Model 2 --> 2-6-24 (Send-recv-opcode, port, offset)
 #define IMM_SEND_REPLY_SEND	0x80000000
 #define IMM_SEND_REPLY_RECV	0x40000000
+#define IMM_ACK			0x20000000
 #define IMM_PORT_PUSH_BIT	24
 #define IMM_GET_PORT_NUMBER(imm) (imm<<2)>>26
 #define IMM_GET_OFFSET		0x00ffffff
 #define IMM_GET_SEMAPHORE	0x00ffffff
+//#define IMM_NODE_BITS		24
+//#define IMM_GET_NODE_ID(imm)	(imm>>24)&0xff
 #define IMM_GET_OPCODE		0x0f000000
 #define IMM_GET_OPCODE_NUMBER(imm) (imm<<4)>>28
 #define IMM_DATA_BIT 32
@@ -80,9 +83,12 @@
 #define IMM_MAX_SIZE IMM_RING_SIZE/NUM_OF_CORES
 #define IMM_SEND_SLEEP_SIZE_THRESHOLD 40960
 #define IMM_SEND_SLEEP_TIME_THRESHOLD 20
+//#define IMM_PORT_CACHE_SIZE 128
+//#define RDMA_RING_SIZE 128
 #define IMM_PORT_CACHE_SIZE 1024*1024*4
 #define RDMA_RING_SIZE 1024*1024*4
-#define IMM_ACK_PORTION = 8;
+#define IMM_ACK_FREQ 1024*512
+//#define IMM_ACK_PORTION 8
 
 //Lock related
 #define FIT_MAX_LOCK_NUM 64
@@ -100,6 +106,7 @@ enum mode {
 	M_WRITE,
 	M_READ,
 	FIT_SEND_MESSAGE_IMM_ONLY,
+	FIT_SEND_ACK_IMM_ONLY,
 	FIT_SEND_MESSAGE_HEADER_AND_IMM,
 	FIT_SEND_MESSAGE_HEADER_ONLY
 };
@@ -423,9 +430,12 @@ struct pingpong_context {
 	int *atomic_buffer_cur_length;
 
 	void **local_rdma_recv_rings;
-	unsigned long *remote_rdma_ring_mrs_offset;
+	int *remote_rdma_ring_mrs_offset;
+	int *remote_last_ack_index;
 	spinlock_t *remote_imm_offset_lock;
 	struct client_ibv_mr *local_rdma_ring_mrs;
+	int *local_last_ack_index;
+	spinlock_t *local_last_ack_index_lock;
 	struct client_ibv_mr *remote_rdma_ring_mrs;
 
    	int (*send_handler)(char *addr, uint32_t size, int sender_id);

@@ -894,7 +894,7 @@ static int mlx4_setup_hca(struct mlx4_dev *dev)
 	int port;
 	__be32 ib_port_default_caps;
 
-	pr_debug("%s enter\n",__func__);
+	//pr_debug("%s enter\n",__func__);
 
 	err = mlx4_init_uar_table(dev);
 	if (err) {
@@ -1040,7 +1040,7 @@ static int mlx4_setup_hca(struct mlx4_dev *dev)
 	}
 	mlx4_set_port_mask(dev);
 
-	pr_debug("%s exit\n",__func__);
+	//pr_debug("%s exit\n",__func__);
 
 	return 0;
 
