@@ -571,8 +571,8 @@ void *mlx4_ib_add(struct mlx4_dev *dev)
 		printk(KERN_ERR "Device struct alloc failed\n");
 		return NULL;
 	}
-	printk_once(KERN_INFO "%s %s ibdev %p mlx4dev %p pcidev %p\n", 
-			__func__, mlx4_ib_version, ibdev, dev, dev->pdev);
+	//printk_once(KERN_INFO "%s %s ibdev %p mlx4dev %p pcidev %p\n", 
+	//		__func__, mlx4_ib_version, ibdev, dev, dev->pdev);
 
 	if (mlx4_pd_alloc(dev, &ibdev->priv_pdn))
 		goto err_dealloc;
@@ -597,8 +597,8 @@ void *mlx4_ib_add(struct mlx4_dev *dev)
 	ibdev->ib_dev.dma_device	= dev->pdev;
 	ibdev->ib_dev.dev		= *(dev->pdev);
 
-	printk_once(KERN_INFO "%s %s ibdev %p mlx4dev %p pcidev %p dmadev %p\n", 
-			__func__, mlx4_ib_version, ibdev, dev, dev->pdev,  ibdev->ib_dev.dma_device);
+	//printk_once(KERN_INFO "%s %s ibdev %p mlx4dev %p pcidev %p dmadev %p\n", 
+	//		__func__, mlx4_ib_version, ibdev, dev, dev->pdev,  ibdev->ib_dev.dma_device);
 	ibdev->ib_dev.query_device	= mlx4_ib_query_device;
 	ibdev->ib_dev.query_port	= mlx4_ib_query_port;
 	//ibdev->ib_dev.get_link_layer	= mlx4_ib_port_link_layer;

@@ -1110,7 +1110,7 @@ int init_workqueues(void)
 			pid = create_and_start_worker(pool);
 			BUG_ON(pid < 0);
 			if (mycpu != cpu) {
-				pr_info("%s scheduling pid %d to cpu %d\n", __func__, pid, cpu);
+				//pr_info("%s scheduling pid %d to cpu %d\n", __func__, pid, cpu);
 				sched_setaffinity(pid, cpumask_of(cpu));
 			}
 		}

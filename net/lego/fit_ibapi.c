@@ -229,13 +229,13 @@ int lego_ib_init(void)
 	ibapi_establish_conn(1, MY_NODE_ID);
 
 	/* begin testing */
-	char *buf = kmalloc(10, GFP_KERNEL);
-	char *retb = kmalloc(10, GFP_KERNEL);
+	char *buf = kmalloc(64, GFP_KERNEL);
+	char *retb = kmalloc(64, GFP_KERNEL);
 	uintptr_t desc;
 	int i;
 	if (MY_NODE_ID == 1) {
-		for (i = 0; i < 100; i++) {
-		ret = ibapi_receive_message(0, buf, 10, &desc);
+		for (i = 0; i < 1000; i++) {
+		ret = ibapi_receive_message(0, buf, 32, &desc);
 		printk(KERN_CRIT "received message ret %d %c\n", ret, buf[0]);
 		retb[0] = '1';
 		ret = ibapi_reply_message(retb, 10, desc);
@@ -245,8 +245,8 @@ int lego_ib_init(void)
 	else {
 		buf[0] = 'a';
 		buf[1] = 'b';
-		for (i = 0; i < 100; i++) {
-		ret = ibapi_send_reply_imm(1, buf, 10, retb, 10);
+		for (i = 0; i < 1000; i++) {
+		ret = ibapi_send_reply_imm(1, buf, 32, retb, 10);
 		printk(KERN_CRIT "ibapi_send_reply_imm return %d val %c\n", ret, retb[0]);
 		}
 	}

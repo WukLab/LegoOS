@@ -593,10 +593,10 @@ int mlx4_QUERY_FW(struct mlx4_dev *dev)
 		return PTR_ERR(mailbox);
 	outbox = mailbox->buf;
 
-	pr_debug("%s got mailbox %p\n", __func__, mailbox);
+	//pr_debug("%s got mailbox %p\n", __func__, mailbox);
 	err = mlx4_cmd_box(dev, 0, mailbox->dma, 0, 0, MLX4_CMD_QUERY_FW,
 			    MLX4_CMD_TIME_CLASS_A);
-	pr_debug("%s cmd box ret %d\n", __func__, err);
+	//pr_debug("%s cmd box ret %d\n", __func__, err);
 	if (err)
 		goto out;
 
@@ -852,7 +852,7 @@ int mlx4_INIT_PORT(struct mlx4_dev *dev, int port)
 	u32 flags;
 	u16 field;
 
-	pr_info("%s\n", __func__);
+	//pr_info("%s\n", __func__);
 	if (dev->flags & MLX4_FLAG_OLD_PORT_CMDS) {
 #define INIT_PORT_IN_SIZE          256
 #define INIT_PORT_FLAGS_OFFSET     0x00
