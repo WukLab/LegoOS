@@ -803,10 +803,11 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 	printk(KERN_CRIT "%s last_ack %d offset %d\n", __func__, last_ack, offset);
 	spin_lock(&ctx->local_last_ack_index_lock[node_id]);
 	last_ack = ctx->local_last_ack_index[node_id];
-	if( (offset>= last_ack && offset - last_ack >= IMM_PORT_CACHE_SIZE/IMM_ACK_PORTION ) ||
-	    (offset< last_ack && offset + IMM_PORT_CACHE_SIZE - last_ack >= IMM_PORT_CACHE_SIZE/IMM_ACK_PORTION))
+	if( (offset>= last_ack && offset - last_ack >= 1024) || //IMM_PORT_CACHE_SIZE/IMM_ACK_PORTION ) ||
+	    (offset< last_ack && offset + IMM_PORT_CACHE_SIZE - last_ack >= 1024)) //IMM_PORT_CACHE_SIZE/IMM_ACK_PORTION))
 	{
 		ack_flag = 1;
+		printk(KERN_CRIT "need ack\n");
 		ctx->local_last_ack_index[node_id] = offset;
 	}
 	spin_unlock(&ctx->local_last_ack_index_lock[node_id]);
