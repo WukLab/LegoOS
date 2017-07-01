@@ -183,7 +183,7 @@ int ibapi_establish_conn(int ib_port, int mynodeid)
 {
 	ppc *ctx;
 	
-	printk(KERN_CRIT "Start calling rc_internal to create FIT based on %p\n", ibapi_dev);
+	//printk(KERN_CRIT "Start calling rc_internal to create FIT based on %p\n", ibapi_dev);
 	
 	ctx = client_establish_conn(ibapi_dev, ib_port, mynodeid);
 	
@@ -195,8 +195,7 @@ int ibapi_establish_conn(int ib_port, int mynodeid)
 
 	FIT_ctx = ctx;
 
-	printk(KERN_ALERT "%s: return before establish connection with NODE_ID: %d\n", __func__, ctx->node_id);
-	printk(KERN_CRIT "Pass all possible test and return\n");
+	printk(KERN_CRIT "FIT layer done with all initialization on node %d. Ready to go!\n", ctx->node_id);
 
 	return ctx->node_id;
 }
@@ -236,10 +235,10 @@ int lego_ib_init(void)
 	if (MY_NODE_ID == 1) {
 		for (i = 0; i < 1000; i++) {
 		ret = ibapi_receive_message(0, buf, 32, &desc);
-		printk(KERN_CRIT "received message ret %d %c\n", ret, buf[0]);
+		//printk(KERN_CRIT "received message ret %d %c\n", ret, buf[0]);
 		retb[0] = '1';
 		ret = ibapi_reply_message(retb, 10, desc);
-		printk(KERN_CRIT "replied message ret %d\n", ret);
+		//printk(KERN_CRIT "replied message ret %d\n", ret);
 		}
 	}
 	else {
@@ -247,7 +246,7 @@ int lego_ib_init(void)
 		buf[1] = 'b';
 		for (i = 0; i < 1000; i++) {
 		ret = ibapi_send_reply_imm(1, buf, 32, retb, 10);
-		printk(KERN_CRIT "ibapi_send_reply_imm return %d val %c\n", ret, retb[0]);
+		//printk(KERN_CRIT "ibapi_send_reply_imm return %d val %c\n", ret, retb[0]);
 		}
 	}
 	return 0;

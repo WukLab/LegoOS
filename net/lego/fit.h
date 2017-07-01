@@ -27,7 +27,7 @@
 
 #define CIRCULAR_BUFFER_LENGTH 256
 
-#define MAX_NODE 2
+#define MAX_NODE 3
 #define MAX_NODE_BIT 5
 
 #define LISTEN_PORT 18500
@@ -72,8 +72,8 @@
 #define IMM_GET_PORT_NUMBER(imm) (imm<<2)>>26
 #define IMM_GET_OFFSET		0x00ffffff
 #define IMM_GET_SEMAPHORE	0x00ffffff
-#define IMM_NODE_BITS		24
-#define IMM_GET_NODE_ID(imm)	(imm>>24)&0xff
+//#define IMM_NODE_BITS		24
+//#define IMM_GET_NODE_ID(imm)	(imm>>24)&0xff
 #define IMM_GET_OPCODE		0x0f000000
 #define IMM_GET_OPCODE_NUMBER(imm) (imm<<4)>>28
 #define IMM_DATA_BIT 32
@@ -87,7 +87,7 @@
 //#define RDMA_RING_SIZE 128
 #define IMM_PORT_CACHE_SIZE 1024*1024*4
 #define RDMA_RING_SIZE 1024*1024*4
-#define IMM_ACK_PORTION 1024*4
+#define IMM_ACK_FREQ 1024*512
 //#define IMM_ACK_PORTION 8
 
 //Lock related
