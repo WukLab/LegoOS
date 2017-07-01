@@ -201,8 +201,8 @@ static int ib_link_query_port(struct ib_device *ibdev, u8 port,
 	props->max_vl_num	= out_mad->data[37] >> 4;
 	props->init_type_reply	= out_mad->data[41] >> 4;
 
-	pr_info("%s lid %d sm_lid %d state %x max_mtu %d active_speed\n", 
-		__func__, props->lid, props->sm_lid, props->state, props->max_mtu, props->active_speed); 
+	//pr_info("%s lid %d sm_lid %d state %x max_mtu %d active_speed\n", 
+	//	__func__, props->lid, props->sm_lid, props->state, props->max_mtu, props->active_speed); 
 	/* Check if extended speeds (EDR/FDR/...) are supported */
 	if (props->port_cap_flags & IB_PORT_EXTENDED_SPEEDS_SUP) {
 		ext_active_speed = out_mad->data[62] >> 4;
@@ -421,7 +421,7 @@ static int mlx4_ib_modify_port(struct ib_device *ibdev, u8 port, int mask,
 	u32 cap_mask;
 	int err;
 
-	pr_info("%s mask %x\n", __func__, mask);
+	//pr_info("%s mask %x\n", __func__, mask);
 	mutex_lock(&to_mdev(ibdev)->cap_mask_mutex);
 
 	err = mlx4_ib_query_port(ibdev, port, &attr);
@@ -661,7 +661,7 @@ void *mlx4_ib_add(struct mlx4_dev *dev)
 
 	ibdev->ib_active = true;
  
- 	pr_debug("%s successful ibdev %p\n", __func__, ibdev);
+ 	//pr_debug("%s successful ibdev %p\n", __func__, ibdev);
 	return ibdev;
 
 err_notif:

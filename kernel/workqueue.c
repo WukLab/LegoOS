@@ -447,8 +447,8 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 		struct worker_pool *cpu_pools =
 			per_cpu(cpu_worker_pools, cpu);
 
-		pr_info("%s cpu %d cpu_pwqs %p pwq %p cpupool %p\n",
-			__func__, cpu, wq->cpu_pwqs, pwq, cpu_pools);
+		//pr_info("%s cpu %d cpu_pwqs %p pwq %p cpupool %p\n",
+		//	__func__, cpu, wq->cpu_pwqs, pwq, cpu_pools);
 		init_pwq(pwq, wq, &cpu_pools[highpri]);
 
 		mutex_lock(&wq->mutex);
@@ -936,7 +936,7 @@ static int worker_thread(void *__worker)
 	struct worker *worker = __worker;
 	struct worker_pool *pool = worker->pool;
 
-	pr_info("%s pid %d worker %p pool %p\n", __func__, current->pid, worker, pool);
+	//pr_info("%s pid %d worker %p pool %p\n", __func__, current->pid, worker, pool);
 	/* tell the scheduler that this is a workqueue worker */
 // XXX	worker->task->flags |= PF_WQ_WORKER;
 woke_up:
@@ -1016,7 +1016,7 @@ static int create_and_start_worker(struct worker_pool *pool)
 	struct worker *worker = NULL;
 	int pid;
 
-	pr_info("%s pool %p\n", __func__, pool);
+	//pr_info("%s pool %p\n", __func__, pool);
 	worker = kzalloc(sizeof(*worker), GFP_KERNEL);
 	if (!worker)
 		return -ENOMEM;
@@ -1083,7 +1083,7 @@ int init_workqueues(void)
 	int std_nice[NR_STD_WORKER_POOLS] = { 0, HIGHPRI_NICE_LEVEL };
 	int i, cpu, mycpu;
 
-	pr_info("%s\n", __func__);
+	//pr_info("%s\n", __func__);
 	/* initialize CPU pools */
 	for_each_possible_cpu(cpu) {
 		struct worker_pool *pool;
@@ -1104,7 +1104,7 @@ int init_workqueues(void)
 		struct worker_pool *pool;
 		int pid;
 
-		pr_info("%s cpu %d\n", __func__, cpu);
+		//pr_info("%s cpu %d\n", __func__, cpu);
 		for_each_cpu_worker_pool(pool, cpu) {
 			pool->flags &= ~POOL_DISASSOCIATED;
 			pid = create_and_start_worker(pool);

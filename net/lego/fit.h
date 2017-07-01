@@ -67,10 +67,13 @@
 //Model 2 --> 2-6-24 (Send-recv-opcode, port, offset)
 #define IMM_SEND_REPLY_SEND	0x80000000
 #define IMM_SEND_REPLY_RECV	0x40000000
+#define IMM_ACK			0x20000000
 #define IMM_PORT_PUSH_BIT	24
 #define IMM_GET_PORT_NUMBER(imm) (imm<<2)>>26
 #define IMM_GET_OFFSET		0x00ffffff
 #define IMM_GET_SEMAPHORE	0x00ffffff
+#define IMM_NODE_BITS		24
+#define IMM_GET_NODE_ID(imm)	(imm>>24)&0xff
 #define IMM_GET_OPCODE		0x0f000000
 #define IMM_GET_OPCODE_NUMBER(imm) (imm<<4)>>28
 #define IMM_DATA_BIT 32
@@ -100,6 +103,7 @@ enum mode {
 	M_WRITE,
 	M_READ,
 	FIT_SEND_MESSAGE_IMM_ONLY,
+	FIT_SEND_ACK_IMM_ONLY,
 	FIT_SEND_MESSAGE_HEADER_AND_IMM,
 	FIT_SEND_MESSAGE_HEADER_ONLY
 };

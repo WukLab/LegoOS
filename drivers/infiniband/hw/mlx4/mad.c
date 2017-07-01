@@ -235,7 +235,7 @@ static void forward_trap(struct mlx4_ib_dev *dev, u8 port_num, struct ib_mad *ma
 		 */
 		spin_lock(&dev->sm_lock);
 		memcpy(send_buf->mad, mad, sizeof *mad);
-		pr_info("%s sendbufah %p devsmah %p\n", __func__, send_buf->ah, dev->sm_ah[port_num - 1]);
+		//pr_info("%s sendbufah %p devsmah %p\n", __func__, send_buf->ah, dev->sm_ah[port_num - 1]);
 		if ((send_buf->ah = dev->sm_ah[port_num - 1]))
 			ret = ib_post_send_mad(send_buf, NULL);
 		else
