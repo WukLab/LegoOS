@@ -712,8 +712,8 @@ retry_send_imm_request:
 	}
 
 	spin_lock(&connection_lock[connection_id]);
-	printk(KERN_CRIT "%s about to post send conn %d wr_id %d num_sge %d\n",
-			__func__, connection_id, wr.wr_id, wr.num_sge);
+	//printk(KERN_CRIT "%s about to post send conn %d wr_id %d num_sge %d\n",
+	//		__func__, connection_id, wr.wr_id, wr.num_sge);
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
 	
 	if(!ret)
@@ -1145,7 +1145,7 @@ int waiting_queue_handler(void *in)
 		spin_lock(&wq_lock);
 		list_del(&new_request->list);
 		spin_unlock(&wq_lock);
-		kfree(new_request);
+		//kfree(new_request);
 		//kmem_cache_free(s_r_cache, new_request);
 	}
 }
