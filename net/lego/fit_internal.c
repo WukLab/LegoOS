@@ -526,7 +526,7 @@ int get_global_qpn(int mynodeid, int remnodeid, int conn)
 	if (remnodeid > mynodeid)
 		ret = mynodeid * NUM_PARALLEL_CONNECTION + conn;
 	else
-		ret = (remnodeid + mynodeid - 1) * NUM_PARALLEL_CONNECTION + conn;
+		ret = (mynodeid - 1) * NUM_PARALLEL_CONNECTION + conn;
 
 	return ret + first_qpn;
 }
