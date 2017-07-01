@@ -1136,7 +1136,6 @@ int waiting_queue_handler(void *in)
 					last_ack = (int)new_request->msg; 
 					printk(KERN_CRIT "%s: [receive ACK node-%d offset-%d]\n", __func__, new_request->src_id, last_ack);
 					ctx->remote_last_ack_index[new_request->src_id] = last_ack;
-					client_free_recv_buf(new_request->msg);
 					break;
 				}
 			default:
@@ -1145,7 +1144,7 @@ int waiting_queue_handler(void *in)
 		spin_lock(&wq_lock);
 		list_del(&new_request->list);
 		spin_unlock(&wq_lock);
-		//kfree(new_request);
+		kfree(new_request);
 		//kmem_cache_free(s_r_cache, new_request);
 	}
 }
