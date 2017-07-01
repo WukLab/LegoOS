@@ -613,7 +613,7 @@ int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *ch
 	int ne, i;
 	struct ib_wc wc[2];
 
-	printk(KERN_CRIT "%s\n", __func__);
+	//printk(KERN_CRIT "%s\n", __func__);
 	do{
 		ne = ib_poll_cq(tar_cq, 1, wc);
 		if(ne < 0)
@@ -648,8 +648,8 @@ int client_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connectio
 	int poll_status = SEND_REPLY_WAIT;
 	int flag=0;
 
-	printk(KERN_CRIT "%s conn %d rkey %d mraddr %lx addr %p size %d offset %d imm %d\n", 
-			__func__, connection_id, input_mr_rkey, input_mr_addr, addr, size, offset, imm);
+	//printk(KERN_CRIT "%s conn %d rkey %d mraddr %lx addr %p size %d offset %d imm %d\n", 
+	//		__func__, connection_id, input_mr_rkey, input_mr_addr, addr, size, offset, imm);
 retry_send_imm_request:
 	memset(&wr, 0, sizeof(struct ib_send_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
@@ -1287,8 +1287,8 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 	tar_offset_start = ctx->remote_rdma_ring_mrs_offset[target_node] - real_size;//Trace back to the real starting point
 	spin_unlock(&ctx->remote_imm_offset_lock[target_node]);
 
-	printk(KERN_CRIT "%s tar_offset_start %d real_size %d last_ack_index %d\n", 
-			__func__, tar_offset_start, real_size, ctx->remote_last_ack_index[target_node]);
+	//printk(KERN_CRIT "%s tar_offset_start %d real_size %d last_ack_index %d\n", 
+	//		__func__, tar_offset_start, real_size, ctx->remote_last_ack_index[target_node]);
 	//make sure does not over write than lastack
 	while(1)
 	{
