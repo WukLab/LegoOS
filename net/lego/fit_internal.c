@@ -977,6 +977,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 			else if((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM)
 			{
 				node_id = GET_NODE_ID_FROM_POST_RECEIVE_ID(wc[i].wr_id);
+				printk(KERN_CRIT "%s got imm from node %d immdata %x\n", __func__, node_id, wc[i].ex.imm_data);
 				if(wc[i].wc_flags&&IB_WC_WITH_IMM)
 				{
 					if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND && wc[i].ex.imm_data & IMM_SEND_REPLY_RECV)//opcode
@@ -1002,10 +1003,10 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 						list_add_tail(&(tmp->list), &ctx->imm_waitqueue_perport[port].list);
 						spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
 					}
-					else if(wc[i].ex.imm_data & IMM_ACK) // ack metadata
+					else if(wc[i].ex.imm_data & IMM_ACK || wc[i].byte_len == 0) // ack metadata
 					{
 						offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
-						node_id = IMM_GET_NODE_ID(wc[i].ex.imm_data);
+						//node_id = IMM_GET_NODE_ID(wc[i].ex.imm_data);
 						printk(KERN_CRIT "%s: get ack from node %d offset %d\n", __func__, node_id, offset);
 
 						recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
@@ -1125,7 +1126,7 @@ int waiting_queue_handler(void *in)
 					tempaddr = client_ib_reg_mr_addr(ctx, &ack_packet, sizeof(struct imm_ack_form));
 					client_send_message_sge(ctx, target_node, MSG_DO_ACK_REMOTE, (void *)tempaddr, sizeof(struct imm_ack_form), 0, 0, LOW_PRIORITY);
 #endif
-					imm_data = IMM_ACK | offset | (target_node << IMM_NODE_BITS); 
+					imm_data = IMM_ACK | offset; // | (target_node << IMM_NODE_BITS); 
 					printk(KERN_CRIT "%s sending ack offset %d targetnode %d imm %x\n", __func__, offset, target_node, imm_data);
 					client_send_message_with_rdma_write_with_imm_request(ctx, target_node * NUM_PARALLEL_CONNECTION, 0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
 					break;
