@@ -234,7 +234,7 @@ int lego_ib_init(void)
 	uintptr_t desc;
 	int i;
 	if (MY_NODE_ID == 1) {
-		for (i = 0; i < 10; i++) {
+		for (i = 0; i < 100; i++) {
 		ret = ibapi_receive_message(0, buf, 10, &desc);
 		printk(KERN_CRIT "received message ret %d %c\n", ret, buf[0]);
 		retb[0] = '1';
@@ -245,7 +245,7 @@ int lego_ib_init(void)
 	else {
 		buf[0] = 'a';
 		buf[1] = 'b';
-		for (i = 0; i < 10; i++) {
+		for (i = 0; i < 100; i++) {
 		ret = ibapi_send_reply_imm(1, buf, 10, retb, 10);
 		printk(KERN_CRIT "ibapi_send_reply_imm return %d val %c\n", ret, retb[0]);
 		}
