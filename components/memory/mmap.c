@@ -1336,7 +1336,70 @@ unsigned long vm_mmap(struct lego_task_struct *p, struct lego_file *file,
 	return vm_mmap_pgoff(p, file, addr, len, prot, flag, offset >> PAGE_SHIFT);
 }
 
+static int do_brk(struct lego_task_struct *p, unsigned long addr,
+		  unsigned long request)
+{
+	struct lego_mm_struct *mm = p->mm;
+	struct vm_area_struct *vma, *prev;
+	unsigned long flags, len;
+	struct rb_node **rb_link, *rb_parent;
+	pgoff_t pgoff = addr >> PAGE_SHIFT;
+	int error;
+
+	len = PAGE_ALIGN(request);
+	if (len < request)
+		return -ENOMEM;
+	if (!len)
+		return 0;
+
+	flags = VM_READ | VM_WRITE | mm->def_flags;
+
+	error = get_unmapped_area(p, NULL, addr, len, 0, MAP_FIXED);
+	if (offset_in_page(error))
+		return error;
+
+	/*
+	 * Clear old maps.  this also does some error checking for us
+	 */
+	while (find_vma_links(mm, addr, addr + len, &prev, &rb_link,
+			      &rb_parent)) {
+		if (do_munmap(mm, addr, len))
+			return -ENOMEM;
+	}
+
+	/* Can we just expand an old private anonymous mapping? */
+	vma = vma_merge(mm, prev, addr, addr + len, flags,
+			NULL, NULL, pgoff);
+	if (vma)
+		goto out;
+
+	/*
+	 * create a vma struct for an anonymous mapping
+	 */
+	vma = kmalloc(sizeof(*vma), GFP_KERNEL);
+	if (!vma)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&vma->anon_vma_chain);
+	vma->vm_mm = mm;
+	vma->vm_start = addr;
+	vma->vm_end = addr + len;
+	vma->vm_pgoff = pgoff;
+	vma->vm_flags = flags;
+	vma->vm_page_prot = vm_get_page_prot(flags);
+	vma_link(mm, vma, prev, rb_link, rb_parent);
+
+out:
+	mm->total_vm += len >> PAGE_SHIFT;
+	mm->data_vm += len >> PAGE_SHIFT;
+	return 0;
+}
+
 int vm_brk(struct lego_task_struct *p, unsigned long addr, unsigned long len)
 {
-	return 0;
+	int ret;
+
+	/* TODO mm locking */
+	ret = do_brk(p, addr, len);
+	return ret;
 }

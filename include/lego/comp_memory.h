@@ -162,6 +162,10 @@ struct lego_mm_struct {
 
 	pgd_t *pgd;
 	int map_count;
+	unsigned long total_vm;		/* Total pages mapped */
+	unsigned long data_vm;		/* VM_WRITE & ~VM_SHARED & ~VM_STACK */
+	unsigned long exec_vm;		/* VM_EXEC & ~VM_WRITE & ~VM_STACK */
+	unsigned long stack_vm;		/* VM_STACK */
 	unsigned long def_flags;
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack;
@@ -226,6 +230,14 @@ void arch_pick_mmap_layout(struct lego_mm_struct *mm);
 
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 struct vm_area_struct *find_vma(struct lego_mm_struct *mm, unsigned long addr);
+
+unsigned long vm_mmap(struct lego_task_struct *p, struct lego_file *file,
+		unsigned long addr, unsigned long len, unsigned long prot,
+		unsigned long flag, unsigned long offset);
+
+unsigned long vm_mmap_pgoff(struct lego_task_struct *p, struct lego_file *file,
+		unsigned long addr, unsigned long len, unsigned long prot,
+		unsigned long flag, unsigned long pgoff);
 
 int vm_brk(struct lego_task_struct *p, unsigned long addr, unsigned long len);
 
