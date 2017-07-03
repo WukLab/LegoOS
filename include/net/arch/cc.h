@@ -18,8 +18,6 @@ typedef s16 s16_t;
 typedef u8 u8_t;
 typedef s8 s8_t;
 
-typedef u64 uintptr_t; 
-
 typedef uintptr_t mem_ptr_t;
 
 #define PACK_STRUCT_FIELD(x)	x

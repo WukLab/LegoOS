@@ -1,7 +1,7 @@
 menu "Lego Memory Component Configurations"
 
 config COMP_MEMORY
-	bool "Configure Lego as memory component"
+	bool "Configure Lego as memory component manager"
 	default n
 	---help---
 	  Say Y if you are going to build a memory-component

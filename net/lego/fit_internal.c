@@ -515,7 +515,7 @@ void init_global_lid_qpn(void)
 	global_lid = (int *)kmalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
 	global_lid[0] = 7;
 	global_lid[1] = 5;
-	global_lid[2] = 10;
+	//global_lid[2] = 10;
 }
 
 int get_global_qpn(int mynodeid, int remnodeid, int conn)
