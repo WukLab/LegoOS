@@ -31,7 +31,15 @@ static int mc_dispatcher(void *rx_buf)
 	rx_desc_p = rx_buf + __DEFAULT_RXBUF_SIZE;
 	rx_desc = *(unsigned long *)rx_desc_p;
 
-	pr_info("%d/%s/cpu%d\n", current->pid, current->comm, smp_processor_id());
+	pr_info("%d/%s/cpu%d, desc: %lu\n", current->pid, current->comm, smp_processor_id(), rx_desc);
+
+	tx_buf = kmalloc(128, GFP_KERNEL);
+	if (!tx_buf)
+		return -ENOMEM;
+
+	memset(tx_buf, '6', 128);
+	ibapi_reply_message(tx_buf, 128, rx_desc);
+	kfree(tx_buf);
 
 	return 0;
 }
@@ -60,6 +68,21 @@ static int mc(void *unused)
 
 	return 0;
 }
+
+static void test_send(void)
+{
+	void *buf;
+	char *ret;
+	int i;
+
+	buf = kmalloc(128, GFP_KERNEL);
+	ret = kmalloc(128, GFP_KERNEL);
+
+	for (i = 0; i < 10; i++) {
+		ibapi_send_reply_imm(1, buf, 128, ret, 128);
+		pr_info("return: %c...%c\n", ret[0], ret[127]);
+	}
+}
 #else
 static int mc(void *unused)
 {
@@ -68,6 +91,7 @@ static int mc(void *unused)
 }
 #endif /* CONFIG_FIT */
 
+
 void __init memory_component_init(void)
 {
 	struct task_struct *ret;
@@ -75,4 +99,7 @@ void __init memory_component_init(void)
 	ret = kthread_run(mc, NULL, "mc");
 	if (IS_ERR(ret))
 		panic("Fail to create mc thread");
+
+	if (MY_NODE_ID==0)
+		test_send();
 }
