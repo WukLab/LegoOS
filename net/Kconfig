@@ -12,14 +12,6 @@ config FIT
 	default y
 	depends on INFINIBAND
 
-config INFINIBAND_CLIENT
-	tristate "InfiniBand client side of rc"
-	depends on INFINIBAND
-
-config INFINIBAND_SERVER
-	tristate "InfiniBand server side of rc"
-	depends on INFINIBAND
-
 endif
 
 endmenu

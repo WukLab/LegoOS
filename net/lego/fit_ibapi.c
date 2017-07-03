@@ -227,6 +227,7 @@ int lego_ib_init(void)
 	
 	ibapi_establish_conn(1, MY_NODE_ID);
 
+#ifdef FIT_TESTING
 	/* begin testing */
 	char *buf = kmalloc(64, GFP_KERNEL);
 	char *retb = kmalloc(64, GFP_KERNEL);
@@ -250,6 +251,7 @@ int lego_ib_init(void)
 			pr_info("%s(%2d) retbuffer: %s\n", __func__, i, retb);
 		}
 	}
+#endif
 	return 0;
 }
 
