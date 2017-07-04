@@ -12,6 +12,7 @@
 #include <lego/kernel.h>
 #include <lego/binfmts.h>
 #include <lego/spinlock.h>
+#include <lego/syscalls.h>
 
 static LIST_HEAD(formats);
 static DEFINE_SPINLOCK(binfmt_lock);
@@ -44,6 +45,14 @@ int do_execve(const char *filename,
 
 	/* Return to the newly replaced program */
 	return 0;
+}
+
+SYSCALL_DEFINE3(execve,
+		const char *, filename,
+		const char *const *, argv,
+		const char *const *, envp)
+{
+	return do_execve(filename, argv, envp);
 }
 
 void __init exec_init(void)

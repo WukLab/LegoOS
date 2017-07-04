@@ -12,6 +12,7 @@
 #include <lego/slab.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
+#include <lego/syscalls.h>
 
 #include <asm/pgalloc.h>
 
@@ -310,6 +311,11 @@ pid_t do_fork(unsigned long clone_flags,
 
 	wake_up_new_task(p);
 	return p->pid;
+}
+
+SYSCALL_DEFINE0(fork)
+{
+	return 0;
 }
 
 /**

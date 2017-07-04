@@ -39,8 +39,9 @@
 #include <lego/workqueue.h>
 #include <lego/completion.h>
 
-#include <lego/comp_processor.h>
+#include <lego/comp_common.h>
 #include <lego/comp_memory.h>
+#include <lego/comp_processor.h>
 
 #include <asm/io.h>
 #include <asm/asm.h>
@@ -110,28 +111,6 @@ static int run_init_process(const char *init_filename)
 
 static __initdata DEFINE_COMPLETION(kthreadd_done);
 
-static void work_handler(struct work_struct *_work)
-{
-	pr_info("%s\n", __func__);
-}
-
-static void test_workqueue(void)
-{
-	struct workqueue_struct *wq;
-	struct work_struct work;
-
-	wq = create_workqueue("test_wq");
-	if (!wq) {
-		pr_info("cannot create workq\n");
-		return;
-	}
-
-	INIT_WORK(&work, work_handler);
-	queue_work(wq, &work);
-
-	return;
-}
-
 /*
  * This is our first kernel thread (pid 1),
  */
@@ -142,7 +121,6 @@ static int kernel_init(void *unused)
 	set_task_comm(current, "kernel_init");
 
 	init_workqueues();
-	//test_workqueue();
 
 #ifdef CONFIG_INFINIBAND
 	ib_mad_init();

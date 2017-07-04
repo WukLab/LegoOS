@@ -64,5 +64,10 @@
 	static inline long SYSC##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 
 asmlinkage long sys_getpid(void);
+asmlinkage long sys_fork(void);
+
+asmlinkage long sys_execve(const char *filename,
+			   const char *const *argv,
+			   const char *const *envp);
 
 #endif /* _LEGO_SYSCALLS_H_ */
