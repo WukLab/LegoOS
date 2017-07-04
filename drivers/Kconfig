@@ -1,4 +1,4 @@
-menu "Device Drivers"
+menu "Lego Device Drivers"
 
 source "drivers/tty/Kconfig"
 source "drivers/infiniband/Kconfig"

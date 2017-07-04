@@ -26,21 +26,23 @@ static unsigned long nr_rx;
 
 static int mc_dispatcher(void *rx_buf)
 {
-	void *rx_desc_p, *payload;
-	unsigned long rx_desc;
+	void *desc_p, *payload;
+	unsigned long desc;
 	struct common_header *hdr;
 	int ret;
 
-	rx_desc_p = rx_buf + __DEFAULT_RXBUF_SIZE;
-	rx_desc = *(unsigned long *)rx_desc_p;
+	desc_p = rx_buf + __DEFAULT_RXBUF_SIZE;
+	desc = *(unsigned long *)desc_p;
 
 	hdr = to_common_header(rx_buf);
 	payload = to_payload(rx_buf);
 
 	/* handler should call reply message */
 	switch (hdr->opcode) {
+	case P2M_LLC_MISS:
+		handle_p2m_llc_miss(payload, desc);
 	case P2M_FORK:
-		handle_p2m_fork(payload, rx_desc);
+		handle_p2m_fork(payload, desc);
 		break;
 	default:
 		WARN_ON(1);

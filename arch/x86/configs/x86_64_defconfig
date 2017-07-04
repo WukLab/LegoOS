@@ -20,7 +20,7 @@ CONFIG_ILLEGAL_POINTER_VALUE=0xdead000000000000
 #
 CONFIG_INIT_ENV_ARG_LIMIT=32
 CONFIG_CROSS_COMPILE=""
-CONFIG_LOCALVERSION=""
+CONFIG_LOCALVERSION="-lego"
 # CONFIG_LOCALVERSION_AUTO is not set
 # CONFIG_CMDLINE_BOOL is not set
 CONFIG_FRAME_POINTER=y
@@ -56,14 +56,20 @@ CONFIG_HPET_TIMER=y
 CONFIG_PCI_MSI=y
 
 #
-# Lego Processor Component Configurations
+# Timer Interrupt Frequency Configuration
 #
-# CONFIG_COMP_PROCESSOR is not set
+CONFIG_HZ_100=y
+# CONFIG_HZ_250 is not set
+# CONFIG_HZ_300 is not set
+# CONFIG_HZ_1000 is not set
+CONFIG_HZ=100
+# CONFIG_SCHED_HRTICK is not set
 
 #
-# Lego Memory Component Configurations
+# Preemption Configuration
 #
-# CONFIG_COMP_MEMORY is not set
+# CONFIG_PREEMPT_NONE is not set
+CONFIG_PREEMPT=y
 
 #
 # Memory Management
@@ -90,35 +96,37 @@ CONFIG_BINFMT_SCRIPT=y
 CONFIG_COREDUMP=y
 
 #
-# Timer Interrupt Frequency Configuration
-#
-CONFIG_HZ_100=y
-# CONFIG_HZ_250 is not set
-# CONFIG_HZ_300 is not set
-# CONFIG_HZ_1000 is not set
-CONFIG_HZ=100
-# CONFIG_SCHED_HRTICK is not set
-
-#
-# Preemption Configuration
-#
-# CONFIG_PREEMPT_NONE is not set
-CONFIG_PREEMPT=y
-
-#
 # Networking
 #
 # CONFIG_LWIP is not set
 
 #
-# Device Drivers
+# Lego Device Drivers
 #
 
 #
 # TTY Layer Configurations
 #
-CONFIG_TTY_VT=y
+# CONFIG_TTY_VT is not set
 CONFIG_TTY_SERIAL=y
+
+#
+# InfiniBand
+#
 # CONFIG_INFINIBAND is not set
+
+#
+# Ethernet
+#
 # CONFIG_E1000 is not set
 # CONFIG_TG3 is not set
+
+#
+# Lego Processor Component Configurations
+#
+# CONFIG_COMP_PROCESSOR is not set
+
+#
+# Lego Memory Component Configurations
+#
+# CONFIG_COMP_MEMORY is not set

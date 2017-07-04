@@ -17,10 +17,9 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
-#include <lego/comp_memory.h>
-#include <lego/comp_processor.h>
 #include <lego/memory.h>
 #include <lego/signal.h>
+#include <lego/comp_common.h>
 
 /*
  * Page fault error code bits:

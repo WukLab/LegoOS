@@ -45,7 +45,7 @@
 static inline char *ret_to_string(u32 ret_status)
 {
 	switch (ret_status) {
-	case RET_OKAY:		return "ret_okay";
+	case RET_OKAY:		return "Okay";
 	case RET_EPERM:		return "Operation not permitted";
 	case RET_ESRCH:		return "No such process";
 	case RET_EAGAIN:	return "Try again";
@@ -77,30 +77,25 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 			   void *payload, u32 len_payload,
 			   void *retbuf, u32 max_len_retbuf, u32 timeout);
 
+/* P2M_LLC_MISS */
+struct p2m_llc_miss_struct {
+
+};
+int pcache_fill(unsigned long, unsigned long *);
+int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64);
+
 /* P2M_FORK */
 struct p2m_fork_struct {
 	__u32	pid;	
 	char	comm[TASK_COMM_LEN];
 };
-#ifdef CONFIG_COMP_PROCESSOR
 int p2m_fork(struct task_struct *p);
-#else
-static inline int p2m_fork(struct task_struct *p) { return 0; };
-#endif
-#ifdef CONFIG_COMP_MEMORY
 int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc);
-#else
-static inline int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc)
-{ return 0; };
-#endif
 
 /* P2M_EXECVE */
 struct p2m_execve_struct {
 };
-#ifdef CONFIG_COMP_PROCESSOR
 int p2m_execve(struct task_struct *p);
-#else
-static inline int p2m_execve(struct task_struct *p) { return 0; };
-#endif
+int handle_p2m_execve(struct p2m_execve_struct *, u64);
 
 #endif /* _LEGO_COMP_COMMON_H_ */

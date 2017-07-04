@@ -1,3 +1,5 @@
+menu "InfiniBand"
+
 menuconfig INFINIBAND
 	tristate "InfiniBand support"
 #	depends on PCI || BROKEN
@@ -21,3 +23,5 @@ source "drivers/infiniband/ulp/ipoib/Kconfig"
 #source "drivers/infiniband/sw/rxe/Kconfig"
 
 endif # INFINIBAND
+
+endmenu

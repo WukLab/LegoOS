@@ -1,3 +1,5 @@
+menu "Ethernet"
+
 menuconfig E1000
 	tristate "e1000 driver"
 	---help---
@@ -8,3 +10,4 @@ menuconfig TG3
 	---help---
 	  Driver for Broadcom tg3.
 
+endmenu
