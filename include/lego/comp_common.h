@@ -14,6 +14,7 @@
 #ifndef _LEGO_COMP_COMMON_H_
 #define _LEGO_COMP_COMMON_H_
 
+#include <lego/sched.h>
 #include <generated/unistd_64.h>
 
 /*
@@ -29,9 +30,77 @@
  *	Follow the original SYSCALL number
  */
 
-#define P2M_HEARTBEAT	(0x00000001)
-#define P2M_LLC_MISS	(0x00000002)
+#define P2M_HEARTBEAT	((__u32)0x00000001)
+#define P2M_LLC_MISS	((__u32)0x00000002)
 #define P2M_FORK	((__u32)__NR_fork)
 #define P2M_EXECVE	((__u32)__NR_execve)
+
+/* Return status */
+#define RET_OKAY	((__u32)0)	/* Operation succeed */
+#define RET_EPERM	((__u32)1)	/* Operation not permitted */
+#define RET_ESRCH	((__u32)3)	/* No such process */
+#define RET_EAGAIN	((__u32)11)	/* Try again */
+#define RET_ENOMEM	((__u32)12)	/* Out of memory */
+
+static inline char *ret_to_string(u32 ret_status)
+{
+	switch (ret_status) {
+	case RET_OKAY:		return "ret_okay";
+	case RET_EPERM:		return "Operation not permitted";
+	case RET_ESRCH:		return "No such process";
+	case RET_EAGAIN:	return "Try again";
+	case RET_ENOMEM:	return "Out of memory";
+	}
+	return "undefined";
+}
+
+struct common_header {
+	__u32	opcode;		/* see above */
+	__u32	length;		/* of the whole message */
+};
+
+static inline struct common_header *to_common_header(void *msg)
+{
+	return (struct common_header *)(msg);
+}
+
+static inline void *to_payload(void *msg)
+{
+	return (void *)(msg + sizeof(struct common_header));
+}
+
+int net_send_reply(u32 node, u32 opcode,
+		   void *payload, u32 len_payload,
+		   void *retbuf, u32 max_len_retbuf);
+
+int net_send_reply_timeout(u32 node, u32 opcode,
+			   void *payload, u32 len_payload,
+			   void *retbuf, u32 max_len_retbuf, u32 timeout);
+
+/* P2M_FORK */
+struct p2m_fork_struct {
+	__u32	pid;	
+	char	comm[TASK_COMM_LEN];
+};
+#ifdef CONFIG_COMP_PROCESSOR
+int p2m_fork(struct task_struct *p);
+#else
+static inline int p2m_fork(struct task_struct *p) { return 0; };
+#endif
+#ifdef CONFIG_COMP_MEMORY
+int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc);
+#else
+static inline int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc)
+{ return 0; };
+#endif
+
+/* P2M_EXECVE */
+struct p2m_execve_struct {
+};
+#ifdef CONFIG_COMP_PROCESSOR
+int p2m_execve(struct task_struct *p);
+#else
+static inline int p2m_execve(struct task_struct *p) { return 0; };
+#endif
 
 #endif /* _LEGO_COMP_COMMON_H_ */

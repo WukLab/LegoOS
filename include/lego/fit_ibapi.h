@@ -10,6 +10,8 @@
 #ifndef _INCLUDE_FIT_API_H
 #define _INCLUDE_FIT_API_H
 
+#include <lego/types.h>
+#include <lego/errno.h>
 #include <net/arch/cc.h>
 
 /* 
@@ -18,20 +20,33 @@
  * wuklab06: 1
  * wuklab08: 2
  */
-#define MY_NODE_ID 1
+#define MY_NODE_ID 0
 
+#ifdef CONFIG_FIT
 int ibapi_establish_conn(int ib_port, int mynodeid);
-
-inline void ibapi_free_recv_buf(void *input_buf);
+void ibapi_free_recv_buf(void *input_buf);
 
 //uint64_t ibapi_dist_barrier(unsigned int checknum);
 
-//IMM related
-inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor);
-inline int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size);
-inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor);
+/* IMM related */
+int ibapi_reply_message(void *addr, int size, uintptr_t descriptor);
+int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size);
+int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor);
 
 int ibapi_get_node_id(void);
 int ibapi_num_connected_nodes(void);
 
-#endif
+#else
+static inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
+{ return -EIO; }
+static inline int ibapi_send_reply_imm(int target_node, void *addr, int size,
+				       void *ret_addr, int max_ret_size)
+{ return -EIO; }
+static inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr,
+					int receive_size, uintptr_t *descriptor)
+{ return -EIO; }
+static inline int ibapi_get_node_id(void) {return 0; }
+static inline int ibapi_num_connected_nodes(void) {return 0; };
+#endif /* CONFIG_FIT*/
+
+#endif /* _INCLUDE_FIT_API_H */

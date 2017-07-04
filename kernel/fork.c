@@ -13,6 +13,8 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
+#include <lego/fit_ibapi.h>
+#include <lego/comp_common.h>
 
 #include <asm/pgalloc.h>
 
@@ -304,10 +306,23 @@ pid_t do_fork(unsigned long clone_flags,
 	      int tls)
 {
 	struct task_struct *p;
+	int ret;
 
 	p = copy_process(clone_flags, stack_start, stack_size, NUMA_NO_NODE, tls);
 	if (IS_ERR(p))
 		return PTR_ERR(p);
+
+	if (clone_flags & CLONE_GLOBAL_THREAD) {
+		/*
+		 * If we are processor-manager, before waking the new process,
+		 * tell remote memory-manager first:
+		 */
+		ret = p2m_fork(p);
+		if (ret) {
+			/* TODO: free task_struct */
+			return ret;
+		}
+	}
 
 	wake_up_new_task(p);
 	return p->pid;
