@@ -7,11 +7,12 @@
  * (at your option) any later version.
  */
 
-#include <lego/sched.h>
 #include <lego/net.h>
+#include <lego/slab.h>
+#include <lego/sched.h>
 #include <rdma/ib_verbs.h>
 #include <lego/fit_ibapi.h>
-#include <lego/slab.h>
+#include <lego/completion.h>
 #include "fit.h"
 #include "fit_internal.h"
 
@@ -206,7 +207,37 @@ static struct ib_client ibv_client = {
 	.remove = ibv_remove_one
 };
 
-int lego_ib_init(void)
+static void lego_ib_test(void)
+{
+#ifdef FIT_TESTING
+	int ret, i;
+	char *buf = kmalloc(64, GFP_KERNEL);
+	char *retb = kmalloc(64, GFP_KERNEL);
+	uintptr_t desc;
+	if (MY_NODE_ID == 1) {
+		for (i = 0; i < 10; i++) {
+			ret = ibapi_receive_message(0, buf, 32, &desc);
+			pr_info("received message: [%c%c%c%c]\n", buf[0], buf[1], buf[2], buf[3]);
+			retb[0] = '1';
+			retb[1] = '2';
+			retb[2] = '\0';
+			ret = ibapi_reply_message(retb, 10, desc);
+		}
+	} else {
+		buf[0] = 'a';
+		buf[1] = 'b';
+		buf[2] = '\0';
+		for (i = 0; i < 10; i++) {
+			ret = ibapi_send_reply_imm(1, buf, 32, retb, 10);
+			pr_info("%s(%2d) retbuffer: %s\n", __func__, i, retb);
+		}
+	}
+#endif
+}
+
+__initdata DEFINE_COMPLETION(ib_init_done);
+
+int lego_ib_init(void *unused)
 {
 	int ret;
 
@@ -224,34 +255,13 @@ int lego_ib_init(void)
 	}
 
 	atomic_set(&global_reqid, 0);
-	
+
 	ibapi_establish_conn(1, MY_NODE_ID);
 
-#ifdef FIT_TESTING
-	/* begin testing */
-	char *buf = kmalloc(64, GFP_KERNEL);
-	char *retb = kmalloc(64, GFP_KERNEL);
-	uintptr_t desc;
-	int i;
-	if (MY_NODE_ID == 1) {
-		for (i = 0; i < 10; i++) {
-			ret = ibapi_receive_message(0, buf, 32, &desc);
-			printk(KERN_CRIT "received message: [%c%c%c%c]\n", buf[0], buf[1], buf[2], buf[3]);
-			retb[0] = '1';
-			retb[1] = '2';
-			retb[2] = '\0';
-			ret = ibapi_reply_message(retb, 10, desc);
-		}
-	} else {
-		buf[0] = 'a';
-		buf[1] = 'b';
-		buf[2] = '\0';
-		for (i = 0; i < 10; i++) {
-			ret = ibapi_send_reply_imm(1, buf, 32, retb, 10);
-			pr_info("%s(%2d) retbuffer: %s\n", __func__, i, retb);
-		}
-	}
-#endif
+	lego_ib_test();
+
+	/* notify init that ib has done initialization */
+	complete(&ib_init_done);
 	return 0;
 }
 

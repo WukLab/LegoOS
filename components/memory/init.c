@@ -51,13 +51,15 @@ static int mc(void *unused)
 	struct task_struct *ret;
 	int port = 0;
 
+	pr_info("mc is running\n");
+
 	while (1) {
 		rx_buf = kmalloc(DEFAULT_RXBUF_SIZE, GFP_KERNEL);
 		if (unlikely(!rx_buf))
 			panic("OOM");
 		rx_desc = rx_buf + __DEFAULT_RXBUF_SIZE;
 
-		ibapi_receive_message(port, rx_buf, DEFAULT_RXBUF_SIZE, rx_desc);
+		ibapi_receive_message(port, rx_buf, __DEFAULT_RXBUF_SIZE, rx_desc);
 
 		ret = kthread_run(mc_dispatcher, rx_buf, "mcd-%lu", nr_rx++);
 		if (unlikely(IS_ERR(ret))) {

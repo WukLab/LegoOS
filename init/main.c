@@ -157,6 +157,9 @@ static int kernel_init(void *unused)
 	ib_cm_init();
 	pr_info("before lego ib init\n");
 	kthread_run(lego_ib_init, NULL, "ib-initd");
+
+	/* wait until ib finished initialization */
+	wait_for_completion(&ib_init_done);
 #endif
 
 #ifdef CONFIG_MEMCOMPONENT
