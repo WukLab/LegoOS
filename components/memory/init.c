@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-#define pr_fmt(fmt) "mcd: " fmt
+#define pr_fmt(fmt) "mc-manager: " fmt
 
 #include <lego/slab.h>
 #include <lego/kernel.h>
@@ -16,30 +16,35 @@
 #include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 
-#ifdef CONFIG_FIT
-
 #define __DEFAULT_RXBUF_SIZE	(128)
 #define __DEFAULT_DESC_SIZE	(sizeof(unsigned long))
 #define DEFAULT_RXBUF_SIZE	(__DEFAULT_RXBUF_SIZE+__DEFAULT_DESC_SIZE)
+
+#ifdef CONFIG_FIT
 
 static unsigned long nr_rx;
 
 static int mc_dispatcher(void *rx_buf)
 {
-	void *tx_buf, *rx_desc_p;
+	void *rx_desc_p, *payload;
 	unsigned long rx_desc;
+	struct common_header *hdr;
+	int ret;
 
 	rx_desc_p = rx_buf + __DEFAULT_RXBUF_SIZE;
 	rx_desc = *(unsigned long *)rx_desc_p;
 
-	pr_info("%d/%s/cpu%d, desc: %lu\n", current->pid, current->comm, smp_processor_id(), rx_desc);
+	hdr = to_common_header(rx_buf);
+	payload = to_payload(rx_buf);
 
-	tx_buf = kmalloc(128, GFP_KERNEL);
-	if (!tx_buf)
-		return -ENOMEM;
-
-	ibapi_reply_message(tx_buf, 128, rx_desc);
-	kfree(tx_buf);
+	/* handler should call reply message */
+	switch (hdr->opcode) {
+	case P2M_FORK:
+		handle_p2m_fork(payload, rx_desc);
+		break;
+	default:
+		WARN_ON(1);
+	}
 
 	return 0;
 }
@@ -61,7 +66,13 @@ static int mc_manager(void *unused)
 
 		ibapi_receive_message(port, rx_buf, __DEFAULT_RXBUF_SIZE, rx_desc);
 
-		ret = kthread_run(mc_dispatcher, rx_buf, "mcd-%lu", nr_rx++);
+		/*
+		 * XXX:
+		 * The overhead to create a new thread might be too costly
+		 * Later on we should find a more efficient implementation.
+		 * Something like thread pool, or workqueue.
+		 */
+		ret = kthread_run(mc_dispatcher, rx_buf, "mcdisp-%lu", nr_rx++);
 		if (unlikely(IS_ERR(ret))) {
 			kfree(rx_buf);
 			WARN_ON_ONCE(1);
@@ -70,20 +81,17 @@ static int mc_manager(void *unused)
 
 	return 0;
 }
-#else
-static int mc(void *unused)
-{
-	WARN(1, "CONFIG_FIT is not set!");
-	return 0;
-}
 #endif /* CONFIG_FIT */
-
 
 void __init memory_component_init(void)
 {
+#ifdef CONFIG_FIT
 	struct task_struct *ret;
 
-	ret = kthread_run(mc, NULL, "mc-manager");
+	ret = kthread_run(mc_manager, NULL, "mc-manager");
 	if (IS_ERR(ret))
 		panic("Fail to create mc thread");
+#else
+	pr_warn("require CONFIG_FIT to be set.\n");
+#endif
 }

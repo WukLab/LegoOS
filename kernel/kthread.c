@@ -23,6 +23,7 @@ struct kthread_create_info {
 	int			(*threadfn)(void *data);
 	void			*data;
 	int			node;
+	unsigned int		clone_flags;
 
 	/* Result passed back to kthread_create() from kthreadd. */
 	struct task_struct	*result;
@@ -61,6 +62,7 @@ static void __kthread_parkme(struct kthread *self)
 
 static struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
 						    void *data, int node,
+						    unsigned int clone_flags,
 						    const char namefmt[],
 						    va_list args)
 {
@@ -74,6 +76,7 @@ static struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
 	create->threadfn = threadfn;
 	create->data = data;
 	create->node = node;
+	create->clone_flags = clone_flags;
 	create->done = &done;
 
 	spin_lock(&kthread_create_lock);
@@ -126,6 +129,7 @@ static struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
  * @threadfn: the function to run until signal_pending(current).
  * @data: data ptr for @threadfn.
  * @node: task and thread structures for the thread are allocated on this node
+ * @clone_flags: additional clone flags (for Lego global threads)
  * @namefmt: printf-style name for the thread.
  *
  * Description: This helper function creates and names a kernel
@@ -145,7 +149,7 @@ static struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
  * Returns a task_struct or ERR_PTR(-ENOMEM) or ERR_PTR(-EINTR).
  */
 struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
-					   void *data, int node,
+					   void *data, int node, unsigned int clone_flags,
 					   const char namefmt[],
 					   ...)
 {
@@ -153,7 +157,7 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 	va_list args;
 
 	va_start(args, namefmt);
-	task = __kthread_create_on_node(threadfn, data, node, namefmt, args);
+	task = __kthread_create_on_node(threadfn, data, node, clone_flags, namefmt, args);
 	va_end(args);
 
 	return task;
@@ -202,8 +206,12 @@ static int kthread(void *_create)
 static void create_kthread(struct kthread_create_info *create)
 {
 	int pid;
+	unsigned long clone_flags;
 
-	pid = kernel_thread(kthread, create, CLONE_FS | CLONE_FILES | SIGCHLD);
+	clone_flags = CLONE_FS | CLONE_FILES | SIGCHLD;
+	clone_flags |= create->clone_flags;
+
+	pid = kernel_thread(kthread, create, clone_flags);
 	if (pid < 0) {
 		/* If user was SIGKILLed, I release the structure. */
 		struct completion *done = xchg(&create->done, NULL);

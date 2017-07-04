@@ -3,10 +3,10 @@
 #include <lego/init.h>
 #include <lego/mutex.h>
 #include <lego/jiffies.h>
-//#include <lego/completion.h>
+#include <lego/completion.h>
 #include <lego/workqueue.h>
 #include <lego/slab.h>
-//#include <lego/kthread.h>
+#include <lego/kthread.h>
 //#include <lego/hardirq.h>
 
 enum {
@@ -1014,7 +1014,7 @@ sleep:
 static int create_and_start_worker(struct worker_pool *pool)
 {
 	struct worker *worker = NULL;
-	int pid;
+	struct task_struct *p;
 
 	//pr_info("%s pool %p\n", __func__, pool);
 	worker = kzalloc(sizeof(*worker), GFP_KERNEL);
@@ -1043,9 +1043,9 @@ static int create_and_start_worker(struct worker_pool *pool)
 	worker->pool->nr_workers++;
 	worker_enter_idle(worker);
 	//wake_up_process(worker->task);
-	pid = kernel_thread(worker_thread, worker, 0);
+	p = kthread_run(worker_thread, worker, "kworker");
 
-	return pid;
+	return p->pid;
 }
 
 /**

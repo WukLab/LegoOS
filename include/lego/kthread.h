@@ -16,10 +16,11 @@
 int kthreadd(void *unused);
 extern struct task_struct *kthreadd_task;
 
-__printf(4, 5)
+__printf(5, 6)
 struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 					   void *data,
 					   int node,
+					   unsigned int flags,
 					   const char namefmt[], ...);
 
 /**
@@ -33,8 +34,8 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
  * the stopped state.  This is just a helper for kthread_create_on_node();
  * see the documentation there for more details.
  */
-#define kthread_create(threadfn, data, namefmt, arg...) \
-	kthread_create_on_node(threadfn, data, NUMA_NO_NODE, namefmt, ##arg)
+#define kthread_create(threadfn, data, flags, namefmt, arg...) \
+	kthread_create_on_node(threadfn, data, NUMA_NO_NODE, flags, namefmt, ##arg)
 
 /**
  * kthread_run - create and wake a thread.
@@ -45,13 +46,31 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
  * Description: Convenient wrapper for kthread_create() followed by
  * wake_up_process().  Returns the kthread or ERR_PTR(-ENOMEM).
  */
-#define kthread_run(threadfn, data, namefmt, ...)			   \
-({									   \
-	struct task_struct *__k						   \
-		= kthread_create(threadfn, data, namefmt, ## __VA_ARGS__); \
-	if (!IS_ERR(__k))						   \
-		wake_up_process(__k);					   \
-	__k;								   \
+#define kthread_run(threadfn, data, namefmt, ...)				\
+({										\
+	struct task_struct *__k							\
+		= kthread_create(threadfn, data, 0, namefmt, ## __VA_ARGS__);	\
+	if (!IS_ERR(__k))							\
+		wake_up_process(__k);						\
+	__k;									\
 })
+
+#define kthread_run_flags(threadfn, data, flags, namefmt, ...)			\
+({										\
+	struct task_struct *__k							\
+		= kthread_create(threadfn, data, flags, namefmt, ## __VA_ARGS__);\
+	if (!IS_ERR(__k))							\
+		wake_up_process(__k);						\
+	__k;									\
+})
+
+/**
+ * global_kthread_run
+ *
+ * Create a global-visible lego thread.
+ * The creation will contact remote memory component.
+ */
+#define global_kthread_run(threadfn, data, namefmt, ...) \
+	kthread_run_flags(threadfn, data, CLONE_GLOBAL_THREAD, namefmt, ## __VA_ARGS__)
 
 #endif /* _LEGO_KTHREAD_H_ */

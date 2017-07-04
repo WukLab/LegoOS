@@ -46,6 +46,7 @@
 #define CLONE_PARENT		0x00008000	/* set if we want to have the same parent as the cloner */
 #define CLONE_THREAD		0x00010000	/* Same thread group? */
 #define CLONE_IDLE_THREAD	0x80000000	/* set if we want to clone an idle thread */
+#define CLONE_GLOBAL_THREAD	0x40000000	/* set if it is global */
 
 /*
  * task->state and task->exit_state
