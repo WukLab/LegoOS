@@ -13,15 +13,7 @@
 #include <lego/fit_ibapi.h>
 #include <lego/comp_common.h>
 
-int net_send_reply_timeout(u32 node, u32 opcode,
-			   void *payload, u32 len_payload,
-			   void *retbuf, u32 max_len_retbuf, u32 timeout)
-{
-	return -EIO;
-}
-
 /**
- * net_send_reply_sync	- send and wait reply synchronously
  * @node: target node id
  * @opcode: see <lego/comp_common.h>
  * @payload: payload of your message
@@ -33,9 +25,9 @@ int net_send_reply_timeout(u32 node, u32 opcode,
  *
  * This function will block until network layer received reply.
  */
-int net_send_reply(u32 node, u32 opcode,
-		   void *payload, u32 len_payload,
-		   void *retbuf, u32 max_len_retbuf)
+int net_send_reply_timeout(u32 node, u32 opcode,
+			   void *payload, u32 len_payload,
+			   void *retbuf, u32 max_len_retbuf, u32 timeout)
 {
 	int ret;
 	u32 len_msg;
@@ -62,5 +54,16 @@ int net_send_reply(u32 node, u32 opcode,
 	/* Synchronously send it out */
 	ret = ibapi_send_reply_imm(node, msg, len_msg, retbuf, max_len_retbuf);
 	kfree(msg);
+
 	return ret;
+}
+
+#define DEF_MAX_TIMEOUT	100
+
+int net_send_reply(u32 node, u32 opcode,
+		   void *payload, u32 len_payload,
+		   void *retbuf, u32 max_len_retbuf)
+{
+	return net_send_reply_timeout(node, opcode, payload, len_payload, retbuf,
+				max_len_retbuf, DEF_MAX_TIMEOUT);
 }

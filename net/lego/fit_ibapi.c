@@ -271,4 +271,6 @@ int lego_ib_cleanup(void)
 	client_cleanup_module();
 	ib_unregister_client(&ibv_client);
 	fit_internal_cleanup();
+
+	return 0;
 }

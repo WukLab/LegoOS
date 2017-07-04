@@ -20,7 +20,7 @@
  * wuklab06: 1
  * wuklab08: 2
  */
-#define MY_NODE_ID 1
+#define MY_NODE_ID 0
 
 #ifdef CONFIG_FIT
 int ibapi_establish_conn(int ib_port, int mynodeid);
