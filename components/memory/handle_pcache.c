@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/fit_ibapi.h>
 #include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 #include <lego/comp_processor.h>
@@ -15,7 +16,7 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc)
 {
 	u32 retbuf;
 
-	pr_info("%s: remote pid: %d, missing_vaddr: %#lx\n",
+	pr_info("%s: remote pid: %d, missing_vaddr: %#Lx\n",
 		__func__, payload->pid, payload->missing_vaddr);
 
 	retbuf = RET_ENOMEM;

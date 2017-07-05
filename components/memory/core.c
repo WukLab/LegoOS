@@ -41,6 +41,7 @@ static int mc_dispatcher(void *rx_buf)
 	switch (hdr->opcode) {
 	case P2M_LLC_MISS:
 		handle_p2m_llc_miss(payload, desc);
+		break;
 	case P2M_FORK:
 		handle_p2m_fork(payload, desc);
 		break;
