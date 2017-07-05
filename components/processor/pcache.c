@@ -11,8 +11,9 @@
  * Lego Processor Last-Level Cache Management
  */
 
-#define pr_fmt(fmt)  "P$: " fmt
+#define pr_fmt(fmt)  "pcache: " fmt
 
+#include <asm/io.h>
 #include <lego/mm.h>
 #include <lego/log2.h>
 #include <lego/kernel.h>
@@ -35,10 +36,15 @@ static u64 nr_cachelines;
 static u64 nr_cachesets;
 static u32 llc_cache_associativity = 1 << CONFIG_PCACHE_ASSOCIATIVITY_SHIFT;
 
+/* pages used by cacheline and metadata */
 static u64 nr_pages_cacheline;
 static u64 nr_pages_metadata;
+
+/* original physical and ioremap'd virtual address */
 static u64 phys_start_cacheline;
 static u64 phys_start_metadata;
+static u64 virt_start_cacheline;
+static u64 virt_start_metadata;
 
 /* Address bits usage */
 static u64 nr_bits_cacheline;
@@ -65,8 +71,8 @@ static inline unsigned long addr2set(unsigned long addr)
  * @way: current way number (maximum is llc_cache_associativity)
  */
 #define for_each_way_set(addr, cache, meta, way)				\
-	for (cache = (void *)((addr & pcache_set_mask) + phys_start_cacheline),	\
-	     meta = (void *)(addr2set(addr) + phys_start_metadata), way = 0;	\
+	for (cache = (void *)((addr & pcache_set_mask) + virt_start_cacheline),	\
+	     meta = (void *)(addr2set(addr) + virt_start_metadata), way = 0;	\
 	     way < llc_cache_associativity;				\
 	     way++,							\
 	     cache += pcache_way_cache_stride, 				\
@@ -76,20 +82,37 @@ static int do_pcache_fill(unsigned long vaddr, void *cache,
 			  void *meta, unsigned int way)
 {
 	struct p2m_llc_miss_struct payload;
-	int ret, retbuf;
+	int ret;
 
-	pr_info("MisVaddr: %#lx, Cacheline: %p, Meta: %p, way: %u",
+	pr_info("MisVaddr: %#lx, Cacheline: %p, Meta: %p, way: %u\n",
 		vaddr, cache, meta, way);
 
 	payload.pid = current->pid;
 	payload.missing_vaddr = vaddr;
 
+	/*
+	 * Using the cacheline as our return buffer, hence we avoid
+	 * another memcpy from retbuf to cacheline itself.
+	 */
 	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS, &payload,
-			sizeof(payload), &retbuf, sizeof(retbuf),
+			sizeof(payload), cache, PAGE_SIZE,
 			DEF_NET_TIMEOUT);
 
-	WARN(retbuf, ret_to_string(retbuf));
-	return retbuf;
+	if (unlikely(ret < PAGE_SIZE)) {
+		/* remote reported error */
+		if (likely(ret == sizeof(int)))
+			return -(*((int *)cache));
+		/* IB is not available */
+		else if (ret < 0)
+			return -EIO;
+		else
+			WARN(1, "invalid retbuf size: %d\n", ret);
+	}
+
+	pcache_mkvalid(meta);
+	pcache_mkaccessed(meta);
+
+	return 0;
 }
 
 /*
@@ -103,7 +126,7 @@ int pcache_fill(unsigned long missing_vaddr, unsigned long *cache_paddr)
 
 	pr_info("missing_vaddr: %#lx\n", missing_vaddr);
 	for_each_way_set(missing_vaddr, cache, meta, way) {
-		if (pcache_valid(meta))
+		if (!pcache_valid(meta))
 			break;
 	}
 
@@ -133,25 +156,36 @@ void __init pcache_init(void)
 	 * number of cache lines can be a power of 2, too.
 	 */
 	nr_units = llc_cache_registered_size / unit_size;
-	pr_info("Original nr_units:  %Lu\n", nr_units);
 	nr_units = rounddown_pow_of_two(nr_units);
+
+	/* final valid used size */
 	llc_cache_size = nr_units * unit_size;
-	pr_info("Rounddown nr_units: %Lu\n", nr_units);
+
+	virt_start_cacheline = (unsigned long)ioremap_cache(llc_cache_start,
+							    llc_cache_size);
+	if (!virt_start_cacheline) {
+		pr_info("fail to ioremap: [%#llx - %#llx]\n", llc_cache_start,
+			llc_cache_start + llc_cache_size);
+	}
 
 	nr_cachelines = nr_units * nr_cachelines_per_page;
 	nr_cachesets = nr_cachelines / llc_cache_associativity;
 
 	nr_pages_cacheline = nr_cachelines;
 	nr_pages_metadata = nr_units;
+
+	/* Save physical/virtual starting address */
 	phys_start_cacheline = llc_cache_start;
 	phys_start_metadata = phys_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
+	virt_start_metadata = virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
 
 	nr_bits_cacheline = ilog2(llc_cacheline_size);
 	nr_bits_set = ilog2(nr_cachesets);
 	nr_bits_tag = 64 - nr_bits_cacheline - nr_bits_set;
 
 	pr_info("Processor LLC Configurations:\n");
-	pr_info("    Start:             %#llx\n",	llc_cache_start);
+	pr_info("    PhysStart:         %#llx\n",	llc_cache_start);
+	pr_info("    VirtStart:         %#llx\n",	virt_start_cacheline);
 	pr_info("    Registered Size:   %#llx\n",	llc_cache_registered_size);
 	pr_info("    Actual Used Size:  %#llx\n",	llc_cache_size);
 	pr_info("    NR cachelines:     %llu\n",	nr_cachelines);
@@ -182,10 +216,15 @@ void __init pcache_init(void)
 
 	pr_info("    NR pages for data: %llu\n",	nr_pages_cacheline);
 	pr_info("    NR pages for meta: %llu\n",	nr_pages_metadata);
-	pr_info("    Cacheline range:   [%#18llx - %#18llx]\n",
+	pr_info("    Cacheline (pa) range:   [%#18llx - %#18llx]\n",
 		phys_start_cacheline, phys_start_metadata - 1);
-	pr_info("    Metadata range:    [%#18llx - %#18llx]\n",
+	pr_info("    Metadata (pa) range:    [%#18llx - %#18llx]\n",
 		phys_start_metadata, phys_start_metadata + nr_pages_metadata * PAGE_SIZE - 1);
+
+	pr_info("    Cacheline (va) range:   [%#18llx - %#18llx]\n",
+		virt_start_cacheline, virt_start_metadata - 1);
+	pr_info("    Metadata (va) range:    [%#18llx - %#18llx]\n",
+		virt_start_metadata, virt_start_metadata + nr_pages_metadata * PAGE_SIZE - 1);
 
 	pcache_way_cache_stride = nr_cachesets * llc_cacheline_size;
 	pcache_way_meta_stride =  nr_cachesets * llc_cachemeta_size;

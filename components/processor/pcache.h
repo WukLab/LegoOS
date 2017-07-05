@@ -46,4 +46,29 @@ static inline int __pcache_nx(unsigned long meta)
 #define pcache_accessed(meta)	__pcache_accessed(*(unsigned long *)meta)
 #define pcache_nx(meta)		__pcache_nx(*(unsigned long *)meta)
 
+static inline void __pcache_mkvalid(unsigned long *meta)
+{
+	*meta |= _PCACHE_VALID;
+}
+
+static inline void __pcache_mkdirty(unsigned long *meta)
+{
+	*meta |= _PCACHE_DIRTY;
+}
+
+static inline void __pcache_mkaccessed(unsigned long *meta)
+{
+	*meta |= _PCACHE_ACCESSED;
+}
+
+static inline void __pcache_mknx(unsigned long *meta)
+{
+	*meta |= _PCACHE_NX;
+}
+
+#define pcache_mkvalid(meta)	__pcache_mkvalid((unsigned long *)meta)
+#define pcache_mkdirty(meta)	__pcache_mkdirty((unsigned long *)meta)
+#define pcache_mkaccessed(meta)	__pcache_mkaccessed((unsigned long *)meta)
+#define pcache_mknx(meta)	__pcache_mknx((unsigned long *)meta)
+
 #endif /* _COMPONENT_PROCESSOR_PCACHE_H_ */

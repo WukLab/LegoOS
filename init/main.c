@@ -151,7 +151,6 @@ static int kernel_init(void *unused)
 	memory_component_init();
 #endif
 
-	while (1) ;
 	run_init_process("/etc/init");
 	return 0;
 }

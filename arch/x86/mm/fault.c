@@ -341,9 +341,9 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	panic("User-mode pgfault is only allowed at processor-component.");
 #else
 	ret = pcache_fill(address, &page);
-	if (ret && ret != -EAGAIN) {
+	if (ret) {
 		/* pcache fail to handle this fault*/
-		panic("pcache failt to handle: ret: %d\n", ret);
+		panic("pcache fail to handle: ret: %d\n", ret);
 	}
 
 	/* establish pgtable mapping */
