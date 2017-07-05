@@ -29,7 +29,6 @@ static int mc_dispatcher(void *rx_buf)
 	void *desc_p, *payload;
 	unsigned long desc;
 	struct common_header *hdr;
-	int ret;
 
 	desc_p = rx_buf + __DEFAULT_RXBUF_SIZE;
 	desc = *(unsigned long *)desc_p;
