@@ -30,7 +30,7 @@ void ibapi_free_recv_buf(void *input_buf);
 
 /* IMM related */
 int ibapi_reply_message(void *addr, int size, uintptr_t descriptor);
-int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size);
+int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int if_use_ret_phys_addr);
 int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor);
 
 int ibapi_get_node_id(void);

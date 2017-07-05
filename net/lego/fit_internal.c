@@ -352,6 +352,11 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 	return ret;
 }
 
+inline uintptr_t client_ib_reg_mr_addr_phys(ppc *ctx, void *addr, size_t length)
+{
+	return client_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
+}
+
 inline uintptr_t client_ib_reg_mr_addr(ppc *ctx, void *addr, size_t length)
 {
 	#ifdef PHYSICAL_ALLOCATION
@@ -1255,7 +1260,7 @@ inline int client_get_inbox_by_addr(ppc *ctx, void *addr)
 	return tar;
 }
 
-int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int userspace_flag)
+int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int userspace_flag, int if_use_ret_phys_addr)
 {
 	int tar_offset_start;
 	int connection_id;
@@ -1310,7 +1315,10 @@ retry_send_reply_with_imm_request:
 	
 	imm_data = IMM_SEND_REPLY_SEND | tar_offset_start; 
 	
-	output_header.inbox_addr = client_ib_reg_mr_addr(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
+	if (if_use_ret_phys_addr == 1)
+		output_header.inbox_addr = client_ib_reg_mr_addr_phys(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
+	else
+		output_header.inbox_addr = client_ib_reg_mr_addr(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
 	output_header.inbox_rkey = ctx->proc->rkey;
 	output_header.inbox_semaphore = inbox_id;
 	output_header.source_node_id = ctx->node_id;
