@@ -15,6 +15,7 @@
 
 #include <asm/io.h>
 #include <lego/mm.h>
+#include <lego/slab.h>
 #include <lego/log2.h>
 #include <lego/kernel.h>
 #include <lego/comp_common.h>
@@ -86,6 +87,7 @@ static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
 {
 	struct p2m_llc_miss_struct payload;
 	int ret;
+	void *temp_retbuf;
 
 	pr_info("maddr: %#lx pa_cache: %p va_cache: %p va_meta: %p way: %u\n",
 		vaddr, pa_cache, va_cache, va_meta, way);
@@ -93,6 +95,7 @@ static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
 	payload.pid = current->pid;
 	payload.missing_vaddr = vaddr;
 
+#if 0
 	/*
 	 * Using the cacheline as our return buffer, hence we avoid
 	 * another memcpy from retbuf to cacheline itself.
@@ -110,6 +113,30 @@ static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
 		else
 			WARN(1, "invalid retbuf size: %d\n", ret);
 	}
+#else
+	temp_retbuf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!temp_retbuf)
+		return -ENOMEM;
+
+	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS, &payload,
+				sizeof(payload), temp_retbuf, PAGE_SIZE,
+				false, DEF_NET_TIMEOUT);
+
+	if (unlikely(ret < PAGE_SIZE)) {
+		/* remote reported error */
+		if (likely(ret == sizeof(int)))
+			return -(*(int *)temp_retbuf);
+		/* IB is not available */
+		else if (ret < 0)
+			return -EIO;
+		else {
+			WARN(1, "invalid retbuf size: %d\n", ret);
+			return -EIO;
+		}
+	}
+	memcpy(va_cache, temp_retbuf, PAGE_SIZE);
+	kfree(temp_retbuf);
+#endif
 
 	pcache_mkvalid(va_meta);
 	pcache_mkaccessed(va_meta);
@@ -120,11 +147,14 @@ static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
 /*
  * Fill a cacheline given a missing virtual address
  * Return 0 on success, others on failure
+ *
+ * TODO: sync in SMP
  */
 int pcache_fill(unsigned long missing_vaddr, unsigned long *cache_paddr)
 {
 	void *pa_cache, *va_cache, *va_meta;
 	unsigned int way;
+	int ret;
 
 	for_each_way_set(missing_vaddr, pa_cache, va_cache, va_meta, way) {
 		if (!pcache_valid(va_meta))
@@ -136,7 +166,15 @@ int pcache_fill(unsigned long missing_vaddr, unsigned long *cache_paddr)
 		return -ENOMEM;
 	}
 
-	return do_pcache_fill(missing_vaddr, pa_cache, va_cache, va_meta, way);
+	ret = do_pcache_fill(missing_vaddr, pa_cache, va_cache, va_meta, way);
+	if (unlikely(ret)) {
+		*cache_paddr = 0;
+		return ret;
+	}
+
+	/* for establishing va->pa mapping */
+	*cache_paddr = (unsigned long)pa_cache;
+	return 0;
 }
 
 void __init pcache_init(void)

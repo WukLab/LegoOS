@@ -345,6 +345,7 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 		/* pcache fail to handle this fault*/
 		panic("pcache fail to handle: ret: %d\n", ret);
 	}
+	pr_info("new page pa: %#lx\n", page);
 
 	/* establish pgtable mapping */
 	pgd = pgd_offset(current->mm, address);
@@ -358,6 +359,7 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	if (unlikely(!ptep))
 		goto oom;
 
+	/*TODO mkpte */
 	pte_set(ptep, pte);
 	return;
 
