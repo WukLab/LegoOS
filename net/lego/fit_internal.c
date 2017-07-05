@@ -354,7 +354,7 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 
 inline uintptr_t client_ib_reg_mr_addr_phys(ppc *ctx, void *addr, size_t length)
 {
-	return client_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
+	return client_ib_reg_mr_phys_addr(ctx, addr, length);
 }
 
 inline uintptr_t client_ib_reg_mr_addr(ppc *ctx, void *addr, size_t length)
