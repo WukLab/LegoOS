@@ -23,8 +23,8 @@ int p2m_fork(struct task_struct *p)
 	memcpy(payload.comm, p->comm, TASK_COMM_LEN);
 
 	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_FORK, &payload,
-				     sizeof(payload), &retbuf, sizeof(retbuf),
-				     DEF_NET_TIMEOUT);
+				sizeof(payload), &retbuf, sizeof(retbuf), false,
+				DEF_NET_TIMEOUT);
 
 	WARN(retbuf, ret_to_string(retbuf));
 	return retbuf;

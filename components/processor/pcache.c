@@ -66,26 +66,29 @@ static inline unsigned long addr2set(unsigned long addr)
 /*
  * Walk through all N-way cachelines within a set
  * @addr: the address in question
- * @cache: physical address of the cacheline 
- * @meta: physical address of the metadata
+ * @pa_cache: physical address of the cacheline 
+ * @va_cache: virtual address of the cacheline 
+ * @va_meta: virtual address of the metadata
  * @way: current way number (maximum is llc_cache_associativity)
  */
-#define for_each_way_set(addr, cache, meta, way)				\
-	for (cache = (void *)((addr & pcache_set_mask) + virt_start_cacheline),	\
-	     meta = (void *)(addr2set(addr) + virt_start_metadata), way = 0;	\
-	     way < llc_cache_associativity;				\
-	     way++,							\
-	     cache += pcache_way_cache_stride, 				\
-	     meta += pcache_way_meta_stride)
+#define for_each_way_set(addr, pa_cache, va_cache, va_meta, way)			\
+	for (va_cache = (void *)((addr & pcache_set_mask) + virt_start_cacheline),	\
+	     pa_cache = (void *)((addr & pcache_set_mask) + phys_start_cacheline),	\
+	     va_meta = (void *)(addr2set(addr) + virt_start_metadata), way = 0;		\
+	     way < llc_cache_associativity;						\
+	     way++,									\
+	     pa_cache += pcache_way_cache_stride, 					\
+	     va_cache += pcache_way_cache_stride, 					\
+	     va_meta += pcache_way_meta_stride)
 
-static int do_pcache_fill(unsigned long vaddr, void *cache,
-			  void *meta, unsigned int way)
+static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
+			  void *va_cache, void *va_meta, unsigned int way)
 {
 	struct p2m_llc_miss_struct payload;
 	int ret;
 
-	pr_info("MisVaddr: %#lx, Cacheline: %p, Meta: %p, way: %u\n",
-		vaddr, cache, meta, way);
+	pr_info("maddr: %#lx pa_cache: %p va_cache: %p va_meta: %p way: %u\n",
+		vaddr, pa_cache, va_cache, va_meta, way);
 
 	payload.pid = current->pid;
 	payload.missing_vaddr = vaddr;
@@ -95,13 +98,12 @@ static int do_pcache_fill(unsigned long vaddr, void *cache,
 	 * another memcpy from retbuf to cacheline itself.
 	 */
 	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS, &payload,
-			sizeof(payload), cache, PAGE_SIZE,
-			DEF_NET_TIMEOUT);
+			sizeof(payload), pa_cache, PAGE_SIZE, true, DEF_NET_TIMEOUT);
 
 	if (unlikely(ret < PAGE_SIZE)) {
 		/* remote reported error */
 		if (likely(ret == sizeof(int)))
-			return -(*((int *)cache));
+			return -(*(int *)va_cache);
 		/* IB is not available */
 		else if (ret < 0)
 			return -EIO;
@@ -109,8 +111,8 @@ static int do_pcache_fill(unsigned long vaddr, void *cache,
 			WARN(1, "invalid retbuf size: %d\n", ret);
 	}
 
-	pcache_mkvalid(meta);
-	pcache_mkaccessed(meta);
+	pcache_mkvalid(va_meta);
+	pcache_mkaccessed(va_meta);
 
 	return 0;
 }
@@ -121,12 +123,11 @@ static int do_pcache_fill(unsigned long vaddr, void *cache,
  */
 int pcache_fill(unsigned long missing_vaddr, unsigned long *cache_paddr)
 {
-	void *cache, *meta;
+	void *pa_cache, *va_cache, *va_meta;
 	unsigned int way;
 
-	pr_info("missing_vaddr: %#lx\n", missing_vaddr);
-	for_each_way_set(missing_vaddr, cache, meta, way) {
-		if (!pcache_valid(meta))
+	for_each_way_set(missing_vaddr, pa_cache, va_cache, va_meta, way) {
+		if (!pcache_valid(va_meta))
 			break;
 	}
 
@@ -135,7 +136,7 @@ int pcache_fill(unsigned long missing_vaddr, unsigned long *cache_paddr)
 		return -ENOMEM;
 	}
 
-	return do_pcache_fill(missing_vaddr, cache, meta, way);
+	return do_pcache_fill(missing_vaddr, pa_cache, va_cache, va_meta, way);
 }
 
 void __init pcache_init(void)

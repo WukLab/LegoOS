@@ -40,7 +40,7 @@ int ibapi_num_connected_nodes(void);
 static inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
 { return -EIO; }
 static inline int ibapi_send_reply_imm(int target_node, void *addr, int size,
-				       void *ret_addr, int max_ret_size)
+				       void *ret_addr, int max_ret_size, bool if_use_ret_phys_addr)
 { return -EIO; }
 static inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr,
 					int receive_size, uintptr_t *descriptor)

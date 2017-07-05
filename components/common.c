@@ -27,7 +27,8 @@
  */
 int net_send_reply_timeout(u32 node, u32 opcode,
 			   void *payload, u32 len_payload,
-			   void *retbuf, u32 max_len_retbuf, u32 timeout, int if_use_phys_ret_addr)
+			   void *retbuf, u32 max_len_retbuf, bool retbuf_is_phys,
+			   u32 timeout)
 {
 	int ret;
 	u32 len_msg;
@@ -52,7 +53,7 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 	memcpy(payload_msg, payload, len_payload);
 
 	/* Synchronously send it out */
-	ret = ibapi_send_reply_imm(node, msg, len_msg, retbuf, max_len_retbuf, if_use_phys_ret_addr);
+	ret = ibapi_send_reply_imm(node, msg, len_msg, retbuf, max_len_retbuf, retbuf_is_phys);
 	kfree(msg);
 
 	return ret;
@@ -62,8 +63,10 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 
 int net_send_reply(u32 node, u32 opcode,
 		   void *payload, u32 len_payload,
-		   void *retbuf, u32 max_len_retbuf, int if_use_phys_ret_addr)
+		   void *retbuf, u32 max_len_retbuf, bool retbuf_is_phys)
 {
-	return net_send_reply_timeout(node, opcode, payload, len_payload, retbuf,
-				max_len_retbuf, DEF_MAX_TIMEOUT, if_use_phys_ret_addr);
+	return net_send_reply_timeout(node, opcode,
+				payload, len_payload,
+				retbuf, max_len_retbuf, retbuf_is_phys,
+				DEF_MAX_TIMEOUT);
 }

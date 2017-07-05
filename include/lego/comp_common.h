@@ -71,11 +71,12 @@ static inline void *to_payload(void *msg)
 
 int net_send_reply(u32 node, u32 opcode,
 		   void *payload, u32 len_payload,
-		   void *retbuf, u32 max_len_retbuf, int if_use_phys_ret_addr);
+		   void *retbuf, u32 max_len_retbuf, bool retbuf_is_phys);
 
 int net_send_reply_timeout(u32 node, u32 opcode,
 			   void *payload, u32 len_payload,
-			   void *retbuf, u32 max_len_retbuf, u32 timeout, int if_use_phys_ret_addr);
+			   void *retbuf, u32 max_len_retbuf, bool retbuf_is_phys,
+			   u32 timeout);
 
 /* P2M_LLC_MISS */
 struct p2m_llc_miss_struct {

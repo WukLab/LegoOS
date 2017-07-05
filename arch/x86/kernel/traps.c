@@ -18,7 +18,6 @@
 #include <lego/kernel.h>
 #include <lego/signal.h>
 #include <lego/linkage.h>
-#include <lego/compiler.h>
 
 /*
  * The default IDT table
@@ -68,8 +67,10 @@ dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 
 dotraplinkage void do_nmi(struct pt_regs *regs, long error_code)
 {
+	pr_crit("NMI in CPU%d, error_code: %ld\n",
+		smp_processor_id(), error_code);
 	show_regs(regs);
-	printk("NMI");
+	hlt();
 }
 
 dotraplinkage void do_device_not_available(struct pt_regs *regs, long error_code)
