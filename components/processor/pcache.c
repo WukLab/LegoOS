@@ -16,6 +16,10 @@
 #include <lego/mm.h>
 #include <lego/log2.h>
 #include <lego/kernel.h>
+#include <lego/comp_common.h>
+#include <lego/comp_processor.h>
+
+#include "pcache.h"
 
 static u64 llc_cache_start;
 static u64 llc_cache_registered_size;
@@ -60,13 +64,33 @@ static inline unsigned long addr2set(unsigned long addr)
  * @meta: physical address of the metadata
  * @way: current way number (maximum is llc_cache_associativity)
  */
-#define for_each_way_set(addr, cache, meta, way)			\
-	for (cache = (addr & pcache_set_mask) + phys_start_cacheline,	\
-	     meta = addr2set(addr) + phys_start_metadata, way = 0;	\
+#define for_each_way_set(addr, cache, meta, way)				\
+	for (cache = (void *)((addr & pcache_set_mask) + phys_start_cacheline),	\
+	     meta = (void *)(addr2set(addr) + phys_start_metadata), way = 0;	\
 	     way < llc_cache_associativity;				\
 	     way++,							\
 	     cache += pcache_way_cache_stride, 				\
 	     meta += pcache_way_meta_stride)
+
+static int do_pcache_fill(unsigned long vaddr, void *cache,
+			  void *meta, unsigned int way)
+{
+	struct p2m_llc_miss_struct payload;
+	int ret, retbuf;
+
+	pr_info("MisVaddr: %#lx, Cacheline: %p, Meta: %p, way: %u",
+		vaddr, cache, meta, way);
+
+	payload.pid = current->pid;
+	payload.missing_vaddr = vaddr;
+
+	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS, &payload,
+			sizeof(payload), &retbuf, sizeof(retbuf),
+			DEF_NET_TIMEOUT);
+
+	WARN(retbuf, ret_to_string(retbuf));
+	return retbuf;
+}
 
 /*
  * Fill a cacheline given a missing virtual address
@@ -74,15 +98,21 @@ static inline unsigned long addr2set(unsigned long addr)
  */
 int pcache_fill(unsigned long missing_vaddr, unsigned long *cache_paddr)
 {
-	unsigned long cache, meta;
+	void *cache, *meta;
 	unsigned int way;
 
 	pr_info("missing_vaddr: %#lx\n", missing_vaddr);
 	for_each_way_set(missing_vaddr, cache, meta, way) {
-		pr_info(" cache: %#lx, meta %#lx, way: %u\n", cache, meta, way);
+		if (pcache_valid(meta))
+			break;
 	}
 
-	return 0;
+	if (unlikely(way == llc_cache_associativity)) {
+		WARN(1, "Cache eviction needed!\n");
+		return -ENOMEM;
+	}
+
+	return do_pcache_fill(missing_vaddr, cache, meta, way);
 }
 
 void __init pcache_init(void)

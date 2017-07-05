@@ -12,6 +12,9 @@
 
 #include <lego/compiler.h>
 
+#define DEF_MEM_HOMENODE 1
+#define DEF_NET_TIMEOUT	 10	/* second */
+
 #ifdef CONFIG_COMP_PROCESSOR
 void __init processor_component_init(void);
 int __init pcache_range_register(u64 start, u64 size);

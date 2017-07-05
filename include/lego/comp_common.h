@@ -79,7 +79,8 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 
 /* P2M_LLC_MISS */
 struct p2m_llc_miss_struct {
-
+	__u32	pid;
+	__u64	missing_vaddr;
 };
 int pcache_fill(unsigned long, unsigned long *);
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64);

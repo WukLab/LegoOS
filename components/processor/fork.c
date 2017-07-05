@@ -11,9 +11,6 @@
 #include <lego/comp_common.h>
 #include <lego/comp_processor.h>
 
-#define DEF_MEM_HOMENODE 1
-#define DEF_NET_TIMEOUT	 10	/* second */
-
 /* Return 0 on success, other on failure */
 int p2m_fork(struct task_struct *p)
 {
