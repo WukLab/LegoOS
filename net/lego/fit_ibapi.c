@@ -54,11 +54,11 @@ static void ibv_remove_one(struct ib_device *device)
 	return;
 }
 
-inline int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size)
+inline int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int if_use_ret_phys_addr)
 {
 	ppc *ctx = FIT_ctx;
 	int ret;
-	ret = client_send_reply_with_rdma_write_with_imm(ctx, target_node, addr, size, ret_addr, max_ret_size, 0);
+	ret = client_send_reply_with_rdma_write_with_imm(ctx, target_node, addr, size, ret_addr, max_ret_size, 0, if_use_ret_phys_addr);
 	return ret;
 }
 
