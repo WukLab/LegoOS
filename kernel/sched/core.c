@@ -577,13 +577,6 @@ again:
 	BUG();
 }
 
-static void switch_mm_irqs_off(struct mm_struct *prev,
-			       struct mm_struct *next,
-			       struct task_struct *tsk)
-{
-	load_cr3(next->pgd);
-}
-
 /**
  * finish_task_switch - clean up after a task-switch
  * @prev: the thread we just switched away from.

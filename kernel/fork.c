@@ -103,9 +103,17 @@ static void free_task(struct task_struct *tsk)
 	free_task_struct(tsk);
 }
 
-/* TODO: cleanup all mm_struct related stuff */
+static inline void mm_free_pgd(struct mm_struct *mm)
+{
+	pgd_free(mm, mm->pgd);
+}
+
 static inline void __mmput(struct mm_struct *mm)
 {
+	BUG_ON(atomic_read(&mm->mm_users));
+	BUG_ON(mm == &init_mm);
+
+	mm_free_pgd(mm);
 	kfree(mm);
 }
 
@@ -119,13 +127,32 @@ void mmput(struct mm_struct *mm)
 		__mmput(mm);
 }
 
+/* Please note the differences between mmput and mm_release.
+ * mmput is called whenever we stop holding onto a mm_struct,
+ * error success whatever.
+ *
+ * mm_release is called after a mm_struct has been removed
+ * from the current process.
+ *
+ * This difference is important for error handling, when we
+ * only half set up a mm_struct for a new process and need to restore
+ * the old one.  Because we mmput the new mm_struct before
+ * restoring the old one. . .
+ * Eric Biederman 10 January 1998
+ */
+void mm_release(struct task_struct *tsk, struct mm_struct *mm)
+{
+	/* Get rid of any cached register state */
+	deactivate_mm(tsk, mm);
+}
+
 /* TODO: copy mmap for the new mm */
 static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 {
 	return 0;
 }
 
-static int mm_init(struct mm_struct *mm, struct task_struct *p)
+static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 {
 	atomic_set(&mm->mm_users, 1);
 	atomic_set(&mm->mm_count, 1);
@@ -133,15 +160,31 @@ static int mm_init(struct mm_struct *mm, struct task_struct *p)
 	mm->pinned_vm = 0;
 	spin_lock_init(&mm->page_table_lock);
 
+	/*
+	 * pgd_alloc() will duplicate the identity kernel mapping
+	 * but leaves other entries empty:
+	 */
 	mm->pgd = pgd_alloc(mm);
-	if (unlikely(!mm->pgd))
-		goto out;
+	if (unlikely(!mm->pgd)) {
+		kfree(mm);
+		return NULL;
+	}
+	return mm;
+}
 
-	return 0;
+/*
+ * Allocate and initialize an mm_struct.
+ */
+struct mm_struct *mm_alloc(void)
+{
+	struct mm_struct *mm;
 
-out:
-	kfree(mm);
-	return -ENOMEM;
+	mm = kmalloc(GFP_KERNEL, sizeof(*mm));
+	if (!mm)
+		return NULL;
+
+	memset(mm, 0, sizeof(*mm));
+	return mm_init(mm, current);
 }
 
 static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
@@ -155,10 +198,9 @@ static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 	if (!mm)
 		return NULL;
 
-	*mm = *oldmm;
+	memcpy(mm, oldmm, sizeof(*mm));
 
-	ret = mm_init(mm, tsk);
-	if (ret)
+	if (!mm_init(mm, tsk))
 		return NULL;
 
 	ret = dup_mmap(mm, oldmm);

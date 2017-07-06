@@ -12,6 +12,7 @@
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/segment.h>
 #include <asm/processor.h>
 
 #include <lego/pfn.h>
@@ -445,5 +446,40 @@ pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 #define nth_page(page,n)	pfn_to_page(page_to_pfn((page)) + (n))
 
 #define PAGE_ALIGNED(addr)      IS_ALIGNED((unsigned long)addr, PAGE_SIZE)
+
+/* Page Fault flags */
+#define FAULT_FLAG_WRITE	0x01	/* Fault was a write access */
+#define FAULT_FLAG_MKWRITE	0x02	/* Fault was mkwrite of existing pte */
+#define FAULT_FLAG_ALLOW_RETRY	0x04	/* Retry fault if blocking */
+#define FAULT_FLAG_RETRY_NOWAIT	0x08	/* Don't drop mmap_sem and wait when retrying */
+#define FAULT_FLAG_KILLABLE	0x10	/* The fault task is in SIGKILL killable region */
+#define FAULT_FLAG_TRIED	0x20	/* Second try */
+#define FAULT_FLAG_USER		0x40	/* The fault originated in userspace */
+#define FAULT_FLAG_REMOTE	0x80	/* faulting for non current tsk/mm */
+#define FAULT_FLAG_INSTRUCTION  0x100	/* The fault was during an instruction fetch */
+
+void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
+			struct task_struct *tsk);
+void switch_mm(struct mm_struct *prev, struct mm_struct *next,
+	       struct task_struct *tsk);
+
+static inline void activate_mm(struct mm_struct *prev, struct mm_struct *next)
+{
+	switch_mm(prev, next, NULL);
+}
+
+#define deactivate_mm(tsk, mm)	\
+do {				\
+	load_gs_index(0);	\
+	loadsegment(fs, 0);	\
+} while (0)
+
+struct mm_struct *mm_alloc(void);
+
+/* Remove the current tasks stale references to the old mm_struct */
+void mm_release(struct task_struct *, struct mm_struct *);
+
+/* mmput gets rid of the mappings and all user-space */
+void mmput(struct mm_struct *);
 
 #endif /* _LEGO_MM_H_ */

@@ -48,6 +48,7 @@
 	.parent		= &tsk,						\
 	.children	= LIST_HEAD_INIT(tsk.children),			\
 	.sibling	= LIST_HEAD_INIT(tsk.sibling),			\
+	.alloc_lock	= __SPIN_LOCK_UNLOCKED(tsk.alloc_lock),		\
 }
 
 struct task_struct init_task = INIT_TASK(init_task);

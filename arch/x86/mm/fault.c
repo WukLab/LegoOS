@@ -14,6 +14,7 @@
 #include <asm/current.h>
 
 #include <lego/mm.h>
+#include <lego/slab.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
@@ -303,6 +304,98 @@ bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 	no_context(regs, error_code, address, SIGSEGV);
 }
 
+static void pgtable_bad(struct pt_regs *regs, unsigned long error_code,
+			unsigned long address)
+{
+	struct task_struct *tsk;
+
+	tsk = current;
+
+	printk(KERN_ALERT "%s: Corrupted page table at address %lx\n",
+	       tsk->comm, address);
+	dump_pagetable(address);
+
+	tsk->thread.cr2		= address;
+	tsk->thread.trap_nr	= X86_TRAP_PF;
+	tsk->thread.error_code	= error_code;
+
+	__die("Bad pagetable", regs, error_code);
+	hlt();
+}
+
+static void user_hlt(void)
+{
+/*
+	asm volatile (
+		"movq $39, %rax\n\t"
+		"syscall\n\t"
+	);
+*/
+	asm volatile (
+		"movq $39, %rax\n\t"
+	);
+	for (;;)
+		cpu_relax();
+}
+
+static inline void __do_page_fault(struct pt_regs *regs, unsigned long address,
+				   long error_code)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *ptep;
+	pte_t pte;
+	pgprot_t pgprot;
+	unsigned long page;
+	unsigned long flags = FAULT_FLAG_KILLABLE | FAULT_FLAG_USER;
+	struct mm_struct *mm = current->mm;
+
+	if (error_code & PF_WRITE)
+		flags |= FAULT_FLAG_WRITE;
+	if (error_code & PF_INSTR)
+		flags |= FAULT_FLAG_INSTRUCTION;
+
+#if 0
+	ret = pcache_fill(address, &page);
+	if (ret)
+		panic("pcache fail to handle: ret: %d\n", ret);
+#endif
+
+	pr_info("PID:%d(%s)UserPageFault(CPU%d),ErrorCode:%#lx,Address:%#lx\n",
+		current->pid, current->comm, smp_processor_id(), error_code, address);
+	dump_pagetable(address);
+	page = (unsigned long)kmalloc(PAGE_SIZE, GFP_KERNEL);
+	memcpy((void *)page, user_hlt, 100);
+	page = virt_to_phys((void *)page);
+
+	/* establish pgtable mapping */
+	pgd = pgd_offset(mm, address);
+	pud = pud_alloc(mm, pgd, address);
+	if (unlikely(!pud))
+		goto oom;
+	pmd = pmd_alloc(mm, pud, address);
+	if (unlikely(!pmd))
+		goto oom;
+	ptep = pte_alloc(mm, pmd, address);
+	if (unlikely(!ptep))
+		goto oom;
+
+	if (!pte_none(*ptep)) {
+		dump_pagetable(address);
+		panic("BUG");
+		return;
+	}
+
+	pgprot = PAGE_SHARED_EXEC;
+	pte = pfn_pte(page >> PAGE_SHIFT, pgprot);
+	pte_set(ptep, pte);
+
+	return;
+oom:
+	panic("oom\n");
+}
+
 /*
  * This routine handles page faults.  It determines the address,
  * and the problem, and then passes it off to one of the appropriate
@@ -311,15 +404,6 @@ bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 {
 	unsigned long address = read_cr2();
-#ifdef CONFIG_COMP_PROCESSOR
-	unsigned long page;
-	int ret;
-	pgd_t *pgd;
-	pud_t *pud;
-	pmd_t *pmd;
-	pte_t *ptep;
-	pte_t pte;
-#endif
 
 	if (unlikely(fault_in_kernel_space(address))) {
 		if (!(error_code & (PF_RSVD | PF_USER | PF_PROT))) {
@@ -334,36 +418,12 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 		bad_area_nosemaphore(regs, error_code, address, NULL);
 	}
 
-	pr_info("UserPageFault(CPU%d),ErrorCode:%#lx,Address:%#lx\n",
-		smp_processor_id(), error_code, address);
+	if (unlikely(error_code & PF_RSVD))
+		pgtable_bad(regs, error_code, address);
 
-#ifndef CONFIG_COMP_PROCESSOR
-	panic("User-mode pgfault is only allowed at processor-component.");
+#ifdef CONFIG_COMP_PROCESSOR
+	__do_page_fault(regs, address, error_code);
 #else
-	ret = pcache_fill(address, &page);
-	if (ret) {
-		/* pcache fail to handle this fault*/
-		panic("pcache fail to handle: ret: %d\n", ret);
-	}
-	pr_info("new page pa: %#lx\n", page);
-
-	/* establish pgtable mapping */
-	pgd = pgd_offset(current->mm, address);
-	pud = pud_alloc(current->mm, pgd, address);
-	if (unlikely(!pud))
-		goto oom;
-	pmd = pmd_alloc(current->mm, pud, address);
-	if (unlikely(!pmd))
-		goto oom;
-	ptep = pte_alloc(current->mm, pmd, address);
-	if (unlikely(!ptep))
-		goto oom;
-
-	/*TODO mkpte */
-	pte_set(ptep, pte);
-	return;
-
-oom:
-	panic("oom\n");
+	panic("User-mode pgfault is only allowed at processor-component.");
 #endif
 }

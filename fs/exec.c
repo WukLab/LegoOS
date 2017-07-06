@@ -35,15 +35,52 @@ void unregister_binfmt(struct lego_binfmt *fmt)
 	spin_unlock(&binfmt_lock);
 }
 
+static int exec_mmap(void)
+{
+	struct mm_struct *new_mm;
+	struct mm_struct *old_mm;
+	struct task_struct *tsk;
+
+	new_mm = mm_alloc();
+	if (!new_mm)
+		return -ENOMEM;
+
+	tsk = current;
+	old_mm = current->mm;
+	mm_release(tsk, old_mm);
+
+	task_lock(tsk);
+	tsk->mm = new_mm;
+	tsk->active_mm = new_mm;
+	activate_mm(old_mm, new_mm);
+	task_unlock(tsk);
+
+	if (old_mm)
+		mmput(old_mm);
+	return 0;
+}
+
 int do_execve(const char *filename,
 	      const char * const *argv,
 	      const char * const *envp)
 {
 	struct pt_regs *regs = current_pt_regs();
+	int ret;
 
-	start_thread(regs, (unsigned long)0xC0001000, (unsigned long)0xC0002000);
+	ret = exec_mmap();
+	if (ret)
+		return ret;
 
-	/* Return to the newly replaced program */
+	start_thread(regs, (unsigned long)0xC0001000, (unsigned long)0xC0003000);
+
+	/*
+	 * This return will return to the point where do_execve()
+	 * is invoked. The final return to user-space will happen
+	 * when this kernel thread finishes and merges into
+	 * the end of ret_from_fork().
+	 *
+	 * Check ret_from_fork() for more detail.
+	 */
 	return 0;
 }
 

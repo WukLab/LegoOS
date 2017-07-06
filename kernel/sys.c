@@ -13,6 +13,7 @@
 /* Non-implemented system calls get redirected here. */
 asmlinkage long sys_ni_syscall(void)
 {
+	pr_info("%s: current: %d/%s", __func__, current->pid, current->comm);
 	return -ENOSYS;
 }
 
@@ -32,11 +33,13 @@ SYSCALL_DEFINE2(testhh, int, foo, long, bar)
  */
 SYSCALL_DEFINE0(getpid)
 {
+	pr_info("%s: current: %d/%s", __func__, current->pid, current->comm);
 	return current->tgid;
 }
 
 /* Thread ID - the internal kernel "pid" */
 SYSCALL_DEFINE0(gettid)
 {
+	pr_info("%s: current: %d/%s", __func__, current->pid, current->comm);
 	return current->pid;
 }
