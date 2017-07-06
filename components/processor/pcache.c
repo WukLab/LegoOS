@@ -87,7 +87,6 @@ static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
 {
 	struct p2m_llc_miss_struct payload;
 	int ret;
-	void *temp_retbuf;
 
 	pr_info("maddr: %#lx pa_cache: %p va_cache: %p va_meta: %p way: %u\n",
 		vaddr, pa_cache, va_cache, va_meta, way);
@@ -95,7 +94,6 @@ static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
 	payload.pid = current->pid;
 	payload.missing_vaddr = vaddr;
 
-#if 0
 	/*
 	 * Using the cacheline as our return buffer, hence we avoid
 	 * another memcpy from retbuf to cacheline itself.
@@ -103,6 +101,7 @@ static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
 	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS, &payload,
 			sizeof(payload), pa_cache, PAGE_SIZE, true, DEF_NET_TIMEOUT);
 
+	pr_info("%s: ret=%d, retbuf: %d\n", __func__, ret, *(int *)va_cache);
 	if (unlikely(ret < PAGE_SIZE)) {
 		/* remote reported error */
 		if (likely(ret == sizeof(int)))
@@ -113,30 +112,6 @@ static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
 		else
 			WARN(1, "invalid retbuf size: %d\n", ret);
 	}
-#else
-	temp_retbuf = kmalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!temp_retbuf)
-		return -ENOMEM;
-
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS, &payload,
-				sizeof(payload), temp_retbuf, PAGE_SIZE,
-				false, DEF_NET_TIMEOUT);
-
-	if (unlikely(ret < PAGE_SIZE)) {
-		/* remote reported error */
-		if (likely(ret == sizeof(int)))
-			return -(*(int *)temp_retbuf);
-		/* IB is not available */
-		else if (ret < 0)
-			return -EIO;
-		else {
-			WARN(1, "invalid retbuf size: %d\n", ret);
-			return -EIO;
-		}
-	}
-	memcpy(va_cache, temp_retbuf, PAGE_SIZE);
-	kfree(temp_retbuf);
-#endif
 
 	pcache_mkvalid(va_meta);
 	pcache_mkaccessed(va_meta);

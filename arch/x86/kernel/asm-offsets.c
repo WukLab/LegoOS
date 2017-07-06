@@ -23,17 +23,16 @@ static char syscalls_64[] = {
 
 void GoSpurs(void)
 {
-	BLANK();
 	OFFSET(TI_flags, thread_info, flags);
 	OFFSET(TI_status, thread_info, status);
-
 	BLANK();
+
 	OFFSET(TASK_THREAD_SP, task_struct, thread.sp);
-
 	BLANK();
+
 	DEFINE(PTREGS_SIZE, sizeof(struct pt_regs));
-
 	BLANK();
+
 #define ENTRY(entry) OFFSET(pt_regs_ ## entry, pt_regs, entry)
 	ENTRY(bx);
 	ENTRY(cx);
@@ -51,9 +50,13 @@ void GoSpurs(void)
 	ENTRY(r14);
 	ENTRY(r15);
 	ENTRY(flags);
+	BLANK();
 #undef ENTRY
+
+	OFFSET(TSS_ist, tss_struct, x86_tss.ist);
+	OFFSET(TSS_sp0, tss_struct, x86_tss.sp0);
+	BLANK();
 
 	DEFINE(__NR_syscall_max, sizeof(syscalls_64) - 1);
 	DEFINE(NR_syscalls, sizeof(syscalls_64));
-
 }

@@ -35,6 +35,7 @@ DEFINE_PER_CPU(struct tss_struct, cpu_tss) = {
 	},
 };
 
+/* Seriously, this is magic function */
 int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 		unsigned long arg, struct task_struct *p, unsigned long tls)
 {
@@ -47,7 +48,9 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	fork_frame = container_of(childregs, struct fork_frame, regs);
 	frame = &fork_frame->frame;
 	frame->bp = 0;
+	/* __switch_to() will return to ret_from_fork */
 	frame->ret_addr = (unsigned long)ret_from_fork;
+	/* __switch_to_asm will switch to this sp */
 	p->thread.sp = (unsigned long)fork_frame;
 	p->thread.io_bitmap_ptr = NULL;
 
