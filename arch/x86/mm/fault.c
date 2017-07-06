@@ -325,15 +325,14 @@ static void pgtable_bad(struct pt_regs *regs, unsigned long error_code,
 
 static void user_hlt(void)
 {
-/*
+#if 1
 	asm volatile (
 		"movq $39, %rax\n\t"
 		"syscall\n\t"
-	);
-*/
-	asm volatile (
 		"movq $39, %rax\n\t"
+		"syscall\n\t"
 	);
+#endif
 	for (;;)
 		cpu_relax();
 }

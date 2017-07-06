@@ -73,7 +73,14 @@ END(ignore_sysret)
 ENTRY(entry_SYSCALL_64)
 	SWAPGS
 
+	/*
+	 * SYSCALL does not change rsp for us!
+	 * Save the previous rsp and load the top of kernel stack.
+	 * It must be the top of kernel stack, since we came here
+	 * from *userspace*.
+	 */
 	movq	%rsp, PER_CPU_VAR(rsp_scratch)
+	movq	PER_CPU_VAR(cpu_tss + TSS_sp0), %rsp
 
 	/* Construct struct pt_regs on stack */
 	pushq	$__USER_DS			/* pt_regs->ss */
@@ -117,7 +124,6 @@ ENTRY(entry_SYSCALL_64)
 	movq	RSP(%rsp), %rsp
 	SWAPGS
 	sysretq
-
 END(entry_SYSCALL_64)
 
 /*
@@ -329,6 +335,10 @@ ENTRY(__switch_to_asm)
 	/*
 	 * Save callee-saved registers
 	 * This must match the order in inactive_task_frame
+	 *
+	 * Note that ret_addr is already pushed:
+	 *	1) context_switch(), where switch_to() was called
+	 *	2) ret_from_fork(), which is placed by fork()
 	 */
 	pushq	%rbp
 	pushq	%rbx
@@ -350,9 +360,8 @@ ENTRY(__switch_to_asm)
 	popq	%rbp
 
 	/*
-	 * Note: _Jump_ to __switch_to() function!
-	 * The __switch_to() will return to the address saved
-	 * previously or the ret_from_fork
+	 * Note:
+	 * This is a *JUMP* to __switch_to() function!
 	 */
 	jmp	__switch_to
 END(__switch_to_asm)
