@@ -947,6 +947,14 @@ int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len)
 	return 0;
 }
 
+int vm_munmap(struct lego_task_struct *p, unsigned long start, size_t len)
+{
+	int ret;
+
+	ret = do_munmap(p->mm, start, len);
+	return ret;
+}
+
 unsigned long unmapped_area(struct lego_task_struct *p,
 			    struct vm_unmapped_area_info *info)
 {
