@@ -58,8 +58,12 @@ SECTIONS {
 		__stext = .;
 		*(.text*)
 		SCHED_TEXT
+		FIXUP_TEXT
+		/* End of text section */
 		__etext = .;
-	} :text
+	} :text = 0x9090
+
+	EXCEPTION_TABLE(16) :text = 0x9090
 
 	. = ALIGN(PAGE_SIZE);
 	.rodata : AT(ADDR(.rodata) - LOAD_OFFSET) {

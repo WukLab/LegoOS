@@ -19,3 +19,4 @@ obj-y += exit.o
 obj-y += mutex.o
 obj-y += sys.o
 obj-y += kthread.o
+obj-y += extable.o

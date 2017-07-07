@@ -20,6 +20,8 @@
 #include <lego/ptrace.h>
 #include <lego/memory.h>
 #include <lego/signal.h>
+#include <lego/uaccess.h>
+#include <lego/extable.h>
 #include <lego/comp_common.h>
 
 /*

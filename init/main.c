@@ -26,6 +26,7 @@
 #include <lego/string.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>
+#include <lego/extable.h>
 #include <lego/binfmts.h>
 #include <lego/jiffies.h>
 #include <lego/kthread.h>
@@ -98,6 +99,7 @@ static void inline setup_nr_cpu_ids(void)
 #define MAX_INIT_ARGS	CONFIG_INIT_ENV_ARG_LIMIT
 #define MAX_INIT_ENVS	CONFIG_INIT_ENV_ARG_LIMIT
 
+/* http://c-faq.com/decl/spiral.anderson.html */
 static const char *argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 
@@ -240,6 +242,8 @@ asmlinkage void __init start_kernel(void)
 	 * buddy allocator is avaiable afterwards:
 	 */
 	memory_init();
+
+	sort_main_extable();
 
 	irq_init();
 

@@ -17,7 +17,24 @@
 		ALIGN_FUNCTION();					\
 		__sched_text_start = .;					\
 		*(.sched.text)						\
-		__sched_text_end = .;					\
+		__sched_text_end = .;
+
+#define FIXUP_TEXT							\
+		ALIGN_FUNCTION();					\
+		__fixup_text_start = .;					\
+		*(.fixup)						\
+		__fixup_text_end = .;
+
+/*
+ * Exception table
+ */
+#define EXCEPTION_TABLE(align)						\
+	. = ALIGN(align);						\
+	__ex_table : AT(ADDR(__ex_table) - LOAD_OFFSET) {		\
+		__start___ex_table = .;					\
+		*(__ex_table)						\
+		__stop___ex_table = .;					\
+	}
 
 /**
  * PERCPU_INPUT - the percpu input sections
