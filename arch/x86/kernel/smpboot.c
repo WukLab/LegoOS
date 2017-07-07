@@ -244,6 +244,8 @@ static int do_cpu_up(int apicid, int cpu, struct task_struct *idle)
 	initial_code = (unsigned long)start_secondary_cpu;
 	initial_gs = per_cpu_offset(cpu);
 
+	per_cpu(current_task, cpu) = idle;
+
 	/* So we see what's up */
 	announce_cpu(cpu, apicid);
 

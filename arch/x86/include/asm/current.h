@@ -24,4 +24,6 @@ static __always_inline struct task_struct *get_current(void)
 
 #define current get_current()
 
+DECLARE_PER_CPU(struct task_struct *, current_task);
+
 #endif /* _ASM_X86_CURRENT_H_ */

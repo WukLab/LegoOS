@@ -23,11 +23,13 @@ static char syscalls_64[] = {
 
 void GoSpurs(void)
 {
+	OFFSET(TI_task, thread_info, task);
 	OFFSET(TI_flags, thread_info, flags);
 	OFFSET(TI_status, thread_info, status);
 	BLANK();
 
 	OFFSET(TASK_THREAD_SP, task_struct, thread.sp);
+	OFFSET(TASK_addr_limit, task_struct, thread.addr_limit);
 	BLANK();
 
 	DEFINE(PTREGS_SIZE, sizeof(struct pt_regs));

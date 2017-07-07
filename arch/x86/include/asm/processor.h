@@ -12,6 +12,7 @@
 
 #include <asm/smp.h>
 #include <asm/ptrace.h>
+#include <asm/uaccess.h>
 #include <asm/thread_info.h>
 #include <asm/processor-flags.h>
 #include <asm/processor-features.h>
@@ -226,8 +227,9 @@ static inline unsigned long current_top_of_stack(void)
 #define TASK_SIZE_MAX	TASK_SIZE
 #define STACK_TOP_MAX	TASK_SIZE
 
-#define INIT_THREAD  {				\
-	.sp0		= TOP_OF_INIT_STACK,	\
+#define INIT_THREAD  {						\
+	.sp0			= TOP_OF_INIT_STACK,		\
+	.addr_limit		= KERNEL_DS,			\
 }
 
 #define task_pt_regs(tsk)	((struct pt_regs *)(tsk)->thread.sp0 - 1)

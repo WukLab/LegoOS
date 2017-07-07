@@ -25,9 +25,8 @@
 
 bool sysctl_SCHED_FEATURE_TTWU_QUEUE = false;
 
+DEFINE_PER_CPU(struct task_struct *, current_task) = &init_task;
 DEFINE_PER_CPU(int, __preempt_count) = INIT_PREEMPT_COUNT;
-
-/* Per-CPU Runqueue */
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 int in_sched_functions(unsigned long addr)

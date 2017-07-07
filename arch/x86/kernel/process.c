@@ -83,6 +83,8 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	 */
 	load_sp0(tss, next);
 
+	this_cpu_write(current_task, next_p);
+
 	return prev_p;
 }
 

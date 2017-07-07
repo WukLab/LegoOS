@@ -23,6 +23,7 @@
  * on our cache or tlb entries.
  */
 
+#ifndef __ASSEMBLY__
 struct exception_table_entry {
 	int insn, fixup, handler;
 };
@@ -40,6 +41,7 @@ struct exception_table_entry {
 struct pt_regs;
 int fixup_exception(struct pt_regs *regs, int trapnr);
 bool ex_has_fault_handler(unsigned long ip);
+#endif /* __ASSEMBLY__ */
 
 /* Exception table entry */
 #ifdef __ASSEMBLY__

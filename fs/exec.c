@@ -13,6 +13,7 @@
 #include <lego/binfmts.h>
 #include <lego/spinlock.h>
 #include <lego/syscalls.h>
+#include <lego/uaccess.h>
 
 static LIST_HEAD(formats);
 static DEFINE_SPINLOCK(binfmt_lock);
@@ -60,12 +61,39 @@ static int exec_mmap(void)
 	return 0;
 }
 
+static int count(const char * const *argv, int max)
+{
+	int i = 0;
+
+	if (!argv)
+		return 0;
+
+	for (;;) {
+		const char *p;
+
+		if (get_user(p, argv + i))
+			return -EFAULT;
+
+		if (i >= max)
+			return -E2BIG;
+		i++;
+	}
+	return i;
+}
+
 int do_execve(const char *filename,
 	      const char * const *argv,
 	      const char * const *envp)
 {
 	struct pt_regs *regs = current_pt_regs();
-	int ret;
+	int ret, argc, envc;
+
+	argc = count(argv, MAX_ARG_STRINGS);
+	if (argc < 0)
+		return argc;
+	envc = count(envp, MAX_ARG_STRINGS);
+	if (envc < 0)
+		return envc;
 
 	ret = exec_mmap();
 	if (ret)
@@ -85,9 +113,9 @@ int do_execve(const char *filename,
 }
 
 SYSCALL_DEFINE3(execve,
-		const char *, filename,
-		const char *const *, argv,
-		const char *const *, envp)
+		const char __user*, filename,
+		const char __user *const __user *, argv,
+		const char __user *const __user *, envp)
 {
 	return do_execve(filename, argv, envp);
 }
