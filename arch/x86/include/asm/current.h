@@ -14,6 +14,7 @@
 
 #include <asm/thread_info.h>
 #include <lego/compiler.h>
+#include <lego/percpu.h>
 
 struct task_struct;
 

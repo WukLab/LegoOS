@@ -16,82 +16,204 @@
 
 #include <generated/asm-offsets.h>
 
-	.text
-ENTRY(__get_user_1)
-	mov PER_CPU_VAR(current_task), %_ASM_DX
-	cmp TASK_addr_limit(%_ASM_DX),%_ASM_AX
-	jae bad_get_user
-1:	movzbl (%_ASM_AX),%edx
-	xor %eax,%eax
-	ret
-ENDPROC(__get_user_1)
+/* Standard copy_to_user with segment limit checking */
+ENTRY(_copy_to_user)
+	mov PER_CPU_VAR(current_task), %rax
+	movq %rdi,%rcx
+	addq %rdx,%rcx
+	jc bad_to_user
+	cmpq TASK_addr_limit(%rax),%rcx
+	ja bad_to_user
+	jmp copy_user_enhanced_fast_string
+ENDPROC(_copy_to_user)
 
-ENTRY(__get_user_2)
-	add $1,%_ASM_AX
-	jc bad_get_user
-	mov PER_CPU_VAR(current_task), %_ASM_DX
-	cmp TASK_addr_limit(%_ASM_DX),%_ASM_AX
-	jae bad_get_user
-2:	movzwl -1(%_ASM_AX),%edx
-	xor %eax,%eax
-	ret
-ENDPROC(__get_user_2)
+/* Standard copy_from_user with segment limit checking */
+ENTRY(_copy_from_user)
+	mov PER_CPU_VAR(current_task), %rax
+	movq %rsi,%rcx
+	addq %rdx,%rcx
+	jc bad_from_user
+	cmpq TASK_addr_limit(%rax),%rcx
+	ja bad_from_user
+	jmp copy_user_enhanced_fast_string
+ENDPROC(_copy_from_user)
 
-ENTRY(__get_user_4)
-	add $3,%_ASM_AX
-	jc bad_get_user
-	mov PER_CPU_VAR(current_task), %_ASM_DX
-	cmp TASK_addr_limit(%_ASM_DX),%_ASM_AX
-	jae bad_get_user
-3:	movl -3(%_ASM_AX),%edx
-	xor %eax,%eax
+	.section .fixup,"ax"
+	/* must zero dest */
+ENTRY(bad_from_user)
+bad_from_user:
+	movl %edx,%ecx
+	xorl %eax,%eax
+	rep
+	stosb
+bad_to_user:
+	movl %edx,%eax
 	ret
-ENDPROC(__get_user_4)
+ENDPROC(bad_from_user)
+	.previous
 
-ENTRY(__get_user_8)
-#ifdef CONFIG_X86_64
-	add $7,%_ASM_AX
-	jc bad_get_user
-	mov PER_CPU_VAR(current_task), %_ASM_DX
-	cmp TASK_addr_limit(%_ASM_DX),%_ASM_AX
-	jae bad_get_user
-4:	movq -7(%_ASM_AX),%rdx
-	xor %eax,%eax
-	ret
-#else
-	add $7,%_ASM_AX
-	jc bad_get_user_8
-	mov PER_CPU_VAR(current_task), %_ASM_DX
-	cmp TASK_addr_limit(%_ASM_DX),%_ASM_AX
-	jae bad_get_user_8
-4:	movl -7(%_ASM_AX),%edx
-5:	movl -3(%_ASM_AX),%ecx
-	xor %eax,%eax
-	ret
-#endif
-ENDPROC(__get_user_8)
 
-bad_get_user:
-	xor %edx,%edx
-	mov $(-EFAULT),%_ASM_AX
+/*
+ * copy_user_generic_unrolled - memory copy with exception handling.
+ * This version is for CPUs like P4 that don't have efficient micro
+ * code for rep movsq
+ *
+ * Input:
+ * rdi destination
+ * rsi source
+ * rdx count
+ *
+ * Output:
+ * eax uncopied bytes or 0 if successful.
+ */
+ENTRY(copy_user_generic_unrolled)
+	cmpl $8,%edx
+	jb 20f		/* less then 8 bytes, go to byte copy loop */
+	ALIGN_DESTINATION
+	movl %edx,%ecx
+	andl $63,%edx
+	shrl $6,%ecx
+	jz 17f
+1:	movq (%rsi),%r8
+2:	movq 1*8(%rsi),%r9
+3:	movq 2*8(%rsi),%r10
+4:	movq 3*8(%rsi),%r11
+5:	movq %r8,(%rdi)
+6:	movq %r9,1*8(%rdi)
+7:	movq %r10,2*8(%rdi)
+8:	movq %r11,3*8(%rdi)
+9:	movq 4*8(%rsi),%r8
+10:	movq 5*8(%rsi),%r9
+11:	movq 6*8(%rsi),%r10
+12:	movq 7*8(%rsi),%r11
+13:	movq %r8,4*8(%rdi)
+14:	movq %r9,5*8(%rdi)
+15:	movq %r10,6*8(%rdi)
+16:	movq %r11,7*8(%rdi)
+	leaq 64(%rsi),%rsi
+	leaq 64(%rdi),%rdi
+	decl %ecx
+	jnz 1b
+17:	movl %edx,%ecx
+	andl $7,%edx
+	shrl $3,%ecx
+	jz 20f
+18:	movq (%rsi),%r8
+19:	movq %r8,(%rdi)
+	leaq 8(%rsi),%rsi
+	leaq 8(%rdi),%rdi
+	decl %ecx
+	jnz 18b
+20:	andl %edx,%edx
+	jz 23f
+	movl %edx,%ecx
+21:	movb (%rsi),%al
+22:	movb %al,(%rdi)
+	incq %rsi
+	incq %rdi
+	decl %ecx
+	jnz 21b
+23:	xor %eax,%eax
 	ret
-END(bad_get_user)
 
-#ifdef CONFIG_X86_32
-bad_get_user_8:
-	xor %edx,%edx
-	xor %ecx,%ecx
-	mov $(-EFAULT),%_ASM_AX
+	.section .fixup,"ax"
+30:	shll $6,%ecx
+	addl %ecx,%edx
+	jmp 60f
+40:	leal (%rdx,%rcx,8),%edx
+	jmp 60f
+50:	movl %ecx,%edx
+60:	jmp copy_user_handle_tail /* ecx is zerorest also */
+	.previous
+
+	_ASM_EXTABLE(1b,30b)
+	_ASM_EXTABLE(2b,30b)
+	_ASM_EXTABLE(3b,30b)
+	_ASM_EXTABLE(4b,30b)
+	_ASM_EXTABLE(5b,30b)
+	_ASM_EXTABLE(6b,30b)
+	_ASM_EXTABLE(7b,30b)
+	_ASM_EXTABLE(8b,30b)
+	_ASM_EXTABLE(9b,30b)
+	_ASM_EXTABLE(10b,30b)
+	_ASM_EXTABLE(11b,30b)
+	_ASM_EXTABLE(12b,30b)
+	_ASM_EXTABLE(13b,30b)
+	_ASM_EXTABLE(14b,30b)
+	_ASM_EXTABLE(15b,30b)
+	_ASM_EXTABLE(16b,30b)
+	_ASM_EXTABLE(18b,40b)
+	_ASM_EXTABLE(19b,40b)
+	_ASM_EXTABLE(21b,50b)
+	_ASM_EXTABLE(22b,50b)
+ENDPROC(copy_user_generic_unrolled)
+
+/* Some CPUs run faster using the string copy instructions.
+ * This is also a lot simpler. Use them when possible.
+ *
+ * Only 4GB of copy is supported. This shouldn't be a problem
+ * because the kernel normally only writes from/to page sized chunks
+ * even if user space passed a longer buffer.
+ * And more would be dangerous because both Intel and AMD have
+ * errata with rep movsq > 4GB. If someone feels the need to fix
+ * this please consider this.
+ *
+ * Input:
+ * rdi destination
+ * rsi source
+ * rdx count
+ *
+ * Output:
+ * eax uncopied bytes or 0 if successful.
+ */
+ENTRY(copy_user_generic_string)
+	cmpl $8,%edx
+	jb 2f		/* less than 8 bytes, go to byte copy loop */
+	ALIGN_DESTINATION
+	movl %edx,%ecx
+	shrl $3,%ecx
+	andl $7,%edx
+1:	rep
+	movsq
+2:	movl %edx,%ecx
+3:	rep
+	movsb
+	xorl %eax,%eax
 	ret
-END(bad_get_user_8)
-#endif
 
-	_ASM_EXTABLE(1b,bad_get_user)
-	_ASM_EXTABLE(2b,bad_get_user)
-	_ASM_EXTABLE(3b,bad_get_user)
-#ifdef CONFIG_X86_64
-	_ASM_EXTABLE(4b,bad_get_user)
-#else
-	_ASM_EXTABLE(4b,bad_get_user_8)
-	_ASM_EXTABLE(5b,bad_get_user_8)
-#endif
+	.section .fixup,"ax"
+11:	leal (%rdx,%rcx,8),%ecx
+12:	movl %ecx,%edx		/* ecx is zerorest also */
+	jmp copy_user_handle_tail
+	.previous
+
+	_ASM_EXTABLE(1b,11b)
+	_ASM_EXTABLE(3b,12b)
+ENDPROC(copy_user_generic_string)
+
+/*
+ * Some CPUs are adding enhanced REP MOVSB/STOSB instructions.
+ * It's recommended to use enhanced REP MOVSB/STOSB if it's enabled.
+ *
+ * Input:
+ * rdi destination
+ * rsi source
+ * rdx count
+ *
+ * Output:
+ * eax uncopied bytes or 0 if successful.
+ */
+ENTRY(copy_user_enhanced_fast_string)
+	movl %edx,%ecx
+1:	rep
+	movsb
+	xorl %eax,%eax
+	ret
+
+	.section .fixup,"ax"
+12:	movl %ecx,%edx		/* ecx is zerorest also */
+	jmp copy_user_handle_tail
+	.previous
+
+	_ASM_EXTABLE(1b,12b)
+ENDPROC(copy_user_enhanced_fast_string)

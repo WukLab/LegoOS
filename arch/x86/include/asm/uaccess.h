@@ -14,8 +14,10 @@
 #ifndef _ASM_X86_UACCESS_H_
 #define _ASM_X86_UACCESS_H_
 
+#include <lego/kernel.h>
 #include <lego/extable.h>
 #include <lego/compiler.h>
+#include <asm/current.h>
 
 #define VERIFY_READ	0
 #define VERIFY_WRITE	1
@@ -122,26 +124,13 @@ copy_user_generic_unrolled(void *to, const void *from, unsigned len);
 static __always_inline __must_check unsigned long
 copy_user_generic(void *to, const void *from, unsigned len)
 {
-	unsigned ret = 0;
-
-	panic("Sorry not implemented now!");
-#if 0
-	/*
-	 * If CPU has ERMS feature, use copy_user_enhanced_fast_string.
-	 * Otherwise, if CPU has rep_good feature, use copy_user_generic_string.
-	 * Otherwise, use copy_user_generic_unrolled.
-	 */
-	alternative_call_2(copy_user_generic_unrolled,
-			 copy_user_generic_string,
-			 X86_FEATURE_REP_GOOD,
-			 copy_user_enhanced_fast_string,
-			 X86_FEATURE_ERMS,
-			 ASM_OUTPUT2("=a" (ret), "=D" (to), "=S" (from),
-				     "=d" (len)),
-			 "1" (to), "2" (from), "3" (len)
-			 : "memory", "rcx", "r8", "r9", "r10", "r11");
-#endif
-	return ret;
+/*
+ * FIXME:
+ * Originally, there are three versions of usercopy.
+ * All in lib/uaccess.S. We are just using the fastest verion
+ * because 1) our E5-v3 supports, 2) we don't have alternatives
+ */
+	return copy_user_enhanced_fast_string(to, from , len);
 }
 
 /* FIXME: this hack is definitely wrong -AK */
@@ -394,5 +383,111 @@ extern int __get_user_bad(void);
 	(x) = (__force __typeof__(*(ptr))) __val_gu;			\
 	__builtin_expect(__ret_gu, 0);					\
 })
+
+extern void __put_user_bad(void);
+
+/*
+ * Strange magic calling convention: pointer in %ecx,
+ * value in %eax(:%edx), return value in %eax. clobbers %rbx
+ */
+extern void __put_user_1(void);
+extern void __put_user_2(void);
+extern void __put_user_4(void);
+extern void __put_user_8(void);
+
+#define __put_user_x(size, x, ptr, __ret_pu)			\
+	asm volatile("call __put_user_" #size : "=a" (__ret_pu)	\
+		     : "0" ((typeof(*(ptr)))(x)), "c" (ptr) : "ebx")
+
+/**
+ * put_user: - Write a simple value into user space.
+ * @x:   Value to copy to user space.
+ * @ptr: Destination address, in user space.
+ *
+ * Context: User context only. This function may sleep if pagefaults are
+ *          enabled.
+ *
+ * This macro copies a single simple value from kernel space to user
+ * space.  It supports simple types like char and int, but not larger
+ * data types like structures or arrays.
+ *
+ * @ptr must have pointer-to-simple-variable type, and @x must be assignable
+ * to the result of dereferencing @ptr.
+ *
+ * Returns zero on success, or -EFAULT on error.
+ */
+#define put_user(x, ptr)					\
+({								\
+	int __ret_pu;						\
+	__typeof__(*(ptr)) __pu_val;				\
+	__chk_user_ptr(ptr);					\
+	__pu_val = x;						\
+	switch (sizeof(*(ptr))) {				\
+	case 1:							\
+		__put_user_x(1, __pu_val, ptr, __ret_pu);	\
+		break;						\
+	case 2:							\
+		__put_user_x(2, __pu_val, ptr, __ret_pu);	\
+		break;						\
+	case 4:							\
+		__put_user_x(4, __pu_val, ptr, __ret_pu);	\
+		break;						\
+	case 8:							\
+		__put_user_x(8, __pu_val, ptr, __ret_pu);	\
+		break;						\
+	default:						\
+		__put_user_x(X, __pu_val, ptr, __ret_pu);	\
+		break;						\
+	}							\
+	__builtin_expect(__ret_pu, 0);				\
+})
+
+unsigned long __must_check _copy_from_user(void *to, const void __user *from,
+					   unsigned n);
+unsigned long __must_check _copy_to_user(void __user *to, const void *from,
+					 unsigned n);
+
+extern void __compiletime_error("usercopy buffer size is too small")
+__bad_copy_user(void);
+
+static inline void copy_user_overflow(int size, unsigned long count)
+{
+	WARN(1, "Buffer overflow detected (%d < %lu)!\n", size, count);
+}
+
+static __always_inline unsigned long __must_check
+copy_from_user(void *to, const void __user *from, unsigned long n)
+{
+	int sz = __compiletime_object_size(to);
+
+	if (likely(sz < 0 || sz >= n)) {
+		check_object_size(to, n, false);
+		n = _copy_from_user(to, from, n);
+	} else if (!__builtin_constant_p(n))
+		copy_user_overflow(sz, n);
+	else
+		__bad_copy_user();
+
+	return n;
+}
+
+static __always_inline unsigned long __must_check
+copy_to_user(void __user *to, const void *from, unsigned long n)
+{
+	int sz = __compiletime_object_size(from);
+
+	if (likely(sz < 0 || sz >= n)) {
+		check_object_size(from, n, true);
+		n = _copy_to_user(to, from, n);
+	} else if (!__builtin_constant_p(n))
+		copy_user_overflow(sz, n);
+	else
+		__bad_copy_user();
+
+	return n;
+}
+
+unsigned long
+copy_user_handle_tail(char *to, char *from, unsigned len);
 
 #endif /* _ASM_X86_UACCESS_H_ */
