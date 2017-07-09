@@ -95,9 +95,25 @@ int p2m_fork(struct task_struct *p);
 int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc);
 
 /* P2M_EXECVE */
+#define MAX_FILENAME_LENGTH	256
 struct p2m_execve_struct {
+	__u32	pid;
+	__u32	payload_size;
+	char	filename[MAX_FILENAME_LENGTH];
+	__u32	argc;
+	__u32	envc;
+	char	*array;
+	/*
+	 * NOTE:
+	 * variable size struct
+	 * the @payload_size means the total size
+	 */
 };
-int p2m_execve(struct task_struct *p);
+struct m2p_execve_struct {
+	__u32	status;
+	__u64	new_ip;
+	__u64	new_sp;
+};
 int handle_p2m_execve(struct p2m_execve_struct *, u64);
 
 #endif /* _LEGO_COMP_COMMON_H_ */

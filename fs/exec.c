@@ -15,6 +15,8 @@
 #include <lego/spinlock.h>
 #include <lego/syscalls.h>
 #include <lego/uaccess.h>
+#include <lego/comp_common.h>
+#include <lego/comp_processor.h>
 
 static LIST_HEAD(formats);
 static DEFINE_SPINLOCK(binfmt_lock);
@@ -62,15 +64,16 @@ static int exec_mmap(void)
 	return 0;
 }
 
-static int count(const char * const *argv, int max)
+static __u32 count_param(const char * const *argv, int max, __u32 *size)
 {
 	int i = 0;
 
-	if (!argv)
+	if (!argv || !size)
 		return 0;
 
 	for (;;) {
 		const char *p;
+		__u32 len;
 
 		if (get_user(p, argv + i))
 			return -EFAULT;
@@ -80,52 +83,169 @@ static int count(const char * const *argv, int max)
 
 		if (i >= max)
 			return -E2BIG;
+
+		/*
+		 * Vulnerable to read-after-check attack?
+		 */
+		len = strnlen_user(p, MAX_ARG_STRLEN);
+		if (unlikely(!len))
+			return -EINVAL;
+
+		*size += len;
 		i++;
 	}
 	return i;
 }
 
+/* Copy strings from userspace to core-kernel paylaod */
+static int copy_strings(__u32 argc, const char * const *argv,
+			struct p2m_execve_struct *payload, __u32 *array_oft)
+{
+	int i;
+	long copied;
+	char *dst;
+	const char *src;
+
+	BUG_ON(!argc || !argv || !payload || !array_oft);
+
+	dst = (char *)&(payload->array) + *array_oft;
+	for (i = 0; i < argc; i++) {
+		if (get_user(src, argv + i))
+			return -EFAULT;
+
+		copied = strncpy_from_user(dst, src, MAX_ARG_STRLEN);
+		if (unlikely(copied < 0))
+			return -EFAULT;
+
+		copied++; /* including terminal NULL */
+		*array_oft += copied;
+		dst += copied;
+	}
+
+	return 0;
+}
+
+/*
+ * Processor-Component
+ * Prepare the payload being sent to memory-component
+ */
 static void *prepare_exec_payload(const char *filename,
 				  const char * const *argv,
-				  const char * const *envp)
+				  const char * const *envp,
+				  __u32 *payload_size)
 {
-	int argc, envc;
-	void *payload;
+	__u32 argc, envc, size = 0, array_oft = 0;
+	long copied;
+	struct p2m_execve_struct *payload;
 
-	argc = count(argv, MAX_ARG_STRINGS);
+	/* Count the total payload size first */
+	argc = count_param(argv, MAX_ARG_STRINGS, &size);
 	if (argc < 0)
 		return ERR_PTR(argc);
 
-	envc = count(envp, MAX_ARG_STRINGS);
+	envc = count_param(envp, MAX_ARG_STRINGS, &size);
 	if (envc < 0)
 		return ERR_PTR(envc);
 
-	return NULL;
+	/* then allocate payload */
+	*payload_size = sizeof(*payload) + size - sizeof(char *);
+	payload = kzalloc(*payload_size, GFP_KERNEL);
+	if (!payload)
+		return ERR_PTR(-ENOMEM);
+
+	/* then copy strings and fill payload */
+	payload->pid = current->pid;
+	payload->payload_size = *payload_size;
+	payload->argc = argc;
+	payload->envc = envc;
+
+	copied = strncpy_from_user(payload->filename, filename, MAX_FILENAME_LENGTH);
+	if (unlikely(copied < 0))
+		goto out;
+
+	array_oft = 0;
+	if (copy_strings(argc, argv, payload, &array_oft))
+		goto out;
+
+	if (copy_strings(envc, envp, payload, &array_oft))
+		goto out;
+
+	return payload;
+
+out:
+	kfree(payload);
+	return ERR_PTR(-EFAULT);
+}
+
+static void *prepare_exec_reply(__u32 *reply_size)
+{
+	*reply_size = sizeof(struct m2p_execve_struct);
+	return kmalloc(sizeof(struct m2p_execve_struct), GFP_KERNEL);
+}
+
+static int p2m_execve(struct p2m_execve_struct *payload,
+		      struct m2p_execve_struct *reply,
+		      __u32 payload_size, __u32 reply_size,
+		      unsigned long *new_ip, unsigned long *new_sp)
+{
+	int ret;
+
+	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_EXECVE, payload,
+			payload_size, reply, reply_size, false, DEF_NET_TIMEOUT);
+
+	if (ret > 0) {
+		if (reply->status == RET_OKAY) {
+			*new_ip = reply->new_ip;
+			*new_sp = reply->new_sp;
+			return 0;
+		} else {
+			WARN(1, ret_to_string(reply->status));
+			return -(reply->status);
+		}
+	}
+
+	*new_ip = 0xc0001000;
+	*new_sp = 0xc0003000;
+	return 0;
 }
 
 int do_execve(const char *filename,
 	      const char * const *argv,
 	      const char * const *envp)
 {
-	struct pt_regs *regs = current_pt_regs();
 	int ret;
-	void *payload;
+	__u32 payload_size, reply_size;
+	unsigned long new_ip, new_sp;
+	struct pt_regs *regs = current_pt_regs();
+	void *payload, *reply;
 
-	payload = prepare_exec_payload(filename, argv, envp);
+	payload = prepare_exec_payload(filename, argv, envp, &payload_size);
 	if (IS_ERR(payload))
 		return PTR_ERR(payload);
 
-	/* core kernel */
+	reply = prepare_exec_reply(&reply_size);
+	if (!reply) {
+		kfree(payload);
+		return -ENOMEM;
+	}
+
+	ret = p2m_execve(payload, reply, payload_size, reply_size,
+			 &new_ip, &new_sp);
+	if (ret)
+		goto out;
+
+	/* core-kernel: switch the emulated page-table */
 	ret = exec_mmap();
 	if (ret)
 		goto out;
 
-	/* core kernel */
-	start_thread(regs, (unsigned long)0xC0001000, (unsigned long)0xC0003000);
+	/* core-kernel: change the task iret frame */
+	start_thread(regs, new_ip, new_sp);
 	ret = 0;
 
 out:
-	//kfree(payload);
+	kfree(payload);
+	kfree(reply);
 
 	/*
 	 * This return will return to the point where do_execve()

@@ -154,6 +154,7 @@ static int kernel_init(void *unused)
 #endif
 
 	run_init_process("/etc/init");
+	do_exit(0);
 	return 0;
 }
 
