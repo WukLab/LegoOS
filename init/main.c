@@ -142,18 +142,14 @@ static int kernel_init(void *unused)
 	wait_for_completion(&ib_init_done);
 #endif
 
-#ifdef CONFIG_MEMCOMPONENT
-	pr_info("before memcomponent init\n");
-	memcomponent_init();
-#endif
-
+	/* Final step towards a running component.. */
 #ifdef CONFIG_COMP_PROCESSOR
 	processor_component_init();
+	run_init_process("/etc/init");
 #elif defined(CONFIG_COMP_MEMORY)
 	memory_component_init();
 #endif
 
-	run_init_process("/etc/init");
 	do_exit(0);
 	return 0;
 }
