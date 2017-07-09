@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/slab.h>
 #include <lego/sched.h>
 #include <lego/ptrace.h>
 #include <lego/kernel.h>
@@ -74,6 +75,9 @@ static int count(const char * const *argv, int max)
 		if (get_user(p, argv + i))
 			return -EFAULT;
 
+		if (!p)
+			break;
+
 		if (i >= max)
 			return -E2BIG;
 		i++;
@@ -81,25 +85,47 @@ static int count(const char * const *argv, int max)
 	return i;
 }
 
+static void *prepare_exec_payload(const char *filename,
+				  const char * const *argv,
+				  const char * const *envp)
+{
+	int argc, envc;
+	void *payload;
+
+	argc = count(argv, MAX_ARG_STRINGS);
+	if (argc < 0)
+		return ERR_PTR(argc);
+
+	envc = count(envp, MAX_ARG_STRINGS);
+	if (envc < 0)
+		return ERR_PTR(envc);
+
+	return NULL;
+}
+
 int do_execve(const char *filename,
 	      const char * const *argv,
 	      const char * const *envp)
 {
 	struct pt_regs *regs = current_pt_regs();
-	int ret, argc, envc;
+	int ret;
+	void *payload;
 
-	argc = count(argv, MAX_ARG_STRINGS);
-	if (argc < 0)
-		return argc;
-	envc = count(envp, MAX_ARG_STRINGS);
-	if (envc < 0)
-		return envc;
+	payload = prepare_exec_payload(filename, argv, envp);
+	if (IS_ERR(payload))
+		return PTR_ERR(payload);
 
+	/* core kernel */
 	ret = exec_mmap();
 	if (ret)
-		return ret;
+		goto out;
 
+	/* core kernel */
 	start_thread(regs, (unsigned long)0xC0001000, (unsigned long)0xC0003000);
+	ret = 0;
+
+out:
+	//kfree(payload);
 
 	/*
 	 * This return will return to the point where do_execve()
@@ -109,7 +135,7 @@ int do_execve(const char *filename,
 	 *
 	 * Check ret_from_fork() for more detail.
 	 */
-	return 0;
+	return ret;
 }
 
 SYSCALL_DEFINE3(execve,

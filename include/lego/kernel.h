@@ -53,6 +53,8 @@
 #define might_sleep()		do { might_resched(); } while (0)
 #define might_sleep_if(cond)	do { if (cond) might_sleep(); } while (0)
 
+#define REPEAT_BYTE(x)		((~0ul / 0xff) * (x))
+
 /*
  * This looks more complex than it should be. But we need to
  * get the type for the ~ right in round_down (it needs to be

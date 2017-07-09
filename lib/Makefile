@@ -1,3 +1,7 @@
+#
+# Libraries: used by core-kernel
+#
+
 obj-y := vsprintf.o
 obj-y += ctype.o
 obj-y += hexdump.o
@@ -11,3 +15,5 @@ obj-y += scatterlist.o
 obj-y += bcd.o
 obj-y += cpumask.o
 obj-y += cmdline.o
+obj-y += strncpy_from_user.o
+obj-y += strnlen_user.o

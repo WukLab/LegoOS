@@ -490,4 +490,68 @@ copy_to_user(void __user *to, const void *from, unsigned long n)
 unsigned long
 copy_user_handle_tail(char *to, char *from, unsigned len);
 
+__must_check long strncpy_from_user(char *dst, const char __user *src, long count);
+__must_check long strlen_user(const char __user *str);
+__must_check long strnlen_user(const char __user *str, long n);
+
+#define __put_user_size(x, ptr, size, retval, errret)			\
+do {									\
+	retval = 0;							\
+	__chk_user_ptr(ptr);						\
+	switch (size) {							\
+	case 1:								\
+		__put_user_asm(x, ptr, retval, "b", "b", "iq", errret);	\
+		break;							\
+	case 2:								\
+		__put_user_asm(x, ptr, retval, "w", "w", "ir", errret);	\
+		break;							\
+	case 4:								\
+		__put_user_asm(x, ptr, retval, "l", "k", "ir", errret);	\
+		break;							\
+	case 8:								\
+		__put_user_asm(x, ptr, retval, "q", "", "er", errret);	\
+		break;							\
+	default:							\
+		__put_user_bad();					\
+	}								\
+} while (0)
+
+#define __get_user_size(x, ptr, size, retval, errret)			\
+do {									\
+	retval = 0;							\
+	__chk_user_ptr(ptr);						\
+	switch (size) {							\
+	case 1:								\
+		__get_user_asm(x, ptr, retval, "b", "b", "=q", errret);	\
+		break;							\
+	case 2:								\
+		__get_user_asm(x, ptr, retval, "w", "w", "=r", errret);	\
+		break;							\
+	case 4:								\
+		__get_user_asm(x, ptr, retval, "l", "k", "=r", errret);	\
+		break;							\
+	case 8:								\
+		__get_user_asm(x, ptr, retval, "q", "", "=r", errret);	\
+		break;							\
+	default:							\
+		(x) = __get_user_bad();					\
+	}								\
+} while (0)
+
+#define unsafe_put_user(x, ptr, err_label)					\
+do {										\
+	int __pu_err;								\
+	__put_user_size((x), (ptr), sizeof(*(ptr)), __pu_err, -EFAULT);		\
+	if (unlikely(__pu_err)) goto err_label;					\
+} while (0)
+
+#define unsafe_get_user(x, ptr, err_label)					\
+do {										\
+	int __gu_err;								\
+	unsigned long __gu_val;							\
+	__get_user_size(__gu_val, (ptr), sizeof(*(ptr)), __gu_err, -EFAULT);	\
+	(x) = (__typeof__(*(ptr)))__gu_val;					\
+	if (unlikely(__gu_err)) goto err_label;					\
+} while (0)
+
 #endif /* _ASM_X86_UACCESS_H_ */
