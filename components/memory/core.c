@@ -24,6 +24,16 @@
 
 static unsigned long nr_rx;
 
+static void handle_bad_request(u32 opcode, u64 desc)
+{
+	u32 retbuf;
+
+	pr_info("Unknown: opcode: %u\n", opcode);
+
+	retbuf = RET_EPERM;
+	ibapi_reply_message(&retbuf, 4, desc);
+}
+
 static int mc_dispatcher(void *rx_buf)
 {
 	void *desc_p, *payload;
@@ -44,8 +54,11 @@ static int mc_dispatcher(void *rx_buf)
 	case P2M_FORK:
 		handle_p2m_fork(payload, desc);
 		break;
+	case P2M_EXECVE:
+		handle_p2m_execve(payload, desc);
+		break
 	default:
-		WARN_ON(1);
+		handle_bad_request(hdr->opcode, desc);
 	}
 
 	return 0;
