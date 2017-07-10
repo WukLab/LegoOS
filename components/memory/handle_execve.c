@@ -25,7 +25,7 @@ int loader(struct lego_task_struct *tsk, const char *filename,
 	return 0;
 }
 
-int handle_p2m_exec(struct p2m_execve_struct *payload, u64 desc)
+int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc)
 {
 	struct m2p_execve_struct reply;
 	__u32 argc, envc;
