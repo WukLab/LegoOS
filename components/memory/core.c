@@ -16,7 +16,7 @@
 #include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 
-#define __DEFAULT_RXBUF_SIZE	(128)
+#define __DEFAULT_RXBUF_SIZE	(4000)
 #define __DEFAULT_DESC_SIZE	(sizeof(unsigned long))
 #define DEFAULT_RXBUF_SIZE	(__DEFAULT_RXBUF_SIZE+__DEFAULT_DESC_SIZE)
 
@@ -56,7 +56,7 @@ static int mc_dispatcher(void *rx_buf)
 		break;
 	case P2M_EXECVE:
 		handle_p2m_execve(payload, desc);
-		break
+		break;
 	default:
 		handle_bad_request(hdr->opcode, desc);
 	}
