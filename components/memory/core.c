@@ -100,11 +100,45 @@ static int mc_manager(void *unused)
 }
 #endif /* CONFIG_FIT */
 
+static void hashtable_test(void)
+{
+        struct lego_task_struct *tsk;
+        
+        pr_info("Testing ... \n.");
+        
+        tsk = alloc_lego_task(1, 15634);
+        
+        if (!tsk) {
+                pr_info("Could not alloc task_struct. \n");
+        }
+        
+        pr_info("pid : %lu, nodeid: %lu.\n", tsk->pid, tsk->node);
+        
+        
+        if ((tsk = find_lego_task_by_pid(1, 15634)) == NULL) {
+                pr_info("Could not find the task_struct. \n");
+        }
+
+         
+        if (find_lego_task_by_pid(1, 1563)) {
+                pr_err("Error finding the task_struct. \n");
+        }
+                        
+        free_lego_task(tsk);
+        
+        if (find_lego_task_by_pid(1, 15634)) {
+                pr_err("Could not free the task_struct. \n");
+        }
+        
+        pr_info("Test successful. \n"); 
+
+}
+
 void __init memory_component_init(void)
 {
-	/* Register exec binary handlers */
+        /* Register exec binary handlers */
 	exec_init();
-
+       
 #ifdef CONFIG_FIT
 	struct task_struct *ret;
 

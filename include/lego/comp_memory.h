@@ -294,4 +294,20 @@ ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,
 ssize_t file_write(struct lego_task_struct *tsk, struct lego_file *file,
 		   const char __user *buf, size_t count, loff_t *pos);
 
+
+/* lego_mm_struct APIs */
+
+struct lego_task_struct *
+        alloc_lego_task(unsigned long node, unsigned long pid); 
+
+void free_lego_task(struct lego_task_struct *proc); 
+
+struct lego_task_struct *
+        find_lego_task_by_pid(unsigned long node, unsigned long pid);
+
+/* Functions related to the page mapping walk */
+//pte_t *page_mapping_walk(struct lego_mm_struct *, unsigned long);
+
+//int page_mapping_update(struct lego_mm_struct *, struct page *);
+
 #endif /* _LEGO_COMP_MEMORY_H_ */

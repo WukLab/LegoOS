@@ -16,16 +16,17 @@
 DEFINE_HASHTABLE(node_pid_hash, HASH_BITS);
 DEFINE_SPINLOCK(hastable_lock);
 
-int getKey (unsigned int node, unsigned int pid)
+static int getKey (unsigned int node, unsigned int pid)
 {
         return node*10000+pid*10;
 }
 
 struct lego_task_struct *
-alloc_lego_task(unsigned int node, unsigned int pid) 
+alloc_lego_task(unsigned long node, unsigned long pid) 
 {
         struct lego_task_struct *proc;
-
+        
+        pr_info("Reached alloc_lego_task. \n");
         if (!node || !pid) {
                 return NULL;
         }
@@ -38,10 +39,13 @@ alloc_lego_task(unsigned int node, unsigned int pid)
         proc->node = node;
         proc->pid = pid;
         
+        pr_info("Allocated alloc_lego_task. \n");
+        
         spin_lock(&hastable_lock);
         hash_add(node_pid_hash, &proc->link, getKey(node, pid));  
         spin_unlock(&hastable_lock);
         
+        pr_info("Exiting alloc_lego_task [%p]. \n", proc);
         return proc;
 }
 
@@ -58,13 +62,15 @@ void free_lego_task(struct lego_task_struct *proc)
 }
 
 struct lego_task_struct *
-find_lego_task_by_pid(unsigned int node, unsigned int pid)
+find_lego_task_by_pid(unsigned long node, unsigned long pid)
 {
         struct lego_task_struct *proc;
 
         spin_lock(&hastable_lock);
         hash_for_each_possible(node_pid_hash, proc, link, getKey(node, pid)) {
                 if (proc->pid == pid && proc->node == node) {
+                        pr_info("Found matching task_struct.\n");
+                        spin_unlock(&hastable_lock);
                         return proc;        
                 }
         }
