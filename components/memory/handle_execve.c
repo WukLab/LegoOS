@@ -9,6 +9,7 @@
 
 #define pr_fmt(fmt) "handle_execve: " fmt
 
+#include <lego/elf.h>
 #include <lego/slab.h>
 #include <lego/binfmts.h>
 #include <lego/kernel.h>

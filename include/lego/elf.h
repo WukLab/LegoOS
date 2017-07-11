@@ -468,7 +468,6 @@ typedef struct elf64_shdr {
 #define NT_METAG_RPIPE	0x501		/* Metag read pipeline state */
 #define NT_METAG_TLS	0x502		/* Metag TLS pointer */
 
-
 /* Note header in a PT_NOTE section */
 typedef struct elf32_note {
 	Elf32_Word	n_namesz;	/* Name size */
@@ -482,5 +481,26 @@ typedef struct elf64_note {
 	Elf64_Word n_descsz;	/* Content size */
 	Elf64_Word n_type;	/* Content type */
 } Elf64_Nhdr;
+
+#include <asm/elf.h>
+
+#if ELF_CLASS == ELFCLASS32
+  /* 32bit */
+# define elfhdr		elf32_hdr
+# define elf_phdr	elf32_phdr
+# define elf_shdr	elf32_shdr
+# define elf_note	elf32_note
+# define elf_addr_t	Elf32_Off
+# define Elf_Half	Elf32_Half
+#else
+  /* 64bit */
+# define elfhdr		elf64_hdr
+# define elf_phdr	elf64_phdr
+# define elf_shdr	elf64_shdr
+# define elf_note	elf64_note
+# define elf_addr_t	Elf64_Off
+# define Elf_Half	Elf64_Half
+
+#endif
 
 #endif /* _LEGO_ELF_H_ */
