@@ -48,11 +48,22 @@
 
 #define VM_LOCKED	0x00002000
 #define VM_IO           0x00004000	/* Memory mapped I/O or similar */
+#define VM_SEQ_READ	0x00008000	/* App will access data sequentially */
+#define VM_RAND_READ	0x00010000	/* App will not benefit from clustered reads */
 
 /*
  * Special vmas that are non-mergable, non-mlock()able.
  */
-#define VM_SPECIAL	(VM_IO | VM_PFNMAP)
+#define VM_SPECIAL		(VM_IO | VM_PFNMAP)
+
+#define VM_DATA_DEFAULT_FLAGS	(VM_READ | VM_WRITE) 
+
+#define VM_STACK		VM_GROWSDOWN
+#define VM_STACK_DEFAULT_FLAGS	VM_DATA_DEFAULT_FLAGS
+#define VM_STACK_FLAGS		(VM_STACK | VM_STACK_DEFAULT_FLAGS)
+
+/* Bits set in the VMA until the stack is in its final location */
+#define VM_STACK_INCOMPLETE_SETUP	(VM_RAND_READ | VM_SEQ_READ)
 
 /*
  * Optimisation macro.  It is equivalent to:
@@ -156,11 +167,13 @@ struct lego_mm_struct {
 				struct lego_file *filp,
 				unsigned long addr, unsigned long len,
 				unsigned long pgoff, unsigned long flags);
-	unsigned long mmap_base;		/* base of mmap area */
-	unsigned long mmap_legacy_base;         /* base of mmap area in bottom-up allocations */
-	unsigned long task_size;		/* size of task vm space */
+	unsigned long mmap_base;	/* base of mmap area */
+	unsigned long mmap_legacy_base;	/* base of mmap area in bottom-up allocations */
+	unsigned long task_size;	/* size of task vm space */
 
 	pgd_t *pgd;
+	atomic_t mm_users;		/* How many users with user space? */
+	atomic_t mm_count;		/* How many references to "struct mm_struct" (users count as 1) */
 	int map_count;
 	unsigned long total_vm;		/* Total pages mapped */
 	unsigned long data_vm;		/* VM_WRITE & ~VM_SHARED & ~VM_STACK */
@@ -192,6 +205,17 @@ void __init memory_component_init(void);
 #else
 static inline void memory_component_init(void) { }
 #endif
+
+/* Is the vma a continuation of the stack vma above it? */
+static inline int vma_growsdown(struct vm_area_struct *vma, unsigned long addr)
+{
+	return vma && (vma->vm_end == addr) && (vma->vm_flags & VM_GROWSDOWN);
+}
+
+static inline bool vma_is_anonymous(struct vm_area_struct *vma)
+{
+	return true;
+}
 
 struct vm_unmapped_area_info {
 #define VM_UNMAPPED_AREA_TOPDOWN 1
@@ -226,7 +250,10 @@ vm_unmapped_area(struct lego_task_struct *p, struct vm_unmapped_area_info *info)
 		return unmapped_area(p, info);
 }
 
+pgprot_t vm_get_page_prot(unsigned long vm_flags);
 void arch_pick_mmap_layout(struct lego_mm_struct *mm);
+
+int insert_vm_struct(struct lego_mm_struct *, struct vm_area_struct *);
 
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 struct vm_area_struct *find_vma(struct lego_mm_struct *mm, unsigned long addr);
@@ -241,5 +268,31 @@ unsigned long vm_mmap_pgoff(struct lego_task_struct *p, struct lego_file *file,
 		unsigned long flag, unsigned long pgoff);
 
 int vm_brk(struct lego_task_struct *p, unsigned long addr, unsigned long len);
+
+struct lego_mm_struct *lego_mm_alloc(struct lego_task_struct *p);
+
+/* lego_mmdrop drops the mm and the page tables */
+void __lego_mmdrop(struct lego_mm_struct *);
+static inline void lego_mmdrop(struct lego_mm_struct *mm)
+{
+	if (unlikely(atomic_dec_and_test(&mm->mm_count)))
+		__lego_mmdrop(mm);
+}
+
+/* Decrement the use count and release all resources for an mm */
+void __lego_mmput(struct lego_mm_struct *);
+static inline void lego_mmput(struct lego_mm_struct *mm)
+{
+	if (unlikely(atomic_dec_and_test(&mm->mm_users)))
+		__lego_mmput(mm);
+}
+
+void __init exec_init(void);
+
+/* Storage APIs */
+ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,
+		  char __user *buf, size_t count, loff_t *pos);
+ssize_t file_write(struct lego_task_struct *tsk, struct lego_file *file,
+		   const char __user *buf, size_t count, loff_t *pos);
 
 #endif /* _LEGO_COMP_MEMORY_H_ */

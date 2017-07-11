@@ -19,6 +19,7 @@
 #include <lego/kernel.h>
 #include <lego/netmacro.h>
 #include <lego/comp_memory.h>
+#include <lego/comp_common.h>
 
 static inline unsigned long vma_pages(struct vm_area_struct *vma)
 {
@@ -303,6 +304,40 @@ static void __insert_vm_struct(struct lego_mm_struct *mm, struct vm_area_struct 
 		BUG();
 	__vma_link(mm, vma, prev, rb_link, rb_parent);
 	mm->map_count++;
+}
+
+/* Insert vm structure into process list sorted by address
+ * and into the inode's i_mmap tree.  If vm_file is non-NULL
+ * then i_mmap_rwsem is taken here.
+ */
+int insert_vm_struct(struct lego_mm_struct *mm, struct vm_area_struct *vma)
+{
+	struct vm_area_struct *prev;
+	struct rb_node **rb_link, *rb_parent;
+
+	if (find_vma_links(mm, vma->vm_start, vma->vm_end,
+			   &prev, &rb_link, &rb_parent))
+		return -ENOMEM;
+
+	/*
+	 * The vm_pgoff of a purely anonymous vma should be irrelevant
+	 * until its first write fault, when page's anon_vma and index
+	 * are set.  But now set the vm_pgoff it will almost certainly
+	 * end up with (unless mremap moves it elsewhere before that
+	 * first wfault), so /proc/pid/maps tells a consistent story.
+	 *
+	 * By setting it to reflect the virtual start address of the
+	 * vma, merges and splits can happen in a seamless way, just
+	 * using the existing file pgoff checks and manipulations.
+	 * Similarly in do_mmap_pgoff and in do_brk.
+	 */
+	if (vma_is_anonymous(vma)) {
+		BUG_ON(vma->anon_vma);
+		vma->vm_pgoff = vma->vm_start >> PAGE_SHIFT;
+	}
+
+	vma_link(mm, vma, prev, rb_link, rb_parent);
+	return 0;
 }
 
 static __always_inline void __vma_unlink_common(struct lego_mm_struct *mm,
@@ -1410,4 +1445,60 @@ int vm_brk(struct lego_task_struct *p, unsigned long addr, unsigned long len)
 	/* TODO mm locking */
 	ret = do_brk(p, addr, len);
 	return ret;
+}
+
+#define LEGO_PGALLOC_GFP     (GFP_KERNEL | __GFP_ZERO)
+
+static pgd_t *lego_pgd_alloc(struct lego_mm_struct *mm)
+{
+	return (pgd_t *)__get_free_page(LEGO_PGALLOC_GFP);
+}
+
+static void lego_pgd_free(struct lego_mm_struct *mm)
+{
+	free_page((unsigned long)mm->pgd);
+}
+
+static struct lego_mm_struct *lego_mm_init(struct lego_mm_struct *mm,
+					   struct lego_task_struct *p)
+{
+	atomic_set(&mm->mm_users, 1);
+	atomic_set(&mm->mm_count, 1);
+
+	mm->pgd = lego_pgd_alloc(mm);
+	if (unlikely(!mm->pgd)) {
+		kfree(mm);
+		return NULL;
+	}
+	return mm;
+}
+
+struct lego_mm_struct *lego_mm_alloc(struct lego_task_struct *p)
+{
+	struct lego_mm_struct *mm;
+
+	mm = kzalloc(sizeof(*mm), GFP_KERNEL);
+	if (!mm)
+		return NULL;
+	return lego_mm_init(mm, p);
+}
+
+/*
+ * Called when the last reference to the mm
+ * is dropped: either by a lazy thread or by
+ * mmput. Free the page directory and the mm.
+ */
+void __lego_mmdrop(struct lego_mm_struct *mm)
+{
+	lego_pgd_free(mm);
+	kfree(mm);
+}
+
+void __lego_mmput(struct lego_mm_struct *mm)
+{
+	BUG_ON(atomic_read(&mm->mm_users));
+	/*
+	 * TODO exit a lot of things here
+	 */
+	lego_mmdrop(mm);
 }

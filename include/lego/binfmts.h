@@ -12,6 +12,7 @@
 
 #include <lego/mm.h>
 #include <lego/sched.h>
+#include <lego/comp_memory.h>
 
 int do_execve(const char *filename,
 	      const char * const *argv,
@@ -34,7 +35,12 @@ int do_execve(const char *filename,
  */
 struct lego_binprm {
 	char			buf[BINPRM_BUF_SIZE];
-	struct mm_struct	*mm;
+	struct lego_mm_struct	*mm;
+	struct vm_area_struct	*vma;
+	unsigned long		vma_pages;
+	struct lego_file	*file;
+
+	int			argc, envc;
 
 	/* Current top of mem */
 	unsigned long		p;
@@ -45,23 +51,5 @@ struct lego_binfmt {
 	int (*load_binary)(struct lego_binprm *);
 	int (*core_dump)(void);
 };
-
-void __init exec_init(void);
-void unregister_binfmt(struct lego_binfmt *);
-void __register_binfmt(struct lego_binfmt *fmt, int insert);
-
-/* Registration of default binfmt handlers */
-static inline void register_binfmt(struct lego_binfmt *fmt)
-{
-	__register_binfmt(fmt, 0);
-}
-
-/* Same as above, but adds a new binfmt at the top of the list */
-static inline void insert_binfmt(struct lego_binfmt *fmt)
-{
-	__register_binfmt(fmt, 1);
-}
-
-extern struct lego_binfmt elf_format;
 
 #endif /* _LEGO_BINFMTS_H_ */

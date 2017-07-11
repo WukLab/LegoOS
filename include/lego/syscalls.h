@@ -10,6 +10,10 @@
 #ifndef _LEGO_SYSCALLS_H_
 #define _LEGO_SYSCALLS_H_
 
+#include <lego/bug.h>
+#include <lego/linkage.h>
+#include <lego/compiler.h>
+
 /*
  * __MAP - apply a macro to syscall arguments
  * __MAP(n, m, t1, a1, t2, a2, ..., tn, an) will expand to

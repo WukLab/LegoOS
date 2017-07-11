@@ -7,16 +7,20 @@
  * (at your option) any later version.
  */
 
-#include <lego/elf.h>
-#include <lego/sched.h>
+#include <lego/slab.h>
 #include <lego/kernel.h>
 #include <lego/binfmts.h>
+#include <lego/spinlock.h>
+#include <lego/comp_memory.h>
 
-static int load_elf_binary(struct lego_binprm *bprm)
+ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,
+		  char __user *buf, size_t count, loff_t *pos)
 {
-	return 0;
+	return -EINVAL;
 }
 
-struct lego_binfmt elf_format = {
-	.load_binary	= load_elf_binary,
-};
+ssize_t file_write(struct lego_task_struct *tsk, struct lego_file *file,
+		   const char __user *buf, size_t count, loff_t *pos)
+{
+	return -EINVAL;
+}

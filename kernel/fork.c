@@ -179,7 +179,7 @@ struct mm_struct *mm_alloc(void)
 {
 	struct mm_struct *mm;
 
-	mm = kmalloc(GFP_KERNEL, sizeof(*mm));
+	mm = kmalloc(sizeof(*mm), GFP_KERNEL);
 	if (!mm)
 		return NULL;
 
@@ -194,7 +194,7 @@ static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 
 	oldmm = current->mm;
 
-	mm = kmalloc(GFP_KERNEL, sizeof(*mm));
+	mm = kmalloc(sizeof(*mm), GFP_KERNEL);
 	if (!mm)
 		return NULL;
 

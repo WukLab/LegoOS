@@ -100,6 +100,9 @@ static int mc_manager(void *unused)
 
 void __init memory_component_init(void)
 {
+	/* Register exec binary handlers */
+	exec_init();
+
 #ifdef CONFIG_FIT
 	struct task_struct *ret;
 

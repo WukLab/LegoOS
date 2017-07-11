@@ -7,6 +7,11 @@
  * (at your option) any later version.
  */
 
+/*
+ * execve()-related syscalls are processor-specific
+ * Memory component does not this syscall, hence we move it to here.
+ */
+
 #include <lego/slab.h>
 #include <lego/sched.h>
 #include <lego/ptrace.h>
@@ -17,27 +22,6 @@
 #include <lego/uaccess.h>
 #include <lego/comp_common.h>
 #include <lego/comp_processor.h>
-
-static LIST_HEAD(formats);
-static DEFINE_SPINLOCK(binfmt_lock);
-
-void __register_binfmt(struct lego_binfmt *fmt, int insert)
-{
-	BUG_ON(!fmt);
-	if (WARN_ON(!fmt->load_binary))
-		return;
-	spin_lock(&binfmt_lock);
-	insert ? list_add(&fmt->lh, &formats) :
-		 list_add_tail(&fmt->lh, &formats);
-	spin_unlock(&binfmt_lock);
-}
-
-void unregister_binfmt(struct lego_binfmt *fmt)
-{
-	spin_lock(&binfmt_lock);
-	list_del(&fmt->lh);
-	spin_unlock(&binfmt_lock);
-}
 
 static int exec_mmap(void)
 {
@@ -264,9 +248,4 @@ SYSCALL_DEFINE3(execve,
 		const char __user *const __user *, envp)
 {
 	return do_execve(filename, argv, envp);
-}
-
-void __init exec_init(void)
-{
-	register_binfmt(&elf_format);
 }

@@ -541,7 +541,7 @@ ifeq ($(KBUILD_EXTMOD),)
 # Objects that will be linked into final vmImage
 # These variables are initialized in arch Makefile
 init-y		:= init/
-core-y		+= kernel/ mm/ fs/ components/
+core-y		+= kernel/ mm/ components/
 drivers-y	+= drivers/
 net-y		:= net/
 libs-y		+= lib/
