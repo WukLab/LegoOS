@@ -46,3 +46,18 @@ SYSCALL_DEFINE0(gettid)
 		__func__, smp_processor_id(), current->pid, current->comm);
 	return current->pid;
 }
+
+/*
+ * This section defines SYSCALLs that are only available to processor component
+ * We are having this to make the kernel compile
+ */
+#if !defined(CONFIG_COMP_PROCESSOR) && !defined(CONFIG_COMP_MEMORY)
+SYSCALL_DEFINE3(execve,
+		const char __user*, filename,
+		const char __user *const __user *, argv,
+		const char __user *const __user *, envp)
+{
+	panic("Not right baby.");
+	return 0;
+}
+#endif
