@@ -16,6 +16,8 @@
 #include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 
+extern void __init exec_init(void);
+
 #define __DEFAULT_RXBUF_SIZE	(4000)
 #define __DEFAULT_DESC_SIZE	(sizeof(unsigned long))
 #define DEFAULT_RXBUF_SIZE	(__DEFAULT_RXBUF_SIZE+__DEFAULT_DESC_SIZE)

@@ -287,8 +287,6 @@ static inline void lego_mmput(struct lego_mm_struct *mm)
 		__lego_mmput(mm);
 }
 
-void __init exec_init(void);
-
 /* Storage APIs */
 ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,
 		  char __user *buf, size_t count, loff_t *pos);
