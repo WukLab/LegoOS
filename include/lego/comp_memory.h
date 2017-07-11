@@ -191,7 +191,8 @@ struct lego_task_struct {
 	unsigned long node;
 	unsigned long pid;
 	unsigned long gpid;
-
+        
+        struct hlist_node link;
 	struct lego_mm_struct *mm;
 };
 

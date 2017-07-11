@@ -12,12 +12,14 @@
 
 #include <lego/list.h>
 #include <lego/kernel.h>
+#include <lego/hash.h>
 
 #define DEFINE_HASHTABLE(name, bits)                                            \
         struct hlist_head name[1 << (bits)] =                                   \
                                 { [0 ... ((1 << (bits)) - 1)] = HLIST_HEAD_INIT }
 
-#define HASH_SIZE(name) (ARRAY_SIZE(name))
+#define HASH_BITS        10
+#define HASH_SIZE        (ARRAY_SIZE(name))
 
 static inline void __hash_init(struct hlist_head *ht, unsigned int sz)
 {
@@ -40,14 +42,12 @@ static inline void __hash_init(struct hlist_head *ht, unsigned int sz)
  * @key : key for the object
  */ 
 #define hash_add(hashtable, node, key)                                          \
-        hlist_add_head(node, &hashtable[hash_min(key, HASH_BITS(hashtable))])
+        hlist_add_head(node, &hashtable[hash_min(key, HASH_BITS)])
 
 #define hash_remove(node)       hlist_del(node)
 
-#define GOLDEN_RATIO_32 0x61C88647
-#define GOLDEN_RATIO_64 0x61C8864680B583EBull
-
-#define hash_long(val, bits) hash_64_generic(val, bits)
+#define hash_min(val, bits)                                                     \
+        (sizeof(val) <= 4 ? hash_32(val, bits) : hash_long(val, bits))
 
 static inline bool __hash_empty(struct hlist_head *ht, unsigned int sz)
 {
@@ -60,12 +60,7 @@ static inline bool __hash_empty(struct hlist_head *ht, unsigned int sz)
         return true;
 }
 
-static __always_inline u32 hash_64_generic(u64 val, unsigned int bits)
-{
-        /* 64x64-bit multiply is efficient on all 64-bit processors */
-        return val * GOLDEN_RATIO_64 >> (64 - bits);
-}
-                                
+                               
 /**
  *  hash_empty - check whether a hashtable is empty
  *  @hashtable: hashtable to check
@@ -90,6 +85,6 @@ static inline void hash_del(struct hlist_node *node)
  * @key: the key of the objects to iterate over
  */
 #define hash_for_each_possible(name, obj, member, key)                  \
-        hlist_for_each_entry(obj, &name[hash_min(key, HASH_BITS(name))], member)
+        hlist_for_each_entry(obj, &name[hash_min(key, HASH_BITS)], member)
 
 #endif /* _LEGO_HASHTABLE_H_ */

@@ -13,7 +13,7 @@
 #include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 
-DEFINE_HASHTABLE(node_pid_hash, 10);
+DEFINE_HASHTABLE(node_pid_hash, HASH_BITS);
 DEFINE_SPINLOCK(hastable_lock);
 
 int getKey (unsigned int node, unsigned int pid)
@@ -33,7 +33,7 @@ alloc_lego_task(unsigned int node, unsigned int pid)
         proc = kmalloc(sizeof(*proc), GFP_KERNEL);
         
         if (!proc) 
-                return -ENOMEM;
+                return NULL;
 
         proc->node = node;
         proc->pid = pid;
@@ -48,10 +48,10 @@ alloc_lego_task(unsigned int node, unsigned int pid)
 void free_lego_task(struct lego_task_struct *proc) 
 {
         if (!proc)
-                return -EFAULT;
+                return;
         
         spin_lock(&hastable_lock);
-        hash_remove(proc->link);
+        hash_remove(&proc->link);
         spin_unlock(&hastable_lock);
 
         kfree(proc);
