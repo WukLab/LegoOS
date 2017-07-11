@@ -7,21 +7,68 @@
  * (at your option) any later version.
  */
 
+#include <lego/slab.h>
+#include <lego/hashtable.h>
+#include <lego/spinlock.h>
 #include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 
-pid_t alloc_gpid(struct lego_task_struct *tsk)
-{
-	return 0;
-}
+DEFINE_HASHTABLE(node_pid_hash, 10);
+DEFINE_SPINLOCK(hastable_lock);
 
-void free_gpid(pid_t pid)
+int getKey (unsigned int node, unsigned int pid)
 {
-	return;
+        return node*10000+pid*10;
 }
 
 struct lego_task_struct *
-find_lego_task_by_pid(unsigned int node, pid_t pid)
+alloc_lego_task(unsigned int node, unsigned int pid) 
 {
-	return NULL;
+        struct lego_task_struct *proc;
+
+        if (!node || !pid) {
+                return NULL;
+        }
+
+        proc = kmalloc(sizeof(*proc), GFP_KERNEL);
+        
+        if (!proc) 
+                return -ENOMEM;
+
+        proc->node = node;
+        proc->pid = pid;
+        
+        spin_lock(&hastable_lock);
+        hash_add(node_pid_hash, &proc->link, getKey(node, pid));  
+        spin_unlock(&hastable_lock);
+        
+        return proc;
+}
+
+void free_lego_task(struct lego_task_struct *proc) 
+{
+        if (!proc)
+                return -EFAULT;
+        
+        spin_lock(&hastable_lock);
+        hash_remove(proc->link);
+        spin_unlock(&hastable_lock);
+
+        kfree(proc);
+}
+
+struct lego_task_struct *
+find_lego_task_by_pid(unsigned int node, unsigned int pid)
+{
+        struct lego_task_struct *proc;
+
+        spin_lock(&hastable_lock);
+        hash_for_each_possible(node_pid_hash, proc, link, getKey(node, pid)) {
+                if (proc->pid == pid && proc->node == node) {
+                        return proc;        
+                }
+        }
+        spin_unlock(&hastable_lock);
+
+        return NULL;
 }

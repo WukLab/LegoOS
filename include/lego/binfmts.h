@@ -52,4 +52,9 @@ struct lego_binfmt {
 	int (*core_dump)(void);
 };
 
+/* Stack area protections */
+#define EXSTACK_DEFAULT   0	/* Whatever the arch defaults to */
+#define EXSTACK_DISABLE_X 1	/* Disable executable stacks */
+#define EXSTACK_ENABLE_X  2	/* Enable executable stacks */
+
 #endif /* _LEGO_BINFMTS_H_ */
