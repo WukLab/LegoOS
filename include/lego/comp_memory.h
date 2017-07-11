@@ -11,6 +11,8 @@
 #define _LEGO_COMP_MEMORY_H_
 
 #include <lego/mm.h>
+#include <lego/sched.h>
+#include <lego/spinlock.h>
 
 /*
  * mmap flags
@@ -192,8 +194,28 @@ struct lego_task_struct {
 	unsigned long pid;
 	unsigned long gpid;
 
+	unsigned char comm[TASK_COMM_LEN];
+	spinlock_t task_lock;
 	struct lego_mm_struct *mm;
 };
+
+static inline void lego_task_lock(struct lego_task_struct *p)
+{
+	spin_lock(&p->task_lock);
+}
+
+static inline void lego_task_unlock(struct lego_task_struct *p)
+{
+	spin_unlock(&p->task_lock);
+}
+
+static inline void lego_set_task_comm(struct lego_task_struct *tsk,
+				      const char *buf)
+{
+	lego_task_lock(tsk);
+	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
+	lego_task_unlock(tsk);
+}
 
 #define MAX_FILENAME_LEN 128
 struct lego_file {
@@ -251,6 +273,8 @@ vm_unmapped_area(struct lego_task_struct *p, struct vm_unmapped_area_info *info)
 }
 
 pgprot_t vm_get_page_prot(unsigned long vm_flags);
+
+/* arch-hook for loader */
 void arch_pick_mmap_layout(struct lego_mm_struct *mm);
 
 int insert_vm_struct(struct lego_mm_struct *, struct vm_area_struct *);
@@ -267,7 +291,8 @@ unsigned long vm_mmap_pgoff(struct lego_task_struct *p, struct lego_file *file,
 		unsigned long addr, unsigned long len, unsigned long prot,
 		unsigned long flag, unsigned long pgoff);
 
-int vm_brk(struct lego_task_struct *p, unsigned long addr, unsigned long len);
+int vm_brk(struct lego_task_struct *tsk,
+	   unsigned long start, unsigned long len);
 
 struct lego_mm_struct *lego_mm_alloc(struct lego_task_struct *p);
 
@@ -286,6 +311,7 @@ static inline void lego_mmput(struct lego_mm_struct *mm)
 	if (unlikely(atomic_dec_and_test(&mm->mm_users)))
 		__lego_mmput(mm);
 }
+void lego_mm_release(struct lego_task_struct *tsk, struct lego_mm_struct *mm);
 
 /* Storage APIs */
 ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,

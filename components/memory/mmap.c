@@ -1438,12 +1438,13 @@ out:
 	return 0;
 }
 
-int vm_brk(struct lego_task_struct *p, unsigned long addr, unsigned long len)
+int vm_brk(struct lego_task_struct *tsk,
+	   unsigned long start, unsigned long len)
 {
 	int ret;
 
 	/* TODO mm locking */
-	ret = do_brk(p, addr, len);
+	ret = do_brk(tsk, start, len);
 	return ret;
 }
 
@@ -1501,4 +1502,25 @@ void __lego_mmput(struct lego_mm_struct *mm)
 	 * TODO exit a lot of things here
 	 */
 	lego_mmdrop(mm);
+}
+
+/*
+ * Please note the differences between mmput and mm_release.
+ * mmput is called whenever we stop holding onto a mm_struct,
+ * error success whatever.
+ *
+ * mm_release is called after a mm_struct has been removed
+ * from the current process.
+ *
+ * This difference is important for error handling, when we
+ * only half set up a mm_struct for a new process and need to restore
+ * the old one.  Because we mmput the new mm_struct before
+ * restoring the old one. . .
+ * Eric Biederman 10 January 1998
+ */
+void lego_mm_release(struct lego_task_struct *tsk, struct lego_mm_struct *mm)
+{
+	/*
+	 * TODO: futex
+	 */
 }

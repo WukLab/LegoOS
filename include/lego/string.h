@@ -99,4 +99,15 @@ extern void * memmove(void *,const void *,size_t);
 extern int memcmp(const void *,const void *,size_t);
 #endif
 
+/**
+ * kbasename - return the last part of a pathname.
+ *
+ * @path: path to extract the filename from.
+ */
+static inline const char *kbasename(const char *path)
+{
+	const char *tail = strrchr(path, '/');
+	return tail ? tail + 1 : path;
+}
+
 #endif /* _LEGO_STRING_H_ */
