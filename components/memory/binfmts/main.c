@@ -16,6 +16,11 @@
 
 #include "internal.h"
 
+/*
+ * The least possible virtual address a process can map to:
+ */
+unsigned long sysctl_mmap_min_addr = PAGE_SIZE;
+
 static LIST_HEAD(formats);
 static DEFINE_SPINLOCK(binfmt_lock);
 
@@ -190,4 +195,86 @@ out_free:
 	kfree(bprm);
 out_ret:
 	return retval;
+}
+
+/*
+ * TODO: signal
+ * This function makes sure the current process has its own signal table,
+ * so that flush_signal_handlers can later reset the handlers without
+ * disturbing other processes.  (Other processes might share the signal
+ * table via the CLONE_SIGHAND option to clone().)
+ */
+static int de_thread(struct lego_task_struct *tsk)
+{
+	return 0;
+}
+
+static int exec_mmap(struct lego_task_struct *tsk, struct lego_mm_struct *new_mm)
+{
+	struct lego_mm_struct *old_mm;
+
+	old_mm = tsk->mm;
+	lego_mm_release(tsk, old_mm);
+
+	lego_task_lock(tsk);
+	tsk->mm = new_mm;
+	lego_task_unlock(tsk);
+
+	/* dec mm_users */
+	lego_mmput(old_mm);
+
+	return 0;
+}
+
+/**
+ * flush_old_exec
+ *
+ * Flush the old maping and release the lego_mm if needed
+ * then install the new lego_mm into tsk.
+ */
+int flush_old_exec(struct lego_task_struct *tsk, struct lego_binprm *bprm)
+{
+	int retval;
+
+	/*
+	 * Make sure we have a private signal table and that
+	 * we are unassociated from the previous thread group.
+	 */
+	retval = de_thread(tsk);
+	if (retval)
+		return retval;
+
+	/*
+	 * Release all of the old mmap stuff
+	 * Activate new mm
+	 */
+	retval = exec_mmap(tsk, bprm->mm);
+	if (retval)
+		return retval;
+
+	/* done with it, mark it as NULL */
+	bprm->mm = NULL;
+
+	return 0;
+}
+
+void setup_new_exec(struct lego_task_struct *tsk, struct lego_binprm *bprm)
+{
+	arch_pick_mmap_layout(tsk->mm);
+	lego_set_task_comm(tsk, kbasename(bprm->file->filename));
+	tsk->mm->task_size = TASK_SIZE;
+
+	/*
+	 * TODO: signal
+	 */
+}
+
+/*
+ * Finalizes the stack vm_area_struct. The flags and permissions are updated,
+ * the stack is optionally relocated, and some extra space is added.
+ */
+int setup_arg_pages(struct lego_task_struct *tsk, struct lego_binprm *bprm,
+		    unsigned long stack_top, int executable_stack)
+{
+	return 0;
 }

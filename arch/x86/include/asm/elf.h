@@ -42,4 +42,10 @@
 #define ELF_DATA	ELFDATA2LSB
 #define ELF_ARCH	EM_X86_64
 
+/*
+ * This is used to ensure we don't load something for the wrong architecture.
+ */
+#define elf_check_arch(x)			\
+	((x)->e_machine == EM_X86_64)
+
 #endif /* _ASM_X86_ELF_H_ */
