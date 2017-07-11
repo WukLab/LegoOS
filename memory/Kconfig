@@ -1,7 +1,0 @@
-menu "Memory Component"
-
-config MEMCOMPONENT
-	bool "Memory Component Manager"
-	default y
-
-endmenu

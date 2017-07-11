@@ -7,9 +7,4 @@
  * (at your option) any later version.
  */
 
-#include <lego/mm_types.h>
-#include <lego/mm.h>
-#include <lego/netmacro.h>
-#include "mem.h"
-
 
