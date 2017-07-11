@@ -48,7 +48,7 @@ struct lego_binprm {
 
 struct lego_binfmt {
 	struct list_head lh;
-	int (*load_binary)(struct lego_binprm *);
+	int (*load_binary)(struct lego_task_struct *, struct lego_binprm *);
 	int (*core_dump)(void);
 };
 

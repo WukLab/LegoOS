@@ -18,7 +18,15 @@
 #include <lego/comp_common.h>
 #include <lego/comp_memory.h>
 
-static struct lego_binfmt elf_format;
+static int load_elf_binary(struct lego_task_struct *tsk,
+			   struct lego_binprm *bprm)
+{
+	return 0;
+}
+
+static struct lego_binfmt elf_format = {
+	.load_binary	= load_elf_binary
+};
 
 static LIST_HEAD(formats);
 static DEFINE_SPINLOCK(binfmt_lock);
@@ -50,13 +58,14 @@ void __init exec_init(void)
 }
 
 /* Iterate the list of binary formats handler, until one recognizes the image */
-static int search_exec_binary_handler(struct lego_binprm *bprm)
+static int search_exec_binary_handler(struct lego_task_struct *tsk,
+				      struct lego_binprm *bprm)
 {
 	int retval = -ENOENT;
 	struct lego_binfmt *fmt;
 
 	list_for_each_entry(fmt, &formats, lh) {
-		retval = fmt->load_binary(bprm);
+		retval = fmt->load_binary(tsk, bprm);
 		if (retval < 0 && !bprm->mm) {
 			/*
 			 * TODO:
@@ -173,7 +182,7 @@ static int exec_loader(struct lego_task_struct *tsk, const char *filename,
 	if (retval < 0)
 		goto out;
 
-	retval = search_exec_binary_handler(bprm);
+	retval = search_exec_binary_handler(tsk, bprm);
 	if (retval)
 		goto out;
 
