@@ -480,6 +480,9 @@ CHECKFLAGS     += $(NOSTDINC_FLAGS)
 
 KBUILD_CFLAGS   += $(call cc-option, -fno-var-tracking-assignments)
 
+# Force off for distro compilers that enable stack proector by default
+KBUILD_CFLAGS += $(call cc-option, -fno-stack-protector)
+
 # warn about C99 declaration after statement
 KBUILD_CFLAGS += $(call cc-option,-Wdeclaration-after-statement,)
 
