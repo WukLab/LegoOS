@@ -37,6 +37,7 @@
 static inline int clear_user(void *a, unsigned long b)
 {
 	WARN_ON(1);
+	return 0;
 }
 
 /*

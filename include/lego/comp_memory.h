@@ -89,7 +89,8 @@ struct lego_mm_struct {
 	unsigned long mmap_legacy_base;	/* base of mmap area in bottom-up allocations */
 	unsigned long task_size;	/* size of task vm space */
 
-	pgd_t *pgd;
+	spinlock_t page_table_lock;	/* Protects page tables and some counters */
+	pgd_t *pgd;			/* root page table */
 	atomic_t mm_users;		/* How many users with user space? */
 	atomic_t mm_count;		/* How many references to "struct mm_struct" (users count as 1) */
 	int map_count;

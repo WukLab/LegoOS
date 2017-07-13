@@ -1,6 +1,0 @@
-#
-# Makefile for Lego components selections
-#
-
-source "components/processor/Kconfig"
-source "components/memory/Kconfig"
