@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_ELF_H_
-#define _LEGO_ELF_H_
+#ifndef _LEGO_MEMORY_ELF_H_
+#define _LEGO_MEMORY_ELF_H_
 
 #include <lego/types.h>
 
@@ -503,4 +503,4 @@ typedef struct elf64_note {
 
 #endif
 
-#endif /* _LEGO_ELF_H_ */
+#endif /* _LEGO_MEMORY_ELF_H_ */

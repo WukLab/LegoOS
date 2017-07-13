@@ -100,6 +100,7 @@ static int mc_manager(void *unused)
 }
 #endif /* CONFIG_FIT */
 
+#if 0
 static void hashtable_test(void)
 {
         struct lego_task_struct *tsk;
@@ -133,12 +134,13 @@ static void hashtable_test(void)
         pr_info("Test successful. \n"); 
 
 }
+#endif
 
 void __init memory_component_init(void)
 {
-        /* Register exec binary handlers */
+	/* Register exec binary handlers */
 	exec_init();
-       
+
 #ifdef CONFIG_FIT
 	struct task_struct *ret;
 

@@ -16,7 +16,6 @@
 #include <lego/sched.h>
 #include <lego/ptrace.h>
 #include <lego/kernel.h>
-#include <lego/binfmts.h>
 #include <lego/spinlock.h>
 #include <lego/syscalls.h>
 #include <lego/uaccess.h>

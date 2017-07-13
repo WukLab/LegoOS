@@ -27,7 +27,6 @@
 #include <lego/atomic.h>
 #include <lego/kernel.h>
 #include <lego/extable.h>
-#include <lego/binfmts.h>
 #include <lego/jiffies.h>
 #include <lego/kthread.h>
 #include <lego/cpumask.h>

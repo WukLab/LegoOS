@@ -7,14 +7,14 @@
  * (at your option) any later version.
  */
 
-#include <lego/elf.h>
 #include <lego/slab.h>
 #include <lego/sched.h>
-#include <lego/binfmts.h>
 #include <lego/kernel.h>
 #include <lego/comp_memory.h>
 
-#include "internal.h"
+#include "../include/vm.h"
+#include "../include/elf.h"
+#include "../include/loader.h"
 
 #define ELF_EXEC_PAGESIZE	4096
 
@@ -32,15 +32,19 @@
 #define ELF_PAGEOFFSET(_v) 	((_v) & (ELF_MIN_ALIGN-1))
 #define ELF_PAGEALIGN(_v) 	(((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
 
-#define BAD_ADDR(x) ((unsigned long)(x) >= TASK_SIZE)
+#define BAD_ADDR(x)	((unsigned long)(x) >= TASK_SIZE)
 
-// used to initialize the bss section data to zero 
-int clear_user(void *addr, unsigned long size)
+static inline int clear_user(void *a, unsigned long b)
 {
-	/* The clear_user function is used to zero a block of memory in user space. */
-	return 0;
+	WARN_ON(1);
 }
 
+/*
+ * We need to explicitly zero any fractional pages
+ * after the data section (i.e. bss).  This would
+ * contain the junk from the file that should not
+ * be in memory
+ */
 static int padzero(unsigned long elf_bss)
 {
 	unsigned long nbyte;
@@ -62,6 +66,7 @@ static int create_elf_tables(struct lego_binprm *bprm, struct elfhdr *exec,
  * the argv pointer and the environment variable array pointer are pushed 
  * to user mode stack by create_elf_tables() 
  */
+	WARN_ON(1);
 	return 0;
 }
 
@@ -191,7 +196,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		struct elfhdr interp_elf_ex;
 	} *loc;
 
-	BUG_ON(!bprm->file);
+	BUG_ON(!tsk || !bprm->file);
 
 	loc = kmalloc(sizeof(*loc), GFP_KERNEL);
 	if (!loc) {
@@ -252,7 +257,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	/* Some simple consistency checks for the interpreter */
 	if (elf_interpreter) {
 		retval = -ENOEXEC;
-		/* No support for dynamic linking */
+		/* XXX: No support for dynamic linking */
 		goto out_free_ph;
 	}
 
@@ -266,17 +271,21 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 
 	/* setup basic mmap info */
 	setup_new_exec(tsk, bprm);
-	
-	/* Do this so that we can load the interpreter, if need be.  We will
-	   change some of these later */
+
+	/*
+	 * Do this so that we can load the interpreter, if need be.
+	 * We will change some of these later
+	 */
 	retval = setup_arg_pages(tsk, bprm, STACK_TOP, executable_stack);
 	if (retval < 0)
 		goto out_free_ph;
 
 	tsk->mm->start_stack = bprm->p;
 
-	/* Now we do a little grungy work by mmapping the ELF image into
-	   the correct location in memory. */
+	/*
+	 * Now we do a little grungy work by mmapping the ELF image into
+	 * the correct location in memory.
+	 */
 	for(i = 0, elf_ppnt = elf_phdata;
 	    i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
 		int elf_prot = 0, elf_flags;
@@ -421,7 +430,10 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	kfree(elf_phdata);
 
 #ifdef ARCH_HAS_SETUP_ADDITIONAL_PAGES
-		goto out;
+	/*
+	 * TODO: vdso
+	 * x86 can map vdso here
+	 */
 #endif
 
 	retval = create_elf_tables(bprm, &loc->elf_ex,
@@ -436,14 +448,9 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	mm->start_data = start_data;
 	mm->end_data = end_data;
 	mm->start_stack = bprm->p;
-	
-#ifdef ELF_PLAT_INIT
-	goto out_free_ph;
-#endif
 
-	/* Need to pack the response in the desc and send the data back to the processor */
+	/* finally, huh? */
 	retval = 0;
-	
 out:
 	kfree(loc);
 out_ret:

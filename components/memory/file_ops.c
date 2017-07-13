@@ -9,7 +9,6 @@
 
 #include <lego/slab.h>
 #include <lego/kernel.h>
-#include <lego/binfmts.h>
 #include <lego/spinlock.h>
 #include <lego/comp_memory.h>
 

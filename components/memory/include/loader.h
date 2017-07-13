@@ -7,25 +7,11 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_BINFMTS_H_
-#define _LEGO_BINFMTS_H_
+#ifndef _LEGO_MEMORY_LOADER_H_
+#define _LEGO_MEMORY_LOADER_H_
 
-#include <lego/mm.h>
-#include <lego/sched.h>
+#include <lego/comp_common.h>
 #include <lego/comp_memory.h>
-
-int do_execve(const char *filename,
-	      const char * const *argv,
-	      const char * const *envp);
-
-/*
- * These are the maximum length and maximum number of strings passed to the
- * execve() system call.  MAX_ARG_STRLEN is essentially random but serves to
- * prevent the kernel from being unduly impacted by misaddressed pointers.
- * MAX_ARG_STRINGS is chosen to fit in a signed 32-bit integer.
- */
-#define MAX_ARG_STRLEN		(PAGE_SIZE * 32)
-#define MAX_ARG_STRINGS		0x7FFFFFFF
 
 /* sizeof(lego_binprm->buf) */
 #define BINPRM_BUF_SIZE		128
@@ -42,6 +28,7 @@ struct lego_binprm {
 
 	int			argc, envc;
 
+	unsigned long		exec;
 	/* Current top of mem */
 	unsigned long		p;
 };
@@ -57,4 +44,15 @@ struct lego_binfmt {
 #define EXSTACK_DISABLE_X 1	/* Disable executable stacks */
 #define EXSTACK_ENABLE_X  2	/* Enable executable stacks */
 
-#endif /* _LEGO_BINFMTS_H_ */
+int flush_old_exec(struct lego_task_struct *tsk, struct lego_binprm *bprm);
+void setup_new_exec(struct lego_task_struct *tsk, struct lego_binprm *bprm);
+int setup_arg_pages(struct lego_task_struct *tsk, struct lego_binprm *bprm,
+		    unsigned long stack_top, int executable_stack);
+
+extern int exec_loader(struct lego_task_struct *tsk, const char *filename,
+		       u32 argc, const char **argv,  u32 envc, const char **envp,
+		       u64 *new_ip, u64 *new_sp);
+
+extern struct lego_binfmt elf_format;
+
+#endif /* _LEGO_MEMORY_LOADER_H_ */

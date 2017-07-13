@@ -10,10 +10,6 @@
 #ifndef _ASM_X86_ELF_H_
 #define _ASM_X86_ELF_H_
 
-#ifndef _LEGO_ELF_H_
-# error "Don't include this file directory"
-#endif
-
 /* x86-64 relocation types */
 #define R_X86_64_NONE		0	/* No reloc */
 #define R_X86_64_64		1	/* Direct 64 bit  */

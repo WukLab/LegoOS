@@ -7,14 +7,25 @@
  * (at your option) any later version.
  */
 
-#include <lego/elf.h>
+/*
+ * Loader part is invoked only when memory-component receives execve()
+ * SYSCALL request from processor-coponent. Loader will setup all vm related
+ * data structures, and just return start_ip and start_sp back to processor.
+ *
+ * Loader also introduces another abstraction:
+ *	Virtual Loader Layer:
+ *	  |--> elf
+ *	  |--> a.out
+ *	  |--> script
+ */
+
 #include <lego/slab.h>
-#include <lego/binfmts.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/spinlock.h>
 
-#include "internal.h"
+#include "../include/vm.h"
+#include "../include/loader.h"
 
 /*
  * The least possible virtual address a process can map to:
@@ -270,11 +281,93 @@ void setup_new_exec(struct lego_task_struct *tsk, struct lego_binprm *bprm)
 }
 
 /*
+ * During bprm_mm_init(), we create a temporary stack at STACK_TOP_MAX.  Once
+ * the binfmt code determines where the new stack should reside, we shift it to
+ * its final location.  The process proceeds as follows:
+ *
+ * 1) Use shift to calculate the new vma endpoints.
+ * 2) Extend vma to cover both the old and new ranges.  This ensures the
+ *    arguments passed to subsequent functions are consistent.
+ * 3) Move vma's page tables to the new range.
+ * 4) Free up any cleared pgd range.
+ * 5) Shrink the vma to cover only the new range.
+ */
+static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
+{
+	return 0;
+}
+
+/*
  * Finalizes the stack vm_area_struct. The flags and permissions are updated,
  * the stack is optionally relocated, and some extra space is added.
  */
 int setup_arg_pages(struct lego_task_struct *tsk, struct lego_binprm *bprm,
 		    unsigned long stack_top, int executable_stack)
 {
-	return 0;
+	unsigned long ret;
+	unsigned long stack_shift;
+	struct lego_mm_struct *mm = tsk->mm;
+	struct vm_area_struct *vma = bprm->vma;
+	struct vm_area_struct *prev = NULL;
+	unsigned long vm_flags;
+	unsigned long stack_base;
+	unsigned long stack_size;
+	unsigned long stack_expand;
+
+	stack_top = PAGE_ALIGN(stack_top);
+
+	if (stack_top < sysctl_mmap_min_addr ||
+	    vma->vm_end - vma->vm_start >= stack_top - sysctl_mmap_min_addr)
+		return -ENOMEM;
+
+	stack_shift = vma->vm_end - stack_top;
+	bprm->p -= stack_shift;
+	bprm->exec -= stack_shift;
+	mm->arg_start = bprm->p;
+
+	if (down_write_killable(&mm->mmap_sem))
+		return -EINTR;
+
+	vm_flags = VM_STACK_FLAGS;
+
+	/*
+	 * Adjust stack execute permissions; explicitly enable for
+	 * EXSTACK_ENABLE_X, disable for EXSTACK_DISABLE_X and leave alone
+	 * (arch default) otherwise.
+	 */
+	if (unlikely(executable_stack == EXSTACK_ENABLE_X))
+		vm_flags |= VM_EXEC;
+	else if (executable_stack == EXSTACK_DISABLE_X)
+		vm_flags &= ~VM_EXEC;
+	vm_flags |= mm->def_flags;
+	vm_flags |= VM_STACK_INCOMPLETE_SETUP;
+
+	ret = mprotect_fixup(tsk, vma, &prev, vma->vm_start, vma->vm_end,
+			vm_flags);
+	if (ret)
+		goto out_unlock;
+	BUG_ON(prev != vma);
+
+	/* Move stack pages down in memory. */
+	if (stack_shift) {
+		ret = shift_arg_pages(vma, stack_shift);
+		if (ret)
+			goto out_unlock;
+	}
+
+	/* mprotect_fixup is overkill to remove the temporary stack flags */
+	vma->vm_flags &= ~VM_STACK_INCOMPLETE_SETUP;
+
+	stack_expand = 131072UL; /* randomly 32*4k (or 2*64k) pages */
+	stack_size = vma->vm_end - vma->vm_start;
+	stack_base = vma->vm_start - stack_expand;
+
+	mm->start_stack = bprm->p;
+	ret = expand_stack(vma, stack_base);
+	if (ret)
+		ret = -EFAULT;
+
+out_unlock:
+	up_write(&mm->mmap_sem);
+	return ret;
 }

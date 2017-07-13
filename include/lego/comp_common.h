@@ -79,6 +79,7 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 			   u32 timeout);
 
 /* P2M_LLC_MISS */
+
 struct p2m_llc_miss_struct {
 	__u32	pid;
 	__u64	missing_vaddr;
@@ -87,6 +88,7 @@ int pcache_fill(unsigned long, unsigned long *);
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64);
 
 /* P2M_FORK */
+
 struct p2m_fork_struct {
 	__u32	pid;	
 	char	comm[TASK_COMM_LEN];
@@ -95,6 +97,16 @@ int p2m_fork(struct task_struct *p);
 int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc);
 
 /* P2M_EXECVE */
+
+/*
+ * These are the maximum length and maximum number of strings passed to the
+ * execve() system call.  MAX_ARG_STRLEN is essentially random but serves to
+ * prevent the kernel from being unduly impacted by misaddressed pointers.
+ * MAX_ARG_STRINGS is chosen to fit in a signed 32-bit integer.
+ */
+#define MAX_ARG_STRLEN		(PAGE_SIZE * 32)
+#define MAX_ARG_STRINGS		0x7FFFFFFF
+
 #define MAX_FILENAME_LENGTH	256
 struct p2m_execve_struct {
 	__u32	pid;

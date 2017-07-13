@@ -13,13 +13,10 @@
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/fit_ibapi.h>
-#include <lego/binfmts.h>
 #include <lego/comp_common.h>
 #include <lego/comp_memory.h>
 
-extern int exec_loader(struct lego_task_struct *tsk, const char *filename,
-		       u32 argc, const char **argv,  u32 envc, const char **envp,
-		       u64 *new_ip, u64 *new_sp);
+#include "include/loader.h"
 
 int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc)
 {
