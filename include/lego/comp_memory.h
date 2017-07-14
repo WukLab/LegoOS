@@ -30,6 +30,15 @@ struct anon_vma {
 };
 
 /*
+ * These are the virtual MM functions - opening of an area, closing and
+ * unmapping it (needed to keep files on disk up-to-date etc), pointer
+ * to the functions called when a no-page or a wp-page exception occurs.
+ */
+struct vm_operations_struct {
+	int (*fault)(struct vm_area_struct *vma);
+};
+
+/*
  * This struct defines a memory VMM memory area. There is one of these
  * per VM-area/task.  A VM area is any part of the process virtual memory
  * space that has a special rule for the page-fault handlers (ie a shared
@@ -69,6 +78,9 @@ struct vm_area_struct {
 	struct list_head anon_vma_chain;/* Serialized by mmap_sem &
 					 * page_table_lock */
 	struct anon_vma *anon_vma;	/* Serialized by page_table_lock */
+
+	/* Function pointers to deal with this struct. */
+	const struct vm_operations_struct *vm_ops;
 
 	/* Information about our backing store: */
 	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE

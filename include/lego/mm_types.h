@@ -13,8 +13,8 @@
 #include <asm/pgtable.h>
 
 #include <lego/types.h>
-#include <lego/spinlock.h>
 #include <lego/rbtree.h>
+#include <lego/spinlock.h>
 
 typedef unsigned long vm_flags_t;
 
@@ -43,15 +43,13 @@ struct page {
 		void *freelist;		/* slab first free object */
 	};
 
-	struct list_head lru;
-	unsigned long private;
+	int units;			/* SLOB */
+
 	atomic_t _mapcount;
 	atomic_t _refcount;
 
-	int units;
-#ifdef CONFIG_MEMCOMPONENT
-	
-#endif
+	struct list_head lru;
+	unsigned long private;
 };
 
 enum {
