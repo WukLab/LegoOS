@@ -156,6 +156,64 @@ err:
 	return err;
 }
 
+static int get_arg_page(struct lego_task_struct *tsk, struct lego_binprm *bprm,
+			unsigned long pos, unsigned long *kvaddr)
+{
+	return 0;
+}
+
+/*
+ * Copy argument/environment strings to the temporary stack vma
+ */
+static int copy_strings(struct lego_task_struct *tsk, struct lego_binprm *bprm,
+			u32 argc, const char **argv,  u32 envc, const char **envp)
+{
+	int ret, len;
+	unsigned long pos, kvaddr, kpos = 0;
+	const char *str;
+
+	while (argc-- > 0) {
+		ret = -EINVAL;
+		str = argv[argc];
+		len = strnlen(str, MAX_ARG_STRLEN);
+		if (!len)
+			goto out;
+
+		len++; /* terminator NULL */
+		pos = bprm->p;
+		str += len;
+		bprm->p -= len;
+
+		while (len > 0) {
+			int offset, bytes_to_copy;
+
+			offset = pos % PAGE_SIZE;
+			if (offset == 0)
+				offset = PAGE_SIZE;
+
+			bytes_to_copy = offset;
+			if (bytes_to_copy > len)
+				bytes_to_copy = len;
+
+			offset -= bytes_to_copy;
+			pos -= bytes_to_copy;
+			str -= bytes_to_copy;
+			len -= bytes_to_copy;
+
+			if (kpos != (pos & PAGE_MASK)) {
+				ret = get_arg_page(tsk, bprm, pos, &kvaddr);
+				if (ret)
+					return -EFAULT;
+				kpos = pos & PAGE_MASK;
+			}
+			strncpy((char *)(kvaddr + offset), str, bytes_to_copy);
+		}
+	}
+	ret = 0;
+out:
+	return ret;
+}
+
 /**
  * exec_loader - loader binary formats
  *
@@ -186,6 +244,10 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 	retval = bprm_mm_init(tsk, bprm);
 	if (retval)
 		goto out_free;
+
+	retval = copy_strings(tsk, bprm, argc, argv, envc, envp);
+	if (retval)
+		goto out;
 
 	/* Read the binary format header from the file */
 	retval = file_read(tsk, bprm->file, bprm->buf, BINPRM_BUF_SIZE, &offset);
