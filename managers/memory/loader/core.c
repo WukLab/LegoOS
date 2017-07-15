@@ -26,6 +26,7 @@
 
 #include <memory/include/vm.h>
 #include <memory/include/loader.h>
+#include <memory/include/file_ops.h>
 
 /*
  * The least possible virtual address a process can map to:

@@ -1,2 +1,2 @@
 obj-y := piggy.o
-obj-y += main.o
+obj-y += core.o

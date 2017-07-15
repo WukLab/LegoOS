@@ -171,6 +171,16 @@ SECTIONS {
 		__apicdrivers_end = .;
 	}
 
+/* XXX: remove me later */
+#ifdef CONFIG_COMP_MEMORY
+	. = ALIGN(PAGE_SIZE);
+	.ramfs : AT(ADDR(.ramfs) - LOAD_OFFSET) {
+		__ramfs_start = .;
+		*(.ramfs)
+		__ramfs_end = .;
+	}
+#endif
+
 	__einit = .;
 
 	/* Checked during boot-time */

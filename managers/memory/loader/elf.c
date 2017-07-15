@@ -15,6 +15,7 @@
 #include <memory/include/vm.h>
 #include <memory/include/elf.h>
 #include <memory/include/loader.h>
+#include <memory/include/file_ops.h>
 
 #define ELF_EXEC_PAGESIZE	4096
 
@@ -197,7 +198,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		struct elfhdr interp_elf_ex;
 	} *loc;
 
-	BUG_ON(!tsk || !bprm->file);
+	BUG_ON(!tsk);
 
 	loc = kmalloc(sizeof(*loc), GFP_KERNEL);
 	if (!loc) {

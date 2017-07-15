@@ -12,14 +12,16 @@
 #include <lego/spinlock.h>
 #include <lego/comp_memory.h>
 
+#include <memory/include/file_ops.h>
+
 ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,
 		  char __user *buf, size_t count, loff_t *pos)
 {
-	return -EINVAL;
+	return ramfs_file_ops.read(tsk, file, buf, count, pos);
 }
 
 ssize_t file_write(struct lego_task_struct *tsk, struct lego_file *file,
 		   const char __user *buf, size_t count, loff_t *pos)
 {
-	return -EINVAL;
+	return ramfs_file_ops.write(tsk, file, buf, count, pos);
 }

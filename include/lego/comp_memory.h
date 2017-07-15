@@ -154,12 +154,6 @@ struct lego_file {
 	const char filename[MAX_FILENAME_LEN];
 };
 
-/* Storage APIs */
-ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,
-		  char __user *buf, size_t count, loff_t *pos);
-ssize_t file_write(struct lego_task_struct *tsk, struct lego_file *file,
-		   const char __user *buf, size_t count, loff_t *pos);
-
 /* Functions related to the page mapping walk */
 //pte_t *page_mapping_walk(struct lego_mm_struct *, unsigned long);
 
