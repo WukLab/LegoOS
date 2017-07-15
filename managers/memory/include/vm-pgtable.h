@@ -83,4 +83,7 @@ do {							\
 	spin_unlock(ptl);				\
 } while (0)
 
+void free_pgd_range(struct lego_mm_struct *mm,
+		    unsigned long start, unsigned long end);
+
 #endif /* _LEGO_MEMORY_VM_PGTABLE_H_ */

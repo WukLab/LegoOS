@@ -186,3 +186,19 @@ int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 
 	return 0;
 }
+
+int faultin_page(struct vm_area_struct *vma, unsigned long start,
+		 unsigned long flags, unsigned long *kvaddr)
+{
+	int ret;
+
+	ret = handle_lego_mm_fault(vma, start, flags, kvaddr);
+	if (ret & VM_FAULT_ERROR) {
+		if (ret & VM_FAULT_OOM)
+			return -ENOMEM;
+		if (ret & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV))
+			return -EFAULT;
+		BUG();
+	}
+	return 0;
+}

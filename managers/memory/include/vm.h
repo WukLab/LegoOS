@@ -189,6 +189,15 @@ unsigned long vm_mmap_pgoff(struct lego_task_struct *p, struct lego_file *file,
 int vm_brk(struct lego_task_struct *tsk,
 	   unsigned long start, unsigned long len);
 
+int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
+	unsigned long end, pgoff_t pgoff, struct vm_area_struct *insert,
+	struct vm_area_struct *expand);
+static inline int vma_adjust(struct vm_area_struct *vma, unsigned long start,
+	unsigned long end, pgoff_t pgoff, struct vm_area_struct *insert)
+{
+	return __vma_adjust(vma, start, end, pgoff, insert, NULL);
+}
+
 struct lego_mm_struct *lego_mm_alloc(struct lego_task_struct *p);
 
 /* lego_mmdrop drops the mm and the page tables */
@@ -214,9 +223,17 @@ static inline unsigned long vma_pages(struct vm_area_struct *vma)
 }
 
 int expand_stack(struct vm_area_struct *vma, unsigned long address);
-
+struct vm_area_struct *find_extend_vma(struct lego_mm_struct *mm, unsigned long addr);
 int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 		struct vm_area_struct **pprev, unsigned long start,
 		unsigned long end, unsigned long newflags);
+
+int faultin_page(struct vm_area_struct *vma, unsigned long start,
+		 unsigned long flags, unsigned long *kvaddr);
+
+extern unsigned long move_page_tables(struct vm_area_struct *vma,
+		unsigned long old_addr, struct vm_area_struct *new_vma,
+		unsigned long new_addr, unsigned long len,
+		bool need_rmap_locks);
 
 #endif /* _LEGO_MEMORY_VM_H_ */

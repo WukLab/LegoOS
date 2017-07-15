@@ -277,7 +277,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	 * Do this so that we can load the interpreter, if need be.
 	 * We will change some of these later
 	 */
-	retval = setup_arg_pages(tsk, bprm, STACK_TOP, executable_stack);
+	retval = setup_arg_pages(tsk, bprm, TASK_SIZE, executable_stack);
 	if (retval < 0)
 		goto out_free_ph;
 

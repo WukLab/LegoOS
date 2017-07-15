@@ -22,6 +22,7 @@
 #include <lego/comp_common.h>
 
 #include "../include/vm.h"
+#include "../include/vm-pgtable.h"
 
 static unsigned long
 arch_get_unmapped_area(struct lego_task_struct *p, struct lego_file *filp,
@@ -683,12 +684,6 @@ again:
 	validate_mm(mm);
 
 	return 0;
-}
-
-static inline int vma_adjust(struct vm_area_struct *vma, unsigned long start,
-	unsigned long end, pgoff_t pgoff, struct vm_area_struct *insert)
-{
-	return __vma_adjust(vma, start, end, pgoff, insert, NULL);
 }
 
 /*
@@ -1637,10 +1632,71 @@ void lego_mm_release(struct lego_task_struct *tsk, struct lego_mm_struct *mm)
 }
 
 /*
+ * These three helpers classifies VMAs for virtual memory accounting.
+ */
+
+/*
+ * Executable code area - executable, not writable, not stack
+ */
+static inline bool is_exec_mapping(vm_flags_t flags)
+{
+	return (flags & (VM_EXEC | VM_WRITE | VM_STACK)) == VM_EXEC;
+}
+
+/*
+ * Stack area - atomatically grows in one direction
+ *
+ * VM_GROWSUP / VM_GROWSDOWN VMAs are always private anonymous:
+ * do_mmap() forbids all other combinations.
+ */
+static inline bool is_stack_mapping(vm_flags_t flags)
+{
+	return (flags & VM_STACK) == VM_STACK;
+}
+
+/*
+ * Data area - private, writable, not stack
+ */
+static inline bool is_data_mapping(vm_flags_t flags)
+{
+	return (flags & (VM_WRITE | VM_SHARED | VM_STACK)) == VM_WRITE;
+}
+
+void vm_stat_account(struct lego_mm_struct *mm, vm_flags_t flags, long npages)
+{
+	mm->total_vm += npages;
+
+	if (is_exec_mapping(flags))
+		mm->exec_vm += npages;
+	else if (is_stack_mapping(flags))
+		mm->stack_vm += npages;
+	else if (is_data_mapping(flags))
+		mm->data_vm += npages;
+}
+
+/*
  * vma is the first one with address < vma->vm_start.  Have to extend vma.
  */
 int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 {
+	struct lego_mm_struct *mm = vma->vm_mm;
+
+	address &= PAGE_MASK;
+	if (address < vma->vm_start) {
+		unsigned long size, grow;
+
+		size = vma->vm_end - address;
+		grow = (vma->vm_start - address) >> PAGE_SHIFT;
+
+		if (grow <= vma->vm_pgoff) {
+			spin_lock(&mm->page_table_lock);
+			vm_stat_account(mm, vma->vm_flags, grow);
+			vma->vm_start = address;
+			vma->vm_pgoff -= grow;
+			vma_gap_update(vma);
+			spin_unlock(&mm->page_table_lock);
+		}
+	}
 	return 0;
 }
 
@@ -1657,6 +1713,23 @@ int expand_stack(struct vm_area_struct *vma, unsigned long address)
 	return expand_downwards(vma, address);
 }
 
+struct vm_area_struct *
+find_extend_vma(struct lego_mm_struct *mm, unsigned long addr)
+{
+	struct vm_area_struct *vma;
+
+	addr &= PAGE_MASK;
+	vma = find_vma(mm, addr);
+	if (!vma)
+		return NULL;
+	if (vma->vm_start <= addr)
+		return vma;
+	if (expand_stack(vma, addr))
+		return NULL;
+	return vma;
+}
+
+/* TODO */
 int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 		struct vm_area_struct **pprev, unsigned long start,
 		unsigned long end, unsigned long newflags)

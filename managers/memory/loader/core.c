@@ -103,7 +103,7 @@ static int __bprm_mm_init(struct lego_binprm *bprm)
 	 * configured yet.
 	 */
 	BUILD_BUG_ON(VM_STACK_FLAGS & VM_STACK_INCOMPLETE_SETUP);
-	vma->vm_end = STACK_TOP_MAX;
+	vma->vm_end = TASK_SIZE;
 	vma->vm_start = vma->vm_end - PAGE_SIZE;
 	vma->vm_flags = VM_STACK_FLAGS | VM_STACK_INCOMPLETE_SETUP;
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
@@ -157,9 +157,19 @@ err:
 }
 
 static int get_arg_page(struct lego_task_struct *tsk, struct lego_binprm *bprm,
-			unsigned long pos, unsigned long *kvaddr)
+			unsigned long start, unsigned long *kvaddr)
 {
-	return 0;
+	struct lego_mm_struct *mm = tsk->mm;
+	struct vm_area_struct *vma;
+	unsigned long flags;
+
+	vma = find_extend_vma(mm, start);
+	if (!vma)
+		return -EFAULT;
+
+	/* We are going to copy strings, so make it a write fault */
+	flags = FAULT_FLAG_WRITE;
+	return faultin_page(vma, start, flags, kvaddr);
 }
 
 /*
@@ -200,10 +210,11 @@ static int copy_strings(struct lego_task_struct *tsk, struct lego_binprm *bprm,
 			str -= bytes_to_copy;
 			len -= bytes_to_copy;
 
+			/* Do we need another page? */
 			if (kpos != (pos & PAGE_MASK)) {
 				ret = get_arg_page(tsk, bprm, pos, &kvaddr);
 				if (ret)
-					return -EFAULT;
+					return ret;
 				kpos = pos & PAGE_MASK;
 			}
 			strncpy((char *)(kvaddr + offset), str, bytes_to_copy);
@@ -241,10 +252,12 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 	bprm->envc = envc;
 	bprm->file = file;
 
+	/* Prepare a temporary stack vma */
 	retval = bprm_mm_init(tsk, bprm);
 	if (retval)
 		goto out_free;
 
+	/* Copy argv/envp to new process's stack */
 	retval = copy_strings(tsk, bprm, argc, argv, envc, envp);
 	if (retval)
 		goto out;
@@ -254,6 +267,7 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 	if (retval < 0)
 		goto out;
 
+	/* go for it */
 	retval = search_exec_binary_handler(tsk, bprm);
 	if (retval)
 		goto out;
@@ -356,13 +370,55 @@ void setup_new_exec(struct lego_task_struct *tsk, struct lego_binprm *bprm)
  */
 static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 {
+	struct lego_mm_struct *mm = vma->vm_mm;
+	unsigned long old_start = vma->vm_start;
+	unsigned long old_end = vma->vm_end;
+	unsigned long length = old_end - old_start;
+	unsigned long new_start = old_start - shift;
+	unsigned long new_end = old_end - shift;
+
+	BUG_ON(new_start > new_end);
+
+	/*
+	 * ensure there are no vmas between where we want to go
+	 * and where we are
+	 */
+	if (vma != find_vma(mm, new_start))
+		return -EFAULT;
+
+	/* cover the whole range: [new_start, old_end) */
+	if (vma_adjust(vma, new_start, old_end, vma->vm_pgoff, NULL))
+		return -ENOMEM;
+
+	/*
+	 * move the page tables downwards, on failure we rely on
+	 * process cleanup to remove whatever mess we made.
+	 */
+	if (length != move_page_tables(vma, old_start,
+				       vma, new_start, length, false))
+		return -ENOMEM;
+
+	if (new_end > old_start) {
+		/* when the old and new regions overlap clear from new_end. */
+		free_pgd_range(mm, new_end, old_end);
+	} else {
+		/*
+		 * otherwise, clean from old_start; this is done to not touch
+		 * the address space in [new_end, old_start)
+		 */
+		free_pgd_range(mm, old_start, old_end);
+	}
+
+	/* Shrink the vma to just the new range.  Always succeeds. */
+	vma_adjust(vma, new_start, new_end, vma->vm_pgoff, NULL);
+
 	return 0;
 }
 
 /*
  * Finalizes the stack vm_area_struct. The flags and permissions are updated,
  * the stack is optionally relocated, and some extra space is added.
- */
+*/
 int setup_arg_pages(struct lego_task_struct *tsk, struct lego_binprm *bprm,
 		    unsigned long stack_top, int executable_stack)
 {
