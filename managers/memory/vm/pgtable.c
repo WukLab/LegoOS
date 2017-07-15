@@ -114,9 +114,10 @@ int __lego_pte_alloc(struct lego_mm_struct *mm, pmd_t *pmd, unsigned long addres
 	if (pmd_present(*pmd))
 		 /* Another has populated it */
 		lego_pte_free(new);
-	else
+	else {
+		atomic_long_inc(&mm->nr_ptes);
 		lego_pmd_populate(pmd, new);
-	spin_unlock(&mm->page_table_lock);
+	} spin_unlock(&mm->page_table_lock);
 	return 0;
 }
 
