@@ -58,8 +58,6 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 		str += strnlen(str, MAX_ARG_STRLEN);
 		/* terminating NULL */
 		str++;
-
-		pr_info("%d: [%s]\n", i, argv[i]);
 	}
 	envp = &argv[argc];
 

@@ -182,7 +182,6 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 {
  	unsigned long load_addr = 0, load_bias = 0;
 	int load_addr_set = 0;
-	char *elf_interpreter = NULL;
 	unsigned long error;
 	struct elf_phdr *elf_ppnt, *elf_phdata;
 	unsigned long elf_bss, elf_brk;
@@ -214,10 +213,8 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	if (memcmp(loc->elf_ex.e_ident, ELFMAG, SELFMAG) != 0)
 		goto out;
 
-	if (loc->elf_ex.e_type != ET_EXEC) {
-		WARN(1, "Only static exectuables are supported!");
+	if (loc->elf_ex.e_type != ET_EXEC && loc->elf_ex.e_type != ET_DYN)
 		goto out;
-	}
 
 	if (!elf_check_arch(&loc->elf_ex))
 		goto out;
@@ -237,9 +234,11 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 
 	for (i = 0; i < loc->elf_ex.e_phnum; i++) {
 		if (elf_ppnt->p_type == PT_INTERP) {
-			/* This is the program interpreter used for
+			/*
+			 * This is the program interpreter used for
 			 * shared libraries - not supported for now
 			 */
+			WARN(1, "Only static-link elf is supported!\n");
 			retval = -ENOEXEC;
 			goto out_free_ph;
 		}
@@ -254,13 +253,6 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 			else
 				executable_stack = EXSTACK_DISABLE_X;
 		}
-	}
-
-	/* Some simple consistency checks for the interpreter */
-	if (elf_interpreter) {
-		retval = -ENOEXEC;
-		/* XXX: No support for dynamic linking */
-		goto out_free_ph;
 	}
 
 	/*
@@ -417,16 +409,10 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		goto out_free_ph;
 	}
 
-	if (elf_interpreter) {
-		/* Dynamic linking not supported */
-		retval = -ENOEXEC;
+	elf_entry = loc->elf_ex.e_entry;
+	if (BAD_ADDR(elf_entry)) {
+		retval = -EINVAL;
 		goto out_free_ph;
-	} else {
-		elf_entry = loc->elf_ex.e_entry;
-		if (BAD_ADDR(elf_entry)) {
-			retval = -EINVAL;
-			goto out_free_ph;
-		}
 	}
 
 	kfree(elf_phdata);

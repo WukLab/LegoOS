@@ -21,8 +21,7 @@ ssize_t ramfs_read(struct lego_task_struct *tsk, struct lego_file *file,
 	memcpy(buf, start, count);
 	*pos += count;
 
-	pr_info("%p -> %p, cnt: %zu\n", start, buf, count);
-	return 0;
+	return count;
 }
 
 ssize_t ramfs_write(struct lego_task_struct *tsk, struct lego_file *file,

@@ -1744,5 +1744,6 @@ int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 		struct vm_area_struct **pprev, unsigned long start,
 		unsigned long end, unsigned long newflags)
 {
+	*pprev = vma;
 	return 0;
 }
