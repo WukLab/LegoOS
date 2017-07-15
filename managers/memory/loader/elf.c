@@ -17,27 +17,18 @@
 #include <memory/include/loader.h>
 #include <memory/include/file_ops.h>
 
-#define ELF_EXEC_PAGESIZE	4096
-
-#if ELF_EXEC_PAGESIZE > PAGE_SIZE
-#define ELF_MIN_ALIGN	ELF_EXEC_PAGESIZE
-#else
-#define ELF_MIN_ALIGN	PAGE_SIZE
-#endif
-
-#ifndef ELF_CORE_EFLAGS
+#define ELF_MIN_ALIGN		PAGE_SIZE
 #define ELF_CORE_EFLAGS		0
-#endif
+#define ELF_PAGESTART(_v)	((_v) & ~(unsigned long)(ELF_MIN_ALIGN-1))
+#define ELF_PAGEOFFSET(_v)	((_v) & (ELF_MIN_ALIGN-1))
+#define ELF_PAGEALIGN(_v)	(((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
 
-#define ELF_PAGESTART(_v) 	((_v) & ~(unsigned long)(ELF_MIN_ALIGN-1))
-#define ELF_PAGEOFFSET(_v) 	((_v) & (ELF_MIN_ALIGN-1))
-#define ELF_PAGEALIGN(_v) 	(((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
 
 #define BAD_ADDR(x)	((unsigned long)(x) >= TASK_SIZE)
 
 static inline int clear_user(void *a, unsigned long b)
 {
-	WARN_ON(1);
+	pr_info("%s: implement me\n", __func__);
 	return 0;
 }
 
@@ -68,7 +59,7 @@ static int create_elf_tables(struct lego_binprm *bprm, struct elfhdr *exec,
  * the argv pointer and the environment variable array pointer are pushed 
  * to user mode stack by create_elf_tables() 
  */
-	WARN(1, "load_addr: %#lx\n", load_addr);
+	pr_info("%s: implement me\n", __func__);
 	return 0;
 }
 
@@ -96,6 +87,8 @@ static unsigned long elf_map(struct lego_task_struct *tsk, struct lego_file *fil
 	 * the end. (which unmap is needed for ELF images with holes.)
 	 */
 	if (total_size) {
+		/* Used by dynamic-linked image */
+		BUG();
 		total_size = ELF_PAGEALIGN(total_size);
 		map_addr = vm_mmap(tsk, filep, addr, total_size, prot, type, off);
 		if (!BAD_ADDR(map_addr))
@@ -198,7 +191,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		struct elfhdr interp_elf_ex;
 	} *loc;
 
-	BUG_ON(!tsk);
+	BUG_ON(!tsk || !bprm->file);
 
 	loc = kmalloc(sizeof(*loc), GFP_KERNEL);
 	if (!loc) {
@@ -347,6 +340,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		error = elf_map(tsk, bprm->file, load_bias + vaddr, elf_ppnt,
 				elf_prot, elf_flags, total_size);
 		if (BAD_ADDR(error)) {
+			WARN_ON(1);
 			retval = IS_ERR((void *)error) ?
 				PTR_ERR((void*)error) : -EINVAL;
 			goto out_free_ph;

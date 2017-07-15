@@ -25,3 +25,27 @@ ssize_t file_write(struct lego_task_struct *tsk, struct lego_file *file,
 {
 	return ramfs_file_ops.write(tsk, file, buf, count, pos);
 }
+
+/*
+ * Open a file, allocate and initialized the lego_file data structure
+ */
+struct lego_file *file_open(struct lego_task_struct *tsk, const char *filename)
+{
+	struct lego_file *file;
+
+	file = kmalloc(sizeof(*file), GFP_KERNEL);
+	if (!file)
+		return ERR_PTR(-ENOMEM);
+
+	strncpy(file->filename, filename, MAX_FILENAME_LEN);
+	file->f_op = &ramfs_file_ops;
+	file->task = tsk;
+
+	return file;
+}
+
+void file_close(struct lego_file *file)
+{
+	BUG_ON(!file);
+	kfree(file);
+}

@@ -248,10 +248,16 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 
 	BUG_ON(!tsk || !filename || !argc || !argv || !envc || !envp);
 
+	file = file_open(tsk, filename);
+	if (IS_ERR(file)) {
+		retval = PTR_ERR(file);
+		goto out_ret;
+	}
+
 	bprm = kzalloc(sizeof(*bprm), GFP_KERNEL);
 	if (!bprm) {
 		retval = -ENOMEM;
-		goto out_ret;
+		goto out_free_file;
 	}
 
 	bprm->argc = argc;
@@ -286,6 +292,8 @@ out:
 		lego_mmput(bprm->mm);
 out_free:
 	kfree(bprm);
+out_free_file:
+	file_close(file);
 out_ret:
 	return retval;
 }

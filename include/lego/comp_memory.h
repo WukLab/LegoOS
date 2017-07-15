@@ -24,6 +24,7 @@ static inline void memory_component_init(void) { }
 struct lego_task_struct;
 struct lego_mm_struct;
 struct lego_file;
+struct vm_fault;
 
 struct anon_vma {
 	int unused;
@@ -35,7 +36,7 @@ struct anon_vma {
  * to the functions called when a no-page or a wp-page exception occurs.
  */
 struct vm_operations_struct {
-	int (*fault)(struct vm_area_struct *vma);
+	int (*fault)(struct vm_area_struct *, struct vm_fault *);
 };
 
 /*
@@ -150,9 +151,20 @@ static inline void lego_set_task_comm(struct lego_task_struct *tsk,
 	lego_task_unlock(tsk);
 }
 
+struct file_operations {
+	ssize_t (*read)(struct lego_task_struct *, struct lego_file *,
+			char __user *, size_t, loff_t *);
+	ssize_t (*write)(struct lego_task_struct *, struct lego_file *,
+			 const char __user *, size_t, loff_t *);
+
+	int (*mmap)(struct lego_task_struct *, struct lego_file *, struct vm_area_struct *);
+};
+
 #define MAX_FILENAME_LEN 128
 struct lego_file {
-	const char filename[MAX_FILENAME_LEN];
+	char filename[MAX_FILENAME_LEN];
+	struct file_operations *f_op;
+	struct lego_task_struct *task;
 };
 
 /* Functions related to the page mapping walk */

@@ -28,14 +28,6 @@ static inline unsigned long my_zero_vfn(void)
 	return (unsigned long)empty_zero_page >> PAGE_SHIFT;
 }
 
-static int do_linear_fault(struct vm_area_struct *vma, unsigned long address,
-			   unsigned int flags, pte_t *ptep, pmd_t *pmd,
-			   pte_t entry)
-{
-	BUG();
-	return 0;
-}
-
 static int do_swap_page(struct vm_area_struct *vma, unsigned long address,
 			unsigned int flags, pte_t *ptep, pmd_t *pmd,
 			pte_t entry)
@@ -49,6 +41,56 @@ static int do_wp_page(struct vm_area_struct *vma, unsigned long address,
 {
 	BUG();
 	return 0;
+}
+
+/* TODO:
+ * This is a much simplified __do_fault
+ * we need to consider alot other protection things.
+ */
+static int __do_fault(struct lego_mm_struct *mm, struct vm_area_struct *vma,
+		unsigned long address, pmd_t *pmd,
+		pgoff_t pgoff, unsigned int flags, pte_t orig_pte)
+{
+	struct vm_fault vmf;
+	pte_t *page_table;
+	pte_t entry;
+	spinlock_t *ptl;
+	int ret;
+
+	vmf.virtual_address = address & PAGE_MASK;
+	vmf.pgoff = pgoff;
+	vmf.flags = flags;
+	vmf.page = 0;
+
+	ret = vma->vm_ops->fault(vma, &vmf);
+	if (unlikely(ret & VM_FAULT_ERROR))
+		return ret;
+
+	page_table = lego_pte_offset_lock(mm, pmd, address, &ptl);
+	pr_info("page:%#lx\n", vmf.page);
+
+	/* Only go through if we didn't race with anybody else... */
+	if (likely(pte_same(*page_table, orig_pte))) {
+		entry = lego_vfn_pte(((signed long)vmf.page >> PAGE_SHIFT),
+					vma->vm_page_prot);
+		if (flags & FAULT_FLAG_WRITE)
+			entry = pte_mkwrite(pte_mkdirty(entry));
+		pte_set(page_table, entry);
+	}
+
+	lego_pte_unlock(page_table, ptl);
+
+	return 0;
+}
+
+static int do_linear_fault(struct vm_area_struct *vma, unsigned long address,
+			   unsigned int flags, pte_t *page_table, pmd_t *pmd,
+			   pte_t orig_pte)
+{
+	pgoff_t pgoff = (((address & PAGE_MASK)
+			- vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
+
+	return __do_fault(vma->vm_mm, vma, address, pmd, pgoff, flags, orig_pte);
 }
 
 static int do_anonymous_page(struct vm_area_struct *vma, unsigned long address,
@@ -142,6 +184,10 @@ unlock:
 /*
  * Given a missing address, this function will establish the process's
  * virtual memory page table mapping.
+ *
+ * RETURN: VM_FAULT_XXX flags
+ * It is the caller's responsibility to check return value;
+ *
  *
  * Note that:
  * Traditional page table:

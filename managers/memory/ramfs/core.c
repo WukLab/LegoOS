@@ -8,12 +8,14 @@
  */
 
 #include <lego/kernel.h>
+#include <lego/comp_memory.h>
+#include <memory/include/vm.h>
 #include <memory/include/file_ops.h>
 
 extern char __ramfs_start[], __ramfs_end[];
 
-ssize_t ramfs_read(struct lego_task_struct *tsk, struct lego_file *file,
-		   char *buf, size_t count, loff_t *pos)
+static ssize_t ramfs_read(struct lego_task_struct *tsk, struct lego_file *file,
+			  char *buf, size_t count, loff_t *pos)
 {
 	char *start;
 
@@ -24,13 +26,49 @@ ssize_t ramfs_read(struct lego_task_struct *tsk, struct lego_file *file,
 	return count;
 }
 
-ssize_t ramfs_write(struct lego_task_struct *tsk, struct lego_file *file,
-		    const char *buf, size_t count, loff_t *pos)
+static ssize_t ramfs_write(struct lego_task_struct *tsk, struct lego_file *file,
+			   const char *buf, size_t count, loff_t *pos)
 {
 	return -EINVAL;
+}
+
+static int ramfs_vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	struct lego_task_struct *tsk;
+	struct lego_file *file;
+	size_t count;
+	loff_t pos;
+	unsigned long page;
+
+	page = __get_free_page(GFP_KERNEL);
+	if (unlikely(!page))
+		return VM_FAULT_OOM;
+
+	tsk = vma->vm_mm->task;
+	file = vma->vm_file;
+	count = PAGE_SIZE;
+	pos = vmf->pgoff << PAGE_SHIFT;
+
+	ramfs_read(tsk, file, (char *)page, count, &pos);
+
+	vmf->page = page;
+
+	return 0;
+}
+
+static struct vm_operations_struct ramfs_vma_ops = {
+	.fault	= ramfs_vma_fault,
+};
+
+static int ramfs_mmap(struct lego_task_struct *tsk, struct lego_file *file,
+		      struct vm_area_struct *vma)
+{
+	vma->vm_ops = &ramfs_vma_ops;
+	return 0;
 }
 
 struct file_operations ramfs_file_ops = {
 	.read	= ramfs_read,
 	.write	= ramfs_write,
+	.mmap	= ramfs_mmap,
 };

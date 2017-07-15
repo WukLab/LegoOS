@@ -260,6 +260,30 @@ int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 		unsigned long end, unsigned long newflags);
 
 /* fault.c */
+/*
+ * vm_fault is filled by the the pagefault handler and passed to the vma's
+ * ->fault function. The vma's ->fault is responsible for returning a bitmask
+ * of VM_FAULT_xxx flags that give details about how the fault was handled.
+ *
+ * MM layer fills up gfp_mask for page allocations but fault handler might
+ * alter it if its implementation requires a different allocation context.
+ *
+ * pgoff should be used in favour of virtual_address, if possible.
+ */
+struct vm_fault {
+	unsigned int flags;		/* FAULT_FLAG_xxx flags */
+	gfp_t gfp_mask;			/* gfp mask to be used for allocations */
+	pgoff_t pgoff;			/* Logical page offset based on vma */
+	unsigned long __user virtual_address;	/* Faulting virtual address */
+
+	unsigned long page;		/* ->fault handlers should return a
+					 * page here (kernel virtual address),
+					 * unless VM_FAULT_NOPAGE
+					 * is set (which is also implied by
+					 * VM_FAULT_ERROR).
+					 */
+};
+
 int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 			 unsigned int flags, unsigned long *ret_va);
 int faultin_page(struct vm_area_struct *vma, unsigned long start,

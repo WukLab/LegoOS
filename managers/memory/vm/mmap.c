@@ -781,10 +781,6 @@ again:
 	return 0;
 }
 
-/*
- * If the vma has a ->close operation then the driver probably needs to release
- * per-vma resources, so we don't attempt to merge those.
- */
 static inline int is_mergeable_vma(struct vm_area_struct *vma,
 				struct lego_file *file, unsigned long vm_flags)
 {
@@ -987,7 +983,7 @@ static int __split_vma(struct lego_mm_struct *mm, struct vm_area_struct *vma,
 	struct vm_area_struct *new;
 	int err = 0;
 
-	new = kmalloc(sizeof(*new), GFP_KERNEL);
+	new = kzalloc(sizeof(*new), GFP_KERNEL);
 	if (!new)
 		return -ENOMEM;
 
@@ -1430,6 +1426,7 @@ mmap_region(struct lego_task_struct *p, struct lego_file *file,
 	struct lego_mm_struct *mm = p->mm;
 	struct vm_area_struct *vma, *prev;
 	struct rb_node **rb_link, *rb_parent;
+	int error;
 
 	/* Clear old maps */
 	while (find_vma_links(mm, addr, addr + len, &prev, &rb_link,
@@ -1438,15 +1435,13 @@ mmap_region(struct lego_task_struct *p, struct lego_file *file,
 			return -ENOMEM;
 	}
 
-	/*
-	 * Can we just expand an old mapping?
-	 */
+	/* Can we just expand an old mapping? */
 	vma = vma_merge(mm, prev, addr, addr + len, vm_flags,
 			NULL, file, pgoff);
 	if (vma)
 		goto out;
 
-	vma = kmalloc(sizeof(*vma), GFP_KERNEL);
+	vma = kzalloc(sizeof(*vma), GFP_KERNEL);
 	if (!vma)
 		return -ENOMEM;
 
@@ -1456,12 +1451,39 @@ mmap_region(struct lego_task_struct *p, struct lego_file *file,
 	vma->vm_flags = vm_flags;
 	vma->vm_page_prot = vm_get_page_prot(vm_flags);
 	vma->vm_pgoff = pgoff;
+	vma->vm_file = file;
+
+	/*
+	 * If we have a back-store, invoke the mmap() callback
+	 * it must setup the vma->vm_ops!
+	 */
+	if (file) {
+		error = file->f_op->mmap(p, file, vma);
+		if (WARN_ON(error))
+			goto unmap_and_free_vma;
+		BUG_ON(!vma->vm_ops);
+	}
 
 	vma_link(mm, vma, prev, rb_link, rb_parent);
 
 out:
+	/*
+	 * New (or expanded) vma always get soft dirty status.
+	 * Otherwise user-space soft-dirty page tracker won't
+	 * be able to distinguish situation when vma area unmapped,
+	 * then new mapped in-place (which must be aimed as
+	 * a completely new data area).
+	 */
+	vma->vm_flags |= VM_SOFTDIRTY;
+
 	vma_set_page_prot(vma);
 	return addr;
+
+unmap_and_free_vma:
+	vma->vm_file = NULL;
+	unmap_region(mm, vma, prev, vma->vm_start, vma->vm_end);
+	kfree(vma);
+	return error;
 }
 
 /* minimum virtual address that a process is allowed to mmap */
@@ -1519,15 +1541,26 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 	if (file) {
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
+			vm_flags |= VM_SHARED | VM_MAYSHARE;
+			/* fall through */
 		case MAP_PRIVATE:
+			if (!file->f_op->mmap)
+				return -ENODEV;
+			if (vm_flags & (VM_GROWSDOWN|VM_GROWSUP)) {
+				WARN(1, "stack flag mis-used\n");
+				return -EINVAL;
+			}
+			break;
 		default:
 			return -EINVAL;
 		}
 	} else {
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
-			if (vm_flags & (VM_GROWSDOWN|VM_GROWSUP))
+			if (vm_flags & (VM_GROWSDOWN|VM_GROWSUP)) {
+				WARN(1, "stack flag mis-used\n");
 				return -EINVAL;
+			}
 			/*
 			 * Ignore pgoff.
 			 */
@@ -1620,7 +1653,7 @@ static int do_brk(struct lego_task_struct *p, unsigned long addr,
 	/*
 	 * create a vma struct for an anonymous mapping
 	 */
-	vma = kmalloc(sizeof(*vma), GFP_KERNEL);
+	vma = kzalloc(sizeof(*vma), GFP_KERNEL);
 	if (!vma)
 		return -ENOMEM;
 

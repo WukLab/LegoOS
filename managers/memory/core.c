@@ -71,7 +71,7 @@ static void local_qemu_test(void)
 
 	miss.pid = pid;
 	miss.flags = FAULT_FLAG_WRITE;
-	miss.missing_vaddr = 0x6b7000ULL;
+	miss.missing_vaddr = 0x400000ULL;
 	handle_p2m_llc_miss(&miss, 0, &hdr);
 }
 

@@ -56,10 +56,10 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 		return;
 	}
 
-	pr_info("new_page: %#lx, rebuf: %p\n", new_page, p);
-	print_hex_dump_bytes("dump:", DUMP_PREFIX_ADDRESS, retbuf, PAGE_SIZE);
 	memcpy(retbuf, (char *)new_page, PAGE_SIZE);
 	ibapi_reply_message(retbuf, PAGE_SIZE, desc);
+
+	print_hex_dump_bytes("dump:", DUMP_PREFIX_ADDRESS, retbuf, PAGE_SIZE);
 }
 
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,

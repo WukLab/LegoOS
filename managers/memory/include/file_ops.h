@@ -12,13 +12,6 @@
 
 #include <lego/comp_memory.h>
 
-struct file_operations {
-	ssize_t (*read)(struct lego_task_struct *, struct lego_file *,
-			char __user *, size_t, loff_t *);
-	ssize_t (*write)(struct lego_task_struct *, struct lego_file *,
-			 const char __user *, size_t, loff_t *);
-};
-
 extern struct file_operations ramfs_file_ops;
 
 /* Storage APIs */
@@ -26,5 +19,8 @@ ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,
 		  char __user *buf, size_t count, loff_t *pos);
 ssize_t file_write(struct lego_task_struct *tsk, struct lego_file *file,
 		   const char __user *buf, size_t count, loff_t *pos);
+
+struct lego_file *file_open(struct lego_task_struct *tsk, const char *filename);
+void file_close(struct lego_file *file);
 
 #endif /* _LEGO_MEMORY_FILE_OPS_H_ */
