@@ -13,6 +13,8 @@
 #include <lego/fit_ibapi.h>
 #include <lego/comp_common.h>
 
+unsigned int LEGO_LOCAL_NID __read_mostly = MY_NODE_ID;
+
 /**
  * @node: target node id
  * @opcode: see <lego/comp_common.h>
@@ -47,6 +49,7 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 
 	hdr = to_common_header(msg);
 	hdr->opcode = opcode;
+	hdr->src_nid = LEGO_LOCAL_NID;
 	hdr->length = sizeof(*hdr) + len_payload;
 
 	payload_msg = to_payload(msg);

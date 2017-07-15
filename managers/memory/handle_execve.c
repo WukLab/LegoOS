@@ -18,7 +18,8 @@
 
 #include "include/loader.h"
 
-int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc)
+int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
+		      struct common_header *hdr)
 {
 	struct m2p_execve_struct reply;
 	__u32 argc, envc;

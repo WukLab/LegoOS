@@ -11,7 +11,10 @@
 #include <lego/comp_common.h>
 #include <lego/comp_memory.h>
 
-int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc)
+#include "include/pid.h"
+
+int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
+		    struct common_header *hdr)
 {
 	u32 retbuf;
 

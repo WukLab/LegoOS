@@ -12,7 +12,8 @@
 #include <lego/comp_common.h>
 #include <lego/comp_processor.h>
 
-int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc)
+int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
+			struct common_header *hdr)
 {
 	u32 retbuf;
 

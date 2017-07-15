@@ -17,6 +17,8 @@
 #include <lego/sched.h>
 #include <generated/unistd_64.h>
 
+extern unsigned int LEGO_LOCAL_NID;
+
 /*
  * Rules about our message opcodes:
  *
@@ -56,6 +58,7 @@ static inline char *ret_to_string(u32 ret_status)
 
 struct common_header {
 	__u32	opcode;		/* see above */
+	__u32	src_nid;	/* source nid */
 	__u32	length;		/* of the whole message */
 };
 
@@ -85,7 +88,8 @@ struct p2m_llc_miss_struct {
 	__u64	missing_vaddr;
 };
 int pcache_fill(unsigned long, unsigned long *);
-int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64);
+int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64,
+			struct common_header *);
 
 /* P2M_FORK */
 
@@ -94,7 +98,7 @@ struct p2m_fork_struct {
 	char	comm[TASK_COMM_LEN];
 };
 int p2m_fork(struct task_struct *p);
-int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc);
+int handle_p2m_fork(struct p2m_fork_struct *, u64, struct common_header *);
 
 /* P2M_EXECVE */
 
@@ -126,6 +130,6 @@ struct m2p_execve_struct {
 	__u64	new_ip;
 	__u64	new_sp;
 };
-int handle_p2m_execve(struct p2m_execve_struct *, u64);
+int handle_p2m_execve(struct p2m_execve_struct *, u64, struct common_header *);
 
 #endif /* _LEGO_COMP_COMMON_H_ */

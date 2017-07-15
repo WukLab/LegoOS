@@ -26,11 +26,12 @@ extern void __init exec_init(void);
 
 static unsigned long nr_rx;
 
-static void handle_bad_request(u32 opcode, u64 desc)
+static void handle_bad_request(struct common_header *hdr, u64 desc)
 {
 	u32 retbuf;
 
-	pr_info("Unknown: opcode: %u\n", opcode);
+	pr_warn("Unknown: opcode: %u, from node: %u\n",
+		hdr->opcode, hdr->src_nid);
 
 	retbuf = RET_EPERM;
 	ibapi_reply_message(&retbuf, 4, desc);
@@ -51,16 +52,16 @@ static int mc_dispatcher(void *rx_buf)
 	/* handler should call reply message */
 	switch (hdr->opcode) {
 	case P2M_LLC_MISS:
-		handle_p2m_llc_miss(payload, desc);
+		handle_p2m_llc_miss(payload, desc, hdr);
 		break;
 	case P2M_FORK:
-		handle_p2m_fork(payload, desc);
+		handle_p2m_fork(payload, desc, hdr);
 		break;
 	case P2M_EXECVE:
-		handle_p2m_execve(payload, desc);
+		handle_p2m_execve(payload, desc, hdr);
 		break;
 	default:
-		handle_bad_request(hdr->opcode, desc);
+		handle_bad_request(hdr, desc);
 	}
 
 	return 0;
@@ -73,7 +74,7 @@ static int mc_manager(void *unused)
 	struct task_struct *ret;
 	int port = 0;
 
-	pr_info("memory-component manger is up and running.\n");
+	pr_info("Memory-component manager is up and running.\n");
 
 	while (1) {
 		rx_buf = kmalloc(DEFAULT_RXBUF_SIZE, GFP_KERNEL);
