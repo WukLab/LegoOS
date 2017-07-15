@@ -358,7 +358,7 @@ static inline void __do_page_fault(struct pt_regs *regs, unsigned long address,
 		flags |= FAULT_FLAG_INSTRUCTION;
 
 #if 0
-	ret = pcache_fill(address, &page);
+	ret = pcache_fill(address, flags, &page);
 	if (ret)
 		panic("pcache fail to handle: ret: %d\n", ret);
 #endif

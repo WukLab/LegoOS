@@ -104,4 +104,16 @@ int vprintk(const char *fmt, va_list args);
 #define pr_info_once(fmt, ...)					\
 	printk_once(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
 
+enum {
+	DUMP_PREFIX_NONE,
+	DUMP_PREFIX_ADDRESS,
+	DUMP_PREFIX_OFFSET
+};
+
+void print_hex_dump(const char *level, const char *prefix_str, int prefix_type,
+		    int rowsize, int groupsize,
+		    const void *buf, size_t len, bool ascii);
+void print_hex_dump_bytes(const char *prefix_str, int prefix_type,
+			  const void *buf, size_t len);
+
 #endif /* _LEGO_PRINTK_H_ */

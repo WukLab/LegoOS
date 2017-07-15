@@ -15,6 +15,7 @@
 #define _LEGO_COMP_COMMON_H_
 
 #include <lego/sched.h>
+#include <lego/signal.h>
 #include <generated/unistd_64.h>
 
 extern unsigned int LEGO_LOCAL_NID;
@@ -37,6 +38,9 @@ extern unsigned int LEGO_LOCAL_NID;
 #define P2M_FORK	((__u32)__NR_fork)
 #define P2M_EXECVE	((__u32)__NR_execve)
 
+/* To fold signal values into ret, without conflicting with EXXXX values */
+#define RET_SIGNAL_BASE	((__u32)1000)
+
 /* Return status */
 #define RET_OKAY	((__u32)0)	/* Operation succeed */
 #define RET_EPERM	((__u32)EPERM)	/* Operation not permitted */
@@ -44,6 +48,8 @@ extern unsigned int LEGO_LOCAL_NID;
 #define RET_EAGAIN	((__u32)EAGAIN)	/* Try again */
 #define RET_ENOMEM	((__u32)ENOMEM)	/* Out of memory */
 #define RET_EFAULT	((__u32)EFAULT)	/* Bad address */
+
+#define RET_ESIGSEGV	((__u32)(RET_SIGNAL_BASE+SIGSEGV)) /* Segmentation fault*/
 
 static inline __u32 ERR_TO_LEGO_RET(long err)
 {
@@ -98,9 +104,10 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 
 struct p2m_llc_miss_struct {
 	__u32	pid;
+	__u32	flags;
 	__u64	missing_vaddr;
 };
-int pcache_fill(unsigned long, unsigned long *);
+int pcache_fill(unsigned long, unsigned long, unsigned long *);
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64,
 			struct common_header *);
 

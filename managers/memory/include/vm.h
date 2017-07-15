@@ -259,14 +259,19 @@ int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 		struct vm_area_struct **pprev, unsigned long start,
 		unsigned long end, unsigned long newflags);
 
+/* fault.c */
+int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
+			 unsigned int flags, unsigned long *ret_va);
 int faultin_page(struct vm_area_struct *vma, unsigned long start,
 		 unsigned long flags, unsigned long *kvaddr);
 
+/* pgtable.c */
 extern unsigned long move_page_tables(struct vm_area_struct *vma,
 		unsigned long old_addr, struct vm_area_struct *new_vma,
 		unsigned long new_addr, unsigned long len,
 		bool need_rmap_locks);
 
+/* debug.c */
 void dump_vma(const struct vm_area_struct *vma);
 void dump_lego_mm(const struct lego_mm_struct *mm);
 #define VM_BUG_ON_VMA(cond, vma)					\

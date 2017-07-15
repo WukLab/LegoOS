@@ -82,7 +82,7 @@ static inline unsigned long addr2set(unsigned long addr)
 	     va_cache += pcache_way_cache_stride, 					\
 	     va_meta += pcache_way_meta_stride)
 
-static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
+static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cache,
 			  void *va_cache, void *va_meta, unsigned int way)
 {
 	struct p2m_llc_miss_struct payload;
@@ -92,6 +92,7 @@ static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
 		vaddr, pa_cache, va_cache, va_meta, way);
 
 	payload.pid = current->pid;
+	payload.flags = flags;
 	payload.missing_vaddr = vaddr;
 
 	/*
@@ -125,7 +126,8 @@ static int do_pcache_fill(unsigned long vaddr, void *pa_cache,
  *
  * TODO: sync in SMP
  */
-int pcache_fill(unsigned long missing_vaddr, unsigned long *cache_paddr)
+int pcache_fill(unsigned long missing_vaddr, unsigned long flags,
+		unsigned long *cache_paddr)
 {
 	void *pa_cache, *va_cache, *va_meta;
 	unsigned int way;
@@ -141,7 +143,7 @@ int pcache_fill(unsigned long missing_vaddr, unsigned long *cache_paddr)
 		return -ENOMEM;
 	}
 
-	ret = do_pcache_fill(missing_vaddr, pa_cache, va_cache, va_meta, way);
+	ret = do_pcache_fill(missing_vaddr, flags, pa_cache, va_cache, va_meta, way);
 	if (unlikely(ret)) {
 		*cache_paddr = 0;
 		return ret;

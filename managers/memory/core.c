@@ -38,6 +38,7 @@ static void local_qemu_test(void)
 	struct common_header hdr;
 	struct p2m_fork_struct fork;
 	struct p2m_execve_struct *execve;
+	struct p2m_llc_miss_struct miss;
 	struct lego_task_struct *tsk;
 	const char *str;
 	unsigned int nid, pid;
@@ -68,6 +69,10 @@ static void local_qemu_test(void)
 	dump_lego_mm(tsk->mm);
 	dump_all_vmas(tsk->mm);
 
+	miss.pid = pid;
+	miss.flags = FAULT_FLAG_WRITE;
+	miss.missing_vaddr = 0x6b7000ULL;
+	handle_p2m_llc_miss(&miss, 0, &hdr);
 }
 
 #define __DEFAULT_RXBUF_SIZE	(4000)
