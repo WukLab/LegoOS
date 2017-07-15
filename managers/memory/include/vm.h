@@ -296,7 +296,12 @@ extern unsigned long move_page_tables(struct vm_area_struct *vma,
 		bool need_rmap_locks);
 
 /* debug.c */
+void dump_all_vmas_simple(struct lego_mm_struct *mm);
+void dump_vma_simple(const struct vm_area_struct *vma);
+
+void dump_all_vmas(struct lego_mm_struct *mm);
 void dump_vma(const struct vm_area_struct *vma);
+
 void dump_lego_mm(const struct lego_mm_struct *mm);
 #define VM_BUG_ON_VMA(cond, vma)					\
 	do {								\

@@ -49,6 +49,43 @@ const struct trace_print_flags vmaflag_names[] = {
 	{0, NULL}
 };
 
+void dump_vma_simple(const struct vm_area_struct *vma)
+{
+	struct lego_file *file = vma->vm_file;
+	struct lego_mm_struct *mm = vma->vm_mm;
+	unsigned long start = vma->vm_start;
+	unsigned long end = vma->vm_end;
+	vm_flags_t flags = vma->vm_flags;
+	unsigned long long pgoff = 0;
+
+	if (file)
+		pgoff = vma->vm_pgoff << PAGE_SHIFT;
+
+	pr_emerg("%08lx-%08lx %c%c%c%c %08llx ",
+		  start, end,
+		  flags & VM_READ ? 'r' : '-',
+		  flags & VM_WRITE ? 'w' : '-',
+		  flags & VM_EXEC ? 'x' : '-',
+		  flags & VM_MAYSHARE ? 's' : 'p',
+		  pgoff);
+
+	if (file)
+		pr_cont("%s\n", file->filename);
+	else {
+		const char *name;
+
+		if (!mm)
+			name = "[vdso]";
+		else if (vma->vm_start <= mm->brk &&
+			 vma->vm_end >= mm->start_brk)
+			name = "[heap]";
+		else if (vma->vm_start <= mm->start_stack &&
+			 vma->vm_end >= mm->start_stack)
+			name = "[stack]";
+		pr_cont("%s\n", name);
+	}
+}
+
 void dump_vma(const struct vm_area_struct *vma)
 {
 	pr_emerg("vma %p start %p end %p\n"
@@ -62,6 +99,30 @@ void dump_vma(const struct vm_area_struct *vma)
 		vma->anon_vma, vma->vm_ops,
 		vma->vm_pgoff, vma->vm_file, vma->vm_file ? vma->vm_file->f_op : NULL,
 		vma->vm_flags, &vma->vm_flags);
+}
+
+void dump_all_vmas_simple(struct lego_mm_struct *mm)
+{
+	struct vm_area_struct *vma;
+
+	vma = mm->mmap;
+
+	while (vma) {
+		dump_vma_simple(vma);
+		vma = vma->vm_next;
+	}
+}
+
+void dump_all_vmas(struct lego_mm_struct *mm)
+{
+	struct vm_area_struct *vma;
+
+	vma = mm->mmap;
+
+	while (vma) {
+		dump_vma(vma);
+		vma = vma->vm_next;
+	}
 }
 
 void dump_lego_mm(const struct lego_mm_struct *mm)

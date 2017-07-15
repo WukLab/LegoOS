@@ -20,19 +20,6 @@
 #include <memory/include/pid.h>
 #include <memory/include/loader.h>
 
-static void dump_all_vmas(struct lego_mm_struct *mm)
-{
-	struct vm_area_struct *vma;
-
-	vma = mm->mmap;
-
-	while (vma) {
-		dump_vma(vma);
-		vma = vma->vm_next;
-		pr_info("\n");
-	}
-}
-
 static void local_qemu_test(void)
 {
 	struct common_header hdr;
@@ -66,8 +53,7 @@ static void local_qemu_test(void)
 	str = "aaa\0bbb\0ccc\0ddd";
 	memcpy(&execve->array, str, 20);
 	handle_p2m_execve(execve, 0, &hdr);
-	dump_lego_mm(tsk->mm);
-	dump_all_vmas(tsk->mm);
+	dump_all_vmas_simple(tsk->mm);
 
 	miss.pid = pid;
 	miss.flags = FAULT_FLAG_WRITE;
