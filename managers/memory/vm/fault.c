@@ -11,8 +11,9 @@
 #include <lego/mm.h>
 #include <lego/spinlock.h>
 #include <lego/comp_memory.h>
-#include "../include/vm.h"
-#include "../include/vm-pgtable.h"
+
+#include <memory/include/vm.h>
+#include <memory/include/vm-pgtable.h>
 
 /*
  * empty_zero_page is a shared zero-filled page.

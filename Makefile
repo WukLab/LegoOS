@@ -221,6 +221,8 @@ LEGO_INCLUDE	:= -I$(srctree)/arch/$(SRCARCH)/include \
                    -I$(objtree)/arch/$(SRCARCH)/include/generated/uapi \
                    $(if $(KBUILD_SRC), -I$(srctree)/include) \
 		   -I$(objtree)/include \
+		   -I$(objtree)/managers \
+		   -I$(srctree)/managers \
 		   -include $(srctree)/include/lego/kconfig.h
 
 KBUILD_CPPFLAGS = -D__KERNEL__

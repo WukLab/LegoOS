@@ -13,6 +13,7 @@
  */
 
 #include <lego/mm.h>
+#include <lego/rwsem.h>
 #include <lego/slab.h>
 #include <lego/rbtree.h>
 #include <lego/sched.h>
@@ -21,8 +22,8 @@
 #include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 
-#include "../include/vm.h"
-#include "../include/vm-pgtable.h"
+#include <memory/include/vm.h>
+#include <memory/include/vm-pgtable.h>
 
 static unsigned long
 arch_get_unmapped_area(struct lego_task_struct *p, struct lego_file *filp,
@@ -1566,11 +1567,20 @@ static void lego_pgd_free(struct lego_mm_struct *mm)
 	free_page((unsigned long)mm->pgd);
 }
 
+/**
+ * Setup a new lego_mm_struct
+ * Especially do not forget to initialize locks, counters etc.
+ */
 static struct lego_mm_struct *lego_mm_init(struct lego_mm_struct *mm,
 					   struct lego_task_struct *p)
 {
+	mm->task = p;
+	mm->mmap = NULL;
+	mm->mm_rb = RB_ROOT;
 	atomic_set(&mm->mm_users, 1);
 	atomic_set(&mm->mm_count, 1);
+	init_rwsem(&mm->mmap_sem);
+	spin_lock_init(&mm->page_table_lock);
 
 	mm->pgd = lego_pgd_alloc(mm);
 	if (unlikely(!mm->pgd)) {

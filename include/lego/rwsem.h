@@ -37,6 +37,13 @@ struct rw_semaphore {
 #define DEFINE_RWSEM(name) \
 	struct rw_semaphore name = __RWSEM_INITIALIZER(name)
 
+static inline void init_rwsem(struct rw_semaphore *sem)
+{
+	atomic_long_set(&sem->count, RWSEM_UNLOCKED_VALUE);
+	INIT_LIST_HEAD(&sem->wait_list);
+	spin_lock_init(&sem->wait_lock);
+}
+
 /* In all implementations count != 0 means locked */
 static inline int rwsem_is_locked(struct rw_semaphore *sem)
 {

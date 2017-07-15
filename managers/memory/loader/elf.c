@@ -12,9 +12,9 @@
 #include <lego/kernel.h>
 #include <lego/comp_memory.h>
 
-#include "../include/vm.h"
-#include "../include/elf.h"
-#include "../include/loader.h"
+#include <memory/include/vm.h>
+#include <memory/include/elf.h>
+#include <memory/include/loader.h>
 
 #define ELF_EXEC_PAGESIZE	4096
 

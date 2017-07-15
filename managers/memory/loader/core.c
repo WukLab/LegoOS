@@ -24,8 +24,8 @@
 #include <lego/string.h>
 #include <lego/spinlock.h>
 
-#include "../include/vm.h"
-#include "../include/loader.h"
+#include <memory/include/vm.h>
+#include <memory/include/loader.h>
 
 /*
  * The least possible virtual address a process can map to:

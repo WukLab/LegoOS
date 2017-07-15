@@ -16,7 +16,33 @@
 #include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 
-extern void __init exec_init(void);
+#include <memory/include/vm.h>
+#include <memory/include/pid.h>
+#include <memory/include/loader.h>
+
+static void local_qemu_test(void)
+{
+	struct common_header hdr;
+	struct p2m_fork_struct fork;
+	struct p2m_execve_struct execve;
+	struct lego_task_struct *tsk;
+	unsigned int nid, pid;
+
+	nid = 88;
+	pid = 6666;
+
+	hdr.src_nid = nid;
+
+/* Test Fork */
+	fork.pid = pid;
+	strcpy(fork.comm, "hotpot");
+	handle_p2m_fork(&fork, 0, &hdr);
+	tsk = find_lego_task_by_pid(1, 666);
+	BUG_ON(!tsk);
+	pr_info("%u:%u/%s\n", tsk->node, tsk->pid, tsk->comm);
+
+/* Test EXECVE */
+}
 
 #define __DEFAULT_RXBUF_SIZE	(4000)
 #define __DEFAULT_DESC_SIZE	(sizeof(unsigned long))
@@ -101,42 +127,6 @@ static int mc_manager(void *unused)
 }
 #endif /* CONFIG_FIT */
 
-#if 0
-static void hashtable_test(void)
-{
-        struct lego_task_struct *tsk;
-        
-        pr_info("Testing ... \n.");
-        
-        tsk = alloc_lego_task(1, 15634);
-        
-        if (!tsk) {
-                pr_info("Could not alloc task_struct. \n");
-        }
-        
-        pr_info("pid : %lu, nodeid: %lu.\n", tsk->pid, tsk->node);
-        
-        
-        if ((tsk = find_lego_task_by_pid(1, 15634)) == NULL) {
-                pr_info("Could not find the task_struct. \n");
-        }
-
-         
-        if (find_lego_task_by_pid(1, 1563)) {
-                pr_err("Error finding the task_struct. \n");
-        }
-                        
-        free_lego_task(tsk);
-        
-        if (find_lego_task_by_pid(1, 15634)) {
-                pr_err("Could not free the task_struct. \n");
-        }
-        
-        pr_info("Test successful. \n"); 
-
-}
-#endif
-
 void __init memory_component_init(void)
 {
 	/* Register exec binary handlers */
@@ -149,6 +139,8 @@ void __init memory_component_init(void)
 	if (IS_ERR(ret))
 		panic("Fail to create mc thread");
 #else
+	local_qemu_test();
 	pr_warn("require CONFIG_FIT to be set.\n");
 #endif
 }
+

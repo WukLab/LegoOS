@@ -55,4 +55,6 @@ extern int exec_loader(struct lego_task_struct *tsk, const char *filename,
 
 extern struct lego_binfmt elf_format;
 
+void __init exec_init(void);
+
 #endif /* _LEGO_MEMORY_LOADER_H_ */

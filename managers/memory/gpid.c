@@ -14,7 +14,8 @@
 #include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 
-#include "include/pid.h"
+#include <memory/include/vm.h>
+#include <memory/include/pid.h>
 
 #define PID_ARRAY_HASH_BITS	10
 
@@ -100,4 +101,24 @@ find_lego_task_by_pid(unsigned int node, unsigned int pid)
         spin_unlock(&hashtable_lock);
 
 	return NULL;
+}
+
+/**
+ * Similar to copy_process(), init a new lego task struct.
+ * and its lego mm struct.
+ *
+ * TODO: thread group?
+ * Reuse some data structures?
+ * Accounting relationship with existing threads?
+ * May need more info in fork payload!
+ */
+int init_lego_task(struct lego_task_struct *p)
+{
+	BUG_ON(!p);
+
+	spin_lock_init(&p->task_lock);
+
+	if (!lego_mm_alloc(p))
+		return -ENOMEM;
+	return 0;
 }

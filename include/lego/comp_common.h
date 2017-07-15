@@ -39,10 +39,23 @@ extern unsigned int LEGO_LOCAL_NID;
 
 /* Return status */
 #define RET_OKAY	((__u32)0)	/* Operation succeed */
-#define RET_EPERM	((__u32)1)	/* Operation not permitted */
-#define RET_ESRCH	((__u32)3)	/* No such process */
-#define RET_EAGAIN	((__u32)11)	/* Try again */
-#define RET_ENOMEM	((__u32)12)	/* Out of memory */
+#define RET_EPERM	((__u32)EPERM)	/* Operation not permitted */
+#define RET_ESRCH	((__u32)ESRCH)	/* No such process */
+#define RET_EAGAIN	((__u32)EAGAIN)	/* Try again */
+#define RET_ENOMEM	((__u32)ENOMEM)	/* Out of memory */
+#define RET_EFAULT	((__u32)EFAULT)	/* Bad address */
+
+static inline __u32 ERR_TO_LEGO_RET(long err)
+{
+	switch (err) {
+	case -EPERM:	return RET_EPERM;
+	case -ESRCH:	return RET_ESRCH;
+	case -EAGAIN:	return RET_EAGAIN;
+	case -ENOMEM:	return RET_ENOMEM;
+	case -EFAULT:	return RET_EFAULT;
+	default:	return RET_EFAULT;
+	};
+}
 
 static inline char *ret_to_string(u32 ret_status)
 {
