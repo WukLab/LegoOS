@@ -103,12 +103,26 @@ static void inline setup_nr_cpu_ids(void)
 static const char *argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 
-static int run_init_process(const char *init_filename)
+static int procmgmt(void *unused)
 {
+	const char *init_filename = "/etc/init";
 	argv_init[0] = init_filename;
 	return do_execve(init_filename,
 		(const char *const *)argv_init,
 		(const char *const *)envp_init);
+}
+
+static void run_global_thread(void)
+{
+	struct task_struct *tsk;
+
+	tsk = global_kthread_run(procmgmt, NULL, "proc_mgmt");
+	if (IS_ERR(tsk)) {
+		panic("Fail to start first user program!\n");
+		return;
+	}
+
+	pr_info("Create a global thread lpid: %u\n", tsk->pid);
 }
 #endif
 
@@ -146,21 +160,17 @@ static int kernel_init(void *unused)
 	/* Final step towards a running component.. */
 #ifdef CONFIG_COMP_PROCESSOR
 	processor_component_init();
-	run_init_process("/etc/init");
-	/*
-	 * For processor-component, kernel_init will
-	 * return to userspace and run basic system-wide
-	 * initialization if needed.
-	 */
+	run_global_thread();
 #elif defined(CONFIG_COMP_MEMORY)
 	memory_component_init();
-	do_exit(0);
-	/*
-	 * For memory-component, kernel_init will
-	 * just exit. Since there is no user program
-	 * running in this component.
-	 */
 #endif
+	/*
+	 * For memory component, there is no need to run user-program,
+	 * kernel_init can just exit.
+	 * For processor component, it has to create a new global
+	 * thread, so kernel is useless too.
+	 */
+	do_exit(0);
 
 	return 0;
 }
