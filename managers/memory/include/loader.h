@@ -35,7 +35,8 @@ struct lego_binprm {
 
 struct lego_binfmt {
 	struct list_head lh;
-	int (*load_binary)(struct lego_task_struct *, struct lego_binprm *);
+	int (*load_binary)(struct lego_task_struct *, struct lego_binprm *,
+			   u64 *new_ip, u64 *new_sp);
 	int (*core_dump)(void);
 };
 

@@ -64,13 +64,15 @@ void __init exec_init(void)
 
 /* Iterate the list of binary formats handler, until one recognizes the image */
 static int search_exec_binary_handler(struct lego_task_struct *tsk,
-				      struct lego_binprm *bprm)
+				      struct lego_binprm *bprm,
+				      u64 *new_ip,
+				      u64 *new_sp)
 {
 	int retval = -ENOENT;
 	struct lego_binfmt *fmt;
 
 	list_for_each_entry(fmt, &formats, lh) {
-		retval = fmt->load_binary(tsk, bprm);
+		retval = fmt->load_binary(tsk, bprm, new_ip, new_sp);
 		if (retval < 0 && !bprm->mm) {
 			/*
 			 * TODO:
@@ -272,7 +274,7 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 		goto out;
 
 	/* go for it */
-	retval = search_exec_binary_handler(tsk, bprm);
+	retval = search_exec_binary_handler(tsk, bprm, new_ip, new_sp);
 	if (retval)
 		goto out;
 

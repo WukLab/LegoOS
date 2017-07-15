@@ -68,7 +68,7 @@ static int create_elf_tables(struct lego_binprm *bprm, struct elfhdr *exec,
  * the argv pointer and the environment variable array pointer are pushed 
  * to user mode stack by create_elf_tables() 
  */
-	WARN_ON(1);
+	WARN(1, "load_addr: %#lx\n", load_addr);
 	return 0;
 }
 
@@ -178,7 +178,8 @@ out:
 	return elf_phdata;
 }
 
-static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bprm)
+static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bprm,
+			   u64 *new_ip, u64 *new_sp)
 {
  	unsigned long load_addr = 0, load_bias = 0;
 	int load_addr_set = 0;
@@ -213,7 +214,13 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	if (memcmp(loc->elf_ex.e_ident, ELFMAG, SELFMAG) != 0)
 		goto out;
 
-	if (loc->elf_ex.e_type != ET_EXEC && loc->elf_ex.e_type != ET_DYN)
+	/*
+	 * Lego only supportes executables.
+	 * (Both dynamic/static linked executables are ET_EXEC)
+	 * No relocatable object file (ET_REL)
+	 * No shared library (ET_DYN)
+	 */
+	if (loc->elf_ex.e_type != ET_EXEC)
 		goto out;
 
 	if (!elf_check_arch(&loc->elf_ex))
@@ -224,29 +231,17 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		goto out;
 
 	elf_ppnt = elf_phdata;
-	elf_bss = 0;
-	elf_brk = 0;
-
-	start_code = ~0UL;
-	end_code = 0;
-	start_data = 0;
-	end_data = 0;
-
-	for (i = 0; i < loc->elf_ex.e_phnum; i++) {
+	for (i = 0; i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
 		if (elf_ppnt->p_type == PT_INTERP) {
 			/*
 			 * This is the program interpreter used for
-			 * shared libraries - not supported for now
+			 * dynamic linked elf - not supported for now
 			 */
-			WARN(1, "Only static-link elf is supported!\n");
+			WARN(1, "Only static-linked elf is supported!\n");
 			retval = -ENOEXEC;
 			goto out_free_ph;
 		}
-		elf_ppnt++;
-	}
 
-	elf_ppnt = elf_phdata;
-	for (i = 0; i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
 		if (elf_ppnt->p_type == PT_GNU_STACK) {
 			if (elf_ppnt->p_flags & PF_X)
 				executable_stack = EXSTACK_ENABLE_X;
@@ -267,8 +262,8 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	setup_new_exec(tsk, bprm);
 
 	/*
-	 * Do this so that we can load the interpreter, if need be.
-	 * We will change some of these later
+	 * Adjust previously allocated temporary stack vma
+	 * shift everything down if needed:
 	 */
 	retval = setup_arg_pages(tsk, bprm, TASK_SIZE, executable_stack);
 	if (retval < 0)
@@ -276,12 +271,19 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 
 	tsk->mm->start_stack = bprm->p;
 
+	elf_bss = 0;
+	elf_brk = 0;
+	start_code = ~0UL;
+	end_code = 0;
+	start_data = 0;
+	end_data = 0;
+
 	/*
 	 * Now we do a little grungy work by mmapping the ELF image into
 	 * the correct location in memory.
 	 */
-	for(i = 0, elf_ppnt = elf_phdata;
-	    i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
+	elf_ppnt = elf_phdata;
+	for(i = 0; i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
 		int elf_prot = 0, elf_flags;
 		unsigned long k, vaddr;
 		unsigned long total_size = 0;
@@ -289,16 +291,19 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
 
-		if (unlikely (elf_brk > elf_bss)) {
+		if (unlikely(elf_brk > elf_bss)) {
 			unsigned long nbyte;
 
 			/*
 			 * There was a PT_LOAD segment with p_memsz > p_filesz
 			 * before this one. Map anonymous pages, if needed,
 			 * and clear the area.
+			 *
+			 * Normally, the segment that has the .bss section
+			 * comes at last, so, unlikely.
 			 */
 			retval = set_brk(tsk, elf_bss + load_bias,
-					 elf_brk + load_bias);
+					      elf_brk + load_bias);
 			if (retval)
 				goto out_free_ph;
 			nbyte = ELF_PAGEOFFSET(elf_bss);
@@ -330,9 +335,11 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		if (loc->elf_ex.e_type == ET_EXEC || load_addr_set) {
 			elf_flags |= MAP_FIXED;
 		} else if (loc->elf_ex.e_type == ET_DYN) {
-			/* Shared object files not supported. 
-			 * Should not come here as type is verified at the very beginning.
+			/*
+			 * Dynamic linked files are not supported. 
+			 * Should not come here as type is verified.
 			 */
+			BUG();
 			retval = -ENOEXEC;
 			goto out_free_ph;
 		}
@@ -349,13 +356,12 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 			load_addr_set = 1;
 			load_addr = (elf_ppnt->p_vaddr - elf_ppnt->p_offset);
 			if (loc->elf_ex.e_type == ET_DYN) {
-				/* Shared object files not supported. 
-				 * Should not come here as type is verified at the very beginning.
-				 */
+				BUG();
 				retval = -ENOEXEC;
 				goto out_free_ph;
 			}
 		}
+
 		k = elf_ppnt->p_vaddr;
 		if (k < start_code)
 			start_code = k;
@@ -376,13 +382,13 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		}
 
 		k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
-
 		if (k > elf_bss)
 			elf_bss = k;
 		if ((elf_ppnt->p_flags & PF_X) && end_code < k)
 			end_code = k;
 		if (end_data < k)
 			end_data = k;
+
 		k = elf_ppnt->p_vaddr + elf_ppnt->p_memsz;
 		if (k > elf_brk)
 			elf_brk = k;
@@ -396,7 +402,8 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	start_data += load_bias;
 	end_data += load_bias;
 
-	/* Calling set_brk effectively mmaps the pages that we need
+	/*
+	 * Calling set_brk effectively mmaps the pages that we need
 	 * for the bss and break sections.  We must do this before
 	 * mapping in the interpreter, to make sure it doesn't wind
 	 * up getting placed where the bss needs to go.
@@ -420,7 +427,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 #ifdef ARCH_HAS_SETUP_ADDITIONAL_PAGES
 	/*
 	 * TODO: vdso
-	 * x86 can map vdso here
+	 * x86 can map vdso vma here
 	 */
 #endif
 
@@ -430,12 +437,18 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		goto out;
 
 	mm = tsk->mm;
-
 	mm->end_code = end_code;
 	mm->start_code = start_code;
 	mm->start_data = start_data;
 	mm->end_data = end_data;
 	mm->start_stack = bprm->p;
+
+	/*
+	 * e_entry is the VA to which the system first transfers control
+	 * Note the start_code! Normally, it is the <_start> function.
+	 */
+	*new_ip = elf_entry;
+	*new_sp = mm->start_stack;
 
 	/* finally, huh? */
 	retval = 0;
