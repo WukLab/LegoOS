@@ -16,6 +16,7 @@
 #include <lego/comp_common.h>
 #include <lego/comp_memory.h>
 
+#include <memory/include/vm.h>
 #include <memory/include/pid.h>
 #include <memory/include/loader.h>
 

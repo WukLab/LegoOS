@@ -5,3 +5,4 @@
 obj-y := mmap.o
 obj-y += fault.o
 obj-y += pgtable.o
+obj-y += debug.o

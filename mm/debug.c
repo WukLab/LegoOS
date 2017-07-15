@@ -11,16 +11,16 @@
 #include <lego/kernel.h>
 #include <lego/tracepoint.h>
 
-#define __def_pageflag_names						\
-	{1UL << PG_locked,		"locked"	},		\
-	{1UL << PG_referenced,		"referenced"	},		\
-	{1UL << PG_dirty,		"dirty"		},		\
-	{1UL << PG_lru,			"lru"		},		\
-	{1UL << PG_active,		"active"	},		\
-	{1UL << PG_reserved,		"reserved"	},		\
-	{1UL << PG_private,		"private"	},		\
-	{1UL << PG_unevictable,		"unevictable"	}, \
-	{1UL << PG_slab,		"slab"	},		\
+#define __def_pageflag_names					\
+	{1UL << PG_locked,		"locked"	},	\
+	{1UL << PG_referenced,		"referenced"	},	\
+	{1UL << PG_dirty,		"dirty"		},	\
+	{1UL << PG_lru,			"lru"		},	\
+	{1UL << PG_active,		"active"	},	\
+	{1UL << PG_reserved,		"reserved"	},	\
+	{1UL << PG_private,		"private"	},	\
+	{1UL << PG_unevictable,		"unevictable"	},	\
+	{1UL << PG_slab,		"slab"		},	\
 	{1UL << PG_slob_free,		"slob_free"	}
 
 const struct trace_print_flags pageflag_names[] = {

@@ -9,6 +9,13 @@ config COMP_MEMORY
 
 if COMP_MEMORY
 
+config DEBUG_VM_RB
+	bool "Debug VM red-black trees"
+	help
+	  Enable VM red-black tree debugging information and extra validations.
+
+	  If unsure, say N.
+
 endif
 
 endmenu

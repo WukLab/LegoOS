@@ -15,6 +15,8 @@
 #include <lego/kallsyms.h>
 #include <lego/tracepoint.h>
 
+#include <lego/comp_memory.h>
+
 static __noinline_for_stack
 int skip_atoi(const char **s)
 {
@@ -641,6 +643,10 @@ char *format_flags(char *buf, char *end, unsigned long flags,
 	return buf;
 }
 
+#ifdef CONFIG_COMP_MEMORY
+extern const struct trace_print_flags vmaflag_names[];
+#endif
+
 static __noinline_for_stack
 char *flags_string(char *buf, char *end, void *flags_ptr, const char *fmt)
 {
@@ -654,6 +660,15 @@ char *flags_string(char *buf, char *end, void *flags_ptr, const char *fmt)
 		flags &= (1UL << NR_PAGEFLAGS) - 1;
 		names = pageflag_names;
 		break;
+/*
+ * Only memory-manager has vma
+ */
+#ifdef CONFIG_COMP_MEMORY
+	case 'v':
+		flags = *(unsigned long *)flags_ptr;
+		names = vmaflag_names;
+		break;
+#endif
 	default:
 		WARN_ONCE(1, "Unsupported flags modifier: %c\n", fmt[1]);
 		return buf;

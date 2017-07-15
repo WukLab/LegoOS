@@ -139,8 +139,123 @@ void arch_pick_mmap_layout(struct lego_mm_struct *lego_mm)
 	lego_mm->get_unmapped_area = arch_get_unmapped_area_topdown;
 }
 
+static long vma_compute_subtree_gap(struct vm_area_struct *vma)
+{
+	unsigned long max, subtree_gap;
+	max = vma->vm_start;
+	if (vma->vm_prev)
+		max -= vma->vm_prev->vm_end;
+	if (vma->vm_rb.rb_left) {
+		subtree_gap = rb_entry(vma->vm_rb.rb_left,
+				struct vm_area_struct, vm_rb)->rb_subtree_gap;
+		if (subtree_gap > max)
+			max = subtree_gap;
+	}
+	if (vma->vm_rb.rb_right) {
+		subtree_gap = rb_entry(vma->vm_rb.rb_right,
+				struct vm_area_struct, vm_rb)->rb_subtree_gap;
+		if (subtree_gap > max)
+			max = subtree_gap;
+	}
+	return max;
+}
+
+#ifdef CONFIG_DEBUG_VM_RB
+static int browse_rb(struct lego_mm_struct *mm)
+{
+	struct rb_root *root = &mm->mm_rb;
+	int i = 0, j, bug = 0;
+	struct rb_node *nd, *pn = NULL;
+	unsigned long prev = 0, pend = 0;
+
+	for (nd = rb_first(root); nd; nd = rb_next(nd)) {
+		struct vm_area_struct *vma;
+		vma = rb_entry(nd, struct vm_area_struct, vm_rb);
+		if (vma->vm_start < prev) {
+			pr_emerg("vm_start %lx < prev %lx\n",
+				  vma->vm_start, prev);
+			bug = 1;
+		}
+		if (vma->vm_start < pend) {
+			pr_emerg("vm_start %lx < pend %lx\n",
+				  vma->vm_start, pend);
+			bug = 1;
+		}
+		if (vma->vm_start > vma->vm_end) {
+			pr_emerg("vm_start %lx > vm_end %lx\n",
+				  vma->vm_start, vma->vm_end);
+			bug = 1;
+		}
+		spin_lock(&mm->page_table_lock);
+		if (vma->rb_subtree_gap != vma_compute_subtree_gap(vma)) {
+			pr_emerg("free gap %lx, correct %lx\n",
+			       vma->rb_subtree_gap,
+			       vma_compute_subtree_gap(vma));
+			bug = 1;
+		}
+		spin_unlock(&mm->page_table_lock);
+		i++;
+		pn = nd;
+		prev = vma->vm_start;
+		pend = vma->vm_end;
+	}
+	j = 0;
+	for (nd = pn; nd; nd = rb_prev(nd))
+		j++;
+	if (i != j) {
+		pr_emerg("backwards %d, forwards %d\n", j, i);
+		bug = 1;
+	}
+	return bug ? -1 : i;
+}
+
+static void validate_mm_rb(struct rb_root *root, struct vm_area_struct *ignore)
+{
+	struct rb_node *nd;
+
+	for (nd = rb_first(root); nd; nd = rb_next(nd)) {
+		struct vm_area_struct *vma;
+		vma = rb_entry(nd, struct vm_area_struct, vm_rb);
+		VM_BUG_ON_VMA(vma != ignore &&
+			vma->rb_subtree_gap != vma_compute_subtree_gap(vma),
+			vma);
+	}
+}
+
+static void validate_mm(struct lego_mm_struct *mm)
+{
+	int bug = 0;
+	int i = 0;
+	unsigned long highest_address = 0;
+	struct vm_area_struct *vma = mm->mmap;
+
+	while (vma) {
+		highest_address = vma->vm_end;
+		vma = vma->vm_next;
+		i++;
+	}
+	if (i != mm->map_count) {
+		pr_emerg("map_count %d vm_next %d\n", mm->map_count, i);
+		bug = 1;
+	}
+	if (highest_address != mm->highest_vm_end) {
+		pr_emerg("mm->highest_vm_end %lx, found %lx\n",
+			  mm->highest_vm_end, highest_address);
+		bug = 1;
+	}
+	i = browse_rb(mm);
+	if (i != mm->map_count) {
+		if (i != -1)
+			pr_emerg("map_count %d rb %d\n", mm->map_count, i);
+		bug = 1;
+	}
+	VM_BUG_ON_MM(bug, mm);
+}
+#else
 #define validate_mm_rb(root, ignore) do { } while (0)
 #define validate_mm(mm) do { } while (0)
+#endif
+
 
 /* description of effects of mapping type and prot in current implementation.
  * this is due to the limited x86 page protection hardware.  The expected
@@ -195,27 +310,6 @@ void vma_set_page_prot(struct vm_area_struct *vma)
 
 	/* remove_protection_ptes reads vma->vm_page_prot without mmap_sem */
 	WRITE_ONCE(vma->vm_page_prot, vm_page_prot);
-}
-
-static long vma_compute_subtree_gap(struct vm_area_struct *vma)
-{
-	unsigned long max, subtree_gap;
-	max = vma->vm_start;
-	if (vma->vm_prev)
-		max -= vma->vm_prev->vm_end;
-	if (vma->vm_rb.rb_left) {
-		subtree_gap = rb_entry(vma->vm_rb.rb_left,
-				struct vm_area_struct, vm_rb)->rb_subtree_gap;
-		if (subtree_gap > max)
-			max = subtree_gap;
-	}
-	if (vma->vm_rb.rb_right) {
-		subtree_gap = rb_entry(vma->vm_rb.rb_right,
-				struct vm_area_struct, vm_rb)->rb_subtree_gap;
-		if (subtree_gap > max)
-			max = subtree_gap;
-	}
-	return max;
 }
 
 RB_DECLARE_CALLBACKS(static, vma_gap_callbacks, struct vm_area_struct, vm_rb,

@@ -105,6 +105,7 @@ struct lego_mm_struct {
 	pgd_t *pgd;			/* root page table */
 	atomic_t mm_users;		/* How many users with user space? */
 	atomic_t mm_count;		/* How many references to "struct mm_struct" (users count as 1) */
+	atomic_long_t nr_ptes;			/* PTE page table pages */
 	int map_count;
 	unsigned long total_vm;		/* Total pages mapped */
 	unsigned long data_vm;		/* VM_WRITE & ~VM_SHARED & ~VM_STACK */
