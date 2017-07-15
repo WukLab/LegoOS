@@ -75,7 +75,16 @@ static int do_anonymous_page(struct vm_area_struct *vma, unsigned long address,
 	if (!vaddr)
 		return VM_FAULT_OOM;
 
-	entry = lego_vfn_pte(vaddr >> PAGE_SHIFT, vma->vm_page_prot);
+	/*
+	 * Use (signed long) to do the logical shift
+	 * so that sign bit (left-most bit) will be extended:
+	 *
+	 * Since this page table is never loaded into CR3,
+	 * hence it is okay to write those high reserved bits
+	 * in page table entries.
+	 */
+	entry = lego_vfn_pte(((signed long)vaddr >> PAGE_SHIFT),
+				vma->vm_page_prot);
 	if (vma->vm_flags & VM_WRITE)
 		entry = pte_mkwrite(pte_mkdirty(entry));
 
@@ -183,7 +192,7 @@ int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	 * Return the kernel virtual address of the new
 	 * allocated page:
 	 */
-	*ret_va = pte_val(*pte) & PTE_PFN_MASK;
+	*ret_va = pte_val(*pte) & PTE_VFN_MASK;
 
 	return 0;
 }

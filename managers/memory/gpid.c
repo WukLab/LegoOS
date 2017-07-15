@@ -114,11 +114,16 @@ find_lego_task_by_pid(unsigned int node, unsigned int pid)
  */
 int init_lego_task(struct lego_task_struct *p)
 {
+	struct lego_mm_struct *mm;
+
 	BUG_ON(!p);
 
 	spin_lock_init(&p->task_lock);
 
-	if (!lego_mm_alloc(p))
+	mm = lego_mm_alloc(p);
+	if (!mm)
 		return -ENOMEM;
+
+	p->mm = mm;
 	return 0;
 }

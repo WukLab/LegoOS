@@ -137,7 +137,7 @@ static int bprm_mm_init(struct lego_task_struct *tsk, struct lego_binprm *bprm)
 {
 	struct lego_mm_struct *mm = NULL;
 	int err = -ENOMEM;
-	
+
 	bprm->mm = mm = lego_mm_alloc(tsk);
 	if (!mm)
 		goto err;
@@ -156,14 +156,17 @@ err:
 	return err;
 }
 
-static int get_arg_page(struct lego_task_struct *tsk, struct lego_binprm *bprm,
+static int get_arg_page(struct lego_binprm *bprm,
 			unsigned long start, unsigned long *kvaddr)
 {
-	struct lego_mm_struct *mm = tsk->mm;
 	struct vm_area_struct *vma;
 	unsigned long flags;
 
-	vma = find_extend_vma(mm, start);
+	/*
+	 * Note that:
+	 * Use bprm->mm, this is the new temporary mm!
+	 */
+	vma = find_extend_vma(bprm->mm, start);
 	if (!vma)
 		return -EFAULT;
 
@@ -212,7 +215,7 @@ static int copy_strings(struct lego_task_struct *tsk, struct lego_binprm *bprm,
 
 			/* Do we need another page? */
 			if (kpos != (pos & PAGE_MASK)) {
-				ret = get_arg_page(tsk, bprm, pos, &kvaddr);
+				ret = get_arg_page(bprm, pos, &kvaddr);
 				if (ret)
 					return ret;
 				kpos = pos & PAGE_MASK;
@@ -264,7 +267,7 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 
 	/* Read the binary format header from the file */
 	retval = file_read(tsk, bprm->file, bprm->buf, BINPRM_BUF_SIZE, &offset);
-	if (retval < 0)
+	if (WARN_ON(retval < 0))
 		goto out;
 
 	/* go for it */

@@ -38,6 +38,7 @@ static void do_error_trap(struct pt_regs *regs, long error_code, char *str,
 {
 	show_regs(regs);
 	printk("%s, trapnr=%lu\n", str, trapnr);
+	hlt();
 }
 
 #define DO_ERROR_TRAP(str, name, trapnr, signr)				\
@@ -61,8 +62,10 @@ DO_ERROR_TRAP("coprocessor segment overrun", coprocessor_segment_overrun, X86_TR
 
 dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 {
+	pr_crit("%s in CPU%d, error_code: %ld\n",
+		__func__, smp_processor_id(), error_code);
 	show_regs(regs);
-	printk("#GP");
+	hlt();
 }
 
 dotraplinkage void do_nmi(struct pt_regs *regs, long error_code)
@@ -75,44 +78,62 @@ dotraplinkage void do_nmi(struct pt_regs *regs, long error_code)
 
 dotraplinkage void do_device_not_available(struct pt_regs *regs, long error_code)
 {
+	pr_crit("%s in CPU%d, error_code: %ld\n",
+		__func__, smp_processor_id(), error_code);
 	show_regs(regs);
-	printk("Device Not Avaliable");
+	hlt();
 }
 
 dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code)
 {
+	pr_crit("%s in CPU%d, error_code: %ld\n",
+		__func__, smp_processor_id(), error_code);
 	show_regs(regs);
-	printk("Double Fault");
+	hlt();
 }
 
 dotraplinkage void do_spurious_interrupt_bug(struct pt_regs *regs, long error_code)
 {
+	pr_crit("%s in CPU%d, error_code: %ld\n",
+		__func__, smp_processor_id(), error_code);
 	show_regs(regs);
-	printk("Spurious Interrupt Bug");
+	hlt();
 }
 
 dotraplinkage void do_coprocessor_error(struct pt_regs *regs, long error_code)
 {
 	show_regs(regs);
 	printk("X87 Coprocessor Error");
+	pr_crit("%s in CPU%d, error_code: %ld\n",
+		__func__, smp_processor_id(), error_code);
+	show_regs(regs);
+	hlt();
 }
 
 dotraplinkage void do_machine_check(struct pt_regs *regs, long error_code)
 {
 	show_regs(regs);
 	printk("Machine Check");
+	pr_crit("%s in CPU%d, error_code: %ld\n",
+		__func__, smp_processor_id(), error_code);
+	show_regs(regs);
+	hlt();
 }
 
 dotraplinkage void do_virtualization_exception(struct pt_regs *regs, long error_code)
 {
+	pr_crit("%s in CPU%d, error_code: %ld\n",
+		__func__, smp_processor_id(), error_code);
 	show_regs(regs);
-	printk("Virtualization Exception");
+	hlt();
 }
 
 dotraplinkage void do_reserved(struct pt_regs *regs, long error_code)
 {
+	pr_crit("%s in CPU%d, error_code: %ld\n",
+		__func__, smp_processor_id(), error_code);
 	show_regs(regs);
-	printk("Reserved Interrupt");
+	hlt();
 }
 
 void __init trap_init(void)

@@ -16,7 +16,8 @@
 #include <lego/comp_common.h>
 #include <lego/comp_memory.h>
 
-#include "include/loader.h"
+#include <memory/include/pid.h>
+#include <memory/include/loader.h>
 
 int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 		      struct common_header *hdr)
@@ -38,6 +39,12 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 	pr_info("pid:%u,argc:%u,envc:%u,file:%s\n",
 		pid, argc, envc, filename);
 
+	tsk = find_lego_task_by_pid(hdr->src_nid, pid);
+	if (!tsk) {
+		reply.status = RET_ESRCH;
+		goto out_reply;
+	}
+
 	argv = kzalloc(sizeof(*argv) * (argc + envc), GFP_KERNEL);
 	if (!argv) {
 		reply.status = RET_ENOMEM;
@@ -51,6 +58,8 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 		str += strnlen(str, MAX_ARG_STRLEN);
 		/* terminating NULL */
 		str++;
+
+		pr_info("%d: [%s]\n", i, argv[i]);
 	}
 	envp = &argv[argc];
 

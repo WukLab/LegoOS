@@ -384,6 +384,7 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 #ifdef CONFIG_SMP
 static int find_lowest_rq(struct task_struct *p, int prev_cpu)
 {
+#if 0
 	int cpu, target = prev_cpu;
 	unsigned int nr_running_min = UINT_MAX;
 
@@ -399,6 +400,8 @@ static int find_lowest_rq(struct task_struct *p, int prev_cpu)
 		}
 	}
 	return target;
+#endif
+	return prev_cpu;
 }
 
 static int

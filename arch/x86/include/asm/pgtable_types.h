@@ -222,6 +222,7 @@
 
 /* Extracts the PFN from a (pte|pmd|pud|pgd)val_t of a 4KB page */
 #define PTE_PFN_MASK		((pteval_t)PHYSICAL_PAGE_MASK)
+#define PTE_VFN_MASK		((pteval_t)VIRTUAL_PAGE_MASK)
 
 /*
  *  Extracts the flags from a (pte|pmd|pud|pgd)val_t

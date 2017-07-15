@@ -24,8 +24,9 @@ static void local_qemu_test(void)
 {
 	struct common_header hdr;
 	struct p2m_fork_struct fork;
-	struct p2m_execve_struct execve;
+	struct p2m_execve_struct *execve;
 	struct lego_task_struct *tsk;
+	const char *str;
 	unsigned int nid, pid;
 
 	nid = 88;
@@ -37,11 +38,20 @@ static void local_qemu_test(void)
 	fork.pid = pid;
 	strcpy(fork.comm, "hotpot");
 	handle_p2m_fork(&fork, 0, &hdr);
-	tsk = find_lego_task_by_pid(1, 666);
+	tsk = find_lego_task_by_pid(nid, pid);
 	BUG_ON(!tsk);
 	pr_info("%u:%u/%s\n", tsk->node, tsk->pid, tsk->comm);
 
 /* Test EXECVE */
+	execve = kmalloc(4096, GFP_KERNEL);
+	BUG_ON(!execve);
+	execve->pid = pid;
+	strcpy(execve->filename, "/bin/getpid");
+	execve->argc = 2;
+	execve->envc = 2;
+	str = "aaa\0bbb\0ccc\0ddd";
+	memcpy(&execve->array, str, 20);
+	handle_p2m_execve(execve, 0, &hdr);
 }
 
 #define __DEFAULT_RXBUF_SIZE	(4000)
