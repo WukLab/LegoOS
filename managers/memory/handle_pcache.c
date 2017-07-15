@@ -40,6 +40,7 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 		return;
 	}
 
+	/* ask vm for the cacheline */
 	ret = handle_lego_mm_fault(vma, vaddr, flags, &new_page);
 	if (unlikely(ret & VM_FAULT_ERROR)) {
 		if (ret & VM_FAULT_OOM)
@@ -56,10 +57,9 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 		return;
 	}
 
+	/* Send the cacheline back to processor! */
 	memcpy(retbuf, (char *)new_page, PAGE_SIZE);
 	ibapi_reply_message(retbuf, PAGE_SIZE, desc);
-
-	print_hex_dump_bytes("dump:", DUMP_PREFIX_ADDRESS, retbuf, PAGE_SIZE);
 }
 
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,

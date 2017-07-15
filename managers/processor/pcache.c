@@ -88,7 +88,7 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 	struct p2m_llc_miss_struct payload;
 	int ret;
 
-	pr_info("maddr: %#lx pa_cache: %p va_cache: %p va_meta: %p way: %u\n",
+	pr_info("missing_vaddr: %#lx pa_cache: %p va_cache: %p va_meta: %p way: %u\n",
 		vaddr, pa_cache, va_cache, va_meta, way);
 
 	payload.pid = current->pid;

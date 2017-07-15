@@ -325,6 +325,7 @@ static void pgtable_bad(struct pt_regs *regs, unsigned long error_code,
 	hlt();
 }
 
+#if 0
 static void user_hlt(void)
 {
 #if 1
@@ -338,6 +339,7 @@ static void user_hlt(void)
 	for (;;)
 		cpu_relax();
 }
+#endif
 
 static inline void __do_page_fault(struct pt_regs *regs, unsigned long address,
 				   long error_code)
@@ -348,7 +350,8 @@ static inline void __do_page_fault(struct pt_regs *regs, unsigned long address,
 	pte_t *ptep;
 	pte_t pte;
 	pgprot_t pgprot;
-	unsigned long page;
+	int ret;
+	unsigned long cache_paddr;
 	unsigned long flags = FAULT_FLAG_KILLABLE | FAULT_FLAG_USER;
 	struct mm_struct *mm = current->mm;
 
@@ -357,20 +360,17 @@ static inline void __do_page_fault(struct pt_regs *regs, unsigned long address,
 	if (error_code & PF_INSTR)
 		flags |= FAULT_FLAG_INSTRUCTION;
 
-#if 0
-	ret = pcache_fill(address, flags, &page);
-	if (ret)
+	/* fetch cacheline from memory component */
+	ret = pcache_fill(address, flags, &cache_paddr);
+	if (unlikely(ret))
 		panic("pcache fail to handle: ret: %d\n", ret);
-#endif
 
-	pr_info("PID:%d(%s)UserPageFault(CPU%d),ErrorCode:%#lx,Address:%#lx\n",
-		current->pid, current->comm, smp_processor_id(), error_code, address);
-	dump_pagetable(address);
-	page = (unsigned long)kmalloc(PAGE_SIZE, GFP_KERNEL);
-	memcpy((void *)page, user_hlt, 100);
-	page = virt_to_phys((void *)page);
-
-	/* establish pgtable mapping */
+	/*
+	 * TODO: sync establishing and should sync before sending request
+	 * so that request will be only sent once to memory
+	 *
+	 * establish pgtable mapping
+	 */
 	pgd = pgd_offset(mm, address);
 	pud = pud_alloc(mm, pgd, address);
 	if (unlikely(!pud))
@@ -389,7 +389,7 @@ static inline void __do_page_fault(struct pt_regs *regs, unsigned long address,
 	}
 
 	pgprot = PAGE_SHARED_EXEC;
-	pte = pfn_pte(page >> PAGE_SHIFT, pgprot);
+	pte = pfn_pte(cache_paddr >> PAGE_SHIFT, pgprot);
 	pte_set(ptep, pte);
 
 	return;
