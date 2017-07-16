@@ -20,6 +20,7 @@
 #include <memory/include/pid.h>
 #include <memory/include/loader.h>
 
+#ifndef CONFIG_FIT
 static void local_qemu_test(void)
 {
 	struct common_header hdr;
@@ -60,12 +61,16 @@ static void local_qemu_test(void)
 	miss.missing_vaddr = 0x400000ULL;
 	handle_p2m_llc_miss(&miss, 0, &hdr);
 }
+#endif
 
-#define __DEFAULT_RXBUF_SIZE	(4000)
+#define __DEFAULT_RXBUF_SIZE	(PAGE_SIZE - __DEFAULT_DESC_SIZE)
 #define __DEFAULT_DESC_SIZE	(sizeof(unsigned long))
-#define DEFAULT_RXBUF_SIZE	(__DEFAULT_RXBUF_SIZE+__DEFAULT_DESC_SIZE)
+#define DEFAULT_RXBUF_SIZE	(PAGE_SIZE)
 
 #ifdef CONFIG_FIT
+/*
+ * Memory manager is only meaningful when FIT is configured.
+ */
 
 static unsigned long nr_rx;
 
@@ -78,6 +83,20 @@ static void handle_bad_request(struct common_header *hdr, u64 desc)
 
 	retbuf = RET_EPERM;
 	ibapi_reply_message(&retbuf, 4, desc);
+}
+
+static void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
+{
+	void *page;
+
+	pr_info("%s(): from node: %u", __func__, hdr->src_nid);
+
+	page = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	*(int *)page = 0xffffffff;
+	BUG_ON(!page);
+	ibapi_reply_message(page, PAGE_SIZE, desc);
+	pr_info("%s(): after sending\n", __func__);
+	kfree(page);
 }
 
 static int mc_dispatcher(void *rx_buf)
@@ -103,6 +122,9 @@ static int mc_dispatcher(void *rx_buf)
 	case P2M_EXECVE:
 		handle_p2m_execve(payload, desc, hdr);
 		break;
+	case P2M_TEST:
+		handle_p2m_test(payload, desc, hdr);
+		break;
 	default:
 		handle_bad_request(hdr, desc);
 	}
@@ -116,6 +138,7 @@ static int mc_manager(void *unused)
 	void *rx_buf, *rx_desc;
 	struct task_struct *ret;
 	int port = 0;
+	int retlen;
 
 	pr_info("Memory-component manager is up and running.\n");
 
@@ -125,7 +148,13 @@ static int mc_manager(void *unused)
 			panic("OOM");
 		rx_desc = rx_buf + __DEFAULT_RXBUF_SIZE;
 
-		ibapi_receive_message(port, rx_buf, __DEFAULT_RXBUF_SIZE, rx_desc);
+		retlen = ibapi_receive_message(port, rx_buf,
+					    __DEFAULT_RXBUF_SIZE, rx_desc);
+		if (unlikely(retlen > __DEFAULT_RXBUF_SIZE)) {
+			/* Catch processor bugs.. */
+			panic("Got message len: %d, configured max len: %d",
+				retlen, __DEFAULT_RXBUF_SIZE);
+		}
 
 		/*
 		 * XXX:

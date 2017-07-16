@@ -57,7 +57,18 @@ SYSCALL_DEFINE3(execve,
 		const char __user *const __user *, argv,
 		const char __user *const __user *, envp)
 {
-	panic("Not right baby.");
-	return 0;
+	BUG();
+}
+
+SYSCALL_DEFINE1(brk, unsigned long, brk)
+{
+	BUG();	
+}
+
+SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
+		unsigned long, prot, unsigned long, flags,
+		unsigned long, fd, unsigned long, off)
+{
+	BUG();
 }
 #endif

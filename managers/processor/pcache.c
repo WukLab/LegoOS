@@ -99,8 +99,10 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 	 * Using the cacheline as our return buffer, hence we avoid
 	 * another memcpy from retbuf to cacheline itself.
 	 */
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS, &payload,
-			sizeof(payload), pa_cache, PAGE_SIZE, true, DEF_NET_TIMEOUT);
+	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
+				&payload, sizeof(payload),
+				pa_cache, PAGE_SIZE, true,
+				DEF_NET_TIMEOUT);
 
 	pr_info("%s: ret=%d, retbuf: %d\n", __func__, ret, *(int *)va_cache);
 	if (unlikely(ret < PAGE_SIZE)) {

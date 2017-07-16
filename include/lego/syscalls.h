@@ -70,8 +70,13 @@
 asmlinkage long sys_getpid(void);
 asmlinkage long sys_fork(void);
 
+asmlinkage long sys_brk(unsigned long);
+
 asmlinkage long sys_execve(const char *filename,
 			   const char *const *argv,
 			   const char *const *envp);
+
+asmlinkage long sys_mmap(unsigned long, unsigned long, unsigned long,
+			 unsigned long, unsigned long, unsigned long);
 
 #endif /* _LEGO_SYSCALLS_H_ */

@@ -7,31 +7,28 @@
  * (at your option) any later version.
  */
 
-/*
- * This file records SYSCALLs that are ONLY available
- * at processor-component. We just define a simple prototypes
- * here and panic in case someone calls.
- */
-
-#include <lego/kernel.h>
+#include <lego/comp_common.h>
+#include <lego/comp_processor.h>
 #include <lego/syscalls.h>
-
-SYSCALL_DEFINE3(execve,
-		const char __user*, filename,
-		const char __user *const __user *, argv,
-		const char __user *const __user *, envp)
-{
-	BUG();
-}
 
 SYSCALL_DEFINE1(brk, unsigned long, brk)
 {
-	BUG();
+	return 0;	
+}
+
+static long sys_mmap_pgoff(unsigned long addr, unsigned long len,
+			   unsigned long prot, unsigned long flags,
+			   unsigned long fd, unsigned long pgoff)
+{
+	return 0;			
 }
 
 SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 		unsigned long, prot, unsigned long, flags,
 		unsigned long, fd, unsigned long, off)
 {
-	BUG();
+	if (off & ~PAGE_MASK)
+		return -EINVAL;
+
+	return sys_mmap_pgoff(addr, len, prot, flags, fd, off >> PAGE_SHIFT);
 }

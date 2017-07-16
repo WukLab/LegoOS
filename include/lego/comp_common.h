@@ -37,6 +37,7 @@ extern unsigned int LEGO_LOCAL_NID;
 #define P2M_LLC_MISS	((__u32)0x00000002)
 #define P2M_FORK	((__u32)__NR_fork)
 #define P2M_EXECVE	((__u32)__NR_execve)
+#define P2M_TEST	((__u32)0x0fffffff)
 
 /* To fold signal values into ret, without conflicting with EXXXX values */
 #define RET_SIGNAL_BASE	((__u32)1000)

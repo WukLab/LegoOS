@@ -56,9 +56,10 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 	memcpy(payload_msg, payload, len_payload);
 
 	/* Synchronously send it out */
-	ret = ibapi_send_reply_imm(node, msg, len_msg, retbuf, max_len_retbuf, retbuf_is_phys);
-	kfree(msg);
+	ret = ibapi_send_reply_imm(node, msg, len_msg, retbuf,
+				   max_len_retbuf, retbuf_is_phys);
 
+	kfree(msg);
 	return ret;
 }
 
