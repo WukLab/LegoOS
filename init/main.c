@@ -106,6 +106,9 @@ const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 static int procmgmt(void *unused)
 {
 	const char *init_filename = "/etc/init";
+
+	pr_info("Global thread pid: %u\n", current->pid);
+
 	argv_init[0] = init_filename;
 	return do_execve(init_filename,
 		(const char *const *)argv_init,
@@ -114,15 +117,12 @@ static int procmgmt(void *unused)
 
 static void run_global_thread(void)
 {
-	struct task_struct *tsk;
-
-	tsk = global_kthread_run(procmgmt, NULL, "proc_mgmt");
-	if (IS_ERR(tsk)) {
-		panic("Fail to start first user program!\n");
-		return;
-	}
-
-	pr_info("Create a global thread lpid: %u\n", tsk->pid);
+	/*
+	 * Must use kernel_thread instead of global_kthread_run
+	 * because that one will call do_exit inside. So do_execve
+	 * will not have any effect.
+	 */
+	kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD);
 }
 #endif
 
