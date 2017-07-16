@@ -146,12 +146,12 @@ static int mc_manager(void *unused)
 
 void __init memory_component_init(void)
 {
+	struct task_struct *ret __maybe_unused;
+
 	/* Register exec binary handlers */
 	exec_init();
 
 #ifdef CONFIG_FIT
-	struct task_struct *ret;
-
 	ret = kthread_run(mc_manager, NULL, "mc-manager");
 	if (IS_ERR(ret))
 		panic("Fail to create mc thread");

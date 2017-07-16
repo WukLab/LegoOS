@@ -33,7 +33,7 @@ alloc_lego_task(unsigned int node, unsigned int pid)
 	struct lego_task_struct *tsk, *p;
 	unsigned int key;
 
-	if (!node || !pid)
+	if (unlikely(!pid))
                 return ERR_PTR(-EINVAL);
 
 	tsk = kmalloc(sizeof(*tsk), GFP_KERNEL);
@@ -87,7 +87,7 @@ find_lego_task_by_pid(unsigned int node, unsigned int pid)
 	struct lego_task_struct *tsk;
 	unsigned int key;
 
-	if (!node || !pid)
+	if (unlikely(!pid))
 		return NULL;
 
 	key = getKey(node, pid);

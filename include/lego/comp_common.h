@@ -43,11 +43,16 @@ extern unsigned int LEGO_LOCAL_NID;
 
 /* Return status */
 #define RET_OKAY	((__u32)0)	/* Operation succeed */
-#define RET_EPERM	((__u32)EPERM)	/* Operation not permitted */
+#define RET_ENOENT	((__u32)ENOENT)	/* No such file or directory */
 #define RET_ESRCH	((__u32)ESRCH)	/* No such process */
+#define RET_EPERM	((__u32)EPERM)	/* Operation not permitted */
 #define RET_EAGAIN	((__u32)EAGAIN)	/* Try again */
 #define RET_ENOMEM	((__u32)ENOMEM)	/* Out of memory */
 #define RET_EFAULT	((__u32)EFAULT)	/* Bad address */
+#define RET_EBUSY	((__u32)EBUSY)	/* Device or resource busy */
+#define RET_EEXIST	((__u32)EEXIST) /* Already exist */
+#define RET_EINVAL	((__u32)EINVAL) /* invalid argument */
+#define RET_NOSYS	((__u32)ENOSYS)	/* Invalid system call number */
 
 #define RET_ESIGSEGV	((__u32)(RET_SIGNAL_BASE+SIGSEGV)) /* Segmentation fault*/
 
@@ -59,6 +64,7 @@ static inline __u32 ERR_TO_LEGO_RET(long err)
 	case -EAGAIN:	return RET_EAGAIN;
 	case -ENOMEM:	return RET_ENOMEM;
 	case -EFAULT:	return RET_EFAULT;
+	case -EINVAL:	return RET_EINVAL;
 	default:	return RET_EFAULT;
 	};
 }
@@ -66,13 +72,19 @@ static inline __u32 ERR_TO_LEGO_RET(long err)
 static inline char *ret_to_string(u32 ret_status)
 {
 	switch (ret_status) {
-	case RET_OKAY:		return "Okay";
-	case RET_EPERM:		return "Operation not permitted";
-	case RET_ESRCH:		return "No such process";
-	case RET_EAGAIN:	return "Try again";
-	case RET_ENOMEM:	return "Out of memory";
+	case RET_OKAY:		return "OKAY";
+	case RET_ENOENT:	return "ENOENT:No such file or directory";
+	case RET_ESRCH:		return "ESRCH:No such process";
+	case RET_EPERM:		return "EPERM:Operation not permitted";
+	case RET_EAGAIN:	return "EAGAIN:Try again";
+	case RET_ENOMEM:	return "ENOMEM:Out of memory";
+	case RET_EFAULT:	return "EFAULT:bad address";
+	case RET_EBUSY:		return "EBUSY:resource busy";
+	case RET_EEXIST:	return "EEXIST:already exist";
+	case RET_EINVAL:	return "EINVAL:Invalid argument";
+	case RET_NOSYS:		return "ENOSYS:invalid system call number";
 	}
-	return "undefined";
+	return "Undefined ret_status";
 }
 
 struct common_header {
