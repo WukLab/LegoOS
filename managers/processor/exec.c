@@ -177,7 +177,7 @@ static int p2m_execve(struct p2m_execve_struct *payload,
 			payload_size, reply, reply_size, false, DEF_NET_TIMEOUT);
 
 	if (ret > 0) {
-		if (reply->status == RET_OKAY) {
+		if (likely(reply->status == RET_OKAY)) {
 			*new_ip = reply->new_ip;
 			*new_sp = reply->new_sp;
 			return 0;
@@ -186,10 +186,7 @@ static int p2m_execve(struct p2m_execve_struct *payload,
 			return -(reply->status);
 		}
 	}
-
-	*new_ip = 0xc0001000;
-	*new_sp = 0xc0003000;
-	return 0;
+	return -EIO;
 }
 
 int do_execve(const char *filename,
