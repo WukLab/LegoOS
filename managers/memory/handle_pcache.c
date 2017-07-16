@@ -32,7 +32,6 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 	struct lego_mm_struct *mm = p->mm;
 	unsigned long new_page;
 	int ret;
-	char *retbuf;
 
 	vma = find_vma(mm, vaddr);
 	if (unlikely(!vma)) {
@@ -51,15 +50,8 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 		return;
 	}
 
-	retbuf = (char *)__get_free_page(GFP_KERNEL);
-	if (unlikely(!retbuf)) {
-		llc_miss_error(RET_ENOMEM, desc, p, vaddr);
-		return;
-	}
-
 	/* Send the cacheline back to processor! */
-	memcpy(retbuf, (char *)new_page, PAGE_SIZE);
-	ibapi_reply_message(retbuf, PAGE_SIZE, desc);
+	ibapi_reply_message((void *)new_page, PAGE_SIZE, desc);
 }
 
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
