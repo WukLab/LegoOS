@@ -730,6 +730,7 @@ retry_send_imm_request:
 	}
 	else
 	{
+		spin_unlock(&connection_lock[connection_id]);
 		printk(KERN_INFO "%s: send fail %d ret %d\n", __func__, connection_id, ret);
 	}
 	spin_unlock(&connection_lock[connection_id]);
