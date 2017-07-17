@@ -14,6 +14,9 @@
 #include <lego/sched.h>
 #include <lego/rwsem.h>
 #include <lego/spinlock.h>
+#include <lego/signal.h>
+#include <generated/unistd_64.h>
+#include <lego/comp_common.h>	/* must come at last */
 
 #ifdef CONFIG_COMP_MEMORY
 void __init memory_component_init(void);

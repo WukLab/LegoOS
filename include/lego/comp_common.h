@@ -14,10 +14,6 @@
 #ifndef _LEGO_COMP_COMMON_H_
 #define _LEGO_COMP_COMMON_H_
 
-#include <lego/sched.h>
-#include <lego/signal.h>
-#include <generated/unistd_64.h>
-
 extern unsigned int LEGO_LOCAL_NID;
 
 /*
@@ -41,6 +37,7 @@ extern unsigned int LEGO_LOCAL_NID;
 
 #define M2S_BASE	((__u32)0x00100000)
 #define M2S_READ	((__u32)(M2S_BASE)+1)
+#define M2S_WRITE	((__u32)(M2S_BASE)+2)
 
 /* To fold signal values into ret, without conflicting with EXXXX values */
 #define RET_SIGNAL_BASE	((__u32)0x01000000)
@@ -129,9 +126,12 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64,
 
 /* P2M_FORK */
 
+/* Task command name length */
+#define LEGO_TASK_COMM_LEN 16
+
 struct p2m_fork_struct {
 	__u32	pid;	
-	char	comm[TASK_COMM_LEN];
+	char	comm[LEGO_TASK_COMM_LEN];
 };
 int p2m_fork(struct task_struct *p);
 int handle_p2m_fork(struct p2m_fork_struct *, u64, struct common_header *);
@@ -167,5 +167,17 @@ struct m2p_execve_struct {
 	__u64	new_sp;
 };
 int handle_p2m_execve(struct p2m_execve_struct *, u64, struct common_header *);
+
+/* M2S_READ */
+struct m2s_read {
+	__u32	pid;
+	char    filename[MAX_FILENAME_LENGTH];
+};
+
+/* M2S_WRITE */
+struct m2s_write {
+	__u32	pid;
+	char    filename[MAX_FILENAME_LENGTH];
+};
 
 #endif /* _LEGO_COMP_COMMON_H_ */

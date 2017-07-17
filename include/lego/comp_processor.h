@@ -10,7 +10,10 @@
 #ifndef _LEGO_COMP_PROCESSOR_H_
 #define _LEGO_COMP_PROCESSOR_H_
 
-#include <lego/compiler.h>
+#include <lego/sched.h>
+#include <lego/signal.h>
+#include <generated/unistd_64.h>
+#include <lego/comp_common.h>	/* must come at last */
 
 #define DEF_MEM_HOMENODE 1
 #define DEF_NET_TIMEOUT	 10	/* second */

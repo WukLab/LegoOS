@@ -14,7 +14,7 @@
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
 #include <lego/fit_ibapi.h>
-#include <lego/comp_common.h>
+#include <lego/comp_processor.h>
 
 #include <asm/pgalloc.h>
 

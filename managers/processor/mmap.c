@@ -7,7 +7,6 @@
  * (at your option) any later version.
  */
 
-#include <lego/comp_common.h>
 #include <lego/comp_processor.h>
 #include <lego/syscalls.h>
 

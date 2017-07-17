@@ -19,7 +19,6 @@
 #include <lego/spinlock.h>
 #include <lego/syscalls.h>
 #include <lego/uaccess.h>
-#include <lego/comp_common.h>
 #include <lego/comp_processor.h>
 
 static int exec_mmap(void)

@@ -20,7 +20,6 @@
 #include <lego/kernel.h>
 #include <lego/netmacro.h>
 #include <lego/comp_memory.h>
-#include <lego/comp_common.h>
 
 #include <memory/include/vm.h>
 #include <memory/include/vm-pgtable.h>

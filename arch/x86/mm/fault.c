@@ -22,7 +22,7 @@
 #include <lego/signal.h>
 #include <lego/uaccess.h>
 #include <lego/extable.h>
-#include <lego/comp_common.h>
+#include <lego/comp_processor.h>
 
 /*
  * Page fault error code bits:

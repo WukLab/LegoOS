@@ -8,7 +8,6 @@
  */
 
 #include <lego/sched.h>
-#include <lego/comp_common.h>
 #include <lego/comp_processor.h>
 
 /* Return 0 on success, other on failure */

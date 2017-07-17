@@ -13,7 +13,6 @@
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/fit_ibapi.h>
-#include <lego/comp_common.h>
 #include <lego/comp_memory.h>
 
 #include <memory/include/vm.h>

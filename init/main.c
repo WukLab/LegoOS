@@ -39,7 +39,6 @@
 #include <lego/workqueue.h>
 #include <lego/completion.h>
 
-#include <lego/comp_common.h>
 #include <lego/comp_memory.h>
 #include <lego/comp_processor.h>
 

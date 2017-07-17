@@ -18,7 +18,6 @@
 #include <lego/slab.h>
 #include <lego/log2.h>
 #include <lego/kernel.h>
-#include <lego/comp_common.h>
 #include <lego/comp_processor.h>
 
 #include "pcache.h"

@@ -12,7 +12,6 @@
 #include <lego/slab.h>
 #include <lego/kernel.h>
 #include <lego/kthread.h>
-#include <lego/comp_common.h>
 #include <lego/comp_processor.h>
 #include "processor.h"
 

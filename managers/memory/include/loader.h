@@ -10,7 +10,6 @@
 #ifndef _LEGO_MEMORY_LOADER_H_
 #define _LEGO_MEMORY_LOADER_H_
 
-#include <lego/comp_common.h>
 #include <lego/comp_memory.h>
 
 /* sizeof(lego_binprm->buf) */

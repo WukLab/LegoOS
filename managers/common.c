@@ -11,7 +11,8 @@
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/fit_ibapi.h>
-#include <lego/comp_common.h>
+#include <lego/comp_memory.h>
+#include <lego/comp_processor.h>
 
 unsigned int LEGO_LOCAL_NID __read_mostly = MY_NODE_ID;
 
