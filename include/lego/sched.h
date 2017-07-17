@@ -437,8 +437,8 @@ static inline int kstack_end(void *addr)
 extern union thread_union init_thread_union;
 extern struct task_struct init_task;
 
-void show_call_trace(struct task_struct *task, struct pt_regs *regs);
-void show_stack_content(struct task_struct *task, struct pt_regs *regs);
+void show_call_trace(struct task_struct *task, struct pt_regs *regs, unsigned long *);
+void show_stack_content(struct task_struct *task, struct pt_regs *regs, unsigned long *sp);
 void show_general_task_info(struct task_struct *task);
 void show_regs(struct pt_regs *regs);
 
@@ -452,8 +452,8 @@ void show_regs(struct pt_regs *regs);
 static inline void dump_stack(void)
 {
 	show_general_task_info(current);
-	show_stack_content(current, NULL);
-	show_call_trace(current, NULL);
+	show_stack_content(current, NULL, NULL);
+	show_call_trace(current, NULL, NULL);
 }
 
 void setup_init_idleclass(struct task_struct *idle);

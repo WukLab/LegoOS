@@ -157,6 +157,7 @@ static int kernel_init(void *unused)
 	wait_for_completion(&ib_init_done);
 #endif
 
+	panic("asd");
 	/* Final step towards a running component.. */
 #ifdef CONFIG_COMP_PROCESSOR
 	processor_component_init();

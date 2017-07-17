@@ -70,8 +70,7 @@ get_stack_pointer(struct task_struct *task, struct pt_regs *regs)
 	if (task == current)
 		return __builtin_frame_address(0);
 
-	/*TODO*/
-	return NULL;
+	return (unsigned long *)task->thread.sp;
 }
 
 /*

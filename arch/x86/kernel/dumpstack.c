@@ -136,16 +136,14 @@ static inline long probe_kernel_read(void *dst, const void *src, size_t size)
 	return 0;
 }
 
-void show_call_trace(struct task_struct *task, struct pt_regs *regs)
+void show_call_trace(struct task_struct *task, struct pt_regs *regs,
+		     unsigned long *stack)
 {
-	unsigned long *stack;
 	struct unwind_state state;
 	struct stack_info stack_info = {0};
 	unsigned long visit_mask = 0;
 
 	pr_info("Call Trace:\n");
-
-	stack = get_stack_pointer(task, regs);
 
 	unwind_start(&state, task, regs, stack);
 
@@ -158,6 +156,7 @@ void show_call_trace(struct task_struct *task, struct pt_regs *regs)
 	 * - (no)  interrupt stack
 	 * - (no)  HW exception stacks (double fault, nmi, debug, mce)
 	 */
+	stack = stack ? : get_stack_pointer(task, regs);
 	for (; stack; stack = stack_info.next_sp) {
 		const char *str_begin, *str_end;
 
@@ -239,16 +238,18 @@ static int __init setup_stack_lines(char *s)
 }
 __setup("stack_lines", setup_stack_lines);
 
-void show_stack_content(struct task_struct *task, struct pt_regs *regs)
+void show_stack_content(struct task_struct *task, struct pt_regs *regs,
+			unsigned long *sp)
 {
 	int i, kstack_depth_to_print;
 	unsigned long *stack;
 
-	kstack_depth_to_print = stackslots_per_line * stack_lines;
-
 	pr_info("Stack:\n");
 
-	stack = get_stack_pointer(task, regs);
+	kstack_depth_to_print = stackslots_per_line * stack_lines;
+
+	sp = sp ? : get_stack_pointer(task, regs);
+	stack = sp;
 	for (i = 0; i < kstack_depth_to_print; i++) {
 		unsigned long word;
 
@@ -367,8 +368,22 @@ void show_regs(struct pt_regs *regs)
 
 	/* print stack, calltrace and code if in kernel mode */
 	if (!user_mode(regs)) {
-		show_stack_content(current, regs);
-		show_call_trace(current, regs);
+		show_stack_content(current, regs, NULL);
+		show_call_trace(current, regs, NULL);
 		show_code(regs);
 	}
+}
+
+void show_stack(struct task_struct *task, unsigned long *sp)
+{
+	task = task ? : current;
+
+	/*
+	 * Stack frames below this one aren't interesting.
+	 * Don't show them if we're printing for %current.
+	 */
+	if (!sp && task == current)
+		sp = get_stack_pointer(current, NULL);
+
+	show_stack_content(task, NULL, sp);
 }

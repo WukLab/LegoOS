@@ -39,8 +39,11 @@ extern unsigned int LEGO_LOCAL_NID;
 #define P2M_EXECVE	((__u32)__NR_execve)
 #define P2M_TEST	((__u32)0x0fffffff)
 
+#define M2S_BASE	((__u32)0x00100000)
+#define M2S_READ	((__u32)(M2S_BASE)+1)
+
 /* To fold signal values into ret, without conflicting with EXXXX values */
-#define RET_SIGNAL_BASE	((__u32)1000)
+#define RET_SIGNAL_BASE	((__u32)0x01000000)
 
 /* Return status */
 #define RET_OKAY	((__u32)0)	/* Operation succeed */
