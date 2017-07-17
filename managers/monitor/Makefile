@@ -1,14 +1,7 @@
-#ifneq ($(KERNELRELEASE),)
-#	obj-m += lego.o
-#else
-#
-#KDIR ?= /lib/modules/$$(uname -r)/build
-#
-#all:
-#	$(MAKE) -C $(KDIR) M=$$PWD modules
-#
-#clean:
-#	$(MAKE) -C $(KDIR) M=$$PWD clean
-#
-#.PHONY  : clean
-#endif
+# Targets
+all:
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+clean:
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+help:
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) help
