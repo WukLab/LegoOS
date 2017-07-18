@@ -75,9 +75,13 @@ static void local_qemu_test(void)
 	get_user_pages(tsk, 0x7fffffffc000, ARRAY_SIZE(pages), 0, pages, NULL);
 	for (i = 0; i < ARRAY_SIZE(pages); i++) {
 		pr_info("Page %d\n", i);
-		print_hex_dump_bytes("hex: ", DUMP_PREFIX_ADDRESS,
+		print_hex_dump_bytes("to_user: ", DUMP_PREFIX_ADDRESS,
 			(void *)pages[i], 4096);
 	}
+
+	memset(buffer, 0, buffer_len);
+	lego_copy_from_user(tsk, buffer, (void *)0x7fffffffcfee, buffer_len);
+	print_hex_dump_bytes("from_user: ", DUMP_PREFIX_ADDRESS, buffer, buffer_len);
 }
 #endif
 

@@ -10,10 +10,11 @@
 /*
  * Copy bytes to/from process virtual memory.
  * The basic idea is the same as original copy_to/from_user: make sure pages
- * are mapped before we do the copy.
+ * are mapped before we do the copy. Instead of triggering real hardware pgfault,
+ * we manually get_user_pages() first to make sure pages are mapped.
  *
- * Instead of triggering real hardware pgfault, we manually get_user_pages()
- * first to make sure pages are mapped.
+ * This code looks a little complicated because the user virtual address would
+ * map to non-contiguous kernel virtual address, so might need to copy one by one.
  */
 
 #include <lego/slab.h>
@@ -59,7 +60,7 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 		int i;
 
 		/* set a reasonable value to catch potential bug */
-		WARN_ON(nr_pages > 4);
+		WARN_ON(nr_pages > 3);
 
 		pages = kmalloc(sizeof(unsigned long) * nr_pages, GFP_KERNEL);
 		if (unlikely(!pages))
@@ -97,9 +98,69 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
  * @to: virtual address of kernel
  * @from: virtual address of user process
  * @n: number of bytes to copy
+ *
+ * Return bytes been copied, 0 on failure.
  */
 unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
-				void *to , const void __user *from, size_t n)
+				  void *to , const void __user *from, size_t n)
 {
+	unsigned long first_page, last_page, nr_pages;
+	long ret;
+
+	if (!n)
+		return 0;
+
+	first_page = (unsigned long)from & PAGE_MASK;
+	last_page = ((unsigned long)from + n) & PAGE_MASK;
+	nr_pages = ((last_page - first_page) >> PAGE_SHIFT) + 1;
+
+	if (likely(nr_pages == 1)) {
+		unsigned long page;
+
+		down_read(&tsk->mm->mmap_sem);
+		ret = get_user_pages(tsk, first_page, 1, 0, &page, NULL);
+		up_read(&tsk->mm->mmap_sem);
+		if (unlikely(ret != 1))
+			return 0;
+
+		memcpy(to, (void *)(page + offset_in_page(from)), n);
+		return n;
+	} else {
+		unsigned long *pages;
+		unsigned long bytes_to_copy, start, offset, copied = 0;
+		int i;
+
+		/* set a reasonable value to catch potential bug */
+		WARN_ON(nr_pages > 3);
+
+		pages = kmalloc(sizeof(unsigned long) * nr_pages, GFP_KERNEL);
+		if (unlikely(!pages))
+			return 0;
+
+		down_read(&tsk->mm->mmap_sem);
+		ret = get_user_pages(tsk, first_page, nr_pages, 0, pages, NULL);
+		up_read(&tsk->mm->mmap_sem);
+		if (unlikely(ret != nr_pages))
+			return 0;
+
+		/* Copy one by one */
+		start = (unsigned long)from;
+		for (i = 0; i < nr_pages; i++) {
+			offset = offset_in_page(start);
+
+			bytes_to_copy = PAGE_SIZE - offset;
+
+			/* last page case */
+			if (bytes_to_copy >= (n - copied))
+				bytes_to_copy = n - copied;
+
+			memcpy(to + copied, (void *)(pages[i] + offset),
+				bytes_to_copy);
+
+			copied += bytes_to_copy;
+			start += bytes_to_copy;
+		}
+		return copied;
+	}
 	return 0;
 }
