@@ -30,7 +30,6 @@ static void local_qemu_test(void)
 	const char *str;
 	unsigned int nid, pid;
 	unsigned long pages[3];
-	int i;
 	void *buffer;
 	size_t buffer_len;
 
@@ -72,16 +71,11 @@ static void local_qemu_test(void)
 	memset(buffer, 65, buffer_len);
 	lego_copy_to_user(tsk, (void *)0x7fffffffcff0, buffer, buffer_len);
 
-	get_user_pages(tsk, 0x7fffffffc000, ARRAY_SIZE(pages), 0, pages, NULL);
-	for (i = 0; i < ARRAY_SIZE(pages); i++) {
-		pr_info("Page %d\n", i);
-		print_hex_dump_bytes("to_user: ", DUMP_PREFIX_ADDRESS,
-			(void *)pages[i], 4096);
-	}
+	/* last page of stack, see argc etc info */
+	get_user_pages(tsk, 0x7fffffffe000, 1, 0, pages, NULL);
+	print_hex_dump_bytes("to_user: ", DUMP_PREFIX_ADDRESS,
+		(void *)pages[0], 4096);
 
-	memset(buffer, 0, buffer_len);
-	lego_copy_from_user(tsk, buffer, (void *)0x7fffffffcfee, buffer_len);
-	print_hex_dump_bytes("from_user: ", DUMP_PREFIX_ADDRESS, buffer, buffer_len);
 }
 #endif
 
@@ -174,7 +168,7 @@ static int mc_manager(void *unused)
 					    __DEFAULT_RXBUF_SIZE, rx_desc);
 		if (unlikely(retlen > __DEFAULT_RXBUF_SIZE)) {
 			/* Catch processor bugs.. */
-			panic("Got message len: %d, configured max len: %d",
+			panic("Got message len: %d, configured max len: %u",
 				retlen, __DEFAULT_RXBUF_SIZE);
 		}
 

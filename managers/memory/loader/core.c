@@ -65,14 +65,15 @@ void __init exec_init(void)
 /* Iterate the list of binary formats handler, until one recognizes the image */
 static int search_exec_binary_handler(struct lego_task_struct *tsk,
 				      struct lego_binprm *bprm,
-				      u64 *new_ip,
-				      u64 *new_sp)
+				      u64 *new_ip, u64 *new_sp,
+				      unsigned long *argv_len,
+				      unsigned long *envp_len)
 {
 	int retval = -ENOENT;
 	struct lego_binfmt *fmt;
 
 	list_for_each_entry(fmt, &formats, lh) {
-		retval = fmt->load_binary(tsk, bprm, new_ip, new_sp);
+		retval = fmt->load_binary(tsk, bprm, new_ip, new_sp, argv_len, envp_len);
 		if (retval < 0 && !bprm->mm) {
 			/*
 			 * TODO:
@@ -238,7 +239,8 @@ out:
  * Return 0 on success, others on failure.
  */
 int exec_loader(struct lego_task_struct *tsk, const char *filename,
-		u32 argc, const char **argv,  u32 envc, const char **envp,
+		u32 argc, const char **argv, unsigned long *argv_len,
+		u32 envc, const char **envp, unsigned long *envp_len,
 		u64 *new_ip, u64 *new_sp)
 {
 	struct lego_binprm *bprm;
@@ -271,11 +273,11 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 
 	/* Copy argv/envp to new process's stack */
 	bprm->exec = bprm->p;
-	retval = copy_strings(tsk, bprm, argc, argv);
+	retval = copy_strings(tsk, bprm, envc, envp);
 	if (retval)
 		goto out;
 
-	retval = copy_strings(tsk, bprm, envc, envp);
+	retval = copy_strings(tsk, bprm, argc, argv);
 	if (retval)
 		goto out;
 
@@ -285,7 +287,8 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 		goto out;
 
 	/* go for it */
-	retval = search_exec_binary_handler(tsk, bprm, new_ip, new_sp);
+	retval = search_exec_binary_handler(tsk, bprm, new_ip, new_sp,
+					    argv_len, envp_len);
 	if (retval)
 		goto out;
 

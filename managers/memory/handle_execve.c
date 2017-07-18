@@ -24,6 +24,8 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 {
 	struct m2p_execve_struct reply;
 	__u32 argc, envc;
+	size_t len;
+	unsigned long *argv_len, *envp_len;
 	const char **argv, **envp;
 	const char *filename, *str;
 	__u32 pid;
@@ -51,18 +53,31 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 		goto out_reply;
 	}
 
+	argv_len = kzalloc(sizeof(*argv_len) * (argc + envc), GFP_KERNEL);
+	if (!argv_len) {
+		kfree(argv);
+		reply.status = RET_ENOMEM;
+		goto out_reply;
+	}
+
 	/* Prepare argv and envp */
 	str = (const char *)&(payload->array);
 	for (i = 0; i < (argc + envc); i++) {
 		argv[i] = str;
-		str += strnlen(str, MAX_ARG_STRLEN);
-		/* terminating NULL */
-		str++;
+
+		len = strnlen(str, MAX_ARG_STRLEN);
+		len++;	/* terminating NULL */
+		str += len;
+
+		/* this array of length including terminal NULL */
+		argv_len[i] = len;
 	}
 	envp = &argv[argc];
+	envp_len = &argv_len[argc];
 
 	/* Invoke real loader */
-	ret = exec_loader(tsk, filename, argc, argv, envc, envp,
+	ret = exec_loader(tsk, filename, argc, argv, argv_len,
+			  envc, envp, envp_len,
 			  &new_ip, &new_sp);
 	if (ret) {
 		reply.status = RET_EPERM;
@@ -75,6 +90,7 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 
 out:
 	kfree(argv);
+	kfree(argv_len);
 out_reply:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 	return 0;

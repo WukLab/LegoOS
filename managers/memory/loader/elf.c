@@ -63,9 +63,122 @@ static int padzero(unsigned long elf_bss)
 #define STACK_ROUND(sp, items)	(((unsigned long) (sp - items)) &~ 15UL)
 #define STACK_ALLOC(sp, len)	({ sp -= len ; sp; })
 
+/*
+ * This function finalize the stack layout, put some machine specific info,
+ * create the real argv[], envp[] pointer array, and finally the last thing
+ * in the stack is argc.
+ *
+ * For a detailed stack layout, refer to: https://lwn.net/Articles/631631/
+ */
 static int create_elf_tables(struct lego_task_struct *tsk, struct lego_binprm *bprm,
-		struct elfhdr *exec, unsigned long load_addr, unsigned long interp_load_addr)
+		struct elfhdr *exec, unsigned long load_addr, unsigned long interp_load_addr,
+		unsigned long *argv_len, unsigned long *envp_len)
 {
+	unsigned long zero = 0;
+	unsigned long p = bprm->p;
+	unsigned long argc = bprm->argc;
+	unsigned long envc = bprm->envc;
+	elf_addr_t __user *argv;
+	elf_addr_t __user *envp;
+	elf_addr_t __user *sp;
+	elf_addr_t __user *u_platform;
+	elf_addr_t __user *u_base_platform;
+	const char *k_platform = ELF_PLATFORM;
+	const char *k_base_platform = ELF_BASE_PLATFORM;
+	int items, i;
+	struct vm_area_struct *vma;
+
+	/*
+	 * In some cases (e.g. Hyper-Threading), we want to avoid L1
+	 * evictions by the processes running on the same package. One
+	 * thing we can do is to shuffle the initial stack for them.
+	 *
+	 * Well. We do not have random things now.
+	 */
+	p &= ~0xf;
+
+	/*
+	 * If this architecture has a platform capability string, copy it
+	 * to userspace.  In some cases (Sparc), this info is impossible
+	 * for userspace to get any other way, in others (i386) it is
+	 * merely difficult.
+	 */
+	u_platform = NULL;
+	if (k_platform) {
+		size_t len = strlen(k_platform) + 1;
+
+		u_platform = (elf_addr_t __user *)STACK_ALLOC(p, len);
+		if (!lego_copy_to_user(tsk, u_platform, k_platform, len))
+			return -EFAULT;
+	}
+
+	/*
+	 * If this architecture has a "base" platform capability
+	 * string, copy it to userspace.
+	 */
+	u_base_platform = NULL;
+	if (k_base_platform) {
+		size_t len = strlen(k_base_platform) + 1;
+
+		u_base_platform = (elf_addr_t __user *)STACK_ALLOC(p, len);
+		if (!lego_copy_to_user(tsk, u_base_platform, k_base_platform, len))
+			return -EFAULT;
+	}
+
+	/* init sp first */
+	sp = STACK_ADD(p, 0);
+
+	/*
+	 * 1) nr of envc pointers
+	 * 2) NULL
+	 * 3) nr of argc pointers
+	 * 4) argc variable
+	 */
+	items = (argc + 1) + (envc + 1) + 1;
+	bprm->p = STACK_ROUND(sp, items);
+	sp = (elf_addr_t __user *)bprm->p;
+
+	/*
+	 * Grow the stack manually; some architectures have a limit on how
+	 * far ahead a user-space access may be in order to grow the stack.
+	 */
+	vma = find_extend_vma(tsk->mm, bprm->p);
+	if (WARN_ON(!vma))
+		return -EFAULT;
+
+	/* Now, let's put argc (and argv, envp if appropriate) on the stack */
+	if (!lego_copy_to_user(tsk, sp, &argc, sizeof(*sp)))
+		return -EFAULT;
+	sp++;
+	argv = sp;
+	envp = argv + argc + 1;
+
+	/* Populate argv */
+	p = tsk->mm->arg_end = tsk->mm->arg_start;
+	for (i = 0; i < argc; i++) {
+		if (!lego_copy_to_user(tsk, argv++, &p, sizeof(*argv)))
+			return -EFAULT;
+		p += argv_len[i];
+	}
+
+	/* final 0 */
+	if (!lego_copy_to_user(tsk, argv, &zero, sizeof(*argv)))
+		return -EFAULT;
+
+	/* Populate envp */
+	tsk->mm->arg_end = tsk->mm->env_start = p;
+	for (i = 0; i < envc; i++) {
+		if (!lego_copy_to_user(tsk, envp++, &p, sizeof(*envp)))
+			return -EFAULT;
+		p += envp_len[i];
+	}
+
+	/* final 0 */
+	if (!lego_copy_to_user(tsk, envp, &zero, sizeof(*envp)))
+		return -EFAULT;
+
+	tsk->mm->env_end = p;
+
 	return 0;
 }
 
@@ -178,7 +291,7 @@ out:
 }
 
 static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bprm,
-			   u64 *new_ip, u64 *new_sp)
+			   u64 *new_ip, u64 *new_sp, unsigned long *argv_len, unsigned long *envp_len)
 {
  	unsigned long load_addr = 0, load_bias = 0;
 	int load_addr_set = 0;
@@ -432,7 +545,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 #endif
 
 	retval = create_elf_tables(tsk, bprm, &loc->elf_ex,
-			  load_addr, interp_load_addr);
+			  load_addr, interp_load_addr, argv_len, envp_len);
 	if (retval < 0)
 		goto out;
 
