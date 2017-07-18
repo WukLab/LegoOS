@@ -67,7 +67,6 @@ static int __do_fault(struct lego_mm_struct *mm, struct vm_area_struct *vma,
 		return ret;
 
 	page_table = lego_pte_offset_lock(mm, pmd, address, &ptl);
-	pr_info("page:%#lx\n", vmf.page);
 
 	/* Only go through if we didn't race with anybody else... */
 	if (likely(pte_same(*page_table, orig_pte))) {
@@ -240,21 +239,5 @@ int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	 */
 	*ret_va = pte_val(*pte) & PTE_VFN_MASK;
 
-	return 0;
-}
-
-int faultin_page(struct vm_area_struct *vma, unsigned long start,
-		 unsigned long flags, unsigned long *kvaddr)
-{
-	int ret;
-
-	ret = handle_lego_mm_fault(vma, start, flags, kvaddr);
-	if (ret & VM_FAULT_ERROR) {
-		if (ret & VM_FAULT_OOM)
-			return -ENOMEM;
-		if (ret & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV))
-			return -EFAULT;
-		BUG();
-	}
 	return 0;
 }

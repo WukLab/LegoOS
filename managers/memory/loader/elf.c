@@ -7,6 +7,12 @@
  * (at your option) any later version.
  */
 
+/*
+ * https://lwn.net/Articles/631631/
+ * https://lwn.net/Articles/519085/
+ * http://www.win.tue.nl/~aeb/linux/hh/stack-layout.html
+ */
+
 #include <lego/slab.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
@@ -22,7 +28,6 @@
 #define ELF_PAGESTART(_v)	((_v) & ~(unsigned long)(ELF_MIN_ALIGN-1))
 #define ELF_PAGEOFFSET(_v)	((_v) & (ELF_MIN_ALIGN-1))
 #define ELF_PAGEALIGN(_v)	(((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
-
 
 #define BAD_ADDR(x)	((unsigned long)(x) >= TASK_SIZE)
 
@@ -51,15 +56,16 @@ static int padzero(unsigned long elf_bss)
 	return 0;
 }
 
-static int create_elf_tables(struct lego_binprm *bprm, struct elfhdr *exec,
-		unsigned long load_addr, unsigned long interp_load_addr)
+#define ELF_PLATFORM		("x86_64")
+#define ELF_BASE_PLATFORM	NULL
+
+#define STACK_ADD(sp, items)	((elf_addr_t __user *)(sp) - (items))
+#define STACK_ROUND(sp, items)	(((unsigned long) (sp - items)) &~ 15UL)
+#define STACK_ALLOC(sp, len)	({ sp -= len ; sp; })
+
+static int create_elf_tables(struct lego_task_struct *tsk, struct lego_binprm *bprm,
+		struct elfhdr *exec, unsigned long load_addr, unsigned long interp_load_addr)
 {
-/* This allocates user mode pages for this process and copies the argv and 
- * environment variables to those allocated page addresses. Finally argc, 
- * the argv pointer and the environment variable array pointer are pushed 
- * to user mode stack by create_elf_tables() 
- */
-	pr_info("%s: implement me\n", __func__);
 	return 0;
 }
 
@@ -425,7 +431,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	 */
 #endif
 
-	retval = create_elf_tables(bprm, &loc->elf_ex,
+	retval = create_elf_tables(tsk, bprm, &loc->elf_ex,
 			  load_addr, interp_load_addr);
 	if (retval < 0)
 		goto out;

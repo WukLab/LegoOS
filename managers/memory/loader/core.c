@@ -182,7 +182,7 @@ static int get_arg_page(struct lego_binprm *bprm,
  * Copy argument/environment strings to the temporary stack vma
  */
 static int copy_strings(struct lego_task_struct *tsk, struct lego_binprm *bprm,
-			u32 argc, const char **argv,  u32 envc, const char **envp)
+			u32 argc, const char **argv)
 {
 	int ret, len;
 	unsigned long pos, kvaddr, kpos = 0;
@@ -270,7 +270,12 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 		goto out_free;
 
 	/* Copy argv/envp to new process's stack */
-	retval = copy_strings(tsk, bprm, argc, argv, envc, envp);
+	bprm->exec = bprm->p;
+	retval = copy_strings(tsk, bprm, argc, argv);
+	if (retval)
+		goto out;
+
+	retval = copy_strings(tsk, bprm, envc, envp);
 	if (retval)
 		goto out;
 

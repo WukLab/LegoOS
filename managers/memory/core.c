@@ -29,6 +29,10 @@ static void local_qemu_test(void)
 	struct lego_task_struct *tsk;
 	const char *str;
 	unsigned int nid, pid;
+	unsigned long pages[3];
+	int i;
+	void *buffer;
+	size_t buffer_len;
 
 	nid = 88;
 	pid = 6666;
@@ -48,17 +52,32 @@ static void local_qemu_test(void)
 	BUG_ON(!execve);
 	execve->pid = pid;
 	strcpy(execve->filename, "/bin/getpid");
-	execve->argc = 2;
+	execve->argc = 3;
 	execve->envc = 2;
-	str = "aaa\0bbb\0ccc\0ddd";
-	memcpy(&execve->array, str, 20);
+	str = "/bin/getpid\0argc2\0argc3\0envp1\0envp2";
+	memcpy(&execve->array, str, 40);
 	handle_p2m_execve(execve, 0, &hdr);
 	dump_all_vmas_simple(tsk->mm);
 
+/* Test LLC miss */
 	miss.pid = pid;
 	miss.flags = FAULT_FLAG_WRITE;
 	miss.missing_vaddr = 0x400000ULL;
 	handle_p2m_llc_miss(&miss, 0, &hdr);
+
+/* Test GUP */
+	buffer_len = PAGE_SIZE + 0x10 + 0xf;
+	buffer = kmalloc(buffer_len, GFP_KERNEL);
+	BUG_ON(!buffer);
+	memset(buffer, 65, buffer_len);
+	lego_copy_to_user(tsk, (void *)0x7fffffffcff0, buffer, buffer_len);
+
+	get_user_pages(tsk, 0x7fffffffc000, ARRAY_SIZE(pages), 0, pages, NULL);
+	for (i = 0; i < ARRAY_SIZE(pages); i++) {
+		pr_info("Page %d\n", i);
+		print_hex_dump_bytes("hex: ", DUMP_PREFIX_ADDRESS,
+			(void *)pages[i], 4096);
+	}
 }
 #endif
 

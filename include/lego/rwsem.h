@@ -10,6 +10,7 @@
 #ifndef _LEGO_RWSEM_H_
 #define _LEGO_RWSEM_H_
 
+#include <lego/list.h>
 #include <lego/atomic.h>
 #include <lego/spinlock.h>
 
