@@ -207,7 +207,7 @@ static struct ib_client ibv_client = {
 	.remove = ibv_remove_one
 };
 
-#define FIT_TESTING
+//#define FIT_TESTING
 static void lego_ib_test(void)
 {
 #ifdef FIT_TESTING
@@ -215,6 +215,8 @@ static void lego_ib_test(void)
 	char *buf = kmalloc(4096, GFP_KERNEL);
 	char *retb = kmalloc(4096, GFP_KERNEL);
 	uintptr_t desc;
+
+	pr_info("testing IB\n");
 	if (MY_NODE_ID == 1) {
 		for (i = 0; i < 10; i++) {
 			ret = ibapi_receive_message(0, buf, 4096, &desc);
