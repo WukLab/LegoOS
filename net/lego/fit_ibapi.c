@@ -207,28 +207,29 @@ static struct ib_client ibv_client = {
 	.remove = ibv_remove_one
 };
 
+#define FIT_TESTING
 static void lego_ib_test(void)
 {
 #ifdef FIT_TESTING
 	int ret, i;
-	char *buf = kmalloc(64, GFP_KERNEL);
-	char *retb = kmalloc(64, GFP_KERNEL);
+	char *buf = kmalloc(4096, GFP_KERNEL);
+	char *retb = kmalloc(4096, GFP_KERNEL);
 	uintptr_t desc;
 	if (MY_NODE_ID == 1) {
 		for (i = 0; i < 10; i++) {
-			ret = ibapi_receive_message(0, buf, 32, &desc);
+			ret = ibapi_receive_message(0, buf, 4096, &desc);
 			pr_info("received message: [%c%c%c%c]\n", buf[0], buf[1], buf[2], buf[3]);
 			retb[0] = '1';
 			retb[1] = '2';
 			retb[2] = '\0';
-			ret = ibapi_reply_message(retb, 10, desc);
+			ret = ibapi_reply_message(retb, 4096, desc);
 		}
 	} else {
 		buf[0] = 'a';
 		buf[1] = 'b';
 		buf[2] = '\0';
 		for (i = 0; i < 10; i++) {
-			ret = ibapi_send_reply_imm(1, buf, 32, retb, 10);
+			ret = ibapi_send_reply_imm(1, buf, 4096, retb, 4096, 0);
 			pr_info("%s(%2d) retbuffer: %s\n", __func__, i, retb);
 		}
 	}

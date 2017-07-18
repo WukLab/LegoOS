@@ -102,7 +102,6 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 		return NULL;
 	}
 	ctx->node_id = mynodeid;
-	ctx->size = size;
 	ctx->send_flags = IB_SEND_SIGNALED;
 	ctx->rx_depth = rx_depth;
 	ctx->num_connections = num_connections;
@@ -275,7 +274,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 
 ppc *client_init_interface(int ib_port, struct ib_device *ib_dev, int mynodeid)
 {
-	int	size = 4096;
+	int	size = 8192;
 	int	rx_depth = RECV_DEPTH;
 	int	ret;
 	ppc *ctx;

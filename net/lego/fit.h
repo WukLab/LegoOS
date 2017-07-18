@@ -18,12 +18,10 @@
 #define DEBUG_SHINYEH
 
 #define MAX_FIT_NUM 4
-#define MESSAGE_SIZE 4096
 
 #define FIT_USERSPACE_FLAG 1
 #define FIT_KERNELSPACE_FLAG 0
 #define FIT_LINUX_PAGE_OFFSET 0x00000fff
-#define FIT_LINUX_PAGE_SIZE 4096
 
 #define CIRCULAR_BUFFER_LENGTH 256
 
@@ -45,8 +43,6 @@
 #define WRAP_UP_NUM_FOR_CIRCULAR_ID 256
 #define WRAP_UP_NUM_FOR_WAITING_INBOX 256
 #define WRAP_UP_NUM_FOR_TYPE 65536 //since there are 64 bits in wr_id, we are going to use 9-12 bits to do thread id waiting passing
-//const int MESSAGE_SIZE = 4096;
-//const int CIRCULAR_BUFFER_LENGTH = 256;
 //const int MAX_NODE = 4;
 #define POST_RECEIVE_CACHE_SIZE 256
 #define SERVER_ID 0
@@ -304,41 +300,10 @@ enum {
 	MSG_DO_ACK_REMOTE,
 	MSG_SEND_RDMA_RING_MR
 };
-struct buf_message
-{
-	char buf[MESSAGE_SIZE];
-};
-
 
 enum {
 	PINGPONG_RECV_WRID = 1,
 	PINGPONG_SEND_WRID = 2,
-};
-
-
-struct asy_IO_header
-{
-	int target_node;
-	uint64_t mr_key;
-	int size;
-	int priority;
-	uint64_t offset;
-	int complete;
-	int type;
-	uint32_t page_num;
-	char *addr;
-	int* wait_id_addr; 
-};
-
-enum asy_IO_event_type {
-	ASY_READ=1,
-	ASY_WRITE=2,
-	ASY_FENCE=3,
-	ASY_INIT=4,
-	SYN_WRITE=5,
-	REMOTE_MEMSET=6,
-	ASY_READ_PREFETCH=7,
-	ASY_WAIT=8
 };
 
 struct client_ah_combined
@@ -386,7 +351,6 @@ struct pingpong_context {
 	int recv_numUD;
 	spinlock_t connection_lockUD;
 
-	int			 size;
 	int			 send_flags;
 	int			 rx_depth;
 	struct ib_port_attr     portinfo;
