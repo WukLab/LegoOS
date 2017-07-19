@@ -175,7 +175,7 @@ static int p2m_execve(struct p2m_execve_struct *payload,
 	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_EXECVE, payload,
 			payload_size, reply, reply_size, false, DEF_NET_TIMEOUT);
 
-	if (ret > 0) {
+	if (likely(ret > 0)) {
 		if (likely(reply->status == RET_OKAY)) {
 			*new_ip = reply->new_ip;
 			*new_sp = reply->new_sp;

@@ -20,8 +20,10 @@
 #include <lego/kernel.h>
 #include <lego/netmacro.h>
 #include <lego/comp_memory.h>
+#include <lego/fit_ibapi.h>
 
 #include <memory/include/vm.h>
+#include <memory/include/pid.h>
 #include <memory/include/vm-pgtable.h>
 
 static unsigned long
@@ -1612,6 +1614,13 @@ unsigned long vm_mmap(struct lego_task_struct *p, struct lego_file *file,
 	return vm_mmap_pgoff(p, file, addr, len, prot, flag, offset >> PAGE_SHIFT);
 }
 
+/*
+ * This is really a simplified "do_mmap". It only handles
+ * anonymous maps. Eventually we may be able to do some
+ * brk-specific accounting here.
+ *
+ * Must enter with mmap_sem held
+ */
 static int do_brk(struct lego_task_struct *p, unsigned long addr,
 		  unsigned long request)
 {
@@ -1675,10 +1684,99 @@ int vm_brk(struct lego_task_struct *tsk,
 	   unsigned long start, unsigned long len)
 {
 	int ret;
+	struct lego_mm_struct *mm = tsk->mm;
 
-	/* TODO mm locking */
+	if (down_write_killable(&mm->mmap_sem))
+		return -EINTR;
+
 	ret = do_brk(tsk, start, len);
+	up_write(&mm->mmap_sem);
+
+	/* Prepopulate brk pages */
+	if (!ret)
+		lego_mm_populate(mm, start, len);
+
 	return ret;
+}
+
+/**
+ * handle_p2m_brk
+ * Handle brk syscall issued from processor-component.
+ */
+int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
+		   struct common_header *hdr)
+{
+	u32 nid = hdr->src_nid;
+	u32 pid = payload->pid;
+	unsigned long min_brk, brk = payload->brk;
+	unsigned long newbrk, oldbrk;
+	struct lego_task_struct *tsk;
+	struct lego_mm_struct *mm;
+	unsigned long ret_brk;
+	int ret;
+
+	tsk = find_lego_task_by_pid(nid, pid);
+	if (unlikely(!tsk)) {
+		ret_brk = RET_ESRCH;
+		ibapi_reply_message(&ret_brk, sizeof(ret_brk), desc);
+		return 0;
+	}
+	mm = tsk->mm;
+
+	if (down_write_killable(&mm->mmap_sem)) {
+		ret_brk = RET_EINTR;
+		ibapi_reply_message(&ret_brk, sizeof(ret_brk), desc);
+		return 0;
+	}
+
+	min_brk = mm->start_brk;
+	if (brk < min_brk)
+		goto out;
+
+	newbrk = PAGE_ALIGN(brk);
+	oldbrk = PAGE_ALIGN(mm->brk);
+
+	/* within same page, great! */
+	if (oldbrk == newbrk)
+		goto set_brk;
+
+	/* Shrink the brk */
+	if (brk <= mm->brk) {
+		ret = do_munmap(mm, newbrk, oldbrk - newbrk);
+		if (likely(!ret))
+			goto set_brk;
+		goto out;
+	}
+
+	/* Check against existing mmap mappings. */
+	if (find_vma_intersection(mm, oldbrk, newbrk+PAGE_SIZE))
+		goto out;
+
+	/* Ok, looks good - let it rip. */
+	ret = do_brk(tsk, oldbrk, newbrk-oldbrk);
+	if (unlikely(ret < 0))
+		goto out;
+
+set_brk:
+	mm->brk = brk;
+
+	/* Yup, by default, we populate */
+	if (newbrk > oldbrk)
+		lego_mm_populate(mm, oldbrk, newbrk - oldbrk);
+
+out:
+	up_write(&mm->mmap_sem);
+
+	ret_brk = mm->brk;
+	ibapi_reply_message(&ret_brk, sizeof(ret_brk), desc);
+
+	return 0;
+}
+
+int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
+		    struct common_header *hdr)
+{
+	return 0;
 }
 
 #define LEGO_PGALLOC_GFP     (GFP_KERNEL | __GFP_ZERO)
