@@ -1597,8 +1597,12 @@ unsigned long vm_mmap_pgoff(struct lego_task_struct *p, struct lego_file *file,
 {
 	unsigned long ret;
 
-	/* TODO mm locking */
+	if (down_write_killable(&p->mm->mmap_sem))
+		return -EINTR;
+
 	ret = do_mmap_pgoff(p, file, addr, len, prot, flag, pgoff);
+	up_write(&p->mm->mmap_sem);
+
 	return ret;
 }
 

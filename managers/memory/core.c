@@ -31,6 +31,8 @@ static void local_qemu_test(void)
 	unsigned int nid, pid;
 	unsigned long pages[3];
 	struct p2m_brk_struct brk;
+	struct p2m_mmap_struct mmap;
+	struct p2m_munmap_struct munmap;
 
 	nid = 88;
 	pid = 6666;
@@ -69,6 +71,7 @@ static void local_qemu_test(void)
 		(void *)pages[0] + 2048, 2048);
 
 /* Test brk */
+	pr_info("test brk..\n");
 	brk.pid = pid;
 	brk.brk = 0x800000ULL;
 	handle_p2m_brk(&brk, 0, &hdr);
@@ -77,6 +80,25 @@ static void local_qemu_test(void)
 	handle_p2m_brk(&brk, 0, &hdr);
 	dump_all_vmas_simple(tsk->mm);
 
+/* mmap */
+	pr_info("mmap..\n");
+	mmap.pid = pid;
+	mmap.addr = 0;
+	mmap.len = PAGE_SIZE * 0x10;
+	mmap.prot = PROT_READ | PROT_WRITE;
+	mmap.flags = MAP_ANONYMOUS | MAP_PRIVATE;
+	mmap.fd = 1;
+	mmap.pgoff = 0;
+	handle_p2m_mmap(&mmap, 0, &hdr);
+	dump_all_vmas_simple(tsk->mm);
+
+/* munmap */
+	pr_info("munmap..\n");
+	munmap.pid = pid;
+	munmap.addr = 0x7ffff7ff0000;
+	munmap.len = PAGE_SIZE * 0x5;
+	handle_p2m_munmap(&munmap, 9, &hdr);
+	dump_all_vmas_simple(tsk->mm);
 }
 #endif
 

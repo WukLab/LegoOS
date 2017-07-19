@@ -179,10 +179,14 @@ struct p2m_mmap_struct {
 	__u32	pid;
 	__u64	addr;
 	__u64	len;
-	__u32	prot;
-	__u32	flags;
-	__u32	fd;
-	__u64	off;
+	__u64	prot;
+	__u64	flags;
+	__u64	fd;
+	__u64	pgoff;
+};
+struct p2m_mmap_reply_struct {
+	__u32	ret;
+	__u64	ret_addr;
 };
 int handle_p2m_mmap(struct p2m_mmap_struct *, u64, struct common_header *);
 

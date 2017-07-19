@@ -22,8 +22,10 @@
 #include <memory/include/vm-pgtable.h>
 
 /**
- * handle_p2m_brk
- * Handle brk syscall issued from processor-component.
+ * Returns: the brk address
+ *  ERROR:
+ *	RET_ESRCH
+ *	RET_EINTR
  */
 int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
 		   struct common_header *hdr)
@@ -95,14 +97,83 @@ out:
 	return 0;
 }
 
+/**
+ * Returns: the virtual address
+ *  ERROR:
+ *	RET_ESRCH
+ */
 int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 		    struct common_header *hdr)
 {
+	u32 nid = hdr->src_nid;
+	u32 pid = payload->pid;
+	u64 addr = payload->addr;
+	u64 len = payload->len;
+	u64 prot = payload->prot;
+	u64 flags = payload->flags;
+	u64 pgoff = payload->pgoff;
+	struct lego_task_struct *tsk;
+	struct lego_file *file = NULL;
+	struct p2m_mmap_reply_struct reply;
+	s64 ret;
+
+	tsk = find_lego_task_by_pid(nid, pid);
+	if (unlikely(!tsk)) {
+		reply.ret = RET_ESRCH;
+		goto out;
+	}
+
+	if (!(flags & MAP_ANONYMOUS)) {
+		/* use fd to find file */
+		/* file backed mmap() */
+		file = NULL;
+	}
+
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	ret = vm_mmap_pgoff(tsk, file, addr, len, prot, flags, pgoff);
+
+	/* which means vm_mmap_pgoff() returns -ERROR */
+	if (unlikely(ret < 0)) {
+		reply.ret = ERR_TO_LEGO_RET(ret);
+		goto out;
+	}
+
+	reply.ret = RET_OKAY;
+	reply.ret_addr = (u64)ret;
+
+out:
+	ibapi_reply_message(&reply, sizeof(reply), desc);
+
 	return 0;
 }
 
 int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 		      struct common_header *hdr)
 {
+	u32 nid = hdr->src_nid;
+	u32 pid = payload->pid;
+	u64 addr = payload->addr;
+	u64 len = payload->len;
+	struct lego_task_struct *tsk;
+	struct lego_mm_struct *mm;
+	u64 ret;
+
+	tsk = find_lego_task_by_pid(nid, pid);
+	if (unlikely(!tsk)) {
+		ret = RET_ESRCH;
+		goto out;
+	}
+
+	mm = tsk->mm;
+	if (down_write_killable(&mm->mmap_sem)) {
+		ret = RET_EINTR;
+		goto out;
+	}
+
+	ret = do_munmap(mm, addr, len);
+	up_write(&mm->mmap_sem);
+
+out:
+	ibapi_reply_message(&ret, sizeof(ret), desc);
 	return 0;
 }

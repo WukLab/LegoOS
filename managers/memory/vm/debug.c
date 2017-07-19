@@ -72,7 +72,7 @@ void dump_vma_simple(const struct vm_area_struct *vma)
 	if (file)
 		pr_cont("%s\n", file->filename);
 	else {
-		const char *name;
+		const char *name = NULL;
 
 		if (!mm)
 			name = "[vdso]";
@@ -82,7 +82,10 @@ void dump_vma_simple(const struct vm_area_struct *vma)
 		else if (vma->vm_start <= mm->start_stack &&
 			 vma->vm_end >= mm->start_stack)
 			name = "[stack]";
-		pr_cont("%s\n", name);
+		if (name)
+			pr_cont("%s\n", name);
+		else
+			pr_cont("\n");
 	}
 }
 

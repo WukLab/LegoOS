@@ -36,7 +36,7 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 		unsigned long, fd, unsigned long, off)
 {
 	struct p2m_mmap_struct payload;
-	unsigned long ret_addr;
+	struct p2m_mmap_reply_struct reply;
 	int ret;
 
 	if (offset_in_page(off))
@@ -56,14 +56,17 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	payload.prot = prot;
 	payload.flags = flags;
 	payload.fd = fd;
-	payload.off = off;
+	payload.pgoff = off >> PAGE_SHIFT;
 
 	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MMAP,
-			&payload, sizeof(payload), &ret_addr, sizeof(ret_addr),
+			&payload, sizeof(payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
 
-	if (likely(ret == sizeof(ret_addr))) {
-		return ret_addr;
+	if (likely(ret == sizeof(reply))) {
+		if (likely(reply.ret == RET_OKAY))
+			return reply.ret_addr;
+		else
+			return (s64)reply.ret;
 	}
 	return -EIO;
 }
