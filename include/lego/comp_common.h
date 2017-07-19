@@ -31,6 +31,9 @@ extern unsigned int LEGO_LOCAL_NID;
 
 #define P2M_HEARTBEAT	((__u32)0x00000001)
 #define P2M_LLC_MISS	((__u32)0x00000002)
+#define P2M_MMAP	((__u32)__NR_mmap)
+#define P2M_MUNMAP	((__u32)__NR_munmap)
+#define P2M_BRK		((__u32)__NR_brk)
 #define P2M_FORK	((__u32)__NR_fork)
 #define P2M_EXECVE	((__u32)__NR_execve)
 #define P2M_TEST	((__u32)0x0fffffff)
@@ -39,13 +42,11 @@ extern unsigned int LEGO_LOCAL_NID;
 #define M2S_READ	((__u32)(M2S_BASE)+1)
 #define M2S_WRITE	((__u32)(M2S_BASE)+2)
 
-/* To fold signal values into ret, without conflicting with EXXXX values */
-#define RET_SIGNAL_BASE	((__u32)0x01000000)
-
 /* Return status */
 #define RET_OKAY	((__u32)0)	/* Operation succeed */
 #define RET_ENOENT	((__u32)ENOENT)	/* No such file or directory */
 #define RET_ESRCH	((__u32)ESRCH)	/* No such process */
+#define RET_EINTR	((__u32)EINTR)	/* Interrupted system call */
 #define RET_EPERM	((__u32)EPERM)	/* Operation not permitted */
 #define RET_EAGAIN	((__u32)EAGAIN)	/* Try again */
 #define RET_ENOMEM	((__u32)ENOMEM)	/* Out of memory */
@@ -55,11 +56,15 @@ extern unsigned int LEGO_LOCAL_NID;
 #define RET_EINVAL	((__u32)EINVAL) /* invalid argument */
 #define RET_NOSYS	((__u32)ENOSYS)	/* Invalid system call number */
 
+/* To fold signal values into ret, without conflicting with EXXXX values */
+#define RET_SIGNAL_BASE	((__u32)0x01000000)
+
 #define RET_ESIGSEGV	((__u32)(RET_SIGNAL_BASE+SIGSEGV)) /* Segmentation fault*/
 
 static inline __u32 ERR_TO_LEGO_RET(long err)
 {
 	switch (err) {
+	case -EINTR:	return RET_EINTR;
 	case -EPERM:	return RET_EPERM;
 	case -ESRCH:	return RET_ESRCH;
 	case -EAGAIN:	return RET_EAGAIN;
@@ -76,6 +81,7 @@ static inline char *ret_to_string(u32 ret_status)
 	case RET_OKAY:		return "OKAY";
 	case RET_ENOENT:	return "ENOENT:No such file or directory";
 	case RET_ESRCH:		return "ESRCH:No such process";
+	case RET_EINTR:		return "EINTR:Interrupted system call";
 	case RET_EPERM:		return "EPERM:Operation not permitted";
 	case RET_EAGAIN:	return "EAGAIN:Try again";
 	case RET_ENOMEM:	return "ENOMEM:Out of memory";
@@ -167,6 +173,33 @@ struct m2p_execve_struct {
 	__u64	new_sp;
 };
 int handle_p2m_execve(struct p2m_execve_struct *, u64, struct common_header *);
+
+/* P2M_MMAP */
+struct p2m_mmap_struct {
+	__u32	pid;
+	__u64	addr;
+	__u64	len;
+	__u32	prot;
+	__u32	flags;
+	__u32	fd;
+	__u64	off;
+};
+int handle_p2m_mmap(struct p2m_mmap_struct *, u64, struct common_header *);
+
+/* P2M_MUNMAP */
+struct p2m_munmap_struct {
+	__u32	pid;
+	__u64	addr;
+	__u64	len;
+};
+int handle_p2m_munmap(struct p2m_munmap_struct *, u64, struct common_header *);
+
+/* P2M_BRK */
+struct p2m_brk_struct {
+	__u32	pid;
+	__u64	brk;
+};
+int handle_p2m_brk(struct p2m_brk_struct *, u64, struct common_header *);
 
 /* M2S_READ */
 struct m2s_read {

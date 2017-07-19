@@ -30,8 +30,7 @@ static void local_qemu_test(void)
 	const char *str;
 	unsigned int nid, pid;
 	unsigned long pages[3];
-	void *buffer;
-	size_t buffer_len;
+	struct p2m_brk_struct brk;
 
 	nid = 88;
 	pid = 6666;
@@ -64,17 +63,19 @@ static void local_qemu_test(void)
 	miss.missing_vaddr = 0x400000ULL;
 	handle_p2m_llc_miss(&miss, 0, &hdr);
 
-/* Test GUP */
-	buffer_len = PAGE_SIZE + 0x10 + 0xf;
-	buffer = kmalloc(buffer_len, GFP_KERNEL);
-	BUG_ON(!buffer);
-	memset(buffer, 65, buffer_len);
-	lego_copy_to_user(tsk, (void *)0x7fffffffcff0, buffer, buffer_len);
-
-	/* last page of stack, see argc etc info */
+/* last page of stack, see argc etc info */
 	get_user_pages(tsk, 0x7fffffffe000, 1, 0, pages, NULL);
 	print_hex_dump_bytes("to_user: ", DUMP_PREFIX_ADDRESS,
-		(void *)pages[0], 4096);
+		(void *)pages[0] + 2048, 2048);
+
+/* Test brk */
+	brk.pid = pid;
+	brk.brk = 0x800000ULL;
+	handle_p2m_brk(&brk, 0, &hdr);
+	dump_all_vmas_simple(tsk->mm);
+	brk.brk = 0x700000ULL;
+	handle_p2m_brk(&brk, 0, &hdr);
+	dump_all_vmas_simple(tsk->mm);
 
 }
 #endif
@@ -132,15 +133,31 @@ static int mc_dispatcher(void *rx_buf)
 	case P2M_LLC_MISS:
 		handle_p2m_llc_miss(payload, desc, hdr);
 		break;
+
+	case P2M_MMAP:
+		handle_p2m_mmap(payload, desc, hdr);
+		break;
+
+	case P2M_MUNMAP:
+		handle_p2m_munmap(payload, desc, hdr);
+		break;
+
+	case P2M_BRK:
+		handle_p2m_brk(payload, desc, hdr);
+		break;
+
 	case P2M_FORK:
 		handle_p2m_fork(payload, desc, hdr);
 		break;
+
 	case P2M_EXECVE:
 		handle_p2m_execve(payload, desc, hdr);
 		break;
+
 	case P2M_TEST:
 		handle_p2m_test(payload, desc, hdr);
 		break;
+
 	default:
 		handle_bad_request(hdr, desc);
 	}

@@ -20,8 +20,10 @@
 #include <lego/kernel.h>
 #include <lego/netmacro.h>
 #include <lego/comp_memory.h>
+#include <lego/fit_ibapi.h>
 
 #include <memory/include/vm.h>
+#include <memory/include/pid.h>
 #include <memory/include/vm-pgtable.h>
 
 static unsigned long
@@ -1612,8 +1614,15 @@ unsigned long vm_mmap(struct lego_task_struct *p, struct lego_file *file,
 	return vm_mmap_pgoff(p, file, addr, len, prot, flag, offset >> PAGE_SHIFT);
 }
 
-static int do_brk(struct lego_task_struct *p, unsigned long addr,
-		  unsigned long request)
+/*
+ * This is really a simplified "do_mmap". It only handles
+ * anonymous maps. Eventually we may be able to do some
+ * brk-specific accounting here.
+ *
+ * Must enter with mmap_sem held
+ */
+int do_brk(struct lego_task_struct *p, unsigned long addr,
+	   unsigned long request)
 {
 	struct lego_mm_struct *mm = p->mm;
 	struct vm_area_struct *vma, *prev;
@@ -1675,9 +1684,18 @@ int vm_brk(struct lego_task_struct *tsk,
 	   unsigned long start, unsigned long len)
 {
 	int ret;
+	struct lego_mm_struct *mm = tsk->mm;
 
-	/* TODO mm locking */
+	if (down_write_killable(&mm->mmap_sem))
+		return -EINTR;
+
 	ret = do_brk(tsk, start, len);
+	up_write(&mm->mmap_sem);
+
+	/* Prepopulate brk pages */
+	if (!ret)
+		lego_mm_populate(mm, start, len);
+
 	return ret;
 }
 

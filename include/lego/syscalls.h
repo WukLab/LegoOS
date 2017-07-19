@@ -79,4 +79,6 @@ asmlinkage long sys_execve(const char *filename,
 asmlinkage long sys_mmap(unsigned long, unsigned long, unsigned long,
 			 unsigned long, unsigned long, unsigned long);
 
+asmlinkage long sys_munmap(unsigned long addr, size_t len);
+
 #endif /* _LEGO_SYSCALLS_H_ */
