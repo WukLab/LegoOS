@@ -10,6 +10,8 @@ Purpose : Header file
 
 #define OP_SUCCESS		1
 #define OP_FAILURE		0
+//This is the return value of grant_access while O_CREAT is set and file not exist.
+#define NEW_FILE		2
 
 #define MAX_USERS_ALLOWED 	5
 #define MAX_FILE_NAME		20
@@ -22,6 +24,8 @@ Purpose : Header file
 #define FILE_METADATA		"/home/yilun/file_metadata.bin"
 #define FILE_REPO		"/data/0/file_repository/"
 
+#define EMETAFULL		-1
+
 #define MAX_SIZE		5 
 
 struct userDetails {
@@ -30,16 +34,17 @@ struct userDetails {
 };
 
 struct metadata {
-	struct          userDetails users[MAX_USERS_ALLOWED]; // Users who have access to this file
+	int		users[MAX_USERS_ALLOWED]; // Users who have access to this file
 	int	        noOfUsers;	// No of users accessing this file currently 
 	int 		permission; // The file permission applicable to all the users
-	int 		fd;			// File descriptor
+	int 		used;			// File descriptor
+	int		owner;
 	char 		fileName[MAX_FILE_NAME];  	
 };
 
 typedef struct {
 	// userID, fileName, service, length, offset, requesterInfo?, flags 
-	int  	userID;
+	int  	uid;
 	char 	fileName[MAX_FILE_NAME]; // Requested file
 	int 	service; // Specifies the read/write/update/create service requested
 	int 	permission; // Permission for the data
