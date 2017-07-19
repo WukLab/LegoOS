@@ -7,6 +7,7 @@
 # The abi is "common", "64" or "x32" for this file.
 #
 9	common	mmap			sys_mmap
+11	common	munmap			sys_munmap
 12	common	brk			sys_brk
 39	common	getpid			sys_getpid
 57	common	fork			sys_fork

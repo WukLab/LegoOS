@@ -32,6 +32,7 @@ extern unsigned int LEGO_LOCAL_NID;
 #define P2M_HEARTBEAT	((__u32)0x00000001)
 #define P2M_LLC_MISS	((__u32)0x00000002)
 #define P2M_MMAP	((__u32)__NR_mmap)
+#define P2M_MUNMAP	((__u32)__NR_munmap)
 #define P2M_BRK		((__u32)__NR_brk)
 #define P2M_FORK	((__u32)__NR_fork)
 #define P2M_EXECVE	((__u32)__NR_execve)
@@ -175,9 +176,23 @@ int handle_p2m_execve(struct p2m_execve_struct *, u64, struct common_header *);
 
 /* P2M_MMAP */
 struct p2m_mmap_struct {
-	__u32 pid;
+	__u32	pid;
+	__u64	addr;
+	__u64	len;
+	__u32	prot;
+	__u32	flags;
+	__u32	fd;
+	__u64	off;
 };
 int handle_p2m_mmap(struct p2m_mmap_struct *, u64, struct common_header *);
+
+/* P2M_MUNMAP */
+struct p2m_munmap_struct {
+	__u32	pid;
+	__u64	addr;
+	__u64	len;
+};
+int handle_p2m_munmap(struct p2m_munmap_struct *, u64, struct common_header *);
 
 /* P2M_BRK */
 struct p2m_brk_struct {

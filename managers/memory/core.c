@@ -138,6 +138,10 @@ static int mc_dispatcher(void *rx_buf)
 		handle_p2m_mmap(payload, desc, hdr);
 		break;
 
+	case P2M_MUNMAP:
+		handle_p2m_munmap(payload, desc, hdr);
+		break;
+
 	case P2M_BRK:
 		handle_p2m_brk(payload, desc, hdr);
 		break;

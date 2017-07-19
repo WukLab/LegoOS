@@ -217,6 +217,10 @@ unsigned long vm_mmap_pgoff(struct lego_task_struct *p, struct lego_file *file,
 		unsigned long addr, unsigned long len, unsigned long prot,
 		unsigned long flag, unsigned long pgoff);
 
+int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len);
+int do_brk(struct lego_task_struct *p, unsigned long addr,
+	   unsigned long request);
+
 /*
  * Look up the first VMA which intersects the interval start_addr..end_addr-1,
  * NULL if none.  Assume start_addr < end_addr.

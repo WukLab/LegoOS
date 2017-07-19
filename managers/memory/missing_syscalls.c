@@ -35,3 +35,8 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 {
 	BUG();
 }
+
+SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
+{
+	BUG();
+}
