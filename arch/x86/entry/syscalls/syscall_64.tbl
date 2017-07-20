@@ -9,6 +9,7 @@
 9	common	mmap			sys_mmap
 11	common	munmap			sys_munmap
 12	common	brk			sys_brk
+26	common	msync			sys_msync
 39	common	getpid			sys_getpid
 57	common	fork			sys_fork
 59	64	execve			sys_execve

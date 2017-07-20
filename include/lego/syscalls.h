@@ -80,5 +80,6 @@ asmlinkage long sys_mmap(unsigned long, unsigned long, unsigned long,
 			 unsigned long, unsigned long, unsigned long);
 
 asmlinkage long sys_munmap(unsigned long addr, size_t len);
+asmlinkage long sys_msync(unsigned long start, size_t len, int flags);
 
 #endif /* _LEGO_SYSCALLS_H_ */

@@ -177,3 +177,84 @@ out:
 	ibapi_reply_message(&ret, sizeof(ret), desc);
 	return 0;
 }
+
+int handle_p2m_msync(struct p2m_msync_struct *payload, u64 desc,
+		     struct common_header *hdr)
+{
+	u32 nid = hdr->src_nid;
+	u32 pid = payload->pid;
+	u64 start = payload->start;
+	u64 len = payload->len;
+	u64 end = start + len;
+	u32 flags = payload->flags;
+	struct lego_task_struct *tsk;
+	struct lego_mm_struct *mm;
+	struct vm_area_struct *vma;
+	u32 ret, unmapped_error;
+
+	tsk = find_lego_task_by_pid(nid, pid);
+	if (unlikely(!tsk)) {
+		ret = RET_ESRCH;
+		goto out;
+	}
+
+	/*
+	 * If the interval [start,end) covers some unmapped address ranges,
+	 * just ignore them, but return -ENOMEM at the end.
+	 */
+	mm = tsk->mm;
+	down_read(&mm->mmap_sem);
+	vma = find_vma(mm, start);
+	for (;;) {
+		struct lego_file *file;
+		loff_t fstart, fend;
+
+		ret = -ENOMEM;
+		if (!vma)
+			goto out_unlock;
+
+		/* Here start < vma->vm_end. */
+		if (start < vma->vm_start) {
+			start = vma->vm_start;
+			if (start >= end)
+				goto out_unlock;
+			unmapped_error = -ENOMEM;
+		}
+
+		file = vma->vm_file;
+
+		fstart = (start - vma->vm_start) +
+			 ((loff_t)vma->vm_pgoff << PAGE_SHIFT);
+		fend = fstart + (min((unsigned long)end, vma->vm_end) - start) - 1;
+
+		start = vma->vm_end;
+		if ((flags & MS_SYNC) && file &&
+				(vma->vm_flags & VM_SHARED)) {
+			up_read(&mm->mmap_sem);
+			/*
+			 * TODO:
+			 * How we gonna impl msync without buffer cache?
+			 * What about mmaped files?
+			 */
+			//ret = vfs_fsync_range(file, fstart, fend, 1);
+			if (ret || start >= end)
+				goto out;
+			down_read(&mm->mmap_sem);
+			vma = find_vma(mm, start);
+		} else {
+			if (start >= end) {
+				ret = 0;
+				goto out_unlock;
+			}
+			vma = vma->vm_next;
+		}
+	}
+
+out_unlock:
+	up_read(&mm->mmap_sem);
+out:
+	if (unmapped_error)
+		ret = unmapped_error;
+	ibapi_reply_message(&ret, sizeof(ret), desc);
+	return 0;
+}

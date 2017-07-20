@@ -7,6 +7,14 @@
  * (at your option) any later version.
  */
 
+/*
+ * This file defines all mmap-related syscall hooks:
+ *	brk
+ *	mmap
+ *	munmap
+ *	msync
+ */
+
 #include <lego/syscalls.h>
 #include <lego/comp_processor.h>
 
@@ -89,6 +97,54 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	payload.len = len;
 
 	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MUNMAP,
+			&payload, sizeof(payload), &retbuf, sizeof(retbuf),
+			false, DEF_NET_TIMEOUT);
+
+	if (likely(ret == sizeof(retbuf)))
+		return retbuf;
+	return -EIO;
+}
+
+/*
+ * MS_SYNC syncs the entire file - including mappings.
+ *
+ * MS_ASYNC does not start I/O (it used to, up to 2.5.67).
+ * Nor does it marks the relevant pages dirty (it used to up to 2.6.17).
+ * Now it doesn't do anything, since dirty pages are properly tracked.
+ *
+ * The application may now run fsync() to
+ * write out the dirty pages and wait on the writeout and check the result.
+ * Or the application may run fadvise(FADV_DONTNEED) against the fd to start
+ * async writeout immediately.
+ * So by _not_ starting I/O in MS_ASYNC we provide complete flexibility to
+ * applications.
+ */
+SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
+{
+	struct p2m_msync_struct payload;
+	int retbuf, ret;
+	unsigned long end;
+
+	if (flags & ~(MS_ASYNC | MS_INVALIDATE | MS_SYNC))
+		return -EINVAL;
+	if (offset_in_page(start))
+		return -EINVAL;
+	if ((flags & MS_ASYNC) && (flags & MS_SYNC))
+		return -EINVAL;
+	len = (len + ~PAGE_MASK) & PAGE_MASK;
+	end = start + len;
+	if (end < start)
+		return -ENOMEM;
+	if (end == start)
+		return 0;
+
+	/* all good, send request */
+	payload.pid = current->pid;
+	payload.start = start;
+	payload.len = len;
+	payload.flags = flags;
+
+	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MSYNC,
 			&payload, sizeof(payload), &retbuf, sizeof(retbuf),
 			false, DEF_NET_TIMEOUT);
 

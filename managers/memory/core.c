@@ -150,12 +150,18 @@ static int mc_dispatcher(void *rx_buf)
 	hdr = to_common_header(rx_buf);
 	payload = to_payload(rx_buf);
 
-	/* handler should call reply message */
+	/*
+	 * BIG FAT NOTE:
+	 * 1) Handler MUST call reply message
+	 * 2) Handler CAN NOT free payload and hdr
+	 * 3) Handler SHOULD NOT call exit()
+	 */
 	switch (hdr->opcode) {
+/* PCACHE */
 	case P2M_LLC_MISS:
 		handle_p2m_llc_miss(payload, desc, hdr);
 		break;
-
+/* SYSCALL */
 	case P2M_MMAP:
 		handle_p2m_mmap(payload, desc, hdr);
 		break;
@@ -168,6 +174,10 @@ static int mc_dispatcher(void *rx_buf)
 		handle_p2m_brk(payload, desc, hdr);
 		break;
 
+	case P2M_MSYNC:
+		handle_p2m_msync(payload, desc, hdr);
+		break;
+
 	case P2M_FORK:
 		handle_p2m_fork(payload, desc, hdr);
 		break;
@@ -176,6 +186,7 @@ static int mc_dispatcher(void *rx_buf)
 		handle_p2m_execve(payload, desc, hdr);
 		break;
 
+/* TEST */
 	case P2M_TEST:
 		handle_p2m_test(payload, desc, hdr);
 		break;
@@ -184,6 +195,7 @@ static int mc_dispatcher(void *rx_buf)
 		handle_bad_request(hdr, desc);
 	}
 
+	kfree(rx_buf);
 	return 0;
 }
 

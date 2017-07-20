@@ -34,6 +34,7 @@ extern unsigned int LEGO_LOCAL_NID;
 #define P2M_MMAP	((__u32)__NR_mmap)
 #define P2M_MUNMAP	((__u32)__NR_munmap)
 #define P2M_BRK		((__u32)__NR_brk)
+#define P2M_MSYNC	((__u32)__NR_msync)
 #define P2M_FORK	((__u32)__NR_fork)
 #define P2M_EXECVE	((__u32)__NR_execve)
 #define P2M_TEST	((__u32)0x0fffffff)
@@ -204,6 +205,18 @@ struct p2m_brk_struct {
 	__u64	brk;
 };
 int handle_p2m_brk(struct p2m_brk_struct *, u64, struct common_header *);
+
+/* P2M_MSYNC */
+#define MS_ASYNC	1		/* sync memory asynchronously */
+#define MS_INVALIDATE	2		/* invalidate the caches */
+#define MS_SYNC		4		/* synchronous memory sync */
+struct p2m_msync_struct {
+	__u32	pid;
+	__u64	start;
+	__u64	len;
+	__u32	flags;
+};
+int handle_p2m_msync(struct p2m_msync_struct *, u64, struct common_header *);
 
 /* M2S_READ */
 struct m2s_read {
