@@ -11,6 +11,7 @@
 2	common	open			sys_open
 3	common	close			sys_close
 9	common	mmap			sys_mmap
+10	common	mprotect		sys_mprotect
 11	common	munmap			sys_munmap
 12	common	brk			sys_brk
 26	common	msync			sys_msync

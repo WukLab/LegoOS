@@ -67,6 +67,11 @@
 	}								\
 	static inline long SYSC##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 
+asmlinkage long sys_read(unsigned int fd, char __user *buf, size_t count);
+asmlinkage long sys_write(unsigned int fd, const char __user *buf, size_t count);
+asmlinkage long sys_open(const char __user *filename, int flags, umode_t mode);
+asmlinkage long sys_close(unsigned int fd);
+
 asmlinkage long sys_getpid(void);
 asmlinkage long sys_fork(void);
 
@@ -78,7 +83,8 @@ asmlinkage long sys_execve(const char *filename,
 
 asmlinkage long sys_mmap(unsigned long, unsigned long, unsigned long,
 			 unsigned long, unsigned long, unsigned long);
-
+asmlinkage long sys_mprotect(unsigned long start, size_t len,
+			     unsigned long prot);
 asmlinkage long sys_munmap(unsigned long addr, size_t len);
 asmlinkage long sys_msync(unsigned long start, size_t len, int flags);
 

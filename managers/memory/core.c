@@ -185,6 +185,10 @@ static int mc_dispatcher(void *rx_buf)
 		handle_p2m_mmap(payload, desc, hdr);
 		break;
 
+	case P2M_MPROTECT:
+		handle_p2m_mprotect(payload, desc, hdr);
+		break;
+
 	case P2M_MUNMAP:
 		handle_p2m_munmap(payload, desc, hdr);
 		break;

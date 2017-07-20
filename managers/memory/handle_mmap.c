@@ -258,3 +258,10 @@ out:
 	ibapi_reply_message(&ret, sizeof(ret), desc);
 	return 0;
 }
+
+int handle_p2m_mprotect(struct p2m_mprotect_struct *payload, u64 desc,
+			struct common_header *hdr)
+{
+	WARN_ON(1);
+	return 0;
+}

@@ -37,6 +37,7 @@ extern unsigned int LEGO_LOCAL_NID;
 #define P2M_OPEN	((__u32)__NR_open)
 #define P2M_CLOSE	((__u32)__NR_close)
 #define P2M_MMAP	((__u32)__NR_mmap)
+#define P2M_MPROTECT	((__u32)__NR_mprotect)
 #define P2M_MUNMAP	((__u32)__NR_munmap)
 #define P2M_BRK		((__u32)__NR_brk)
 #define P2M_MSYNC	((__u32)__NR_msync)
@@ -227,6 +228,15 @@ struct p2m_munmap_struct {
 	__u64	len;
 };
 int handle_p2m_munmap(struct p2m_munmap_struct *, u64, struct common_header *);
+
+/* P2M_MPROTECT */
+struct p2m_mprotect_struct {
+	__u32	pid;
+	__u64	addr;
+	__u64	len;
+	__u32	prot;
+};
+int handle_p2m_mprotect(struct p2m_mprotect_struct *, u64, struct common_header *);
 
 /* P2M_BRK */
 struct p2m_brk_struct {

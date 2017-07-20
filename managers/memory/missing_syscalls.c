@@ -62,6 +62,12 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	BUG();
 }
 
+SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
+		unsigned long, prot)
+{
+	BUG();
+}
+
 SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 {
 	BUG();
