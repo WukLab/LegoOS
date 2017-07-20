@@ -516,10 +516,10 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	end_data += load_bias;
 
 	/*
-	 * Calling set_brk effectively mmaps the pages that we need
-	 * for the bss and break sections.  We must do this before
-	 * mapping in the interpreter, to make sure it doesn't wind
-	 * up getting placed where the bss needs to go.
+	 * Calling set_brk effectively mmaps the pages
+	 * that we need for the bss and break sections.
+	 *
+	 * .bss and brk is combined together!
 	 */
 	retval = set_brk(tsk, elf_bss, elf_brk);
 	if (retval)

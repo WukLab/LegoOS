@@ -6,6 +6,10 @@
 #
 # The abi is "common", "64" or "x32" for this file.
 #
+0	common	read			sys_read
+1	common	write			sys_write
+2	common	open			sys_open
+3	common	close			sys_close
 9	common	mmap			sys_mmap
 11	common	munmap			sys_munmap
 12	common	brk			sys_brk

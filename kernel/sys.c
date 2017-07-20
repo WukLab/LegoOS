@@ -52,6 +52,27 @@ SYSCALL_DEFINE0(gettid)
  * We are having this to make the kernel compile
  */
 #if !defined(CONFIG_COMP_PROCESSOR) && !defined(CONFIG_COMP_MEMORY)
+SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
+		size_t, count)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE1(close, unsigned int, fd)
+{
+	BUG();
+}
+
 SYSCALL_DEFINE3(execve,
 		const char __user*, filename,
 		const char __user *const __user *, argv,

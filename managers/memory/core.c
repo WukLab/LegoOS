@@ -57,6 +57,7 @@ static void local_qemu_test(void)
 	str = "/bin/getpid\0argc2\0argc3\0envp1\0envp2";
 	memcpy(&execve->array, str, 40);
 	handle_p2m_execve(execve, 0, &hdr);
+	dump_lego_mm(tsk->mm);
 	dump_all_vmas_simple(tsk->mm);
 
 /* Test LLC miss */
@@ -68,16 +69,18 @@ static void local_qemu_test(void)
 /* last page of stack, see argc etc info */
 	get_user_pages(tsk, 0x7fffffffe000, 1, 0, pages, NULL);
 	print_hex_dump_bytes("to_user: ", DUMP_PREFIX_ADDRESS,
-		(void *)pages[0] + 2048, 2048);
+		(void *)pages[0] + 3072, 1024);
 
 /* Test brk */
 	pr_info("test brk..\n");
 	brk.pid = pid;
 	brk.brk = 0x800000ULL;
 	handle_p2m_brk(&brk, 0, &hdr);
+	dump_lego_mm(tsk->mm);
 	dump_all_vmas_simple(tsk->mm);
 	brk.brk = 0x700000ULL;
 	handle_p2m_brk(&brk, 0, &hdr);
+	dump_lego_mm(tsk->mm);
 	dump_all_vmas_simple(tsk->mm);
 
 /* mmap */
@@ -162,6 +165,22 @@ static int mc_dispatcher(void *rx_buf)
 		handle_p2m_llc_miss(payload, desc, hdr);
 		break;
 /* SYSCALL */
+	case P2M_READ:
+		handle_p2m_read(payload, desc, hdr);
+		break;
+
+	case P2M_WRITE:
+		handle_p2m_write(payload, desc, hdr);
+		break;
+
+	case P2M_OPEN:
+		handle_p2m_open(payload, desc, hdr);
+		break;
+
+	case P2M_CLOSE:
+		handle_p2m_close(payload, desc, hdr);
+		break;
+
 	case P2M_MMAP:
 		handle_p2m_mmap(payload, desc, hdr);
 		break;

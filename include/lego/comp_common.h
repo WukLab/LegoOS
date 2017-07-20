@@ -29,8 +29,13 @@ extern unsigned int LEGO_LOCAL_NID;
  *	Follow the original SYSCALL number
  */
 
-#define P2M_HEARTBEAT	((__u32)0x00000001)
-#define P2M_LLC_MISS	((__u32)0x00000002)
+#define P2M_HEARTBEAT	((__u32)0x10000000)
+#define P2M_LLC_MISS	((__u32)0x20000000)
+
+#define P2M_READ	((__u32)__NR_read)
+#define P2M_WRITE	((__u32)__NR_write)
+#define P2M_OPEN	((__u32)__NR_open)
+#define P2M_CLOSE	((__u32)__NR_close)
 #define P2M_MMAP	((__u32)__NR_mmap)
 #define P2M_MUNMAP	((__u32)__NR_munmap)
 #define P2M_BRK		((__u32)__NR_brk)
@@ -130,6 +135,30 @@ struct p2m_llc_miss_struct {
 int pcache_fill(unsigned long, unsigned long, unsigned long *);
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64,
 			struct common_header *);
+
+/* P2M_READ */
+struct p2m_read_struct {
+	__u32 pid;
+};
+int handle_p2m_read(struct p2m_read_struct *, u64, struct common_header *);
+
+/* P2M_WRITE */
+struct p2m_write_struct {
+	__u32 pid;
+};
+int handle_p2m_write(struct p2m_write_struct *, u64, struct common_header *);
+
+/* P2M_OPEN */
+struct p2m_open_struct {
+	__u32 pid;
+};
+int handle_p2m_open(struct p2m_open_struct *, u64, struct common_header *);
+
+/* P2M_CLOSE */
+struct p2m_close_struct {
+	__u32 pid;
+};
+int handle_p2m_close(struct p2m_close_struct *, u64, struct common_header *);
 
 /* P2M_FORK */
 

@@ -139,6 +139,7 @@ typedef __kernel_time_t		time_t;
 typedef __kernel_clock_t	clock_t;
 typedef unsigned long		uintptr_t;
 typedef long long		loff_t;
+typedef unsigned short		umode_t;
 
 /**
  * struct callback_head - callback structure for use with RCU and task_work
