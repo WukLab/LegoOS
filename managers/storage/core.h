@@ -13,7 +13,7 @@ Purpose : Header file
 //This is the return value of grant_access while O_CREAT is set and file not exist.
 #define NEW_FILE		2
 
-#define MAX_USERS_ALLOWED 	5
+#define MAX_USERS_ALLOWED 	2
 #define MAX_FILE_NAME		20
 #define ROOT_PRIVILEGE		S_IRWXU
 
@@ -26,7 +26,7 @@ Purpose : Header file
 
 #define EMETAFULL		-1
 
-#define MAX_SIZE		5 
+#define MAX_SIZE		2 
 
 struct userDetails {
 	int   	userID; 	// The unique identifier for the user 

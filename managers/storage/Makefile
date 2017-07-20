@@ -1,5 +1,7 @@
-obj-m := core.o
+obj-m := storage.o
+storage-objs := core.o
+
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules
 clean:
-	rm -rf *.o *.ko *.mod.c .*.cmd *.markers *.order *.symvers .tmp_versions
+	rm -rf *.o *.ko *.mod.c .*.cmd *.markers *.order *.symvers .tmp_versions *~
