@@ -111,3 +111,10 @@ void start_thread(struct pt_regs *regs, unsigned long new_ip,
 	regs->ss		= __USER_DS;
 	regs->flags		= X86_EFLAGS_IF;
 }
+
+/*
+ * Free current thread data structures etc..
+ */
+void exit_thread(struct task_struct *tsk)
+{
+}

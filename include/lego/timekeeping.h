@@ -140,4 +140,38 @@ void do_timer(unsigned long ticks);
 /* Update all wall time based on our clocksource */
 void update_wall_time(void);
 
+/*
+ * ktime_t based interfaces
+ */
+enum tk_offsets {
+	TK_OFFS_REAL,
+	TK_OFFS_BOOT,
+	TK_OFFS_TAI,
+	TK_OFFS_MAX,
+};
+
+ktime_t ktime_get(void);
+ktime_t ktime_get_with_offset(enum tk_offsets offs);
+
+/**
+ * ktime_get_boottime - Returns monotonic time since boot in ktime_t format
+ *
+ * This is similar to CLOCK_MONTONIC/ktime_get, but also includes the
+ * time spent in suspend.
+ */
+static inline ktime_t ktime_get_boottime(void)
+{
+	return ktime_get_with_offset(TK_OFFS_BOOT);
+}
+
+static inline u64 ktime_get_ns(void)
+{
+	return ktime_to_ns(ktime_get());
+}
+
+static inline u64 ktime_get_boot_ns(void)
+{
+	return ktime_to_ns(ktime_get_boottime());
+}
+
 #endif /* _LEGO_TIMEKEEPING_H_ */

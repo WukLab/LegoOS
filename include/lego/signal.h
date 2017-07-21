@@ -10,6 +10,11 @@
 #ifndef _LEGO_SIGNAL_H_
 #define _LEGO_SIGNAL_H_
 
+#include <lego/wait.h>
+#include <lego/atomic.h>
+#include <lego/kernel.h>
+#include <lego/spinlock.h>
+
 #define SIGHUP		1
 #define SIGINT		2
 #define SIGQUIT		3
@@ -37,5 +42,33 @@
 #define SIGXFSZ		25
 #define SIGVTALRM	26
 #define SIGPROF		27
+
+struct sigpending {
+	struct list_head list;
+	//sigset_t signal;
+};
+
+struct sighand_struct {
+	atomic_t		count;
+	//struct k_sigaction	action[_NSIG];
+	spinlock_t		siglock;
+	wait_queue_head_t	signalfd_wqh;
+};
+
+/*
+ * NOTE! "signal_struct" does not have its own
+ * locking, because a shared signal_struct always
+ * implies a shared sighand_struct, so locking
+ * sighand_struct is always a proper superset of
+ * the locking of signal_struct.
+ */
+struct signal_struct {
+	atomic_t		sigcnt;
+	atomic_t		live;
+	int			nr_threads;
+	struct list_head	thread_head;
+
+	pid_t			leader_pid;
+};
 
 #endif /* _LEGO_SIGNAL_H_ */

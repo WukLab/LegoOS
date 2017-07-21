@@ -177,7 +177,12 @@ int timekeeping_notify(struct clocksource *clock)
 /* TODO */
 ktime_t ktime_get(void)
 {
-	return (ktime_t)100;
+	return jiffies;
+}
+
+ktime_t ktime_get_with_offset(enum tk_offsets offs)
+{
+	return jiffies;
 }
 
 void do_timer(unsigned long ticks)
