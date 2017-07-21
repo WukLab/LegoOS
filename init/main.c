@@ -121,7 +121,7 @@ static void run_global_thread(void)
 	 * because that one will call do_exit inside. So do_execve
 	 * will not have any effect.
 	 */
-	kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD);
+	kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD | CLONE_THREAD);
 }
 #endif
 
