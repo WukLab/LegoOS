@@ -373,11 +373,6 @@ pid_t do_fork(unsigned long clone_flags,
 	return p->pid;
 }
 
-SYSCALL_DEFINE0(fork)
-{
-	return 0;
-}
-
 /**
  * kernel_thread	-	Create a kernel thread
  * @fn: the function to run in the thread
@@ -390,4 +385,19 @@ SYSCALL_DEFINE0(fork)
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
 	return do_fork(flags | CLONE_VM, (unsigned long)fn, (unsigned long)arg, 0);
+}
+
+SYSCALL_DEFINE0(fork)
+{
+	WARN_ON(1);
+	return -EFAULT;
+}
+
+SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
+		 int __user *, parent_tidptr,
+		 int __user *, child_tidptr,
+		 unsigned long, tls)
+{
+	WARN_ON(1);
+	return -EFAULT;
 }

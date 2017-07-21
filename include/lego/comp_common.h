@@ -167,7 +167,9 @@ int handle_p2m_close(struct p2m_close_struct *, u64, struct common_header *);
 #define LEGO_TASK_COMM_LEN 16
 
 struct p2m_fork_struct {
-	__u32	pid;	
+	__u32	pid;
+	__u32	current_pid;	/* current thread who calls fork() */
+	__u32	clone_flags;
 	char	comm[LEGO_TASK_COMM_LEN];
 };
 int p2m_fork(struct task_struct *p);

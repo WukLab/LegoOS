@@ -1719,9 +1719,11 @@ static void lego_pgd_free(struct lego_mm_struct *mm)
  * Setup a new lego_mm_struct
  * Especially do not forget to initialize locks, counters etc.
  */
-static struct lego_mm_struct *lego_mm_init(struct lego_mm_struct *mm,
-					   struct lego_task_struct *p)
+struct lego_mm_struct *
+lego_mm_init(struct lego_mm_struct *mm, struct lego_task_struct *p)
 {
+	BUG_ON(!mm || !p);
+
 	mm->task = p;
 	mm->mmap = NULL;
 	mm->mm_rb = RB_ROOT;
@@ -1893,5 +1895,12 @@ int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 		unsigned long end, unsigned long newflags)
 {
 	*pprev = vma;
+	return 0;
+}
+
+/* TODO */
+int copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
+		    struct vm_area_struct *vma)
+{
 	return 0;
 }

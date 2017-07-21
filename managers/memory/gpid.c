@@ -26,34 +26,29 @@ static int getKey(unsigned int node, unsigned int pid)
         return node*10000+pid*10;
 }
 
-struct lego_task_struct *
-alloc_lego_task(unsigned int node, unsigned int pid)
+int __must_check ht_insert_lego_task(struct lego_task_struct *tsk)
 {
-	struct lego_task_struct *tsk, *p;
+	struct lego_task_struct *p;
 	unsigned int key;
+	unsigned int node, pid;
 
-	if (unlikely(!pid))
-                return ERR_PTR(-EINVAL);
+	BUG_ON(!tsk || !tsk->pid);
 
-	tsk = kmalloc(sizeof(*tsk), GFP_KERNEL);
-	if (!tsk)
-		return ERR_PTR(-ENOMEM);
-	tsk->node = node;
-	tsk->pid = pid;
-
+	pid = tsk->pid;
+	node = tsk->node;
 	key = getKey(node, pid);
 
 	spin_lock(&hashtable_lock);
 	hash_for_each_possible(node_pid_hash, p, link, key) {
 		if (unlikely(p->pid == pid && p->node ==node)) {
 			spin_unlock(&hashtable_lock);
-			return ERR_PTR(-EEXIST);
+			return -EEXIST;
 		}
 	}
 	hash_add(node_pid_hash, &tsk->link, key);  
 	spin_unlock(&hashtable_lock);
 
-	return tsk;
+	return 0;
 }
 
 void free_lego_task(struct lego_task_struct *tsk)
@@ -100,29 +95,4 @@ find_lego_task_by_pid(unsigned int node, unsigned int pid)
         spin_unlock(&hashtable_lock);
 
 	return NULL;
-}
-
-/**
- * Similar to copy_process(), init a new lego task struct.
- * and its lego mm struct.
- *
- * TODO: thread group?
- * Reuse some data structures?
- * Accounting relationship with existing threads?
- * May need more info in fork payload!
- */
-int init_lego_task(struct lego_task_struct *p)
-{
-	struct lego_mm_struct *mm;
-
-	BUG_ON(!p);
-
-	spin_lock_init(&p->task_lock);
-
-	mm = lego_mm_alloc(p);
-	if (!mm)
-		return -ENOMEM;
-
-	p->mm = mm;
-	return 0;
 }

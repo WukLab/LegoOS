@@ -14,12 +14,9 @@
 
 void free_lego_task(struct lego_task_struct *tsk);
 
-struct lego_task_struct *
-alloc_lego_task(unsigned int node, unsigned int pid);
+int __must_check ht_insert_lego_task(struct lego_task_struct *tsk);
 
 struct lego_task_struct *
 find_lego_task_by_pid(unsigned int node, unsigned int pid);
-
-int init_lego_task(struct lego_task_struct *tsk);
 
 #endif /* _LEGO_MEMORY_PID_H_ */

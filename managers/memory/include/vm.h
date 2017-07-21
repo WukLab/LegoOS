@@ -239,6 +239,8 @@ find_vma_intersection(struct lego_mm_struct * mm,
 int vm_brk(struct lego_task_struct *tsk,
 	   unsigned long start, unsigned long len);
 
+void __vma_link_rb(struct lego_mm_struct *mm, struct vm_area_struct *vma,
+		struct rb_node **rb_link, struct rb_node *rb_parent);
 int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 	unsigned long end, pgoff_t pgoff, struct vm_area_struct *insert,
 	struct vm_area_struct *expand);
@@ -248,6 +250,8 @@ static inline int vma_adjust(struct vm_area_struct *vma, unsigned long start,
 	return __vma_adjust(vma, start, end, pgoff, insert, NULL);
 }
 
+struct lego_mm_struct *
+lego_mm_init(struct lego_mm_struct *mm, struct lego_task_struct *p);
 struct lego_mm_struct *lego_mm_alloc(struct lego_task_struct *p);
 
 /* lego_mmdrop drops the mm and the page tables */
@@ -277,6 +281,9 @@ struct vm_area_struct *find_extend_vma(struct lego_mm_struct *mm, unsigned long 
 int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 		struct vm_area_struct **pprev, unsigned long start,
 		unsigned long end, unsigned long newflags);
+
+int copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
+		struct vm_area_struct *vma);
 
 /* fault.c */
 /*
