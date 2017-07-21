@@ -11,6 +11,7 @@
 #define _LEGO_TYPES_H_
 
 #include <asm/types.h>
+#include <lego/compiler.h>
 
 #define BITS_PER_LONG		__BITS_PER_LONG
 #define BITS_PER_LONG_LONG	__BITS_PER_LONG_LONG
@@ -140,6 +141,9 @@ typedef __kernel_clock_t	clock_t;
 typedef unsigned long		uintptr_t;
 typedef long long		loff_t;
 typedef unsigned short		umode_t;
+typedef unsigned		fmode_t;
+
+typedef unsigned long		cputime_t;
 
 /**
  * struct callback_head - callback structure for use with RCU and task_work

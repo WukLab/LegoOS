@@ -27,7 +27,8 @@ static void __init init_idle(int cpu)
 {
 	struct task_struct *tsk;
 
-	tsk = copy_process(CLONE_VM | CLONE_IDLE_THREAD, 0, 0, cpu_to_node(cpu), 0);
+	tsk = copy_process(CLONE_VM | CLONE_IDLE_THREAD,
+			   0, 0, NULL, 0, cpu_to_node(cpu));
 	if (!tsk)
 		panic("fail to init idle thread for cpu %d\n", cpu);
 

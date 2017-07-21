@@ -18,8 +18,10 @@
 #include <asm/thread_info.h>
 
 #include <lego/mm.h>
+#include <lego/files.h>
 #include <lego/llist.h>
 #include <lego/magic.h>
+#include <lego/signal.h>
 #include <lego/rbtree.h>
 #include <lego/preempt.h>
 #include <lego/sched_prio.h>
@@ -43,8 +45,14 @@
 #define CLONE_FILES		0x00000400	/* set if open files shared between processes */
 #define CLONE_SIGHAND		0x00000800	/* set if signal handlers and blocked signals shared */
 #define CLONE_PTRACE		0x00002000	/* set if we want to let tracing continue on the child too */
+#define CLONE_VFORK		0x00004000	/* set if the parent wants the child to wake it up on mm_release */
 #define CLONE_PARENT		0x00008000	/* set if we want to have the same parent as the cloner */
 #define CLONE_THREAD		0x00010000	/* Same thread group? */
+#define CLONE_PARENT_SETTID	0x00100000	/* set the TID in the parent */
+#define CLONE_CHILD_CLEARTID	0x00200000	/* clear the TID in the child */
+#define CLONE_CHILD_SETTID	0x01000000	/* set the TID in the child */
+
+/* TODO Conflict with Linux's define */
 #define CLONE_IDLE_THREAD	0x80000000	/* set if we want to clone an idle thread */
 #define CLONE_GLOBAL_THREAD	0x40000000	/* set if it is global */
 
@@ -269,6 +277,11 @@ struct task_struct {
 	int			nr_cpus_allowed;
 	cpumask_t		cpus_allowed;
 
+	/* list of all task_structs in the system */
+	struct list_head	tasks;
+
+	struct mm_struct *mm, *active_mm;
+
 /* Scheduler bits, serialized by scheduler locks */
 	unsigned		sched_reset_on_fork:1;
 	unsigned		sched_contributes_to_load:1;
@@ -281,11 +294,6 @@ struct task_struct {
 	int			exit_code;
 	int			exit_signal;
 
-	char			comm[TASK_COMM_LEN];
-
-	/* list of all task_structs in the system */
-	struct list_head	tasks;
-
 	int			in_iowait;
 
 	pid_t			pid;
@@ -296,8 +304,8 @@ struct task_struct {
 	 * younger sibling, older sibling, respectively.
 	 * (p->father can be replaced with p->real_parent->pid)
 	 */
-	struct task_struct *real_parent;	/* real parent process */
-	struct task_struct *parent;		/* recipient of SIGCHLD, wait4() reports */
+	struct task_struct __rcu *real_parent;	/* real parent process */
+	struct task_struct __rcu *parent;	/* recipient of SIGCHLD, wait4() reports */
 	/*
 	 * children/sibling forms the list of my natural children
 	 */
@@ -305,7 +313,36 @@ struct task_struct {
 	struct list_head sibling;		/* linkage in my parent's children list */
 	struct task_struct *group_leader;	/* threadgroup leader */
 
-	struct mm_struct *mm, *active_mm;
+	struct list_head thread_group;
+	struct list_head thread_node;
+
+	struct completion *vfork_done;		/* for vfork() */
+	int __user *set_child_tid;		/* CLONE_CHILD_SETTID */
+	int __user *clear_child_tid;		/* CLONE_CHILD_CLEARTID */
+
+	cputime_t utime, stime, utimescaled, stimescaled;
+	cputime_t gtime;
+
+	unsigned long nvcsw, nivcsw;		/* context switch counts */
+	u64 start_time;				/* monotonic time in nsec */
+	u64 real_start_time;			/* boot based time in nsec */
+
+	char comm[TASK_COMM_LEN];  /* executable name excluding path
+				     - access with [gs]et_task_comm (which lock
+				       it with task_lock())
+				     - initialized normally by setup_new_exec */
+
+	/* signal handlers */
+	struct signal_struct *signal;
+	struct sighand_struct *sighand;
+	struct sigpending pending;
+
+	/* Thread group tracking */
+   	u32 parent_exec_id;
+   	u32 self_exec_id;
+
+	/* Open file information */
+	struct files_struct *files;
 
 	/*
 	 * Protection of (de-)allocation: mm, files, fs, tty, keyrings,
@@ -324,6 +361,11 @@ union thread_union {
 
 #define task_thread_info(task)	((struct thread_info *)((task)->stack))
 #define task_stack_page(task)	((void *)((task)->stack))
+
+static inline bool thread_group_leader(struct task_struct *p)
+{
+	return p->exit_signal >= 0;
+}
 
 /*
  * flag set/clear/test wrappers
@@ -473,7 +515,8 @@ unsigned long long sched_clock(void);
 struct task_struct *copy_process(unsigned long clone_flags,
 				 unsigned long stack_start,
 				 unsigned long stack_size,
-				 int node, int tls);
+				 int __user *child_tidptr,
+				 unsigned long tls, int node);
 
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 
@@ -569,6 +612,9 @@ static inline int signal_pending_state(long state, struct task_struct *p)
 		return 0;
 	return 0;
 }
+
+/* arch-specific exit */
+void exit_thread(struct task_struct *tsk);
 
 #define SD_LOAD_BALANCE		0x0001	/* Do load balancing on this domain. */
 #define SD_BALANCE_NEWIDLE	0x0002	/* Balance when about to become idle */

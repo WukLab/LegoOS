@@ -11,6 +11,7 @@
 #define _LEGO_SYSCALLS_H_
 
 #include <lego/bug.h>
+#include <lego/rlimit.h>
 #include <lego/linkage.h>
 #include <lego/compiler.h>
 
@@ -72,8 +73,13 @@ asmlinkage long sys_write(unsigned int fd, const char __user *buf, size_t count)
 asmlinkage long sys_open(const char __user *filename, int flags, umode_t mode);
 asmlinkage long sys_close(unsigned int fd);
 
+asmlinkage long sys_gettid(void);
 asmlinkage long sys_getpid(void);
+asmlinkage long sys_getppid(void);
 asmlinkage long sys_fork(void);
+asmlinkage long sys_vfork(void);
+asmlinkage long sys_clone(unsigned long, unsigned long, int __user *,
+			  int __user *, unsigned long);
 
 asmlinkage long sys_brk(unsigned long);
 
@@ -87,5 +93,11 @@ asmlinkage long sys_mprotect(unsigned long start, size_t len,
 			     unsigned long prot);
 asmlinkage long sys_munmap(unsigned long addr, size_t len);
 asmlinkage long sys_msync(unsigned long start, size_t len, int flags);
+
+asmlinkage long sys_getrlimit(unsigned int resource,
+				struct rlimit __user *rlim);
+
+asmlinkage long sys_setrlimit(unsigned int resource,
+				struct rlimit __user *rlim);
 
 #endif /* _LEGO_SYSCALLS_H_ */

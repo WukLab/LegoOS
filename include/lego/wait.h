@@ -17,8 +17,10 @@
 #ifndef _LEGO_WAIT_H_
 #define _LEGO_WAIT_H_
 
-#include <lego/sched.h>
+#include <lego/list.h>
 #include <lego/spinlock.h>
+
+struct task_struct;
 
 typedef struct wait_queue_head	wait_queue_head_t;
 typedef struct wait_queue	wait_queue_t;

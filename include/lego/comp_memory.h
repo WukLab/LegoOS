@@ -130,29 +130,11 @@ struct lego_task_struct {
 
         struct hlist_node link;
 
-	struct list_head tasks;		/* list of all tasks */
 	struct lego_mm_struct *mm;
 
 	unsigned int node;
 	unsigned int pid;
 	unsigned int tgid;
-
-	int exit_signal;
-	/*
-	 * pointers to (original) parent process, youngest child,
-	 * younger sibling, older sibling, respectively.
-	 * (p->father can be replaced with p->real_parent->pid)
-	 */
-	struct lego_task_struct *real_parent; /* real parent process */
-	struct lego_task_struct *parent; /* recipient of SIGCHLD, wait4() reports */
-	/*
-	 * children/sibling forms the list of my natural children
-	 */
-	struct list_head children;	/* list of my children */
-	struct list_head sibling;	/* linkage in my parent's children list */
-	struct lego_task_struct *group_leader; /* threadgroup leader */
-
-	struct list_head thread_group;
 
 	char comm[LEGO_TASK_COMM_LEN];	/* executable name excluding path
 					 * - access with [gs]et_task_comm (which lock
@@ -161,11 +143,6 @@ struct lego_task_struct {
 					 */
 	spinlock_t task_lock;
 };
-
-static inline bool thread_group_leader(struct lego_task_struct *p)
-{
-	return p->exit_signal >= 0;
-}
 
 static inline void lego_task_lock(struct lego_task_struct *p)
 {
