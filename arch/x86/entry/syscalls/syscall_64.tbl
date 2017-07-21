@@ -16,5 +16,7 @@
 12	common	brk			sys_brk
 26	common	msync			sys_msync
 39	common	getpid			sys_getpid
+56	common	clone			sys_clone
 57	common	fork			sys_fork
+58	common	vfork			sys_vfork
 59	64	execve			sys_execve

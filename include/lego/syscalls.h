@@ -74,6 +74,9 @@ asmlinkage long sys_close(unsigned int fd);
 
 asmlinkage long sys_getpid(void);
 asmlinkage long sys_fork(void);
+asmlinkage long sys_vfork(void);
+asmlinkage long sys_clone(unsigned long, unsigned long, int __user *,
+			  int __user *, unsigned long);
 
 asmlinkage long sys_brk(unsigned long);
 

@@ -141,6 +141,7 @@ typedef __kernel_clock_t	clock_t;
 typedef unsigned long		uintptr_t;
 typedef long long		loff_t;
 typedef unsigned short		umode_t;
+typedef unsigned		fmode_t;
 
 typedef unsigned long		cputime_t;
 

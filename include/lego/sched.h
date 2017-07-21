@@ -18,6 +18,7 @@
 #include <asm/thread_info.h>
 
 #include <lego/mm.h>
+#include <lego/files.h>
 #include <lego/llist.h>
 #include <lego/magic.h>
 #include <lego/signal.h>
@@ -339,6 +340,9 @@ struct task_struct {
 	/* Thread group tracking */
    	u32 parent_exec_id;
    	u32 self_exec_id;
+
+	/* Open file information */
+	struct files_struct *files;
 
 	/*
 	 * Protection of (de-)allocation: mm, files, fs, tty, keyrings,

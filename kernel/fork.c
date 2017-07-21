@@ -10,6 +10,7 @@
 #include <lego/mm.h>
 #include <lego/pid.h>
 #include <lego/slab.h>
+#include <lego/files.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
@@ -204,6 +205,10 @@ static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 	return mm;
 }
 
+/*
+ * mm_struct does not handle user virtual memory
+ * so no need to copy all mmap:
+ */
 static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)
 {
 	struct mm_struct *mm, *oldmm;
@@ -227,9 +232,68 @@ good_mm:
 	return 0;
 }
 
+static void put_files_struct(struct files_struct *files)
+{
+	if (atomic_dec_and_test(&files->count)) {
+		/* TODO: put files */
+		kfree(files);
+	}
+}
+
+static void exit_files(struct task_struct *tsk)
+{
+	struct files_struct * files = tsk->files;
+
+	if (files) {
+		task_lock(tsk);
+		tsk->files = NULL;
+		task_unlock(tsk);
+		put_files_struct(files);
+	}
+}
+
+static struct files_struct *dup_fd(struct files_struct *oldf)
+{
+	struct files_struct *newf;
+
+	newf = kmalloc(sizeof(*newf), GFP_KERNEL);
+	if (!newf)
+		return ERR_PTR(-ENOMEM);
+
+	atomic_set(&newf->count, 1);
+	spin_lock_init(&newf->file_lock);
+
+	/* Copy the content */
+	spin_lock(&oldf->file_lock);
+	/* TODO: get_file */
+	spin_unlock(&oldf->file_lock);
+
+	return newf;
+}
+
 static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
 {
-	return 0;
+	struct files_struct *oldf, *newf;
+	int ret = 0;
+
+	oldf = tsk->files;
+	if (clone_flags & CLONE_FILES) {
+		newf = oldf;
+		atomic_inc(&oldf->count);
+		goto out;
+	}
+
+	newf = dup_fd(oldf);
+	if (IS_ERR(newf)) {
+		ret = PTR_ERR(newf);
+		goto out;
+	}
+
+	tsk->files = newf;
+	ret = 0;
+
+out:
+	return ret;
 }
 
 static int copy_sighand(unsigned long clone_flags, struct task_struct *tsk)
@@ -250,10 +314,6 @@ static inline void free_signal_struct(struct signal_struct *sig)
 {
 }
 
-void exit_files(struct task_struct *tsk)
-{
-}
-
 /*
  * This creates a new process as a copy of the old one,
  * but does not actually start it yet.
@@ -271,6 +331,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	struct task_struct *p;
 	int retval;
 	int pid = 0;
+	unsigned long flags;
 
 	/*
 	 * Thread groups must share signals as well, and detached threads
@@ -299,6 +360,8 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	INIT_LIST_HEAD(&p->thread_group);
 	p->vfork_done = NULL;
 	spin_lock_init(&p->alloc_lock);
+
+	init_sigpending(&p->pending);
 
 	p->utime = p->stime = p->gtime = 0;
 	p->start_time = ktime_get_ns();
@@ -361,7 +424,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	 * Make it visible to the rest of the system, but dont wake it up yet.
 	 * Need tasklist lock for parent etc handling!
 	 */
-	spin_lock_irq(&tasklist_lock);
+	spin_lock_irqsave(&tasklist_lock, flags);
 
 	/* CLONE_PARENT re-uses the old parent */
 	if (clone_flags & (CLONE_PARENT|CLONE_THREAD)) {
@@ -390,7 +453,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	}
 
 	total_forks++;
-	spin_unlock_irq(&tasklist_lock);
+	spin_unlock_irqrestore(&tasklist_lock, flags);
 
 	return p;
 
