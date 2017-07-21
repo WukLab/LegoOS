@@ -13,8 +13,14 @@
 /* Non-implemented system calls get redirected here. */
 asmlinkage long sys_ni_syscall(void)
 {
-	pr_info("%s(CPU%d): current: %d/%s\n",
-		__func__, smp_processor_id(), current->pid, current->comm);
+	unsigned long rax;
+
+	asm volatile (
+		"movq %%rax, %0\n\t"
+		: "=r" (rax) : :
+	);
+	pr_info("%s(CPU%d): current: %d/%s, SYSCALL number: %lu\n",
+		__func__, smp_processor_id(), current->pid, current->comm, rax);
 	return -ENOSYS;
 }
 
