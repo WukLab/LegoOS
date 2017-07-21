@@ -226,7 +226,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			.pkey_index = 0,
 			.port_num = port,
 			.qp_access_flags = IB_ACCESS_REMOTE_WRITE|IB_ACCESS_REMOTE_READ|IB_ACCESS_LOCAL_WRITE|IB_ACCESS_REMOTE_ATOMIC,
-			.path_mtu = IB_MTU_4096,
+			.path_mtu = IB_MTU_2048,
 			.retry_cnt = 7,
 			.rnr_retry = 7
 		};
@@ -278,7 +278,7 @@ ppc *client_init_interface(int ib_port, struct ib_device *ib_dev, int mynodeid)
 	int	rx_depth = RECV_DEPTH;
 	int	ret;
 	ppc *ctx;
-	mtu = IB_MTU_4096;
+	mtu = IB_MTU_2048;
 	sl = 0;
 
 	page_size = PAGE_SIZE;
