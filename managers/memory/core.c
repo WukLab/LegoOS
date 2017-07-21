@@ -129,16 +129,10 @@ static void handle_bad_request(struct common_header *hdr, u64 desc)
 
 static void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
 {
-	void *page;
+	int retbuf = RET_OKAY;
 
 	pr_info("%s(): from node: %u", __func__, hdr->src_nid);
-
-	page = kmalloc(PAGE_SIZE, GFP_KERNEL);
-	*(int *)page = 0xffffffff;
-	BUG_ON(!page);
-	ibapi_reply_message(page, PAGE_SIZE, desc);
-	pr_info("%s(): after sending\n", __func__);
-	kfree(page);
+	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
 }
 
 static int mc_dispatcher(void *rx_buf)

@@ -500,11 +500,7 @@ pid_t do_fork(unsigned long clone_flags,
 	if (clone_flags & CLONE_GLOBAL_THREAD) {
 		int ret;
 
-		/*
-		 * If we are processor-manager, before waking the new process,
-		 * tell remote memory-manager first:
-		 */
-		ret = p2m_fork(p);
+		ret = p2m_fork(p, clone_flags);
 		if (ret) {
 			/* TODO: free task_struct */
 			return ret;

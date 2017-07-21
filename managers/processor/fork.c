@@ -11,7 +11,7 @@
 #include <lego/comp_processor.h>
 
 /* Return 0 on success, other on failure */
-int p2m_fork(struct task_struct *p)
+int p2m_fork(struct task_struct *p, unsigned long clone_flags)
 {
 	struct p2m_fork_struct payload;
 	int ret, retbuf;
@@ -19,7 +19,8 @@ int p2m_fork(struct task_struct *p)
 	BUG_ON(!p);
 
 	payload.pid = p->pid;
-	payload.current_pid = current->pid;
+	payload.tgid = p->group_leader->pid;
+	payload.clone_flags = clone_flags;
 	memcpy(payload.comm, p->comm, TASK_COMM_LEN);
 
 	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_FORK, &payload,
