@@ -18,11 +18,6 @@ asmlinkage long sys_ni_syscall(void)
 	return -ENOSYS;
 }
 
-SYSCALL_DEFINE2(testhh, int, foo, long, bar)
-{
-	return current->pid;
-}
-
 /**
  * sys_getpid - return the thread group id of the current process
  *
@@ -36,7 +31,7 @@ SYSCALL_DEFINE0(getpid)
 {
 	pr_info("%s(CPU%d): current: %d/%s\n",
 		__func__, smp_processor_id(), current->pid, current->comm);
-	return current->tgid;
+	return current->group_leader->pid;
 }
 
 /* Thread ID - the internal kernel "pid" */
@@ -45,6 +40,50 @@ SYSCALL_DEFINE0(gettid)
 	pr_info("%s(CPU%d): current: %d/%s\n",
 		__func__, smp_processor_id(), current->pid, current->comm);
 	return current->pid;
+}
+
+/*
+ * Accessing ->real_parent is not SMP-safe, it could
+ * change from under us.
+ * Anyway, it should be enough for us.
+ */
+SYSCALL_DEFINE0(getppid)
+{
+	pr_info("%s(CPU%d): current: %d/%s\n",
+		__func__, smp_processor_id(), current->pid, current->comm);
+	return current->real_parent->pid;
+}
+
+/* make sure you are allowed to change @tsk limits before calling this */
+int do_prlimit(struct task_struct *tsk, unsigned int resource,
+		struct rlimit *new_rlim, struct rlimit *old_rlim)
+{
+	return -EFAULT;
+}
+
+SYSCALL_DEFINE2(setrlimit, unsigned int, resource, struct rlimit __user *, rlim)
+{
+	struct rlimit new_rlim;
+
+	pr_info("%s(CPU%d): current: %d/%s\n",
+		__func__, smp_processor_id(), current->pid, current->comm);
+	if (copy_from_user(&new_rlim, rlim, sizeof(*rlim)))
+		return -EFAULT;
+	return do_prlimit(current, resource, &new_rlim, NULL);
+}
+
+SYSCALL_DEFINE2(getrlimit, unsigned int, resource, struct rlimit __user *, rlim)
+{
+	struct rlimit value;
+	int ret;
+
+	pr_info("%s(CPU%d): current: %d/%s\n",
+		__func__, smp_processor_id(), current->pid, current->comm);
+	ret = do_prlimit(current, resource, NULL, &value);
+	if (!ret)
+		ret = copy_to_user(rlim, &value, sizeof(*rlim)) ? -EFAULT : 0;
+
+	return ret;
 }
 
 /*

@@ -9,6 +9,7 @@
 
 #include <lego/errno.h>
 #include <lego/linkage.h>
+
 #include <asm/percpu.h>
 #include <asm/asm.h>
 #include <asm/extable.h>

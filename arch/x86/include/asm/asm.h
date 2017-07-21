@@ -47,6 +47,24 @@
 #define _ASM_DI		__ASM_REG(di)
 
 #ifdef __ASSEMBLY__
+
+#define _ASM_EXTABLE_HANDLE(from, to, handler)			\
+	.pushsection "__ex_table","a" ;				\
+	.balign 4 ;						\
+	.long (from) - . ;					\
+	.long (to) - . ;					\
+	.long (handler) - . ;					\
+	.popsection
+
+#define _ASM_EXTABLE(from, to)					\
+	_ASM_EXTABLE_HANDLE(from, to, ex_handler_default)
+
+#define _ASM_EXTABLE_FAULT(from, to)				\
+	_ASM_EXTABLE_HANDLE(from, to, ex_handler_fault)
+
+#define _ASM_EXTABLE_EX(from, to)				\
+	_ASM_EXTABLE_HANDLE(from, to, ex_handler_ext)
+
 .macro ALIGN_DESTINATION
 	/* check for bad alignment of destination */
 	movl %edi,%ecx
@@ -70,6 +88,24 @@
 	_ASM_EXTABLE(100b,103b)
 	_ASM_EXTABLE(101b,103b)
 .endm
+#else
+#define _ASM_EXTABLE_HANDLE(from, to, handler)			\
+	" .pushsection \"__ex_table\",\"a\"\n"			\
+	" .balign 4\n"						\
+	" .long (" #from ") - .\n"				\
+	" .long (" #to ") - .\n"				\
+	" .long (" _EXPAND_EXTABLE_HANDLE(handler) ") - .\n"	\
+	" .popsection\n"
+
+#define _ASM_EXTABLE(from, to)					\
+	_ASM_EXTABLE_HANDLE(from, to, ex_handler_default)
+
+#define _ASM_EXTABLE_FAULT(from, to)				\
+	_ASM_EXTABLE_HANDLE(from, to, ex_handler_fault)
+
+#define _ASM_EXTABLE_EX(from, to)				\
+	_ASM_EXTABLE_HANDLE(from, to, ex_handler_ext)
+
 #endif /* __ASSEMBLY__ */
 
 #ifndef __ASSEMBLY__
