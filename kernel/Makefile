@@ -20,3 +20,4 @@ obj-y += mutex.o
 obj-y += sys.o
 obj-y += kthread.o
 obj-y += extable.o
+obj-y += signal.o

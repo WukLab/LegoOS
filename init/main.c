@@ -163,6 +163,7 @@ static int kernel_init(void *unused)
 #elif defined(CONFIG_COMP_MEMORY)
 	memory_component_init();
 #endif
+
 	/*
 	 * For memory component, there is no need to run user-program,
 	 * kernel_init can just exit.
@@ -183,9 +184,9 @@ static void rest_init(void)
 	 * the init task will end up wanting to create kthreads, which, if
 	 * we schedule it before we create kthreadd, will OOPS.
 	 */
-	kernel_thread(kernel_init, NULL, CLONE_FS);
+	kernel_thread(kernel_init, NULL, 0);
 
-	pid = kernel_thread(kthreadd, NULL, CLONE_FS);
+	pid = kernel_thread(kthreadd, NULL, 0);
 	kthreadd_task = find_task_by_pid(pid);
 	complete(&kthreadd_done);
 

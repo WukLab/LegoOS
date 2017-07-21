@@ -19,9 +19,9 @@
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
 #include <lego/memory.h>
-#include <lego/signal.h>
 #include <lego/uaccess.h>
 #include <lego/extable.h>
+#include <lego/signal.h>
 #include <lego/comp_processor.h>
 
 /*
@@ -261,9 +261,11 @@ static int die_counter;
 int __die(const char *str, struct pt_regs *regs, long err)
 {
 	printk(KERN_DEFAULT
-	       "%s: %04lx [#%d]%s%s\n", str, err & 0xffff, ++die_counter,
-	       IS_ENABLED(CONFIG_PREEMPT) ? " PREEMPT"         : "",
-	       IS_ENABLED(CONFIG_SMP)     ? " SMP"             : "");
+	       "%s: %04lx [#%d]%s%s%s%s\n", str, err & 0xffff, ++die_counter,
+	       IS_ENABLED(CONFIG_PREEMPT)	? " PREEMPT"	: "",
+	       IS_ENABLED(CONFIG_SMP)		? " SMP"	: "",
+	       IS_ENABLED(CONFIG_COMP_PROCESSOR)? " PROCESSOR"	: "",
+	       IS_ENABLED(CONFIG_COMP_MEMORY)	? " MEMORY"	: "");
 
 	show_regs(regs);
 
@@ -278,38 +280,122 @@ int __die(const char *str, struct pt_regs *regs, long err)
 #define task_stack_end_corrupted(task) \
 		(*(end_of_stack(task)) != STACK_END_MAGIC)
 
+/*
+ * A pgfault from kernel threads, either
+ * 1) predefined exception
+ * 2) kernel bug
+ */
 static noinline void
 no_context(struct pt_regs *regs, unsigned long error_code,
 	   unsigned long address, int signal)
 {
+	struct task_struct *tsk = current;
+
+	/* Are we prepared to handle this kernel fault? */
+	if (fixup_exception(regs, X86_TRAP_PF))
+		return;
+
+	/*
+	 * Well, kernel bugs!
+	 */
+
 	show_fault_oops(regs, error_code, address);
 
 	if (task_stack_end_corrupted(current))
 		printk(KERN_EMERG "Thread overran stack, or stack corrupted\n");
 
+	tsk->thread.cr2		= address;
+	tsk->thread.trap_nr	= X86_TRAP_PF;
+	tsk->thread.error_code	= error_code;
+
 	__die("Oops", regs, error_code);
+
 	/* Executive summary in case the body of the oops scrolled away */
 	printk(KERN_DEFAULT "CR2: %016lx\n", address);
-	hlt();
+	panic("Fatal exception");
+}
+
+static void
+force_sig_info_fault(int si_signo, int si_code, unsigned long address,
+		     struct task_struct *tsk, int fault)
+{
+	unsigned lsb = 0;
+	siginfo_t info;
+
+	info.si_signo	= si_signo;
+	info.si_errno	= 0;
+	info.si_code	= si_code;
+	info.si_addr	= (void __user *)address;
+	info.si_addr_lsb = lsb;
+
+	force_sig_info(si_signo, &info, tsk);
+}
+
+/*
+ * Print out info about fatal segfaults, if the show_unhandled_signals
+ * sysctl is set:
+ */
+static inline void
+show_signal_msg(struct pt_regs *regs, unsigned long error_code,
+		unsigned long address, struct task_struct *tsk)
+{
+	printk("%s[%d]: segfault at %#lx ip %p sp %p error %lx",
+		tsk->comm, tsk->pid, address,
+		(void *)regs->ip, (void *)regs->sp, error_code);
+
+	printk(KERN_CONT "\n");
+}
+
+static noinline void
+__bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
+		       unsigned long address, int si_code)
+{
+	struct task_struct *tsk = current;
+
+	/* User mode accesses just cause a SIGSEGV */
+	if (error_code & PF_USER) {
+		/*
+		 * It's possible to have interrupts off here:
+		 */
+		local_irq_enable();
+
+		/*
+		 * To avoid leaking information about the kernel page table
+		 * layout, pretend that user-mode accesses to kernel addresses
+		 * are always protection faults.
+		 */
+		if (address >= TASK_SIZE_MAX)
+			error_code |= PF_PROT;
+
+		show_signal_msg(regs, error_code, address, current);
+
+		tsk->thread.cr2		= address;
+		tsk->thread.error_code	= error_code;
+		tsk->thread.trap_nr	= X86_TRAP_PF;
+
+		force_sig_info_fault(SIGSEGV, si_code, address, tsk, 0);
+
+		return;
+	}
+
+	/*
+	 * If it comes from kernel space, then there is
+	 * user context attached:
+	 */
+	no_context(regs, error_code, address, SIGSEGV);
 }
 
 static noinline void
 bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
-		     unsigned long address, struct vm_area_struct *vma)
+		     unsigned long address)
 {
-	/* User mode accesses just cause a SIGSEGV */
-	if (error_code & PF_USER) {
-		pr_info("%s:%d\n", __func__, __LINE__);
-		panic("die");
-	}
-
-	no_context(regs, error_code, address, SIGSEGV);
+	__bad_area_nosemaphore(regs, error_code, address, SEGV_MAPERR);
 }
 
 static void pgtable_bad(struct pt_regs *regs, unsigned long error_code,
 			unsigned long address)
 {
-	struct task_struct *tsk;
+	struct task_struct *tsk = current;
 
 	tsk = current;
 
@@ -322,7 +408,7 @@ static void pgtable_bad(struct pt_regs *regs, unsigned long error_code,
 	tsk->thread.error_code	= error_code;
 
 	__die("Bad pagetable", regs, error_code);
-	hlt();
+	panic("Fatal exception");
 }
 
 #if 0
@@ -416,7 +502,7 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 		if (spurious_fault(error_code, address))
 			return;
 
-		bad_area_nosemaphore(regs, error_code, address, NULL);
+		bad_area_nosemaphore(regs, error_code, address);
 	}
 
 	if (unlikely(error_code & PF_RSVD))
@@ -425,6 +511,6 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 #ifdef CONFIG_COMP_PROCESSOR
 	__do_page_fault(regs, address, error_code);
 #else
-	panic("User-mode pgfault is only allowed at processor-component.");
+	bad_area_nosemaphore(regs, error_code, address);
 #endif
 }

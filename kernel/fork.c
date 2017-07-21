@@ -216,6 +216,7 @@ static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)
 	tsk->mm = tsk->active_mm = NULL;
 	tsk->nvcsw = tsk->nivcsw = 0;
 
+	oldmm = current->mm;
 	if (clone_flags & CLONE_VM) {
 		atomic_inc(&oldmm->mm_users);
 		mm = oldmm;
@@ -229,6 +230,7 @@ static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)
 good_mm:
 	tsk->mm = mm;
 	tsk->active_mm = mm;
+
 	return 0;
 }
 
@@ -258,7 +260,7 @@ static struct files_struct *dup_fd(struct files_struct *oldf)
 
 	newf = kmalloc(sizeof(*newf), GFP_KERNEL);
 	if (!newf)
-		return ERR_PTR(-ENOMEM);
+		return NULL;
 
 	atomic_set(&newf->count, 1);
 	spin_lock_init(&newf->file_lock);
@@ -284,8 +286,8 @@ static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
 	}
 
 	newf = dup_fd(oldf);
-	if (IS_ERR(newf)) {
-		ret = PTR_ERR(newf);
+	if (!newf) {
+		ret = -ENOMEM;
 		goto out;
 	}
 
@@ -457,7 +459,6 @@ struct task_struct *copy_process(unsigned long clone_flags,
 
 	return p;
 
-	free_pid(pid);
 out_cleanup_thread:
 	exit_thread(p);
 out_cleanup_mm:
@@ -475,6 +476,7 @@ out_cleanup_sched:
 out_free:
 	p->state = TASK_DEAD;
 	free_task(p);
+	free_pid(pid);
 
 	return ERR_PTR(retval);;
 }

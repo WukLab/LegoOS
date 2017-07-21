@@ -14,6 +14,7 @@
 #include <lego/atomic.h>
 #include <lego/kernel.h>
 #include <lego/rlimit.h>
+#include <lego/siginfo.h>
 #include <lego/spinlock.h>
 
 #define SIGHUP		1
@@ -151,5 +152,7 @@ struct signal_struct {
 static inline void init_sigpending(struct sigpending *sig)
 {
 }
+
+int force_sig_info(int, struct siginfo *, struct task_struct *);
 
 #endif /* _LEGO_SIGNAL_H_ */
