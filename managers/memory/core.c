@@ -108,9 +108,9 @@ static void local_qemu_test(void)
 #define MAX_RXBUF_SIZE	PAGE_SIZE
 
 #ifdef CONFIG_FIT
-struct msg_struct {
-	u64	desc;
-	char	buffer[MAX_RXBUF_SIZE];
+struct info_struct {
+	unsigned long desc;
+	char msg[MAX_RXBUF_SIZE];
 };
 
 /*
@@ -138,13 +138,16 @@ static void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
 	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
 }
 
-static int mc_dispatcher(void *msg)
+static int mc_dispatcher(void *passed)
 {
-	u64 desc;
+	struct info_struct *info = (struct info_struct *)passed
+	unsigned long desc;
+	void *msg;
 	void *payload;
 	struct common_header *hdr;
 
-	desc = msg->desc;
+	desc = info->desc;
+	msg = info->msg;
 	hdr = to_common_header(msg);
 	payload = to_payload(msg);
 
@@ -214,7 +217,7 @@ static int mc_dispatcher(void *msg)
 	}
 
 	/* Our responsibility to free it */
-	kfree(msg);
+	kfree(info);
 
 	return 0;
 }
@@ -222,7 +225,7 @@ static int mc_dispatcher(void *msg)
 /* Memory Manager Daemon */
 static int mc_manager(void *unused)
 {
-	struct msg_struct *msg;
+	struct info_struct *info;
 	struct task_struct *ret;
 	int port = 0;
 	int retlen;
@@ -230,8 +233,8 @@ static int mc_manager(void *unused)
 	pr_info("Memory-component manager is up and running.\n");
 
 	while (1) {
-		msg = kmalloc(sizeof(*msg), GFP_KERNEL);
-		if (unlikely(!msg)) {
+		info = kmalloc(sizeof(*info), GFP_KERNEL);
+		if (unlikely(!info)) {
 			WARN_ON(1);
 			do_exit(-1);
 		}
@@ -241,8 +244,8 @@ static int mc_manager(void *unused)
 		 * will return until FIT gets a messages:
 		 */
 		retlen = ibapi_receive_message(port,
-				&msg->buffer, MAX_RXBUF_SIZE,
-				&msg->desc);
+				info->msg, MAX_RXBUF_SIZE,
+				&info->desc);
 
 		if (unlikely(retlen >= MAX_RXBUF_SIZE))
 			panic("retlen: %d,maxlen: %u", retlen, MAX_RXBUF_SIZE);
@@ -253,9 +256,9 @@ static int mc_manager(void *unused)
 		 * Later on we should find a more efficient implementation.
 		 * Something like thread pool, or workqueue.
 		 */
-		ret = kthread_run(mc_dispatcher, msg, "mcdisp-%lu", nr_rx++);
+		ret = kthread_run(mc_dispatcher, info, "mcdisp-%lu", nr_rx++);
 		if (unlikely(IS_ERR(ret))) {
-			kfree(msg);
+			kfree(info);
 			WARN_ON(1);
 		}
 	}
