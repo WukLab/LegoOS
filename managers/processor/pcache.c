@@ -86,6 +86,8 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 {
 	struct p2m_llc_miss_struct payload;
 	int ret;
+	int i, nr_split = CONFIG_PCACHE_FILL_SPLIT_NR;
+	u64 offset, slice;
 
 	pr_info("missing_vaddr: %#lx pa_cache: %p va_cache: %p va_meta: %p way: %u\n",
 		vaddr, pa_cache, va_cache, va_meta, way);
@@ -94,64 +96,27 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 	payload.flags = flags;
 	payload.missing_vaddr = vaddr;
 
-#ifndef CONFIG_PCACHE_HALF_PAGE_FETCH
-	/*
-	 * Using the cacheline as our return buffer, hence we avoid
-	 * another memcpy from retbuf to cacheline itself.
-	 */
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
+	slice = PAGE_SIZE / nr_split;
+	for (i = 0; i < nr_split; i++) {
+		offset = i * slice;
+		payload.offset = offset;
+
+		ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
 				&payload, sizeof(payload),
-				pa_cache, PAGE_SIZE, true,
+				pa_cache + offset, slice, true,
 				DEF_NET_TIMEOUT);
 
-	pr_info("%s: ret=%d, retbuf: %d\n", __func__, ret, *(int *)va_cache);
-	if (unlikely(ret < PAGE_SIZE)) {
-		/* remote reported error */
-		if (likely(ret == sizeof(int)))
-			return -(*(int *)va_cache);
-		/* IB is not available */
-		else if (ret < 0)
-			return -EIO;
-		else
-			WARN(1, "invalid retbuf size: %d\n", ret);
+		if (unlikely(ret < slice)) {
+			if (likely(ret == sizeof(int)))
+				/* remote reported error */
+				return -(*(int *)va_cache);
+			else if (ret < 0)
+				/* IB is not available */
+				return -EIO;
+			else
+				WARN(1, "invalid retbuf size: %d\n", ret);
+		}
 	}
-#else
-	/* First half */
-	payload.offset = 0;
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
-				&payload, sizeof(payload),
-				pa_cache, PAGE_SIZE/2, true,
-				DEF_NET_TIMEOUT);
-	if (ret < PAGE/2) {
-		/* remote reported error */
-		if (likely(ret == sizeof(int)))
-			return -(*(int *)va_cache);
-		/* IB is not available */
-		else if (ret < 0)
-			return -EIO;
-		else
-			WARN(1, "invalid retbuf size: %d\n", ret);
-	}
-
-	/* Second half */
-	payload.offset = PAGE_SIZE/2;
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
-				&payload, sizeof(payload),
-				pa_cache + PAGE_SIZE/2, PAGE_SIZE/2, true,
-				DEF_NET_TIMEOUT);
-	if (ret < PAGE/2) {
-		/* remote reported error */
-		if (likely(ret == sizeof(int)))
-			return -(*(int *)va_cache);
-		/* IB is not available */
-		else if (ret < 0)
-			return -EIO;
-		else
-			WARN(1, "invalid retbuf size: %d\n", ret);
-	}
-	print_hex_dump_bytes("Page: ", DUMP_PREFIX_OFFSET,
-		va_cache, PAGE_SIZE);
-#endif
 
 	pcache_mkvalid(va_meta);
 	pcache_mkaccessed(va_meta);

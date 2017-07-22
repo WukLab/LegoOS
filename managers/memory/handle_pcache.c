@@ -49,12 +49,9 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 		return;
 	}
 
-#ifndef CONFIG_PCACHE_HALF_PAGE_FETCH
 	/* Send the cacheline back to processor! */
-	ibapi_reply_message((void *)new_page, PAGE_SIZE, desc);
-#else
-	ibapi_reply_message((void *)(new_page + offset), PAGE_SIZE/2, desc);
-#endif
+	ibapi_reply_message((void *)(new_page + offset),
+		PAGE_SIZE / CONFIG_PCACHE_FILL_SPLIT_NR, desc);
 }
 
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
@@ -70,8 +67,8 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 	vaddr  = payload->missing_vaddr;
 	offset = payload->offset; 
 
-	pr_info("%s: nid: %u, pid: %u, missing_vaddr: %#Lx, offset: %#Lx\n",
-		__func__, nid, pid, vaddr, offset);
+	pr_info("%s: nid: %u, pid: %u, missing_vaddr: %#Lx, offset: %#Lx, nr_split: %d\n",
+		__func__, nid, pid, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
 
 	p = find_lego_task_by_pid(hdr->src_nid, payload->pid);
 	if (unlikely(!p)) {
