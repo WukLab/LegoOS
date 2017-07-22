@@ -94,6 +94,7 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 	payload.flags = flags;
 	payload.missing_vaddr = vaddr;
 
+#ifndef CONFIG_PCACHE_HALF_PAGE_FETCH
 	/*
 	 * Using the cacheline as our return buffer, hence we avoid
 	 * another memcpy from retbuf to cacheline itself.
@@ -114,6 +115,43 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 		else
 			WARN(1, "invalid retbuf size: %d\n", ret);
 	}
+#else
+	/* First half */
+	payload.offset = 0;
+	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
+				&payload, sizeof(payload),
+				pa_cache, PAGE_SIZE/2, true,
+				DEF_NET_TIMEOUT);
+	if (ret < PAGE/2) {
+		/* remote reported error */
+		if (likely(ret == sizeof(int)))
+			return -(*(int *)va_cache);
+		/* IB is not available */
+		else if (ret < 0)
+			return -EIO;
+		else
+			WARN(1, "invalid retbuf size: %d\n", ret);
+	}
+
+	/* Second half */
+	payload.offset = PAGE_SIZE/2;
+	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
+				&payload, sizeof(payload),
+				pa_cache + PAGE_SIZE/2, PAGE_SIZE/2, true,
+				DEF_NET_TIMEOUT);
+	if (ret < PAGE/2) {
+		/* remote reported error */
+		if (likely(ret == sizeof(int)))
+			return -(*(int *)va_cache);
+		/* IB is not available */
+		else if (ret < 0)
+			return -EIO;
+		else
+			WARN(1, "invalid retbuf size: %d\n", ret);
+	}
+	print_hex_dump_bytes("Page: ", DUMP_PREFIX_OFFSET,
+		va_cache, PAGE_SIZE);
+#endif
 
 	pcache_mkvalid(va_meta);
 	pcache_mkaccessed(va_meta);
