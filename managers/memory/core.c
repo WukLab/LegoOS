@@ -140,7 +140,7 @@ static void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
 
 static int mc_dispatcher(void *passed)
 {
-	struct info_struct *info = (struct info_struct *)passed
+	struct info_struct *info = (struct info_struct *)passed;
 	unsigned long desc;
 	void *msg;
 	void *payload;
@@ -248,7 +248,7 @@ static int mc_manager(void *unused)
 				&info->desc);
 
 		if (unlikely(retlen >= MAX_RXBUF_SIZE))
-			panic("retlen: %d,maxlen: %u", retlen, MAX_RXBUF_SIZE);
+			panic("retlen: %d,maxlen: %lu", retlen, MAX_RXBUF_SIZE);
 
 		/*
 		 * XXX:
