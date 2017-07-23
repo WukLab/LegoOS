@@ -8,6 +8,7 @@
  */
 
 #include <lego/sched.h>
+#include <lego/utsname.h>
 #include <lego/syscalls.h>
 
 /* Non-implemented system calls get redirected here. */
@@ -90,6 +91,15 @@ SYSCALL_DEFINE2(getrlimit, unsigned int, resource, struct rlimit __user *, rlim)
 		ret = copy_to_user(rlim, &value, sizeof(*rlim)) ? -EFAULT : 0;
 
 	return ret;
+}
+
+SYSCALL_DEFINE1(newuname, struct utsname __user *, name)
+{
+	pr_info("%s(CPU%d): current: %d/%s\n",
+		__func__, smp_processor_id(), current->pid, current->comm);
+	if (copy_to_user(name, &utsname, sizeof(*name)))
+		return -EFAULT;
+	return 0;
 }
 
 /*
