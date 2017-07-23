@@ -929,19 +929,18 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	struct imm_header_from_cq_to_port *tmp;
 	//set_current_state(TASK_INTERRUPTIBLE);
 
-	//printk(KERN_CRIT "%s\n", __func__);
-	while(1)
-	{
-		do{
+	pr_info("NOTICE: %s(): IB polling thread on CPU%d\n",
+		__func__, smp_processor_id());
+
+	while(1) {
+		do {
 			//set_current_state(TASK_RUNNING);
 			ne = ib_poll_cq(target_cq, NUM_PARALLEL_CONNECTION, wc);
-			if(ne < 0)
-			{
+			if (unlikely(ne < 0)) {
 				printk(KERN_ALERT "poll CQ failed %d\n", ne);
 				return 1;
 			}
-			if(ne==0)
-			{
+			if (ne == 0) {
 				schedule();
 				//cpu_relax();
 				//set_current_state(TASK_INTERRUPTIBLE);
@@ -952,7 +951,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				//}
 			}
 			//msleep(1);
-		}while(ne < 1);
+		} while(ne < 1);
 
 		for(i=0;i<ne;++i)
 		{
