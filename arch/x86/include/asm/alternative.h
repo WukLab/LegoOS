@@ -1,33 +1,21 @@
-#ifndef _ASM_X86_ALTERNATIVE_H
-#define _ASM_X86_ALTERNATIVE_H
+/*
+ * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+
+#ifndef _ASM_X86_ALTERNATIVE_H_
+#define _ASM_X86_ALTERNATIVE_H_
 
 #ifndef __ASSEMBLY__
 
+#include <asm/asm.h>
 #include <lego/types.h>
 #include <lego/stddef.h>
 #include <lego/stringify.h>
-#include <asm/asm.h>
-
-/*
- * Alternative inline assembly for SMP.
- *
- * The LOCK_PREFIX macro defined here replaces the LOCK and
- * LOCK_PREFIX macros used everywhere in the source tree.
- *
- * SMP alternatives use the same data structures as the other
- * alternatives and the X86_FEATURE_UP flag to indicate the case of a
- * UP system running a SMP kernel.  The existing apply_alternatives()
- * works fine for patching a SMP kernel for UP.
- *
- * The SMP alternative tables can be kept after boot and contain both
- * UP and SMP versions of the instructions to allow switching back to
- * SMP at runtime, when hotplugging in a new CPU, which is especially
- * useful in virtualized environments.
- *
- * The very common lock prefix is handled as special case in a
- * separate table which is a pure address list without replacement ptr
- * and size information.  That keeps the table sizes small.
- */
 
 struct alt_instr {
 	s32 instr_offset;	/* original instruction */
@@ -44,13 +32,13 @@ struct alt_instr {
  */
 extern int alternatives_patched;
 
-extern void alternative_instructions(void);
-extern void apply_alternatives(struct alt_instr *start, struct alt_instr *end);
+void alternative_instructions(void);
+void apply_alternatives(struct alt_instr *start, struct alt_instr *end);
 
 #ifdef CONFIG_SMP
-extern void alternatives_enable_smp(void);
-extern int alternatives_text_reserved(void *start, void *end);
-extern bool skip_smp_alternatives;
+void alternatives_enable_smp(void);
+int alternatives_text_reserved(void *start, void *end);
+bool skip_smp_alternatives;
 #else
 static inline void alternatives_enable_smp(void) {}
 static inline int alternatives_text_reserved(void *start, void *end)
@@ -215,5 +203,4 @@ static inline int alternatives_text_reserved(void *start, void *end)
 
 #endif /* __ASSEMBLY__ */
 
-#endif /* _ASM_X86_ALTERNATIVE_H */
-
+#endif /* _ASM_X86_ALTERNATIVE_H_ */

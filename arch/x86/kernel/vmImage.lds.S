@@ -182,7 +182,9 @@ SECTIONS {
 	 * get the address and the length of them to patch the kernel safely.
 	 */
 	.altinstr_replacement : AT(ADDR(.altinstr_replacement) - LOAD_OFFSET) {
+		__alt_replacement = .;
 		*(.altinstr_replacement)
+		__alt_replacement_end = .;
 	}
 
 	. = ALIGN(L1_CACHE_BYTES);
