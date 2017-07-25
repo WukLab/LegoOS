@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/smp.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
@@ -14,6 +15,7 @@
 
 #include <asm/asm.h>
 #include <asm/msr.h>
+#include <asm/prctl.h>
 #include <asm/ptrace.h>
 #include <asm/segment.h>
 #include <asm/processor.h>
@@ -36,6 +38,49 @@ DEFINE_PER_CPU(struct tss_struct, cpu_tss) = {
 	},
 };
 
+long do_arch_prctl(struct task_struct *task, int code, unsigned long addr)
+{
+	int ret = 0;
+	int doit = task == current;
+	int cpu;
+
+	switch (code) {
+	case ARCH_SET_GS:
+		if (addr >= TASK_SIZE_MAX)
+			return -EPERM;
+		cpu = get_cpu();
+		task->thread.gsindex = 0;
+		task->thread.gsbase = addr;
+		if (doit) {
+			load_gs_index(0);
+			wrmsrl(MSR_KERNEL_GS_BASE, addr);
+		}
+		put_cpu();
+		break;
+	case ARCH_SET_FS:
+		/* Not strictly needed for fs, but do it for symmetry
+		   with gs */
+		if (addr >= TASK_SIZE_MAX)
+			return -EPERM;
+		cpu = get_cpu();
+		task->thread.fsindex = 0;
+		task->thread.fsbase = addr;
+		if (doit) {
+			/* set the selector to 0 to not confuse __switch_to */
+			loadsegment(fs, 0);
+			wrmsrl(MSR_FS_BASE, addr);
+		}
+		put_cpu();
+		break;
+
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
 /* Seriously, this is magic function */
 int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 		unsigned long arg, struct task_struct *p, unsigned long tls)
@@ -43,6 +88,8 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	struct pt_regs *childregs;
 	struct fork_frame *fork_frame;
 	struct inactive_task_frame *frame;
+	struct task_struct *me =current;
+	int err;
 
 	p->thread.sp0 = (unsigned long)task_stack_page(p) + THREAD_SIZE;
 	childregs = task_pt_regs(p);
@@ -54,6 +101,13 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	/* __switch_to_asm will switch to this sp */
 	p->thread.sp = (unsigned long)fork_frame;
 	p->thread.io_bitmap_ptr = NULL;
+
+	savesegment(gs, p->thread.gsindex);
+	p->thread.gsbase = p->thread.gsindex ? 0 : me->thread.gsbase;
+	savesegment(fs, p->thread.fsindex);
+	p->thread.fsbase = p->thread.fsindex ? 0 : me->thread.fsbase;
+	savesegment(es, p->thread.es);
+	savesegment(ds, p->thread.ds);
 
 	if (unlikely(p->flags & PF_KTHREAD)) {
 		/* kernel thread */
@@ -69,7 +123,18 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	if (sp)
 		childregs->sp = sp;
 
-	return 0;
+	/*
+	 * Set a new TLS for the child thread?
+	 */
+	if (clone_flags & CLONE_SETTLS) {
+		err = do_arch_prctl(p, ARCH_SET_FS, tls);
+		if (err)
+			goto out;
+	}
+
+	err = 0;
+out:
+	return err;
 }
 
 /*
