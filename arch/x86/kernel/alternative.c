@@ -8,6 +8,7 @@
  */
 
 #include <asm/asm.h>
+#include <asm/nops.h>
 #include <asm/processor.h>
 #include <asm/alternative.h>
 
@@ -17,8 +18,13 @@
 #include <lego/string.h>
 #include <lego/kernel.h>
 
+/* Defined in linker script */
+extern struct alt_instr __alt_instructions[], __alt_instructions_end[];
+
+/* Debug flag for other subsystems */
 int __read_mostly alternatives_patched;
 
+/* Kernel parameters */
 static int __initdata debug_alternative = 1;
 
 static int __init debug_alt(char *str)
@@ -49,42 +55,100 @@ do {									\
 	}								\
 } while (0)
 
-extern struct alt_instr __alt_instructions[], __alt_instructions_end[];
-
 /*
- * Are we looking at a near JMP with a 1 or 4-byte displacement.
+ * Each GENERIC_NOPX is of X bytes, and defined as an array of bytes
+ * that correspond to that nop. Getting from one nop to the next, we
+ * add to the array the offset that is equal to the sum of all sizes of
+ * nops preceding the one we are after.
+ *
+ * Note: The GENERIC_NOP5_ATOMIC is at the end, as it breaks the
+ * nice symmetry of sizes of the previous nops.
  */
-static inline bool is_jmp(const u8 opcode)
+#if defined(GENERIC_NOP1) && !defined(CONFIG_X86_64)
+static const unsigned char intelnops[] =
 {
-	return opcode == 0xeb || opcode == 0xe9;
-}
+	GENERIC_NOP1,
+	GENERIC_NOP2,
+	GENERIC_NOP3,
+	GENERIC_NOP4,
+	GENERIC_NOP5,
+	GENERIC_NOP6,
+	GENERIC_NOP7,
+	GENERIC_NOP8,
+	GENERIC_NOP5_ATOMIC
+};
+static const unsigned char * const intel_nops[ASM_NOP_MAX+2] =
+{
+	NULL,
+	intelnops,
+	intelnops + 1,
+	intelnops + 1 + 2,
+	intelnops + 1 + 2 + 3,
+	intelnops + 1 + 2 + 3 + 4,
+	intelnops + 1 + 2 + 3 + 4 + 5,
+	intelnops + 1 + 2 + 3 + 4 + 5 + 6,
+	intelnops + 1 + 2 + 3 + 4 + 5 + 6 + 7,
+	intelnops + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8,
+};
+#endif
 
-#define ASM_NOP_MAX 8
+#ifdef K8_NOP1
+static const unsigned char k8nops[] =
+{
+	K8_NOP1,
+	K8_NOP2,
+	K8_NOP3,
+	K8_NOP4,
+	K8_NOP5,
+	K8_NOP6,
+	K8_NOP7,
+	K8_NOP8,
+	K8_NOP5_ATOMIC
+};
+static const unsigned char * const k8_nops[ASM_NOP_MAX+2] =
+{
+	NULL,
+	k8nops,
+	k8nops + 1,
+	k8nops + 1 + 2,
+	k8nops + 1 + 2 + 3,
+	k8nops + 1 + 2 + 3 + 4,
+	k8nops + 1 + 2 + 3 + 4 + 5,
+	k8nops + 1 + 2 + 3 + 4 + 5 + 6,
+	k8nops + 1 + 2 + 3 + 4 + 5 + 6 + 7,
+	k8nops + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8,
+};
+#endif
 
-/* P6 nops
-   uses eax dependencies (Intel-recommended choice)
-   1: nop
-   2: osp nop
-   3: nopl (%eax)
-   4: nopl 0x00(%eax)
-   5: nopl 0x00(%eax,%eax,1)
-   6: osp nopl 0x00(%eax,%eax,1)
-   7: nopl 0x00000000(%eax)
-   8: nopl 0x00000000(%eax,%eax,1)
-   Note: All the above are assumed to be a single instruction.
-	There is kernel code that depends on this.
-*/
-#define GENERIC_NOP1 0x90
-#define P6_NOP1	GENERIC_NOP1
-#define P6_NOP2	0x66,0x90
-#define P6_NOP3	0x0f,0x1f,0x00
-#define P6_NOP4	0x0f,0x1f,0x40,0
-#define P6_NOP5	0x0f,0x1f,0x44,0x00,0
-#define P6_NOP6	0x66,0x0f,0x1f,0x44,0x00,0
-#define P6_NOP7	0x0f,0x1f,0x80,0,0,0,0
-#define P6_NOP8	0x0f,0x1f,0x84,0x00,0,0,0,0
-#define P6_NOP5_ATOMIC P6_NOP5
+#if defined(K7_NOP1) && !defined(CONFIG_X86_64)
+static const unsigned char k7nops[] =
+{
+	K7_NOP1,
+	K7_NOP2,
+	K7_NOP3,
+	K7_NOP4,
+	K7_NOP5,
+	K7_NOP6,
+	K7_NOP7,
+	K7_NOP8,
+	K7_NOP5_ATOMIC
+};
+static const unsigned char * const k7_nops[ASM_NOP_MAX+2] =
+{
+	NULL,
+	k7nops,
+	k7nops + 1,
+	k7nops + 1 + 2,
+	k7nops + 1 + 2 + 3,
+	k7nops + 1 + 2 + 3 + 4,
+	k7nops + 1 + 2 + 3 + 4 + 5,
+	k7nops + 1 + 2 + 3 + 4 + 5 + 6,
+	k7nops + 1 + 2 + 3 + 4 + 5 + 6 + 7,
+	k7nops + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8,
+};
+#endif
 
+#ifdef P6_NOP1
 static const unsigned char p6nops[] =
 {
 	P6_NOP1,
@@ -110,9 +174,69 @@ static const unsigned char * const p6_nops[ASM_NOP_MAX+2] =
 	p6nops + 1 + 2 + 3 + 4 + 5 + 6 + 7,
 	p6nops + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8,
 };
+#endif
 
 /* Initialize these to a safe default */
+#ifdef CONFIG_X86_64
 const unsigned char * const *ideal_nops = p6_nops;
+#else
+const unsigned char * const *ideal_nops = intel_nops;
+#endif
+
+static void __init set_ideal_nops(const unsigned char * const *nops)
+{
+	ideal_nops = nops;
+	pr_info("x86/nops: ideal_nops is %pS\n", nops);
+}
+
+void __init arch_init_ideal_nops(void)
+{
+	switch (default_cpu_info.x86_vendor) {
+	case X86_VENDOR_INTEL:
+		/*
+		 * Due to a decoder implementation quirk, some
+		 * specific Intel CPUs actually perform better with
+		 * the "k8_nops" than with the SDM-recommended NOPs.
+		 */
+		if (default_cpu_info.x86 == 6 &&
+		    default_cpu_info.x86_model >= 0x0f &&
+		    default_cpu_info.x86_model != 0x1c &&
+		    default_cpu_info.x86_model != 0x26 &&
+		    default_cpu_info.x86_model != 0x27 &&
+		    default_cpu_info.x86_model < 0x30) {
+			set_ideal_nops(k8_nops);
+		} else if (cpu_has(X86_FEATURE_NOPL)) {
+			   set_ideal_nops(p6_nops);
+		} else {
+#ifdef CONFIG_X86_64
+			set_ideal_nops(k8_nops);
+#else
+			set_ideal_nops(intel_nops);
+#endif
+		}
+		break;
+
+	case X86_VENDOR_AMD:
+		if (default_cpu_info.x86 > 0xf) {
+			set_ideal_nops(p6_nops);
+			return;
+		}
+
+		/* fall through */
+
+	default:
+#ifdef CONFIG_X86_64
+		set_ideal_nops(k8_nops);
+#else
+		if (cpu_has(X86_FEATURE_K8))
+			set_ideal_nops(k8_nops);
+		else if (boot_cpu_has(X86_FEATURE_K7))
+			set_ideal_nops(k7_nops);
+		else
+			set_ideal_nops(intel_nops);
+#endif
+	}
+}
 
 /* Use this to add nops to a buffer, then text_poke the whole buffer. */
 static void __init add_nops(void *insns, unsigned int len)
@@ -125,6 +249,14 @@ static void __init add_nops(void *insns, unsigned int len)
 		insns += noplen;
 		len -= noplen;
 	}
+}
+
+/*
+ * Are we looking at a near JMP with a 1 or 4-byte displacement.
+ */
+static inline bool is_jmp(const u8 opcode)
+{
+	return opcode == 0xeb || opcode == 0xe9;
 }
 
 static void __init
@@ -184,6 +316,12 @@ done:
 		n_dspl, (unsigned long)orig_insn + n_dspl + repl_len);
 }
 
+/*
+ * Well, this function is called if the feature is not present,
+ * so we have to keep using the old instruction.
+ *
+ * But do update the old padding code to ideal nops.
+ */
 static void __init optimize_nops(struct alt_instr *a, u8 *instr)
 {
 	unsigned long flags;

@@ -12,6 +12,7 @@
 #include <asm/e820.h>
 #include <asm/desc.h>
 #include <asm/page.h>
+#include <asm/nops.h>
 #include <asm/traps.h>
 #include <asm/setup.h>
 #include <asm/timex.h>
@@ -273,6 +274,7 @@ void __init setup_arch(void)
 
 	copy_trampoline_code();
 
+	arch_init_ideal_nops();
 	alternative_instructions();
 
 	pr_info("x86/setup_arch done\n");
