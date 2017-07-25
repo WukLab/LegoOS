@@ -11,6 +11,7 @@
 #include <asm/traps.h>
 #include <asm/ptrace.h>
 #include <asm/irq_vectors.h>
+#include <asm/fpu/internal.h>
 
 #include <lego/sched.h>
 #include <lego/panic.h>
@@ -32,6 +33,18 @@ struct desc_ptr idt_desc = {
 	.size = NR_VECTORS * 16 - 1,
 	.address = (unsigned long)idt_table,
 };
+
+static inline void cond_local_irq_enable(struct pt_regs *regs)
+{
+	if (regs->flags & X86_EFLAGS_IF)
+		local_irq_enable();
+}
+
+static inline void cond_local_irq_disable(struct pt_regs *regs)
+{
+	if (regs->flags & X86_EFLAGS_IF)
+		local_irq_disable();
+}
 
 static void do_error_trap(struct pt_regs *regs, long error_code, char *str,
 			  unsigned long trapnr, int signr)
@@ -78,10 +91,10 @@ dotraplinkage void do_nmi(struct pt_regs *regs, long error_code)
 
 dotraplinkage void do_device_not_available(struct pt_regs *regs, long error_code)
 {
-	pr_crit("%s in CPU%d, error_code: %ld\n",
+	pr_crit("%s() in CPU%d, error_code: %ld\n",
 		__func__, smp_processor_id(), error_code);
-	show_regs(regs);
-	hlt();
+
+	fpu__restore(&current->thread.fpu); /* interrupts still off */
 }
 
 dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code)
@@ -96,8 +109,7 @@ dotraplinkage void do_spurious_interrupt_bug(struct pt_regs *regs, long error_co
 {
 	pr_crit("%s in CPU%d, error_code: %ld\n",
 		__func__, smp_processor_id(), error_code);
-	show_regs(regs);
-	hlt();
+	cond_local_irq_enable(regs);
 }
 
 dotraplinkage void do_coprocessor_error(struct pt_regs *regs, long error_code)

@@ -48,6 +48,8 @@ void fpstate_init(union fpregs_state *state)
 	if (!cpu_has(X86_FEATURE_FPU))
 		return;
 
+	memset(state, 0, fpu_kernel_xstate_size);
+
 	/*
 	 * XRSTORS requires that this bit is set in xcomp_bv, or
 	 * it will #GP. Make sure it is replaced after the memset().
@@ -108,4 +110,40 @@ int fpu__copy(struct fpu *dst_fpu, struct fpu *src_fpu)
 	preempt_enable();
 
 	return 0;
+}
+
+/*
+ * Activate the current task's in-memory FPU context,
+ * if it has not been used before:
+ */
+void fpu__activate_curr(struct fpu *fpu)
+{
+	WARN_ON_FPU(fpu != &current->thread.fpu);
+
+	if (!fpu->fpstate_active) {
+		fpstate_init(&fpu->state);
+
+		/* Safe to do for the current task: */
+		fpu->fpstate_active = 1;
+	}
+}
+
+/*
+ * 'fpu__restore()' is called to copy FPU registers from
+ * the FPU fpstate to the live hw registers and to activate
+ * access to the hardware registers, so that FPU instructions
+ * can be used afterwards.
+ *
+ * Must be called with kernel preemption disabled (for example
+ * with local interrupts disabled, as it is in the case of
+ * do_device_not_available()).
+ */
+void fpu__restore(struct fpu *fpu)
+{
+	fpu__activate_curr(fpu);
+
+	/* Avoid __kernel_fpu_begin() right after fpregs_activate() */
+	fpregs_activate(fpu);
+	copy_kernel_to_fpregs(&fpu->state);
+	fpu->counter++;
 }
