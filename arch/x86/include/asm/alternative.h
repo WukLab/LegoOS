@@ -35,18 +35,6 @@ extern int alternatives_patched;
 void alternative_instructions(void);
 void apply_alternatives(struct alt_instr *start, struct alt_instr *end);
 
-#ifdef CONFIG_SMP
-void alternatives_enable_smp(void);
-int alternatives_text_reserved(void *start, void *end);
-bool skip_smp_alternatives;
-#else
-static inline void alternatives_enable_smp(void) {}
-static inline int alternatives_text_reserved(void *start, void *end)
-{
-	return 0;
-}
-#endif	/* CONFIG_SMP */
-
 #define b_replacement(num)	"664"#num
 #define e_replacement(num)	"665"#num
 

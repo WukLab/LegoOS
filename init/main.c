@@ -49,7 +49,6 @@
 #include <asm/traps.h>
 #include <asm/setup.h>
 
-
 enum system_states system_state __read_mostly;
 
 /* Screen information used by kernel */
@@ -297,6 +296,12 @@ asmlinkage void __init start_kernel(void)
 	smp_prepare_cpus(setup_max_cpus);
 	local_irq_enable();
 	smp_init();
+
+	/*
+	 * For Lego, system is not fully running
+	 * until smp is initialized.
+	 */
+	system_state = SYSTEM_RUNNING;
 
 	/* STOP! WE ARE ALIVE NOW */
 	rest_init();

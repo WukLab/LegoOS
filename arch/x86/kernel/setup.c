@@ -272,4 +272,8 @@ void __init setup_arch(void)
 	register_refined_jiffies(CLOCK_TICK_RATE);
 
 	copy_trampoline_code();
+
+	alternative_instructions();
+
+	pr_info("x86/setup_arch done\n");
 }

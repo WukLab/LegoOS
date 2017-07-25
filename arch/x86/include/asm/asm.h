@@ -329,5 +329,21 @@ static inline void native_clts(void)
 	asm volatile("clts");
 }
 
+/* Stop speculative execution and prefetching of modified code. */
+static inline void sync_core(void)
+{
+	int tmp;
+
+	/*
+	 * CPUID is a barrier to speculative execution.
+	 * Prefetched instructions are automatically
+	 * invalidated when modified.
+	 */
+	asm volatile("cpuid"
+		     : "=a" (tmp)
+		     : "0" (1)
+		     : "ebx", "ecx", "edx", "memory");
+}
+
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_ASM_H_ */
