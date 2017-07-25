@@ -1541,6 +1541,7 @@ int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, i
 			if(ne < 0)
 			{
 				printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
+				spin_unlock(&connection_lock[connection_id]);
 				return 1;
 			}
 		}while(ne<1);
@@ -1549,6 +1550,7 @@ int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, i
 			if(wc[i].status!=IB_WC_SUCCESS)
 			{
 				printk(KERN_ALERT "send failed at connection %d as %d\n", connection_id, wc[i].status);
+				spin_unlock(&connection_lock[connection_id]);
 				return 2;
 			}
 		}

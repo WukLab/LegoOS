@@ -19,7 +19,7 @@ extern int mad_got_one;
 int ib_mad_init(void);
 int ib_cache_setup(void);
 int ib_cm_init(void);
-int lego_ib_init(void *unused);
+int lego_ib_init(void);
 int lego_ib_cleanup(void);
 #else
 static inline int ib_mad_init(void) { return 0; }

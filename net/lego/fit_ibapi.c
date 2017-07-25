@@ -207,7 +207,7 @@ static struct ib_client ibv_client = {
 	.remove = ibv_remove_one
 };
 
-//#define FIT_TESTING
+#define FIT_TESTING
 static void lego_ib_test(void)
 {
 #ifdef FIT_TESTING
@@ -230,9 +230,10 @@ static void lego_ib_test(void)
 		buf[0] = 'a';
 		buf[1] = 'b';
 		buf[2] = '\0';
+		struct page *p = alloc_page();
 		for (i = 0; i < 10; i++) {
-			ret = ibapi_send_reply_imm(1, buf, 4096, retb, 4096, 0);
-			pr_info("%s(%2d) retbuffer: %s\n", __func__, i, retb);
+		ret = ibapi_send_reply_imm(1, buf, 4096, page_to_phys(p), 4096, 1);
+			pr_info("%s(%2d) retbuffer: %s\n", __func__, i, page_to_virt(p));
 		}
 	}
 #endif

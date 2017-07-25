@@ -226,7 +226,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			.pkey_index = 0,
 			.port_num = port,
 			.qp_access_flags = IB_ACCESS_REMOTE_WRITE|IB_ACCESS_REMOTE_READ|IB_ACCESS_LOCAL_WRITE|IB_ACCESS_REMOTE_ATOMIC,
-			.path_mtu = IB_MTU_4096,
+			.path_mtu = IB_MTU_2048,
 			.retry_cnt = 7,
 			.rnr_retry = 7
 		};
@@ -278,7 +278,7 @@ ppc *client_init_interface(int ib_port, struct ib_device *ib_dev, int mynodeid)
 	int	rx_depth = RECV_DEPTH;
 	int	ret;
 	ppc *ctx;
-	mtu = IB_MTU_4096;
+	mtu = IB_MTU_2048;
 	sl = 0;
 
 	page_size = PAGE_SIZE;
@@ -427,9 +427,10 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 		header = kmalloc(sizeof(struct ibapi_header), GFP_KERNEL);
 		header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct ibapi_header));
 		p_r_i_struct = (struct ibapi_post_receive_intermediate_struct *)kmalloc(sizeof(struct ibapi_post_receive_intermediate_struct), GFP_KERNEL);
-		p_r_i_struct->header = (uintptr_t)header_addr;
-		p_r_i_struct->msg = (uintptr_t)addr;
+		p_r_i_struct->header = (uintptr_t)header;
+		p_r_i_struct->msg = (uintptr_t)buf;
 
+		printk(KERN_CRIT "%s pristruct %p header %p buf %p msg %p byf %p\n", __func__, p_r_i_struct, p_r_i_struct->header, buf, p_r_i_struct->msg, addr);
 		sge[0].addr = (uintptr_t)header_addr;
 		sge[0].length = sizeof(struct ibapi_header);
 		sge[0].lkey = ctx->proc->lkey;
@@ -955,8 +956,8 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 
 		for(i=0;i<ne;++i)
 		{
-			//printk(KERN_CRIT "%s got one recv cq status %d opcode %d\n",
-			//		__func__, wc[i].status, wc[i].opcode);
+			printk(KERN_CRIT "%s got one recv cq status %d opcode %d\n",
+					__func__, wc[i].status, wc[i].opcode);
 			if(wc[i].status != IB_WC_SUCCESS)
 			{
 				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
@@ -967,6 +968,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				struct ibapi_post_receive_intermediate_struct *p_r_i_struct = (struct ibapi_post_receive_intermediate_struct*)wc[i].wr_id;
 				struct ibapi_header temp_header;
 
+				printk(KERN_CRIT "%s pristruct %p header %p msg %p\n", __func__, p_r_i_struct, p_r_i_struct->header, p_r_i_struct->msg);
 				memcpy(&temp_header, (void *)p_r_i_struct->header, sizeof(struct ibapi_header));
 				addr = (char *)p_r_i_struct->msg;
 				type = temp_header.type;

@@ -153,7 +153,7 @@ static int kernel_init(void *unused)
 	kthread_run(lego_ib_init, NULL, "ib-initd");
 
 	/* wait until ib finished initialization */
-	wait_for_completion(&ib_init_done);
+//	wait_for_completion(&ib_init_done);
 #endif
 
 	/* Final step towards a running component.. */

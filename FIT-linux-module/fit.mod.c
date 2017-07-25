@@ -57,4 +57,4 @@ __attribute__((section(".modinfo"))) =
 "depends=ib_core";
 
 
-MODULE_INFO(srcversion, "9008C0AAAA6C9EC67351295");
+MODULE_INFO(srcversion, "C47D0D02081C605F06958B4");
