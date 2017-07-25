@@ -261,6 +261,7 @@ asmlinkage void ignore_sysret(void);
 struct pt_regs;
 void start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp);
 
+int arch_dup_task_struct(struct task_struct *, struct task_struct *);
 extern unsigned int fpu_kernel_xstate_size;
 extern unsigned int fpu_user_xstate_size;
 

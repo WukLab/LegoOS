@@ -1,6 +1,7 @@
 #ifndef _ASM_X86_FPU_INTERNAL_H_
 #define _ASM_X86_FPU_INTERNAL_H_
 
+#include <asm/alternative.h>
 #include <asm/fpu/api.h>
 #include <asm/fpu/xstate.h>
 
@@ -48,6 +49,29 @@ extern void fpstate_init(union fpregs_state *state);
 #else
 # define WARN_ON_FPU(x) ({ (void)(x); 0; })
 #endif
+
+/*
+ * FPU related CPU feature flag helper routines:
+ */
+static __always_inline __pure bool use_eager_fpu(void)
+{
+	return cpu_has(X86_FEATURE_EAGER_FPU);
+}
+
+static __always_inline __pure bool use_xsaveopt(void)
+{
+	return cpu_has(X86_FEATURE_XSAVEOPT);
+}
+
+static __always_inline __pure bool use_xsave(void)
+{
+	return cpu_has(X86_FEATURE_XSAVE);
+}
+
+static __always_inline __pure bool use_fxsr(void)
+{
+	return cpu_has(X86_FEATURE_FXSR);
+}
 
 /* These macros all use (%edi)/(%rdi) as the single memory argument. */
 #define XSAVE		".byte " REX_PREFIX "0x0f,0xae,0x27"
@@ -156,6 +180,231 @@ static inline void copy_kernel_to_xregs_booting(struct xregs_state *xstate)
 
 	/* We should never fault when copying from a kernel buffer: */
 	WARN_ON_FPU(err);
+}
+
+/*
+ * Save processor xstate to xsave area.
+ */
+static inline void copy_xregs_to_kernel(struct xregs_state *xstate)
+{
+	u64 mask = -1;
+	u32 lmask = mask;
+	u32 hmask = mask >> 32;
+	int err;
+
+	XSTATE_XSAVE(xstate, lmask, hmask, err);
+
+	/* We should never fault when copying to a kernel buffer: */
+	WARN_ON_FPU(err);
+}
+
+static inline void copy_fxregs_to_kernel(struct fpu *fpu)
+{
+	if (IS_ENABLED(CONFIG_X86_32))
+		asm volatile( "fxsave %[fx]" : [fx] "=m" (fpu->state.fxsave));
+	else if (IS_ENABLED(CONFIG_AS_FXSAVEQ))
+		asm volatile("fxsaveq %[fx]" : [fx] "=m" (fpu->state.fxsave));
+	else {
+		/* Using "rex64; fxsave %0" is broken because, if the memory
+		 * operand uses any extended registers for addressing, a second
+		 * REX prefix will be generated (to the assembler, rex64
+		 * followed by semicolon is a separate instruction), and hence
+		 * the 64-bitness is lost.
+		 *
+		 * Using "fxsaveq %0" would be the ideal choice, but is only
+		 * supported starting with gas 2.16.
+		 *
+		 * Using, as a workaround, the properly prefixed form below
+		 * isn't accepted by any binutils version so far released,
+		 * complaining that the same type of prefix is used twice if
+		 * an extended register is needed for addressing (fix submitted
+		 * to mainline 2005-11-21).
+		 *
+		 *  asm volatile("rex64/fxsave %0" : "=m" (fpu->state.fxsave));
+		 *
+		 * This, however, we can work around by forcing the compiler to
+		 * select an addressing mode that doesn't require extended
+		 * registers.
+		 */
+		asm volatile( "rex64/fxsave (%[fx])"
+			     : "=m" (fpu->state.fxsave)
+			     : [fx] "R" (&fpu->state.fxsave));
+	}
+}
+
+/*
+ * These must be called with preempt disabled. Returns
+ * 'true' if the FPU state is still intact and we can
+ * keep registers active.
+ *
+ * The legacy FNSAVE instruction cleared all FPU state
+ * unconditionally, so registers are essentially destroyed.
+ * Modern FPU state can be kept in registers, if there are
+ * no pending FP exceptions.
+ */
+static inline int copy_fpregs_to_fpstate(struct fpu *fpu)
+{
+	if (likely(use_xsave())) {
+		copy_xregs_to_kernel(&fpu->state.xsave);
+		return 1;
+	}
+
+	if (likely(use_fxsr())) {
+		copy_fxregs_to_kernel(fpu);
+		return 1;
+	}
+
+	/*
+	 * Legacy FPU register saving, FNSAVE always clears FPU registers,
+	 * so we have to mark them inactive:
+	 */
+	asm volatile("fnsave %[fp]; fwait" : [fp] "=m" (fpu->state.fsave));
+
+	return 0;
+}
+
+/*
+ * Restore processor xstate from xsave area.
+ */
+static inline void copy_kernel_to_xregs(struct xregs_state *xstate, u64 mask)
+{
+	u32 lmask = mask;
+	u32 hmask = mask >> 32;
+	int err;
+
+	XSTATE_XRESTORE(xstate, lmask, hmask, err);
+
+	/* We should never fault when copying from a kernel buffer: */
+	WARN_ON_FPU(err);
+}
+
+#define check_insn(insn, output, input...)				\
+({									\
+	int err;							\
+	asm volatile("1:" #insn "\n\t"					\
+		     "2:\n"						\
+		     ".section .fixup,\"ax\"\n"				\
+		     "3:  movl $-1,%[err]\n"				\
+		     "    jmp  2b\n"					\
+		     ".previous\n"					\
+		     _ASM_EXTABLE(1b, 3b)				\
+		     : [err] "=r" (err), output				\
+		     : "0"(0), input);					\
+	err;								\
+})
+
+static inline void copy_kernel_to_fxregs(struct fxregs_state *fx)
+{
+	int err;
+
+	if (IS_ENABLED(CONFIG_X86_32)) {
+		err = check_insn(fxrstor %[fx], "=m" (*fx), [fx] "m" (*fx));
+	} else {
+		if (IS_ENABLED(CONFIG_AS_FXSAVEQ)) {
+			err = check_insn(fxrstorq %[fx], "=m" (*fx), [fx] "m" (*fx));
+		} else {
+			/* See comment in copy_fxregs_to_kernel() below. */
+			err = check_insn(rex64/fxrstor (%[fx]), "=m" (*fx), [fx] "R" (fx), "m" (*fx));
+		}
+	}
+	/* Copying from a kernel buffer to FPU registers should never fail: */
+	WARN_ON_FPU(err);
+}
+
+static inline void copy_kernel_to_fregs(struct fregs_state *fx)
+{
+	int err = check_insn(frstor %[fx], "=m" (*fx), [fx] "m" (*fx));
+
+	WARN_ON_FPU(err);
+}
+
+static inline void copy_kernel_to_fpregs(union fpregs_state *fpstate)
+{
+	if (use_xsave()) {
+		copy_kernel_to_xregs(&fpstate->xsave, -1);
+	} else {
+		if (use_fxsr())
+			copy_kernel_to_fxregs(&fpstate->fxsave);
+		else
+			copy_kernel_to_fregs(&fpstate->fsave);
+	}
+}
+
+/*
+ * FPU context switch related helper methods:
+ */
+
+DECLARE_PER_CPU(struct fpu *, fpu_fpregs_owner_ctx);
+
+/*
+ * Must be run with preemption disabled: this clears the fpu_fpregs_owner_ctx,
+ * on this CPU.
+ *
+ * This will disable any lazy FPU state restore of the current FPU state,
+ * but if the current thread owns the FPU, it will still be saved by.
+ */
+static inline void __cpu_disable_lazy_restore(unsigned int cpu)
+{
+	per_cpu(fpu_fpregs_owner_ctx, cpu) = NULL;
+}
+
+static inline int fpu_want_lazy_restore(struct fpu *fpu, unsigned int cpu)
+{
+	return fpu == this_cpu_read(fpu_fpregs_owner_ctx) && cpu == fpu->last_cpu;
+}
+
+/*
+ * Wrap lazy FPU TS handling in a 'hw fpregs activation/deactivation'
+ * idiom, which is then paired with the sw-flag (fpregs_active) later on:
+ */
+
+static inline void __fpregs_activate_hw(void)
+{
+	if (!use_eager_fpu())
+		clts();
+}
+
+static inline void __fpregs_deactivate_hw(void)
+{
+	if (!use_eager_fpu())
+		stts();
+}
+
+/* Must be paired with a 'clts' (fpregs_activate_hw()) before! */
+static inline void __fpregs_activate(struct fpu *fpu)
+{
+	WARN_ON_FPU(fpu->fpregs_active);
+
+	fpu->fpregs_active = 1;
+	this_cpu_write(fpu_fpregs_owner_ctx, fpu);
+}
+
+/* Must be paired with an 'stts' (fpregs_deactivate_hw()) after! */
+static inline void __fpregs_deactivate(struct fpu *fpu)
+{
+	WARN_ON_FPU(!fpu->fpregs_active);
+
+	fpu->fpregs_active = 0;
+	this_cpu_write(fpu_fpregs_owner_ctx, NULL);
+}
+
+/*
+ * Encapsulate the CR0.TS handling together with the
+ * software flag.
+ *
+ * These generally need preemption protection to work,
+ * do try to avoid using these on their own.
+ */
+static inline void fpregs_activate(struct fpu *fpu)
+{
+	__fpregs_activate_hw();
+	__fpregs_activate(fpu);
+}
+
+static inline void fpregs_deactivate(struct fpu *fpu)
+{
+	__fpregs_deactivate(fpu);
+	__fpregs_deactivate_hw();
 }
 
 /*

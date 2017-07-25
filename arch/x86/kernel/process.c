@@ -14,10 +14,11 @@
 
 #include <asm/asm.h>
 #include <asm/msr.h>
-#include <asm/segment.h>
 #include <asm/ptrace.h>
+#include <asm/segment.h>
 #include <asm/processor.h>
 #include <asm/switch_to.h>
+#include <asm/fpu/internal.h>
 
 __visible DEFINE_PER_CPU(unsigned long, rsp_scratch);
 
@@ -110,6 +111,17 @@ void start_thread(struct pt_regs *regs, unsigned long new_ip,
 	regs->cs		= __USER_CS;
 	regs->ss		= __USER_DS;
 	regs->flags		= X86_EFLAGS_IF;
+}
+
+/*
+ * this gets called so that we can store lazy state into memory and copy the
+ * current task into the new thread.
+ */
+int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
+{
+	memcpy(dst, src, arch_task_struct_size);
+
+	return fpu__copy(&dst->thread.fpu, &src->thread.fpu);
 }
 
 /*

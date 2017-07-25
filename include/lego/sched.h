@@ -632,6 +632,7 @@ void exit_thread(struct task_struct *tsk);
 #define SD_OVERLAP		0x2000	/* sched_domains of this level overlap */
 #define SD_NUMA			0x4000	/* cross-node balancing */
 
+void __init fork_init(void);
 extern int arch_task_struct_size __read_mostly;
 
 #endif /* _LEGO_SCHED_H_ */

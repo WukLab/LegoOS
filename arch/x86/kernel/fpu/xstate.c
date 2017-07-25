@@ -601,12 +601,11 @@ void __init fpu__init_system_xstate(void)
 	if (err)
 		goto out_disable;
 
-	//fpu__init_prepare_fx_sw_frame();
 	setup_init_fpu_buf();
 	setup_xstate_comp();
-	print_xstate_offset_size();
 
-	pr_info("x86/fpu: Enabled xstate features 0x%llx, context size is %d bytes, using '%s' format.\n",
+	print_xstate_offset_size();
+	pr_info("x86/fpu: Enabled xstate features 0x%llx, context size: %d bytes, using '%s' format.\n",
 		xfeatures_mask,
 		fpu_kernel_xstate_size,
 		cpu_has(X86_FEATURE_XSAVES) ? "compacted" : "standard");

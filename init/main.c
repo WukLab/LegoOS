@@ -246,6 +246,7 @@ asmlinkage void __init start_kernel(void)
 
 	/* Allocate pid mapping array */
 	pid_init();
+	fork_init();
 
 	/*
 	 * JUST A NOTE:
