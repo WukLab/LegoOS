@@ -72,19 +72,168 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	return 0;
 }
 
+/*
+ * switch_to(x,y) should switch tasks from x to y.
+ */
 __visible struct task_struct *
 __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 {
+	struct thread_struct *prev = &prev_p->thread;
 	struct thread_struct *next = &next_p->thread;
+	struct fpu *prev_fpu = &prev->fpu;
+	struct fpu *next_fpu = &next->fpu;
 	int cpu = smp_processor_id();
 	struct tss_struct *tss = &per_cpu(cpu_tss, cpu);
+	unsigned prev_fsindex, prev_gsindex;
+	fpu_switch_t fpu_switch;
+
+	fpu_switch = switch_fpu_prepare(prev_fpu, next_fpu, cpu);
 
 	/*
-	 * Replace tss sp0,
+	 * We must save %fs and %gs before load_TLS() because
+	 * %fs and %gs may be cleared by load_TLS().
+	 * (e.g. xen_load_tls())
 	 */
-	load_sp0(tss, next);
+	savesegment(fs, prev_fsindex);
+	savesegment(gs, prev_gsindex);
+
+	/*
+	 * Load TLS before restoring any segments so that segment loads
+	 * reference the correct GDT entries.
+	 */
+	load_TLS(next, cpu);
+
+	/* Switch DS and ES.
+	 *
+	 * Reading them only returns the selectors, but writing them (if
+	 * nonzero) loads the full descriptor from the GDT or LDT.  The
+	 * LDT for next is loaded in switch_mm, and the GDT is loaded
+	 * above.
+	 *
+	 * We therefore need to write new values to the segment
+	 * registers on every context switch unless both the new and old
+	 * values are zero.
+	 *
+	 * Note that we don't need to do anything for CS and SS, as
+	 * those are saved and restored as part of pt_regs.
+	 */
+	savesegment(es, prev->es);
+	if (unlikely(next->es | prev->es))
+		loadsegment(es, next->es);
+
+	savesegment(ds, prev->ds);
+	if (unlikely(next->ds | prev->ds))
+		loadsegment(ds, next->ds);
+
+	/*
+	 * Switch FS and GS.
+	 *
+	 * These are even more complicated than DS and ES: they have
+	 * 64-bit bases are that controlled by arch_prctl.  The bases
+	 * don't necessarily match the selectors, as user code can do
+	 * any number of things to cause them to be inconsistent.
+	 *
+	 * We don't promise to preserve the bases if the selectors are
+	 * nonzero.  We also don't promise to preserve the base if the
+	 * selector is zero and the base doesn't match whatever was
+	 * most recently passed to ARCH_SET_FS/GS.  (If/when the
+	 * FSGSBASE instructions are enabled, we'll need to offer
+	 * stronger guarantees.)
+	 *
+	 * As an invariant,
+	 * (fsbase != 0 && fsindex != 0) || (gsbase != 0 && gsindex != 0) is
+	 * impossible.
+	 */
+	if (next->fsindex) {
+		/* Loading a nonzero value into FS sets the index and base. */
+		loadsegment(fs, next->fsindex);
+	} else {
+		if (next->fsbase) {
+			/* Next index is zero but next base is nonzero. */
+			if (prev_fsindex)
+				loadsegment(fs, 0);
+			wrmsrl(MSR_FS_BASE, next->fsbase);
+		} else {
+			/* Next base and index are both zero. */
+			if (cpu_has(X86_BUG_NULL_SEG)) {
+				/*
+				 * We don't know the previous base and can't
+				 * find out without RDMSR.  Forcibly clear it.
+				 */
+				loadsegment(fs, __USER_DS);
+				loadsegment(fs, 0);
+			} else {
+				/*
+				 * If the previous index is zero and ARCH_SET_FS
+				 * didn't change the base, then the base is
+				 * also zero and we don't need to do anything.
+				 */
+				if (prev->fsbase || prev_fsindex)
+					loadsegment(fs, 0);
+			}
+		}
+	}
+	/*
+	 * Save the old state and preserve the invariant.
+	 * NB: if prev_fsindex == 0, then we can't reliably learn the base
+	 * without RDMSR because Intel user code can zero it without telling
+	 * us and AMD user code can program any 32-bit value without telling
+	 * us.
+	 */
+	if (prev_fsindex)
+		prev->fsbase = 0;
+	prev->fsindex = prev_fsindex;
+
+	if (next->gsindex) {
+		/* Loading a nonzero value into GS sets the index and base. */
+		load_gs_index(next->gsindex);
+	} else {
+		if (next->gsbase) {
+			/* Next index is zero but next base is nonzero. */
+			if (prev_gsindex)
+				load_gs_index(0);
+			wrmsrl(MSR_KERNEL_GS_BASE, next->gsbase);
+		} else {
+			/* Next base and index are both zero. */
+			if (cpu_has(X86_BUG_NULL_SEG)) {
+				/*
+				 * We don't know the previous base and can't
+				 * find out without RDMSR.  Forcibly clear it.
+				 *
+				 * This contains a pointless SWAPGS pair.
+				 * Fixing it would involve an explicit check
+				 * for Xen or a new pvop.
+				 */
+				load_gs_index(__USER_DS);
+				load_gs_index(0);
+			} else {
+				/*
+				 * If the previous index is zero and ARCH_SET_GS
+				 * didn't change the base, then the base is
+				 * also zero and we don't need to do anything.
+				 */
+				if (prev->gsbase || prev_gsindex)
+					load_gs_index(0);
+			}
+		}
+	}
+	/*
+	 * Save the old state and preserve the invariant.
+	 * NB: if prev_gsindex == 0, then we can't reliably learn the base
+	 * without RDMSR because Intel user code can zero it without telling
+	 * us and AMD user code can program any 32-bit value without telling
+	 * us.
+	 */
+	if (prev_gsindex)
+		prev->gsbase = 0;
+	prev->gsindex = prev_gsindex;
+
+	switch_fpu_finish(next_fpu, fpu_switch);
 
 	this_cpu_write(current_task, next_p);
+
+	/* Reload sp0 This changes current_thread_info(). */
+	load_sp0(tss, next);
 
 	return prev_p;
 }

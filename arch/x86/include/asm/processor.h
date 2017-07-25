@@ -10,17 +10,52 @@
 #ifndef _ASM_X86_PROCESSOR_H_
 #define _ASM_X86_PROCESSOR_H_
 
-#include <asm/fpu/types.h>
+#include <asm/tss.h>
 #include <asm/smp.h>
+#include <asm/desc.h>
 #include <asm/ptrace.h>
 #include <asm/uaccess.h>
 #include <asm/segment.h>
+#include <asm/alternative.h>
+#include <asm/fpu/types.h>
 #include <asm/thread_info.h>
 #include <asm/processor-flags.h>
 #include <asm/processor-features.h>
 
 #include <lego/kernel.h>
 #include <lego/percpu.h>
+
+#ifdef CONFIG_X86_32
+# define BASE_PREFETCH		""
+# define ARCH_HAS_PREFETCH
+#else
+# define BASE_PREFETCH		"prefetcht0 %P1"
+#endif
+
+/*
+ * Prefetch instructions for Pentium III (+) and AMD Athlon (+)
+ *
+ * It's not worth to care about 3dnow prefetches for the K6
+ * because they are microcoded there and very slow.
+ */
+static inline void prefetch(const void *x)
+{
+	alternative_input(BASE_PREFETCH, "prefetchnta %P1",
+			  X86_FEATURE_XMM,
+			  "m" (*(const char *)x));
+}
+
+/*
+ * 3dnow prefetch to get an exclusive cache line.
+ * Useful for spinlocks to avoid one state transition in the
+ * cache coherency protocol:
+ */
+static inline void prefetchw(const void *x)
+{
+	alternative_input(BASE_PREFETCH, "prefetchw %P1",
+			  X86_FEATURE_3DNOWPREFETCH,
+			  "m" (*(const char *)x));
+}
 
 /**
  * struct cpu_info
@@ -129,53 +164,14 @@ extern u16 __read_mostly tlb_lld_2m[NR_INFO];
 extern u16 __read_mostly tlb_lld_4m[NR_INFO];
 extern u16 __read_mostly tlb_lld_1g[NR_INFO];
 
-/*
- * x86-64 hardware TSS structure
- */
-struct x86_hw_tss {
-	u32			reserved1;
-	u64			sp0;
-	u64			sp1;
-	u64			sp2;
-	u64			reserved2;
-	u64			ist[7];
-	u32			reserved3;
-	u32			reserved4;
-	u16			reserved5;
-	u16			io_bitmap_base;
-} __packed ____cacheline_aligned;
-
-/* IO-bitmap sizes: */
-#define IO_BITMAP_BITS			65536
-#define IO_BITMAP_BYTES			(IO_BITMAP_BITS/8)
-#define IO_BITMAP_LONGS			(IO_BITMAP_BYTES/sizeof(long))
-#define IO_BITMAP_OFFSET		offsetof(struct tss_struct, io_bitmap)
-#define INVALID_IO_BITMAP_OFFSET	0x8000
-
-struct tss_struct {
-	/*
-	 * The hardware state:
-	 */
-	struct x86_hw_tss	x86_tss;
-
-	/*
-	 * The extra 1 is there because the CPU will access an
-	 * additional byte beyond the end of the IO permission
-	 * bitmap. The extra byte must be all 1 bits, and must
-	 * be within the limit.
-	 */
-	unsigned long		io_bitmap[IO_BITMAP_LONGS + 1];
-} ____cacheline_aligned;
-
-DECLARE_PER_CPU(struct tss_struct, cpu_tss);
-
 typedef struct {
 	unsigned long		seg;
 } mm_segment_t;
 
-struct desc_struct;
-
 struct thread_struct {
+	/* Cached TLS descriptors: */
+	struct desc_struct	tls_array[GDT_ENTRY_TLS_ENTRIES];
+
 	unsigned long		sp0;
 	unsigned long		sp;
 
