@@ -40,7 +40,7 @@ qemu-system-x86_64 -s  \
 	-no-reboot \
 	-d int,cpu_reset -D $OUTPUT_DIR/qemu.log \
 	$SERIAL \
-	-cpu Haswell,+tsc \
+	-cpu Haswell,+tsc,+xsave,+aes,+avx \
 	-m 16G \
 	-monitor stdio \
 	-smp cpus=24,cores=12,threads=2,sockets=2 \

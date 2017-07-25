@@ -545,3 +545,6 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 {
 	return do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
 }
+
+/* Initialized by the architecture: */
+int arch_task_struct_size __read_mostly;

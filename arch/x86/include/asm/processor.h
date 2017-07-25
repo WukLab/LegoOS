@@ -10,9 +10,11 @@
 #ifndef _ASM_X86_PROCESSOR_H_
 #define _ASM_X86_PROCESSOR_H_
 
+#include <asm/fpu/types.h>
 #include <asm/smp.h>
 #include <asm/ptrace.h>
 #include <asm/uaccess.h>
+#include <asm/segment.h>
 #include <asm/thread_info.h>
 #include <asm/processor-flags.h>
 #include <asm/processor-features.h>
@@ -171,14 +173,20 @@ typedef struct {
 	unsigned long		seg;
 } mm_segment_t;
 
+struct desc_struct;
+
 struct thread_struct {
 	unsigned long		sp0;
 	unsigned long		sp;
+
 	unsigned short		es;
 	unsigned short		ds;
 	unsigned short		fsindex;
 	unsigned short		gsindex;
+
+	/* thread synchronous flags */
 	unsigned int		status;
+
 	unsigned long		fsbase;
 	unsigned long		gsbase;
 
@@ -194,6 +202,16 @@ struct thread_struct {
 	unsigned		io_bitmap_max;
 
 	mm_segment_t		addr_limit;
+
+	unsigned int		sig_on_uaccess_err:1;
+	unsigned int		uaccess_err:1;	/* uaccess failed */
+
+	/* Floating point and extended processor state */
+	struct fpu		fpu;
+	/*
+	 * WARNING: 'fpu' is dynamically-sized.
+	 * It *MUST* be at the end.
+	 */
 };
 
 static inline void load_sp0(struct tss_struct *tss,
@@ -242,5 +260,8 @@ asmlinkage void ignore_sysret(void);
 
 struct pt_regs;
 void start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp);
+
+extern unsigned int fpu_kernel_xstate_size;
+extern unsigned int fpu_user_xstate_size;
 
 #endif /* _ASM_X86_PROCESSOR_H_ */
