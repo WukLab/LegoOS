@@ -616,3 +616,82 @@ out_disable:
 	/* something went wrong, try to boot without any XSAVE support */
 	fpu__init_disable_system_xstate();
 }
+
+/*
+ * When executing XSAVEOPT (or other optimized XSAVE instructions), if
+ * a processor implementation detects that an FPU state component is still
+ * (or is again) in its initialized state, it may clear the corresponding
+ * bit in the header.xfeatures field, and can skip the writeout of registers
+ * to the corresponding memory layout.
+ *
+ * This means that when the bit is zero, the state component might still contain
+ * some previous - non-initialized register state.
+ *
+ * Before writing xstate information to user-space we sanitize those components,
+ * to always ensure that the memory layout of a feature will be in the init state
+ * if the corresponding header bit is zero. This is to ensure that user-space doesn't
+ * see some stale state in the memory layout during signal handling, debugging etc.
+ */
+void fpstate_sanitize_xstate(struct fpu *fpu)
+{
+	struct fxregs_state *fx = &fpu->state.fxsave;
+	int feature_bit;
+	u64 xfeatures;
+
+	if (!use_xsaveopt())
+		return;
+
+	xfeatures = fpu->state.xsave.header.xfeatures;
+
+	/*
+	 * None of the feature bits are in init state. So nothing else
+	 * to do for us, as the memory layout is up to date.
+	 */
+	if ((xfeatures & xfeatures_mask) == xfeatures_mask)
+		return;
+
+	/*
+	 * FP is in init state
+	 */
+	if (!(xfeatures & XFEATURE_MASK_FP)) {
+		fx->cwd = 0x37f;
+		fx->swd = 0;
+		fx->twd = 0;
+		fx->fop = 0;
+		fx->rip = 0;
+		fx->rdp = 0;
+		memset(&fx->st_space[0], 0, 128);
+	}
+
+	/*
+	 * SSE is in init state
+	 */
+	if (!(xfeatures & XFEATURE_MASK_SSE))
+		memset(&fx->xmm_space[0], 0, 256);
+
+	/*
+	 * First two features are FPU and SSE, which above we handled
+	 * in a special way already:
+	 */
+	feature_bit = 0x2;
+	xfeatures = (xfeatures_mask & ~xfeatures) >> 2;
+
+	/*
+	 * Update all the remaining memory layouts according to their
+	 * standard xstate layout, if their header bit is in the init
+	 * state:
+	 */
+	while (xfeatures) {
+		if (xfeatures & 0x1) {
+			int offset = xstate_comp_offsets[feature_bit];
+			int size = xstate_sizes[feature_bit];
+
+			memcpy((void *)fx + offset,
+			       (void *)&init_fpstate.xsave + offset,
+			       size);
+		}
+
+		xfeatures >>= 1;
+		feature_bit++;
+	}
+}

@@ -191,6 +191,15 @@ void remove_wait_queue(wait_queue_head_t *q, wait_queue_t *wait);
 
 void __wake_up(wait_queue_head_t *q, unsigned int mode, int nr_exclusive, void *key);
 void __wake_up_locked(wait_queue_head_t *q, unsigned int mode, int nr);
+void __wake_up_locked_key(wait_queue_head_t *q, unsigned int mode, void *key);
+void __wake_up_sync_key(wait_queue_head_t *q, unsigned int mode, int nr, void *key);
+
+typedef int wait_bit_action_f(struct wait_bit_key *, int mode);
+void __wake_up_bit(wait_queue_head_t *, void *, int);
+int __wait_on_bit(wait_queue_head_t *, struct wait_bit_queue *, wait_bit_action_f *, unsigned);
+int __wait_on_bit_lock(wait_queue_head_t *, struct wait_bit_queue *, wait_bit_action_f *, unsigned);
+void wake_up_bit(void *, int);
+wait_queue_head_t *bit_waitqueue(void *, int);
 
 #define wake_up(x)			__wake_up(x, TASK_NORMAL, 1, NULL)
 #define wake_up_nr(x, nr)		__wake_up(x, TASK_NORMAL, nr, NULL)

@@ -7,19 +7,15 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_PTRACE_H_
-#define _LEGO_PTRACE_H_
+#ifndef _ASM_X86_SIGNAL_H_
+#define _ASM_X86_SIGNAL_H_
 
-#include <asm/ptrace.h>
-#include <lego/sched.h>
+#define _NSIG		64
+#define _NSIG_BPW	64
+#define _NSIG_WORDS	(_NSIG / _NSIG_BPW)
 
-#ifndef current_pt_regs
-#define current_pt_regs()	task_pt_regs(current)
-#endif
+typedef struct {
+	unsigned long sig[_NSIG_WORDS];
+} sigset_t;
 
-static inline int ptrace_reparented(struct task_struct *child)
-{
-	return !same_thread_group(child->real_parent, child->parent);
-}
-
-#endif /* _LEGO_PTRACE_H_ */
+#endif /* _ASM_X86_SIGNAL_H_ */

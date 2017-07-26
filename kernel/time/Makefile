@@ -6,6 +6,7 @@ obj-y += jiffies.o
 obj-y += time.o
 obj-y += timekeeping.o
 obj-y += timer.o
+obj-y += posix-timers.o
 
 # Genetic Timer Interrupt Handler
 obj-y += tick-common.o

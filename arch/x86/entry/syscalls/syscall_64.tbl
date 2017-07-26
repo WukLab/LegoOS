@@ -25,3 +25,4 @@
 110	common	getppid			sys_getppid
 160	common	setrlimit		sys_setrlimit
 186	common	gettid			sys_gettid
+219	common	restart_syscall		sys_restart_syscall

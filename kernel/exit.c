@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/wait.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
 
@@ -27,4 +28,76 @@ void __noreturn do_exit(long code)
 
 	preempt_disable();
 	do_task_dead();
+}
+
+/*
+ * Take down every thread in the group.  This is called by fatal signals
+ * as well as by sys_exit_group (below).
+ */
+void do_group_exit(int exit_code)
+{
+	struct signal_struct *sig = current->signal;
+
+	BUG_ON(exit_code & 0x80); /* core dumps don't get here */
+
+	if (signal_group_exit(sig))
+		exit_code = sig->group_exit_code;
+	else if (!thread_group_empty(current)) {
+		struct sighand_struct *const sighand = current->sighand;
+
+		spin_lock_irq(&sighand->siglock);
+		if (signal_group_exit(sig))
+			/* Another thread got here before we took the lock.  */
+			exit_code = sig->group_exit_code;
+		else {
+			sig->group_exit_code = exit_code;
+			sig->flags = SIGNAL_GROUP_EXIT;
+			zap_other_threads(current);
+		}
+		spin_unlock_irq(&sighand->siglock);
+	}
+
+	do_exit(exit_code);
+	/* NOTREACHED */
+}
+
+void __wake_up_parent(struct task_struct *p, struct task_struct *parent)
+{
+	__wake_up_sync_key(&parent->signal->wait_chldexit,
+				TASK_INTERRUPTIBLE, 1, p);
+}
+
+static inline pid_t task_pgrp(struct task_struct *task)
+{
+	/*
+	 * TODO:
+	 * Of course this is not the process group id
+	 * Assume there is only one process in a process group
+	 * and use the pid of group leader as process group id
+	 */
+	return task->group_leader->pid;
+}
+
+/*
+ * Determine if a process group is "orphaned", according to the POSIX
+ * definition in 2.2.2.52.  Orphaned process groups are not to be affected
+ * by terminal-generated stop signals.  Newly orphaned process groups are
+ * to receive a SIGHUP and a SIGCONT.
+ *
+ * "I ask you, have you ever known what it is to be an orphan?"
+ */
+static int will_become_orphaned_pgrp(pid_t pid, struct task_struct *ignored_task)
+{
+	return 0;
+}
+
+int is_current_pgrp_orphaned(void)
+{
+	int retval;
+
+	spin_lock(&tasklist_lock);
+	retval = will_become_orphaned_pgrp(task_pgrp(current), NULL);
+	spin_unlock(&tasklist_lock);
+
+	return retval;
 }

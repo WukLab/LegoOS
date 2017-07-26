@@ -147,3 +147,67 @@ void fpu__restore(struct fpu *fpu)
 	copy_kernel_to_fpregs(&fpu->state);
 	fpu->counter++;
 }
+
+/*
+ * Clear FPU registers by setting them up from
+ * the init fpstate:
+ */
+static inline void copy_init_fpstate_to_fpregs(void)
+{
+	if (use_xsave())
+		copy_kernel_to_xregs(&init_fpstate.xsave, -1);
+	else if (cpu_has(X86_FEATURE_FXSR))
+		copy_kernel_to_fxregs(&init_fpstate.fxsave);
+	else
+		copy_kernel_to_fregs(&init_fpstate.fsave);
+}
+
+/*
+ * Drops current FPU state: deactivates the fpregs and
+ * the fpstate. NOTE: it still leaves previous contents
+ * in the fpregs in the eager-FPU case.
+ *
+ * This function can be used in cases where we know that
+ * a state-restore is coming: either an explicit one,
+ * or a reschedule.
+ */
+void fpu__drop(struct fpu *fpu)
+{
+	preempt_disable();
+	fpu->counter = 0;
+
+	if (fpu->fpregs_active) {
+		/* Ignore delayed exceptions from user space */
+		asm volatile("1: fwait\n"
+			     "2:\n"
+			     _ASM_EXTABLE(1b, 2b));
+		fpregs_deactivate(fpu);
+	}
+
+	fpu->fpstate_active = 0;
+
+	preempt_enable();
+}
+
+/*
+ * Clear the FPU state back to init state.
+ *
+ * Called by sys_execve(), by the signal handler code and by various
+ * error paths.
+ */
+void fpu__clear(struct fpu *fpu)
+{
+	WARN_ON_FPU(fpu != &current->thread.fpu); /* Almost certainly an anomaly */
+
+	fpu__drop(fpu);
+
+	/*
+	 * Make sure fpstate is cleared and initialized.
+	 */
+	if (cpu_has(X86_FEATURE_FPU)) {
+		fpu__activate_curr(fpu);
+		user_fpu_begin();
+		copy_init_fpstate_to_fpregs();
+	}
+}
+

@@ -139,12 +139,9 @@ static int kernel_init(void *unused)
 
 #ifdef CONFIG_INFINIBAND
 	ib_mad_init();
-	pr_info("after ib_mad_init\n");
 #endif
 
-	pr_info("before pci init\n");
 	pci_init();
-
 #ifdef CONFIG_INFINIBAND
 	pr_info("before cmb init\n");
 	ib_cm_init();
@@ -152,7 +149,7 @@ static int kernel_init(void *unused)
 	kthread_run(lego_ib_init, NULL, "ib-initd");
 
 	/* wait until ib finished initialization */
-//	wait_for_completion(&ib_init_done);
+	wait_for_completion(&ib_init_done);
 #endif
 
 	/* Final step towards a running component.. */

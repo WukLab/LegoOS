@@ -7,19 +7,19 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_PTRACE_H_
-#define _LEGO_PTRACE_H_
+/*
+ * TODO: coredump
+ * Useful for debugging
+ */
 
-#include <asm/ptrace.h>
+#include <lego/init.h>
+#include <lego/slab.h>
 #include <lego/sched.h>
+#include <lego/signal.h>
+#include <lego/signalfd.h>
+#include <lego/spinlock.h>
+#include <lego/syscalls.h>
 
-#ifndef current_pt_regs
-#define current_pt_regs()	task_pt_regs(current)
-#endif
-
-static inline int ptrace_reparented(struct task_struct *child)
+void do_coredump(const siginfo_t *siginfo)
 {
-	return !same_thread_group(child->real_parent, child->parent);
 }
-
-#endif /* _LEGO_PTRACE_H_ */

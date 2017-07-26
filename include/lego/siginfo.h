@@ -97,6 +97,11 @@ typedef struct siginfo {
 	} _sifields;
 } siginfo_t;
 
+/* These can be the second arg to send_sig_info/send_group_sig_info.  */
+#define SEND_SIG_NOINFO ((struct siginfo *) 0)
+#define SEND_SIG_PRIV	((struct siginfo *) 1)
+#define SEND_SIG_FORCED	((struct siginfo *) 2)
+
 /* If the arch shares siginfo, then it has SIGSYS. */
 #define __ARCH_SIGSYS
 
@@ -283,5 +288,8 @@ typedef struct sigevent {
 #define sigev_notify_function	_sigev_un._sigev_thread._function
 #define sigev_notify_attributes	_sigev_un._sigev_thread._attribute
 #define sigev_notify_thread_id	 _sigev_un._tid
+
+/* POSIX timers */
+void do_schedule_next_timer(struct siginfo *info);
 
 #endif /* _LEGO_SIGINFO_H_ */

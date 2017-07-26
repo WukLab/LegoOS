@@ -4,6 +4,7 @@
 #include <asm/alternative.h>
 #include <asm/fpu/api.h>
 #include <asm/fpu/xstate.h>
+#include <lego/sched.h>
 
 /*
  * High level FPU state handling functions:
@@ -141,6 +142,8 @@ static __always_inline __pure bool use_fxsr(void)
 		     : [err] "=r" (err)					\
 		     : "D" (st), "m" (*st), "a" (lmask), "d" (hmask)	\
 		     : "memory")
+
+void fpstate_sanitize_xstate(struct fpu *fpu);
 
 /*
  * This function is called only during boot time when x86 caps are not set
@@ -295,6 +298,37 @@ static inline void copy_kernel_to_xregs(struct xregs_state *xstate, u64 mask)
 	err;								\
 })
 
+#define user_insn(insn, output, input...)				\
+({									\
+	int err;							\
+	asm volatile("1:" #insn "\n\t"					\
+		     "2: \n"						\
+		     ".section .fixup,\"ax\"\n"				\
+		     "3:  movl $-1,%[err]\n"				\
+		     "    jmp  2b\n"					\
+		     ".previous\n"					\
+		     _ASM_EXTABLE(1b, 3b)				\
+		     : [err] "=r" (err), output				\
+		     : "0"(0), input);					\
+	err;								\
+})
+
+static inline int copy_fregs_to_user(struct fregs_state __user *fx)
+{
+	return user_insn(fnsave %[fx]; fwait,  [fx] "=m" (*fx), "m" (*fx));
+}
+
+static inline int copy_fxregs_to_user(struct fxregs_state __user *fx)
+{
+	if (IS_ENABLED(CONFIG_X86_32))
+		return user_insn(fxsave %[fx], [fx] "=m" (*fx), "m" (*fx));
+	else if (IS_ENABLED(CONFIG_AS_FXSAVEQ))
+		return user_insn(fxsaveq %[fx], [fx] "=m" (*fx), "m" (*fx));
+
+	/* See comment in copy_fxregs_to_kernel() below. */
+	return user_insn(rex64/fxsave (%[fx]), "=m" (*fx), [fx] "R" (fx));
+}
+
 static inline void copy_kernel_to_fxregs(struct fxregs_state *fx)
 {
 	int err;
@@ -330,6 +364,65 @@ static inline void copy_kernel_to_fpregs(union fpregs_state *fpstate)
 		else
 			copy_kernel_to_fregs(&fpstate->fsave);
 	}
+}
+
+/*
+ * Save xstate to user space xsave area.
+ *
+ * We don't use modified optimization because xrstor/xrstors might track
+ * a different application.
+ *
+ * We don't use compacted format xsave area for
+ * backward compatibility for old applications which don't understand
+ * compacted format of xsave area.
+ */
+static inline int copy_xregs_to_user(struct xregs_state __user *buf)
+{
+	int err;
+
+	/*
+	 * Clear the xsave header first, so that reserved fields are
+	 * initialized to zero.
+	 */
+	err = __clear_user(&buf->header, sizeof(buf->header));
+	if (unlikely(err))
+		return -EFAULT;
+
+	XSTATE_OP(XSAVE, buf, -1, -1, err);
+
+	return err;
+}
+
+/*
+ * Restore xstate from user space xsave area.
+ */
+static inline int copy_user_to_xregs(struct xregs_state __user *buf, u64 mask)
+{
+	struct xregs_state *xstate = ((__force struct xregs_state *)buf);
+	u32 lmask = mask;
+	u32 hmask = mask >> 32;
+	int err;
+
+	XSTATE_OP(XRSTOR, xstate, lmask, hmask, err);
+
+	return err;
+}
+
+static inline int copy_user_to_fxregs(struct fxregs_state __user *fx)
+{
+	if (IS_ENABLED(CONFIG_X86_32))
+		return user_insn(fxrstor %[fx], "=m" (*fx), [fx] "m" (*fx));
+	else if (IS_ENABLED(CONFIG_AS_FXSAVEQ))
+		return user_insn(fxrstorq %[fx], "=m" (*fx), [fx] "m" (*fx));
+
+	/* See comment in copy_fxregs_to_kernel() below. */
+	return user_insn(rex64/fxrstor (%[fx]), "=m" (*fx), [fx] "R" (fx),
+			  "m" (*fx));
+}
+
+static inline int copy_user_to_fregs(struct fregs_state __user *fx)
+{
+	return user_insn(frstor %[fx], "=m" (*fx), [fx] "m" (*fx));
 }
 
 /*
@@ -481,6 +574,39 @@ static inline void switch_fpu_finish(struct fpu *new_fpu, fpu_switch_t fpu_switc
 }
 
 /*
+ * The question "does this thread have fpu access?"
+ * is slightly racy, since preemption could come in
+ * and revoke it immediately after the test.
+ *
+ * However, even in that very unlikely scenario,
+ * we can just assume we have FPU access - typically
+ * to save the FP state - we'll just take a #NM
+ * fault and get the FPU access back.
+ */
+static inline int fpregs_active(void)
+{
+	return current->thread.fpu.fpregs_active;
+}
+
+/*
+ * Needs to be preemption-safe.
+ *
+ * NOTE! user_fpu_begin() must be used only immediately before restoring
+ * the save state. It does not do any saving/restoring on its own. In
+ * lazy FPU mode, it is just an optimization to avoid a #NM exception,
+ * the task can lose the FPU right after preempt_enable().
+ */
+static inline void user_fpu_begin(void)
+{
+	struct fpu *fpu = &current->thread.fpu;
+
+	preempt_disable();
+	if (!fpregs_active())
+		fpregs_activate(fpu);
+	preempt_enable();
+}
+
+/*
  * MXCSR and XCR definitions:
  */
 
@@ -507,4 +633,8 @@ static inline void xsetbv(u32 index, u64 value)
 		     : : "a" (eax), "d" (edx), "c" (index));
 }
 
+int copy_fpstate_to_sigframe(void __user *buf, void __user *buf_fx, int size);
+unsigned long
+fpu__alloc_mathframe(unsigned long sp, int ia32_frame,
+		     unsigned long *buf_fx, unsigned long *size);
 #endif /* _ASM_X86_FPU_INTERNAL_H_ */

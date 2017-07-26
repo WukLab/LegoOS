@@ -11,9 +11,12 @@
 #define _LEGO_SYSCALLS_H_
 
 #include <lego/bug.h>
+#include <lego/ptrace.h>
 #include <lego/rlimit.h>
 #include <lego/linkage.h>
 #include <lego/compiler.h>
+
+#include <asm/syscalls.h>
 
 /*
  * __MAP - apply a macro to syscall arguments

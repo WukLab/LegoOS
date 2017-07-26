@@ -7,19 +7,19 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_PTRACE_H_
-#define _LEGO_PTRACE_H_
+#ifndef _ASM_X86_SIGFRAME_H_
+#define _ASM_X86_SIGFRAME_H_
 
-#include <asm/ptrace.h>
-#include <lego/sched.h>
+#include <asm/ucontext.h>
+#include <lego/compiler.h>
 
-#ifndef current_pt_regs
-#define current_pt_regs()	task_pt_regs(current)
-#endif
+struct siginfo;
 
-static inline int ptrace_reparented(struct task_struct *child)
-{
-	return !same_thread_group(child->real_parent, child->parent);
-}
+struct rt_sigframe {
+	char __user *pretcode;
+	struct ucontext uc;
+	struct siginfo info;
+	/* fp state follows here */
+};
 
-#endif /* _LEGO_PTRACE_H_ */
+#endif /* _ASM_X86_SIGFRAME_H_ */

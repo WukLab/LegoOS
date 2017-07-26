@@ -261,6 +261,7 @@ struct task_struct {
 	void			*stack;		/* kernel mode stack */
 	atomic_t		usage;
 	unsigned int		flags;		/* per-process flags */
+	unsigned int		ptrace;
 
 #ifdef CONFIG_SMP
 	int			on_cpu;
@@ -298,6 +299,11 @@ struct task_struct {
 	int			exit_state;
 	int			exit_code;
 	int			exit_signal;
+
+	int pdeath_signal;	/*  The signal sent when the parent dies  */
+	unsigned long jobctl;	/* JOBCTL_*, siglock protected */
+
+	unsigned restore_sigmask:1;
 
 	int			in_iowait;
 
@@ -341,6 +347,13 @@ struct task_struct {
 	struct signal_struct *signal;
 	struct sighand_struct *sighand;
 	struct sigpending pending;
+	sigset_t blocked, real_blocked;
+	/* restored if set_restore_sigmask() was used */
+	sigset_t saved_sigmask;
+
+	unsigned long sas_ss_sp;
+	size_t sas_ss_size;
+	unsigned sas_ss_flags;
 
 	/* Thread group tracking */
    	u32 parent_exec_id;
@@ -371,6 +384,8 @@ union thread_union {
 	unsigned long stack[THREAD_SIZE/sizeof(long)];
 };
 
+extern spinlock_t tasklist_lock;
+
 #define task_thread_info(task)	((struct thread_info *)((task)->stack))
 #define task_stack_page(task)	((void *)((task)->stack))
 
@@ -378,6 +393,26 @@ static inline bool thread_group_leader(struct task_struct *p)
 {
 	return p->exit_signal >= 0;
 }
+
+static inline int thread_group_empty(struct task_struct *p)
+{
+	return list_empty(&p->thread_group);
+}
+
+static inline
+bool same_thread_group(struct task_struct *p1, struct task_struct *p2)
+{
+	return p1->signal == p2->signal;
+}
+
+static inline struct task_struct *next_thread(const struct task_struct *p)
+{
+	/* list_entry_rcu */
+	return list_entry(p->thread_group.next, struct task_struct, thread_group);
+}
+
+#define while_each_thread(g, t) \
+	while ((t = next_thread(t)) != g)
 
 /*
  * flag set/clear/test wrappers
@@ -556,9 +591,15 @@ int wake_up_state(struct task_struct *p, unsigned int state);
 int wake_up_process(struct task_struct *p);
 void wake_up_new_task(struct task_struct *p);
 
+/* kernel/exit.c */
+void __wake_up_parent(struct task_struct *p, struct task_struct *parent);
 void do_exit(long code);
+void do_group_exit(int);
+int is_current_pgrp_orphaned(void);
+
 void __noreturn do_task_dead(void);
 void cpu_idle(void);
+int task_curr(const struct task_struct *p);
 
 void __put_task_struct(struct task_struct *t);
 
@@ -594,6 +635,12 @@ static inline void task_unlock(struct task_struct *p)
 }
 
 void set_task_comm(struct task_struct *tsk, const char *buf);
+
+#ifdef CONFIG_SMP
+void kick_process(struct task_struct *tsk);
+#else
+static inline void kick_process(struct task_struct *tsk) { }
+#endif
 
 /*
  * Wrappers for p->thread_info->cpu access. No-op on UP.
@@ -644,7 +691,140 @@ void exit_thread(struct task_struct *tsk);
 #define SD_OVERLAP		0x2000	/* sched_domains of this level overlap */
 #define SD_NUMA			0x4000	/* cross-node balancing */
 
+/*
+ * task->jobctl flags
+ */
+#define JOBCTL_STOP_SIGMASK	0xffff	/* signr of the last group stop */
+
+#define JOBCTL_STOP_DEQUEUED_BIT 16	/* stop signal dequeued */
+#define JOBCTL_STOP_PENDING_BIT	17	/* task should stop for group stop */
+#define JOBCTL_STOP_CONSUME_BIT	18	/* consume group stop count */
+#define JOBCTL_TRAP_STOP_BIT	19	/* trap for STOP */
+#define JOBCTL_TRAP_NOTIFY_BIT	20	/* trap for NOTIFY */
+#define JOBCTL_TRAPPING_BIT	21	/* switching to TRACED */
+#define JOBCTL_LISTENING_BIT	22	/* ptracer is listening for events */
+
+#define JOBCTL_STOP_DEQUEUED	(1UL << JOBCTL_STOP_DEQUEUED_BIT)
+#define JOBCTL_STOP_PENDING	(1UL << JOBCTL_STOP_PENDING_BIT)
+#define JOBCTL_STOP_CONSUME	(1UL << JOBCTL_STOP_CONSUME_BIT)
+#define JOBCTL_TRAP_STOP	(1UL << JOBCTL_TRAP_STOP_BIT)
+#define JOBCTL_TRAP_NOTIFY	(1UL << JOBCTL_TRAP_NOTIFY_BIT)
+#define JOBCTL_TRAPPING		(1UL << JOBCTL_TRAPPING_BIT)
+#define JOBCTL_LISTENING	(1UL << JOBCTL_LISTENING_BIT)
+
+#define JOBCTL_TRAP_MASK	(JOBCTL_TRAP_STOP | JOBCTL_TRAP_NOTIFY)
+#define JOBCTL_PENDING_MASK	(JOBCTL_STOP_PENDING | JOBCTL_TRAP_MASK)
+
+bool task_set_jobctl_pending(struct task_struct *task, unsigned long mask);
+void task_clear_jobctl_trapping(struct task_struct *task);
+void task_clear_jobctl_pending(struct task_struct *task, unsigned long mask);
+
 void __init fork_init(void);
 extern int arch_task_struct_size __read_mostly;
+
+static inline int signal_pending(struct task_struct *p)
+{
+	return unlikely(test_tsk_thread_flag(p,TIF_SIGPENDING));
+}
+
+static inline int __fatal_signal_pending(struct task_struct *p)
+{
+	return unlikely(sigismember(&p->pending.signal, SIGKILL));
+}
+
+static inline int fatal_signal_pending(struct task_struct *p)
+{
+	return signal_pending(p) && __fatal_signal_pending(p);
+}
+
+void set_current_blocked(sigset_t *);
+void __set_current_blocked(const sigset_t *);
+
+/* Higher-quality implementation, used if TIF_RESTORE_SIGMASK doesn't exist. */
+static inline void set_restore_sigmask(void)
+{
+	current->restore_sigmask = true;
+	WARN_ON(!test_thread_flag(TIF_SIGPENDING));
+}
+static inline void clear_restore_sigmask(void)
+{
+	current->restore_sigmask = false;
+}
+static inline bool test_restore_sigmask(void)
+{
+	return current->restore_sigmask;
+}
+static inline bool test_and_clear_restore_sigmask(void)
+{
+	if (!current->restore_sigmask)
+		return false;
+	current->restore_sigmask = false;
+	return true;
+}
+
+static inline void restore_saved_sigmask(void)
+{
+	if (test_and_clear_restore_sigmask())
+		__set_current_blocked(&current->saved_sigmask);
+}
+
+static inline sigset_t *sigmask_to_save(void)
+{
+	sigset_t *res = &current->blocked;
+	if (unlikely(test_restore_sigmask()))
+		res = &current->saved_sigmask;
+	return res;
+}
+
+#define SS_ONSTACK	1
+#define SS_DISABLE	2
+
+/* bit-flags */
+#define SS_AUTODISARM	(1U << 31)	/* disable sas during sighandling */
+/* mask for all SS_xxx flags */
+#define SS_FLAG_BITS	SS_AUTODISARM
+
+/*
+ * True if we are on the alternate signal stack.
+ */
+static inline int on_sig_stack(unsigned long sp)
+{
+	/*
+	 * If the signal stack is SS_AUTODISARM then, by construction, we
+	 * can't be on the signal stack unless user code deliberately set
+	 * SS_AUTODISARM when we were already on it.
+	 *
+	 * This improves reliability: if user state gets corrupted such that
+	 * the stack pointer points very close to the end of the signal stack,
+	 * then this check will enable the signal to be handled anyway.
+	 */
+	if (current->sas_ss_flags & SS_AUTODISARM)
+		return 0;
+
+	return sp > current->sas_ss_sp &&
+		sp - current->sas_ss_sp <= current->sas_ss_size;
+}
+
+static inline int sas_ss_flags(unsigned long sp)
+{
+	if (!current->sas_ss_size)
+		return SS_DISABLE;
+
+	return on_sig_stack(sp) ? SS_ONSTACK : 0;
+}
+
+static inline void sas_ss_reset(struct task_struct *p)
+{
+	p->sas_ss_sp = 0;
+	p->sas_ss_size = 0;
+	p->sas_ss_flags = SS_DISABLE;
+}
+
+static inline unsigned long sigsp(unsigned long sp, struct ksignal *ksig)
+{
+	if (unlikely((ksig->ka.sa.sa_flags & SA_ONSTACK)) && ! sas_ss_flags(sp))
+		return current->sas_ss_sp + current->sas_ss_size;
+	return sp;
+}
 
 #endif /* _LEGO_SCHED_H_ */

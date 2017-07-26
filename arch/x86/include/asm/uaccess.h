@@ -538,6 +538,71 @@ do {									\
 	}								\
 } while (0)
 
+#define __get_user_nocheck(x, ptr, size)				\
+({									\
+	int __gu_err;							\
+	__inttype(*(ptr)) __gu_val;					\
+	__get_user_size(__gu_val, (ptr), (size), __gu_err, -EFAULT);	\
+	(x) = (__force __typeof__(*(ptr)))__gu_val;			\
+	__builtin_expect(__gu_err, 0);					\
+})
+
+#define __put_user_nocheck(x, ptr, size)			\
+({								\
+	int __pu_err;						\
+	__put_user_size((x), (ptr), (size), __pu_err, -EFAULT);	\
+	__builtin_expect(__pu_err, 0);				\
+})
+
+/**
+ * __get_user: - Get a simple variable from user space, with less checking.
+ * @x:   Variable to store result.
+ * @ptr: Source address, in user space.
+ *
+ * Context: User context only. This function may sleep if pagefaults are
+ *          enabled.
+ *
+ * This macro copies a single simple variable from user space to kernel
+ * space.  It supports simple types like char and int, but not larger
+ * data types like structures or arrays.
+ *
+ * @ptr must have pointer-to-simple-variable type, and the result of
+ * dereferencing @ptr must be assignable to @x without a cast.
+ *
+ * Caller must check the pointer with access_ok() before calling this
+ * function.
+ *
+ * Returns zero on success, or -EFAULT on error.
+ * On error, the variable @x is set to zero.
+ */
+
+#define __get_user(x, ptr)						\
+	__get_user_nocheck((x), (ptr), sizeof(*(ptr)))
+
+/**
+ * __put_user: - Write a simple value into user space, with less checking.
+ * @x:   Value to copy to user space.
+ * @ptr: Destination address, in user space.
+ *
+ * Context: User context only. This function may sleep if pagefaults are
+ *          enabled.
+ *
+ * This macro copies a single simple value from kernel space to user
+ * space.  It supports simple types like char and int, but not larger
+ * data types like structures or arrays.
+ *
+ * @ptr must have pointer-to-simple-variable type, and @x must be assignable
+ * to the result of dereferencing @ptr.
+ *
+ * Caller must check the pointer with access_ok() before calling this
+ * function.
+ *
+ * Returns zero on success, or -EFAULT on error.
+ */
+
+#define __put_user(x, ptr)						\
+	__put_user_nocheck((__typeof__(*(ptr)))(x), (ptr), sizeof(*(ptr)))
+
 #define unsafe_put_user(x, ptr, err_label)					\
 do {										\
 	int __pu_err;								\
@@ -553,5 +618,107 @@ do {										\
 	(x) = (__typeof__(*(ptr)))__gu_val;					\
 	if (unlikely(__gu_err)) goto err_label;					\
 } while (0)
+
+#define __get_user_asm_ex(x, addr, itype, rtype, ltype)			\
+	asm volatile("1:	mov"itype" %1,%"rtype"0\n"		\
+		     "2:\n"						\
+		     ".section .fixup,\"ax\"\n"				\
+                     "3:xor"itype" %"rtype"0,%"rtype"0\n"		\
+		     "  jmp 2b\n"					\
+		     ".previous\n"					\
+		     _ASM_EXTABLE_EX(1b, 3b)				\
+		     : ltype(x) : "m" (__m(addr)))
+
+/*
+ * This doesn't do __uaccess_begin/end - the exception handling
+ * around it must do that.
+ */
+#define __get_user_size_ex(x, ptr, size)				\
+do {									\
+	__chk_user_ptr(ptr);						\
+	switch (size) {							\
+	case 1:								\
+		__get_user_asm_ex(x, ptr, "b", "b", "=q");		\
+		break;							\
+	case 2:								\
+		__get_user_asm_ex(x, ptr, "w", "w", "=r");		\
+		break;							\
+	case 4:								\
+		__get_user_asm_ex(x, ptr, "l", "k", "=r");		\
+		break;							\
+	case 8:								\
+		__get_user_asm_ex(x, ptr, "q", "",  "=r");		\
+		break;							\
+	default:							\
+		(x) = __get_user_bad();					\
+	}								\
+} while (0)
+
+#define __put_user_asm_ex(x, addr, itype, rtype, ltype)			\
+	asm volatile("1:	mov"itype" %"rtype"0,%1\n"		\
+		     "2:\n"						\
+		     _ASM_EXTABLE_EX(1b, 2b)				\
+		     : : ltype(x), "m" (__m(addr)))
+
+/*
+ * This doesn't do __uaccess_begin/end - the exception handling
+ * around it must do that.
+ */
+#define __put_user_size_ex(x, ptr, size)				\
+do {									\
+	__chk_user_ptr(ptr);						\
+	switch (size) {							\
+	case 1:								\
+		__put_user_asm_ex(x, ptr, "b", "b", "iq");		\
+		break;							\
+	case 2:								\
+		__put_user_asm_ex(x, ptr, "w", "w", "ir");		\
+		break;							\
+	case 4:								\
+		__put_user_asm_ex(x, ptr, "l", "k", "ir");		\
+		break;							\
+	case 8:								\
+		__put_user_asm_ex(x, ptr, "q", "",  "er");		\
+		break;							\
+	default:							\
+		__put_user_bad();					\
+	}								\
+} while (0)
+
+/*
+ * uaccess_try and catch
+ */
+#define uaccess_try	do {						\
+	current->thread.uaccess_err = 0;				\
+	barrier();
+
+#define uaccess_catch(err)						\
+	(err) |= (current->thread.uaccess_err ? -EFAULT : 0);		\
+} while (0)
+
+/*
+ * {get|put}_user_try and catch
+ *
+ * get_user_try {
+ *	get_user_ex(...);
+ * } get_user_catch(err)
+ */
+#define get_user_try		uaccess_try
+#define get_user_catch(err)	uaccess_catch(err)
+
+#define get_user_ex(x, ptr)	do {					\
+	unsigned long __gue_val;					\
+	__get_user_size_ex((__gue_val), (ptr), (sizeof(*(ptr))));	\
+	(x) = (__force __typeof__(*(ptr)))__gue_val;			\
+} while (0)
+
+#define put_user_try		uaccess_try
+#define put_user_catch(err)	uaccess_catch(err)
+
+#define put_user_ex(x, ptr)						\
+	__put_user_size_ex((__typeof__(*(ptr)))(x), (ptr), sizeof(*(ptr)))
+
+unsigned long __must_check clear_user(void __user *mem, unsigned long len);
+unsigned long __must_check __clear_user(void __user *mem, unsigned long len);
 
 #endif /* _ASM_X86_UACCESS_H_ */

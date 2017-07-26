@@ -382,6 +382,7 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 	 * If it comes from kernel space, then there is
 	 * user context attached:
 	 */
+	force_sig_info_fault(SIGSEGV, si_code, address, tsk, 0);
 	no_context(regs, error_code, address, SIGSEGV);
 }
 

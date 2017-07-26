@@ -23,7 +23,7 @@
 /* Initialized by the architecture: */
 int arch_task_struct_size __read_mostly = sizeof(struct task_struct);
 
-static DEFINE_SPINLOCK(tasklist_lock);
+DEFINE_SPINLOCK(tasklist_lock);
 unsigned long total_forks;
 int nr_threads;			/* The idle threads do not count.. */
 
