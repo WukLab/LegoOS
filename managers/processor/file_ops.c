@@ -11,6 +11,7 @@
  * This file describes all file-related syscalls
  */
 
+#include <lego/uaccess.h>
 #include <lego/files.h>
 #include <lego/syscalls.h>
 #include <lego/comp_processor.h>
@@ -30,8 +31,15 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
+	char name[FILENAME_LEN_DEFAULT];
+
 	debug_syscall_print();
-	return 0;
+
+	if (copy_from_user(name, filename, FILENAME_LEN_DEFAULT))
+		return -EFAULT;
+
+	pr_info("%s: %s\n", __func__, name);
+	return 66;
 }
 
 SYSCALL_DEFINE1(close, unsigned int, fd)
@@ -44,6 +52,7 @@ static ssize_t do_readv(unsigned long fd, const struct iovec __user *vec,
 			unsigned long vlen, int flags)
 {
 	debug_syscall_print();
+	pr_info("%s: fd: %lu\n", __func__, fd);
 	return -EFAULT;
 }
 
@@ -51,8 +60,10 @@ static ssize_t do_writev(unsigned long fd, const struct iovec __user *vec,
 			 unsigned long vlen, int flags)
 {
 	debug_syscall_print();
+	pr_info("%s: fd: %lu\n", __func__, fd);
 	return -EFAULT;
 }
+
 SYSCALL_DEFINE3(readv, unsigned long, fd, const struct iovec __user *, vec,
 		unsigned long, vlen)
 {
