@@ -1,0 +1,8 @@
+*.ko
+*.mod.c
+*.symtypes
+*.lst
+*.order
+modules.builtin
+Module.symvers
+*.c.[012]*.*
