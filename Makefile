@@ -1,6 +1,6 @@
-VERSION = 0
+VERSION = 4
 PATCHLEVEL = 0
-SUBLEVEL = 1
+SUBLEVEL = 0
 
 # o Do not use make's built-in rules and variables
 #   (this increases performance and avoids hard-to-debug behaviour);
