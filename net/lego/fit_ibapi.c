@@ -207,7 +207,6 @@ static struct ib_client ibv_client = {
 	.remove = ibv_remove_one
 };
 
-#define FIT_TESTING
 static void lego_ib_test(void)
 {
 #ifdef FIT_TESTING
