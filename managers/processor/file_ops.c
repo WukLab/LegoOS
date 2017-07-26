@@ -59,9 +59,44 @@ static ssize_t do_readv(unsigned long fd, const struct iovec __user *vec,
 static ssize_t do_writev(unsigned long fd, const struct iovec __user *vec,
 			 unsigned long vlen, int flags)
 {
+	struct iovec *kvec;
+	char *buf;
+	int i;
+	ssize_t ret = 0;
+
 	debug_syscall_print();
-	pr_info("%s: fd: %lu\n", __func__, fd);
-	return -EFAULT;
+	pr_info("%s: fd: %lu, nrvec: %d\n",
+		__func__, fd, vlen);
+
+	kvec = kmalloc(vlen * sizeof(*kvec), GFP_KERNEL);
+	if (!kvec)
+		return -ENOMEM;
+
+	buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!buf) {
+		kfree(kvec);
+		return -ENOMEM;
+	}
+
+	if (copy_from_user(kvec, vec, vlen * sizeof(*kvec))) {
+		ret = -EFAULT;
+		goto free;
+	}
+
+	for (i = 0; i < vlen; i++) {
+		if (copy_from_user(buf, kvec[i].iov_base, kvec[i].iov_len)) {
+			ret = -EFAULT;
+			goto free;
+		}
+		ret += kvec[i].iov_len;
+
+		pr_info("  vec[%d]: %s\n", i, buf);
+	}
+
+free:
+	kfree(kvec);
+	kfree(buf);
+	return ret;
 }
 
 SYSCALL_DEFINE3(readv, unsigned long, fd, const struct iovec __user *, vec,
