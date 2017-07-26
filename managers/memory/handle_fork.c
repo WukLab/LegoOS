@@ -21,7 +21,6 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	unsigned int nid = hdr->src_nid;
 	unsigned int pid = payload->pid;
 	unsigned int tgid = payload->tgid;
-	unsigned int clone_flags = payload->clone_flags;
 	struct lego_task_struct *tsk;
 	int ret;
 
@@ -35,7 +34,8 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	}
 
 	/* All threads within process share one VM */
-	tsk->pid = tgid;
+	spin_lock_init(&tsk->task_lock);
+	tsk->pid = pid;
 	tsk->node = nid;
 
 	lego_set_task_comm(tsk, payload->comm);
@@ -43,7 +43,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	ret = ht_insert_lego_task(tsk);
 	if (unlikely(ret)) {
 		/* Same process */
-		if (likely(ret == -EEXIST && (clone_flags & CLONE_VM)))
+		if (likely(ret == -EEXIST))
 			retbuf = RET_OKAY;
 		else
 			retbuf = ERR_TO_LEGO_RET(ret);

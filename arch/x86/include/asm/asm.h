@@ -296,7 +296,54 @@ static inline void clflush(volatile void *__p)
 	asm volatile("clflush %0" : "+m" (*(volatile char *)__p));
 }
 
+/* Set in this cpu's CR4. */
+static inline void cr4_set_bits(unsigned long mask)
+{
+	unsigned long cr4;
+
+	cr4 = read_cr4();
+	if ((cr4 | mask) != cr4) {
+		cr4 |= mask;
+		write_cr4(cr4);
+	}
+}
+
+/* Clear in this cpu's CR4. */
+static inline void cr4_clear_bits(unsigned long mask)
+{
+	unsigned long cr4;
+
+	cr4 = read_cr4();
+	if ((cr4 & ~mask) != cr4) {
+		cr4 &= ~mask;
+		write_cr4(cr4);
+	}
+}
+
 #define nop() asm volatile ("nop")
+
+#define stts() write_cr0(read_cr0() | X86_CR0_TS)
+
+static inline void native_clts(void)
+{
+	asm volatile("clts");
+}
+
+/* Stop speculative execution and prefetching of modified code. */
+static inline void sync_core(void)
+{
+	int tmp;
+
+	/*
+	 * CPUID is a barrier to speculative execution.
+	 * Prefetched instructions are automatically
+	 * invalidated when modified.
+	 */
+	asm volatile("cpuid"
+		     : "=a" (tmp)
+		     : "0" (1)
+		     : "ebx", "ecx", "edx", "memory");
+}
 
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_ASM_H_ */

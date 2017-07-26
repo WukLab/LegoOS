@@ -14,6 +14,7 @@
 #include <asm/pgtable.h>
 #include <asm/syscalls.h>
 #include <asm/processor.h>
+#include <asm/fpu/internal.h>
 
 #include <lego/smp.h>
 #include <lego/ctype.h>
@@ -300,6 +301,7 @@ void __init early_cpu_init(void)
 	get_model_name(c);
 	cpu_detect_tlb(c);
 
+	fpu__init_system(c);
 	print_cpu_info(c);
 }
 
@@ -369,5 +371,9 @@ void cpu_init(void)
 	/* Then setup the TR register to point to TSS segment */
 	load_tr_desc();
 
+	atomic_inc(&init_mm.mm_count);
+	current->mm = &init_mm;
 	current->active_mm = &init_mm;
+
+	fpu__init_cpu();
 }

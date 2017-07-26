@@ -4,3 +4,7 @@
 
 source "managers/processor/Kconfig"
 source "managers/memory/Kconfig"
+
+config PCACHE_FILL_SPLIT_NR
+	int
+	default 1

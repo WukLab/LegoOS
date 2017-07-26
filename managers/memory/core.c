@@ -105,11 +105,14 @@ static void local_qemu_test(void)
 }
 #endif
 
-#define __DEFAULT_RXBUF_SIZE	(PAGE_SIZE - __DEFAULT_DESC_SIZE)
-#define __DEFAULT_DESC_SIZE	(sizeof(unsigned long))
-#define DEFAULT_RXBUF_SIZE	(PAGE_SIZE)
+#define MAX_RXBUF_SIZE	PAGE_SIZE
 
 #ifdef CONFIG_FIT
+struct info_struct {
+	unsigned long desc;
+	char msg[MAX_RXBUF_SIZE];
+};
+
 /*
  * Memory manager is only meaningful when FIT is configured.
  */
@@ -135,17 +138,18 @@ static void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
 	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
 }
 
-static int mc_dispatcher(void *rx_buf)
+static int mc_dispatcher(void *passed)
 {
-	void *desc_p, *payload;
+	struct info_struct *info = (struct info_struct *)passed;
 	unsigned long desc;
+	void *msg;
+	void *payload;
 	struct common_header *hdr;
 
-	desc_p = rx_buf + __DEFAULT_RXBUF_SIZE;
-	desc = *(unsigned long *)desc_p;
-
-	hdr = to_common_header(rx_buf);
-	payload = to_payload(rx_buf);
+	desc = info->desc;
+	msg = info->msg;
+	hdr = to_common_header(msg);
+	payload = to_payload(msg);
 
 	/*
 	 * BIG FAT NOTE:
@@ -212,14 +216,16 @@ static int mc_dispatcher(void *rx_buf)
 		handle_bad_request(hdr, desc);
 	}
 
-	kfree(rx_buf);
+	/* Our responsibility to free it */
+	kfree(info);
+
 	return 0;
 }
 
 /* Memory Manager Daemon */
 static int mc_manager(void *unused)
 {
-	void *rx_buf, *rx_desc;
+	struct info_struct *info;
 	struct task_struct *ret;
 	int port = 0;
 	int retlen;
@@ -227,18 +233,22 @@ static int mc_manager(void *unused)
 	pr_info("Memory-component manager is up and running.\n");
 
 	while (1) {
-		rx_buf = kmalloc(DEFAULT_RXBUF_SIZE, GFP_KERNEL);
-		if (unlikely(!rx_buf))
-			panic("OOM");
-		rx_desc = rx_buf + __DEFAULT_RXBUF_SIZE;
-
-		retlen = ibapi_receive_message(port, rx_buf,
-					    __DEFAULT_RXBUF_SIZE, rx_desc);
-		if (unlikely(retlen > __DEFAULT_RXBUF_SIZE)) {
-			/* Catch processor bugs.. */
-			panic("Got message len: %d, configured max len: %u",
-				retlen, __DEFAULT_RXBUF_SIZE);
+		info = kmalloc(sizeof(*info), GFP_KERNEL);
+		if (unlikely(!info)) {
+			WARN_ON(1);
+			do_exit(-1);
 		}
+
+		/*
+		 * This function is blocking,
+		 * will return until FIT gets a messages:
+		 */
+		retlen = ibapi_receive_message(port,
+				info->msg, MAX_RXBUF_SIZE,
+				&info->desc);
+
+		if (unlikely(retlen >= MAX_RXBUF_SIZE))
+			panic("retlen: %d,maxlen: %lu", retlen, MAX_RXBUF_SIZE);
 
 		/*
 		 * XXX:
@@ -246,10 +256,10 @@ static int mc_manager(void *unused)
 		 * Later on we should find a more efficient implementation.
 		 * Something like thread pool, or workqueue.
 		 */
-		ret = kthread_run(mc_dispatcher, rx_buf, "mcdisp-%lu", nr_rx++);
+		ret = kthread_run(mc_dispatcher, info, "mcdisp-%lu", nr_rx++);
 		if (unlikely(IS_ERR(ret))) {
-			kfree(rx_buf);
-			WARN_ON_ONCE(1);
+			kfree(info);
+			WARN_ON(1);
 		}
 	}
 

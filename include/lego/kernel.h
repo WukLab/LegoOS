@@ -74,6 +74,8 @@
 
 #define ARRAY_SIZE(x)		(sizeof(x) / sizeof((x)[0]))
 
+#define FIELD_SIZEOF(t, f)	(sizeof(((t*)0)->f))
+
 #define _RET_IP_		(unsigned long)__builtin_return_address(0)
 #define _THIS_IP_						\
 ({								\

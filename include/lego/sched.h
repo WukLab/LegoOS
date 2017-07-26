@@ -48,8 +48,13 @@
 #define CLONE_VFORK		0x00004000	/* set if the parent wants the child to wake it up on mm_release */
 #define CLONE_PARENT		0x00008000	/* set if we want to have the same parent as the cloner */
 #define CLONE_THREAD		0x00010000	/* Same thread group? */
+#define CLONE_NEWNS		0x00020000	/* New mount namespace group */
+#define CLONE_SYSVSEM		0x00040000	/* share system V SEM_UNDO semantics */
+#define CLONE_SETTLS		0x00080000	/* create a new TLS for the child */
 #define CLONE_PARENT_SETTID	0x00100000	/* set the TID in the parent */
 #define CLONE_CHILD_CLEARTID	0x00200000	/* clear the TID in the child */
+#define CLONE_DETACHED		0x00400000	/* Unused, ignored */
+#define CLONE_UNTRACED		0x00800000	/* set if the tracing process can't force CLONE_PTRACE on this clone */
 #define CLONE_CHILD_SETTID	0x01000000	/* set the TID in the child */
 
 /* TODO Conflict with Linux's define */
@@ -352,6 +357,13 @@ struct task_struct {
 
 	/* CPU-specific state of this task */
 	struct thread_struct thread;
+
+/*
+ * WARNING: on x86, 'thread_struct' contains a variable-sized
+ * structure.  It *MUST* be at the end of 'task_struct'.
+ *
+ * Do not put anything below here!
+ */
 };
 
 union thread_union {
@@ -631,5 +643,8 @@ void exit_thread(struct task_struct *tsk);
 #define SD_PREFER_SIBLING	0x1000	/* Prefer to place tasks in a sibling domain */
 #define SD_OVERLAP		0x2000	/* sched_domains of this level overlap */
 #define SD_NUMA			0x4000	/* cross-node balancing */
+
+void __init fork_init(void);
+extern int arch_task_struct_size __read_mostly;
 
 #endif /* _LEGO_SCHED_H_ */

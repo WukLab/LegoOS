@@ -14,9 +14,9 @@
 #ifndef _ASM_X86_DESC_H_
 #define _ASM_X86_DESC_H_
 
+#include <asm/tss.h>
 #include <asm/page.h>
 #include <asm/segment.h>
-#include <asm/processor.h>
 #include <asm/irq_vectors.h>
 
 #include <lego/bug.h>
@@ -137,6 +137,21 @@ static inline void pack_gate(gate_desc *gate, unsigned char type,
 }
 
 #endif
+
+/*
+ * @t: thread_struct
+ * @cpu: cpu
+ *
+ * Defined as macro to avoid includ hole
+ */
+#define load_TLS(t, cpu)					\
+do {								\
+	struct desc_struct *gdt = get_cpu_gdt_table(cpu);	\
+	unsigned int i;						\
+								\
+	for (i = 0; i < GDT_ENTRY_TLS_ENTRIES; i++)		\
+		gdt[GDT_ENTRY_TLS_MIN + i] = t->tls_array[i];	\
+} while (0)
 
 static inline void load_tr_desc(void)
 {

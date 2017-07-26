@@ -25,7 +25,7 @@ static void llc_miss_error(u32 retval, u64 desc,
 }
 
 static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
-				   u64 vaddr, u32 flags, u64 desc)
+				   u64 vaddr, u64 offset, u32 flags, u64 desc)
 {
 	struct vm_area_struct *vma;
 	struct lego_mm_struct *mm = p->mm;
@@ -50,23 +50,25 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 	}
 
 	/* Send the cacheline back to processor! */
-	ibapi_reply_message((void *)new_page, PAGE_SIZE, desc);
+	ibapi_reply_message((void *)(new_page + offset),
+		PAGE_SIZE / CONFIG_PCACHE_FILL_SPLIT_NR, desc);
 }
 
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 			struct common_header *hdr)
 {
 	u32 pid, nid, flags;
-	u64 vaddr;
+	u64 vaddr, offset;
 	struct lego_task_struct *p;
 
-	nid   = hdr->src_nid;
-	pid   = payload->pid;
-	flags = payload->flags;
-	vaddr = payload->missing_vaddr;
+	nid    = hdr->src_nid;
+	pid    = payload->pid;
+	flags  = payload->flags;
+	vaddr  = payload->missing_vaddr;
+	offset = payload->offset; 
 
-	pr_info("%s: nid: %u, pid: %u, missing_vaddr: %#Lx\n",
-		__func__, nid, pid, vaddr);
+	pr_info("%s: nid: %u, pid: %u, missing_vaddr: %#Lx, offset: %#Lx, nr_split: %d\n",
+		__func__, nid, pid, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
 
 	p = find_lego_task_by_pid(hdr->src_nid, payload->pid);
 	if (unlikely(!p)) {
@@ -74,6 +76,6 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 		return 0;
 	}
 
-	do_handle_p2m_llc_miss(p, vaddr, flags, desc);
+	do_handle_p2m_llc_miss(p, vaddr, offset, flags, desc);
 	return 0;
 }

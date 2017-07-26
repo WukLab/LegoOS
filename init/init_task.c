@@ -80,7 +80,6 @@
 	.nr_cpus_allowed= NR_CPUS,					\
 	.mm		= &init_mm,					\
 	.active_mm	= &init_mm,					\
-	.thread		= INIT_THREAD,					\
 	.rt		= {						\
 		.run_list	= LIST_HEAD_INIT(tsk.rt.run_list),	\
 		.time_slice	= RR_TIMESLICE,				\
@@ -100,6 +99,7 @@
 	.thread_group	= LIST_HEAD_INIT(tsk.thread_group),		\
 	.thread_node	= LIST_HEAD_INIT(init_signals.thread_head),	\
 	.alloc_lock	= __SPIN_LOCK_UNLOCKED(tsk.alloc_lock),		\
+	.thread		= INIT_THREAD,					\
 }
 
 static struct files_struct init_files = {

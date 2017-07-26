@@ -12,6 +12,7 @@
  * Mapped to SCHED_FIFO and SCHED_RR policies
  */
 
+#include <lego/smp.h>
 #include <lego/sched.h>
 #include <lego/sched_rt.h>
 #include "sched.h"
@@ -382,26 +383,10 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 }
 
 #ifdef CONFIG_SMP
-static int find_lowest_rq(struct task_struct *p, int prev_cpu)
+static int nr_pick = 0;
+static int find_next_rr_cpu(struct task_struct *p, int old_cpu)
 {
-#if 0
-	int cpu, target = prev_cpu;
-	unsigned int nr_running_min = UINT_MAX;
-
-	for_each_online_cpu(cpu) {
-		struct rt_rq *rt_rq = &(cpu_rq(cpu)->rt);
-
-		if (rt_rq->rt_nr_running == 0)
-			return cpu;
-
-		if (rt_rq->rt_nr_running < nr_running_min) {
-			nr_running_min = rt_rq->rt_nr_running;
-			target = cpu;
-		}
-	}
-	return target;
-#endif
-	return prev_cpu;
+	return nr_pick++ % nr_cpus;
 }
 
 static int
@@ -411,7 +396,7 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int wake_flags)
 
 	/* Only fork time? */
 	if (sd_flag == SD_BALANCE_FORK)
-		new_cpu = find_lowest_rq(p, cpu);
+		new_cpu = find_next_rr_cpu(p, cpu);
 	return new_cpu;
 }
 #endif

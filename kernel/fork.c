@@ -20,13 +20,16 @@
 
 #include <asm/pgalloc.h>
 
+/* Initialized by the architecture: */
+int arch_task_struct_size __read_mostly = sizeof(struct task_struct);
+
 static DEFINE_SPINLOCK(tasklist_lock);
 unsigned long total_forks;
 int nr_threads;			/* The idle threads do not count.. */
 
 static inline struct task_struct *alloc_task_struct_node(int node)
 {
-	return kmalloc(sizeof(struct task_struct), GFP_KERNEL);
+	return kmalloc(arch_task_struct_size, GFP_KERNEL);
 }
 
 static inline void free_task_struct(struct task_struct *tsk)
@@ -74,6 +77,7 @@ static struct task_struct *dup_task_struct(struct task_struct *old, int node)
 {
 	struct task_struct *new;
 	unsigned long *stack;
+	int err;
 
 	new = alloc_task_struct_node(node);
 	if (!new)
@@ -83,17 +87,35 @@ static struct task_struct *dup_task_struct(struct task_struct *old, int node)
 	if (!stack)
 		goto free_task;
 
-	*new = *old;
+	err = arch_dup_task_struct(new, old);
 
+	/*
+	 * arch_dup_task_struct() clobbers the stack-related fields.
+	 * Make sure they're properly initialized before using any
+	 * stack-related functions again.
+	 */
 	new->stack = stack;
+	if (err)
+		goto free_stack;
+
+	/* Duplicate whole stack! */
 	*task_thread_info(new) = *task_thread_info(old);
 
 	/* Make current macro work */
 	task_thread_info(new)->task = new;
+	clear_tsk_need_resched(new);
 	setup_task_stack_end_magic(new);
+
+	/*
+	 * One for us,
+	 * one for whoever does the "release_task()" (usually parent)
+	 */
+	atomic_set(&new->usage, 2);
 
 	return new;
 
+free_stack:
+	free_thread_stack(new);
 free_task:
 	free_task_struct(new);
 	return NULL;
@@ -544,4 +566,10 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 		 unsigned long, tls)
 {
 	return do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
+}
+
+void __init fork_init(void)
+{
+	pr_info("fork: arch_task_struct_size: %d, task_struct: %lu\n",
+		arch_task_struct_size, sizeof(struct task_struct));
 }

@@ -20,6 +20,7 @@
 57	common	fork			sys_fork
 58	common	vfork			sys_vfork
 59	64	execve			sys_execve
+63	common	uname			sys_newuname
 97	common	getrlimit		sys_getrlimit
 110	common	getppid			sys_getppid
 160	common	setrlimit		sys_setrlimit

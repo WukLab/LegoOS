@@ -15,6 +15,8 @@
 
 #include <asm/smp.h>
 
+extern unsigned int nr_cpus;
+
 void cpu_up(int cpu, struct task_struct *tidle);
 
 void __init smp_prepare_cpus(unsigned int maxcpus);

@@ -49,7 +49,6 @@
 #include <asm/traps.h>
 #include <asm/setup.h>
 
-
 enum system_states system_state __read_mostly;
 
 /* Screen information used by kernel */
@@ -121,7 +120,7 @@ static void run_global_thread(void)
 	 * because that one will call do_exit inside. So do_execve
 	 * will not have any effect.
 	 */
-	kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD);
+	kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD); 
 }
 #endif
 
@@ -246,6 +245,7 @@ asmlinkage void __init start_kernel(void)
 
 	/* Allocate pid mapping array */
 	pid_init();
+	fork_init();
 
 	/*
 	 * JUST A NOTE:
@@ -296,6 +296,12 @@ asmlinkage void __init start_kernel(void)
 	smp_prepare_cpus(setup_max_cpus);
 	local_irq_enable();
 	smp_init();
+
+	/*
+	 * For Lego, system is not fully running
+	 * until smp is initialized.
+	 */
+	system_state = SYSTEM_RUNNING;
 
 	/* STOP! WE ARE ALIVE NOW */
 	rest_init();
