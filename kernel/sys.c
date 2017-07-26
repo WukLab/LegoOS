@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/files.h>
 #include <lego/sched.h>
 #include <lego/utsname.h>
 #include <lego/syscalls.h>
@@ -14,14 +15,11 @@
 /* Non-implemented system calls get redirected here. */
 asmlinkage long sys_ni_syscall(void)
 {
-	unsigned long rax;
+	struct pt_regs *regs = current_pt_regs();
 
-	asm volatile (
-		"movq %%rax, %0\n\t"
-		: "=r" (rax) : :
-	);
-	pr_info("%s(CPU%d): current: %d/%s, SYSCALL number: %lu\n",
-		__func__, smp_processor_id(), current->pid, current->comm, rax);
+	pr_info("NOTICE: Missing syscall nr: %d\n",
+		syscall_get_nr(current, regs));
+	show_regs(regs);
 	return -ENOSYS;
 }
 
@@ -36,16 +34,14 @@ asmlinkage long sys_ni_syscall(void)
  */
 SYSCALL_DEFINE0(getpid)
 {
-	pr_info("%s(CPU%d): current: %d/%s\n",
-		__func__, smp_processor_id(), current->pid, current->comm);
+	debug_syscall_print();
 	return current->group_leader->pid;
 }
 
 /* Thread ID - the internal kernel "pid" */
 SYSCALL_DEFINE0(gettid)
 {
-	pr_info("%s(CPU%d): current: %d/%s\n",
-		__func__, smp_processor_id(), current->pid, current->comm);
+	debug_syscall_print();
 	return current->pid;
 }
 
@@ -56,8 +52,7 @@ SYSCALL_DEFINE0(gettid)
  */
 SYSCALL_DEFINE0(getppid)
 {
-	pr_info("%s(CPU%d): current: %d/%s\n",
-		__func__, smp_processor_id(), current->pid, current->comm);
+	debug_syscall_print();
 	return current->real_parent->pid;
 }
 
@@ -72,8 +67,7 @@ SYSCALL_DEFINE2(setrlimit, unsigned int, resource, struct rlimit __user *, rlim)
 {
 	struct rlimit new_rlim;
 
-	pr_info("%s(CPU%d): current: %d/%s\n",
-		__func__, smp_processor_id(), current->pid, current->comm);
+	debug_syscall_print();
 	if (copy_from_user(&new_rlim, rlim, sizeof(*rlim)))
 		return -EFAULT;
 	return do_prlimit(current, resource, &new_rlim, NULL);
@@ -84,8 +78,7 @@ SYSCALL_DEFINE2(getrlimit, unsigned int, resource, struct rlimit __user *, rlim)
 	struct rlimit value;
 	int ret;
 
-	pr_info("%s(CPU%d): current: %d/%s\n",
-		__func__, smp_processor_id(), current->pid, current->comm);
+	debug_syscall_print();
 	ret = do_prlimit(current, resource, NULL, &value);
 	if (!ret)
 		ret = copy_to_user(rlim, &value, sizeof(*rlim)) ? -EFAULT : 0;
@@ -95,8 +88,7 @@ SYSCALL_DEFINE2(getrlimit, unsigned int, resource, struct rlimit __user *, rlim)
 
 SYSCALL_DEFINE1(newuname, struct utsname __user *, name)
 {
-	pr_info("%s(CPU%d): current: %d/%s\n",
-		__func__, smp_processor_id(), current->pid, current->comm);
+	debug_syscall_print();
 	if (copy_to_user(name, &utsname, sizeof(*name)))
 		return -EFAULT;
 	return 0;
@@ -160,6 +152,18 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 }
 
 SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(readv, unsigned long, fd, const struct iovec __user *, vec,
+		unsigned long, vlen)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(writev, unsigned long, fd, const struct iovec __user *, vec,
+		unsigned long, vlen)
 {
 	BUG();
 }

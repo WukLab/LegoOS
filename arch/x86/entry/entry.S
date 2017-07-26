@@ -82,7 +82,13 @@ ENTRY(entry_SYSCALL_64)
 	movq	%rsp, PER_CPU_VAR(rsp_scratch)
 	movq	PER_CPU_VAR(cpu_tss + TSS_sp0), %rsp
 
-	/* Construct struct pt_regs on stack */
+	/*
+	 * Construct struct pt_regs on stack
+	 *
+	 * In any syscall handler, you can use
+	 *	current_pt_regs()
+	 * to get these registers.
+	 */
 	pushq	$__USER_DS			/* pt_regs->ss */
 	pushq	PER_CPU_VAR(rsp_scratch)	/* pt_regs->sp */
 	pushq	%r11				/* pt_regs->flags */
@@ -98,7 +104,12 @@ ENTRY(entry_SYSCALL_64)
 	pushq	%r9				/* pt_regs->r9 */
 	pushq	%r10				/* pt_regs->r10 */
 	pushq	%r11				/* pt_regs->r11 */
-	sub	$(6*8), %rsp			/* pt_regs->bp, bx, r12-15 not saved */
+	pushq	%rbx				/* pt_regs->bx */
+	pushq	%rbp				/* pt_regs->bp */
+	pushq	%r12				/* pt_regs->r12 */
+	pushq	%r13				/* pt_regs->r13 */
+	pushq	%r14				/* pt_regs->r14 */
+	pushq	%r15				/* pt_regs->r15 */
 
 	/*
 	 * Easy case: enable interrupts and issue the syscall
@@ -108,8 +119,8 @@ ENTRY(entry_SYSCALL_64)
 	ja	1f				/* return -ENOSYS (already in pt_regs->ax) */
 
 	movq	%r10, %rcx
-	call	*sys_call_table(, %rax, 8)
-	movq	%rax, RAX(%rsp)
+	call	*sys_call_table(, %rax, 8)	/* dispatch */
+	movq	%rax, RAX(%rsp)			/* put return value into %rax */
 
 1:
 	/*
@@ -118,12 +129,14 @@ ENTRY(entry_SYSCALL_64)
 	 * to check with IRQs off), then we can go straight to SYSRET64.
 	 */
 	cli
+
 	movq	RIP(%rsp), %rcx
 	movq	EFLAGS(%rsp), %r11
 	RESTORE_C_REGS_EXCEPT_RCX_R11
 	movq	RSP(%rsp), %rsp
 	SWAPGS
 	sysretq
+
 END(entry_SYSCALL_64)
 
 /*

@@ -31,12 +31,6 @@
 
 #define BAD_ADDR(x)	((unsigned long)(x) >= TASK_SIZE)
 
-static inline int clear_user(void *a, unsigned long b)
-{
-	pr_info("%s: implement me\n", __func__);
-	return 0;
-}
-
 /*
  * We need to explicitly zero any fractional pages
  * after the data section (i.e. bss).  This would

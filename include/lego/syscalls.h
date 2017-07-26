@@ -10,6 +10,7 @@
 #ifndef _LEGO_SYSCALLS_H_
 #define _LEGO_SYSCALLS_H_
 
+#include <lego/files.h>
 #include <lego/bug.h>
 #include <lego/ptrace.h>
 #include <lego/rlimit.h>
@@ -17,6 +18,10 @@
 #include <lego/compiler.h>
 
 #include <asm/syscalls.h>
+
+#define debug_syscall_print()			\
+	pr_info("%s() cpu(%d) tsk(%d/%s)\n",	\
+		__func__, smp_processor_id(), current->pid, current->comm);
 
 /*
  * __MAP - apply a macro to syscall arguments
@@ -72,7 +77,13 @@
 	static inline long SYSC##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 
 asmlinkage long sys_read(unsigned int fd, char __user *buf, size_t count);
+asmlinkage long sys_readv(unsigned long fd,
+			  const struct iovec __user *vec,
+			  unsigned long vlen);
 asmlinkage long sys_write(unsigned int fd, const char __user *buf, size_t count);
+asmlinkage long sys_writev(unsigned long fd,
+			   const struct iovec __user *vec,
+			   unsigned long vlen);
 asmlinkage long sys_open(const char __user *filename, int flags, umode_t mode);
 asmlinkage long sys_close(unsigned int fd);
 

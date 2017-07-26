@@ -91,4 +91,15 @@ struct files_struct {
 	struct file *fd_array[NR_OPEN_DEFAULT];
 };
 
+struct iovec {
+	void __user *iov_base;	/* BSD uses caddr_t (1003.1g requires void *) */
+	unsigned long iov_len;	/* Must be size_t (1003.1g) */
+};
+
+/*
+ * UIO_MAXIOV shall be at least 16 1003.1g (5.4.1.1)
+ */
+#define UIO_FASTIOV	8
+#define UIO_MAXIOV	1024
+
 #endif /* _LEGO_FILES_H_ */
