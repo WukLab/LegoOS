@@ -54,6 +54,11 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 		PAGE_SIZE / CONFIG_PCACHE_FILL_SPLIT_NR, desc);
 }
 
+static int fault_in_kernel_space(unsigned long address)
+{
+	return address >= TASK_SIZE_MAX;
+}
+
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 			struct common_header *hdr)
 {
@@ -73,6 +78,11 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 	p = find_lego_task_by_pid(hdr->src_nid, payload->pid);
 	if (unlikely(!p)) {
 		llc_miss_error(RET_ESRCH, desc, p, vaddr);
+		return 0;
+	}
+
+	if (unlikely(fault_in_kernel_space(vaddr))) {
+		llc_miss_error(RET_EFAULT, desc, p, vaddr);
 		return 0;
 	}
 
