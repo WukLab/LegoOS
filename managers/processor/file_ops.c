@@ -11,6 +11,7 @@
  * This file describes all file-related syscalls
  */
 
+#include <lego/slab.h>
 #include <lego/uaccess.h>
 #include <lego/files.h>
 #include <lego/syscalls.h>
@@ -65,7 +66,7 @@ static ssize_t do_writev(unsigned long fd, const struct iovec __user *vec,
 	ssize_t ret = 0;
 
 	debug_syscall_print();
-	pr_info("%s: fd: %lu, nrvec: %d\n",
+	pr_info("%s: fd: %lu, nrvec: %lu\n",
 		__func__, fd, vlen);
 
 	kvec = kmalloc(vlen * sizeof(*kvec), GFP_KERNEL);
