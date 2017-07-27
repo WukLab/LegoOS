@@ -58,3 +58,6 @@ int local_file_close(struct file *);
 ssize_t local_file_write(struct file *, const char __user *, ssize_t, loff_t *);
 ssize_t local_file_read(struct file *, const char __user *, ssize_t, loff_t *);
 int local_fsync(struct file *);
+
+/* handler.c */
+int handle_fake_read(void *);
