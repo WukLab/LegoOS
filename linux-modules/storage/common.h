@@ -28,6 +28,8 @@
 #define M2S_BASE	((__u32)0x00100000)
 #define M2S_READ	((__u32)(M2S_BASE)+1)
 #define M2S_WRITE	((__u32)(M2S_BASE)+2)
+#define STOREAGE_NODE	1
+#define MEM_NODE	0
 
 struct common_header {
 	__u32	opcode;		/* see above */
@@ -72,7 +74,7 @@ static inline int net_send_reply_timeout(u32 node, u32 opcode,
 
 	hdr = to_common_header(msg);
 	hdr->opcode = opcode;
-	hdr->src_nid = 0;
+	hdr->src_nid = MEM_NODE;
 	hdr->length = sizeof(*hdr) + len_payload;
 
 	payload_msg = to_payload(msg);

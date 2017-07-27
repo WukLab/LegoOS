@@ -1,5 +1,6 @@
 #include <linux/fs.h>
 #include <linux/mutex.h>
+#include <asm/uaccess.h>
 
 #define OP_SUCCESS		1
 #define OP_FAILURE		0

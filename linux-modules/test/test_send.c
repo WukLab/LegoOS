@@ -17,7 +17,7 @@ static void send_read_request(void *data){
 	int ret;
 	char retbuf[MAX_FILENAME_LENGTH];
 
-	ret = net_send_reply_timeout(0, M2S_READ, &payload,
+	ret = net_send_reply_timeout(STORAGE_NODE, M2S_READ, &payload,
 				sizeof(payload), &retbuf, sizeof(retbuf), false,
 				DEF_MAX_TIMEOUT);
 	

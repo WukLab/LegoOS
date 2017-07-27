@@ -93,7 +93,6 @@ static void stroage_dispatch(void *msg){
 }
 
 static void storage_manager(void *data){
-	int port = 0;
 	void *msg;
 	unsigned long desc;
 	struct task_struct *tsk;
@@ -108,7 +107,7 @@ static void storage_manager(void *data){
 	}
 
 	while(1){
-		retlen = ibapi_receive_message(port, msg, MAX_RXBUF_SIZE, &desc);
+		retlen = ibapi_receive_message(MEM_NODE, msg, MAX_RXBUF_SIZE, &desc);
 		if (unlikely(retlen >= MAX_RXBUF_SIZE))
 			panic("Fatal : retlen %d MAX_RETBUF_SIZE %lu", retlen, MAX_RXBUF_SIZE);
 
