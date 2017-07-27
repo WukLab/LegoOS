@@ -375,6 +375,7 @@ static __always_inline void vma_rb_erase(struct vm_area_struct *vma,
 	__vma_rb_erase(vma, root);
 }
 
+/* Find the first VMA which satisfies  addr < vm_end,  NULL if none. */
 struct vm_area_struct *find_vma(struct lego_mm_struct *mm, unsigned long addr)
 {
 	struct rb_node *rb_node;
@@ -1873,6 +1874,14 @@ int expand_stack(struct vm_area_struct *vma, unsigned long address)
 	return expand_downwards(vma, address);
 }
 
+/*
+ * The returned VMA satisfy:
+ *	[vm_start < addr < vm_end]
+ *
+ * If NULL is returned, it is because
+ *	1) vm_start <= addr, and VMA does not GROWSDOWN
+ *	2) VMA GROWSDOWN, but expand_stack fails
+ */
 struct vm_area_struct *
 find_extend_vma(struct lego_mm_struct *mm, unsigned long addr)
 {
@@ -1884,6 +1893,8 @@ find_extend_vma(struct lego_mm_struct *mm, unsigned long addr)
 		return NULL;
 	if (vma->vm_start <= addr)
 		return vma;
+	if (!(vma->vm_flags & VM_GROWSDOWN))
+		return NULL;
 	if (expand_stack(vma, addr))
 		return NULL;
 	return vma;

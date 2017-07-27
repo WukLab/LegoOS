@@ -24,6 +24,13 @@ static void llc_miss_error(u32 retval, u64 desc,
 	ibapi_reply_message(&retval, 4, desc);
 }
 
+static void bad_area(struct lego_task_struct *p, u64 vaddr, u64 offset, u64 desc)
+{
+	int retval = RET_ESIGSEGV;
+	WARN(1, "src_nid:%u,pid:%u,vaddr:%#Lx\n", p->node, p->pid, vaddr);
+	ibapi_reply_message(&retval, 4, desc);
+}
+
 static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 				   u64 vaddr, u64 offset, u32 flags, u64 desc)
 {
@@ -32,13 +39,34 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 	unsigned long new_page;
 	int ret;
 
+	down_read(&mm->mmap_sem);
+
 	vma = find_vma(mm, vaddr);
 	if (unlikely(!vma)) {
-		llc_miss_error(RET_ESIGSEGV, desc, p, vaddr);
+		bad_area(p, vaddr, offset, desc);
 		return;
 	}
 
-	/* ask vm for the cacheline */
+	/* VMAs except stack */
+	if (likely(vma->vm_start <= vaddr))
+		goto good_area;
+
+	/* stack? */
+	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN))) {
+		bad_area(p, vaddr, offset, desc);
+		return;
+	}
+
+	if (unlikely(expand_stack(vma, vaddr))) {
+		bad_area(p, vaddr, offset, desc);
+		return;
+	}
+
+	/*
+	 * Ok, we have a good vm_area for this memory access,
+	 * go for it...
+	 */
+good_area:
 	ret = handle_lego_mm_fault(vma, vaddr, flags, &new_page);
 	if (unlikely(ret & VM_FAULT_ERROR)) {
 		if (ret & VM_FAULT_OOM)
@@ -48,6 +76,8 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 		llc_miss_error(ret, desc, p, vaddr);
 		return;
 	}
+
+	up_read(&mm->mmap_sem);
 
 	/* Send the cacheline back to processor! */
 	ibapi_reply_message((void *)(new_page + offset),
