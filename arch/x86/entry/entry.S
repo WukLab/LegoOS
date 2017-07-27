@@ -11,6 +11,7 @@
  * - INTERRUPT:		Define interrupt entry points
  */
 
+#include <asm/asm.h>
 #include <asm/page.h>
 #include <asm/ptrace.h>
 #include <asm/percpu.h>
@@ -24,12 +25,12 @@
 
 #include "abi.h"
 
-#define SWAPGS
-
 ENTRY(ignore_sysret)
 	mov	$-ENOSYS, %eax
 	sysret
 END(ignore_sysret)
+
+#define SWAPGS	swapgs
 
 /*
  * 64-bit SYSCALL instruction entry. Up to 6 arguments in registers.
@@ -139,6 +140,32 @@ ENTRY(entry_SYSCALL_64)
 
 END(entry_SYSCALL_64)
 
+	/*
+	 * Reload gs selector with exception handling
+	 * edi:  new selector
+	 */
+ENTRY(native_load_gs_index)
+	pushfq
+	cli
+	SWAPGS
+.Lgs_change:
+	movl	%edi, %gs
+2:
+	SWAPGS
+	popfq
+	ret
+END(native_load_gs_index)
+
+	_ASM_EXTABLE(.Lgs_change, bad_gs)
+	.section .fixup, "ax"
+	/* running with kernelgs */
+bad_gs:
+	SWAPGS					/* switch back to user gs */
+	xorl	%eax, %eax
+	movl	%eax, %gs
+	jmp	2b
+	.previous
+
 /*
  * IDT_ENTRY - Intel Reserved Vector Handler
  * Corresponding to Intel's software developer manual, e.g. page fault.
@@ -153,8 +180,9 @@ ENTRY(\sym)
 	 * Save all registers in pt_regs
 	 */
 	ALLOC_PT_GPREGS_ON_STACK
-	SAVE_C_REGS
-	SAVE_EXTRA_REGS
+
+	call	error_entry
+	/* returned flag: ebx=0: need swapgs on exit, ebx=1: don't need it */
 
 	movq	%rsp, %rdi		/* pt_regs pointer */
 
@@ -167,15 +195,95 @@ ENTRY(\sym)
 
 	call	\do_sym
 
-	/* Disable interrupts */
-	cli
-
-	RESTORE_EXTRA_REGS
-	RESTORE_C_REGS
-	REMOVE_PT_GPREGS_FROM_STACK 8
-	iretq
+	jmp	error_exit
 END(\sym)
 .endm
+
+/*
+ * Save all registers in pt_regs, and switch gs if needed.
+ * Return: EBX=0: came from user mode; EBX=1: otherwise
+ */
+ENTRY(error_entry)
+	cld
+	SAVE_C_REGS 8			/* offset 8 due to [call error_entry] pushes */
+	SAVE_EXTRA_REGS 8
+	xorl	%ebx, %ebx
+	testb	$3, CS+8(%rsp)
+	jz	.Lerror_kernelspace
+
+	/*
+	 * We entered from user mode or we're pretending to have entered
+	 * from user mode due to an IRET fault.
+	 */
+	SWAPGS
+
+.Lerror_entry_from_usermode_after_swapgs:
+	ret
+
+.Lerror_entry_done:
+	ret
+
+	/*
+	 * There are two places in the kernel that can potentially fault with
+	 * usergs. Handle them here.  B stepping K8s sometimes report a
+	 * truncated RIP for IRET exceptions returning to compat mode. Check
+	 * for these here too.
+	 */
+.Lerror_kernelspace:
+	incl	%ebx
+	leaq	native_irq_return_iret(%rip), %rcx
+	cmpq	%rcx, RIP+8(%rsp)
+	je	.Lerror_bad_iret
+	movl	%ecx, %eax			/* zero extend */
+	cmpq	%rax, RIP+8(%rsp)
+	je	.Lbstep_iret
+	cmpq	$.Lgs_change, RIP+8(%rsp)
+	jne	.Lerror_entry_done
+
+	/*
+	 * hack: .Lgs_change can fail with user gsbase.  If this happens, fix up
+	 * gsbase and proceed.  We'll fix up the exception and land in
+	 * .Lgs_change's error handler with kernel gsbase.
+	 */
+	SWAPGS
+	jmp .Lerror_entry_done
+
+.Lbstep_iret:
+	/* Fix truncated RIP */
+	movq	%rcx, RIP+8(%rsp)
+	/* fall through */
+
+.Lerror_bad_iret:
+	/*
+	 * We came from an IRET to user mode, so we have user gsbase.
+	 * Switch to kernel gsbase:
+	 */
+	SWAPGS
+
+	/*
+	 * Pretend that the exception came from user mode: set up pt_regs
+	 * as if we faulted immediately after IRET and clear EBX so that
+	 * error_exit knows that we will be returning to user mode.
+	 */
+	mov	%rsp, %rdi
+	call	fixup_bad_iret
+	mov	%rax, %rsp
+	decl	%ebx
+	jmp	.Lerror_entry_from_usermode_after_swapgs
+END(error_entry)
+
+/*
+ * On entry, EBX is a "return to kernel mode" flag:
+ *   1: already in kernel mode, don't need SWAPGS
+ *   0: user gsbase is loaded, we need SWAPGS and standard preparation for return to usermode
+ */
+ENTRY(error_exit)
+	movl	%ebx, %eax
+	cli
+	testl	%eax, %eax
+	jnz	retint_kernel
+	jmp	retint_user
+END(error_exit)
 
 IDT_ENTRY divide_error			do_divide_error			has_error_code=0
 IDT_ENTRY debug				do_debug			has_error_code=0
@@ -206,7 +314,7 @@ IDT_ENTRY virtualization_exception	do_virtualization_exception	has_error_code=0
  *
  * When called, 0(%rsp): ~(interrupt number)
  */
-.macro INTR func
+.macro interrupt func
 	cld
 	ALLOC_PT_GPREGS_ON_STACK
 	SAVE_C_REGS
@@ -244,7 +352,7 @@ IDT_ENTRY virtualization_exception	do_virtualization_exception	has_error_code=0
 ENTRY(common_interrupt)
 	/* Adjust vector to [-256, -1] range */
 	addq	$-0x80, (%rsp)
-	INTR	do_IRQ
+	interrupt do_IRQ
 
 ret_from_intr:
 	cli
@@ -287,6 +395,14 @@ restore_c_regs_and_iret:
 	/*
 	 * The iretq could re-enable interrupts:
 	 */
+	/*
+	 * This may fault.  Non-paranoid faults on return to userspace are
+	 * handled by fixup_bad_iret.  These include #SS, #GP, and #NP.
+	 * Double-faults due to espfix64 are handled in do_double_fault.
+	 * Other faults here are fatal.
+	 */
+.global native_irq_return_iret
+native_irq_return_iret:
 	iretq
 END(common_interrupt)
 
@@ -326,7 +442,7 @@ END(irq_entries_start)
 .macro apicinterrupt num do_sym smp__sym
 ENTRY(\smp__sym)
 	pushq	$~(\num)
-	INTR	\do_sym
+	interrupt \do_sym
 	jmp	ret_from_intr
 END(\smp__sym)
 .endm
@@ -396,7 +512,7 @@ ENTRY(ret_from_fork)
 2:
 	movq    %rsp, %rdi
 	call	syscall_return_slowpath	/* return with IRQs disabled */
-	SWAPGS
+	SWAPGS				/* switch to user gs.base */
 	jmp	restore_regs_and_iret
 
 1:

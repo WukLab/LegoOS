@@ -131,9 +131,11 @@
 	asm("mov %0, %%" #seg"": : "r"(value) : "memory")
 
 #ifndef __ASSEMBLY__
-static inline void load_gs_index(unsigned int value)
+/* Defined in entry.S, with exception handling */
+asmlinkage void native_load_gs_index(unsigned);
+static inline void load_gs_index(unsigned int selector)
 {
-
+	native_load_gs_index(selector);
 }
 #endif
 

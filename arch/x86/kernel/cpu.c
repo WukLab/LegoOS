@@ -353,6 +353,10 @@ void cpu_init(void)
 
 	syscall_init();
 
+	wrmsrl(MSR_FS_BASE, 0);
+	wrmsrl(MSR_KERNEL_GS_BASE, 0);
+	barrier();
+
 	tss = &per_cpu(cpu_tss, cpu);
 	tss->x86_tss.io_bitmap_base = offsetof(struct tss_struct, io_bitmap);
 
