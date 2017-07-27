@@ -7,10 +7,7 @@
  * (at your option) any later version.
  */
 
-/*
- * This file describes all file-related syscalls
- */
-
+#include <lego/stat.h>
 #include <lego/slab.h>
 #include <lego/uaccess.h>
 #include <lego/files.h>
@@ -20,14 +17,14 @@
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
 	debug_syscall_print();
-	return 0;
+	return -EFAULT;
 }
 
 SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 		size_t, count)
 {
 	debug_syscall_print();
-	return 0;
+	return count;
 }
 
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
@@ -39,14 +36,14 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	if (copy_from_user(name, filename, FILENAME_LEN_DEFAULT))
 		return -EFAULT;
 
-	pr_info("%s: %s\n", __func__, name);
+	pr_info("%s(): %s\n", __func__, name);
 	return 66;
 }
 
 SYSCALL_DEFINE1(close, unsigned int, fd)
 {
 	debug_syscall_print();
-	return 0;
+	return -EFAULT;
 }
 
 static ssize_t do_readv(unsigned long fd, const struct iovec __user *vec,

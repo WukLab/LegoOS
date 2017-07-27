@@ -7,4 +7,4 @@ obj-y += pcache.o
 obj-y += fork.o
 obj-y += exec.o
 obj-y += mmap.o
-obj-y += file_ops.o
+obj-y += fs/

@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/stat.h>
 #include <lego/files.h>
 #include <lego/sched.h>
 #include <lego/utsname.h>
@@ -167,4 +168,22 @@ SYSCALL_DEFINE3(writev, unsigned long, fd, const struct iovec __user *, vec,
 {
 	BUG();
 }
+
+SYSCALL_DEFINE2(newstat, const char __user *, filename,
+		struct stat __user *, statbuf)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(newlstat, const char __user *, filename,
+		struct stat __user *, statbuf)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
+{
+	BUG();
+}
+
 #endif

@@ -12,6 +12,7 @@
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/percpu.h>
+#include <lego/syscalls.h>
 
 #include <asm/asm.h>
 #include <asm/msr.h>
@@ -72,6 +73,24 @@ long do_arch_prctl(struct task_struct *task, int code, unsigned long addr)
 		}
 		put_cpu();
 		break;
+	case ARCH_GET_FS: {
+		unsigned long base;
+		if (doit)
+			rdmsrl(MSR_FS_BASE, base);
+		else
+			base = task->thread.fsbase;
+		ret = put_user(base, (unsigned long __user *)addr);
+		break;
+	}
+	case ARCH_GET_GS: {
+		unsigned long base;
+		if (doit)
+			rdmsrl(MSR_KERNEL_GS_BASE, base);
+		else
+			base = task->thread.gsbase;
+		ret = put_user(base, (unsigned long __user *)addr);
+		break;
+	}
 
 	default:
 		ret = -EINVAL;
@@ -79,6 +98,11 @@ long do_arch_prctl(struct task_struct *task, int code, unsigned long addr)
 	}
 
 	return ret;
+}
+
+SYSCALL_DEFINE2(arch_prctl, int, code, unsigned long, addr)
+{
+	return do_arch_prctl(current, code, addr);
 }
 
 /* Seriously, this is magic function */

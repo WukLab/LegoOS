@@ -13,6 +13,7 @@
  * here and panic in case someone calls.
  */
 
+#include <lego/stat.h>
 #include <lego/files.h>
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
@@ -82,6 +83,23 @@ SYSCALL_DEFINE3(readv, unsigned long, fd, const struct iovec __user *, vec,
 
 SYSCALL_DEFINE3(writev, unsigned long, fd, const struct iovec __user *, vec,
 		unsigned long, vlen)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(newstat, const char __user *, filename,
+		struct stat __user *, statbuf)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(newlstat, const char __user *, filename,
+		struct stat __user *, statbuf)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 {
 	BUG();
 }

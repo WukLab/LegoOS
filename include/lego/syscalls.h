@@ -114,4 +114,7 @@ asmlinkage long sys_getrlimit(unsigned int resource,
 asmlinkage long sys_setrlimit(unsigned int resource,
 				struct rlimit __user *rlim);
 
+/* x86-64 only */
+asmlinkage long sys_arch_prctl(int, unsigned long);
+
 #endif /* _LEGO_SYSCALLS_H_ */
