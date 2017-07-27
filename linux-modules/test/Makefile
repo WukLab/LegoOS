@@ -1,5 +1,4 @@
-obj-m := storage.o
-storage-y := core.o metadata.o permission.o handlers.o
+obj-m := test_send.o
 
 cflags += -g
 EXTRA_CFLAGS += -g
