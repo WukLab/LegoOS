@@ -69,6 +69,7 @@ inline int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret
 	ret = client_send_reply_with_rdma_write_with_imm(ctx, target_node, addr, size, ret_addr, max_ret_size, 0, if_use_ret_phys_addr);
 	return ret;
 }
+EXPORT_SYMBOL(ibapi_send_reply_imm);
 
 #if 0
 int ibapi_register_application(unsigned int designed_port, unsigned int max_size_per_message, unsigned int max_user_per_node, char *name, uint64_t name_len)
@@ -95,12 +96,15 @@ inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int
 	ppc *ctx = FIT_ctx;
 	return client_receive_message(ctx, designed_port, ret_addr, receive_size, descriptor, 0);
 }
+EXPORT_SYMBOL(ibapi_receive_message);
 
 inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
 {
 	ppc *ctx = FIT_ctx;
 	return client_reply_message(ctx, addr, size, descriptor, 0);
 }
+EXPORT_SYMBOL(ibapi_reply_message);
+
 #if 0
 uint64_t ibapi_dist_barrier(unsigned int check_num)
 {
