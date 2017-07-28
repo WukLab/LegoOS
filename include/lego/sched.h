@@ -18,6 +18,7 @@
 #include <asm/thread_info.h>
 
 #include <lego/mm.h>
+#include <lego/cred.h>
 #include <lego/files.h>
 #include <lego/llist.h>
 #include <lego/magic.h>
@@ -337,6 +338,12 @@ struct task_struct {
 	unsigned long nvcsw, nivcsw;		/* context switch counts */
 	u64 start_time;				/* monotonic time in nsec */
 	u64 real_start_time;			/* boot based time in nsec */
+
+	/* process credentials */
+	struct cred *real_cred;		/* objective and real subjective task
+					 * credentials (COW) */
+	struct cred *cred;		/* effective (overridable) subjective task
+					 * credentials (COW) */
 
 	char comm[TASK_COMM_LEN];  /* executable name excluding path
 				     - access with [gs]et_task_comm (which lock

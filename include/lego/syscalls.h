@@ -87,6 +87,14 @@ asmlinkage long sys_writev(unsigned long fd,
 asmlinkage long sys_open(const char __user *filename, int flags, umode_t mode);
 asmlinkage long sys_close(unsigned int fd);
 
+asmlinkage long sys_getuid(void);
+asmlinkage long sys_geteuid(void);
+asmlinkage long sys_getgid(void);
+asmlinkage long sys_getegid(void);
+
+asmlinkage long sys_setgid(gid_t gid);
+asmlinkage long sys_setuid(uid_t uid);
+
 asmlinkage long sys_gettid(void);
 asmlinkage long sys_getpid(void);
 asmlinkage long sys_getppid(void);

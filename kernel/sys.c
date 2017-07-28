@@ -95,6 +95,58 @@ SYSCALL_DEFINE1(newuname, struct utsname __user *, name)
 	return 0;
 }
 
+SYSCALL_DEFINE0(getuid)
+{
+	debug_syscall_print();
+	return current_uid();
+}
+
+SYSCALL_DEFINE0(geteuid)
+{
+	debug_syscall_print();
+	return current_euid();
+}
+
+SYSCALL_DEFINE0(getgid)
+{
+	debug_syscall_print();
+	return current_gid();
+}
+
+SYSCALL_DEFINE0(getegid)
+{
+	debug_syscall_print();
+	return current_egid();
+}
+
+SYSCALL_DEFINE1(setuid, uid_t, uid)
+{
+	struct cred *cred = current->cred;
+
+	debug_syscall_print();
+	pr_info("%s(): original uid: %u, new uid: %u\n",
+		__func__, current_uid(), uid);
+
+	cred->suid = cred->uid = uid;
+	cred->fsuid = cred->euid = uid;
+
+	return 0;
+}
+
+SYSCALL_DEFINE1(setgid, gid_t, gid)
+{
+	struct cred *cred = current->cred;
+
+	debug_syscall_print();
+	pr_info("%s(): original gid: %u, new gid: %u\n",
+		__func__, current_gid(), gid);
+
+	cred->sgid = cred->gid = gid;
+	cred->fsgid = cred->egid = gid;
+
+	return 0;
+}
+
 /*
  * This section defines SYSCALLs that are only available to processor component
  * We are having this to make the kernel compile

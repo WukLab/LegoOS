@@ -295,6 +295,48 @@ static struct files_struct *dup_fd(struct files_struct *oldf)
 	return newf;
 }
 
+/*
+ * Copy credentials for the new process created by fork()
+ *
+ * We share if we can, but under some circumstances we have to generate a new
+ * set.
+ *
+ * The new process gets the current process's subjective credentials as its
+ * objective and subjective credentials
+ */
+static int copy_creds(struct task_struct *p, unsigned long clone_flags)
+{
+	struct cred *new;
+	struct cred *old = current->cred;
+
+	if (clone_flags & CLONE_THREAD) {
+		p->real_cred = get_cred(p->cred);
+		p->cred = get_cred(p->cred);
+		return 0;
+	}
+
+	new = kmalloc(sizeof(*new), GFP_KERNEL);
+	if (!new)
+		return -ENOMEM;
+
+	*new = *old;
+	atomic_set(&new->usage, 0);
+
+	p->real_cred = get_cred(p->cred);
+	p->cred = get_cred(p->cred);
+
+	return 0;
+}
+
+static void exit_creds(struct task_struct *tsk)
+{
+	put_cred(tsk->real_cred);
+	tsk->real_cred = NULL;
+
+	put_cred(tsk->cred);
+	tsk->cred = NULL;
+}
+
 static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
 {
 	struct files_struct *oldf, *newf;
@@ -391,10 +433,18 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	p->start_time = ktime_get_ns();
 	p->real_start_time = ktime_get_boot_ns();
 
+	/*
+	 * Now do the dirty work.
+	 */
+
+	retval = copy_creds(p, clone_flags);
+	if (retval < 0)
+		goto out_free;
+
 	/* Perform scheduler related setup. Assign this task to a CPU. */
 	retval = setup_sched_fork(clone_flags, p);
 	if (retval)
-		goto out_free;
+		goto out_cleanup_creds;
 
 	retval = copy_files(clone_flags, p);
 	if (retval)
@@ -495,6 +545,8 @@ out_cleanup_files:
 	exit_files(p);
 out_cleanup_sched:
 	sched_remove_from_rq(p);
+out_cleanup_creds:
+	exit_creds(p);
 out_free:
 	p->state = TASK_DEAD;
 	free_task(p);

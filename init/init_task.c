@@ -99,8 +99,26 @@
 	.thread_group	= LIST_HEAD_INIT(tsk.thread_group),		\
 	.thread_node	= LIST_HEAD_INIT(init_signals.thread_head),	\
 	.alloc_lock	= __SPIN_LOCK_UNLOCKED(tsk.alloc_lock),		\
+	.real_cred	= &init_cred,					\
+	.cred		= &init_cred,					\
 	.thread		= INIT_THREAD,					\
 }
+
+#define GLOBAL_ROOT_UID	0
+#define GLOBAL_ROOT_GID 0
+
+struct cred init_cred = {
+	/* both cred and real_cred */
+	.usage			= ATOMIC_INIT(2),
+	.uid			= GLOBAL_ROOT_UID,
+	.gid			= GLOBAL_ROOT_GID,
+	.suid			= GLOBAL_ROOT_UID,
+	.sgid			= GLOBAL_ROOT_GID,
+	.euid			= GLOBAL_ROOT_UID,
+	.egid			= GLOBAL_ROOT_GID,
+	.fsuid			= GLOBAL_ROOT_UID,
+	.fsgid			= GLOBAL_ROOT_GID,
+};
 
 static struct files_struct init_files = {
 	.count		= ATOMIC_INIT(1),

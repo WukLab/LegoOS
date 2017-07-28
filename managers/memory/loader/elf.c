@@ -13,6 +13,7 @@
  * http://www.win.tue.nl/~aeb/linux/hh/stack-layout.html
  */
 
+#include <lego/cred.h>
 #include <lego/slab.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
@@ -185,10 +186,10 @@ static int create_elf_tables(struct lego_task_struct *tsk, struct lego_binprm *b
 	NEW_AUX_ENT(AT_BASE, interp_load_addr);
 	NEW_AUX_ENT(AT_FLAGS, 0);
 	NEW_AUX_ENT(AT_ENTRY, exec->e_entry);
-	NEW_AUX_ENT(AT_UID, 0);
-	NEW_AUX_ENT(AT_EUID, 0);
-	NEW_AUX_ENT(AT_GID, 0);
-	NEW_AUX_ENT(AT_EGID, 0);
+	NEW_AUX_ENT(AT_UID, current_uid());
+	NEW_AUX_ENT(AT_EUID, current_euid());
+	NEW_AUX_ENT(AT_GID, current_gid());
+	NEW_AUX_ENT(AT_EGID, current_egid());
 	NEW_AUX_ENT(AT_SECURE, 0);
 	NEW_AUX_ENT(AT_RANDOM, (elf_addr_t)(unsigned long)u_rand_bytes);
 #ifdef ELF_HWCAP2

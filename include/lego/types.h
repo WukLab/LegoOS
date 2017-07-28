@@ -145,6 +145,9 @@ typedef unsigned		fmode_t;
 
 typedef unsigned long		cputime_t;
 
+typedef u32	uid_t;
+typedef u32	gid_t;
+
 /**
  * struct callback_head - callback structure for use with RCU and task_work
  * @next: next update requests in a list
@@ -154,6 +157,7 @@ struct callback_head {
 	struct callback_head *next;
 	void (*func)(struct callback_head *head);
 };
+
 #define rcu_head callback_head
 
 #endif /* __ASSEMBLY__ */
