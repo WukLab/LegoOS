@@ -16,6 +16,8 @@
 #include <lego/slab.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
+#include <lego/auxvec.h>
+#include <lego/jiffies.h>
 #include <lego/comp_memory.h>
 
 #include <memory/include/vm.h>
@@ -31,6 +33,11 @@
 
 #define BAD_ADDR(x)	((unsigned long)(x) >= TASK_SIZE)
 
+static int lego_clear_user(void * __user dst, size_t cnt)
+{
+	return 0;
+}
+
 /*
  * We need to explicitly zero any fractional pages
  * after the data section (i.e. bss).  This would
@@ -44,7 +51,7 @@ static int padzero(unsigned long elf_bss)
 	nbyte = ELF_PAGEOFFSET(elf_bss);
 	if (nbyte) {
 		nbyte = ELF_MIN_ALIGN - nbyte;
-		if (clear_user((void *)elf_bss, nbyte))
+		if (lego_clear_user((void *)elf_bss, nbyte))
 			return -EFAULT;
 	}
 	return 0;
@@ -57,12 +64,29 @@ static int padzero(unsigned long elf_bss)
 #define STACK_ROUND(sp, items)	(((unsigned long) (sp - items)) &~ 15UL)
 #define STACK_ALLOC(sp, len)	({ sp -= len ; sp; })
 
+static void get_random_bytes(void *buf, int nbytes)
+{
+	int i;
+	char *s;
+
+	for (i = 0, s = buf; i < nbytes; i++) {
+		s[i] = 0x12;
+	}
+}
+
 /*
  * This function finalize the stack layout, put some machine specific info,
  * create the real argv[], envp[] pointer array, and finally the last thing
  * in the stack is argc.
  *
- * For a detailed stack layout, refer to: https://lwn.net/Articles/631631/
+ * For a detailed stack layout, refer to:
+ *	https://lwn.net/Articles/631631/
+ *
+ * More about auxv in:
+ *	http://articles.manugarg.com/aboutelfauxiliaryvectors
+ *
+ * To see the contents of a progran, simply run:
+ *	LD_SHOW_AUXV=1 ls
  */
 static int create_elf_tables(struct lego_task_struct *tsk, struct lego_binprm *bprm,
 		struct elfhdr *exec, unsigned long load_addr, unsigned long interp_load_addr,
@@ -77,10 +101,14 @@ static int create_elf_tables(struct lego_task_struct *tsk, struct lego_binprm *b
 	elf_addr_t __user *sp;
 	elf_addr_t __user *u_platform;
 	elf_addr_t __user *u_base_platform;
+	elf_addr_t __user *u_rand_bytes;
 	const char *k_platform = ELF_PLATFORM;
 	const char *k_base_platform = ELF_BASE_PLATFORM;
 	int items, i;
+	elf_addr_t *elf_info;
+	int ei_index = 0;
 	struct vm_area_struct *vma;
+	unsigned char k_rand_bytes[16];
 
 	/*
 	 * In some cases (e.g. Hyper-Threading), we want to avoid L1
@@ -119,8 +147,71 @@ static int create_elf_tables(struct lego_task_struct *tsk, struct lego_binprm *b
 			return -EFAULT;
 	}
 
-	/* init sp first */
-	sp = STACK_ADD(p, 0);
+	/*
+	 * Generate 16 random bytes for userspace PRND seeding
+	 */
+	get_random_bytes(k_rand_bytes, sizeof(k_rand_bytes));
+	u_rand_bytes = (elf_addr_t __user *)
+			STACK_ALLOC(p, sizeof(k_rand_bytes));
+	if (!lego_copy_to_user(tsk, u_rand_bytes, k_rand_bytes, sizeof(k_rand_bytes)))
+		return -EFAULT;
+
+	/* Create the ELF interpreter info (auxvec) */
+	ei_index = 0;
+	elf_info = (elf_addr_t *)tsk->mm->saved_auxv;
+
+	/* update AT_VECTOR_SIZE_BASE if the number of NEW_AUX_ENT() changes */
+#define NEW_AUX_ENT(id, val) \
+	do { \
+		elf_info[ei_index++] = id; \
+		elf_info[ei_index++] = val; \
+	} while (0)
+
+#ifdef ARCH_DLINFO
+	/*
+	 * ARCH_DLINFO must come first so PPC can do its special alignment of
+	 * AUXV.
+	 * update AT_VECTOR_SIZE_ARCH if the number of NEW_AUX_ENT() in
+	 * ARCH_DLINFO changes
+	 */
+	ARCH_DLINFO;
+#endif
+	NEW_AUX_ENT(AT_HWCAP, ELF_HWCAP);
+	NEW_AUX_ENT(AT_PAGESZ, ELF_EXEC_PAGESIZE);
+	NEW_AUX_ENT(AT_CLKTCK, CLOCKS_PER_SEC);
+	NEW_AUX_ENT(AT_PHDR, load_addr + exec->e_phoff);
+	NEW_AUX_ENT(AT_PHENT, sizeof(struct elf_phdr));
+	NEW_AUX_ENT(AT_PHNUM, exec->e_phnum);
+	NEW_AUX_ENT(AT_BASE, interp_load_addr);
+	NEW_AUX_ENT(AT_FLAGS, 0);
+	NEW_AUX_ENT(AT_ENTRY, exec->e_entry);
+	NEW_AUX_ENT(AT_UID, 0);
+	NEW_AUX_ENT(AT_EUID, 0);
+	NEW_AUX_ENT(AT_GID, 0);
+	NEW_AUX_ENT(AT_EGID, 0);
+	NEW_AUX_ENT(AT_SECURE, 0);
+	NEW_AUX_ENT(AT_RANDOM, (elf_addr_t)(unsigned long)u_rand_bytes);
+#ifdef ELF_HWCAP2
+	NEW_AUX_ENT(AT_HWCAP2, ELF_HWCAP2);
+#endif
+	NEW_AUX_ENT(AT_EXECFN, bprm->exec);
+	if (k_platform) {
+		NEW_AUX_ENT(AT_PLATFORM,
+			    (elf_addr_t)(unsigned long)u_platform);
+	}
+	if (k_base_platform) {
+		NEW_AUX_ENT(AT_BASE_PLATFORM,
+			    (elf_addr_t)(unsigned long)u_base_platform);
+	}
+#undef NEW_AUX_ENT
+	/* AT_NULL is zero; clear the rest too */
+	memset(&elf_info[ei_index], 0,
+	       sizeof tsk->mm->saved_auxv - ei_index * sizeof elf_info[0]);
+
+	/* And advance past the AT_NULL entry.  */
+	ei_index += 2;
+
+	sp = STACK_ADD(p, ei_index);
 
 	/*
 	 * 1) nr of envc pointers
@@ -140,7 +231,10 @@ static int create_elf_tables(struct lego_task_struct *tsk, struct lego_binprm *b
 	if (WARN_ON(!vma))
 		return -EFAULT;
 
-	/* Now, let's put argc (and argv, envp if appropriate) on the stack */
+	/*
+	 * Now, let's put argc (and argv, envp if appropriate)
+	 * on the stack backward (sp is calculated above)
+	 */
 	if (!lego_copy_to_user(tsk, sp, &argc, sizeof(*sp)))
 		return -EFAULT;
 	sp++;
@@ -172,6 +266,11 @@ static int create_elf_tables(struct lego_task_struct *tsk, struct lego_binprm *b
 		return -EFAULT;
 
 	tsk->mm->env_end = p;
+
+	/* Put the elf_info on the stack in the right place.  */
+	sp = (elf_addr_t __user *)envp + 1;
+	if (!lego_copy_to_user(tsk, sp, elf_info, ei_index * sizeof(elf_addr_t)))
+		return -EFAULT;
 
 	return 0;
 }
@@ -417,7 +516,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 				nbyte = ELF_MIN_ALIGN - nbyte;
 				if (nbyte > elf_brk - elf_bss)
 					nbyte = elf_brk - elf_bss;
-				if (clear_user((void *)elf_bss +
+				if (lego_clear_user((void *)elf_bss +
 							load_bias, nbyte)) {
 					/*
 					 * This bss-zeroing can fail if the ELF

@@ -13,8 +13,9 @@
 #include <lego/mm.h>
 #include <lego/sched.h>
 #include <lego/rwsem.h>
-#include <lego/spinlock.h>
+#include <lego/auxvec.h>
 #include <lego/signal.h>
+#include <lego/spinlock.h>
 #include <generated/unistd_64.h>
 #include <lego/comp_common.h>	/* must come at last */
 
@@ -120,6 +121,13 @@ struct lego_mm_struct {
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack;
 	unsigned long arg_start, arg_end, env_start, env_end;
+
+	/*
+	 * This is showed in /proc/PID/auxv
+	 * And Lego can not omit this info during elf loading
+	 * Actually the GLIBC rely on this shit!
+	 */
+	unsigned long saved_auxv[AT_VECTOR_SIZE];
 
 	struct rw_semaphore mmap_sem;
 	struct lego_task_struct *task;

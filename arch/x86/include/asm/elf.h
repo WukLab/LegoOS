@@ -10,6 +10,8 @@
 #ifndef _ASM_X86_ELF_H_
 #define _ASM_X86_ELF_H_
 
+#include <asm/processor.h>
+
 /* x86-64 relocation types */
 #define R_X86_64_NONE		0	/* No reloc */
 #define R_X86_64_64		1	/* Direct 64 bit  */
@@ -43,5 +45,36 @@
  */
 #define elf_check_arch(x)			\
 	((x)->e_machine == EM_X86_64)
+
+static inline void elf_common_init(struct thread_struct *t,
+				   struct pt_regs *regs, const u16 ds)
+{
+	/* ax gets execve's return value. */
+	/*regs->ax = */ regs->bx = regs->cx = regs->dx = 0;
+	regs->si = regs->di = regs->bp = 0;
+	regs->r8 = regs->r9 = regs->r10 = regs->r11 = 0;
+	regs->r12 = regs->r13 = regs->r14 = regs->r15 = 0;
+	t->fsbase = t->gsbase = 0;
+	t->fsindex = t->gsindex = 0;
+	t->ds = t->es = ds;
+}
+
+#define ELF_EXEC_PAGESIZE	4096
+
+#define ELF_PLAT_INIT(_r, load_addr)			\
+	elf_common_init(&current->thread, _r, 0)
+
+/* This is the location that an ET_DYN program is loaded if exec'ed.  Typical
+   use of this is to invoke "./ld.so someprog" to test out a new version of
+   the loader.  We need to make sure that it is out of the way of the program
+   that it will "exec", and that there is sufficient room for the brk.  */
+
+#define ELF_ET_DYN_BASE		(TASK_SIZE / 3 * 2)
+
+/* This yields a mask that user programs can use to figure out what
+   instruction set this CPU supports.  This could be done in user space,
+   but it's not easy, and we've already done it here.  */
+
+#define ELF_HWCAP		(default_cpu_info.x86_capability[CPUID_1_EDX])
 
 #endif /* _ASM_X86_ELF_H_ */

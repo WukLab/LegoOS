@@ -9,6 +9,13 @@
 
 /*
  * User-space memory access functions
+ *
+ * BIT FAT NOTE:
+ * All code here can ONLY be used in processor component code.
+ * Because memory component does not have user-program running.
+ *
+ * Memory component has its own set of functions to manipulate
+ * user virtual memory pages, in managers/memory/include/vm.h
  */
 
 #ifndef _ASM_X86_UACCESS_H_

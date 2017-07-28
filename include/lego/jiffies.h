@@ -14,6 +14,10 @@
 
 #define HZ	CONFIG_HZ
 
+/* XXX: why 100??? */
+#define USER_HZ		100		/* some user interfaces are */
+#define CLOCKS_PER_SEC	(USER_HZ)       /* in "ticks" like times() */
+
 /*
  * The following defines establish the engineering parameters of the PLL
  * model. The HZ variable establishes the timer interrupt frequency, 100 Hz
