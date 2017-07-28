@@ -9,8 +9,9 @@
 
 #include <lego/sched.h>
 #include <lego/signal.h>
+#include <lego/syscalls.h>
+
 #include <asm/desc.h>
-#include <asm/syscalls.h>
 #include <asm/sigframe.h>
 #include <asm/sigcontext.h>
 #include <asm/fpu/internal.h>
@@ -424,4 +425,10 @@ void do_signal(struct pt_regs *regs)
 	 * back.
 	 */
 	restore_saved_sigmask();
+}
+
+SYSCALL_DEFINE0(rt_sigreturn)
+{
+	debug_syscall_print();
+	return -EFAULT;
 }

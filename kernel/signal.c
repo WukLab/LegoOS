@@ -1293,5 +1293,73 @@ int copy_siginfo_to_user(siginfo_t __user *to, const siginfo_t *from)
  */
 SYSCALL_DEFINE0(restart_syscall)
 {
+	debug_syscall_print();
+	return -EFAULT;
+}
+
+/**
+ *  sys_rt_sigprocmask - change the list of currently blocked signals
+ *  @how: whether to add, remove, or set signals
+ *  @nset: stores pending signals
+ *  @oset: previous value of signal mask if non-null
+ *  @sigsetsize: size of sigset_t type
+ */
+SYSCALL_DEFINE4(rt_sigprocmask, int, how, sigset_t __user *, nset,
+		sigset_t __user *, oset, size_t, sigsetsize)
+{
+	debug_syscall_print();
+	return -EFAULT;
+}
+
+/**
+ *  sys_rt_sigpending - examine a pending signal that has been raised
+ *			while blocked
+ *  @uset: stores pending signals
+ *  @sigsetsize: size of sigset_t type or larger
+ */
+SYSCALL_DEFINE2(rt_sigpending, sigset_t __user *, uset, size_t, sigsetsize)
+{
+	debug_syscall_print();
+	return -EFAULT;
+}
+
+/**
+ *  sys_rt_sigaction - alter an action taken by a process
+ *  @sig: signal to be sent
+ *  @act: new sigaction
+ *  @oact: used to save the previous sigaction
+ *  @sigsetsize: size of sigset_t type
+ */
+SYSCALL_DEFINE4(rt_sigaction, int, sig,
+		const struct sigaction __user *, act,
+		struct sigaction __user *, oact,
+		size_t, sigsetsize)
+{
+	debug_syscall_print();
+	return -EFAULT;
+}
+
+/**
+ *  sys_rt_sigqueueinfo - send signal information to a signal
+ *  @pid: the PID of the thread
+ *  @sig: signal to be sent
+ *  @uinfo: signal info to be sent
+ */
+SYSCALL_DEFINE3(rt_sigqueueinfo, pid_t, pid, int, sig,
+		siginfo_t __user *, uinfo)
+{
+	debug_syscall_print();
+	return -EFAULT;
+}
+
+/**
+ *  sys_rt_sigsuspend - replace the signal mask for a value with the
+ *	@unewset value until a signal is received
+ *  @unewset: new signal mask value
+ *  @sigsetsize: size of sigset_t type
+ */
+SYSCALL_DEFINE2(rt_sigsuspend, sigset_t __user *, unewset, size_t, sigsetsize)
+{
+	debug_syscall_print();
 	return -EFAULT;
 }
