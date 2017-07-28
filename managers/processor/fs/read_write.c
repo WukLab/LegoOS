@@ -17,6 +17,7 @@
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
 	debug_syscall_print();
+	pr_info("%s(): fd: %d\n", __func__, fd);
 	return -EFAULT;
 }
 
@@ -25,14 +26,15 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 {
 	char *s;
 
+	debug_syscall_print();
+
 	s = kmalloc(count, GFP_KERNEL);
 	if (!s)
 		return -ENOMEM;
 
-	if (!copy_from_user(s, buf, count))
+	if (copy_from_user(s, buf, count))
 		return -EFAULT;
 
-	debug_syscall_print();
 	pr_info("%s(): buf: %s\n", __func__, s);
 
 	return count;
@@ -60,7 +62,6 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 static ssize_t do_readv(unsigned long fd, const struct iovec __user *vec,
 			unsigned long vlen, int flags)
 {
-	debug_syscall_print();
 	pr_info("%s: fd: %lu\n", __func__, fd);
 	return -EFAULT;
 }
@@ -73,7 +74,6 @@ static ssize_t do_writev(unsigned long fd, const struct iovec __user *vec,
 	int i;
 	ssize_t ret = 0;
 
-	debug_syscall_print();
 	pr_info("%s: fd: %lu, nrvec: %lu\n",
 		__func__, fd, vlen);
 
@@ -111,11 +111,13 @@ free:
 SYSCALL_DEFINE3(readv, unsigned long, fd, const struct iovec __user *, vec,
 		unsigned long, vlen)
 {
+	debug_syscall_print();
 	return do_readv(fd, vec, vlen, 0);
 }
 
 SYSCALL_DEFINE3(writev, unsigned long, fd, const struct iovec __user *, vec,
 		unsigned long, vlen)
 {
+	debug_syscall_print();
 	return do_writev(fd, vec, vlen, 0);
 }
