@@ -12,6 +12,7 @@
 #include <lego/slab.h>
 #include <lego/files.h>
 #include <lego/sched.h>
+#include <lego/completion.h>
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
 #include <lego/fit_ibapi.h>
@@ -155,6 +156,37 @@ void mmput(struct mm_struct *mm)
 		__mmput(mm);
 }
 
+static void complete_vfork_done(struct task_struct *tsk)
+{
+	struct completion *vfork;
+
+	task_lock(tsk);
+	vfork = tsk->vfork_done;
+	if (likely(vfork)) {
+		tsk->vfork_done = NULL;
+		complete(vfork);
+	}
+	task_unlock(tsk);
+}
+
+static int wait_for_vfork_done(struct task_struct *child,
+				struct completion *vfork)
+{
+	int killed;
+
+	killed = wait_for_completion_killable(vfork);
+
+	if (unlikely(killed)) {
+		/* child was killded by signal */
+		task_lock(child);
+		child->vfork_done = NULL;
+		task_unlock(child);
+	}
+
+	put_task_struct(child);
+	return killed;
+}
+
 /* Please note the differences between mmput and mm_release.
  * mmput is called whenever we stop holding onto a mm_struct,
  * error success whatever.
@@ -172,6 +204,25 @@ void mm_release(struct task_struct *tsk, struct mm_struct *mm)
 {
 	/* Get rid of any cached register state */
 	deactivate_mm(tsk, mm);
+
+	if (tsk->clear_child_tid) {
+		if (atomic_read(&mm->mm_users) > 1) {
+			int ret, zero = 0;
+			/*
+			 * We don't check the error code - if userspace has
+			 * not set up a proper pointer then tough luck.
+			 */
+			ret = copy_to_user(tsk->clear_child_tid, &zero, 4);
+		}
+		tsk->clear_child_tid = NULL;
+	}
+
+	/*
+	 * All done, finally we can wake up parent and return this mm to him.
+	 * Also kthread_stop() uses this completion for synchronization.
+	 */
+	if (tsk->vfork_done)
+		complete_vfork_done(tsk);
 }
 
 static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
@@ -564,12 +615,16 @@ pid_t do_fork(unsigned long clone_flags,
 	      int tls)
 {
 	struct task_struct *p;
+	struct completion vfork;
+	pid_t pid;
+	int ret;
 
 	p = copy_process(clone_flags, stack_start, stack_size,
 			 child_tidptr, tls, NUMA_NO_NODE);
 	if (IS_ERR(p))
 		return PTR_ERR(p);
 
+	/* Tell remote memory component */
 #ifdef CONFIG_COMP_PROCESSOR
 	if (clone_flags & CLONE_GLOBAL_THREAD) {
 		int ret;
@@ -582,7 +637,25 @@ pid_t do_fork(unsigned long clone_flags,
 	}
 #endif
 
+	/*
+	 * Do this prior waking up the new thread - the thread pointer
+	 * might get invalid after that point, if the thread exits quickly.
+	 */
+	pid = p->pid;
+	if (clone_flags & CLONE_PARENT_SETTID)
+		ret = copy_to_user(parent_tidptr, &pid, 4);
+
+	if (clone_flags & CLONE_VFORK) {
+		p->vfork_done = &vfork;
+		init_completion(&vfork);
+		get_task_struct(p);
+	}
+
 	wake_up_new_task(p);
+
+	if (clone_flags & CLONE_VFORK)
+		wait_for_vfork_done(p, &vfork);
+
 	return p->pid;
 }
 
@@ -603,11 +676,13 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 
 SYSCALL_DEFINE0(fork)
 {
+	debug_syscall_print();
 	return do_fork(SIGCHLD, 0, 0, NULL, NULL, 0);
 }
 
 SYSCALL_DEFINE0(vfork)
 {
+	debug_syscall_print();
 	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD,
 		       0, 0, NULL, NULL, 0);
 }
@@ -617,7 +692,17 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 		 int __user *, child_tidptr,
 		 unsigned long, tls)
 {
+	debug_syscall_print();
 	return do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
+}
+
+SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)
+{
+	debug_syscall_print();
+	pr_info("%s(): tidpid: %p\n", __func__, tidptr);
+
+	current->clear_child_tid = tidptr;
+	return current->group_leader->pid;
 }
 
 void __init fork_init(void)

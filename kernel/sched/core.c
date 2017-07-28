@@ -654,6 +654,13 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 	rq = finish_task_switch(prev);
 	preempt_enable();
 	balance_callback(rq);
+
+	if (current->set_child_tid) {
+		int ret;
+
+		ret = copy_to_user(current->set_child_tid,
+				   &current->group_leader->pid, 4);
+	}
 }
 
 /*

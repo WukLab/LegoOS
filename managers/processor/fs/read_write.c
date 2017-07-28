@@ -23,7 +23,18 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 		size_t, count)
 {
+	char *s;
+
+	s = kmalloc(count, GFP_KERNEL);
+	if (!s)
+		return -ENOMEM;
+
+	if (!copy_from_user(s, buf, count))
+		return -EFAULT;
+
 	debug_syscall_print();
+	pr_info("%s(): buf: %s\n", __func__, s);
+
 	return count;
 }
 

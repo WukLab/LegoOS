@@ -38,4 +38,5 @@
 158	common	arch_prctl		sys_arch_prctl
 160	common	setrlimit		sys_setrlimit
 186	common	gettid			sys_gettid
+218     common  set_tid_address         sys_set_tid_address
 219	common	restart_syscall		sys_restart_syscall
