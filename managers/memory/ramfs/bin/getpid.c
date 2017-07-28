@@ -6,5 +6,7 @@
 int main(int argc, char **argv)
 {
 	getpid();
-	return 0;
+	getpid();
+	getpid();
+	return -66;
 }
