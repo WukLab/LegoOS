@@ -17,19 +17,37 @@
 SYSCALL_DEFINE2(newstat, const char __user *, filename,
 		struct stat __user *, statbuf)
 {
+	char buf[FILENAME_LEN_DEFAULT];
+	long ret;
+
+	ret = strncpy_from_user(buf, filename, FILENAME_LEN_DEFAULT);
+	if (ret < 0)
+		return ret;
 	debug_syscall_print();
-	return -EFAULT;
+	pr_info("%s(): filename: %s\n", __func__, buf);
+
+	ret = __clear_user(statbuf, sizeof(*statbuf));
+	return 0;
 }
 
 SYSCALL_DEFINE2(newlstat, const char __user *, filename,
 		struct stat __user *, statbuf)
 {
+	char buf[FILENAME_LEN_DEFAULT];
+	long ret;
+
+	ret = strncpy_from_user(buf, filename, FILENAME_LEN_DEFAULT);
+	if (ret < 0)
+		return ret;
 	debug_syscall_print();
-	return -EFAULT;
+	pr_info("%s(): filename: %s\n", __func__, buf);
+
+	ret = __clear_user(statbuf, sizeof(*statbuf));
+	return 0;
 }
 
 SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 {
 	debug_syscall_print();
-	return -EFAULT;
+	return -ENOENT;
 }

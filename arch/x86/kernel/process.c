@@ -102,6 +102,7 @@ long do_arch_prctl(struct task_struct *task, int code, unsigned long addr)
 
 SYSCALL_DEFINE2(arch_prctl, int, code, unsigned long, addr)
 {
+	pr_info("%s(): code: %d, addr: %#lx\n", __func__, code, addr);
 	return do_arch_prctl(current, code, addr);
 }
 
