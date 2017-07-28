@@ -8,6 +8,7 @@
  */
 
 #include <lego/smp.h>
+#include <lego/slab.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
@@ -368,4 +369,23 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
  */
 void exit_thread(struct task_struct *tsk)
 {
+	struct thread_struct *t = &tsk->thread;
+	unsigned long *bp = t->io_bitmap_ptr;
+	struct fpu *fpu = &t->fpu;
+
+	if (bp) {
+		struct tss_struct *tss = &per_cpu(cpu_tss, get_cpu());
+
+		t->io_bitmap_ptr = NULL;
+		clear_thread_flag(TIF_IO_BITMAP);
+		/*
+		 * Careful, clear this in the TSS too:
+		 */
+		memset(tss->io_bitmap, 0xff, t->io_bitmap_max);
+		t->io_bitmap_max = 0;
+		put_cpu();
+		kfree(bp);
+	}
+
+	fpu__drop(fpu);
 }

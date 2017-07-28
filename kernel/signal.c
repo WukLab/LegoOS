@@ -1285,6 +1285,7 @@ int copy_siginfo_to_user(siginfo_t __user *to, const siginfo_t *from)
 	}
 	return err;
 }
+
 /* System-call Part */
 
 /**

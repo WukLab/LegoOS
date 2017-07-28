@@ -7,13 +7,31 @@
  * (at your option) any later version.
  */
 
+#include <lego/mm.h>
 #include <lego/wait.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
+#include <lego/syscalls.h>
+
+static void exit_mm(struct task_struct *tsk)
+{
+	struct mm_struct *mm = tsk->mm;
+
+	mm_release(tsk, mm);
+	barrier();
+	tsk->mm = NULL;
+	mmput(mm);
+}
+
+void exit_files(struct task_struct *tsk)
+{
+	/* TODO */
+}
 
 void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;
+	int group_dead;
 
 	if (unlikely(!tsk->pid))
 		panic("Attempted to kill the idle task!");
@@ -24,7 +42,40 @@ void __noreturn do_exit(long code)
 		preempt_count_set(0);
 	}
 
+	/*
+	 * We're taking recursive faults here in do_exit. Safest is to just
+	 * leave this task alone and wait for reboot.
+	 */
+	if (unlikely(tsk->flags & PF_EXITING)) {
+		pr_alert("Fixing recursive fault but reboot is needed!\n");
+		/*
+		 * We can do this unlocked here. The futex code uses
+		 * this flag just to verify whether the pi state
+		 * cleanup has been done or not. In the worst case it
+		 * loops once more. We pretend that the cleanup was
+		 * done as there is no way to return. Either the
+		 * OWNER_DIED bit is set by now or we push the blocked
+		 * task into the wait for ever nirwana as well.
+		 */
+		tsk->flags |= PF_EXITPIDONE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		schedule();
+	}
+
+	exit_signals(tsk);  /* sets PF_EXITING */
+	/*
+	 * Ensure that all new tsk->pi_lock acquisitions must observe
+	 * PF_EXITING. Serializes against futex.c:attach_to_pi_owner().
+	 */
+	smp_mb();
+
+	group_dead = atomic_dec_and_test(&tsk->signal->live);
+
 	tsk->exit_code = code;
+
+	exit_mm(tsk);
+	exit_files(tsk);
+	exit_thread(tsk);
 
 	preempt_disable();
 	do_task_dead();
@@ -100,4 +151,11 @@ int is_current_pgrp_orphaned(void)
 	spin_unlock(&tasklist_lock);
 
 	return retval;
+}
+
+SYSCALL_DEFINE1(exit, int, error_code)
+{
+	debug_syscall_print();
+	pr_info("%s(): error_code: %d\n", __func__, error_code);
+	do_exit((error_code&0xff)<<8);
 }
