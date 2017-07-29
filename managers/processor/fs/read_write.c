@@ -17,7 +17,8 @@
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
 	debug_syscall_print();
-	pr_info("%s(): fd: %d\n", __func__, fd);
+	pr_info("%s(): fd: %d, buf: %p, count: %zu\n",
+		__func__, fd, buf, count);
 	return -EFAULT;
 }
 
@@ -46,16 +47,18 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 
 	debug_syscall_print();
 
-	if (copy_from_user(name, filename, FILENAME_LEN_DEFAULT))
+	if (strncpy_from_user(name, filename, FILENAME_LEN_DEFAULT) < 0)
 		return -EFAULT;
 
-	pr_info("%s(): %s\n", __func__, name);
+	pr_info("%s(): %p [%s]\n",
+		__func__, filename, name);
 	return 66;
 }
 
 SYSCALL_DEFINE1(close, unsigned int, fd)
 {
 	debug_syscall_print();
+	pr_info("%s(): fd: %d\n", __func__, fd);
 	return -EFAULT;
 }
 
