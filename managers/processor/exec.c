@@ -218,6 +218,20 @@ int do_execve(const char *filename,
 	if (ret)
 		goto out;
 
+#ifdef ELF_PLAT_INIT
+	/*
+	 * The ABI may specify that certain registers be set up in special
+	 * ways (on i386 %edx is the address of a DT_FINI function, for
+	 * example.  In addition, it may also specify (eg, PowerPC64 ELF)
+	 * that the e_entry field is the address of the function descriptor
+	 * for the startup routine, rather than the address of the startup
+	 * routine itself.  This macro performs whatever initialization to
+	 * the regs structure is required as well as any relocations to the
+	 * function descriptor entries when executing dynamically links apps.
+	 */
+	ELF_PLAT_INIT(regs);
+#endif
+
 	/* core-kernel: change the task iret frame */
 	start_thread(regs, new_ip, new_sp);
 	ret = 0;

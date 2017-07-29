@@ -61,7 +61,7 @@ static inline void elf_common_init(struct thread_struct *t,
 
 #define ELF_EXEC_PAGESIZE	4096
 
-#define ELF_PLAT_INIT(_r, load_addr)			\
+#define ELF_PLAT_INIT(_r)	\
 	elf_common_init(&current->thread, _r, 0)
 
 /* This is the location that an ET_DYN program is loaded if exec'ed.  Typical
