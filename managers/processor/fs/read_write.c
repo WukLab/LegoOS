@@ -14,52 +14,58 @@
 #include <lego/syscalls.h>
 #include <lego/comp_processor.h>
 
+#include "internal.h"
+
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
+	struct file *filp;
+
 	debug_syscall_print();
 	pr_info("%s(): fd: %d, buf: %p, count: %zu\n",
 		__func__, fd, buf, count);
+
+	filp = fdget(fd);
+	if (!filp)
+		return -EBADF;
+
 	return -EFAULT;
 }
 
 SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 		size_t, count)
 {
-	char *s;
+	struct file *filp;
+	int retval = 0;
+	void *s;
 
 	debug_syscall_print();
+	pr_info("%s(): fd: %d buf: %p count: %zu\n",
+		__func__, fd, buf, count);
+
+	filp = fdget(fd);
+	if (!filp)
+		return -EBADF;
 
 	s = kmalloc(count, GFP_KERNEL);
-	if (!s)
-		return -ENOMEM;
+	if (!s) {
+		retval = -ENOMEM;
+		goto out_put;
+	}
 
-	if (copy_from_user(s, buf, count))
-		return -EFAULT;
+	if (copy_from_user(s, buf, count)) {
+		retval = -EFAULT;
+		goto out_free;
+	}
 
-	pr_info("%s(): buf: %s\n", __func__, s);
-
+	pr_info("%s(): [%s]\n", __func__, (char *)s);
 	return count;
-}
 
-SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
-{
-	char name[FILENAME_LEN_DEFAULT];
+out_free:
+	kfree(s);
+out_put:
+	put_file(filp);
 
-	debug_syscall_print();
-
-	if (strncpy_from_user(name, filename, FILENAME_LEN_DEFAULT) < 0)
-		return -EFAULT;
-
-	pr_info("%s(): %p [%s]\n",
-		__func__, filename, name);
-	return 66;
-}
-
-SYSCALL_DEFINE1(close, unsigned int, fd)
-{
-	debug_syscall_print();
-	pr_info("%s(): fd: %d\n", __func__, fd);
-	return -EFAULT;
+	return retval;
 }
 
 static ssize_t do_readv(unsigned long fd, const struct iovec __user *vec,

@@ -76,18 +76,27 @@
 struct file {
 	unsigned int 		f_flags;
 	fmode_t			f_mode;
-	struct mutex		f_pos_lock;
+	atomic_t		f_count;
+	spinlock_t		f_pos_lock;
 	loff_t			f_pos;
 	char			f_name[FILENAME_LEN_DEFAULT];
 };
 
-#define NR_OPEN_DEFAULT		16
+#define NR_OPEN_DEFAULT		64
 
 /* Opened files table structure */
 struct files_struct {
 	atomic_t count;
 
 	spinlock_t file_lock ____cacheline_aligned_in_smp;
+
+	/*
+	 * @fd_bitmap is used for fast search
+	 * @fd_array is the real pointer array
+	 *
+	 * Both protected by @file_lock above
+	 */
+	DECLARE_BITMAP(fd_bitmap, NR_OPEN_DEFAULT);
 	struct file *fd_array[NR_OPEN_DEFAULT];
 };
 
