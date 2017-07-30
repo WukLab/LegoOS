@@ -262,6 +262,23 @@ asmlinkage void __init start_kernel(void)
 
 	irq_init();
 
+	/*
+	 * First init timer data structures.
+	 * Then we need to init timekeeping subsystem.
+	 * At last, we register better clocksources and notify timekeeping subsystem.
+	 * and new clockevent devices will be installed.
+	 *
+	 * Do note that after time_init(), our clocksource is final (x86 is tsc)
+	 * But our clockevent device is not. After time_init() it should be hpet,
+	 * but later on it will switch to local-APIC timer clockevent.
+	 *
+	 * Do note that clocksource is used to *read the time*. However clockevent device
+	 * is used to *fire timer interrupt*, which will call update_wall_time() to
+	 * let clocksource subsystem use current clocksource to update wall time!
+	 *
+	 * Clockevent and clocksource are two different data structures.
+	 * But they can be the same device. (Well, normally is different I think)
+	 */
 	init_timers();
 	timekeeping_init();
 	time_init();

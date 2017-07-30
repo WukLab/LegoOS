@@ -16,15 +16,26 @@
 #include <lego/timekeeping.h>
 #include <lego/clocksource.h>
 
+#include "internal.h"
+
+#define TK_CLEAR_NTP		(1 << 0)
+#define TK_MIRROR		(1 << 1)
+#define TK_CLOCK_WAS_SET	(1 << 2)
+
 static struct {
 	struct timekeeper	timekeeper;
 } tk_core ____cacheline_aligned;
+
+static DEFINE_SPINLOCK(timekeeper_lock);
+
+/* Flag for if there is a persistent clock on this platform */
+static bool persistent_clock_exists;
 
 /**
  * tk_setup_internals - Set up internals to use clocksource clock.
  *
  * @tk:		The target timekeeper to setup.
- * @clock:		Pointer to clocksource.
+ * @clock:	Pointer to clocksource.
  *
  * Calculates a fixed cycle/nsec interval for a given clocksource/adjustment
  * pair and interval request.
@@ -125,41 +136,14 @@ static void tk_set_wall_to_mono(struct timekeeper *tk, struct timespec wtm)
 	tk->offs_tai = ktime_add(tk->offs_real, ktime_set(tk->tai_offset, 0));
 }
 
-/* Flag for if there is a persistent clock on this platform */
-static bool persistent_clock_exists;
-
-/*
- * timekeeping_init
- * Initializes the clocksource and common timekeeping values
- */
-void __init timekeeping_init(void)
+/* Uses the current clocksource to increment the wall time */
+void update_wall_time(void)
 {
-	struct timekeeper *tk = &tk_core.timekeeper;
-	struct clocksource *clock;
-	struct timespec now, boot, tmp;
+}
 
-	read_persistent_clock(&now);
-
-	if (!timespec_valid_strict(&now)) {
-		pr_warn("WARNING: Persistent clock returned invalid value!\n"
-			"         Check your CMOS/BIOS settings.\n");
-		now.tv_sec = 0;
-		now.tv_nsec = 0;
-	} else if (now.tv_sec || now.tv_nsec)
-		persistent_clock_exists = true;
-
-	clock = clocksource_default_clock();
-	if (clock->enable)
-		clock->enable(clock);
-
-	tk_setup_internals(tk, clock);
-	tk_set_xtime(tk, &now);
-	tk->raw_time.tv_sec = 0;
-	tk->raw_time.tv_nsec = 0;
-
-	boot = tk_xtime(tk);
-	set_normalized_timespec(&tmp, -boot.tv_sec, -boot.tv_nsec);
-	tk_set_wall_to_mono(tk, tmp);
+/* must hold timekeeper_lock */
+static void timekeeping_update(struct timekeeper *tk, unsigned int action)
+{
 }
 
 /**
@@ -172,6 +156,61 @@ void __init timekeeping_init(void)
 int timekeeping_notify(struct clocksource *clock)
 {
 	return 0;
+}
+
+/*
+ * timekeeping_init
+ * Initializes the clocksource and common timekeeping values
+ */
+void __init timekeeping_init(void)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	struct clocksource *clock;
+	struct timespec now, boot, tmp;
+	unsigned long flags;
+
+	read_persistent_clock(&now);
+
+	if (!timespec_valid_strict(&now)) {
+		pr_warn("WARNING: Persistent clock returned invalid value!\n"
+			"         Check your CMOS/BIOS settings.\n");
+		now.tv_sec = 0;
+		now.tv_nsec = 0;
+	} else if (now.tv_sec || now.tv_nsec)
+		persistent_clock_exists = true;
+
+	spin_lock_irqsave(&timekeeper_lock, flags);
+
+	ntp_init();
+
+	/*
+	 * We are called before time_init(), so better clocksources
+	 * are not even registered. So we use our default jiffies
+	 * clocksource first. Later on if time_init() registe better
+	 * ones, it will use timekeeping_notify() to tell us:
+	 *
+	 * Why jiffies can a clocksource? Because jiffies is updated
+	 * during every timer interrupt. So it is sort of a software
+	 * clocksource, and it has granunality of 1 HZ.
+	 *
+	 * Of course, timer interrupt is fired by clockevent devices.
+	 */
+	clock = clocksource_default_clock();
+	if (clock->enable)
+		clock->enable(clock);
+
+	tk_setup_internals(tk, clock);
+	tk_set_xtime(tk, &now);
+	tk->raw_time.tv_sec = 0;
+	tk->raw_time.tv_nsec = 0;
+
+	boot = tk_xtime(tk);
+	set_normalized_timespec(&tmp, -boot.tv_sec, -boot.tv_nsec);
+	tk_set_wall_to_mono(tk, tmp);
+
+	timekeeping_update(tk, TK_MIRROR | TK_CLOCK_WAS_SET);
+
+	spin_unlock_irqrestore(&timekeeper_lock, flags);
 }
 
 /* TODO */
@@ -188,10 +227,4 @@ ktime_t ktime_get_with_offset(enum tk_offsets offs)
 void do_timer(unsigned long ticks)
 {
 	jiffies += ticks;
-}
-
-
-/* Uses the current clocksource to increment the wall time */
-void update_wall_time(void)
-{
 }
