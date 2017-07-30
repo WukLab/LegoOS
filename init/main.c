@@ -262,6 +262,7 @@ asmlinkage void __init start_kernel(void)
 
 	irq_init();
 
+	init_timers();
 	timekeeping_init();
 	time_init();
 	calibrate_delay();
@@ -283,9 +284,6 @@ asmlinkage void __init start_kernel(void)
 	if (WARN(!irqs_disabled(),
 		 "Interrupts were enabled *very* early, fixing it\n"))
 		local_irq_disable();
-
-
-	init_timers();
 
 	/*
 	 * Boot all possible CPUs
