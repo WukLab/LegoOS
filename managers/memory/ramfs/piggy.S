@@ -11,5 +11,5 @@
 
 	.section ".ramfs","ax"
 GLOBAL(ramfs_start)
-.incbin "managers/memory/ramfs/bin/getpid"
+.incbin "managers/memory/ramfs/bin/word_count"
 GLOBAL(ramfs_end)
