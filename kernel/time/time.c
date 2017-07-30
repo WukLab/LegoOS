@@ -8,8 +8,10 @@
  */
 
 #include <lego/time.h>
+#include <lego/uaccess.h>
 #include <lego/kernel.h>
 #include <lego/jiffies.h>
+#include <lego/syscalls.h>
 
 /**
  * mktime - Converts date to seconds.
@@ -179,4 +181,59 @@ unsigned int jiffies_to_usecs(const unsigned long j)
 	return (j * HZ_TO_USEC_NUM) / HZ_TO_USEC_DEN;
 # endif
 #endif
+}
+
+unsigned long get_seconds(void)
+{
+	return 0;
+}
+
+SYSCALL_DEFINE1(time, time_t __user *, tloc)
+{
+	time_t i = get_seconds();
+
+	syscall_enter();
+	if (tloc)
+		if (copy_to_user(tloc, &i, sizeof(time_t)))
+			return -EFAULT;
+	return i;
+}
+
+/**
+ * do_gettimeofday - Returns the time of day in a timeval
+ * @tv:		pointer to the timeval to be set
+ *
+ * NOTE: Users should be converted to using getnstimeofday()
+ */
+void do_gettimeofday(struct timeval *tv)
+{
+	struct timespec now;
+
+	/* TODO */
+	now = CURRENT_TIME;
+	tv->tv_sec = now.tv_sec;
+	tv->tv_usec = now.tv_nsec/1000;
+}
+
+/*
+ * The timezone where the local system is located.  Used as a default by some
+ * programs who obtain this value by using gettimeofday.
+ */
+struct timezone sys_tz;
+
+SYSCALL_DEFINE2(gettimeofday, struct timeval __user *, tv,
+		struct timezone __user *, tz)
+{
+	syscall_enter();
+	if (likely(tv != NULL)) {
+		struct timeval ktv;
+		do_gettimeofday(&ktv);
+		if (copy_to_user(tv, &ktv, sizeof(ktv)))
+			return -EFAULT;
+	}
+	if (unlikely(tz != NULL)) {
+		if (copy_to_user(tz, &sys_tz, sizeof(sys_tz)))
+			return -EFAULT;
+	}
+	return 0;
 }

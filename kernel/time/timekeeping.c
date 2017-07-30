@@ -190,6 +190,8 @@ void do_timer(unsigned long ticks)
 	jiffies += ticks;
 }
 
+
+/* Uses the current clocksource to increment the wall time */
 void update_wall_time(void)
 {
 }

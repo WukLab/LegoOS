@@ -252,6 +252,9 @@ void tick_handle_periodic(struct clock_event_device *dev)
 {
 	int cpu = smp_processor_id();
 
+	/*
+	 * Things only one CPU core should do...
+	 */
 	if (cpu == tick_do_timer_cpu) {
 		/* jiffies += 1 */
 		do_timer(1);
@@ -262,6 +265,9 @@ void tick_handle_periodic(struct clock_event_device *dev)
 		update_wall_time();
 	}
 
+	/*
+	 * Things every CPU core should do...
+	 */
 	run_local_timers();
 	scheduler_tick();
 }
