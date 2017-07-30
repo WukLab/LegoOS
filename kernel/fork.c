@@ -316,8 +316,10 @@ static void close_files(struct files_struct *files)
 	for_each_set_bit(fd, files->fd_bitmap, NR_OPEN_DEFAULT) {
 		f = files->fd_array[fd];
 		BUG_ON(!f);
+
 		put_file(f);
 		__clear_bit(fd, files->fd_bitmap);
+		files->fd_array[fd] = NULL;
 	}
 	spin_unlock(&files->file_lock);
 }

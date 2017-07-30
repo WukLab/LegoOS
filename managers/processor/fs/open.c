@@ -84,24 +84,53 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	char kname[FILENAME_LEN_DEFAULT];
 	int fd;
 
-	debug_syscall_print();
+	syscall_enter();
 
-	if (strncpy_from_user(kname, filename, FILENAME_LEN_DEFAULT) < 0)
-		return -EFAULT;
+	if (strncpy_from_user(kname, filename, FILENAME_LEN_DEFAULT) < 0) {
+		fd = -EFAULT;
+		goto out;
+	}
 
 	/*
 	 * Allocate fd and struct file
 	 * and @file has ref set to 1 if succeed
 	 */
 	fd = alloc_fd(current->files, kname);
+	pr_info("%s(): [%d] -> [%s]\n", __func__, fd, filename);
+
+out:
+	syscall_exit(fd);
 	return fd;
 }
 
 SYSCALL_DEFINE1(close, unsigned int, fd)
 {
-	debug_syscall_print();
-	pr_info("%s(): fd: %d\n", __func__, fd);
-	return -EFAULT;
+	struct file *f = NULL;
+	struct files_struct *files = current->files;
+	int ret;
+
+	syscall_enter();
+
+	spin_lock(&files->file_lock);
+	if (likely(test_bit(fd, files->fd_bitmap))) {
+		f = files->fd_array[fd];
+		BUG_ON(!f);
+
+		put_file(f);
+		__clear_bit(fd, files->fd_bitmap);
+		files->fd_array[fd] = NULL;
+
+		ret = 0;
+	} else {
+		ret = -EBADF;
+	}
+	spin_unlock(&files->file_lock);
+
+	pr_info("%s(): [%d] -> [%s]\n", __func__, fd,
+		f ? f->f_name : "-EBADF");
+
+	syscall_exit(ret);
+	return ret;
 }
 
 SYSCALL_DEFINE2(dup2, unsigned int, oldfd, unsigned int, newfd)

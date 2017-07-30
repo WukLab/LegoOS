@@ -24,7 +24,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	unsigned long ret_brk;
 	int ret;
 
-	debug_syscall_print();
+	syscall_enter();
 	pr_info("%s(): brk: %#lx\n", __func__, brk);
 
 	payload.pid = current->pid;
@@ -50,8 +50,9 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	struct p2m_mmap_reply_struct reply;
 	int ret;
 
-	debug_syscall_print();
-	pr_info("%s(): fd: %lu\n", __func__, fd);
+	syscall_enter();
+	pr_info("%s(): addr:%#lx,len:%#lx,prot:%#lx,flags:%#lx,fd:%lu,off:%#lx\n",
+		__func__, addr, len, prot, flags, fd, off);
 
 	if (offset_in_page(off))
 		return -EINVAL;
@@ -90,7 +91,9 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	struct p2m_munmap_struct payload;
 	int ret, retbuf;
 
-	debug_syscall_print();
+	syscall_enter();
+	pr_info("%s(): addr:%#lx,len:%#lx\n",
+		__func__, addr, len);
 
 	if (offset_in_page(addr) || addr > TASK_SIZE || len > TASK_SIZE - addr)
 		return -EINVAL;
@@ -133,7 +136,9 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 	int retbuf, ret;
 	unsigned long end;
 
-	debug_syscall_print();
+	syscall_enter();
+	pr_info("%s(): start:%#lx,len:%#lx,flags:%#x\n",
+		__func__, start, len, flags);
 
 	if (flags & ~(MS_ASYNC | MS_INVALIDATE | MS_SYNC))
 		return -EINVAL;
@@ -166,5 +171,9 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
 		unsigned long, prot)
 {
-	BUG();
+	syscall_enter();
+	pr_info("%s(): start:%#lx,len:%#lx,prot:%#lx\n",
+		__func__, start, len, prot);
+
+	return 0;
 }
