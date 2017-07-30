@@ -10,6 +10,7 @@
 #ifndef _LEGO_TIME_H_
 #define _LEGO_TIME_H_
 
+#include <lego/math64.h>
 #include <lego/types.h>
 #include <lego/string.h>
 #include <lego/compiler.h>
@@ -74,6 +75,7 @@ struct itimerval {
 #define CLOCKS_MASK			(CLOCK_REALTIME | CLOCK_MONOTONIC)
 #define CLOCKS_MONO			CLOCK_MONOTONIC
 
+#define TIME_MAX			((s64)~((u64)1 << 63))
 #define KTIME_MAX			((s64)~((u64)1 << 63))
 #define KTIME_SEC_MAX			(KTIME_MAX / NSEC_PER_SEC)
 
@@ -124,15 +126,62 @@ static inline bool timeval_valid(const struct timeval *tv)
 	return true;
 }
 
-#define CURRENT_TIME		(current_kernel_time())
-
-/* TODO */
-static inline struct timespec current_kernel_time(void)
+/*
+ * sub = lhs - rhs, in normalized form
+ */
+static inline struct timespec timespec_sub(struct timespec lhs,
+						struct timespec rhs)
 {
-	struct timespec now;
+	struct timespec ts_delta;
+	set_normalized_timespec(&ts_delta, lhs.tv_sec - rhs.tv_sec,
+				lhs.tv_nsec - rhs.tv_nsec);
+	return ts_delta;
+}
 
-	memset(&now, 0, sizeof(now));
-	return now;
+/*
+ * Validates if a timespec/timeval used to inject a time offset is valid.
+ * Offsets can be postive or negative. The value of the timeval/timespec
+ * is the sum of its fields, but *NOTE*: the field tv_usec/tv_nsec must
+ * always be non-negative.
+ */
+static inline bool timeval_inject_offset_valid(const struct timeval *tv)
+{
+	/* We don't check the tv_sec as it can be positive or negative */
+
+	/* Can't have more microseconds then a second */
+	if (tv->tv_usec < 0 || tv->tv_usec >= USEC_PER_SEC)
+		return false;
+	return true;
+}
+
+static inline bool timespec_inject_offset_valid(const struct timespec *ts)
+{
+	/* We don't check the tv_sec as it can be positive or negative */
+
+	/* Can't have more nanoseconds then a second */
+	if (ts->tv_nsec < 0 || ts->tv_nsec >= NSEC_PER_SEC)
+		return false;
+	return true;
+}
+
+#define CURRENT_TIME		(current_kernel_time())
+#define CURRENT_TIME_SEC	((struct timespec) { get_seconds(), 0 })
+
+unsigned long get_seconds(void);
+struct timespec current_kernel_time(void);
+
+/**
+ * timespec_add_ns - Adds nanoseconds to a timespec
+ * @a:		pointer to timespec to be incremented
+ * @ns:		unsigned nanoseconds value to be added
+ *
+ * This must always be inlined because its used from the x86-64 vdso,
+ * which cannot call other kernel functions.
+ */
+static __always_inline void timespec_add_ns(struct timespec *a, u64 ns)
+{
+	a->tv_sec += __iter_div_u64_rem(a->tv_nsec + ns, NSEC_PER_SEC, &ns);
+	a->tv_nsec = ns;
 }
 
 #endif /* _LEGO_TIME_H_ */

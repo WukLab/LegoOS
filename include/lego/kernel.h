@@ -16,6 +16,7 @@
 #include <lego/errno.h>
 #include <lego/types.h>
 #include <lego/panic.h>
+#include <lego/math64.h>
 #include <lego/stddef.h>
 #include <lego/printk.h>
 #include <lego/sections.h>
@@ -195,23 +196,6 @@ __label__ __here;						\
 	typeof( ((type *)0)->member ) *__ptr = (ptr);		\
 	(type *)( (char *)__ptr - offsetof(type,member) );	\
 })
-
-/*
- * do_div() is NOT a C function. It wants to return
- * two values (the quotient and the remainder), but
- * since that doesn't work very well in C, what it
- * does is:
- *
- * - modifies the 64-bit dividend _in_place_
- * - returns the 32-bit remainder
- */
-#define do_div(n,base) ({					\
-	u32 __base = (base);					\
-	u32 __rem;						\
-	__rem = ((u64)(n)) % __base;				\
-	(n) = ((u64)(n)) / __base;				\
-	__rem;							\
- })
 
 /**
  * abs - return absolute value of an argument

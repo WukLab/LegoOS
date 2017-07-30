@@ -8,6 +8,7 @@
  */
 
 #include <lego/time.h>
+#include <lego/timekeeping.h>
 #include <lego/uaccess.h>
 #include <lego/kernel.h>
 #include <lego/jiffies.h>
@@ -183,16 +184,12 @@ unsigned int jiffies_to_usecs(const unsigned long j)
 #endif
 }
 
-unsigned long get_seconds(void)
-{
-	return 0;
-}
-
 SYSCALL_DEFINE1(time, time_t __user *, tloc)
 {
 	time_t i = get_seconds();
 
 	syscall_enter();
+	pr_info("%s(): get_seconds(): %lld\n", __func__, (s64)i);
 	if (tloc)
 		if (copy_to_user(tloc, &i, sizeof(time_t)))
 			return -EFAULT;
@@ -209,8 +206,7 @@ void do_gettimeofday(struct timeval *tv)
 {
 	struct timespec now;
 
-	/* TODO */
-	now = CURRENT_TIME;
+	__do_gettimeofday(&now);
 	tv->tv_sec = now.tv_sec;
 	tv->tv_usec = now.tv_nsec/1000;
 }

@@ -270,8 +270,6 @@ void __init setup_arch(void)
 	 */
 	trap_init();
 
-	register_refined_jiffies(CLOCK_TICK_RATE);
-
 	copy_trampoline_code();
 
 	arch_init_ideal_nops();

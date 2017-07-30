@@ -162,21 +162,6 @@ static void __update_inv_weight(struct load_weight *lw)
 		lw->inv_weight = WMULT_CONST / w;
 }
 
-static inline u64 mul_u64_u32_shr(u64 a, u32 mul, unsigned int shift)
-{
-	u32 ah, al;
-	u64 ret;
-
-	al = a;
-	ah = a >> 32;
-
-	ret = ((u64)al * mul) >> shift;
-	if (ah)
-		ret += ((u64)ah * mul) << (32 - shift);
-
-	return ret;
-}
-
 /*
  * delta_exec * weight / lw.weight
  *   OR
