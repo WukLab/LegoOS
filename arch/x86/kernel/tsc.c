@@ -517,6 +517,42 @@ void mark_tsc_unstable(char *reason)
 	pr_info("Marking TSC unstable due to %s\n", reason);
 }
 
+static u32 cyc2ns_mul = 0;
+static u32 cyc2ns_shift = 0;
+static u32 cyc2ns_offset = 0;
+
+static inline unsigned long long cycles_2_ns(unsigned long long cyc)
+{
+	unsigned long long ns;
+
+	ns = cyc2ns_offset;
+	ns += mul_u64_u32_shr(cyc, cyc2ns_mul, cyc2ns_shift);
+
+	return ns;
+}
+
+/*
+ * Scheduler clock - returns current time in nanosec units.
+ */
+u64 native_sched_clock(void)
+{
+	u64 tsc_now = rdtsc();
+
+	/* return the value in ns */
+	return cycles_2_ns(tsc_now);
+}
+
+/*
+ * Generate a sched_clock if you already have a TSC value.
+ */
+u64 native_sched_clock_from_tsc(u64 tsc)
+{
+	return cycles_2_ns(tsc);
+}
+
+unsigned long long
+sched_clock(void) __attribute__((alias("native_sched_clock")));
+
 /*
  * We used to compare the TSC to the cycle_last value in the clocksource
  * structure to avoid a nasty time-warp. This can be observed in a
@@ -550,6 +586,7 @@ static struct clocksource clocksource_tsc = {
 void __init tsc_init(void)
 {
 	u64 lpj;
+	unsigned long tsc_now, ns_now;
 
 	if (!cpu_has(X86_FEATURE_TSC))
 		return;
@@ -572,9 +609,36 @@ void __init tsc_init(void)
 		return;
 	}
 
+	tsc_now = rdtsc();
+	ns_now = cycles_2_ns(tsc_now);
+
+	/*
+	 * Compute a new multiplier as per the above comment and ensure our
+	 * time function is continuous; see the comment near struct
+	 * cyc2ns_data.
+	 */
+	clocks_calc_mult_shift(&cyc2ns_mul, &cyc2ns_shift, tsc_khz,
+			       NSEC_PER_MSEC, 0);
+
+	/*
+	 * cyc2ns_shift is exported via arch_perf_update_userpage() where it is
+	 * not expected to be greater than 31 due to the original published
+	 * conversion algorithm shifting a 32-bit value (now specifies a 64-bit
+	 * value) - refer perf_event_mmap_page documentation in perf_event.h.
+	 */
+	if (cyc2ns_shift == 32) {
+		cyc2ns_shift = 31;
+		cyc2ns_mul >>= 1;
+	}
+
+	cyc2ns_offset = ns_now - mul_u64_u32_shr(tsc_now, cyc2ns_mul, cyc2ns_shift);
+
 	pr_info("Detected %lu.%03lu MHz processor\n",
 		(unsigned long)cpu_khz / 1000,
 		(unsigned long)cpu_khz % 1000);
+
+	pr_info("tsc_now: %lu, ns_now: %lu, cyc2ns_mul: %u, cyc2ns_shift: %u, cyc2ns_offset: %u\n",
+		tsc_now, ns_now, cyc2ns_mul, cyc2ns_shift, cyc2ns_offset);
 
 	lpj = ((u64)tsc_khz * 1000);
 	do_div(lpj, HZ);
