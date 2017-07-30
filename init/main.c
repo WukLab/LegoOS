@@ -98,16 +98,17 @@ static void inline setup_nr_cpu_ids(void)
 
 #ifdef CONFIG_COMP_PROCESSOR
 /* http://c-faq.com/decl/spiral.anderson.html */
-static const char *argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
+static const char *argv_init[MAX_INIT_ARGS+2];
 const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 
 static int procmgmt(void *unused)
 {
-	const char *init_filename = "/etc/init";
+	const char *init_filename;
 
-	pr_info("Global thread pid: %u\n", current->pid);
-
+	init_filename = "./word_count";
 	argv_init[0] = init_filename;
+	argv_init[1] = "word_count_datafile";
+
 	return do_execve(init_filename,
 		(const char *const *)argv_init,
 		(const char *const *)envp_init);
