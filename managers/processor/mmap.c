@@ -24,6 +24,9 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	unsigned long ret_brk;
 	int ret;
 
+	debug_syscall_print();
+	pr_info("%s(): brk: %#lx\n", __func__, brk);
+
 	payload.pid = current->pid;
 	payload.brk = brk;
 
@@ -46,6 +49,9 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	struct p2m_mmap_struct payload;
 	struct p2m_mmap_reply_struct reply;
 	int ret;
+
+	debug_syscall_print();
+	pr_info("%s(): fd: %lu\n", __func__, fd);
 
 	if (offset_in_page(off))
 		return -EINVAL;
@@ -83,6 +89,8 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 {
 	struct p2m_munmap_struct payload;
 	int ret, retbuf;
+
+	debug_syscall_print();
 
 	if (offset_in_page(addr) || addr > TASK_SIZE || len > TASK_SIZE - addr)
 		return -EINVAL;
@@ -124,6 +132,8 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 	struct p2m_msync_struct payload;
 	int retbuf, ret;
 	unsigned long end;
+
+	debug_syscall_print();
 
 	if (flags & ~(MS_ASYNC | MS_INVALIDATE | MS_SYNC))
 		return -EINVAL;

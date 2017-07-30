@@ -103,3 +103,13 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 {
 	BUG();
 }
+
+SYSCALL_DEFINE2(dup2, unsigned int, oldfd, unsigned int, newfd)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE1(dup, unsigned int, fildes)
+{
+	BUG();
+}

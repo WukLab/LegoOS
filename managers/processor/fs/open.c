@@ -98,6 +98,22 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 
 SYSCALL_DEFINE1(close, unsigned int, fd)
 {
+	debug_syscall_print();
 	pr_info("%s(): fd: %d\n", __func__, fd);
+	return -EFAULT;
+}
+
+SYSCALL_DEFINE2(dup2, unsigned int, oldfd, unsigned int, newfd)
+{
+	debug_syscall_print();
+	pr_info("%s(): oldfd: %u newfd: %u\n",
+		__func__, oldfd, newfd);
+	return -EFAULT;
+}
+
+SYSCALL_DEFINE1(dup, unsigned int, fildes)
+{
+	debug_syscall_print();
+	pr_info("%s(): fildes: %u\n", __func__, fildes);
 	return -EFAULT;
 }

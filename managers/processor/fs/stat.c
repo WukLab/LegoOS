@@ -49,5 +49,6 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
 SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 {
 	debug_syscall_print();
+	pr_info("%s(): fd: %u, statbuf: %p\n", __func__, fd, statbuf);
 	return -ENOENT;
 }
