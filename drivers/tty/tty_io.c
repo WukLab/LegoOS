@@ -12,6 +12,7 @@
 #include <lego/kernel.h>
 #include <lego/termios.h>
 #include <lego/console.h>
+#include <lego/files.h>
 
 struct termios tty_std_termios = {
 	.c_iflag = ICRNL | IXON,

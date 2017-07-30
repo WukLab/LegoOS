@@ -307,10 +307,25 @@ good_mm:
 	return 0;
 }
 
+static void close_files(struct files_struct *files)
+{
+	int fd;
+	struct file *f;
+
+	spin_lock(&files->file_lock);
+	for_each_set_bit(fd, files->fd_bitmap, NR_OPEN_DEFAULT) {
+		f = files->fd_array[fd];
+		BUG_ON(!f);
+		put_file(f);
+		__clear_bit(fd, files->fd_bitmap);
+	}
+	spin_unlock(&files->file_lock);
+}
+
 static void put_files_struct(struct files_struct *files)
 {
 	if (atomic_dec_and_test(&files->count)) {
-		/* TODO: put files */
+		close_files(files);
 		kfree(files);
 	}
 }
@@ -327,9 +342,14 @@ static void exit_files(struct task_struct *tsk)
 	}
 }
 
+/*
+ * Allocate a new files structure and copy contents from the
+ * passed in files structure.
+ */
 static struct files_struct *dup_fd(struct files_struct *oldf)
 {
 	struct files_struct *newf;
+	int fd;
 
 	newf = kzalloc(sizeof(*newf), GFP_KERNEL);
 	if (!newf)
@@ -338,12 +358,51 @@ static struct files_struct *dup_fd(struct files_struct *oldf)
 	atomic_set(&newf->count, 1);
 	spin_lock_init(&newf->file_lock);
 
-	/* Copy the content */
+	/* Copy fd bitmap and get each open file */
 	spin_lock(&oldf->file_lock);
-	/* TODO: get_file */
+	bitmap_copy(newf->fd_bitmap, oldf->fd_bitmap, NR_OPEN_DEFAULT);
+	for_each_set_bit(fd, newf->fd_bitmap, NR_OPEN_DEFAULT) {
+		struct file *f = oldf->fd_array[fd];
+
+		BUG_ON(!f);
+		newf->fd_array[fd] = f;
+		get_file(f);
+	}
 	spin_unlock(&oldf->file_lock);
 
 	return newf;
+}
+
+static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
+{
+	struct files_struct *oldf, *newf;
+	int ret = 0;
+
+	/*
+	 * A background process may not have any files ...
+	 */
+	oldf = current->files;
+	if (!oldf)
+		goto out;
+
+	if (clone_flags & CLONE_FILES) {
+		newf = oldf;
+		atomic_inc(&oldf->count);
+		goto set;
+	}
+
+	newf = dup_fd(oldf);
+	if (!newf) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+set:
+	tsk->files = newf;
+	ret = 0;
+
+out:
+	return ret;
 }
 
 /*
@@ -386,32 +445,6 @@ static void exit_creds(struct task_struct *tsk)
 
 	put_cred(tsk->cred);
 	tsk->cred = NULL;
-}
-
-static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
-{
-	struct files_struct *oldf, *newf;
-	int ret = 0;
-
-	oldf = tsk->files;
-	if (clone_flags & CLONE_FILES) {
-		newf = oldf;
-		atomic_inc(&oldf->count);
-		goto set;
-	}
-
-	newf = dup_fd(oldf);
-	if (!newf) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-set:
-	tsk->files = newf;
-	ret = 0;
-
-out:
-	return ret;
 }
 
 static int copy_sighand(unsigned long clone_flags, struct task_struct *tsk)

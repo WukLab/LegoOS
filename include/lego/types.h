@@ -142,11 +142,14 @@ typedef unsigned long		uintptr_t;
 typedef long long		loff_t;
 typedef unsigned short		umode_t;
 typedef unsigned		fmode_t;
+typedef u32			dev_t;
 
 typedef unsigned long		cputime_t;
 
 typedef u32	uid_t;
 typedef u32	gid_t;
+typedef uid_t	kuid_t;
+typedef gid_t	kgid_t;
 
 /**
  * struct callback_head - callback structure for use with RCU and task_work

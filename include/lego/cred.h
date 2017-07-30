@@ -14,9 +14,6 @@
 #include <lego/types.h>
 #include <lego/atomic.h>
 
-typedef uid_t kuid_t;
-typedef gid_t kgid_t;
-
 /*
  * The security context of a task
  *

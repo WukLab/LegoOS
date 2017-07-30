@@ -29,6 +29,7 @@ struct file *fdget(int fd)
 	spin_lock(&files->file_lock);
 	if (likely(test_bit(fd, files->fd_bitmap))) {
 		filp = files->fd_array[fd];
+		BUG_ON(!filp);
 		get_file(filp);
 	}
 	spin_unlock(&files->file_lock);

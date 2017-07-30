@@ -10,9 +10,17 @@
 #ifndef _LEGO_FILES_H_
 #define _LEGO_FILES_H_
 
+#include <lego/slab.h>
 #include <lego/mutex.h>
 #include <lego/kernel.h>
 #include <lego/spinlock.h>
+
+#define SEEK_SET	0	/* seek relative to beginning of file */
+#define SEEK_CUR	1	/* seek relative to current file position */
+#define SEEK_END	2	/* seek relative to end of file */
+#define SEEK_DATA	3	/* seek to the next data */
+#define SEEK_HOLE	4	/* seek to the next hole */
+#define SEEK_MAX	SEEK_HOLE
 
 /*
  * flags in file.f_mode.  Note that FMODE_READ and FMODE_WRITE must correspond
@@ -74,9 +82,9 @@
 
 #define FILENAME_LEN_DEFAULT	128
 struct file {
-	unsigned int 		f_flags;
 	fmode_t			f_mode;
 	atomic_t		f_count;
+	unsigned int 		f_flags;
 	spinlock_t		f_pos_lock;
 	loff_t			f_pos;
 	char			f_name[FILENAME_LEN_DEFAULT];
@@ -110,5 +118,22 @@ struct iovec {
  */
 #define UIO_FASTIOV	8
 #define UIO_MAXIOV	1024
+
+static inline void get_file(struct file *filp)
+{
+	atomic_inc(&filp->f_count);
+}
+
+static void __put_file(struct file *filp)
+{
+	BUG_ON(atomic_read(&filp->f_count) != 0);
+	kfree(filp);
+}
+
+static inline void put_file(struct file *filp)
+{
+	if (atomic_dec_and_test(&filp->f_count))
+		__put_file(filp);
+}
 
 #endif /* _LEGO_FILES_H_ */

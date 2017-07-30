@@ -11,6 +11,8 @@
 #define _LEGO_STAT_H_
 
 #include <asm/stat.h>
+#include <lego/time.h>
+#include <lego/types.h>
 
 #define S_IFMT  00170000
 #define S_IFSOCK 0140000
@@ -57,7 +59,6 @@
 #define UTIME_OMIT	((1l << 30) - 2l)
 
 struct kstat {
-#if 0
 	u64		ino;
 	dev_t		dev;
 	umode_t		mode;
@@ -66,12 +67,11 @@ struct kstat {
 	kgid_t		gid;
 	dev_t		rdev;
 	loff_t		size;
-	struct timespec  atime;
+	struct timespec atime;
 	struct timespec	mtime;
 	struct timespec	ctime;
 	unsigned long	blksize;
 	unsigned long long	blocks;
-#endif
 };
 
 #endif /* _LEGO_STAT_H_ */

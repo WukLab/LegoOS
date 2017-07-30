@@ -11,6 +11,7 @@
 #define _LEGO_TIME_H_
 
 #include <lego/types.h>
+#include <lego/string.h>
 #include <lego/compiler.h>
 
 /* Parameters used to convert the timespec values: */
@@ -121,6 +122,17 @@ static inline bool timeval_valid(const struct timeval *tv)
 		return false;
 
 	return true;
+}
+
+#define CURRENT_TIME		(current_kernel_time())
+
+/* TODO */
+static inline struct timespec current_kernel_time(void)
+{
+	struct timespec now;
+
+	memset(&now, 0, sizeof(now));
+	return now;
 }
 
 #endif /* _LEGO_TIME_H_ */
