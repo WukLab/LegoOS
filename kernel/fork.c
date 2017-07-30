@@ -331,7 +331,7 @@ static struct files_struct *dup_fd(struct files_struct *oldf)
 {
 	struct files_struct *newf;
 
-	newf = kmalloc(sizeof(*newf), GFP_KERNEL);
+	newf = kzalloc(sizeof(*newf), GFP_KERNEL);
 	if (!newf)
 		return NULL;
 
@@ -397,7 +397,7 @@ static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
 	if (clone_flags & CLONE_FILES) {
 		newf = oldf;
 		atomic_inc(&oldf->count);
-		goto out;
+		goto set;
 	}
 
 	newf = dup_fd(oldf);
@@ -406,6 +406,7 @@ static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
 		goto out;
 	}
 
+set:
 	tsk->files = newf;
 	ret = 0;
 
