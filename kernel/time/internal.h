@@ -10,6 +10,12 @@
 #ifndef _KERNEL_TIME_INTERNAL_H_
 #define _KERNEL_TIME_INTERNAL_H_
 
+u64 ntp_tick_length(void);
+int second_overflow(time_t secs);
+int __weak update_persistent_clock(struct timespec now);
+int ntp_validate_timex(struct timex *txc);
+ktime_t ntp_get_next_leap(void);
+void ntp_clear(void);
 void __init ntp_init(void);
 
 #endif /* _KERNEL_TIME_INTERNAL_H_ */

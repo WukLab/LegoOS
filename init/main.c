@@ -19,6 +19,7 @@
 #include <lego/list.h>
 #include <lego/slab.h>
 #include <lego/time.h>
+#include <lego/timex.h>
 #include <lego/wait.h>
 #include <lego/timer.h>
 #include <lego/delay.h>
@@ -281,6 +282,7 @@ asmlinkage void __init start_kernel(void)
 	 */
 	init_timers();
 	timekeeping_init();
+	register_refined_jiffies(CLOCK_TICK_RATE);
 	time_init();
 	calibrate_delay();
 

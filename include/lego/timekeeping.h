@@ -152,6 +152,10 @@ enum tk_offsets {
 
 ktime_t ktime_get(void);
 ktime_t ktime_get_with_offset(enum tk_offsets offs);
+time_t ktime_get_real_seconds(void);
+time_t __ktime_get_real_seconds(void);
+time_t ktime_get_seconds(void);
+int __do_gettimeofday(struct timespec *ts);
 
 /**
  * ktime_get_boottime - Returns monotonic time since boot in ktime_t format
