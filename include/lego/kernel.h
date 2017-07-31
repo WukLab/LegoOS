@@ -19,6 +19,7 @@
 #include <lego/math64.h>
 #include <lego/stddef.h>
 #include <lego/printk.h>
+#include <lego/cputime.h>
 #include <lego/sections.h>
 #include <lego/compiler.h>
 #include <lego/byteorder.h>

@@ -892,6 +892,25 @@ int __do_gettimeofday(struct timespec *ts)
 	return 0;
 }
 
+/**
+ * getboottime - Return the real time of system boot.
+ * @ts:		pointer to the timespec64 to be set
+ *
+ * Returns the wall-time of boot in a timespec
+ *
+ * This is based on the wall_to_monotonic offset and the total suspend
+ * time. Calls to settimeofday will affect the value returned (which
+ * basically means that however wrong your real time clock is at boot time,
+ * you get the right time here).
+ */
+void getboottime(struct timespec *ts)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	ktime_t t = ktime_sub(tk->offs_real, tk->offs_boot);
+
+	*ts = ktime_to_timespec(t);
+}
+
 void do_timer(unsigned long ticks)
 {
 	jiffies += ticks;

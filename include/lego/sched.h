@@ -391,6 +391,8 @@ union thread_union {
 	unsigned long stack[THREAD_SIZE/sizeof(long)];
 };
 
+extern unsigned long total_forks;
+extern int nr_threads;
 extern spinlock_t tasklist_lock;
 
 #define task_thread_info(task)	((struct thread_info *)((task)->stack))

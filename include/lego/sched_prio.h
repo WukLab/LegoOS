@@ -66,4 +66,12 @@ static inline long rlimit_to_nice(long prio)
 	return (MAX_NICE - prio + 1);
 }
 
+/**
+ * task_nice - return the nice value of a given task.
+ * @p: the task in question.
+ *
+ * Return: The nice value [ -20 ... 0 ... 19 ].
+ */
+#define task_nice(p)	PRIO_TO_NICE((p)->static_prio)
+
 #endif /* _LEGO_SCHED_PRIO_H_ */

@@ -144,8 +144,6 @@ typedef unsigned short		umode_t;
 typedef unsigned		fmode_t;
 typedef u32			dev_t;
 
-typedef unsigned long		cputime_t;
-
 typedef u32	uid_t;
 typedef u32	gid_t;
 typedef uid_t	kuid_t;

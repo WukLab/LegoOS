@@ -19,6 +19,9 @@
 /* Nanosecond scalar representation for kernel time values */
 typedef s64	ktime_t;
 
+/* Map the ktime_t to timespec conversion to ns_to_timespec function */
+#define ktime_to_timespec(kt)		ns_to_timespec((kt))
+
 /**
  * ktime_set - Set a ktime_t variable from a seconds/nanoseconds value
  * @secs:	seconds to set

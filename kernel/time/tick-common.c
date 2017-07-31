@@ -20,6 +20,9 @@
 #include <lego/clockevent.h>
 #include <lego/clocksource.h>
 #include <lego/timekeeping.h>
+#include <lego/kernel_stat.h>
+
+#include <asm/irq_regs.h>
 
 #include "tick-internal.h"
 
@@ -251,6 +254,7 @@ void tick_handle_noop(struct clock_event_device *dev)
 void tick_handle_periodic(struct clock_event_device *dev)
 {
 	int cpu = smp_processor_id();
+	int user_tick = user_mode(get_irq_regs());
 
 	/*
 	 * Things only one CPU core should do...
@@ -268,6 +272,7 @@ void tick_handle_periodic(struct clock_event_device *dev)
 	/*
 	 * Things every CPU core should do...
 	 */
+	account_process_tick(current, user_tick);
 	run_local_timers();
 	scheduler_tick();
 }

@@ -48,6 +48,43 @@ unsigned long long __weak sched_clock(void)
 					* (NSEC_PER_SEC / HZ);
 }
 
+unsigned long long nr_context_switches(void)
+{
+	int i;
+	unsigned long long sum = 0;
+
+	for_each_possible_cpu(i)
+		sum += cpu_rq(i)->nr_switches;
+
+	return sum;
+}
+
+/*
+ * nr_running and nr_context_switches:
+ *
+ * externally visible scheduler statistics: current number of runnable
+ * threads, total number of context switches performed since bootup.
+ */
+unsigned long nr_running(void)
+{
+	unsigned long i, sum = 0;
+
+	for_each_online_cpu(i)
+		sum += cpu_rq(i)->nr_running;
+
+	return sum;
+}
+
+unsigned long nr_iowait(void)
+{
+	unsigned long i, sum = 0;
+
+	for_each_possible_cpu(i)
+		sum += atomic_read(&cpu_rq(i)->nr_iowait);
+
+	return sum;
+}
+
 /* TODO: more highrec and accurate clock impl */
 u64 sched_clock_cpu(int cpu)
 {

@@ -90,6 +90,22 @@ void set_normalized_timespec(struct timespec *ts, time_t sec, s64 nsec)
 }
 
 /*
+ * Convert jiffies/jiffies_64 to clock_t and back.
+ */
+clock_t jiffies_to_clock_t(unsigned long x)
+{
+#if (TICK_NSEC % (NSEC_PER_SEC / USER_HZ)) == 0
+# if HZ < USER_HZ
+	return x * (USER_HZ / HZ);
+# else
+	return x / (HZ / USER_HZ);
+# endif
+#else
+	return div_u64((u64)x * TICK_NSEC, NSEC_PER_SEC / USER_HZ);
+#endif
+}
+
+/*
  * When we convert to jiffies then we interpret incoming values
  * the following way:
  *
@@ -182,6 +198,30 @@ unsigned int jiffies_to_usecs(const unsigned long j)
 	return (j * HZ_TO_USEC_NUM) / HZ_TO_USEC_DEN;
 # endif
 #endif
+}
+
+/**
+ * ns_to_timespec - Convert nanoseconds to timespec
+ * @nsec:       the nanoseconds value to be converted
+ *
+ * Returns the timespec representation of the nsec parameter.
+ */
+struct timespec ns_to_timespec(const s64 nsec)
+{
+	struct timespec ts;
+	s32 rem;
+
+	if (!nsec)
+		return (struct timespec) {0, 0};
+
+	ts.tv_sec = div_s64_rem(nsec, NSEC_PER_SEC, &rem);
+	if (unlikely(rem < 0)) {
+		ts.tv_sec--;
+		rem += NSEC_PER_SEC;
+	}
+	ts.tv_nsec = rem;
+
+	return ts;
 }
 
 SYSCALL_DEFINE1(time, time_t __user *, tloc)
