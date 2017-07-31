@@ -80,6 +80,13 @@
 /* File was opened by fanotify and shouldn't generate fanotify events */
 #define FMODE_NONOTIFY		((__force fmode_t)0x4000000)
 
+struct file;
+
+struct file_operations {
+	ssize_t (*read)(struct file *, char __user *, size_t, loff_t *);
+	ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *);
+};
+
 #define FILENAME_LEN_DEFAULT	128
 struct file {
 	fmode_t			f_mode;
@@ -88,6 +95,7 @@ struct file {
 	spinlock_t		f_pos_lock;
 	loff_t			f_pos;
 	char			f_name[FILENAME_LEN_DEFAULT];
+	const struct file_operations *f_op;
 };
 
 #define NR_OPEN_DEFAULT		64

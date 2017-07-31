@@ -67,7 +67,7 @@ static int ramfs_mmap(struct lego_task_struct *tsk, struct lego_file *file,
 	return 0;
 }
 
-struct file_operations ramfs_file_ops = {
+struct lego_file_operations ramfs_file_ops = {
 	.read	= ramfs_read,
 	.write	= ramfs_write,
 	.mmap	= ramfs_mmap,

@@ -170,7 +170,13 @@ static inline void lego_set_task_comm(struct lego_task_struct *tsk,
 	lego_task_unlock(tsk);
 }
 
-struct file_operations {
+/*
+ * This is temporary for RAMFS before storage is up
+ * Remove this once we have a working storage.
+ *
+ * Or keep it for debug without storage server?
+ */
+struct lego_file_operations {
 	ssize_t (*read)(struct lego_task_struct *, struct lego_file *,
 			char __user *, size_t, loff_t *);
 	ssize_t (*write)(struct lego_task_struct *, struct lego_file *,
@@ -182,7 +188,7 @@ struct file_operations {
 #define MAX_FILENAME_LEN 128
 struct lego_file {
 	char filename[MAX_FILENAME_LEN];
-	struct file_operations *f_op;
+	struct lego_file_operations *f_op;
 	struct lego_task_struct *task;
 };
 
