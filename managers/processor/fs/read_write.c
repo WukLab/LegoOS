@@ -16,6 +16,11 @@
 
 #include "internal.h"
 
+static int default_p2m_open(struct file *f)
+{
+	return 0;
+}
+
 static ssize_t default_p2m_read(struct file *f, char __user *buf,
 				size_t count, loff_t *off)
 {
@@ -29,6 +34,7 @@ static ssize_t default_p2m_write(struct file *f, const char __user *buf,
 }
 
 struct file_operations default_f_op = {
+	.open	= default_p2m_open,
 	.read	= default_p2m_read,
 	.write	= default_p2m_write,
 };

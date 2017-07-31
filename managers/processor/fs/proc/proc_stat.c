@@ -11,7 +11,38 @@
 #include <lego/slab.h>
 #include <lego/uaccess.h>
 #include <lego/files.h>
+#include <lego/seq_file.h>
 #include <lego/spinlock.h>
-#include <lego/comp_processor.h>
 
-struct file_operations proc_stat_ops;
+static int show_stat(struct seq_file *p, void *v)
+{
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		seq_printf(p, "%2d\n", cpu);
+	}
+
+	return 0;
+}
+
+static ssize_t stat_write(struct file *f, const char __user *buf,
+			  size_t count, loff_t *off)
+{
+	return -EFAULT;
+}
+
+static int stat_open(struct file *file)
+{
+	size_t size = 1024 + 128 * num_online_cpus();
+
+	/* minimum size to display an interrupt count : 2 bytes */
+	size += 2 * nr_irqs;
+	return single_open_size(file, show_stat, NULL, size);
+}
+
+struct file_operations proc_stat_ops = {
+	.open		= stat_open,
+	.read		= seq_read,
+	.write		= stat_write,
+	.release	= single_release,
+};

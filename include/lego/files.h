@@ -83,8 +83,10 @@
 struct file;
 
 struct file_operations {
+	int	(*open)(struct file *);
 	ssize_t (*read)(struct file *, char __user *, size_t, loff_t *);
 	ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *);
+	int	(*release) (struct file *);
 };
 
 #define FILENAME_LEN_DEFAULT	128
@@ -96,6 +98,7 @@ struct file {
 	loff_t			f_pos;
 	char			f_name[FILENAME_LEN_DEFAULT];
 	const struct file_operations *f_op;
+	void			*private_data;
 };
 
 #define NR_OPEN_DEFAULT		64

@@ -30,14 +30,10 @@ static struct proc_file_struct proc_files[] = {
 	},
 };
 
-int proc_file_open(int fd, char *f_name)
+int proc_file_open(struct file *f, char *f_name)
 {
 	struct proc_file_struct *proc_file;
-	struct file *f;
 	int i, ret;
-
-	f = fdget(fd);
-	BUG_ON(!f);
 
 	ret = -EBADF;
 	for (i = 0; i < ARRAY_SIZE(proc_files); i++) {
@@ -49,6 +45,5 @@ int proc_file_open(int fd, char *f_name)
 		}
 	}
 
-	put_file(f);
 	return ret;
 }

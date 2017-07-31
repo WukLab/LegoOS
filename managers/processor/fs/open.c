@@ -95,32 +95,11 @@ static void free_fd(struct files_struct *files, int fd)
 	spin_unlock(&files->file_lock);
 }
 
-static int normal_file_open(int fd, char *f_name)
-{
-	struct file *f;
-
-	f = fdget(fd);
-	BUG_ON(!f);
-	f->f_op = &default_f_op;
-	put_file(f);
-
-	return 0;
-}
-
-static inline int proc_file(char *f_name)
-{
-	return !memcmp(f_name, "/proc", 5);
-}
-
-static inline int sys_file(char *f_name)
-{
-	return !memcmp(f_name, "/sys", 4);
-}
-
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
 	char kname[FILENAME_LEN_DEFAULT];
 	int fd, ret;
+	struct file *f;
 
 	syscall_enter();
 
@@ -134,20 +113,33 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	 * and @file has ref set to 1 if succeed
 	 */
 	fd = alloc_fd(current->files, kname);
+	if (unlikely(fd < 0))
+		goto out;
 
+	f = fdget(fd);
 	if (unlikely(proc_file(kname)))
-		ret = proc_file_open(fd, kname);
+		ret = proc_file_open(f, kname);
 	else if (unlikely(sys_file(kname)))
-		ret = sys_file_open(fd, kname);
+		ret = sys_file_open(f, kname);
 	else
-		ret = normal_file_open(fd, kname);
+		ret = normal_file_open(f, kname);
 
+	if (unlikely(ret)) {
+		free_fd(current->files, fd);
+		fd = ret;
+		goto put;
+	}
+
+	BUG_ON(!f->f_op->open);
+	ret = f->f_op->open(f);
 	if (unlikely(ret)) {
 		free_fd(current->files, fd);
 		fd = ret;
 	}
 
+put:
 	pr_info("%s(): [%d] -> [%s]\n", __func__, fd, filename);
+	put_file(f);
 out:
 	syscall_exit(fd);
 	return fd;
@@ -166,6 +158,8 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 		f = files->fd_array[fd];
 		BUG_ON(!f);
 
+		if (f->f_op->release)
+			f->f_op->release(f);
 		put_file(f);
 		__clear_bit(fd, files->fd_bitmap);
 		files->fd_array[fd] = NULL;

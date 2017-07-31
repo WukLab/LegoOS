@@ -31,14 +31,10 @@ static struct sys_file_struct sys_files[] = {
 	},
 };
 
-int sys_file_open(int fd, char *f_name)
+int sys_file_open(struct file *f, char *f_name)
 {
 	struct sys_file_struct *sys_file;
-	struct file *f;
 	int i, ret;
-
-	f = fdget(fd);
-	BUG_ON(!f);
 
 	ret = -EBADF;
 	for (i = 0; i < ARRAY_SIZE(sys_files); i++) {
@@ -50,6 +46,5 @@ int sys_file_open(int fd, char *f_name)
 		}
 	}
 
-	put_file(f);
 	return ret;
 }

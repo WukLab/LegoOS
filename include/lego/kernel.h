@@ -249,6 +249,9 @@ static inline char *hex_byte_pack_upper(char *buf, unsigned char byte)
 	return buf;
 }
 
+int hex_dump_to_buffer(const void *buf, size_t len, int rowsize, int groupsize,
+		       char *linebuf, size_t linebuflen, bool ascii);
+
 /*
  * lib/vsprintf.c
  */
@@ -269,6 +272,8 @@ int scnprintf(char *buf, size_t size, const char *fmt, ...);
 
 __printf(3, 0)
 int vscnprintf(char *buf, size_t size, const char *fmt, va_list args);
+
+int num_to_str(char *buf, int size, unsigned long long num);
 
 /*
  * lib/sort.c
