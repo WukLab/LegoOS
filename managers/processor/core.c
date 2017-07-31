@@ -10,6 +10,7 @@
 #define pr_fmt(fmt) "pc-manager: " fmt
 
 #include <lego/slab.h>
+#include <lego/timer.h>
 #include <lego/kernel.h>
 #include <lego/kthread.h>
 #include <lego/syscalls.h>

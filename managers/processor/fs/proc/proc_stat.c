@@ -16,13 +16,13 @@
 #include <lego/spinlock.h>
 #include <lego/timekeeping.h>
 #include <lego/kernel_stat.h>
+#include <lego/irqdesc.h>
 
 static int show_stat(struct seq_file *p, void *v)
 {
 	int i;
 	u64 user, nice, system, idle, iowait, irq, softirq, steal;
 	u64 guest, guest_nice;
-	u64 sum = 0;
 	struct timespec boottime;
 
 	user = nice = system = idle = iowait =
@@ -41,10 +41,7 @@ static int show_stat(struct seq_file *p, void *v)
 		steal += kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
 		guest += kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
 		guest_nice += kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
-		//sum += kstat_cpu_irqs_sum(i);
-		//sum += arch_irq_stat_cpu(i);
 	}
-	//sum += arch_irq_stat();
 
 	seq_put_decimal_ull(p, "cpu  ", cputime_to_clock_t(user));
 	seq_put_decimal_ull(p, " ", cputime_to_clock_t(nice));
@@ -83,13 +80,9 @@ static int show_stat(struct seq_file *p, void *v)
 		seq_put_decimal_ull(p, " ", cputime_to_clock_t(guest_nice));
 		seq_putc(p, '\n');
 	}
-# if 0
-	seq_put_decimal_ull(p, "intr ", (unsigned long long)sum);
 
-	/* sum again ? it could be updated? */
-	for_each_irq_nr(j)
-		seq_put_decimal_ull(p, " ", kstat_irqs_usr(j));
-#endif
+	seq_put_decimal_ull(p, "intr ", (unsigned long long)0);
+
 	seq_printf(p,
 		"\nctxt %llu\n"
 		"btime %llu\n"
