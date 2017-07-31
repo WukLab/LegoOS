@@ -16,56 +16,70 @@
 
 #include "internal.h"
 
+static ssize_t default_p2m_read(struct file *f, char __user *buf,
+				size_t count, loff_t *off)
+{
+	return -EACCES;
+}
+
+static ssize_t default_p2m_write(struct file *f, const char __user *buf,
+				 size_t count, loff_t *off)
+{
+	return -EACCES;
+}
+
+struct file_operations default_f_op = {
+	.read	= default_p2m_read,
+	.write	= default_p2m_write,
+};
+
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
-	struct file *filp;
+	struct file *f;
+	long ret;
+	loff_t off = 0;
 
-	debug_syscall_print();
+	syscall_enter();
 	pr_info("%s(): fd: %d, buf: %p, count: %zu\n",
 		__func__, fd, buf, count);
 
-	filp = fdget(fd);
-	if (!filp)
-		return -EBADF;
+	f = fdget(fd);
+	if (!f) {
+		ret = -EBADF;
+		goto out;
+	}
 
-	return -EFAULT;
+	ret = f->f_op->read(f, buf, count, &off);
+
+	put_file(f);
+out:
+	syscall_exit(ret);
+	return ret;
 }
 
 SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 		size_t, count)
 {
-	struct file *filp;
-	int retval = 0;
-	void *s;
+	struct file *f;
+	long ret;
+	loff_t off = 0;
 
-	debug_syscall_print();
+	syscall_enter();
 	pr_info("%s(): fd: %d buf: %p count: %zu\n",
 		__func__, fd, buf, count);
 
-	filp = fdget(fd);
-	if (!filp)
-		return -EBADF;
-
-	s = kmalloc(count, GFP_KERNEL);
-	if (!s) {
-		retval = -ENOMEM;
-		goto out_put;
+	f = fdget(fd);
+	if (!f) {
+		ret = -EBADF;
+		goto out;
 	}
 
-	if (copy_from_user(s, buf, count)) {
-		retval = -EFAULT;
-		goto out_free;
-	}
+	ret = f->f_op->write(f, buf, count, &off);
 
-	pr_info("%s(): [%s]\n", __func__, (char *)s);
-	return count;
-
-out_free:
-	kfree(s);
-out_put:
-	put_file(filp);
-
-	return retval;
+	put_file(f);
+out:
+	syscall_exit(ret);
+	return ret;
 }
 
 static ssize_t do_readv(unsigned long fd, const struct iovec __user *vec,
@@ -120,13 +134,21 @@ free:
 SYSCALL_DEFINE3(readv, unsigned long, fd, const struct iovec __user *, vec,
 		unsigned long, vlen)
 {
-	debug_syscall_print();
-	return do_readv(fd, vec, vlen, 0);
+	long ret;
+
+	syscall_enter();
+	ret = do_readv(fd, vec, vlen, 0);
+	syscall_exit(ret);
+	return ret;
 }
 
 SYSCALL_DEFINE3(writev, unsigned long, fd, const struct iovec __user *, vec,
 		unsigned long, vlen)
 {
-	debug_syscall_print();
-	return do_writev(fd, vec, vlen, 0);
+	long ret;
+
+	syscall_enter();
+	ret = do_writev(fd, vec, vlen, 0);
+	syscall_exit(ret);
+	return ret;
 }
