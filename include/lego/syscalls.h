@@ -147,6 +147,10 @@ asmlinkage long sys_rt_sigqueueinfo(pid_t pid, int sig, siginfo_t __user *uinfo)
 
 asmlinkage long sys_rt_sigsuspend(sigset_t __user *unewset, size_t sigsetsize);
 
+asmlinkage long sys_futex(u32 __user *uaddr, int op, u32 val,
+			struct timespec __user *utime, u32 __user *uaddr2,
+			u32 val3);
+
 /* x86-64 only */
 asmlinkage long sys_arch_prctl(int, unsigned long);
 
