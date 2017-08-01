@@ -186,6 +186,13 @@ Eoverflow:
 	return !m->buf ? -ENOMEM : -EAGAIN;
 }
 
+static void debug_proc_sys(char *str)
+{
+#ifdef CONFIG_DEBUG_PROC_SYS
+	pr_info("seq_file: \n----[%s]---\n", str);
+#endif
+}
+
 /**
  *	seq_read -	->read() method for sequential files.
  *	@file: the file to read from
@@ -234,6 +241,7 @@ ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 		err = copy_to_user(buf, m->buf + m->from, n);
 		if (err)
 			goto Efault;
+		debug_proc_sys(m->buf + m->from);
 		m->count -= n;
 		m->from += n;
 		size -= n;
@@ -300,6 +308,7 @@ Fill:
 	err = copy_to_user(buf, m->buf, n);
 	if (err)
 		goto Efault;
+	debug_proc_sys(m->buf);
 	copied += n;
 	m->count -= n;
 	if (m->count)
