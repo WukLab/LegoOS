@@ -36,7 +36,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	syscall_enter();
 	mmap_printk("%s(): brk: %#lx\n", FUNC, brk);
 
-	payload.pid = current->pid;
+	payload.pid = current->tgid;
 	payload.brk = brk;
 
 	len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_BRK,
@@ -86,7 +86,7 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	} else
 		memset(payload.f_name, 0, MAX_FILENAME_LENGTH);
 
-	payload.pid = current->pid;
+	payload.pid = current->tgid;
 	payload.addr = addr;
 	payload.len = len;
 	payload.prot = prot;
@@ -128,7 +128,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	if (!len)
 		return -EINVAL;
 
-	payload.pid = current->pid;
+	payload.pid = current->tgid;
 	payload.addr = addr;
 	payload.len = len;
 
@@ -179,7 +179,7 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 		return 0;
 
 	/* all good, send request */
-	payload.pid = current->pid;
+	payload.pid = current->tgid;
 	payload.start = start;
 	payload.len = len;
 	payload.flags = flags;

@@ -92,7 +92,7 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 	pr_info("missing_vaddr: %#lx pa_cache: %p va_cache: %p va_meta: %p way: %u\n",
 		vaddr, pa_cache, va_cache, va_meta, way);
 
-	payload.pid = current->pid;
+	payload.pid = current->tgid;
 	payload.flags = flags;
 	payload.missing_vaddr = vaddr;
 

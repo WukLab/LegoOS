@@ -136,7 +136,7 @@ static void *prepare_exec_payload(const char *filename,
 		return ERR_PTR(-ENOMEM);
 
 	/* then copy strings and fill payload */
-	payload->pid = current->pid;
+	payload->pid = current->tgid;
 	payload->payload_size = *payload_size;
 	payload->argc = argc;
 	payload->envc = envc;

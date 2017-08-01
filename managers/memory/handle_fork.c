@@ -33,10 +33,16 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 		goto reply;
 	}
 
-	/* All threads within process share one VM */
-	spin_lock_init(&tsk->task_lock);
-	tsk->pid = pid;
+	/*
+	 * All threads within process share one VM
+	 * So we actually use tgid (thread-group-id) to create
+	 * a lego-tsk entity.
+	 *
+	 * All following requests sent from processor must use tgid.
+	 */
+	tsk->pid = tgid;
 	tsk->node = nid;
+	spin_lock_init(&tsk->task_lock);
 
 	lego_set_task_comm(tsk, payload->comm);
 

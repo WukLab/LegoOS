@@ -713,12 +713,13 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 SYSCALL_DEFINE0(fork)
 {
 	debug_syscall_print();
-	return do_fork(SIGCHLD, 0, 0, NULL, NULL, 0);
+	return do_fork(CLONE_GLOBAL_THREAD | SIGCHLD, 0, 0, NULL, NULL, 0);
 }
 
 SYSCALL_DEFINE0(vfork)
 {
-	debug_syscall_print();
+	syscall_enter();
+	WARN(1, "Check vfork() state");
 	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD,
 		       0, 0, NULL, NULL, 0);
 }
@@ -728,7 +729,9 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 		 int __user *, child_tidptr,
 		 unsigned long, tls)
 {
-	debug_syscall_print();
+	syscall_enter();
+	pr_info("clone_flags:%#lx,newsp:%#lx,parent_tidptr:%p,child_tidptr:%p,tls:%lu\n",
+		clone_flags, newsp, parent_tidptr, child_tidptr, tls);
 	return do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
 }
 
