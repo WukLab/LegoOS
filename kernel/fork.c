@@ -648,7 +648,7 @@ pid_t do_fork(unsigned long clone_flags,
 	      unsigned long stack_size,
 	      int __user *parent_tidptr,
 	      int __user *child_tidptr,
-	      int tls)
+	      unsigned long tls)
 {
 	struct task_struct *p;
 	struct completion vfork;
@@ -730,7 +730,7 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 		 unsigned long, tls)
 {
 	syscall_enter();
-	pr_info("clone_flags:%#lx,newsp:%#lx,parent_tidptr:%p,child_tidptr:%p,tls:%lu\n",
+	pr_info("clone_flags:%#lx,newsp:%#lx,parent_tidptr:%p,child_tidptr:%p,tls:%lx\n",
 		clone_flags, newsp, parent_tidptr, child_tidptr, tls);
 	return do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
 }
