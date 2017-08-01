@@ -395,8 +395,11 @@ void exit_thread(struct task_struct *tsk)
 
 void flush_thread(void)
 {
+#if 0
+Looks like this code break the system
 	struct task_struct *tsk = current;
 	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));
 
 	fpu__clear(&tsk->thread.fpu);
+#endif
 }
