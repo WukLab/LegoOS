@@ -58,7 +58,7 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 {
 	struct p2m_mmap_struct payload;
 	struct p2m_mmap_reply_struct reply;
-	struct file *f;
+	struct file *f = NULL;
 	int ret_len;
 	long ret_addr;
 
@@ -77,9 +77,14 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	if ((off + len) < off)
 		return -EOVERFLOW;
 
-	f = fdget(fd);
-	if (!(flags & MAP_ANONYMOUS) && !f)
-		return -EBADF;
+	/* file-backed mmap? */
+	if (!(flags & MAP_ANONYMOUS)) {
+		f = fdget(fd);
+		if (!f)
+			return -EBADF;
+		memcpy(payload.f_name, f->f_name, MAX_FILENAME_LENGTH);
+	} else
+		memset(payload.f_name, 0, MAX_FILENAME_LENGTH);
 
 	payload.pid = current->pid;
 	payload.addr = addr;
@@ -87,7 +92,6 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	payload.prot = prot;
 	payload.flags = flags;
 	payload.pgoff = off >> PAGE_SHIFT;
-	memcpy(payload.f_name, f->f_name, MAX_FILENAME_LENGTH);
 
 	ret_len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MMAP,
 			&payload, sizeof(payload), &reply, sizeof(reply),
@@ -103,7 +107,8 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	} else
 		ret_addr = -EIO;
 
-	put_file(f);
+	if (f)
+		put_file(f);
 	return ret_addr;
 }
 
