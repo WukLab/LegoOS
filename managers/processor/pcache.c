@@ -89,8 +89,8 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 	int i, nr_split = CONFIG_PCACHE_FILL_SPLIT_NR;
 	u64 offset, slice;
 
-	pr_info("missing_vaddr: %#lx pa_cache: %p va_cache: %p va_meta: %p way: %u\n",
-		vaddr, pa_cache, va_cache, va_meta, way);
+	pr_info("cpu:%d,va:%#lx,p$:%p,v$:%p,vM:%p,way:%u\n",
+		smp_processor_id(), vaddr, pa_cache, va_cache, va_meta, way);
 
 	payload.pid = current->tgid;
 	payload.flags = flags;
