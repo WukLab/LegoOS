@@ -20,12 +20,12 @@
 #include <memory/include/vm.h>
 #include <memory/include/pid.h>
 #include <memory/include/vm-pgtable.h>
+#include <memory/include/file_ops.h>
 
 #ifdef CONFIG_DEBUG_VM_MMAP
 #define mmap_printk(fmt...)	pr_info(fmt)
 static void dump_vm_all(struct lego_mm_struct *mm)
 {
-	dump_lego_mm(mm);
 	dump_all_vmas_simple(mm);
 }
 #else
@@ -129,13 +129,15 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	u64 prot = payload->prot;
 	u64 flags = payload->flags;
 	u64 pgoff = payload->pgoff;
+	char *f_name = payload->f_name;
 	struct lego_task_struct *tsk;
 	struct lego_file *file = NULL;
 	struct p2m_mmap_reply_struct reply;
 	s64 ret;
 
-	mmap_printk("%s():src_nid:%u,pid:%u,addr:%#Lx,len:%#Lx,prot:%#Lx,flags:%#Lx,"
-		    "pgoff:%#Lx\n", __func__, nid, pid, addr, len, prot, flags, pgoff);
+	mmap_printk("%s():src_nid:%u,pid:%u,addr:%#Lx,len:%#Lx,prot:%#Lx,flags:%#Lx"
+		    "pgoff:%#Lx,f_name:[%s]\n", FUNC, nid, pid, addr, len, prot,
+		    flags, pgoff, f_name);
 
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
@@ -144,10 +146,23 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	}
 	dump_vm_all(tsk->mm);
 
+	/*
+	 * Are we doing a file-backed mmap()?
+	 * If so, we need to allocate a lego_file to attach to this vma:
+	 */
 	if (!(flags & MAP_ANONYMOUS)) {
-		/* use fd to find file */
-		/* file backed mmap() */
-		file = NULL;
+		file = kzalloc(sizeof(*file), GFP_KERNEL);
+		if (!file) {
+			reply.ret = RET_ENOMEM;
+			goto out;
+		}
+
+		/*
+		 * TODO: remove ramfs_file_ops to use storage ones
+		 */
+		file->f_op = &ramfs_file_ops;
+		file->task = tsk;
+		memcpy(file->filename, f_name, MAX_FILENAME_LEN);
 	}
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);

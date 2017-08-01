@@ -90,7 +90,6 @@ static void local_qemu_test(void)
 	mmap.len = PAGE_SIZE * 0x10;
 	mmap.prot = PROT_READ | PROT_WRITE;
 	mmap.flags = MAP_ANONYMOUS | MAP_PRIVATE;
-	mmap.fd = 1;
 	mmap.pgoff = 0;
 	handle_p2m_mmap(&mmap, 0, &hdr);
 	dump_all_vmas_simple(tsk->mm);

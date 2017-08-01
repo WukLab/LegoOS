@@ -15,8 +15,11 @@
  *	msync
  */
 
+#include <lego/mmap.h>
 #include <lego/syscalls.h>
 #include <lego/comp_processor.h>
+
+#include <processor/include/fs.h>
 
 #ifdef CONFIG_DEBUG_VM_MMAP
 #define mmap_printk(fmt...)	pr_info(fmt)
@@ -28,7 +31,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 {
 	struct p2m_brk_struct payload;
 	unsigned long ret_brk;
-	long ret;
+	long len;
 
 	syscall_enter();
 	mmap_printk("%s(): brk: %#lx\n", FUNC, brk);
@@ -36,13 +39,13 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	payload.pid = current->pid;
 	payload.brk = brk;
 
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_BRK,
+	len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_BRK,
 			&payload, sizeof(payload), &ret_brk, sizeof(ret_brk),
 			false, DEF_NET_TIMEOUT);
 
-	mmap_printk("%s(): return: %#lx\n", FUNC, ret);
-	if (likely(ret == sizeof(ret_brk))) {
-		if (WARN_ON(ret == RET_ESRCH || ret == RET_EINTR))
+	mmap_printk("%s(): ret_brk: %#lx\n", FUNC, ret_brk);
+	if (likely(len == sizeof(ret_brk))) {
+		if (WARN_ON(ret_brk == RET_ESRCH || ret_brk == RET_EINTR))
 			return -EINTR;
 		return ret_brk;
 	}
@@ -55,7 +58,9 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 {
 	struct p2m_mmap_struct payload;
 	struct p2m_mmap_reply_struct reply;
-	int ret;
+	struct file *f;
+	int ret_len;
+	long ret_addr;
 
 	syscall_enter();
 	mmap_printk("%s():addr:%#lx,len:%#lx,prot:%#lx,flags:%#lx,fd:%lu,off:%#lx\n",
@@ -72,27 +77,34 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	if ((off + len) < off)
 		return -EOVERFLOW;
 
+	f = fdget(fd);
+	if (!(flags & MAP_ANONYMOUS) && !f)
+		return -EBADF;
+
 	payload.pid = current->pid;
 	payload.addr = addr;
 	payload.len = len;
 	payload.prot = prot;
 	payload.flags = flags;
-	payload.fd = fd;
 	payload.pgoff = off >> PAGE_SHIFT;
+	memcpy(payload.f_name, f->f_name, MAX_FILENAME_LENGTH);
 
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MMAP,
+	ret_len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MMAP,
 			&payload, sizeof(payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
 
 	mmap_printk("%s(): ret_addr:%#Lx\n", FUNC, reply.ret_addr);
 
-	if (likely(ret == sizeof(reply))) {
+	if (likely(ret_len == sizeof(reply))) {
 		if (likely(reply.ret == RET_OKAY))
-			return reply.ret_addr;
+			ret_addr = reply.ret_addr;
 		else
-			return (s64)reply.ret;
-	}
-	return -EIO;
+			ret_addr = (s64)reply.ret;
+	} else
+		ret_addr = -EIO;
+
+	put_file(f);
+	return ret_addr;
 }
 
 SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)

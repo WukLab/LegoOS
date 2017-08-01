@@ -14,6 +14,7 @@
 #include <lego/files.h>
 #include <lego/atomic.h>
 #include <lego/string.h>
+#include <processor/include/fs.h>
 
 static inline int f_name_equal(char *f_name1, char *f_name2)
 {
@@ -40,7 +41,5 @@ static inline int normal_file_open(struct file *f, char *f_name)
 	f->f_op = &default_f_op;
 	return 0;
 }
-
-struct file *fdget(int fd);
 
 #endif /* _PROCESSOR_FS_INTERNAL_H_ */

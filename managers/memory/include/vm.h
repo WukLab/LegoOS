@@ -11,6 +11,7 @@
 #define _LEGO_MEMORY_VM_H_
 
 #include <lego/bug.h>
+#include <lego/mmap.h>
 #include <lego/comp_memory.h>
 #include <memory/include/vm-pgtable.h>
 
@@ -31,25 +32,6 @@
 
 #define VM_FAULT_ERROR	(VM_FAULT_OOM | VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV | \
 			 VM_FAULT_HWPOISON )
-
-/*
- * mmap flags
- */
-#define PROT_READ	0x01		/* page can be read */
-#define PROT_WRITE	0x02		/* page can be written */
-#define PROT_EXEC	0x04		/* page can be executed */
-#define PROT_SEM	0x08		/* page may be used for atomic ops */
-#define PROT_NONE	0x00		/* page can not be accessed */
-
-#define MAP_SHARED	0x01		/* Share changes */
-#define MAP_PRIVATE	0x02		/* Changes are private */
-#define MAP_TYPE	0x0f		/* Mask for type of mapping */
-#define MAP_FIXED	0x10		/* Interpret addr exactly */
-#define MAP_ANONYMOUS	0x20		/* don't use a file */
-#define MAP_GROWSDOWN	0x0100		/* stack-like segment */
-#define MAP_DENYWRITE	0x0800		/* ETXTBSY */
-#define MAP_EXECUTABLE	0x1000		/* mark it as an executable */
-#define MAP_LOCKED	0x2000		/* pages are locked */
 
 /*
  * vm_flags in vm_area_struct

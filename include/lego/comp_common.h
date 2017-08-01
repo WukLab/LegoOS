@@ -187,7 +187,7 @@ int handle_p2m_fork(struct p2m_fork_struct *, u64, struct common_header *);
 #define MAX_ARG_STRLEN		(PAGE_SIZE * 32)
 #define MAX_ARG_STRINGS		0x7FFFFFFF
 
-#define MAX_FILENAME_LENGTH	256
+#define MAX_FILENAME_LENGTH	128
 struct p2m_execve_struct {
 	__u32	pid;
 	__u32	payload_size;
@@ -215,8 +215,8 @@ struct p2m_mmap_struct {
 	__u64	len;
 	__u64	prot;
 	__u64	flags;
-	__u64	fd;
 	__u64	pgoff;
+	char	f_name[MAX_FILENAME_LENGTH];
 };
 struct p2m_mmap_reply_struct {
 	__u32	ret;
