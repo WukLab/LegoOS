@@ -5,6 +5,8 @@
 source "managers/processor/Kconfig"
 source "managers/memory/Kconfig"
 
+menu "General Manager Config"
 config PCACHE_FILL_SPLIT_NR
 	int
 	default 1
+endmenu

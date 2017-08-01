@@ -21,6 +21,18 @@
 #include <memory/include/pid.h>
 #include <memory/include/vm-pgtable.h>
 
+#ifdef CONFIG_DEBUG_VM_MMAP
+#define mmap_printk(fmt...)	pr_info(fmt)
+static void dump_vm_all(struct lego_mm_struct *mm)
+{
+	dump_lego_mm(mm);
+	dump_all_vmas_simple(mm);
+}
+#else
+#define mmap_printk(fmt...)	do { } while (0)
+static inline void dump_vm_all(struct lego_mm_struct *mm) { }
+#endif
+
 /**
  * Returns: the brk address
  *  ERROR:
@@ -39,14 +51,18 @@ int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
 	unsigned long ret_brk;
 	int ret;
 
+	mmap_printk("%s():src_nid:%u,pid:%u,brk:%#lx\n",
+		__func__, nid, pid, brk);
+
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
 		ret_brk = RET_ESRCH;
 		ibapi_reply_message(&ret_brk, sizeof(ret_brk), desc);
 		return 0;
 	}
-	mm = tsk->mm;
+	dump_vm_all(tsk->mm);
 
+	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
 		ret_brk = RET_EINTR;
 		ibapi_reply_message(&ret_brk, sizeof(ret_brk), desc);
@@ -94,6 +110,7 @@ out:
 	ret_brk = mm->brk;
 	ibapi_reply_message(&ret_brk, sizeof(ret_brk), desc);
 
+	dump_vm_all(mm);
 	return 0;
 }
 
@@ -117,11 +134,15 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	struct p2m_mmap_reply_struct reply;
 	s64 ret;
 
+	mmap_printk("%s():src_nid:%u,pid:%u,addr:%#Lx,len:%#Lx,prot:%#Lx,flags:%#Lx,"
+		    "pgoff:%#Lx\n", __func__, nid, pid, addr, len, prot, flags, pgoff);
+
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
 		reply.ret = RET_ESRCH;
 		goto out;
 	}
+	dump_vm_all(tsk->mm);
 
 	if (!(flags & MAP_ANONYMOUS)) {
 		/* use fd to find file */
@@ -144,6 +165,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 
+	dump_vm_all(tsk->mm);
 	return 0;
 }
 
@@ -158,11 +180,15 @@ int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 	struct lego_mm_struct *mm;
 	u64 ret;
 
+	mmap_printk("%s():src_nid:%u,pid:%u,addr:%#Lx,len:%#Lx\n",
+		__func__, nid, pid, addr, len);
+
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
 		ret = RET_ESRCH;
 		goto out;
 	}
+	dump_vm_all(tsk->mm);
 
 	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
@@ -175,6 +201,8 @@ int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 
 out:
 	ibapi_reply_message(&ret, sizeof(ret), desc);
+
+	dump_vm_all(tsk->mm);
 	return 0;
 }
 
@@ -186,17 +214,21 @@ int handle_p2m_msync(struct p2m_msync_struct *payload, u64 desc,
 	u64 start = payload->start;
 	u64 len = payload->len;
 	u64 end = start + len;
-	u32 flags = payload->flags;
+	u64 flags = payload->flags;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
 	struct vm_area_struct *vma;
 	u32 ret, unmapped_error;
+
+	mmap_printk("%s():src_nid:%u,pid:%u,start:%#Lx,len:%#Lx,flags:%#Lx\n",
+		__func__, nid, pid, start, len, flags);
 
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
 		ret = RET_ESRCH;
 		goto out;
 	}
+	dump_vm_all(tsk->mm);
 
 	/*
 	 * If the interval [start,end) covers some unmapped address ranges,
@@ -256,6 +288,8 @@ out:
 	if (unmapped_error)
 		ret = unmapped_error;
 	ibapi_reply_message(&ret, sizeof(ret), desc);
+
+	dump_vm_all(tsk->mm);
 	return 0;
 }
 
