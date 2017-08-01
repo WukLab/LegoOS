@@ -18,14 +18,20 @@
 #include <lego/syscalls.h>
 #include <lego/comp_processor.h>
 
+#ifdef CONFIG_DEBUG_VM_MMAP
+#define mmap_printk(fmt...)	pr_info(fmt)
+#else
+#define mmap_printk(fmt...)	do { } while (0)
+#endif
+
 SYSCALL_DEFINE1(brk, unsigned long, brk)
 {
 	struct p2m_brk_struct payload;
 	unsigned long ret_brk;
-	int ret;
+	long ret;
 
 	syscall_enter();
-	pr_info("%s(): brk: %#lx\n", __func__, brk);
+	mmap_printk("%s(): brk: %#lx\n", FUNC, brk);
 
 	payload.pid = current->pid;
 	payload.brk = brk;
@@ -34,6 +40,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 			&payload, sizeof(payload), &ret_brk, sizeof(ret_brk),
 			false, DEF_NET_TIMEOUT);
 
+	mmap_printk("%s(): return: %#lx\n", FUNC, ret);
 	if (likely(ret == sizeof(ret_brk))) {
 		if (WARN_ON(ret == RET_ESRCH || ret == RET_EINTR))
 			return -EINTR;
@@ -51,8 +58,8 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	int ret;
 
 	syscall_enter();
-	pr_info("%s(): addr:%#lx,len:%#lx,prot:%#lx,flags:%#lx,fd:%lu,off:%#lx\n",
-		__func__, addr, len, prot, flags, fd, off);
+	mmap_printk("%s():addr:%#lx,len:%#lx,prot:%#lx,flags:%#lx,fd:%lu,off:%#lx\n",
+		FUNC, addr, len, prot, flags, fd, off);
 
 	if (offset_in_page(off))
 		return -EINVAL;
@@ -77,6 +84,8 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 			&payload, sizeof(payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
 
+	mmap_printk("%s(): ret_addr:%#Lx\n", FUNC, reply.ret_addr);
+
 	if (likely(ret == sizeof(reply))) {
 		if (likely(reply.ret == RET_OKAY))
 			return reply.ret_addr;
@@ -92,8 +101,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	int ret, retbuf;
 
 	syscall_enter();
-	pr_info("%s(): addr:%#lx,len:%#lx\n",
-		__func__, addr, len);
+	mmap_printk("%s():addr:%#lx,len:%#lx\n", FUNC, addr, len);
 
 	if (offset_in_page(addr) || addr > TASK_SIZE || len > TASK_SIZE - addr)
 		return -EINVAL;
@@ -137,8 +145,8 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 	unsigned long end;
 
 	syscall_enter();
-	pr_info("%s(): start:%#lx,len:%#lx,flags:%#x\n",
-		__func__, start, len, flags);
+	mmap_printk("%s():start:%#lx,len:%#lx,flags:%#x\n",
+		FUNC, start, len, flags);
 
 	if (flags & ~(MS_ASYNC | MS_INVALIDATE | MS_SYNC))
 		return -EINVAL;
@@ -172,8 +180,8 @@ SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
 		unsigned long, prot)
 {
 	syscall_enter();
-	pr_info("%s(): start:%#lx,len:%#lx,prot:%#lx\n",
-		__func__, start, len, prot);
+	mmap_printk("%s():start:%#lx,len:%#lx,prot:%#lx\n",
+		FUNC, start, len, prot);
 
 	return 0;
 }

@@ -16,13 +16,6 @@ config DEBUG_VM_RB
 
 	  If unsure, say N.
 
-config DEBUG_VM_MMAP
-	bool "Debug mmap() brk()"
-	help
-	  Enable to have a detailed dump on each mmap(), brk() syscall handlers.
-
-	  if unsure, say N.
-
 endif
 
 endmenu
