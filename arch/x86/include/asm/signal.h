@@ -18,4 +18,6 @@ typedef struct {
 	unsigned long sig[_NSIG_WORDS];
 } sigset_t;
 
+extern void do_signal(struct pt_regs *regs);
+
 #endif /* _ASM_X86_SIGNAL_H_ */

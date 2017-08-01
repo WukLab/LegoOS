@@ -11,11 +11,6 @@
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
 
-static inline void do_signal(struct pt_regs *regs)
-{
-
-}
-
 #define EXIT_TO_USERMODE_LOOP_FLAGS				\
 	(_TIF_SIGPENDING | _TIF_NEED_RESCHED)
 

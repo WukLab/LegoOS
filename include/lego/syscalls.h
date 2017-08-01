@@ -16,6 +16,7 @@
 #include <lego/rlimit.h>
 #include <lego/linkage.h>
 #include <lego/compiler.h>
+#include <lego/time.h>
 
 #include <asm/syscalls.h>
 
@@ -129,6 +130,22 @@ asmlinkage long sys_getrlimit(unsigned int resource,
 
 asmlinkage long sys_setrlimit(unsigned int resource,
 				struct rlimit __user *rlim);
+
+asmlinkage long sys_rt_sigprocmask(int how, sigset_t __user *nset,
+				sigset_t __user *oset, size_t sigsetsize);
+
+asmlinkage long sys_rt_sigpending(sigset_t __user *uset, size_t sigsetsize);
+
+asmlinkage long sys_kill(pid_t pid, int sig);
+
+asmlinkage long sys_rt_sigaction(int,
+				 const struct sigaction __user *,
+				 struct sigaction __user *,
+				 size_t);
+
+asmlinkage long sys_rt_sigqueueinfo(pid_t pid, int sig, siginfo_t __user *uinfo);
+
+asmlinkage long sys_rt_sigsuspend(sigset_t __user *unewset, size_t sigsetsize);
 
 /* x86-64 only */
 asmlinkage long sys_arch_prctl(int, unsigned long);

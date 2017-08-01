@@ -20,6 +20,16 @@
 
 #include <asm/signal.h>	/* for sigset_t */
 
+#ifndef SIG_BLOCK
+#define SIG_BLOCK          0	/* for blocking signals */
+#endif
+#ifndef SIG_UNBLOCK
+#define SIG_UNBLOCK        1	/* for unblocking signals */
+#endif
+#ifndef SIG_SETMASK
+#define SIG_SETMASK        2	/* for setting the signal mask */
+#endif
+
 #define SIGHUP		1
 #define SIGINT		2
 #define SIGQUIT		3
@@ -174,6 +184,28 @@ _SIG_SET_OP(signotset, _sig_not)
 #undef _SIG_SET_OP
 #undef _sig_not
 
+/* Test if 'sig' is valid signal. Use this instead of testing _NSIG directly */
+static inline int valid_signal(unsigned long sig)
+{
+	return sig <= _NSIG ? 1 : 0;
+}
+
+static inline int sigisemptyset(sigset_t *set)
+{
+	switch (_NSIG_WORDS) {
+	case 4:
+		return (set->sig[3] | set->sig[2] |
+			set->sig[1] | set->sig[0]) == 0;
+	case 2:
+		return (set->sig[1] | set->sig[0]) == 0;
+	case 1:
+		return set->sig[0] == 0;
+	default:
+		BUILD_BUG();
+		return 0;
+	}
+}
+
 static inline void sigemptyset(sigset_t *set)
 {
 	switch (_NSIG_WORDS) {
@@ -321,6 +353,7 @@ struct signal_struct {
 
 	pid_t			leader_pid;
 
+	spinlock_t		stats_lock;
 	/*
 	 * We don't bother to synchronize most readers of this at all,
 	 * because there is no reader checking a limit that actually needs
@@ -348,6 +381,9 @@ struct signal_struct {
 #define SIGNAL_CLD_MASK		(SIGNAL_CLD_STOPPED|SIGNAL_CLD_CONTINUED)
 
 #define SIGNAL_UNKILLABLE	0x00000040 /* for init: ignore fatal signals */
+
+#define SIGNAL_STOP_MASK (SIGNAL_CLD_MASK | SIGNAL_STOP_STOPPED | \
+			  SIGNAL_STOP_CONTINUED)
 
 /* If true, all threads except ->group_exit_task have pending SIGKILL */
 static inline int signal_group_exit(const struct signal_struct *sig)

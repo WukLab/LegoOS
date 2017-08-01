@@ -265,6 +265,7 @@ static int __setup_rt_frame(int sig, struct ksignal *ksig,
 	put_user_try {
 		/* Create the ucontext.  */
 		put_user_ex(frame_uc_flags(regs), &frame->uc.uc_flags);
+printk("testing testing\n");
 		put_user_ex(0, &frame->uc.uc_link);
 		save_altstack_ex(&frame->uc.uc_stack, regs->sp);
 
@@ -366,6 +367,7 @@ handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 	stepping = test_thread_flag(TIF_SINGLESTEP);
 
 	failed = (setup_rt_frame(ksig, regs) < 0);
+		printk("testing1\n");
 	if (!failed) {
 		/*
 		 * Clear the direction flag as per the ABI for function entry.
@@ -424,6 +426,7 @@ void do_signal(struct pt_regs *regs)
 	 * If there's no signal to deliver, we just put the saved sigmask
 	 * back.
 	 */
+	printk("signal handle done\n");
 	restore_saved_sigmask();
 }
 

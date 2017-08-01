@@ -398,6 +398,15 @@ extern spinlock_t tasklist_lock;
 #define task_thread_info(task)	((struct thread_info *)((task)->stack))
 #define task_stack_page(task)	((void *)((task)->stack))
 
+#define __for_each_thread(signal, t)	\
+	list_for_each_entry(t, &(signal)->thread_head, thread_node)
+
+#define for_each_thread(p, t)		\
+	__for_each_thread((p)->signal, t)
+
+#define while_each_thread(g, t) \
+	while ((t = next_thread(t)) != g)
+
 static inline bool thread_group_leader(struct task_struct *p)
 {
 	return p->exit_signal >= 0;
@@ -419,9 +428,6 @@ static inline struct task_struct *next_thread(const struct task_struct *p)
 	/* list_entry_rcu */
 	return list_entry(p->thread_group.next, struct task_struct, thread_group);
 }
-
-#define while_each_thread(g, t) \
-	while ((t = next_thread(t)) != g)
 
 /*
  * flag set/clear/test wrappers
@@ -783,6 +789,25 @@ static inline sigset_t *sigmask_to_save(void)
 	if (unlikely(test_restore_sigmask()))
 		res = &current->saved_sigmask;
 	return res;
+}
+
+extern struct sighand_struct *__lock_task_sighand(struct task_struct *tsk,
+							unsigned long *flags);
+
+static inline struct sighand_struct *lock_task_sighand(struct task_struct *tsk,
+						       unsigned long *flags)
+{
+	struct sighand_struct *ret;
+
+	ret = __lock_task_sighand(tsk, flags);
+	(void)__cond_lock(&tsk->sighand->siglock, ret);
+	return ret;
+}
+
+static inline void unlock_task_sighand(struct task_struct *tsk,
+						unsigned long *flags)
+{
+	spin_unlock_irqrestore(&tsk->sighand->siglock, *flags);
 }
 
 #define SS_ONSTACK	1
