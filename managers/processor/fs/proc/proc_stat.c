@@ -94,7 +94,6 @@ static int show_stat(struct seq_file *p, void *v)
 		total_forks,
 		nr_running(),
 		nr_iowait());
-	seq_putc(p, '\n');
 
 	return 0;
 }

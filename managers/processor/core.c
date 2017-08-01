@@ -20,14 +20,23 @@
 #ifndef CONFIG_FIT
 static void p_test(void)
 {
-	char *fn = "/proc/stat";
 	char *buf;
 	int fd;
 
-	fd = sys_open(fn, 0, 0);
 	buf = kmalloc(8192, GFP_KERNEL);
+
+	fd = sys_open("/proc/stat", 0, 0);
 	sys_read(fd, buf, 8192);
-	pr_info("buf: \n%s\n", buf);
+	pr_info("fd: %d buf: \n%s\n", fd, buf);
+	sys_close(fd);
+
+	memset(buf, 0, 8192);
+	fd = sys_open("/sys/devices/system/cpu/online", 0, 0);
+	sys_read(fd, buf, 8192);
+	pr_info("fd: %d buf: \n%s\n", fd, buf);
+	sys_close(fd);
+
+	kfree(buf);
 }
 #endif
 

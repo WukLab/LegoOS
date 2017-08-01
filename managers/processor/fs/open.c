@@ -45,7 +45,7 @@ static struct file *alloc_file(char *f_name)
 {
 	struct file *filp;
 
-	filp = kmalloc(sizeof(*filp), GFP_KERNEL);
+	filp = kzalloc(sizeof(*filp), GFP_KERNEL);
 	if (filp) {
 		atomic_set(&filp->f_count, 1);
 		spin_lock_init(&filp->f_pos_lock);

@@ -13,8 +13,36 @@
 #include <lego/files.h>
 #include <lego/syscalls.h>
 #include <lego/spinlock.h>
-#include <lego/comp_processor.h>
+#include <lego/seq_file.h>
 
 #include "../internal.h"
 
-struct file_operations sys_devices_system_cpu_online_ops;
+static int devices_system_cpu_online_show(struct seq_file *m, void *v)
+{
+	char buf[64];
+
+	memset(buf, 0, 64);
+	scnprintf(buf, 64, "%*pbl", num_online_cpus(), cpu_online_mask);
+	seq_printf(m, "%s", buf);
+
+	return 0;
+}
+
+static int devices_system_cpu_online_open(struct file *file)
+{
+	return single_open(file, devices_system_cpu_online_show, NULL);
+}
+
+static ssize_t
+devices_system_cpu_online_write(struct file *f, const char __user *buf,
+				size_t count, loff_t *off)
+{
+	return -EFAULT;
+}
+
+struct file_operations sys_devices_system_cpu_online_ops = {
+	.open		= devices_system_cpu_online_open,
+	.read		= seq_read,
+	.write		= devices_system_cpu_online_write,
+	.release	= single_release,
+};
