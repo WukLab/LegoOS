@@ -392,3 +392,11 @@ void exit_thread(struct task_struct *tsk)
 
 	fpu__drop(fpu);
 }
+
+void flush_thread(void)
+{
+	struct task_struct *tsk = current;
+	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));
+
+	fpu__clear(&tsk->thread.fpu);
+}

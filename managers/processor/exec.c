@@ -21,6 +21,27 @@
 #include <lego/uaccess.h>
 #include <lego/comp_processor.h>
 
+/*
+ * This function makes sure the current process has its own signal table,
+ * so that flush_signal_handlers can later reset the handlers without
+ * disturbing other processes.  (Other processes might share the signal
+ * table via the CLONE_SIGHAND option to clone().)
+ */
+static int de_thread(struct task_struct *tsk)
+{
+	/* TODO */
+	return 0;
+}
+
+/*
+ * Flush all handlers for a task.
+ */
+
+void flush_signal_handlers(struct task_struct *t, int force_default)
+{
+	/* TODO */
+}
+
 static int exec_mmap(void)
 {
 	struct mm_struct *new_mm;
@@ -213,10 +234,42 @@ int do_execve(const char *filename,
 	if (ret)
 		goto out;
 
-	/* core-kernel: switch the emulated page-table */
+	/*
+	 * Now remote memory-manager has successfully
+	 * loaded the image to memory. We processor still
+	 * has some dirty work to do:
+	 */
+
+	/*
+	 * Make sure we have a private signal table and that
+	 * we are unassociated from the previous thread group.
+	 */
+	ret = de_thread(current);
+	if (ret)
+		goto out;
+
+	/*
+	 * Switch mm, to switch the emulated page-table
+	 * User program also has its own one
+	 */
 	ret = exec_mmap();
 	if (ret)
 		goto out;
+
+	/*
+	 * THIS IS VERY IMPORTANT
+	 * This thread is no longer a kernel thread. If this flag
+	 * is not cleared, copy_process_tls() will falsely think
+	 * this is a kernel thread if later on this guy calls sys_clone():
+	 */
+	current->flags &= ~(PF_KTHREAD | PF_NO_SETAFFINITY);
+	flush_thread();
+
+	/*
+	 * An exec changes our domain.
+	 * We are no longer part of the thread group:
+	 */
+	flush_signal_handlers(current, 0);
 
 #ifdef ELF_PLAT_INIT
 	/*

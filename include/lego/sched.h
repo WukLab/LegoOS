@@ -690,6 +690,9 @@ static inline int signal_pending_state(long state, struct task_struct *p)
 /* arch-specific exit */
 void exit_thread(struct task_struct *tsk);
 
+/* flush stale state in sys_exec() time */
+void flush_thread(void);
+
 #define SD_LOAD_BALANCE		0x0001	/* Do load balancing on this domain. */
 #define SD_BALANCE_NEWIDLE	0x0002	/* Balance when about to become idle */
 #define SD_BALANCE_EXEC		0x0004	/* Balance on exec */

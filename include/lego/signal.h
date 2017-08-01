@@ -423,6 +423,8 @@ void signal_setup_done(int failed, struct ksignal *ksig, int stepping);
 void exit_signals(struct task_struct *tsk);
 void kernel_sigaction(int, __sighandler_t);
 
+void flush_signal_handlers(struct task_struct *, int force_default);
+
 /* Nuke all other threads in the group */
 int zap_other_threads(struct task_struct *p);
 
