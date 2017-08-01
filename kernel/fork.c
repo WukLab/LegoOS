@@ -712,7 +712,7 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 
 SYSCALL_DEFINE0(fork)
 {
-	debug_syscall_print();
+	syscall_enter();
 	return do_fork(CLONE_GLOBAL_THREAD | SIGCHLD, 0, 0, NULL, NULL, 0);
 }
 
@@ -720,7 +720,7 @@ SYSCALL_DEFINE0(vfork)
 {
 	syscall_enter();
 	WARN(1, "Check vfork() state");
-	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD,
+	return do_fork(CLONE_GLOBAL_THREAD | CLONE_VFORK | CLONE_VM | SIGCHLD,
 		       0, 0, NULL, NULL, 0);
 }
 
@@ -732,16 +732,23 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 	syscall_enter();
 	pr_info("clone_flags:%#lx,newsp:%#lx,parent_tidptr:%p,child_tidptr:%p,tls:%lx\n",
 		clone_flags, newsp, parent_tidptr, child_tidptr, tls);
+
+	/*
+	 * Libraries may use clone() instead of fork()
+	 * to create new process. Add global flag if so:
+	 */
+	if (!(clone_flags & CLONE_THREAD))
+		clone_flags |= CLONE_GLOBAL_THREAD;
 	return do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
 }
 
 SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)
 {
-	debug_syscall_print();
-	pr_info("%s(): tidpid: %p\n", __func__, tidptr);
+	syscall_enter();
+	pr_info("%s(): tidpid: %p\n", FUNC, tidptr);
 
 	current->clear_child_tid = tidptr;
-	return current->group_leader->pid;
+	return current->tgid;
 }
 
 void __init fork_init(void)

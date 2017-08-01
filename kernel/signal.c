@@ -243,6 +243,12 @@ static inline int is_si_special(const struct siginfo *info)
 	return info <= SEND_SIG_FORCED;
 }
 
+static inline bool si_fromuser(const struct siginfo *info)
+{
+	return info == SEND_SIG_NOINFO ||
+		(!is_si_special(info) && SI_FROMUSER(info));
+}
+
 /*
  * allocate a new signal queue record
  * - this may be called without locks if and only if t == current, otherwise an
@@ -1520,13 +1526,12 @@ struct sighand_struct *__lock_task_sighand(struct task_struct *tsk,
 }
 
 
-int do_send_sig_info(int sig, struct siginfo *info, struct task_struct *p,
-			bool group)
+int do_send_sig_info(int sig, struct siginfo *info,
+		     struct task_struct *p, bool group)
 {
 	unsigned long flags;
 	int ret = -ESRCH;
 
-	printk("DEBUGGING, entering kill\n");
 	if (lock_task_sighand(p, &flags)) {
 		ret = send_signal(sig, info, p, group);
 		unlock_task_sighand(p, &flags);
@@ -1585,12 +1590,113 @@ SYSCALL_DEFINE2(kill, pid_t, pid, int, sig)
 {
 	struct siginfo info;
 
+	syscall_enter();
+	pr_info("%s():pid:%u,sig:%d\n", FUNC, pid, sig);
+
 	info.si_signo = sig;
 	info.si_errno = 0;
 	info.si_code = SI_USER;
-	info.si_pid = current->group_leader->pid;
+	info.si_pid = current->tgid;
 	info.si_uid = 0;
+
 	return kill_something_info(sig, &info, pid);
+}
+
+static int check_kill_permission(int sig, struct siginfo *info,
+				 struct task_struct *t)
+{
+	if (!valid_signal(sig))
+		return -EINVAL;
+
+	if (!si_fromuser(info))
+		return 0;
+
+	if (!same_thread_group(current, t))
+		return -EPERM;
+
+	return 0;
+}
+
+static int
+do_send_specific(pid_t tgid, pid_t pid, int sig, struct siginfo *info)
+{
+	struct task_struct *p;
+	int error = -ESRCH;
+
+	p = find_task_by_pid(pid);
+	if (p && (tgid <= 0 || p->tgid == tgid)) {
+		error = check_kill_permission(sig, info, p);
+		/*
+		 * The null signal is a permissions and process existence
+		 * probe.  No signal is actually delivered.
+		 */
+		if (!error && sig) {
+			error = do_send_sig_info(sig, info, p, false);
+			/*
+			 * If lock_task_sighand() failed we pretend the task
+			 * dies after receiving the signal. The window is tiny,
+			 * and the signal is private anyway.
+			 */
+			if (unlikely(error == -ESRCH))
+				error = 0;
+		}
+	}
+
+	return error;
+}
+
+static int do_tkill(pid_t tgid, pid_t pid, int sig)
+{
+	struct siginfo info = {};
+
+	info.si_signo = sig;
+	info.si_errno = 0;
+	info.si_code = SI_TKILL;
+	info.si_pid = current->tgid;
+	info.si_uid = current_uid();
+
+	return do_send_specific(tgid, pid, sig, &info);
+}
+
+/**
+ *  sys_tgkill - send signal to one specific thread
+ *  @tgid: the thread group ID of the thread
+ *  @pid: the PID of the thread
+ *  @sig: signal to be sent
+ *
+ *  This syscall also checks the @tgid and returns -ESRCH even if the PID
+ *  exists but it's not belonging to the target process anymore. This
+ *  method solves the problem of threads exiting and PIDs getting reused.
+ */
+SYSCALL_DEFINE3(tgkill, pid_t, tgid, pid_t, pid, int, sig)
+{
+	syscall_enter();
+	pr_info("%s():tgid:%u,pid:%u,sig:%d\n", FUNC, tgid, pid, sig);
+
+	/* This is only valid for single tasks */
+	if (pid <= 0 || tgid <= 0)
+		return -EINVAL;
+
+	return do_tkill(tgid, pid, sig);
+}
+
+/**
+ *  sys_tkill - send signal to one specific task
+ *  @pid: the PID of the task
+ *  @sig: signal to be sent
+ *
+ *  Send a signal to only one task, even if it's a CLONE_THREAD task.
+ */
+SYSCALL_DEFINE2(tkill, pid_t, pid, int, sig)
+{
+	syscall_enter();
+	pr_info("%s():pid:%u,sig:%d\n", FUNC, pid, sig);
+
+	/* This is only valid for single tasks */
+	if (pid <= 0)
+		return -EINVAL;
+
+	return do_tkill(0, pid, sig);
 }
 
 static void __user *sig_handler(struct task_struct *t, int sig)
