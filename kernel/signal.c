@@ -951,23 +951,18 @@ static void collect_signal(int sig, struct sigpending *list, siginfo_t *info)
 	 * Collect the siginfo appropriate to this signal.  Check if
 	 * there is another siginfo for the same signal.
 	*/
-	printk("find4 testingkill \n");
 	list_for_each_entry(q, &list->list, list) {
-	printk("find7 testingkill \n");
 		if (q->info.si_signo == sig) {
-	printk("find8 testingkill \n");
 			if (first)
 				goto still_pending;
 			first = q;
 		}
 	}
 
-	printk("find3 testingkill \n");
 	sigdelset(&list->signal, sig);
 
 	if (first) {
 still_pending:
-	printk("find5 testingkill \n");
 		list_del_init(&first->list);
 		copy_siginfo(info, &first->info);
 		__sigqueue_free(first);
@@ -983,7 +978,6 @@ still_pending:
 		info->si_pid = 0;
 		info->si_uid = 0;
 	}
-	printk("find6 testingkill \n");
 }
 
 static int __dequeue_signal(struct sigpending *pending, sigset_t *mask,
@@ -991,7 +985,6 @@ static int __dequeue_signal(struct sigpending *pending, sigset_t *mask,
 {
 	int sig = next_signal(pending, mask);
 
-	printk("find testingkill %d\n", sig);
 	if (sig)
 		collect_signal(sig, pending, info);
 	return sig;
@@ -1007,10 +1000,6 @@ int dequeue_signal(struct task_struct *tsk, sigset_t *mask, siginfo_t *info)
 {
 	int signr;
 
-	/* We only dequeue private signals from ourselves,
-	 * we don't let signalfd steal them
-	 */
-	printk("find2 testingkill\n");
 	signr = __dequeue_signal(&tsk->pending, mask, info);
 	if (!signr) {
 		signr = __dequeue_signal(&tsk->signal->shared_pending,
@@ -1060,6 +1049,7 @@ int dequeue_signal(struct task_struct *tsk, sigset_t *mask, siginfo_t *info)
 		 * about to disable them again anyway.
 		 */
 		spin_unlock(&tsk->sighand->siglock);
+		WARN_ON(1);
 		do_schedule_next_timer(info);
 		spin_lock(&tsk->sighand->siglock);
 	}
@@ -1109,7 +1099,6 @@ relock:
 
 		goto relock;
 	}
-	printk("find handler \n");
 
 	for (;;) {
 		struct k_sigaction *ka;
@@ -1125,8 +1114,9 @@ relock:
 		}
 
 		signr = dequeue_signal(current, &current->blocked, &ksig->info);
+		pr_info("%s():%d, signr: %d, handler:%p\n",
+			FUNC, LINE, signr, signr > 0 ? (&sighand->action[signr-1])->sa.sa_handler : NULL);
 		
-		printk("testing2 signal number, %d\n", signr);
 		if (!signr)
 			break; /* will return 0 */
 
@@ -1175,7 +1165,6 @@ relock:
 			 * This allows an intervening SIGCONT to be posted.
 			 * We need to check for that and bail out if necessary.
 			 */
-		printk("testing8\n");
 			if (signr != SIGSTOP) {
 				spin_unlock_irq(&sighand->siglock);
 
@@ -1191,8 +1180,6 @@ relock:
 				/* It released the siglock.  */
 				goto relock;
 			}
-
-		printk("testing12\n");
 
 			/*
 			 * We didn't actually stop, due to a race
@@ -1222,18 +1209,14 @@ relock:
 			do_coredump(&ksig->info);
 		}
 
-		printk("testing6\n");
 		/*
 		 * Death signals, no core dump.
 		 */
 		do_group_exit(ksig->info.si_signo);
 		/* NOTREACHED */
-		
-		printk("testing7\n");
 	}
 	spin_unlock_irq(&sighand->siglock);
 
-	printk("testing3\n");
 	ksig->sig = signr;
 	return ksig->sig > 0;
 }
@@ -1393,7 +1376,7 @@ int copy_siginfo_to_user(siginfo_t __user *to, const siginfo_t *from)
  */
 SYSCALL_DEFINE0(restart_syscall)
 {
-	debug_syscall_print();
+	syscall_enter();
 	return -EFAULT;
 }
 
@@ -1447,6 +1430,8 @@ SYSCALL_DEFINE4(rt_sigprocmask, int, how, sigset_t __user *, nset,
 	sigset_t old_set, new_set;
 	int error;
 
+	syscall_enter();
+
 	/* XXX: Don't preclude handling different sized sigset_t's.  */
 	if (sigsetsize != sizeof(sigset_t))
 		return -EINVAL;
@@ -1497,7 +1482,11 @@ static int do_sigpending(void *set, unsigned long sigsetsize)
 SYSCALL_DEFINE2(rt_sigpending, sigset_t __user *, uset, size_t, sigsetsize)
 {
 	sigset_t set;
-	int err = do_sigpending(&set, sigsetsize);
+	int err;
+
+	syscall_enter();
+
+	err = do_sigpending(&set, sigsetsize);
 	if (!err && copy_to_user(uset, &set, sigsetsize))
 		err = -EFAULT;
 	return err;
@@ -1814,6 +1803,9 @@ SYSCALL_DEFINE4(rt_sigaction, int, sig,
 	struct k_sigaction new_sa, old_sa;
 	int ret = -EINVAL;
 
+	syscall_enter();
+	pr_info("%s():sig:%d\n", FUNC, sig);
+
 	/* XXX: Don't preclude handling different sized sigset_t's.  */
 	if (sigsetsize != sizeof(sigset_t))
 		goto out;
@@ -1858,6 +1850,10 @@ SYSCALL_DEFINE3(rt_sigqueueinfo, pid_t, pid, int, sig,
 		siginfo_t __user *, uinfo)
 {
 	siginfo_t info;
+
+	syscall_enter();
+	pr_info("%s():pid:%u,sig:%d\n", FUNC, pid, sig);
+
 	if (copy_from_user(&info, uinfo, sizeof(siginfo_t)))
 		return -EFAULT;
 	return do_rt_sigqueueinfo(pid, sig, &info);
@@ -1885,6 +1881,8 @@ static int sigsuspend(sigset_t *set)
 SYSCALL_DEFINE2(rt_sigsuspend, sigset_t __user *, unewset, size_t, sigsetsize)
 {
 	sigset_t newset;
+
+	syscall_enter();
 
 	/* XXX: Don't preclude handling different sized sigset_t's.  */
 	if (sigsetsize != sizeof(sigset_t))

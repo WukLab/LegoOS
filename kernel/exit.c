@@ -89,6 +89,8 @@ void do_group_exit(int exit_code)
 {
 	struct signal_struct *sig = current->signal;
 
+	pr_info("%s():pid:%u,tgid:%u\n", FUNC, current->pid, current->tgid);
+
 	BUG_ON(exit_code & 0x80); /* core dumps don't get here */
 
 	if (signal_group_exit(sig))

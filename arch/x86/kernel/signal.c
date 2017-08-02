@@ -400,6 +400,7 @@ void do_signal(struct pt_regs *regs)
 
 	if (get_signal(&ksig)) {
 		/* Whee! Actually deliver the signal.  */
+		pr_info("%s(): sig: %d\n", FUNC, ksig.sig);
 		handle_signal(&ksig, regs);
 		return;
 	}
@@ -423,15 +424,14 @@ void do_signal(struct pt_regs *regs)
 	}
 
 	/*
-	 * If there's no signal to deliver, we just put the saved sigmask
-	 * back.
+	 * If there's no signal to deliver,
+	 * we just put the saved sigmask back.
 	 */
-	printk("signal handle done\n");
 	restore_saved_sigmask();
 }
 
 SYSCALL_DEFINE0(rt_sigreturn)
 {
-	debug_syscall_print();
+	syscall_enter();
 	return -EFAULT;
 }
