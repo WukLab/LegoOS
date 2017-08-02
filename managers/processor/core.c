@@ -40,6 +40,54 @@ static void p_test(void)
 }
 #endif
 
+#define MAX_INIT_ARGS	CONFIG_INIT_ENV_ARG_LIMIT
+#define MAX_INIT_ENVS	CONFIG_INIT_ENV_ARG_LIMIT
+
+/* http://c-faq.com/decl/spiral.anderson.html */
+static const char *argv_init[MAX_INIT_ARGS+2];
+const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
+
+static int procmgmt(void *unused)
+{
+	const char *init_filename;
+
+	init_filename = "./word_count";
+	argv_init[0] = init_filename;
+	argv_init[1] = "word_count_datafile";
+
+	return do_execve(init_filename,
+		(const char *const *)argv_init,
+		(const char *const *)envp_init);
+}
+
+static void run_global_thread(void)
+{
+	/*
+	 * Must use kernel_thread instead of global_kthread_run
+	 * because that one will call do_exit inside. So do_execve
+	 * will not have any effect.
+	 */
+	kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD); 
+}
+
+extern struct file stdio_file;
+
+/*
+ * early boot, no race -> no lock
+ */
+static void open_stdio_files(void)
+{
+	struct files_struct *files = current->files;
+	struct file *f = &stdio_file;
+	int i;
+
+	for (i = 0; i <= 2; i++) {
+		set_bit(i, files->fd_bitmap);
+		files->fd_array[i] = f;
+		get_file(f);
+	}
+}
+
 /**
  * processor_component_init
  *
@@ -49,6 +97,8 @@ static void p_test(void)
 void __init processor_component_init(void)
 {
 	pcache_init();
+	open_stdio_files();
+	run_global_thread();
 	pr_info("pc-manager running...\n");
 
 #ifndef CONFIG_FIT
