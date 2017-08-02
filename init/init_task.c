@@ -50,6 +50,7 @@
 	[RLIMIT_RTPRIO]		= { 0, 0 },				\
 	[RLIMIT_RTTIME]		= {  RLIM_INFINITY,  RLIM_INFINITY },	\
 }
+
 #define INIT_SIGNALS(sig) {						\
 	.nr_threads	= 1,						\
 	.thread_head	= LIST_HEAD_INIT(init_task.thread_node),	\

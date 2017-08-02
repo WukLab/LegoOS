@@ -173,6 +173,36 @@ static inline int has_pending_signals(sigset_t *signal, sigset_t *blocked)
 	return ready !=	0;
 }
 
+/*
+ * Tell a process that it has a new active signal..
+ *
+ * NOTE! we rely on the previous spin_lock to
+ * lock interrupts for us! We can only be called with
+ * "siglock" held, and the local interrupt must
+ * have been disabled when that got acquired!
+ *
+ * No need to set need_resched since signal event passing
+ * goes through ->blocked
+ */
+void signal_wake_up(struct task_struct *t, bool resume)
+{
+	unsigned int state;
+
+	state = resume ? TASK_WAKEKILL : 0;
+
+	set_tsk_thread_flag(t, TIF_SIGPENDING);
+
+	/*
+	 * TASK_WAKEKILL also means wake it up in the stopped/traced/killable
+	 * case. We don't check t->state here because there is a race with it
+	 * executing another processor and just now entering stopped state.
+	 * By using wake_up_state, we ensure the process will wake up and
+	 * handle its death signal.
+	 */
+	if (!wake_up_state(t, state | TASK_INTERRUPTIBLE))
+		kick_process(t);
+}
+
 #define PENDING(p,b) has_pending_signals(&(p)->signal, (b))
 
 static int recalc_sigpending_tsk(struct task_struct *t)
@@ -208,31 +238,6 @@ void recalc_sigpending(void)
 
 }
 
-/*
- * Tell a process that it has a new active signal..
- *
- * NOTE! we rely on the previous spin_lock to
- * lock interrupts for us! We can only be called with
- * "siglock" held, and the local interrupt must
- * have been disabled when that got acquired!
- *
- * No need to set need_resched since signal event passing
- * goes through ->blocked
- */
-void signal_wake_up_state(struct task_struct *t, unsigned int state)
-{
-	set_tsk_thread_flag(t, TIF_SIGPENDING);
-	/*
-	 * TASK_WAKEKILL also means wake it up in the stopped/traced/killable
-	 * case. We don't check t->state here because there is a race with it
-	 * executing another processor and just now entering stopped state.
-	 * By using wake_up_state, we ensure the process will wake up and
-	 * handle its death signal.
-	 */
-	if (!wake_up_state(t, state | TASK_INTERRUPTIBLE))
-		kick_process(t);
-}
-
 static inline int legacy_queue(struct sigpending *signals, int sig)
 {
 	return (sig < SIGRTMIN) && sigismember(&signals->signal, sig);
@@ -259,12 +264,13 @@ __sigqueue_alloc(int sig, struct task_struct *t, gfp_t flags, int override_rlimi
 {
 	struct sigqueue *q = NULL;
 
-	if (override_rlimit)
-		q = kmalloc(sizeof(*q), flags);
+	/* Just override now, otherwise we need to check rlimit here */
+	if (override_rlimit || true)
+		q = kmalloc(sizeof(*q), flags | GFP_KERNEL);
 	else
 		print_dropped_signal(sig);
 
-	if (likely(!q)) {
+	if (likely(q)) {
 		INIT_LIST_HEAD(&q->list);
 		q->flags = 0;
 	}
@@ -346,7 +352,6 @@ static void complete_signal(int sig, struct task_struct *p, int group)
 		 * This signal will be fatal to the whole group.
 		 */
 		if (!sig_kernel_coredump(sig)) {
-	printk("find11 testingkill \n");
 			/*
 			 * Start a group exit and wake everybody up.
 			 * This way we don't have other threads
@@ -357,14 +362,11 @@ static void complete_signal(int sig, struct task_struct *p, int group)
 			signal->group_exit_code = sig;
 			signal->group_stop_count = 0;
 			t = p;
-			//task_lock(p);
 			do {
-	printk("find10 testingkill \n");
 				task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 				sigaddset(&t->pending.signal, SIGKILL);
 				signal_wake_up(t, 1);
 			} while_each_thread(p, t);
-			//task_unlock(p);
 			return;
 		}
 	}
@@ -377,6 +379,15 @@ static void complete_signal(int sig, struct task_struct *p, int group)
 	return;
 }
 
+/**
+ * send_signal
+ * @sig: the signal to deliver
+ * @info: information of how signal is generated
+ * @t: the target task to kill
+ * @group: true to kill whole thread group, false to kill @t only
+ *
+ * Must enter with @sighand->siglock held!
+ */
 static int
 send_signal(int sig, struct siginfo *info, struct task_struct *t, int group)
 {
@@ -389,6 +400,12 @@ send_signal(int sig, struct siginfo *info, struct task_struct *t, int group)
 
 	pending = group ? &t->signal->shared_pending : &t->pending;
 
+	/*
+	 * Legacy signals can not be queued if it is already pending.
+	 * POSIX has defined real-time extensions to signals,
+	 * and the signal that being generated more than once
+	 * can be queued, and handled one by one, no one is missed.
+	 */
 	if (legacy_queue(pending, sig))
 		goto out;
 
@@ -413,16 +430,20 @@ send_signal(int sig, struct siginfo *info, struct task_struct *t, int group)
 	else
 		override_rlimit = 0;
 
+	/*
+	 * Allocate a sigqueue, copy info into that
+	 * and insert it into sigpending:
+	 */
 	q = __sigqueue_alloc(sig, t, GFP_ATOMIC, override_rlimit);
-	if (q) {
+	if (likely(q)) {
 		list_add_tail(&q->list, &pending->list);
 		switch ((unsigned long) info) {
 		case (unsigned long) SEND_SIG_NOINFO:
 			q->info.si_signo = sig;
 			q->info.si_errno = 0;
 			q->info.si_code = SI_USER;
-			q->info.si_pid = current->group_leader->pid;
-			q->info.si_uid = 0;
+			q->info.si_pid = current->tgid;
+			q->info.si_uid = current_uid();
 			break;
 		case (unsigned long) SEND_SIG_PRIV:
 			q->info.si_signo = sig;
@@ -456,7 +477,6 @@ out_set:
 	signalfd_notify(t, sig);
 	sigaddset(&pending->signal, sig);
 	complete_signal(sig, t, group);
-
 out:
 	return ret;
 }
@@ -1525,7 +1545,10 @@ struct sighand_struct *__lock_task_sighand(struct task_struct *tsk,
 	return sighand;
 }
 
-
+/*
+ * A wrapper for send_signal()
+ * Acquire the sighand->siglock first:
+ */
 int do_send_sig_info(int sig, struct siginfo *info,
 		     struct task_struct *p, bool group)
 {
@@ -1551,10 +1574,9 @@ int kill_pid_info(int sig, struct siginfo *info, pid_t pid)
 			error = do_send_sig_info(sig, info, p, true);
 		if (likely(!p || error != -ESRCH))
 			return error;
-
 		/*
 		 * The task was unhashed in between, try again.  If it
-		 * is dead, pid_task() will return NULL, if we race with
+		 * is dead, find_task() will return NULL, if we race with
 		 * de_thread() it will find the new leader.
 		 */
 	}
@@ -1565,21 +1587,16 @@ int kill_pid_info(int sig, struct siginfo *info, pid_t pid)
  *
  * POSIX specifies that kill(-1,sig) is unspecified, but what we have
  * is probably wrong.  Should make it like BSD or SYSV.
+ *
+ * Lego also make kill(-1,sig) invalid.
  */
-
 static int kill_something_info(int sig, struct siginfo *info, pid_t pid)
 {
-	int ret;
-
-	if (pid > 0) {
-		ret = kill_pid_info(sig, info, pid);
-		return ret;
-	}
-	BUG_ON(pid < 0);
-
-	return ret;
+	if (pid > 0)
+		return kill_pid_info(sig, info, pid);
+	WARN_ON(pid < 0);
+	return -EPERM;
 }
-
 
 /**
  *  sys_kill - send a signal to a process
@@ -1608,6 +1625,7 @@ static int check_kill_permission(int sig, struct siginfo *info,
 	if (!valid_signal(sig))
 		return -EINVAL;
 
+	/* kernel can send do anything */
 	if (!si_fromuser(info))
 		return 0;
 

@@ -451,20 +451,78 @@ static void exit_creds(struct task_struct *tsk)
 
 static int copy_sighand(unsigned long clone_flags, struct task_struct *tsk)
 {
+	struct sighand_struct *sig;
+
+	if (clone_flags & CLONE_SIGHAND) {
+		atomic_inc(&current->sighand->count);
+		tsk->sighand = current->sighand;
+		return 0;
+	}
+
+	sig = kmalloc(sizeof(*sig), GFP_KERNEL);
+	if (!sig)
+		return -ENOMEM;
+
+	/*
+	 * Actions are inherited from parent even if
+	 * we are going to create a new process:
+	 */
+	memcpy(sig->action, current->sighand->action, sizeof(sig->action));
+	spin_lock_init(&sig->siglock);
+	atomic_set(&sig->count, 1);
+	init_waitqueue_head(&sig->signalfd_wqh);
+
+	tsk->sighand = sig;
 	return 0;
 }
 
 void __cleanup_sighand(struct sighand_struct *sighand)
 {
+	if (atomic_dec_and_test(&sighand->count))
+		kfree(sighand);
 }
 
 static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 {
+	struct signal_struct *sig;
+
+	if (clone_flags & CLONE_THREAD) {
+		/* sigcnt will be incremented later in copy_process */
+		tsk->signal = current->signal;
+		return 0;
+	}
+
+	sig = kmalloc(sizeof(*sig), GFP_KERNEL);
+	if (!sig)
+		return -ENOMEM;
+
+	tsk->signal = sig;
+
+	sig->nr_threads = 1;
+	atomic_set(&sig->live, 1);
+	atomic_set(&sig->sigcnt, 1);
+
+	/* list_add(thread_node, thread_head) without INIT_LIST_HEAD() */
+	sig->thread_head = (struct list_head)LIST_HEAD_INIT(tsk->thread_node);
+	tsk->thread_node = (struct list_head)LIST_HEAD_INIT(sig->thread_head);
+
+	init_waitqueue_head(&sig->wait_chldexit);
+	sig->curr_target = tsk;
+	init_sigpending(&sig->shared_pending);
+	INIT_LIST_HEAD(&sig->posix_timers);
+	spin_lock_init(&sig->stats_lock);
+
+	task_lock(current->group_leader);
+	memcpy(sig->rlim, current->signal->rlim, sizeof sig->rlim);
+	task_unlock(current->group_leader);
+
 	return 0;
 }
 
-static inline void free_signal_struct(struct signal_struct *sig)
+static inline void put_signal_struct(struct signal_struct *sig)
 {
+	if (atomic_dec_and_test(&sig->sigcnt))
+		kfree(sig);
 }
 
 /*
@@ -566,6 +624,12 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	 */
 	p->clear_child_tid = (clone_flags & CLONE_CHILD_CLEARTID) ? child_tidptr : NULL;
 
+	/*
+	 * sigaltstack should be cleared when sharing the same VM
+	 */
+	if ((clone_flags & (CLONE_VM|CLONE_VFORK)) == CLONE_VM)
+		sas_ss_reset(p);
+
 	/* ok, now we should be set up.. */
 	p->pid = pid;
 	if (clone_flags & CLONE_THREAD) {
@@ -625,7 +689,7 @@ out_cleanup_mm:
 		mmput(p->mm);
 out_cleanup_signal:
 	if (!(clone_flags & CLONE_THREAD))
-		free_signal_struct(p->signal);
+		put_signal_struct(p->signal);
 out_cleanup_sighand:
 	__cleanup_sighand(p->sighand);
 out_cleanup_files:

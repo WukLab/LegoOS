@@ -1126,8 +1126,10 @@ void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
  * the simpler "current->state = TASK_RUNNING" to mark yourself
  * runnable without the overhead of this.
  *
- * Return: 1 if @p was woken up, 0 if it was already running.
- * or @state didn't match @p's state.
+ * Return:
+ * 	1 if @p was woken up,
+ *	0 if it was already running.
+ *	  or @state didn't match @p's state.
  */
 int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {

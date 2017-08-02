@@ -394,6 +394,8 @@ static inline int signal_group_exit(const struct signal_struct *sig)
 
 static inline void init_sigpending(struct sigpending *sig)
 {
+	sigemptyset(&sig->signal);
+	INIT_LIST_HEAD(&sig->list);
 }
 
 /*
@@ -405,10 +407,7 @@ static inline void init_sigpending(struct sigpending *sig)
 void recalc_sigpending_and_wake(struct task_struct *t);
 void recalc_sigpending(void);
 
-void signal_wake_up_state(struct task_struct *t, unsigned int state);
-
-#define signal_wake_up(t, resume) \
-	signal_wake_up_state(t, resume ? TASK_WAKEKILL : 0)
+void signal_wake_up(struct task_struct *t, bool resume);
 
 int force_sig_info(int, struct siginfo *, struct task_struct *);
 
