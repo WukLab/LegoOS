@@ -24,13 +24,15 @@
 	pr_info("%s() cpu(%d) tsk(%d/%s)\n",	\
 		__func__, smp_processor_id(), current->pid, current->comm);
 
-#define syscall_enter()					\
-	pr_info("%s() cpu(%d) tsk(%d/%s) enter\n",	\
-		__func__, smp_processor_id(), current->pid, current->comm);
+#define syscall_enter()								\
+	pr_info("%s() cpu(%d) tsk(%u/%u/%s) from-ip:%#lx Enter\n",		\
+		__func__, smp_processor_id(), current->pid, current->tgid,	\
+		current->comm,	current_pt_regs()->ip);
 
-#define syscall_exit(ret)					\
-	pr_info("%s() cpu(%d) tsk(%d/%s) ret: %ld\n",	\
-		__func__, smp_processor_id(), current->pid, current->comm, (long)ret);
+#define syscall_exit(ret)							\
+	pr_info("%s() cpu(%d) tsk(%u/%u/%s) ret: %ld\n",			\
+		__func__, smp_processor_id(), current->pid, current->tgid,	\
+		current->comm, (long)ret);
 
 /*
  * __MAP - apply a macro to syscall arguments
