@@ -43,7 +43,7 @@ static ssize_t stdio_file_write(struct file *f, const char __user *buf,
 		goto out;
 	}
 
-	pr_info("STDOUT: [%s]\n", kbuf);
+	pr_info("STDOUT: ---[\n%s\n]---\n", kbuf);
 	ret = count;
 
 out:

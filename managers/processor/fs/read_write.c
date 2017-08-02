@@ -69,16 +69,10 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 	struct file *f;
 	long ret;
 	loff_t off = 0;
-	char *s;
 
 	syscall_enter();
 	pr_info("%s(): fd: %d buf: %p count: %zu\n",
 		FUNC, fd, buf, count);
-
-	s = kmalloc(PAGE_SIZE, GFP_KERNEL);
-	ret = copy_from_user(s, buf, count);
-	pr_info("%s(): [%s]\n", FUNC, s);
-	kfree(s);
 
 	f = fdget(fd);
 	if (!f) {
