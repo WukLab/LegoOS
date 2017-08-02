@@ -23,3 +23,4 @@ obj-y += extable.o
 obj-y += signal.o
 obj-y += coredump.o
 obj-y += futex.o
+obj-y += madvise.o
