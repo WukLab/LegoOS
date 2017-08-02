@@ -205,45 +205,9 @@ struct _xstate {
 };
 
 /*
- * The 32-bit signal frame:
- */
-struct sigcontext_32 {
-	__u16				gs, __gsh;
-	__u16				fs, __fsh;
-	__u16				es, __esh;
-	__u16				ds, __dsh;
-	__u32				di;
-	__u32				si;
-	__u32				bp;
-	__u32				sp;
-	__u32				bx;
-	__u32				dx;
-	__u32				cx;
-	__u32				ax;
-	__u32				trapno;
-	__u32				err;
-	__u32				ip;
-	__u16				cs, __csh;
-	__u32				flags;
-	__u32				sp_at_signal;
-	__u16				ss, __ssh;
-
-	/*
-	 * fpstate is really (struct _fpstate *) or (struct _xstate *)
-	 * depending on the FP_XSTATE_MAGIC1 encoded in the SW reserved
-	 * bytes of (struct _fpstate) and FP_XSTATE_MAGIC2 present at the end
-	 * of extended memory layout. See comments at the definition of
-	 * (struct _fpx_sw_bytes)
-	 */
-	__u32				fpstate; /* Zero when no FPU/extended context */
-	__u32				oldmask;
-	__u32				cr2;
-};
-
-/*
  * The 64-bit signal frame:
  */
-struct sigcontext_64 {
+struct sigcontext {
 	__u64				r8;
 	__u64				r9;
 	__u64				r10;
@@ -281,15 +245,6 @@ struct sigcontext_64 {
 	__u64				fpstate; /* Zero when no FPU/extended context */
 	__u64				reserved1[8];
 };
-
-/*
- * Create the real 'struct sigcontext' type:
- */
-#ifdef __i386__
-# define sigcontext sigcontext_32
-#else
-# define sigcontext sigcontext_64
-#endif
 
 /* IA32 compatible user structures for ptrace.
  * These should be used for 32bit coredumps too. */

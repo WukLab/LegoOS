@@ -191,20 +191,12 @@ get_sigframe(struct k_sigaction *ka, struct pt_regs *regs, size_t frame_size,
 	struct fpu *fpu = &current->thread.fpu;
 
 	/* redzone */
-	if (IS_ENABLED(CONFIG_X86_64))
-		sp -= 128;
+	sp -= 128;
 
 	/* This is the X/Open sanctioned signal stack switching.  */
 	if (ka->sa.sa_flags & SA_ONSTACK) {
 		if (sas_ss_flags(sp) == 0)
 			sp = current->sas_ss_sp + current->sas_ss_size;
-	} else if (IS_ENABLED(CONFIG_X86_32) &&
-		   !onsigstack &&
-		   (regs->ss & 0xffff) != __USER_DS &&
-		   !(ka->sa.sa_flags & SA_RESTORER) &&
-		   ka->sa.sa_restorer) {
-		/* This is the legacy signal stack switching. */
-		sp = (unsigned long) ka->sa.sa_restorer;
 	}
 
 	if (fpu->fpstate_active) {
@@ -265,7 +257,6 @@ static int __setup_rt_frame(int sig, struct ksignal *ksig,
 	put_user_try {
 		/* Create the ucontext.  */
 		put_user_ex(frame_uc_flags(regs), &frame->uc.uc_flags);
-printk("testing testing\n");
 		put_user_ex(0, &frame->uc.uc_link);
 		save_altstack_ex(&frame->uc.uc_stack, regs->sp);
 
@@ -295,8 +286,7 @@ printk("testing testing\n");
 	   next argument after the signal number on the stack. */
 	regs->si = (unsigned long)&frame->info;
 	regs->dx = (unsigned long)&frame->uc;
-	regs->ip = (unsigned long) ksig->ka.sa.sa_handler;
-
+	regs->ip = (unsigned long)ksig->ka.sa.sa_handler;
 	regs->sp = (unsigned long)frame;
 
 	/*
@@ -367,7 +357,6 @@ handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 	stepping = test_thread_flag(TIF_SINGLESTEP);
 
 	failed = (setup_rt_frame(ksig, regs) < 0);
-		printk("testing1\n");
 	if (!failed) {
 		/*
 		 * Clear the direction flag as per the ABI for function entry.
@@ -430,8 +419,44 @@ void do_signal(struct pt_regs *regs)
 	restore_saved_sigmask();
 }
 
+void signal_fault(struct pt_regs *regs, void __user *frame, char *where)
+{
+	struct task_struct *me = current;
+
+	printk("%s[%d] bad frame in %s frame:%p ip:%lx sp:%lx orax:%lx",
+	       me->comm, me->pid, where, frame,
+	       regs->ip, regs->sp, regs->orig_ax);
+	pr_cont("\n");
+
+	force_sig(SIGSEGV, me);
+}
+
 SYSCALL_DEFINE0(rt_sigreturn)
 {
-	syscall_enter();
-	return -EFAULT;
+	struct pt_regs *regs = current_pt_regs();
+	struct rt_sigframe __user *frame;
+	sigset_t set;
+	unsigned long uc_flags;
+
+	frame = (struct rt_sigframe __user *)(regs->sp - sizeof(long));
+	if (!access_ok(VERIFY_READ, frame, sizeof(*frame)))
+		goto badframe;
+	if (__copy_from_user(&set, &frame->uc.uc_sigmask, sizeof(set)))
+		goto badframe;
+	if (__get_user(uc_flags, &frame->uc.uc_flags))
+		goto badframe;
+
+	set_current_blocked(&set);
+
+	if (restore_sigcontext(regs, &frame->uc.uc_mcontext, uc_flags))
+		goto badframe;
+
+	if (restore_altstack(&frame->uc.uc_stack))
+		goto badframe;
+
+	return regs->ax;
+
+badframe:
+	signal_fault(regs, frame, "rt_sigreturn");
+	return 0;
 }

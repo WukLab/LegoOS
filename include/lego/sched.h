@@ -13,6 +13,7 @@
 #include <asm/page.h>
 #include <asm/ptrace.h>
 #include <asm/current.h>
+#include <asm/ucontext.h>
 #include <asm/processor.h>
 #include <asm/switch_to.h>
 #include <asm/thread_info.h>
@@ -821,6 +822,9 @@ static inline void unlock_task_sighand(struct task_struct *tsk,
 /* mask for all SS_xxx flags */
 #define SS_FLAG_BITS	SS_AUTODISARM
 
+#define MINSIGSTKSZ	2048
+#define SIGSTKSZ	8192
+
 /*
  * True if we are on the alternate signal stack.
  */
@@ -863,5 +867,17 @@ static inline unsigned long sigsp(unsigned long sp, struct ksignal *ksig)
 		return current->sas_ss_sp + current->sas_ss_size;
 	return sp;
 }
+
+#define save_altstack_ex(uss, sp) do { \
+	stack_t __user *__uss = uss; \
+	struct task_struct *t = current; \
+	put_user_ex((void __user *)t->sas_ss_sp, &__uss->ss_sp); \
+	put_user_ex(t->sas_ss_flags, &__uss->ss_flags); \
+	put_user_ex(t->sas_ss_size, &__uss->ss_size); \
+	if (t->sas_ss_flags & SS_AUTODISARM) \
+		sas_ss_reset(t); \
+} while (0);
+
+int restore_altstack(const stack_t __user *uss);
 
 #endif /* _LEGO_SCHED_H_ */

@@ -73,4 +73,5 @@ struct ucontext {
  */
 #define UC_SIGCONTEXT_SS	0x2
 #define UC_STRICT_RESTORE_SS	0x4
+
 #endif /* _ASM_x86_UCONTEXT_H_ */

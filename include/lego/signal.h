@@ -410,6 +410,7 @@ void recalc_sigpending(void);
 void signal_wake_up(struct task_struct *t, bool resume);
 
 int force_sig_info(int, struct siginfo *, struct task_struct *);
+void force_sig(int sig, struct task_struct *p);
 
 /* Catch the signal from interrupt return path */
 struct ksignal {
@@ -431,16 +432,6 @@ int copy_siginfo_to_user(siginfo_t __user *to, const siginfo_t *from);
 
 /* kernel/coredump.c */
 void do_coredump(const siginfo_t *siginfo);
-
-#define save_altstack_ex(uss, sp) do { \
-	stack_t __user *__uss = uss; \
-	struct task_struct *t = current; \
-	put_user_ex((void __user *)t->sas_ss_sp, &__uss->ss_sp); \
-	put_user_ex(t->sas_ss_flags, &__uss->ss_flags); \
-	put_user_ex(t->sas_ss_size, &__uss->ss_size); \
-	if (t->sas_ss_flags & SS_AUTODISARM) \
-		sas_ss_reset(t); \
-} while (0);
 
 /*
  * In POSIX a signal is sent either to a specific thread (Linux task)

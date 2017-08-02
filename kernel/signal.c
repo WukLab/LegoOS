@@ -120,12 +120,7 @@ void task_clear_jobctl_pending(struct task_struct *task, unsigned long mask)
 
 static inline void print_dropped_signal(int sig)
 {
-	//static DEFINE_RATELIMIT_STATE(ratelimit_state, 5 * HZ, 10);
-
 	if (!print_fatal_signals)
-		return;
-
-	//if (!__ratelimit(&ratelimit_state))
 		return;
 
 	pr_info("%s/%d: reached RLIMIT_SIGPENDING, dropped signal %d\n",
@@ -572,7 +567,6 @@ static void retarget_shared_pending(struct task_struct *tsk, sigset_t *which)
 		return;
 
 	t = tsk;
-	//task_lock(tsk);
 	while_each_thread(tsk, t) {
 		if (t->flags & PF_EXITING)
 			continue;
@@ -588,7 +582,6 @@ static void retarget_shared_pending(struct task_struct *tsk, sigset_t *which)
 		if (sigisemptyset(&retarget))
 			break;
 	}
-	//task_unlock(tsk);
 }
 
 static void __set_task_blocked(struct task_struct *tsk, const sigset_t *newset)
@@ -603,15 +596,6 @@ static void __set_task_blocked(struct task_struct *tsk, const sigset_t *newset)
 	recalc_sigpending();
 }
 
-void __set_current_blocked(const sigset_t *newset)
-{
-	struct task_struct *tsk = current;
-
-	spin_lock_irq(&tsk->sighand->siglock);
-	__set_task_blocked(tsk, newset);
-	spin_unlock_irq(&tsk->sighand->siglock);
-}
-
 /**
  * set_current_blocked - change current->blocked mask
  * @newset: new mask
@@ -623,6 +607,15 @@ void set_current_blocked(sigset_t *newset)
 {
 	sigdelsetmask(newset, sigmask(SIGKILL) | sigmask(SIGSTOP));
 	__set_current_blocked(newset);
+}
+
+void __set_current_blocked(const sigset_t *newset)
+{
+	struct task_struct *tsk = current;
+
+	spin_lock_irq(&tsk->sighand->siglock);
+	__set_task_blocked(tsk, newset);
+	spin_unlock_irq(&tsk->sighand->siglock);
 }
 
 static inline void task_cputime(struct task_struct *t,
@@ -1412,7 +1405,6 @@ int sigprocmask(int how, sigset_t *set, sigset_t *oldset)
 		return -EINVAL;
 	}
 
-	printk("new ready set %lu\n", newset.sig[0]);
 	__set_current_blocked(&newset);
 	return 0;
 }
@@ -1432,10 +1424,6 @@ SYSCALL_DEFINE4(rt_sigprocmask, int, how, sigset_t __user *, nset,
 
 	syscall_enter();
 
-	/* XXX: Don't preclude handling different sized sigset_t's.  */
-	if (sigsetsize != sizeof(sigset_t))
-		return -EINVAL;
-
 	old_set = current->blocked;
 
 	if (nset) {
@@ -1443,7 +1431,6 @@ SYSCALL_DEFINE4(rt_sigprocmask, int, how, sigset_t __user *, nset,
 			return -EFAULT;
 		sigdelsetmask(&new_set, sigmask(SIGKILL)|sigmask(SIGSTOP));
 
-	printk("new set %lu\n", new_set.sig[0]);
 		error = sigprocmask(how, &new_set, NULL);
 		if (error)
 			return error;
@@ -1453,8 +1440,8 @@ SYSCALL_DEFINE4(rt_sigprocmask, int, how, sigset_t __user *, nset,
 		if (copy_to_user(oset, &old_set, sizeof(sigset_t)))
 			return -EFAULT;
 	}
-	printk("current blocked %lu\n", current->blocked.sig[0]);
 
+	pr_info("%s():how:%d,nset:%#lx,oset:%#lx\n", FUNC, how, new_set.sig[0], old_set.sig[0]);
 	return 0;
 }
 
@@ -1777,10 +1764,8 @@ int do_sigaction(int sig, struct k_sigaction *act, struct k_sigaction *oact)
 			sigemptyset(&mask);
 			sigaddset(&mask, sig);
 			flush_sigqueue_mask(&mask, &p->signal->shared_pending);
-			//spin_lock(&p->signal->stats_lock);
 			for_each_thread(p, t)
 				flush_sigqueue_mask(&mask, &t->pending);
-			//spin_unlock(&p->signal->stats_lock);
 		}
 	}
 
@@ -1804,11 +1789,6 @@ SYSCALL_DEFINE4(rt_sigaction, int, sig,
 	int ret = -EINVAL;
 
 	syscall_enter();
-	pr_info("%s():sig:%d\n", FUNC, sig);
-
-	/* XXX: Don't preclude handling different sized sigset_t's.  */
-	if (sigsetsize != sizeof(sigset_t))
-		goto out;
 
 	if (act) {
 		if (copy_from_user(&new_sa.sa, act, sizeof(new_sa.sa)))
@@ -1821,7 +1801,11 @@ SYSCALL_DEFINE4(rt_sigaction, int, sig,
 		if (copy_to_user(oact, &old_sa.sa, sizeof(old_sa.sa)))
 			return -EFAULT;
 	}
-out:
+
+	pr_info("%s():sig:%d,n_handler:%p,n_flags:%#lx,n_restore:%p,n_mast:%lx\n",
+		FUNC, sig, new_sa.sa.sa_handler, new_sa.sa.sa_flags, new_sa.sa.sa_restorer,
+		new_sa.sa.sa_mask.sig[0]);
+
 	return ret;
 }
 
@@ -1891,4 +1875,173 @@ SYSCALL_DEFINE2(rt_sigsuspend, sigset_t __user *, unewset, size_t, sigsetsize)
 	if (copy_from_user(&newset, unewset, sizeof(newset)))
 		return -EFAULT;
 	return sigsuspend(&newset);
+}
+
+static int
+do_sigaltstack (const stack_t __user *uss, stack_t __user *uoss, unsigned long sp)
+{
+	stack_t oss;
+	int error;
+
+	oss.ss_sp = (void __user *) current->sas_ss_sp;
+	oss.ss_size = current->sas_ss_size;
+	oss.ss_flags = sas_ss_flags(sp) |
+		(current->sas_ss_flags & SS_FLAG_BITS);
+
+	if (uss) {
+		void __user *ss_sp;
+		size_t ss_size;
+		unsigned ss_flags;
+		int ss_mode;
+
+		error = -EFAULT;
+		if (!access_ok(VERIFY_READ, uss, sizeof(*uss)))
+			goto out;
+		error = __get_user(ss_sp, &uss->ss_sp) |
+			__get_user(ss_flags, &uss->ss_flags) |
+			__get_user(ss_size, &uss->ss_size);
+		if (error)
+			goto out;
+
+		error = -EPERM;
+		if (on_sig_stack(sp))
+			goto out;
+
+		ss_mode = ss_flags & ~SS_FLAG_BITS;
+		error = -EINVAL;
+		if (ss_mode != SS_DISABLE && ss_mode != SS_ONSTACK &&
+				ss_mode != 0)
+			goto out;
+
+		if (ss_mode == SS_DISABLE) {
+			ss_size = 0;
+			ss_sp = NULL;
+		} else {
+			error = -ENOMEM;
+			if (ss_size < MINSIGSTKSZ)
+				goto out;
+		}
+
+		current->sas_ss_sp = (unsigned long) ss_sp;
+		current->sas_ss_size = ss_size;
+		current->sas_ss_flags = ss_flags;
+	}
+
+	error = 0;
+	if (uoss) {
+		error = -EFAULT;
+		if (!access_ok(VERIFY_WRITE, uoss, sizeof(*uoss)))
+			goto out;
+		error = __put_user(oss.ss_sp, &uoss->ss_sp) |
+			__put_user(oss.ss_size, &uoss->ss_size) |
+			__put_user(oss.ss_flags, &uoss->ss_flags);
+	}
+
+out:
+	return error;
+}
+
+SYSCALL_DEFINE2(sigaltstack, const stack_t __user *, uss, stack_t __user *, uoss)
+{
+	syscall_enter();
+	return do_sigaltstack(uss, uoss, current_pt_regs()->sp);
+}
+
+int restore_altstack(const stack_t __user *uss)
+{
+	int err = do_sigaltstack(uss, NULL, current_pt_regs()->sp);
+	/* squash all but EFAULT for now */
+	return err == -EFAULT ? err : 0;
+}
+
+/**
+ *  do_sigtimedwait - wait for queued signals specified in @which
+ *  @which: queued signals to wait for
+ *  @info: if non-null, the signal's siginfo is returned here
+ *  @ts: upper bound on process time suspension
+ */
+int do_sigtimedwait(const sigset_t *which, siginfo_t *info,
+		    const struct timespec *ts)
+{
+	ktime_t timeout = KTIME_MAX;
+	struct task_struct *tsk = current;
+	sigset_t mask = *which;
+	int sig, ret = 0;
+
+	if (ts) {
+		if (!timespec_valid(ts))
+			return -EINVAL;
+		timeout = timespec_to_ktime(*ts);
+	}
+
+	/*
+	 * Invert the set of allowed signals to get those we want to block.
+	 */
+	sigdelsetmask(&mask, sigmask(SIGKILL) | sigmask(SIGSTOP));
+	signotset(&mask);
+
+	spin_lock_irq(&tsk->sighand->siglock);
+	sig = dequeue_signal(tsk, &mask, info);
+	if (!sig && timeout) {
+		/*
+		 * None ready, temporarily unblock those we're interested
+		 * while we are sleeping in so that we'll be awakened when
+		 * they arrive. Unblocking is always fine, we can avoid
+		 * set_current_blocked().
+		 */
+		tsk->real_blocked = tsk->blocked;
+		sigandsets(&tsk->blocked, &tsk->blocked, &mask);
+		recalc_sigpending();
+		spin_unlock_irq(&tsk->sighand->siglock);
+
+		__set_current_state(TASK_INTERRUPTIBLE);
+		schedule_timeout(timeout);
+
+		spin_lock_irq(&tsk->sighand->siglock);
+		__set_task_blocked(tsk, &tsk->real_blocked);
+		sigemptyset(&tsk->real_blocked);
+		sig = dequeue_signal(tsk, &mask, info);
+	}
+	spin_unlock_irq(&tsk->sighand->siglock);
+
+	if (sig)
+		return sig;
+	return ret ? -EINTR : -EAGAIN;
+}
+
+/**
+ *  sys_rt_sigtimedwait - synchronously wait for queued signals specified
+ *			in @uthese
+ *  @uthese: queued signals to wait for
+ *  @uinfo: if non-null, the signal's siginfo is returned here
+ *  @uts: upper bound on process time suspension
+ *  @sigsetsize: size of sigset_t type
+ */
+SYSCALL_DEFINE4(rt_sigtimedwait, const sigset_t __user *, uthese,
+		siginfo_t __user *, uinfo, const struct timespec __user *, uts,
+		size_t, sigsetsize)
+{
+	sigset_t these;
+	struct timespec ts;
+	siginfo_t info;
+	int ret;
+
+	syscall_enter();
+
+	if (copy_from_user(&these, uthese, sizeof(these)))
+		return -EFAULT;
+
+	if (uts) {
+		if (copy_from_user(&ts, uts, sizeof(ts)))
+			return -EFAULT;
+	}
+
+	ret = do_sigtimedwait(&these, &info, uts ? &ts : NULL);
+
+	if (ret > 0 && uinfo) {
+		if (copy_siginfo_to_user(uinfo, &info))
+			ret = -EFAULT;
+	}
+
+	return ret;
 }
