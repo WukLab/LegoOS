@@ -340,7 +340,7 @@ struct task_struct {
 	u64 start_time;				/* monotonic time in nsec */
 	u64 real_start_time;			/* boot based time in nsec */
 
-	/* process credentials */
+/* process credentials */
 	struct cred *real_cred;		/* objective and real subjective task
 					 * credentials (COW) */
 	struct cred *cred;		/* effective (overridable) subjective task
@@ -351,23 +351,25 @@ struct task_struct {
 				       it with task_lock())
 				     - initialized normally by setup_new_exec */
 
-	/* signal handlers */
-	struct signal_struct *signal;
+/* signal handlers */
+	struct signal_struct *signal;	/* including shared pending signals */
 	struct sighand_struct *sighand;
-	struct sigpending pending;
-	sigset_t blocked, real_blocked;
+	struct sigpending pending;	/* Private pending signals */
 	/* restored if set_restore_sigmask() was used */
 	sigset_t saved_sigmask;
+	sigset_t blocked;		/* Mask of blocked signals */
+	sigset_t real_blocked;		/* Temporary mask of blocked signals
+					   Used by the rt_sigtimedwait() syscall */
 
-	unsigned long sas_ss_sp;
-	size_t sas_ss_size;
+	unsigned long sas_ss_sp;	/* Address of alternative signal handler stack */
+	size_t sas_ss_size;		/* Size of alternative signal handler stack */
 	unsigned sas_ss_flags;
 
-	/* Thread group tracking */
+/* Thread group tracking */
    	u32 parent_exec_id;
    	u32 self_exec_id;
 
-	/* Open file information */
+/* Open file information */
 	struct files_struct *files;
 
 	/*
