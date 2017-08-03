@@ -137,8 +137,12 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 			false, DEF_NET_TIMEOUT);
 
 	if (likely(ret == sizeof(retbuf)))
-		return retbuf;
-	return -EIO;
+		ret = retbuf;
+	else
+		ret = -EIO;
+
+	syscall_exit(ret);
+	return ret;
 }
 
 /*
@@ -189,8 +193,12 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 			false, DEF_NET_TIMEOUT);
 
 	if (likely(ret == sizeof(retbuf)))
-		return retbuf;
-	return -EIO;
+		ret = retbuf;
+	else
+		ret = -EIO;
+
+	syscall_exit(ret);
+	return ret;
 }
 
 SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
