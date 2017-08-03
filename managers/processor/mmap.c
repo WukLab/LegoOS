@@ -30,8 +30,7 @@
 SYSCALL_DEFINE1(brk, unsigned long, brk)
 {
 	struct p2m_brk_struct payload;
-	unsigned long ret_brk;
-	long len;
+	unsigned long ret_len, ret_brk;
 
 	syscall_enter();
 	mmap_printk("%s(): brk: %#lx\n", FUNC, brk);
@@ -39,12 +38,12 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	payload.pid = current->tgid;
 	payload.brk = brk;
 
-	len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_BRK,
+	ret_len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_BRK,
 			&payload, sizeof(payload), &ret_brk, sizeof(ret_brk),
 			false, DEF_NET_TIMEOUT);
 
 	mmap_printk("%s(): ret_brk: %#lx\n", FUNC, ret_brk);
-	if (likely(len == sizeof(ret_brk))) {
+	if (likely(ret_len == sizeof(ret_brk))) {
 		if (WARN_ON(ret_brk == RET_ESRCH || ret_brk == RET_EINTR))
 			return -EINTR;
 		return ret_brk;
@@ -59,8 +58,7 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	struct p2m_mmap_struct payload;
 	struct p2m_mmap_reply_struct reply;
 	struct file *f = NULL;
-	int ret_len;
-	long ret_addr;
+	long ret_len, ret_addr;
 
 	syscall_enter();
 	mmap_printk("%s():addr:%#lx,len:%#lx,prot:%#lx,flags:%#lx,fd:%lu,off:%#lx\n",
@@ -115,7 +113,7 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 {
 	struct p2m_munmap_struct payload;
-	int ret, retbuf;
+	long ret, retbuf;
 
 	syscall_enter();
 	mmap_printk("%s():addr:%#lx,len:%#lx\n", FUNC, addr, len);
@@ -162,7 +160,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 {
 	struct p2m_msync_struct payload;
-	int retbuf, ret;
+	long retbuf, ret;
 	unsigned long end;
 
 	syscall_enter();
