@@ -1250,6 +1250,7 @@ void signal_setup_done(int failed, struct ksignal *ksig, int stepping)
 
 /*
  * Nuke all other threads in the group.
+ * Called during do_group_exit()
  */
 int zap_other_threads(struct task_struct *p)
 {
@@ -1258,7 +1259,6 @@ int zap_other_threads(struct task_struct *p)
 
 	p->signal->group_stop_count = 0;
 	
-	//task_lock(p);
 	while_each_thread(p, t) {
 		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 		count++;
@@ -1269,7 +1269,6 @@ int zap_other_threads(struct task_struct *p)
 		sigaddset(&t->pending.signal, SIGKILL);
 		signal_wake_up(t, 1);
 	}
-	//task_unlock(p);
 
 	return count;
 }

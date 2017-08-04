@@ -82,8 +82,8 @@ void __noreturn do_exit(long code)
 }
 
 /*
- * Take down every thread in the group.  This is called by fatal signals
- * as well as by sys_exit_group (below).
+ * Take down every thread in the group.
+ * This is called by fatal signals as well as by sys_exit_group (below).
  */
 void do_group_exit(int exit_code)
 {
@@ -111,7 +111,9 @@ void do_group_exit(int exit_code)
 	}
 
 	do_exit(exit_code);
+
 	/* NOTREACHED */
+	BUG();
 }
 
 void __wake_up_parent(struct task_struct *p, struct task_struct *parent)
@@ -157,7 +159,28 @@ int is_current_pgrp_orphaned(void)
 
 SYSCALL_DEFINE1(exit, int, error_code)
 {
-	debug_syscall_print();
-	pr_info("%s(): error_code: %d\n", __func__, error_code);
+	syscall_enter();
+	pr_info("%s(): error_code: %d\n", FUNC, error_code);
 	do_exit((error_code&0xff)<<8);
+
+	/* NOTREACHED */
+	BUG();
+	return 0;
+}
+
+/*
+ * this kills every thread in the thread group. Note that any externally
+ * wait4()-ing process will get the correct exit code - even if this
+ * thread is not the thread group leader.
+ */
+SYSCALL_DEFINE1(exit_group, int, error_code)
+{
+	syscall_enter();
+	pr_info("%s(): error_code: %d\n", FUNC, error_code);
+
+	do_group_exit((error_code & 0xff) << 8);
+
+	/* NOTREACHED */
+	BUG();
+	return 0;
 }

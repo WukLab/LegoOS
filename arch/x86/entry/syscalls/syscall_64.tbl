@@ -56,6 +56,7 @@
 202	common	futex			sys_futex
 218     common  set_tid_address         sys_set_tid_address
 219	common	restart_syscall		sys_restart_syscall
+231	common	exit_group		sys_exit_group
 234	common	tgkill			sys_tgkill
 273	64	set_robust_list		sys_set_robust_list
 274	64	get_robust_list		sys_get_robust_list
