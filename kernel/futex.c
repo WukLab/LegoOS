@@ -12,6 +12,7 @@
 #include <lego/ktime.h>
 #include <lego/jhash.h>
 #include <lego/futex.h>
+#include <lego/memblock.h>
 #include <lego/syscalls.h>
 
 /*
@@ -819,4 +820,40 @@ SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
 		val2 = (u32) (unsigned long) utime;
 
 	return do_futex(uaddr, op, val, tp, uaddr2, val2, val3);
+}
+
+static void __init futex_detect_cmpxchg(void)
+{
+}
+
+int __init futex_init(void)
+{
+	unsigned int futex_shift;
+	unsigned long i;
+
+	/*
+	 * Lego won't have too many futex at the same time..
+	 * So save some memory!
+	 */
+#if 1
+	futex_hashsize = 16;
+#else
+	futex_hashsize = roundup_pow_of_two(256 * num_possible_cpus());
+#endif
+
+	futex_queues = alloc_large_system_hash("futex", sizeof(*futex_queues),
+					       futex_hashsize, 0, 0,
+					       &futex_shift, NULL,
+					       futex_hashsize, futex_hashsize);
+	futex_hashsize = 1UL << futex_shift;
+
+	futex_detect_cmpxchg();
+
+	for (i = 0; i < futex_hashsize; i++) {
+		atomic_set(&futex_queues[i].waiters, 0);
+		plist_head_init(&futex_queues[i].chain);
+		spin_lock_init(&futex_queues[i].lock);
+	}
+
+	return 0;
 }

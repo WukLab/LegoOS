@@ -208,4 +208,6 @@ static inline void exit_pi_state_list(struct task_struct *curr)
 }
 #endif /* CONFIG_FUTEX */
 
+int __init futex_init(void);
+
 #endif /* _LEGO_FUTEX_H_ */

@@ -102,6 +102,9 @@
 	.alloc_lock	= __SPIN_LOCK_UNLOCKED(tsk.alloc_lock),		\
 	.real_cred	= &init_cred,					\
 	.cred		= &init_cred,					\
+	.restart_block = {						\
+		.fn = do_no_restart_syscall,				\
+	},								\
 	.thread		= INIT_THREAD,					\
 }
 

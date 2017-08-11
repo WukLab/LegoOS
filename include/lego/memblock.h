@@ -270,4 +270,14 @@ void __next_reserved_mem_region(u64 *idx, phys_addr_t *out_start,
 
 unsigned long __init free_all_bootmem(void);
 
+extern void *alloc_large_system_hash(const char *tablename,
+				     unsigned long bucketsize,
+				     unsigned long numentries,
+				     int scale,
+				     int flags,
+				     unsigned int *_hash_shift,
+				     unsigned int *_hash_mask,
+				     unsigned long low_limit,
+				     unsigned long high_limit);
+
 #endif /* _LEGO_MEMBLOCK_H_ */

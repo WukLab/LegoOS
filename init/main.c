@@ -20,6 +20,7 @@
 #include <lego/slab.h>
 #include <lego/time.h>
 #include <lego/timex.h>
+#include <lego/futex.h>
 #include <lego/wait.h>
 #include <lego/timer.h>
 #include <lego/delay.h>
@@ -212,6 +213,8 @@ asmlinkage void __init start_kernel(void)
 	/* Allocate pid mapping array */
 	pid_init();
 	fork_init();
+
+	futex_init();
 
 	/*
 	 * JUST A NOTE:
