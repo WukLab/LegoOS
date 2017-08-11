@@ -147,6 +147,18 @@ static inline void __mmput(struct mm_struct *mm)
 }
 
 /*
+ * Called when the last reference to the mm
+ * is dropped: either by a lazy thread or by
+ * mmput. Free the page directory and the mm.
+ */
+void __mmdrop(struct mm_struct *mm)
+{
+	BUG_ON(mm == &init_mm);
+	mm_free_pgd(mm);
+	kfree(mm);
+}
+
+/*
  * Decrement the use count and release all resources for an mm
  * if this is the last user.
  */

@@ -86,6 +86,9 @@ static int restore_sigcontext(struct pt_regs *regs,
 	unsigned int tmpflags;
 	unsigned int err = 0;
 
+	/* Always make any pending restarted system calls return -EINTR */
+	current->restart_block.fn = do_no_restart_syscall;
+
 	get_user_try {
 
 		COPY(di); COPY(si); COPY(bp); COPY(sp); COPY(bx);

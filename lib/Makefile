@@ -17,3 +17,4 @@ obj-y += cpumask.o
 obj-y += cmdline.o
 obj-y += strncpy_from_user.o
 obj-y += strnlen_user.o
+obj-y += plist.o

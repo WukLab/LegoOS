@@ -1368,10 +1368,14 @@ int copy_siginfo_to_user(siginfo_t __user *to, const siginfo_t *from)
  */
 SYSCALL_DEFINE0(restart_syscall)
 {
-	syscall_enter();
-	return -EFAULT;
+	struct restart_block *restart = &current->restart_block;
+	return restart->fn(restart);
 }
 
+long do_no_restart_syscall(struct restart_block *param)
+{
+	return -EINTR;
+}
 
 /*
  * This is also useful for kernel threads that want to temporarily

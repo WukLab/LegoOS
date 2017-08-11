@@ -482,4 +482,12 @@ void mm_release(struct task_struct *, struct mm_struct *);
 /* mmput gets rid of the mappings and all user-space */
 void mmput(struct mm_struct *);
 
+/* mmdrop drops the mm and the page tables */
+void __mmdrop(struct mm_struct *);
+static inline void mmdrop(struct mm_struct *mm)
+{
+	if (unlikely(atomic_dec_and_test(&mm->mm_count)))
+		__mmdrop(mm);
+}
+
 #endif /* _LEGO_MM_H_ */
