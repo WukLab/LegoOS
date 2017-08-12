@@ -23,6 +23,7 @@
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
+#include <lego/seq_file.h>
 
 /*
  * Tables translating between page_cache_type_t and pte encoding.
@@ -290,6 +291,16 @@ static unsigned long direct_pages_count[PG_LEVEL_NUM];
 static void update_page_count(int level, unsigned long pages)
 {
 	direct_pages_count[level] += pages;
+}
+
+void arch_report_meminfo(struct seq_file *m)
+{
+	seq_printf(m, "DirectMap4k:    %8lu kB\n",
+			direct_pages_count[PG_LEVEL_4K] << 2);
+	seq_printf(m, "DirectMap2M:    %8lu kB\n",
+			direct_pages_count[PG_LEVEL_2M] << 11);
+	seq_printf(m, "DirectMap1G:    %8lu kB\n",
+			direct_pages_count[PG_LEVEL_1G] << 20);
 }
 
 /*

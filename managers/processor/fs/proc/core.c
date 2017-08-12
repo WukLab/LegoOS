@@ -17,6 +17,7 @@
 #include "../internal.h"
 
 extern struct file_operations proc_stat_ops;
+extern struct file_operations proc_meminfo_ops;
 
 struct proc_file_struct {
 	char f_name[FILENAME_LEN_DEFAULT];
@@ -27,6 +28,10 @@ static struct proc_file_struct proc_files[] = {
 	{
 		.f_name	= "/proc/stat",
 		.f_op = &proc_stat_ops,
+	},
+	{
+		.f_name = "/proc/meminfo",
+		.f_op = &proc_meminfo_ops,
 	},
 };
 

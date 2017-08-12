@@ -29,6 +29,7 @@ config PCACHE_METADATA_SIZE
 
 config DEBUG_PROC_SYS
 	bool "Debug /proc and /sys output"
+	default n
 	help
 	  Some user-program will open /proc and /sys files to get information
 	  about lego-kernel. We are having these two interfaces to maintain

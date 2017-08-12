@@ -24,10 +24,13 @@
 	pr_info("%s() cpu(%d) tsk(%d/%s)\n",	\
 		__func__, smp_processor_id(), current->pid, current->comm);
 
-#define syscall_enter()								\
-	pr_info("%s() cpu(%d) tsk(%u/%u/%s) from-ip:%#lx Enter\n",		\
+#define syscall_enter(fmt...)							\
+do {										\
+	pr_info("%s() cpu(%d) tsk(%u/%u/%s) from-ip:%#lx\n",			\
 		__func__, smp_processor_id(), current->pid, current->tgid,	\
-		current->comm,	current_pt_regs()->ip);
+		current->comm,	current_pt_regs()->ip);				\
+	pr_info(fmt);								\
+} while (0)
 
 #define syscall_exit(ret)							\
 	pr_info("%s() cpu(%d) tsk(%u/%u/%s) ret: %ld\n",			\
