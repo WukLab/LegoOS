@@ -34,6 +34,7 @@
 60	common	exit			sys_exit
 62	common	kill			sys_kill
 63	common	uname			sys_newuname
+72	common	fcntl			sys_fcntl
 96	common	gettimeofday		sys_gettimeofday
 97	common	getrlimit		sys_getrlimit
 102	common	getuid			sys_getuid
