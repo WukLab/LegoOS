@@ -68,6 +68,14 @@ extern int nr_cpu_ids;
 
 #define nr_cpumask_bits		NR_CPUS
 
+/**
+ * cpumask_size - size to allocate for a 'struct cpumask' in bytes
+ */
+static inline size_t cpumask_size(void)
+{
+	return BITS_TO_LONGS(nr_cpumask_bits) * sizeof(long);
+}
+
 /*
  * The following particular system cpumasks and operations manage
  * possible, present, active and online cpus.
