@@ -187,7 +187,37 @@ SYSCALL_DEFINE2(dup2, unsigned int, oldfd, unsigned int, newfd)
 
 SYSCALL_DEFINE1(dup, unsigned int, fildes)
 {
-	debug_syscall_print();
+	struct file *f;
+	long ret, fd;
+	struct files_struct *files;
+
+	syscall_enter();
 	pr_info("%s(): fildes: %u\n", __func__, fildes);
-	return -EFAULT;
+
+	f = fdget(fildes);
+	if (!f) {
+		ret = -EBADF;
+		goto out;
+	}
+
+	files = current->files;
+	spin_lock(&files->file_lock);
+	for_each_clear_bit(fd, files->fd_bitmap, NR_OPEN_DEFAULT) {
+		BUG_ON(files->fd_array[fd]);
+		__set_bit(fd, files->fd_bitmap);
+
+		/* above fdget held 1 ref for us */
+		files->fd_array[fd] = f;
+		break;
+	}
+	spin_unlock(&files->file_lock);
+
+	if (likely(fd < NR_OPEN_DEFAULT))
+		ret = fd;
+	else
+		ret = -EMFILE;
+
+out:
+	syscall_exit(ret);
+	return ret;
 }
