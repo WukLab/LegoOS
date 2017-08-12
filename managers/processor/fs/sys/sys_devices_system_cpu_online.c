@@ -23,7 +23,7 @@ static int devices_system_cpu_online_show(struct seq_file *m, void *v)
 
 	memset(buf, 0, 64);
 	scnprintf(buf, 64, "%*pbl", num_online_cpus(), cpu_online_mask);
-	seq_printf(m, "%s", buf);
+	seq_printf(m, "%s\n", buf);
 
 	return 0;
 }
