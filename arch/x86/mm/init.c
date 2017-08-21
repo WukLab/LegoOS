@@ -295,12 +295,14 @@ static void update_page_count(int level, unsigned long pages)
 
 void arch_report_meminfo(struct seq_file *m)
 {
+#ifdef CONFIG_COMP_PROCESSOR
 	seq_printf(m, "DirectMap4k:    %8lu kB\n",
 			direct_pages_count[PG_LEVEL_4K] << 2);
 	seq_printf(m, "DirectMap2M:    %8lu kB\n",
 			direct_pages_count[PG_LEVEL_2M] << 11);
 	seq_printf(m, "DirectMap1G:    %8lu kB\n",
 			direct_pages_count[PG_LEVEL_1G] << 20);
+#endif
 }
 
 /*

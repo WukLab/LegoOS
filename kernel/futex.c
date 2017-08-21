@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/pid.h>
 #include <lego/time.h>
 #include <lego/plist.h>
 #include <lego/ktime.h>
@@ -314,6 +315,21 @@ queue_unlock(struct futex_hash_bucket *hb)
 	hb_waiters_dec(hb);
 }
 
+/*
+ * Support for robust futexes: the kernel cleans up held futexes at
+ * thread exit time.
+ *
+ * Implementation: user-space maintains a per-thread list of locks it
+ * is holding. Upon do_exit(), the kernel carefully walks this list,
+ * and marks all locks that are owned by this thread with the
+ * FUTEX_OWNER_DIED bit, and wakes up a waiter (if any). The list is
+ * always manipulated with the lock held, so the list is private and
+ * per-thread. Userspace also maintains a per-thread 'list_op_pending'
+ * field, to allow the kernel to clean up if the thread dies after
+ * acquiring the lock, but just before it could have added itself to
+ * the list. There can only be one such pending lock.
+ */
+
 /**
  * sys_set_robust_list() - Set the robust-futex list head of a task
  * @head:	pointer to the list-head
@@ -323,7 +339,16 @@ SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
 		size_t, len)
 {
 	syscall_enter();
-	return -ENOSYS;
+
+	/*
+	 * The kernel knows only one size for now:
+	 */
+	if (unlikely(len != sizeof(*head)))
+		return -EINVAL;
+
+	current->robust_list = head;
+
+	return 0;
 }
 
 /**
@@ -336,8 +361,23 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 		struct robust_list_head __user * __user *, head_ptr,
 		size_t __user *, len_ptr)
 {
+	struct robust_list_head __user *head;
+	struct task_struct *p;
+
 	syscall_enter();
-	return -ENOSYS;
+
+	if (!pid)
+		p = current;
+	else {
+		p = find_task_by_pid(pid);
+		if (!p)
+			return -ESRCH;
+	}
+
+	head = p->robust_list;
+	if (put_user(sizeof(*head), len_ptr))
+		return -EFAULT;
+	return put_user(head, head_ptr);
 }
 
 static int get_futex_value_locked(u32 *dest, u32 __user *from)

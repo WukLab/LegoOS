@@ -320,6 +320,8 @@ struct wake_q_head {
 void wake_q_add(struct wake_q_head *head, struct task_struct *task);
 void wake_up_q(struct wake_q_head *head);
 
+struct robust_list_head;
+
 struct task_struct {
 	volatile long		state;		/* -1 unrunnable, 0 runnable, >0 stopped */
 	void			*stack;		/* kernel mode stack */
@@ -443,6 +445,9 @@ struct task_struct {
 	 * mems_allowed, mempolicy
 	 */
 	spinlock_t alloc_lock;
+
+/* futex */
+	struct robust_list_head __user *robust_list;
 
 	/* CPU-specific state of this task */
 	struct thread_struct thread;
