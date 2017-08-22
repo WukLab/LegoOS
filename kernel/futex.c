@@ -338,17 +338,24 @@ queue_unlock(struct futex_hash_bucket *hb)
 SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
 		size_t, len)
 {
+	long ret;
+
 	syscall_enter();
 
 	/*
 	 * The kernel knows only one size for now:
 	 */
-	if (unlikely(len != sizeof(*head)))
-		return -EINVAL;
+	if (unlikely(len != sizeof(*head))) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	current->robust_list = head;
 
-	return 0;
+	ret = 0;
+out:
+	syscall_exit(ret);
+	return ret;
 }
 
 /**
@@ -363,6 +370,7 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 {
 	struct robust_list_head __user *head;
 	struct task_struct *p;
+	long ret;
 
 	syscall_enter();
 
@@ -370,14 +378,22 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 		p = current;
 	else {
 		p = find_task_by_pid(pid);
-		if (!p)
-			return -ESRCH;
+		if (!p) {
+			ret = -ESRCH;
+			goto out;
+		}
 	}
 
 	head = p->robust_list;
-	if (put_user(sizeof(*head), len_ptr))
-		return -EFAULT;
-	return put_user(head, head_ptr);
+	if (put_user(sizeof(*head), len_ptr)) {
+		ret = -EFAULT;
+		goto out;
+	}
+	ret = put_user(head, head_ptr);
+
+out:
+	syscall_exit(ret);
+	return ret;
 }
 
 static int get_futex_value_locked(u32 *dest, u32 __user *from)
@@ -762,6 +778,7 @@ static int futex_requeue(u32 __user *uaddr1, unsigned int flags,
 			 u32 __user *uaddr2, int nr_wake, int nr_requeue,
 			 u32 *cmpval, int requeue_pi)
 {
+	WARN_ON(1);
 	return -ENOSYS;
 }
 
@@ -773,6 +790,7 @@ static int
 futex_wake_op(u32 __user *uaddr1, unsigned int flags, u32 __user *uaddr2,
 	      int nr_wake, int nr_wake2, int op)
 {
+	WARN_ON(1);
 	return -ENOSYS;
 }
 
@@ -788,6 +806,7 @@ long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 	/*
 	 * XXX:
 	 * Lego does not support share now.
+	 * Just mask it here and no need to change code afterwards:
 	 */
 	flags &= ~FLAGS_SHARED;
 
@@ -825,9 +844,9 @@ SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
 	ktime_t t, *tp = NULL;
 	u32 val2 = 0;
 	int cmd = op & FUTEX_CMD_MASK;
+	long ret;
 
-	syscall_enter();
-	pr_info("uaddr: %p, op: %#x, val: %u\n", uaddr, op, val);
+	syscall_enter("uaddr: %p, op: %#x, val: %u\n", uaddr, op, val);
 
 	switch (cmd) {
 	case FUTEX_LOCK_PI:
@@ -835,22 +854,29 @@ SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
 	case FUTEX_TRYLOCK_PI:
 	case FUTEX_WAIT_REQUEUE_PI:
 	case FUTEX_CMP_REQUEUE_PI:
-		return -ENOSYS;
+		ret = -ENOSYS;
+		goto out;
 	}
 
 	if (utime && (cmd == FUTEX_WAIT || cmd == FUTEX_LOCK_PI ||
 		      cmd == FUTEX_WAIT_BITSET ||
 		      cmd == FUTEX_WAIT_REQUEUE_PI)) {
-		if (copy_from_user(&ts, utime, sizeof(ts)) != 0)
-			return -EFAULT;
-		if (!timespec_valid(&ts))
-			return -EINVAL;
+		if (copy_from_user(&ts, utime, sizeof(ts)) != 0) {
+			ret = -EFAULT;
+			goto out;
+		}
+
+		if (!timespec_valid(&ts)) {
+			ret = -EINVAL;
+			goto out;
+		}
 
 		t = timespec_to_ktime(ts);
 		if (cmd == FUTEX_WAIT)
 			t = ktime_add(ktime_get(), t);
 		tp = &t;
 	}
+
 	/*
 	 * requeue parameter in 'utime' if cmd == FUTEX_*_REQUEUE_*.
 	 * number of waiters to wake in 'utime' if cmd == FUTEX_WAKE_OP.
@@ -859,7 +885,10 @@ SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
 	    cmd == FUTEX_CMP_REQUEUE_PI || cmd == FUTEX_WAKE_OP)
 		val2 = (u32) (unsigned long) utime;
 
-	return do_futex(uaddr, op, val, tp, uaddr2, val2, val3);
+	ret = do_futex(uaddr, op, val, tp, uaddr2, val2, val3);
+out:
+	syscall_exit(ret);
+	return ret;
 }
 
 static void __init futex_detect_cmpxchg(void)
