@@ -20,22 +20,37 @@
 
 #include <asm/syscalls.h>
 
+#ifdef CONFIG_DEBUG_SYSCALL
 #define debug_syscall_print()			\
 	pr_info("%s() cpu(%d) tsk(%d/%s)\n",	\
 		__func__, smp_processor_id(), current->pid, current->comm);
 
-#define syscall_enter(fmt...)							\
+#define syscall_enter(fmt, ...)							\
+do {										\
+	pr_info("%s() cpu(%d) tsk(%u/%u/%s) user-ip:%#lx\n",			\
+		__func__, smp_processor_id(), current->pid, current->tgid,	\
+		current->comm,	current_pt_regs()->ip);				\
+	pr_info("    "fmt, __VA_ARGS__);					\
+} while (0)
+
+#define __syscall_enter()							\
 do {										\
 	pr_info("%s() cpu(%d) tsk(%u/%u/%s) from-ip:%#lx\n",			\
 		__func__, smp_processor_id(), current->pid, current->tgid,	\
 		current->comm,	current_pt_regs()->ip);				\
-	pr_info(fmt);								\
 } while (0)
 
 #define syscall_exit(ret)							\
 	pr_info("%s() cpu(%d) tsk(%u/%u/%s) ret: %ld\n",			\
 		__func__, smp_processor_id(), current->pid, current->tgid,	\
 		current->comm, (long)ret);
+
+#else
+#define debug_syscall_print()	do { } while (0)
+#define syscall_enter(fmt, ...)	do { } while (0)
+#define __syscall_enter()	do { } while (0)
+#define syscall_exit(ret)	do { } while (0)
+#endif /* CONFIG_DEBUG_SYSCALL */
 
 /*
  * __MAP - apply a macro to syscall arguments

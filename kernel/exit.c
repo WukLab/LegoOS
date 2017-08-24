@@ -159,8 +159,8 @@ int is_current_pgrp_orphaned(void)
 
 SYSCALL_DEFINE1(exit, int, error_code)
 {
-	syscall_enter();
-	pr_info("%s(): error_code: %d\n", FUNC, error_code);
+	syscall_enter("error_code: %d\n", error_code);
+
 	do_exit((error_code&0xff)<<8);
 
 	/* NOTREACHED */
@@ -175,8 +175,7 @@ SYSCALL_DEFINE1(exit, int, error_code)
  */
 SYSCALL_DEFINE1(exit_group, int, error_code)
 {
-	syscall_enter();
-	pr_info("%s(): error_code: %d\n", FUNC, error_code);
+	syscall_enter("error_code: %d\n", error_code);
 
 	do_group_exit((error_code & 0xff) << 8);
 

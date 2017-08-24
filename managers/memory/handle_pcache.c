@@ -103,8 +103,8 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 	offset = payload->offset; 
 
 #ifdef CONFIG_DEBUG_PCACHE_FILL
-	pr_info("%s: nid: %u, pid: %u, missing_vaddr: %#Lx, offset: %#Lx, nr_split: %d\n",
-		__func__, nid, pid, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
+	pr_info("%s: nid: %u, pid: %u, flags: %lx, missing_vaddr: %#Lx, offset: %#Lx, nr_split: %d\n",
+		__func__, nid, pid, flags, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
 #endif
 
 	p = find_lego_task_by_pid(hdr->src_nid, payload->pid);

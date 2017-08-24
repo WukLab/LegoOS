@@ -45,9 +45,8 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 	long ret;
 	loff_t off = 0;
 
-	syscall_enter();
-	pr_info("%s(): fd: %d, buf: %p, count: %zu\n",
-		__func__, fd, buf, count);
+	syscall_enter("fd: %d, buf: %p, count: %zu\n",
+		fd, buf, count);
 
 	f = fdget(fd);
 	if (!f) {
@@ -70,9 +69,8 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 	long ret;
 	loff_t off = 0;
 
-	syscall_enter();
-	pr_info("%s(): fd: %d buf: %p count: %zu\n",
-		FUNC, fd, buf, count);
+	syscall_enter("fd: %d buf: %p count: %zu\n",
+		fd, buf, count);
 
 	f = fdget(fd);
 	if (!f) {
@@ -142,7 +140,8 @@ SYSCALL_DEFINE3(readv, unsigned long, fd, const struct iovec __user *, vec,
 {
 	long ret;
 
-	syscall_enter();
+	syscall_enter("fd: %lu, vec: %p, vlen: %#lx\n",
+		fd, vec, vlen);
 	ret = do_readv(fd, vec, vlen, 0);
 	syscall_exit(ret);
 	return ret;
@@ -153,7 +152,8 @@ SYSCALL_DEFINE3(writev, unsigned long, fd, const struct iovec __user *, vec,
 {
 	long ret;
 
-	syscall_enter();
+	syscall_enter("fd: %lu, vec: %p, vlen: %#lx\n",
+		fd, vec, vlen);
 	ret = do_writev(fd, vec, vlen, 0);
 	syscall_exit(ret);
 	return ret;

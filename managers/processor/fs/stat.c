@@ -23,7 +23,7 @@ static void dummy_fillstat(struct kstat *stat)
 	stat->dev = 0;
 	stat->ino = 0;
 	stat->mode = S_IRWXO | S_IRWXG | S_IRWXU;
-	stat->nlink = 0;
+	stat->nlink = 1;
 	stat->uid = current_uid();
 	stat->gid = current_gid();
 	stat->rdev = 0;
@@ -79,12 +79,12 @@ SYSCALL_DEFINE2(newstat, const char __user *, filename,
 	struct kstat stat;
 	long ret;
 
-	syscall_enter();
+	syscall_enter("filename: %p, statbuf: %p\n", filename, statbuf);
 
 	ret = strncpy_from_user(buf, filename, FILENAME_LEN_DEFAULT);
 	if (ret < 0)
 		goto out;
-	pr_info("%s(): filename: %s\n", __func__, buf);
+	pr_info("    filename: %s\n", buf);
 
 	ret = handle_special_stat(buf);
 	if (ret)
@@ -106,7 +106,7 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
 	struct kstat stat;
 	long ret;
 
-	syscall_enter();
+	syscall_enter("filename: %p, statbuf: %p\n", filename, statbuf);
 
 	ret = strncpy_from_user(buf, filename, FILENAME_LEN_DEFAULT);
 	if (ret < 0)
@@ -128,9 +128,7 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 	struct kstat stat;
 	int ret;
 
-	syscall_enter();
-	pr_info("%s(): fd: %u, statbuf: %p\n",
-		__func__, fd, statbuf);
+	syscall_enter("fd: %u, statbuf: %p\n", fd, statbuf);
 
 	f = fdget(fd);
 	if (unlikely(!f)) {
@@ -139,10 +137,14 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 	}
 
 	dummy_fillstat(&stat);
-	if (fd <= 2)
-		/* STDIN, STDOUT, STDERR */
-		stat.mode |= S_IFBLK;
-	else
+	if (fd <= 2) {
+		/*
+		 * /dev/tty
+		 * STDIN, STDOUT, STDERR
+		 */
+		stat.mode |= S_IFCHR;
+		stat.ino = 3;
+	} else
 		stat.mode |= S_IFREG;
 	ret = cp_new_stat(&stat, statbuf);
 

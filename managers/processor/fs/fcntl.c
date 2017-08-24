@@ -19,6 +19,6 @@
 
 SYSCALL_DEFINE3(fcntl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 {	
-	syscall_enter();
+	syscall_enter("fd: %u, cmd: %u, arg: %lu\n", fd, cmd, arg);
 	return -ENOMEM;
 }

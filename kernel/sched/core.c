@@ -611,7 +611,8 @@ SYSCALL_DEFINE3(sched_setaffinity, pid_t, pid, unsigned int, len,
 	cpumask_var_t new_mask;
 	int retval;
 
-	syscall_enter();
+	syscall_enter("pid: %d, len: %u, user_mask_ptr: %p\n",
+		pid, len, user_mask_ptr);
 
 	retval = get_user_cpu_mask(user_mask_ptr, len, new_mask);
 	if (retval == 0)
@@ -649,7 +650,8 @@ SYSCALL_DEFINE3(sched_getaffinity, pid_t, pid, unsigned int, len,
 	int ret;
 	cpumask_var_t mask;
 
-	syscall_enter();
+	syscall_enter("pid: %d, len: %u, user_mask_ptr: %p\n",
+		pid, len, user_mask_ptr);
 
 	if ((len * BITS_PER_BYTE) < nr_cpu_ids)
 		return -EINVAL;

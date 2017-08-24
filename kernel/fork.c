@@ -788,13 +788,13 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 
 SYSCALL_DEFINE0(fork)
 {
-	syscall_enter();
+	__syscall_enter();
 	return do_fork(CLONE_GLOBAL_THREAD | SIGCHLD, 0, 0, NULL, NULL, 0);
 }
 
 SYSCALL_DEFINE0(vfork)
 {
-	syscall_enter();
+	__syscall_enter();
 	WARN(1, "Check vfork() state");
 	return do_fork(CLONE_GLOBAL_THREAD | CLONE_VFORK | CLONE_VM | SIGCHLD,
 		       0, 0, NULL, NULL, 0);
@@ -805,8 +805,7 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 		 int __user *, child_tidptr,
 		 unsigned long, tls)
 {
-	syscall_enter();
-	pr_info("clone_flags:%#lx,newsp:%#lx,parent_tidptr:%p,child_tidptr:%p,tls:%lx\n",
+	syscall_enter("clone_flags:%#lx,newsp:%#lx,parent_tidptr:%p,child_tidptr:%p,tls:%lx\n",
 		clone_flags, newsp, parent_tidptr, child_tidptr, tls);
 
 	/*
@@ -820,8 +819,7 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 
 SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)
 {
-	syscall_enter();
-	pr_info("%s(): tidpid: %p\n", FUNC, tidptr);
+	syscall_enter("tidpid: %p\n", tidptr);
 
 	current->clear_child_tid = tidptr;
 	return current->tgid;

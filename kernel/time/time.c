@@ -228,8 +228,7 @@ SYSCALL_DEFINE1(time, time_t __user *, tloc)
 {
 	time_t i = get_seconds();
 
-	syscall_enter();
-	pr_info("%s(): get_seconds(): %lld\n", __func__, (s64)i);
+	syscall_enter("tloc: %p, time: %lld\n", tloc, i);
 	if (tloc)
 		if (copy_to_user(tloc, &i, sizeof(time_t)))
 			return -EFAULT;
@@ -260,7 +259,7 @@ struct timezone sys_tz;
 SYSCALL_DEFINE2(gettimeofday, struct timeval __user *, tv,
 		struct timezone __user *, tz)
 {
-	syscall_enter();
+	syscall_enter("tv: %p, tz: %p\n", tv, tz);
 	if (likely(tv != NULL)) {
 		struct timeval ktv;
 		do_gettimeofday(&ktv);

@@ -1425,27 +1425,33 @@ SYSCALL_DEFINE4(rt_sigprocmask, int, how, sigset_t __user *, nset,
 	sigset_t old_set, new_set;
 	int error;
 
-	syscall_enter();
-
 	old_set = current->blocked;
 
 	if (nset) {
-		if (copy_from_user(&new_set, nset, sizeof(sigset_t)))
-			return -EFAULT;
+		if (copy_from_user(&new_set, nset, sizeof(sigset_t))) {
+			error = -EFAULT;
+			goto out;
+		}
 		sigdelsetmask(&new_set, sigmask(SIGKILL)|sigmask(SIGSTOP));
 
 		error = sigprocmask(how, &new_set, NULL);
 		if (error)
-			return error;
+			goto out;
 	}
+
+	syscall_enter("how: %d, nset: %#lx,oset: %#lx\n",
+		how, new_set.sig[0], old_set.sig[0]);
 
 	if (oset) {
-		if (copy_to_user(oset, &old_set, sizeof(sigset_t)))
-			return -EFAULT;
+		if (copy_to_user(oset, &old_set, sizeof(sigset_t))) {
+			error = -EFAULT;
+			goto out;
+		}
 	}
 
-	pr_info("%s():how:%d,nset:%#lx,oset:%#lx\n", FUNC, how, new_set.sig[0], old_set.sig[0]);
-	return 0;
+out:
+	syscall_exit(error);
+	return error;
 }
 
 static int do_sigpending(void *set, unsigned long sigsetsize)
@@ -1474,7 +1480,8 @@ SYSCALL_DEFINE2(rt_sigpending, sigset_t __user *, uset, size_t, sigsetsize)
 	sigset_t set;
 	int err;
 
-	syscall_enter();
+	syscall_enter("uset: %p, sigsetsize: %zu\n",
+		uset, sigsetsize);
 
 	err = do_sigpending(&set, sigsetsize);
 	if (!err && copy_to_user(uset, &set, sigsetsize))
@@ -1586,8 +1593,7 @@ SYSCALL_DEFINE2(kill, pid_t, pid, int, sig)
 {
 	struct siginfo info;
 
-	syscall_enter();
-	pr_info("%s():pid:%u,sig:%d\n", FUNC, pid, sig);
+	syscall_enter("pid: %u, sig: %d\n", pid, sig);
 
 	info.si_signo = sig;
 	info.si_errno = 0;
@@ -1667,8 +1673,7 @@ static int do_tkill(pid_t tgid, pid_t pid, int sig)
  */
 SYSCALL_DEFINE3(tgkill, pid_t, tgid, pid_t, pid, int, sig)
 {
-	syscall_enter();
-	pr_info("%s():tgid:%u,pid:%u,sig:%d\n", FUNC, tgid, pid, sig);
+	syscall_enter("tgid:%u,pid:%u,sig:%d\n", tgid, pid, sig);
 
 	/* This is only valid for single tasks */
 	if (pid <= 0 || tgid <= 0)
@@ -1686,8 +1691,7 @@ SYSCALL_DEFINE3(tgkill, pid_t, tgid, pid_t, pid, int, sig)
  */
 SYSCALL_DEFINE2(tkill, pid_t, pid, int, sig)
 {
-	syscall_enter();
-	pr_info("%s():pid:%u,sig:%d\n", FUNC, pid, sig);
+	syscall_enter("pid:%u,sig:%d\n", pid, sig);
 
 	/* This is only valid for single tasks */
 	if (pid <= 0)
@@ -1791,24 +1795,25 @@ SYSCALL_DEFINE4(rt_sigaction, int, sig,
 	struct k_sigaction new_sa, old_sa;
 	int ret = -EINVAL;
 
-	syscall_enter();
-
 	if (act) {
-		if (copy_from_user(&new_sa.sa, act, sizeof(new_sa.sa)))
-			return -EFAULT;
+		if (copy_from_user(&new_sa.sa, act, sizeof(new_sa.sa))) {
+			ret = -EFAULT;
+			goto out;
+		}
 	}
 
-	ret = do_sigaction(sig, act ? &new_sa : NULL, oact ? &old_sa : NULL);
-
-	if (!ret && oact) {
-		if (copy_to_user(oact, &old_sa.sa, sizeof(old_sa.sa)))
-			return -EFAULT;
-	}
-
-	pr_info("%s():sig:%d,n_handler:%p,n_flags:%#lx,n_restore:%p,n_mast:%lx\n",
-		FUNC, sig, new_sa.sa.sa_handler, new_sa.sa.sa_flags, new_sa.sa.sa_restorer,
+	syscall_enter("sig:%d,n_handler:%p,n_flags:%#lx,n_restore:%p,n_mast:%lx\n",
+		sig, new_sa.sa.sa_handler, new_sa.sa.sa_flags, new_sa.sa.sa_restorer,
 		new_sa.sa.sa_mask.sig[0]);
 
+	ret = do_sigaction(sig, act ? &new_sa : NULL, oact ? &old_sa : NULL);
+	if (!ret && oact) {
+		if (copy_to_user(oact, &old_sa.sa, sizeof(old_sa.sa)))
+			ret = -EFAULT;
+	}
+
+out:
+	syscall_exit(ret);
 	return ret;
 }
 
@@ -1838,8 +1843,7 @@ SYSCALL_DEFINE3(rt_sigqueueinfo, pid_t, pid, int, sig,
 {
 	siginfo_t info;
 
-	syscall_enter();
-	pr_info("%s():pid:%u,sig:%d\n", FUNC, pid, sig);
+	syscall_enter("pid:%u,sig:%d,uinfo:%p\n", pid, sig, uinfo);
 
 	if (copy_from_user(&info, uinfo, sizeof(siginfo_t)))
 		return -EFAULT;
@@ -1869,7 +1873,8 @@ SYSCALL_DEFINE2(rt_sigsuspend, sigset_t __user *, unewset, size_t, sigsetsize)
 {
 	sigset_t newset;
 
-	syscall_enter();
+	syscall_enter("unewset: %p, sigsetsize: %zu\n",
+		unewset, sigsetsize);
 
 	/* XXX: Don't preclude handling different sized sigset_t's.  */
 	if (sigsetsize != sizeof(sigset_t))
@@ -1946,7 +1951,7 @@ out:
 
 SYSCALL_DEFINE2(sigaltstack, const stack_t __user *, uss, stack_t __user *, uoss)
 {
-	syscall_enter();
+	syscall_enter("uss: %p, uoss: %p\n", uss, uoss);
 	return do_sigaltstack(uss, uoss, current_pt_regs()->sp);
 }
 
@@ -2029,7 +2034,7 @@ SYSCALL_DEFINE4(rt_sigtimedwait, const sigset_t __user *, uthese,
 	siginfo_t info;
 	int ret;
 
-	syscall_enter();
+	__syscall_enter();
 
 	if (copy_from_user(&these, uthese, sizeof(these)))
 		return -EFAULT;

@@ -24,13 +24,17 @@
 
 #ifdef CONFIG_DEBUG_VM_MMAP
 #define mmap_printk(fmt...)	pr_info(fmt)
-static void dump_vm_all(struct lego_mm_struct *mm)
+static void dump_vm_all(struct lego_mm_struct *mm, int enter)
 {
+	if (enter)
+		mmap_printk("Before \n");
+	else
+		mmap_printk("After \n");
 	dump_all_vmas_simple(mm);
 }
 #else
 #define mmap_printk(fmt...)	do { } while (0)
-static inline void dump_vm_all(struct lego_mm_struct *mm) { }
+static inline void dump_vm_all(struct lego_mm_struct *mm, int enter) { }
 #endif
 
 /**
@@ -60,7 +64,7 @@ int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
 		ibapi_reply_message(&ret_brk, sizeof(ret_brk), desc);
 		return 0;
 	}
-	dump_vm_all(tsk->mm);
+	dump_vm_all(tsk->mm, 1);
 
 	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
@@ -110,7 +114,7 @@ out:
 	ret_brk = mm->brk;
 	ibapi_reply_message(&ret_brk, sizeof(ret_brk), desc);
 
-	dump_vm_all(mm);
+	dump_vm_all(mm, 0);
 	return 0;
 }
 
@@ -144,7 +148,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 		reply.ret = RET_ESRCH;
 		goto out;
 	}
-	dump_vm_all(tsk->mm);
+	dump_vm_all(tsk->mm, 1);
 
 	/*
 	 * Are we doing a file-backed mmap()?
@@ -180,7 +184,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 
-	dump_vm_all(tsk->mm);
+	dump_vm_all(tsk->mm, 0);
 	return 0;
 }
 
@@ -203,7 +207,7 @@ int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 		ret = RET_ESRCH;
 		goto out;
 	}
-	dump_vm_all(tsk->mm);
+	dump_vm_all(tsk->mm, 1);
 
 	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
@@ -217,7 +221,7 @@ int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 out:
 	ibapi_reply_message(&ret, sizeof(ret), desc);
 
-	dump_vm_all(tsk->mm);
+	dump_vm_all(tsk->mm, 0);
 	return 0;
 }
 
@@ -243,7 +247,7 @@ int handle_p2m_msync(struct p2m_msync_struct *payload, u64 desc,
 		ret = RET_ESRCH;
 		goto out;
 	}
-	dump_vm_all(tsk->mm);
+	dump_vm_all(tsk->mm, 1);
 
 	/*
 	 * If the interval [start,end) covers some unmapped address ranges,
@@ -304,7 +308,7 @@ out:
 		ret = unmapped_error;
 	ibapi_reply_message(&ret, sizeof(ret), desc);
 
-	dump_vm_all(tsk->mm);
+	dump_vm_all(tsk->mm, 0);
 	return 0;
 }
 

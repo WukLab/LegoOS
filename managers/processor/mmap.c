@@ -32,8 +32,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	struct p2m_brk_struct payload;
 	unsigned long ret_len, ret_brk;
 
-	syscall_enter();
-	mmap_printk("%s(): brk: %#lx\n", FUNC, brk);
+	syscall_enter("brk: %#lx\n", brk);
 
 	payload.pid = current->tgid;
 	payload.brk = brk;
@@ -60,9 +59,8 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	struct file *f = NULL;
 	long ret_len, ret_addr;
 
-	syscall_enter();
-	mmap_printk("%s():addr:%#lx,len:%#lx,prot:%#lx,flags:%#lx,fd:%lu,off:%#lx\n",
-		FUNC, addr, len, prot, flags, fd, off);
+	syscall_enter("addr:%#lx,len:%#lx,prot:%#lx,flags:%#lx,fd:%lu,off:%#lx\n",
+		addr, len, prot, flags, fd, off);
 
 	if (offset_in_page(off))
 		return -EINVAL;
@@ -115,8 +113,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	struct p2m_munmap_struct payload;
 	long ret, retbuf;
 
-	syscall_enter();
-	mmap_printk("%s():addr:%#lx,len:%#lx\n", FUNC, addr, len);
+	syscall_enter("addr:%#lx,len:%#lx\n", addr, len);
 
 	if (offset_in_page(addr) || addr > TASK_SIZE || len > TASK_SIZE - addr)
 		return -EINVAL;
@@ -163,9 +160,8 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 	long retbuf, ret;
 	unsigned long end;
 
-	syscall_enter();
-	mmap_printk("%s():start:%#lx,len:%#lx,flags:%#x\n",
-		FUNC, start, len, flags);
+	syscall_enter("start:%#lx,len:%#lx,flags:%#x\n",
+		start, len, flags);
 
 	if (flags & ~(MS_ASYNC | MS_INVALIDATE | MS_SYNC))
 		return -EINVAL;
@@ -202,9 +198,8 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
 		unsigned long, prot)
 {
-	syscall_enter();
-	mmap_printk("%s():start:%#lx,len:%#lx,prot:%#lx\n",
-		FUNC, start, len, prot);
+	syscall_enter("start:%#lx,len:%#lx,prot:%#lx\n",
+		start, len, prot);
 
 	return 0;
 }

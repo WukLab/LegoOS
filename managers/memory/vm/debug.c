@@ -61,7 +61,7 @@ void dump_vma_simple(const struct vm_area_struct *vma)
 	if (file)
 		pgoff = vma->vm_pgoff << PAGE_SHIFT;
 
-	pr_emerg("%08lx-%08lx %c%c%c%c %08llx ",
+	pr_emerg("  %08lx-%08lx %c%c%c%c %08llx ",
 		  start, end,
 		  flags & VM_READ ? 'r' : '-',
 		  flags & VM_WRITE ? 'w' : '-',

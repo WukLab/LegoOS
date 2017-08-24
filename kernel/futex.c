@@ -340,7 +340,7 @@ SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
 {
 	long ret;
 
-	syscall_enter();
+	syscall_enter("head: %p, len: %zu\n", head, len);
 
 	/*
 	 * The kernel knows only one size for now:
@@ -372,7 +372,8 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 	struct task_struct *p;
 	long ret;
 
-	syscall_enter();
+	syscall_enter("pid: %u, head_ptr: %p, len_ptr: %p\n",
+		pid, head_ptr, len_ptr);
 
 	if (!pid)
 		p = current;
@@ -846,7 +847,8 @@ SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
 	int cmd = op & FUTEX_CMD_MASK;
 	long ret;
 
-	syscall_enter("uaddr: %p, op: %#x, val: %u\n", uaddr, op, val);
+	syscall_enter("uaddr: %p, op: %#x, val: %u utime: %p, uaddr2: %p, "
+		      "val3: %u\n", uaddr, op, val, utime, uaddr2, val3);
 
 	switch (cmd) {
 	case FUTEX_LOCK_PI:

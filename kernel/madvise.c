@@ -67,8 +67,7 @@
  */
 SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
 {
-	syscall_enter();
-	pr_info("%s(): start: %#lx, len_in: %#lx, behavior: %d\n",
-		FUNC, start, len_in, behavior);
+	syscall_enter("start: %#lx, len_in: %#lx, behavior: %d\n",
+		start, len_in, behavior);
 	return 0;
 }

@@ -46,9 +46,6 @@ long do_arch_prctl(struct task_struct *task, int code, unsigned long addr)
 	int doit = task == current;
 	int cpu;
 
-	pr_info("%s():cur:%u,task:%u,code:%d,addr:%#lx\n",
-		FUNC, current->pid, task->pid, code, addr);
-
 	switch (code) {
 	case ARCH_SET_GS:
 		if (addr >= TASK_SIZE_MAX)
@@ -106,7 +103,7 @@ long do_arch_prctl(struct task_struct *task, int code, unsigned long addr)
 
 SYSCALL_DEFINE2(arch_prctl, int, code, unsigned long, addr)
 {
-	syscall_enter();
+	syscall_enter("code: %d, addr: %lx\n", code, addr);
 	return do_arch_prctl(current, code, addr);
 }
 

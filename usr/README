@@ -1,0 +1,5 @@
+Issue make here to compile all syscall test code.
+To include the test within Lego, open managers/memory/ramfs/piggy.S:
+change the incbin to include the file you wanna test. Then compile lego again.
+
+Note that only one file can be included at one time.

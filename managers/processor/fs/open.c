@@ -101,7 +101,8 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	int fd, ret;
 	struct file *f;
 
-	syscall_enter();
+	syscall_enter("filename: %p, flags: %x, mode: %x\n",
+		filename, flags, mode);
 
 	if (strncpy_from_user(kname, filename, FILENAME_LEN_DEFAULT) < 0) {
 		fd = -EFAULT;
@@ -151,7 +152,7 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 	struct files_struct *files = current->files;
 	int ret;
 
-	syscall_enter();
+	syscall_enter("%u\n", fd);
 
 	spin_lock(&files->file_lock);
 	if (likely(test_bit(fd, files->fd_bitmap))) {
@@ -191,8 +192,7 @@ SYSCALL_DEFINE1(dup, unsigned int, fildes)
 	long ret, fd;
 	struct files_struct *files;
 
-	syscall_enter();
-	pr_info("%s(): fildes: %u\n", __func__, fildes);
+	syscall_enter("fildes: %u\n", fildes);
 
 	f = fdget(fildes);
 	if (!f) {

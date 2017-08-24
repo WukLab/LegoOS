@@ -11,7 +11,7 @@
  * Lego Processor Last-Level Cache Management
  */
 
-#define pr_fmt(fmt)  "pcache: " fmt
+#define pr_fmt(fmt)  "P$: " fmt
 
 #include <asm/io.h>
 #include <lego/mm.h>
@@ -90,8 +90,9 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 	u64 offset, slice;
 
 #ifdef CONFIG_DEBUG_PCACHE_FILL
-	pr_info("cpu:%d,pid:%u,va:%#lx,p$:%p,v$:%p,vM:%p,way:%u\n",
-		smp_processor_id(), current->pid, vaddr, pa_cache, va_cache, va_meta, way);
+	pr_info("cpu:%d,pid:%u,va:%#lx,flag:%#lx,p$:%p,v$:%p,vM:%p,way:%u\n",
+		smp_processor_id(), current->pid, vaddr, flags, pa_cache, va_cache,
+		va_meta, way);
 #endif
 
 	payload.pid = current->tgid;
@@ -189,6 +190,13 @@ void __init pcache_init(void)
 		pr_info("fail to ioremap: [%#llx - %#llx]\n", llc_cache_start,
 			llc_cache_start + llc_cache_size);
 	}
+
+	/*
+	 * Clear any stale value
+	 * This may happen if running on QEMU.
+	 * Not sure about physical machine.
+	 */
+	memset((void *)virt_start_cacheline, 0, llc_cache_size);
 
 	nr_cachelines = nr_units * nr_cachelines_per_page;
 	nr_cachesets = nr_cachelines / llc_cache_associativity;

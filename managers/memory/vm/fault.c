@@ -102,6 +102,9 @@ static int do_anonymous_page(struct vm_area_struct *vma, unsigned long address,
 
 	/* Use the zero-page for reads */
 	if (!(flags & FAULT_FLAG_WRITE)) {
+#ifdef CONFIG_DEBUG_PCACHE_FILL
+		pr_info("zero vfn used for: address: %#lx\n", address);
+#endif
 		entry = lego_vfn_pte(my_zero_vfn(),
 				     vma->vm_page_prot);
 

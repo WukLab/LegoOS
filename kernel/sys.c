@@ -61,14 +61,64 @@ SYSCALL_DEFINE0(getppid)
 int do_prlimit(struct task_struct *tsk, unsigned int resource,
 		struct rlimit *new_rlim, struct rlimit *old_rlim)
 {
-	return -EFAULT;
+	struct rlimit *rlim;
+	int retval = 0;
+
+	if (resource >= RLIM_NLIMITS)
+		return -EINVAL;
+	if (new_rlim) {
+		if (new_rlim->rlim_cur > new_rlim->rlim_max)
+			return -EINVAL;
+		if (resource == RLIMIT_NOFILE &&
+				new_rlim->rlim_max > NR_OPEN_DEFAULT)
+			return -EPERM;
+	}
+
+	/* protect tsk->signal and tsk->sighand from disappearing */
+	spin_lock(&tasklist_lock);
+	if (!tsk->sighand) {
+		retval = -ESRCH;
+		goto out;
+	}
+
+	rlim = tsk->signal->rlim + resource;
+	task_lock(tsk->group_leader);
+	if (new_rlim) {
+		/* Keep the capable check against init_user_ns until
+		   cgroups can contain all limits */
+		if (new_rlim->rlim_max > rlim->rlim_max) {
+			WARN_ON(1);
+			retval = -EPERM;
+		}
+		if (resource == RLIMIT_CPU && new_rlim->rlim_cur == 0) {
+			/*
+			 * The caller is asking for an immediate RLIMIT_CPU
+			 * expiry.  But we use the zero value to mean "it was
+			 * never set".  So let's cheat and make it one second
+			 * instead
+			 */
+			new_rlim->rlim_cur = 1;
+		}
+	}
+	if (!retval) {
+		if (old_rlim)
+			*old_rlim = *rlim;
+		if (new_rlim)
+			*rlim = *new_rlim;
+	}
+	task_unlock(tsk->group_leader);
+
+out:
+	spin_unlock(&tasklist_lock);
+	return retval;
 }
 
 SYSCALL_DEFINE2(setrlimit, unsigned int, resource, struct rlimit __user *, rlim)
 {
 	struct rlimit new_rlim;
 
-	debug_syscall_print();
+	syscall_enter("resource: %d\n", resource);
+
 	if (copy_from_user(&new_rlim, rlim, sizeof(*rlim)))
 		return -EFAULT;
 	return do_prlimit(current, resource, &new_rlim, NULL);
@@ -79,7 +129,8 @@ SYSCALL_DEFINE2(getrlimit, unsigned int, resource, struct rlimit __user *, rlim)
 	struct rlimit value;
 	int ret;
 
-	debug_syscall_print();
+	syscall_enter("resource: %d\n", resource);
+
 	ret = do_prlimit(current, resource, NULL, &value);
 	if (!ret)
 		ret = copy_to_user(rlim, &value, sizeof(*rlim)) ? -EFAULT : 0;

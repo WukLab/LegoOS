@@ -40,5 +40,14 @@ config DEBUG_PROC_SYS
 
 	  if unsure, sya N.
 
+config DEBUG_SYSCALL
+	bool "Debug all SYSCALL enter/exit"
+	default n
+	help
+	  Enable to have a detailed dump log of syscall entering and exit.
+	  Only used for testing purpose.
+
+	  if unsure, say N.
+
 endif
 endmenu
