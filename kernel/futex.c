@@ -89,6 +89,24 @@ static struct {
 #define futex_queues   (__futex_data.queues)
 #define futex_hashsize (__futex_data.hashsize)
 
+static inline int futex_atomic_cmpxchg_inatomic(u32 *uval, u32 __user *uaddr,
+						u32 oldval, u32 newval)
+{
+	return user_atomic_cmpxchg_inatomic(uval, uaddr, oldval, newval);
+}
+
+static inline int cmpxchg_futex_value_locked(u32 *curval, u32 __user *uaddr,
+					     u32 uval, u32 newval)
+{
+	int ret;
+
+	//pagefault_disable();
+	ret = futex_atomic_cmpxchg_inatomic(curval, uaddr, uval, newval);
+	//pagefault_enable();
+
+	return ret;
+}
+
 static inline void futex_get_mm(union futex_key *key)
 {
 	atomic_inc(&key->private.mm->mm_count);
@@ -793,6 +811,146 @@ futex_wake_op(u32 __user *uaddr1, unsigned int flags, u32 __user *uaddr2,
 {
 	WARN_ON(1);
 	return -ENOSYS;
+}
+
+/*
+ * Fetch a robust-list pointer. Bit 0 signals PI futexes:
+ */
+static inline int fetch_robust_entry(struct robust_list __user **entry,
+				     struct robust_list __user * __user *head,
+				     unsigned int *pi)
+{
+	unsigned long uentry;
+
+	if (get_user(uentry, (unsigned long __user *)head))
+		return -EFAULT;
+
+	*entry = (void __user *)(uentry & ~1UL);
+	*pi = uentry & 1;
+
+	return 0;
+}
+
+/*
+ * Process a futex-list entry, check whether it's owned by the
+ * dying task, and do notification if so:
+ */
+int handle_futex_death(u32 __user *uaddr, struct task_struct *curr, int pi)
+{
+#if 0
+	u32 uval, uninitialized_var(nval), mval;
+
+retry:
+	if (get_user(uval, uaddr))
+		return -1;
+
+	if ((uval & FUTEX_TID_MASK) == curr->pid) {
+		/*
+		 * Ok, this dying thread is truly holding a futex
+		 * of interest. Set the OWNER_DIED bit atomically
+		 * via cmpxchg, and if the value had FUTEX_WAITERS
+		 * set, wake up a waiter (if any). (We have to do a
+		 * futex_wake() even if OWNER_DIED is already set -
+		 * to handle the rare but possible case of recursive
+		 * thread-death.) The rest of the cleanup is done in
+		 * userspace.
+		 */
+		mval = (uval & FUTEX_WAITERS) | FUTEX_OWNER_DIED;
+		/*
+		 * We are not holding a lock here, but we want to have
+		 * the pagefault_disable/enable() protection because
+		 * we want to handle the fault gracefully. If the
+		 * access fails we try to fault in the futex with R/W
+		 * verification via get_user_pages. get_user() above
+		 * does not guarantee R/W access. If that fails we
+		 * give up and leave the futex locked.
+		 */
+		if (cmpxchg_futex_value_locked(&nval, uaddr, uval, mval)) {
+			if (fault_in_user_writeable(uaddr))
+				return -1;
+			goto retry;
+		}
+		if (nval != uval)
+			goto retry;
+
+		/*
+		 * Wake robust non-PI futexes here. The wakeup of
+		 * PI futexes happens in exit_pi_state():
+		 */
+		if (!pi && (uval & FUTEX_WAITERS))
+			futex_wake(uaddr, 1, 1, FUTEX_BITSET_MATCH_ANY);
+	}
+	return 0;
+#else
+	WARN_ON(1);
+	return 0;
+#endif
+}
+
+/*
+ * Walk curr->robust_list (very carefully, it's a userspace list!)
+ * and mark any locks found there dead, and notify any waiters.
+ *
+ * We silently return on any sign of list-walking problem.
+ */
+void exit_robust_list(struct task_struct *curr)
+{
+	struct robust_list_head __user *head = curr->robust_list;
+	struct robust_list __user *entry, *next_entry, *pending;
+	unsigned int limit = ROBUST_LIST_LIMIT, pi, pip;
+	unsigned int uninitialized_var(next_pi);
+	unsigned long futex_offset;
+	int rc;
+
+	/*
+	 * Fetch the list head (which was registered earlier, via
+	 * sys_set_robust_list()):
+	 */
+	if (fetch_robust_entry(&entry, &head->list.next, &pi))
+		return;
+	/*
+	 * Fetch the relative futex offset:
+	 */
+	if (get_user(futex_offset, &head->futex_offset))
+		return;
+	/*
+	 * Fetch any possibly pending lock-add first, and handle it
+	 * if it exists:
+	 */
+	if (fetch_robust_entry(&pending, &head->list_op_pending, &pip))
+		return;
+
+	next_entry = NULL;	/* avoid warning with gcc */
+	while (entry != &head->list) {
+		/*
+		 * Fetch the next entry in the list before calling
+		 * handle_futex_death:
+		 */
+		rc = fetch_robust_entry(&next_entry, &entry->next, &next_pi);
+		/*
+		 * A pending lock might already be on the list, so
+		 * don't process it twice:
+		 */
+		if (entry != pending)
+			if (handle_futex_death((void __user *)entry + futex_offset,
+						curr, pi))
+				return;
+		if (rc)
+			return;
+		entry = next_entry;
+		pi = next_pi;
+		/*
+		 * Avoid excessively long or circular lists:
+		 */
+		if (!--limit)
+			break;
+
+		cond_resched();
+	}
+
+	if (pending)
+		handle_futex_death((void __user *)pending + futex_offset,
+				   curr, pip);
 }
 
 long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,

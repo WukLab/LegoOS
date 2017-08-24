@@ -953,4 +953,25 @@ static inline unsigned long sigsp(unsigned long sp, struct ksignal *ksig)
 
 int restore_altstack(const stack_t __user *uss);
 
+/*
+ * cond_resched() and cond_resched_lock(): latency reduction via
+ * explicit rescheduling in places that are safe. The return
+ * value indicates whether a reschedule was done in fact.
+ * cond_resched_lock() will drop the spinlock before scheduling,
+ * cond_resched_softirq() will enable bhs before scheduling.
+ */
+#ifndef CONFIG_PREEMPT
+extern int _cond_resched(void);
+#else
+static inline int _cond_resched(void) { return 0; }
+#endif
+
+static inline void ___might_sleep(const char *file, int line,
+				   int preempt_offset) { }
+
+#define cond_resched() ({			\
+	___might_sleep(__FILE__, __LINE__, 0);	\
+	_cond_resched();			\
+})
+
 #endif /* _LEGO_SCHED_H_ */

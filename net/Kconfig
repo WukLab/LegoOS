@@ -12,6 +12,23 @@ config FIT
 	default y
 	depends on INFINIBAND
 
+config FIT_INITIAL_SLEEP_TIMEOUT
+	int "  FIT initial sleep timeout (s) for connection"
+	default 10
+	help
+	  This is the time you need to wait for FIT to establish
+	  connection with other machines. Life is short, make it smaller.
+
+config FIT_NR_NODES
+	int "  FIT Number of Connected Nodes"
+	default 2
+	help
+	  This is the number of nodes that can be connected by FIT layer.
+	  Count the nodes you need for testing, and then set the EXACT same
+	  value for all the testing nodes.
+
+	  E.g., if you are going to use 4 nodes, then config it as 4.
+
 endif
 
 endmenu

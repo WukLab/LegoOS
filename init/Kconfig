@@ -151,6 +151,12 @@ config DEFAULT_HOSTNAME
 	  but you may wish to use a different default here to make a minimal
 	  system more usable with less configuration.
 
+config FUTEX
+	bool
+	default y
+	help
+	  Enable futex support.
+
 menu "Compile-time checks and compiler options"
 
 config DEBUG_INFO

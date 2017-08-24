@@ -1,9 +1,11 @@
 #include <sys/utsname.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <sys/resource.h>
 #include <stdio.h>
+#include <linux/unistd.h>
 
-static int lego_uname(void)
+static void lego_uname(void)
 {
 	struct utsname foo;
 
@@ -17,7 +19,7 @@ static int lego_uname(void)
 	       foo.sysname, foo.nodename, foo.release, foo.version, foo.machine);
 }
 
-static int lego_getrlimit(void)
+static void lego_getrlimit(void)
 {
 	struct rlimit l;
 
@@ -26,7 +28,7 @@ static int lego_getrlimit(void)
 		l.rlim_cur, l.rlim_max);
 }
 
-static int lego_time(void)
+static void lego_time(void)
 {
 	struct timeval tv;
 	time_t t;
@@ -37,15 +39,25 @@ static int lego_time(void)
 
 	t = time(NULL);	
 	printf("time(NULL): %lld\n", t);
+}
 
+static void lego_set_tid_address(void)
+{
+	pid_t tgid;
+	int dummy;
+
+	tgid = syscall(218, &dummy);
+	printf("set_tid_address(): return tgid: %u\n", tgid);
 }
 
 int main(void)
 {
+	printf("pid: %d\n", getpid());
 	lego_time();
 
 	lego_uname();
 	lego_getrlimit();
+	lego_set_tid_address();
 
 	lego_time();
 }

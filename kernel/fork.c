@@ -12,6 +12,7 @@
 #include <lego/slab.h>
 #include <lego/files.h>
 #include <lego/sched.h>
+#include <lego/futex.h>
 #include <lego/completion.h>
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
@@ -214,6 +215,13 @@ static int wait_for_vfork_done(struct task_struct *child,
  */
 void mm_release(struct task_struct *tsk, struct mm_struct *mm)
 {
+	/* Get rid of any futexes when releasing the mm */
+	if (unlikely(tsk->robust_list)) {
+		WARN_ON(1);
+		exit_robust_list(tsk);
+		tsk->robust_list = NULL;
+	}
+
 	/* Get rid of any cached register state */
 	deactivate_mm(tsk, mm);
 
@@ -224,7 +232,10 @@ void mm_release(struct task_struct *tsk, struct mm_struct *mm)
 			 * We don't check the error code - if userspace has
 			 * not set up a proper pointer then tough luck.
 			 */
+			WARN_ON(1);
 			ret = copy_to_user(tsk->clear_child_tid, &zero, 4);
+			sys_futex(tsk->clear_child_tid, FUTEX_WAKE,
+					1, NULL, NULL, 0);
 		}
 		tsk->clear_child_tid = NULL;
 	}
@@ -819,10 +830,9 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 
 SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)
 {
-	syscall_enter("tidpid: %p\n", tidptr);
-
+	syscall_enter("tidptr: %p\n", tidptr);
 	current->clear_child_tid = tidptr;
-	return current->tgid;
+	return current->pid;
 }
 
 void __init fork_init(void)

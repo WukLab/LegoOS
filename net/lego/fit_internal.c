@@ -22,6 +22,7 @@
 #include <lego/delay.h>
 #include <lego/slab.h>
 #include <lego/time.h>
+#include <lego/timer.h>
 #include <lego/kernel.h>
 #include <rdma/ib_verbs.h>
 
@@ -1699,9 +1700,11 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	printk(KERN_CRIT "%s all connections completed\n", __func__);
 	//schedule();
 
-	for (i = 0; i < 30000; i++) {
-		udelay(1000);
-	}
+#ifdef CONFIG_FIT_INITIAL_SLEEP_TIMEOUT
+	msleep(CONFIG_FIT_INITIAL_SLEEP_TIMEOUT*1000);
+#else
+	msleep(30*1000);
+#endif
 
 	printk(KERN_CRIT "now sending mr info\n");
 	//if (ctx->node_id == 0)

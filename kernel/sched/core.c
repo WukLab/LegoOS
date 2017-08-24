@@ -778,11 +778,15 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 	preempt_enable();
 	balance_callback(rq);
 
+	/*
+	 * $ man set_tid_address
+	 * When set_child_tid is set, the very first thing the new process
+	 * does is writing its PID at this address:
+	 */
 	if (current->set_child_tid) {
 		int ret;
-
 		ret = copy_to_user(current->set_child_tid,
-				   &current->group_leader->pid, 4);
+				   &current->pid, 4);
 	}
 }
 
@@ -956,6 +960,31 @@ asmlinkage __visible void __sched preempt_schedule_irq(void)
 		preempt_enable_no_resched();
 	} while (need_resched());
 }
+
+#ifndef CONFIG_PREEMPT
+static void __sched preempt_schedule_common(void)
+{
+	do {
+		preempt_disable();
+		__schedule(true);
+		preempt_enable_no_resched();
+
+		/*
+		 * Check again in case we missed a preemption opportunity
+		 * between schedule and now.
+		 */
+	} while (need_resched());
+}
+
+int __sched _cond_resched(void)
+{
+	if (need_resched()) {
+		preempt_schedule_common();
+		return 1;
+	}
+	return 0;
+}
+#endif
 
 /**
  * Called while a thread has done its job

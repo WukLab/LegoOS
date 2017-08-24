@@ -16,11 +16,7 @@ menuconfig INFINIBAND
 if INFINIBAND
 
 source "drivers/infiniband/hw/mlx4/Kconfig"
-
 source "drivers/infiniband/ulp/ipoib/Kconfig"
-
-#source "drivers/infiniband/sw/rdmavt/Kconfig"
-#source "drivers/infiniband/sw/rxe/Kconfig"
 
 endif # INFINIBAND
 

@@ -29,4 +29,10 @@ config DEBUG_VM_MMAP
 
 	  if unsure, say N.
 
+config RAMFS_OBJECT_FILE
+	string "The static-linked image embedded into Lego"
+	default "managers/memory/ramfs/bin/word_count-seq"
+	help
+	  Please give the full path
+
 endmenu
