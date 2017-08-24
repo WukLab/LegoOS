@@ -13,51 +13,131 @@
 #include <linux/mutex.h>
 #include <linux/mm.h>
 
-//need add buf later;
-static int handle_read_request(request *rq, void *buf){
-	int metadata_entry, user_entry;
-	int ret;
+//Send retval+buf
+ssize_t handle_read_request(void *payload, uintptr_t desc){
 
-	ret = grant_access(rq, &metadata_entry, &user_entry);
-	if (ret != OP_SUCCESS){
-		return ret;
+	pr_info("calling handle_read_request\n");
+
+	struct m2s_read_write_payload *m2s_rq;
+	m2s_rq = (struct m2s_read_write_payload *) payload;
+	request rq = constuct_request(m2s_rq->uid, m2s_rq->filename, 0, m2s_rq->len, 
+			m2s_rq->offset, m2s_rq->flags);
+
+	int metadata_entry, user_entry;
+	ssize_t ret;
+	ssize_t *retval;
+	char *readbuf;
+	void *retbuf;
+
+	int len_retbuf = m2s_rq->len + sizeof(ssize_t);
+	retbuf = kmalloc(len_retbuf, GFP_KERNEL);
+
+	retval = (ssize_t *) retbuf;
+	readbuf = (char *) (retbuf + sizeof(ssize_t));
+
+#ifdef DEBUG_STORAGE
+	pr_info("uid -> [%d].\n", m2s_rq->uid);
+	pr_info("filename -> [%s].\n", m2s_rq->filename);
+	pr_info("len -> [%u].\n", m2s_rq->len);
+	pr_info("offset -> [%lu].\n", m2s_rq->offset);
+	pr_info("flags -> [%o].\n", m2s_rq->flags);
+#endif
+
+	*retval = grant_access(&rq, &metadata_entry, &user_entry);
+	if (*retval){
+		goto out_reply;
 	}
 	struct file *filp;
-	filp = local_file_open(rq);
+	filp = local_file_open(&rq);
 	if (IS_ERR(filp)){
-		return PTR_ERR(filp);
+		*retval = PTR_ERR(filp);
+		goto out_reply;
 	}
-	ret = local_file_read(filp, (const char __user *)buf, rq->len, &rq->offset);
+	*retval = local_file_read(filp, (const char __user *)readbuf, rq.len, &rq.offset);
 	local_file_close(filp);
 	yield_access(metadata_entry, user_entry);
-	return ret;
-}
+	pr_info("Content in readbuf is [%s]\n", readbuf);
 
-static int handle_write_request(request *rq, void *buf){
-	struct file *filp;
-	int metadata_entry, user_entry;
-	int ret;
+out_reply:
+	ret = *retval;
+	ibapi_reply_message(retbuf, len_retbuf, desc);
+	kfree(retbuf);
+	return ret;
 	
-	//the file exist but not grant to access
-	ret = grant_access(rq, &metadata_entry, &user_entry);
-	if (ret != OP_SUCCESS){
-		return ret;
-	}
-
-	filp = local_file_open(rq);
-	if (IS_ERR(filp)){
-		return PTR_ERR(filp);
-	}
-	ret = local_file_write(filp, (const char __user *)buf, rq->len, &rq->offset);
-	local_file_close(filp);
-	yield_access(metadata_entry, user_entry);
-	return ret;
 }
 
-int handle_fake_read(void *payload){
-	struct m2s_read *rx;
-	rx = (struct m2s_read *) payload;
+//send retval
+ssize_t handle_write_request(void *payload, uintptr_t desc){
 
-	printk("received filename %s\n", rx->filename);
-	return 1;
+	pr_info("calling handle_write_request\n");
+
+	struct m2s_read_write_payload *m2s_wq;
+	m2s_wq = (struct m2s_read_write_payload *) payload;
+	request rq = constuct_request(m2s_wq->uid, m2s_wq->filename, 0, m2s_wq->len, 
+			m2s_wq->offset, m2s_wq->flags);
+
+	int metadata_entry, user_entry;
+	ssize_t retval;
+	char *writebuf;
+
+	writebuf = (char *) (payload + sizeof(struct m2s_read_write_payload));
+
+#ifdef DEBUG_STORAGE
+	pr_info("uid -> [%d].\n", m2s_wq->uid);
+	pr_info("filename -> [%s].\n", m2s_wq->filename);
+	pr_info("len -> [%u].\n", m2s_wq->len);
+	pr_info("offset -> [%lu].\n", m2s_wq->offset);
+	pr_info("flags -> [%o].\n", m2s_wq->flags);
+	pr_info("Content in writebuf is [%s]\n", writebuf);
+#endif
+	//pr_info("%c %c %c %c %c\n", writebuf[0], writebuf[1], writebuf[2], writebuf[3], writebuf[4]);
+	//pr_info("%d %d %d %d %d\n", (int)writebuf[0], (int)writebuf[1], (int)writebuf[2], (int)writebuf[3], (int)writebuf[4]);
+
+	retval = grant_access(&rq, &metadata_entry, &user_entry);
+	if (retval){
+		goto out_reply;
+	}
+	struct file *filp;
+	filp = local_file_open(&rq);
+	if (IS_ERR(filp)){
+		retval = PTR_ERR(filp);
+		goto out_reply;
+	}
+	retval = local_file_write(filp, (const char __user *)writebuf, rq.len, &rq.offset);
+	local_file_close(filp);
+	yield_access(metadata_entry, user_entry);
+
+out_reply:
+	ibapi_reply_message(&retval, sizeof(retval), desc);
+	return retval;
+	
+}
+
+int handle_open_request(void *payload, uintptr_t desc){
+
+	pr_info("calling handle_open_request\n");
+
+	struct m2s_open_payload *m2s_op;
+	m2s_op = (struct m2s_open_payload *) payload;
+	int metadata_entry, user_entry;
+	int ret;
+	request rq;
+	rq = constuct_request(m2s_op->uid, m2s_op->filename, m2s_op->permission, 0, 0, m2s_op->flags);
+	ret = grant_access(&rq, &metadata_entry, &user_entry);
+	
+	if (ret)
+		goto out_reply;
+
+	if (m2s_op->flags & O_CREAT){
+		struct file *filp;
+		filp = local_file_open(&rq);
+		if (IS_ERR(filp)){
+			ret = PTR_ERR(filp);
+			goto out_reply;
+		}
+		local_file_close(filp);
+	}
+
+out_reply:
+	ibapi_reply_message(&ret, sizeof(ret), desc);
 }

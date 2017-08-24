@@ -7,6 +7,7 @@ obj-y += open.o
 obj-y += stat.o
 obj-y += fcntl.o
 obj-y += stdio.o
+obj-y += normal_ops.o
 
 #
 # To maintain compability with linux

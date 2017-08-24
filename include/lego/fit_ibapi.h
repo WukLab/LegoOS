@@ -20,7 +20,11 @@
  * wuklab06: 1
  * wuklab08: 2
  */
-#define MY_NODE_ID 0
+#ifdef CONFIG_COMP_PROCESSOR
+#define MY_NODE_ID 1 
+#elif defined(CONFIG_COMP_MEMORY)
+#define MY_NODE_ID 2 //for only 04_06 test
+#endif /* nodeID */
 
 #ifdef CONFIG_FIT
 int ibapi_establish_conn(int ib_port, int mynodeid);

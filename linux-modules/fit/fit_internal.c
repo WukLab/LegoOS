@@ -337,11 +337,7 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 
 	ret = (struct client_ibv_mr *)kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
 	
-	#ifdef PHYSICAL_ALLOCATION
-	ret->addr = (void *)client_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
-	#else
 	ret->addr = (void *)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
-	#endif
 	
 	ret->length = length;
 	ret->lkey = proc->lkey;
@@ -358,12 +354,7 @@ inline uintptr_t client_ib_reg_mr_addr_phys(ppc *ctx, void *addr, size_t length)
 
 inline uintptr_t client_ib_reg_mr_addr(ppc *ctx, void *addr, size_t length)
 {
-	#ifdef PHYSICAL_ALLOCATION
-	return client_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
-	#endif
-	#ifndef PHYSICAL_ALLOCATION
 	return (uintptr_t)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
-	#endif
 }
 
 void client_ib_dereg_mr_addr(ppc *ctx, void *addr, size_t length)
@@ -520,6 +511,14 @@ void init_global_lid_qpn(void)
 	global_lid = (int *)kmalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
 	global_lid[0] = 7;
 	global_lid[1] = 5;
+
+//for temp test using 04_08
+//#define USE_04_08
+#ifdef USE_04_08
+	global_lid[0] = 7;
+	global_lid[1] = 10;
+#endif
+
 #if (MAX_NODE == 3)
 	global_lid[2] = 10;
 #endif
@@ -782,8 +781,9 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 	
 	tmp = (struct imm_message_metadata *)(ctx->local_rdma_recv_rings[node_id] + offset);
 	get_size = tmp->size;
+	//printk(KERN_CRIT "%s got msg size %d\n", __func__, get_size);
 	//Check size
-	if(get_size > receive_size)
+	if(get_size > receive_size || get_size == 0)
 	{
 		return SEND_REPLY_SIZE_TOO_BIG;
 	}
@@ -956,8 +956,8 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 
 		for(i=0;i<ne;++i)
 		{
-			printk(KERN_CRIT "%s got one recv cq status %d opcode %d\n",
-					__func__, wc[i].status, wc[i].opcode);
+			//printk(KERN_CRIT "%s got one recv cq status %d opcode %d\n",
+			//		__func__, wc[i].status, wc[i].opcode);
 			if(wc[i].status != IB_WC_SUCCESS)
 			{
 				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
@@ -990,10 +990,10 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				{
 					if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND && wc[i].ex.imm_data & IMM_SEND_REPLY_RECV)//opcode
 					{
-						//printk(KERN_CRIT "%s: opcode from node %d\n", __func__, node_id);
+						printk(KERN_CRIT "%s: opcode from node %d\n", __func__, node_id);
 						semaphore = wc[i].ex.imm_data & IMM_GET_SEMAPHORE;
 						opcode = IMM_GET_OPCODE_NUMBER(wc[i].ex.imm_data);
-						//printk(KERN_CRIT "%s: case 1 semaphore-%d\n", __func__, semaphore);
+						printk(KERN_CRIT "%s: case 1 semaphore-%d\n", __func__, semaphore);
 						*(int *)(ctx->imm_inbox_semaphore[semaphore]) = -(opcode);
 						ctx->imm_inbox_semaphore[semaphore] = NULL;
 						clear_bit(semaphore, ctx->imm_inbox_semaphore_bitmap);
@@ -1661,8 +1661,8 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		ret_mr = client_ib_reg_mr(ctx, ctx->local_rdma_recv_rings[i], IMM_RING_SIZE,
 				IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
 		memcpy(&ctx->local_rdma_ring_mrs[i], ret_mr, sizeof(struct client_ibv_mr));
-		//printk(KERN_CRIT "allocated local recv mr for node %d addr %p %p lkey %d rkey %d",
-		//		i, ctx->local_rdma_recv_rings[i], ret_mr->addr, ret_mr->lkey, ret_mr->rkey);
+		printk(KERN_CRIT "allocated local recv mr for node %d addr %p %p lkey %d rkey %d",
+				i, ctx->local_rdma_recv_rings[i], ret_mr->addr, ret_mr->lkey, ret_mr->rkey);
 	}
 	/* array to store rdma ring mr for all remote nodes */
 	ctx->remote_rdma_ring_mrs = (struct client_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct client_ibv_mr), GFP_KERNEL);
