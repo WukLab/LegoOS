@@ -63,6 +63,15 @@ static int cp_new_stat(struct kstat *stat, struct stat __user *statbuf)
 	return copy_to_user(statbuf, &tmp, sizeof(tmp)) ? -EFAULT : 0;
 }
 
+static int handle_special_stat(char *f_name)
+{
+	if (f_name_equal(f_name,
+		"/etc/sysconfig/64bit_strstr_via_64bit_strstr_sse2_unaligned"))
+		return -ENOENT;
+	else
+		return 0;
+}
+
 SYSCALL_DEFINE2(newstat, const char __user *, filename,
 		struct stat __user *, statbuf)
 {
@@ -76,6 +85,10 @@ SYSCALL_DEFINE2(newstat, const char __user *, filename,
 	if (ret < 0)
 		goto out;
 	pr_info("%s(): filename: %s\n", __func__, buf);
+
+	ret = handle_special_stat(buf);
+	if (ret)
+		goto out;
 
 	dummy_fillstat(&stat);
 	stat.mode |= S_IFREG;
