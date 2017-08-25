@@ -108,15 +108,14 @@ static int kernel_init(void *unused)
 
 	init_workqueues();
 
-#ifdef CONFIG_INFINIBAND
+#if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
 	ib_mad_init();
 #endif
 
 	pci_init();
-#ifdef CONFIG_INFINIBAND
-	pr_info("before cmb init\n");
+
+#if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
 	ib_cm_init();
-	pr_info("before lego ib init\n");
 	kthread_run(lego_ib_init, NULL, "ib-initd");
 
 	/* wait until ib finished initialization */

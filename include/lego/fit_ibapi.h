@@ -14,13 +14,11 @@
 #include <lego/errno.h>
 #include <net/arch/cc.h>
 
-/* 
- * change the following for each node
- * wuklab04: 0
- * wuklab06: 1
- * wuklab08: 2
- */
-#define MY_NODE_ID 0
+#ifdef CONFIG_FIT_LOCAL_ID
+#define MY_NODE_ID	CONFIG_FIT_LOCAL_ID
+#else
+#define MY_NODE_ID	0
+#endif
 
 #ifdef CONFIG_FIT
 int ibapi_establish_conn(int ib_port, int mynodeid);

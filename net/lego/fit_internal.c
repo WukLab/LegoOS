@@ -509,23 +509,22 @@ int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, i
 	return 0;
 }
 
-int *global_lid;
+int global_lid[CONFIG_FIT_NR_NODES];
 
-/* 
+/*
  * Statically setting LIDs and QPNs now
  * since we don't have socket working
  */
 void init_global_lid_qpn(void)
 {
-	global_lid = (int *)kmalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
-#ifndef USE_08_10
-	global_lid[0] = 7;
-	global_lid[1] = 5;
+#if defined(CONFIG_FIT_LOCAL_ID) && defined(CONFIG_FIT_NR_NODES)
+	BUILD_BUG_ON(CONFIG_FIT_LOCAL_ID >= CONFIG_FIT_NR_NODES);
 #else
-	global_lid[0] = 10;
-	global_lid[1] = 11;
+	BUILD_BUG_ON(1);
 #endif
 
+	global_lid[0] = 10;
+	global_lid[1] = 11;
 
 #if (MAX_NODE == 3)
 	global_lid[2] = 10;
