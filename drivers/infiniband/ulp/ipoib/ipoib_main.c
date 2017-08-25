@@ -39,12 +39,12 @@
 #include <lego/kernel.h>
 #include <lego/vmalloc.h>
 
-#include <lego/if_arp.h>	/* For ARPHRD_xxx */
+//#include <lego/if_arp.h>	/* For ARPHRD_xxx */
 
-#include <lego/ip.h>
-#include <lego/in.h>
+#include <net/lwip/ip.h>
+#include <net/lwip/inet.h>
 
-#include <net/dst.h>
+//#include <net/dst.h>
 
 int ipoib_sendq_size __read_mostly = IPOIB_TX_RING_SIZE;
 int ipoib_recvq_size __read_mostly = IPOIB_RX_RING_SIZE;
@@ -946,8 +946,6 @@ void ipoib_dev_cleanup(struct net_device *dev)
 {
 	struct ipoib_dev_priv *priv = netdev_priv(dev), *cpriv, *tcpriv;
 
-	ipoib_delete_debug_files(dev);
-
 	/* Delete any child interfaces first */
 	list_for_each_entry_safe(cpriv, tcpriv, &priv->child_intfs, list) {
 		unregister_netdev(cpriv->dev);
@@ -1242,8 +1240,6 @@ static struct net_device *ipoib_add_port(const char *format,
 		goto register_failed;
 	}
 
-	ipoib_create_debug_files(priv->dev);
-
 	if (ipoib_cm_add_mode_attr(priv->dev))
 		goto sysfs_failed;
 	if (ipoib_add_pkey_attr(priv->dev))
@@ -1258,7 +1254,6 @@ static struct net_device *ipoib_add_port(const char *format,
 	return priv->dev;
 
 sysfs_failed:
-	ipoib_delete_debug_files(priv->dev);
 	unregister_netdev(priv->dev);
 
 register_failed:
@@ -1282,9 +1277,6 @@ static void ipoib_add_one(struct ib_device *device)
 	struct ipoib_dev_priv *priv;
 	int s, e, p;
 
-	if (rdma_node_get_transport(device->node_type) != RDMA_TRANSPORT_IB)
-		return;
-
 	dev_list = kmalloc(sizeof *dev_list, GFP_KERNEL);
 	if (!dev_list)
 		return;
@@ -1300,8 +1292,6 @@ static void ipoib_add_one(struct ib_device *device)
 	}
 
 	for (p = s; p <= e; ++p) {
-		if (rdma_port_get_link_layer(device, p) != IB_LINK_LAYER_INFINIBAND)
-			continue;
 		dev = ipoib_add_port("ib%d", device, p);
 		if (!IS_ERR(dev)) {
 			priv = netdev_priv(dev);
@@ -1339,7 +1329,7 @@ static void ipoib_remove_one(struct ib_device *device)
 	kfree(dev_list);
 }
 
-static int ipoib_init_module(void)
+static int ipoib_init(void)
 {
 	int ret;
 
@@ -1355,16 +1345,6 @@ static int ipoib_init_module(void)
 #endif
 
 	/*
-	 * When copying small received packets, we only copy from the
-	 * linear data part of the SKB, so we rely on this condition.
-	 */
-	BUILD_BUG_ON(IPOIB_CM_COPYBREAK > IPOIB_CM_HEAD_SIZE);
-
-	ret = ipoib_register_debugfs();
-	if (ret)
-		return ret;
-
-	/*
 	 * We create our own workqueue mainly because we want to be
 	 * able to flush it when devices are being removed.  We can't
 	 * use schedule_work()/flush_scheduled_work() because both
@@ -1378,8 +1358,6 @@ static int ipoib_init_module(void)
 		goto err_fs;
 	}
 
-	ib_sa_register_client(&ipoib_sa_client);
-
 	ret = ib_register_client(&ipoib_client);
 	if (ret)
 		goto err_sa;
@@ -1387,7 +1365,6 @@ static int ipoib_init_module(void)
 	return 0;
 
 err_sa:
-	ib_sa_unregister_client(&ipoib_sa_client);
 	destroy_workqueue(ipoib_workqueue);
 
 err_fs:
@@ -1396,10 +1373,8 @@ err_fs:
 	return ret;
 }
 
-static void ipoib_cleanup_module(void)
+static void ipoib_cleanup(void)
 {
 	ib_unregister_client(&ipoib_client);
-	ib_sa_unregister_client(&ipoib_sa_client);
-	ipoib_unregister_debugfs();
 	destroy_workqueue(ipoib_workqueue);
 }

@@ -37,8 +37,8 @@
 #include <lego/dma-mapping.h>
 #include <lego/slab.h>
 
-#include <lego/ip.h>
-#include <lego/tcp.h>
+#include <net/lwip/ip.h>
+#include <net/lwip/tcp.h>
 
 #include "ipoib.h"
 
@@ -101,7 +101,7 @@ static void ipoib_ud_dma_unmap_rx(struct ipoib_dev_priv *priv,
 }
 
 static void ipoib_ud_skb_put_frags(struct ipoib_dev_priv *priv,
-				   struct sk_buff *skb,
+				   struct pbuf *skb,
 				   unsigned int length)
 {
 	if (ipoib_ud_need_sg(priv->max_ib_mtu)) {
@@ -146,10 +146,10 @@ static int ipoib_ib_post_receive(struct net_device *dev, int id)
 	return ret;
 }
 
-static struct sk_buff *ipoib_alloc_rx_skb(struct net_device *dev, int id)
+static struct pbuf *ipoib_alloc_rx_skb(struct net_device *dev, int id)
 {
 	struct ipoib_dev_priv *priv = netdev_priv(dev);
-	struct sk_buff *skb;
+	struct pbuf *skb;
 	int buf_size;
 	u64 *mapping;
 
@@ -220,7 +220,7 @@ static void ipoib_ib_handle_rx_wc(struct net_device *dev, struct ib_wc *wc)
 {
 	struct ipoib_dev_priv *priv = netdev_priv(dev);
 	unsigned int wr_id = wc->wr_id & ~IPOIB_OP_RECV;
-	struct sk_buff *skb;
+	struct pbuf *skb;
 	u64 mapping[IPOIB_UD_RX_SG];
 	union ib_gid *dgid;
 
@@ -305,7 +305,7 @@ repost:
 static int ipoib_dma_map_tx(struct ib_device *ca,
 			    struct ipoib_tx_buf *tx_req)
 {
-	struct sk_buff *skb = tx_req->skb;
+	struct pbuf *skb = tx_req->skb;
 	u64 *mapping = tx_req->mapping;
 	int i;
 	int off;
@@ -347,7 +347,7 @@ partial_error:
 static void ipoib_dma_unmap_tx(struct ib_device *ca,
 			       struct ipoib_tx_buf *tx_req)
 {
-	struct sk_buff *skb = tx_req->skb;
+	struct pbuf *skb = tx_req->skb;
 	u64 *mapping = tx_req->mapping;
 	int i;
 	int off;
@@ -497,7 +497,7 @@ static inline int post_send(struct ipoib_dev_priv *priv,
 {
 	struct ib_send_wr *bad_wr;
 	int i, off;
-	struct sk_buff *skb = tx_req->skb;
+	struct pbuf *skb = tx_req->skb;
 	skb_frag_t *frags = skb_shinfo(skb)->frags;
 	int nr_frags = skb_shinfo(skb)->nr_frags;
 	u64 *mapping = tx_req->mapping;
@@ -529,7 +529,7 @@ static inline int post_send(struct ipoib_dev_priv *priv,
 	return ib_post_send(priv->qp, &priv->tx_wr, &bad_wr);
 }
 
-void ipoib_send(struct net_device *dev, struct sk_buff *skb,
+void ipoib_send(struct net_device *dev, struct pbuf *skb,
 		struct ipoib_ah *address, u32 qpn)
 {
 	struct ipoib_dev_priv *priv = netdev_priv(dev);

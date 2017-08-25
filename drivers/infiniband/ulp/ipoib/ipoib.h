@@ -36,14 +36,15 @@
 #define _IPOIB_H
 
 #include <lego/list.h>
-#include <lego/skbuff.h>
-#include <lego/netdevice.h>
+#include <lego/completion.h>
+#include <net/lwip//pbuf.h>
+//#include <lego/netdevice.h>
 #include <lego/workqueue.h>
 #include <lego/if_infiniband.h>
 #include <lego/mutex.h>
 
-#include <net/neighbour.h>
-#include <net/sch_generic.h>
+//#include <net/neighbour.h>
+//#include <net/sch_generic.h>
 
 #include <lego/atomic.h>
 
@@ -118,10 +119,11 @@ struct ipoib_header {
 };
 
 struct ipoib_cb {
-	struct qdisc_skb_cb	qdisc_cb;
+	//struct qdisc_skb_cb	qdisc_cb;
 	u8			hwaddr[INFINIBAND_ALEN];
 };
 
+#if 0
 /* Used for all multicast joins (broadcast, IPv4 mcast and IPv6 mcast) */
 struct ipoib_mcast {
 	struct ib_sa_mcmember_rec mcmember;
@@ -139,23 +141,24 @@ struct ipoib_mcast {
 
 	struct list_head  neigh_list;
 
-	struct sk_buff_head pkt_queue;
+	struct pbuf_head pkt_queue;
 
 	struct net_device *dev;
 };
+#endif
 
 struct ipoib_rx_buf {
-	struct sk_buff *skb;
+	struct pbuf *skb;
 	u64		mapping[IPOIB_UD_RX_SG];
 };
 
 struct ipoib_tx_buf {
-	struct sk_buff *skb;
-	u64		mapping[MAX_SKB_FRAGS + 1];
+	struct pbuf *skb;
+	u64		mapping[18 + 1];
 };
 
 struct ipoib_cm_tx_buf {
-	struct sk_buff *skb;
+	struct pbuf *skb;
 	u64		mapping;
 };
 
@@ -166,6 +169,7 @@ struct ipoib_cm_data {
 	__be32 mtu;
 };
 
+#if 0
 /*
  * Quoting 10.3.1 Queue Pair and EE Context States:
  *
@@ -225,7 +229,7 @@ struct ipoib_cm_tx {
 };
 
 struct ipoib_cm_rx_buf {
-	struct sk_buff *skb;
+	struct pbuf *skb;
 	u64 mapping[IPOIB_CM_RX_SG];
 };
 
@@ -243,7 +247,7 @@ struct ipoib_cm_dev_priv {
 	struct work_struct      skb_task;
 	struct work_struct      rx_reap_task;
 	struct delayed_work     stale_task;
-	struct sk_buff_head     skb_queue;
+	struct pbuf_head     skb_queue;
 	struct list_head	start_list;
 	struct list_head	reap_list;
 	struct ib_wc		ibwc[IPOIB_NUM_WC];
@@ -253,6 +257,7 @@ struct ipoib_cm_dev_priv {
 	int			max_cm_mtu;
 	int			num_frags;
 };
+#endif
 
 struct ipoib_ethtool_st {
 	u16     coalesce_usecs;
@@ -267,9 +272,9 @@ struct ipoib_ethtool_st {
 struct ipoib_dev_priv {
 	spinlock_t lock;
 
-	struct net_device *dev;
+//	struct net_device *dev;
 
-	struct napi_struct napi;
+//	struct napi_struct napi;
 
 	unsigned long flags;
 
@@ -282,14 +287,14 @@ struct ipoib_dev_priv {
 	struct list_head multicast_list;
 	struct rb_root multicast_tree;
 
-	struct delayed_work pkey_poll_task;
-	struct delayed_work mcast_task;
+//	struct delayed_work pkey_poll_task;
+//	struct delayed_work mcast_task;
 	struct work_struct carrier_on_task;
 	struct work_struct flush_light;
 	struct work_struct flush_normal;
 	struct work_struct flush_heavy;
 	struct work_struct restart_task;
-	struct delayed_work ah_reap_task;
+//	struct delayed_work ah_reap_task;
 
 	struct ib_device *ca;
 	u8		  port;
@@ -314,7 +319,7 @@ struct ipoib_dev_priv {
 	struct ipoib_tx_buf *tx_ring;
 	unsigned	     tx_head;
 	unsigned	     tx_tail;
-	struct ib_sge	     tx_sge[MAX_SKB_FRAGS + 1];
+	struct ib_sge	     tx_sge[18 + 1];
 	struct ib_send_wr    tx_wr;
 	unsigned	     tx_outstanding;
 	struct ib_wc	     send_wc[MAX_SEND_CQE];
@@ -343,7 +348,7 @@ struct ipoib_dev_priv {
 #endif
 	int	hca_caps;
 	struct ipoib_ethtool_st ethtool;
-	struct timer_list poll_timer;
+//	struct timer_list poll_timer;
 };
 
 struct ipoib_ah {
@@ -358,7 +363,7 @@ struct ipoib_path {
 	struct net_device    *dev;
 	struct ib_sa_path_rec pathrec;
 	struct ipoib_ah      *ah;
-	struct sk_buff_head   queue;
+//	struct pbuf_head   queue;
 
 	struct list_head      neigh_list;
 
@@ -372,16 +377,17 @@ struct ipoib_path {
 };
 
 struct ipoib_neigh {
+#if 0
 	struct ipoib_ah    *ah;
 #ifdef CONFIG_INFINIBAND_IPOIB_CM
 	struct ipoib_cm_tx *cm;
 #endif
 	union ib_gid	    dgid;
-	struct sk_buff_head queue;
+	struct pbuf_head queue;
 
 	struct neighbour   *neighbour;
 	struct net_device *dev;
-
+#endif
 	struct list_head    list;
 };
 
@@ -393,6 +399,7 @@ static inline int ipoib_ud_need_sg(unsigned int ib_mtu)
 	return IPOIB_UD_BUF_SIZE(ib_mtu) > PAGE_SIZE;
 }
 
+#if 0
 /*
  * We stash a pointer to our private neighbour information after our
  * hardware address in neigh->ha.  The ALIGN() expression here makes
@@ -408,6 +415,7 @@ static inline struct ipoib_neigh **to_ipoib_neigh(struct neighbour *neigh)
 struct ipoib_neigh *ipoib_neigh_alloc(struct neighbour *neigh,
 				      struct net_device *dev);
 void ipoib_neigh_free(struct net_device *dev, struct ipoib_neigh *neigh);
+#endif
 
 extern struct workqueue_struct *ipoib_workqueue;
 
@@ -429,7 +437,7 @@ int ipoib_open(struct net_device *dev);
 int ipoib_add_pkey_attr(struct net_device *dev);
 int ipoib_add_umcast_attr(struct net_device *dev);
 
-void ipoib_send(struct net_device *dev, struct sk_buff *skb,
+void ipoib_send(struct net_device *dev, struct pbuf *skb,
 		struct ipoib_ah *address, u32 qpn);
 void ipoib_reap_ah(struct work_struct *work);
 
@@ -455,7 +463,7 @@ void ipoib_dev_cleanup(struct net_device *dev);
 
 void ipoib_mcast_join_task(struct work_struct *work);
 void ipoib_mcast_carrier_on_task(struct work_struct *work);
-void ipoib_mcast_send(struct net_device *dev, void *mgid, struct sk_buff *skb);
+void ipoib_mcast_send(struct net_device *dev, void *mgid, struct pbuf *skb);
 
 void ipoib_mcast_restart_task(struct work_struct *work);
 int ipoib_mcast_start_thread(struct net_device *dev);
@@ -552,7 +560,7 @@ static inline unsigned int ipoib_cm_max_mtu(struct net_device *dev)
 	return priv->cm.max_cm_mtu;
 }
 
-void ipoib_cm_send(struct net_device *dev, struct sk_buff *skb, struct ipoib_cm_tx *tx);
+void ipoib_cm_send(struct net_device *dev, struct pbuf *skb, struct ipoib_cm_tx *tx);
 int ipoib_cm_dev_open(struct net_device *dev);
 void ipoib_cm_dev_stop(struct net_device *dev);
 int ipoib_cm_dev_init(struct net_device *dev);
@@ -561,7 +569,7 @@ void ipoib_cm_dev_cleanup(struct net_device *dev);
 struct ipoib_cm_tx *ipoib_cm_create_tx(struct net_device *dev, struct ipoib_path *path,
 				    struct ipoib_neigh *neigh);
 void ipoib_cm_destroy_tx(struct ipoib_cm_tx *tx);
-void ipoib_cm_skb_too_long(struct net_device *dev, struct sk_buff *skb,
+void ipoib_cm_skb_too_long(struct net_device *dev, struct pbuf *skb,
 			   unsigned int mtu);
 void ipoib_cm_handle_rx_wc(struct net_device *dev, struct ib_wc *wc);
 void ipoib_cm_handle_tx_wc(struct net_device *dev, struct ib_wc *wc);
@@ -607,7 +615,7 @@ static inline unsigned int ipoib_cm_max_mtu(struct net_device *dev)
 }
 
 static inline
-void ipoib_cm_send(struct net_device *dev, struct sk_buff *skb, struct ipoib_cm_tx *tx)
+void ipoib_cm_send(struct net_device *dev, struct pbuf *skb, struct ipoib_cm_tx *tx)
 {
 	return;
 }
@@ -655,10 +663,10 @@ int ipoib_cm_add_mode_attr(struct net_device *dev)
 	return 0;
 }
 
-static inline void ipoib_cm_skb_too_long(struct net_device *dev, struct sk_buff *skb,
+static inline void ipoib_cm_skb_too_long(struct net_device *dev, struct pbuf *skb,
 					 unsigned int mtu)
 {
-	dev_kfree_skb_any(skb);
+	pbuf_free(skb);
 }
 
 static inline void ipoib_cm_handle_rx_wc(struct net_device *dev, struct ib_wc *wc)
@@ -682,8 +690,8 @@ static inline int ipoib_register_debugfs(void) { return 0; }
 static inline void ipoib_unregister_debugfs(void) { }
 #endif
 
-#define ipoib_printk(level, priv, format, arg...)	\
-	printk(level "%s: " format, ((struct ipoib_dev_priv *) priv)->dev->name , ## arg)
+#define ipoib_printk(level, priv, format, ...)	\
+	printk(level pr_fmt(format), ##__VA_ARGS__)
 #define ipoib_warn(priv, format, arg...)		\
 	ipoib_printk(KERN_WARNING, priv, format , ## arg)
 

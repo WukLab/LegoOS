@@ -35,7 +35,7 @@
 #ifndef IB_SA_H
 #define IB_SA_H
 
-//#include <lego/completion.h>
+#include <lego/completion.h>
 #include <lego/compiler.h>
 
 #include <lego/atomic.h>
@@ -253,7 +253,7 @@ struct ib_sa_service_rec {
 
 struct ib_sa_client {
 	atomic_t users;
-// XXX	struct completion comp;
+	struct completion comp;
 };
 
 /**

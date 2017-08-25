@@ -30,10 +30,8 @@
  * SOFTWARE.
  */
 
-#include <linux/module.h>
-
-#include <linux/init.h>
-#include <linux/seq_file.h>
+#include <lego/init.h>
+#include <lego/seq_file.h>
 
 #include <asm/uaccess.h>
 

@@ -28,7 +28,7 @@
 #include <lego/pci.h>
 //#include <lego/netdevice.h>
 //#include <lego/etherdevice.h>
-//#include <lego/skbuff.h>
+#include <net/lwip/pbuf.h>
 //#include <lego/ethtool.h>
 //#include <lego/mdio.h>
 //#include <lego/mii.h>
@@ -3390,7 +3390,7 @@ static void tg3_tx(struct tg3_napi *tnapi)
 
 	while (sw_idx != hw_idx) {
 		struct ring_info *ri = &tnapi->tx_buffers[sw_idx];
-		struct sk_buff *skb = ri->skb;
+		struct pbuf *skb = ri->skb;
 		int i, tx_bug = 0;
 
 		if (unlikely(skb == NULL)) {
@@ -3473,7 +3473,7 @@ static int tg3_alloc_rx_skb(struct tg3 *tp, struct tg3_rx_prodring_set *tpr,
 {
 	struct tg3_rx_buffer_desc *desc;
 	struct ring_info *map;
-	struct sk_buff *skb;
+	struct pbuf *skb;
 	dma_addr_t mapping;
 	int skb_size, dest_idx;
 
@@ -3622,7 +3622,7 @@ static int tg3_rx(struct tg3_napi *tnapi, int budget)
 		struct ring_info *ri;
 		struct tg3_rx_buffer_desc *desc = &tnapi->rx_rcb[sw_idx];
 		unsigned int len;
-		struct sk_buff *skb;
+		struct pbuf *skb;
 		dma_addr_t dma_addr;
 		u32 opaque_key, desc_idx, *post_ptr;
 
@@ -3678,7 +3678,7 @@ static int tg3_rx(struct tg3_napi *tnapi, int budget)
 
 			skb_put(skb, len);
 		} else {
-			struct sk_buff *copy_skb;
+			struct pbuf *copy_skb;
 
 			tg3_recycle_rx(tnapi, tpr, opaque_key,
 				       desc_idx, *post_ptr);
@@ -4479,7 +4479,7 @@ static void tg3_set_txd(struct tg3_napi *tnapi, int entry,
 }
 
 static void tg3_skb_error_unmap(struct tg3_napi *tnapi,
-				struct sk_buff *skb, int last)
+				struct pbuf *skb, int last)
 {
 	int i;
 	u32 entry = tnapi->tx_prod;
@@ -4503,11 +4503,11 @@ static void tg3_skb_error_unmap(struct tg3_napi *tnapi,
 
 /* Workaround 4GB and 40-bit hardware DMA bugs. */
 static int tigon3_dma_hwbug_workaround(struct tg3_napi *tnapi,
-				       struct sk_buff *skb,
+				       struct pbuf *skb,
 				       u32 base_flags, u32 mss)
 {
 	struct tg3 *tp = tnapi->tp;
-	struct sk_buff *new_skb;
+	struct pbuf *new_skb;
 	dma_addr_t new_addr = 0;
 	u32 entry = tnapi->tx_prod;
 	int ret = 0;
@@ -4557,14 +4557,14 @@ static int tigon3_dma_hwbug_workaround(struct tg3_napi *tnapi,
 	return ret;
 }
 
-static netdev_tx_t tg3_start_xmit(struct sk_buff *, struct net_device *);
+static netdev_tx_t tg3_start_xmit(struct pbuf *, struct net_device *);
 
 /* Use GSO to workaround a rare TSO bug that may be triggered when the
  * TSO header is greater than 80 bytes.
  */
-static int tg3_tso_bug(struct tg3 *tp, struct sk_buff *skb)
+static int tg3_tso_bug(struct tg3 *tp, struct pbuf *skb)
 {
-	struct sk_buff *segs, *nskb;
+	struct pbuf *segs, *nskb;
 	u32 frag_cnt_est = skb_shinfo(skb)->gso_segs * 3;
 
 	/* Estimate the number of fragments in the worst case */
@@ -4604,7 +4604,7 @@ tg3_tso_bug_end:
  * support TG3_FLAG_HW_TSO_1 or firmware TSO only.
  */
 w
-static netdev_tx_t tg3_start_xmit(struct sk_buff *skb, struct pci_dev *pdev)
+static netdev_tx_t tg3_start_xmit(struct pbuf *skb, struct pci_dev *pdev)
 {
 	struct tg3 *tp = (struct tg3 *)pdev->priv;
 	u32 len, entry, base_flags, mss;
@@ -5126,7 +5126,7 @@ static void tg3_free_rings(struct tg3 *tp)
 
 		for (i = 0; i < TG3_TX_RING_SIZE; ) {
 			struct ring_info *txp;
-			struct sk_buff *skb;
+			struct pbuf *skb;
 			unsigned int k;
 
 			txp = &tnapi->tx_buffers[i];
