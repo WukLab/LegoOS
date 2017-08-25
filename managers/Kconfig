@@ -13,6 +13,7 @@ config PCACHE_FILL_SPLIT_NR
 config DEBUG_PCACHE_FILL
 	bool "Debug L4-cache"
 	default n
+	depends on COMP_PROCESSOR || COMP_MEMORY
 	help
 	  Enable to have a detailed dump log of L4 cache subsystem.
 	  Mostly, it tells you the missing address and how it was handled
@@ -23,6 +24,7 @@ config DEBUG_PCACHE_FILL
 config DEBUG_VM_MMAP
 	bool "Debug mmap() brk() related syscalls"
 	default n
+	depends on COMP_PROCESSOR || COMP_MEMORY
 	help
 	  Enable to have a detailed dump on each mmap(), brk() syscall handlers.
 	  Dumpers will be enabled at both processor and memory components.
@@ -32,6 +34,7 @@ config DEBUG_VM_MMAP
 config RAMFS_OBJECT_FILE
 	string "The static-linked image embedded into Lego"
 	default "managers/memory/ramfs/bin/word_count-seq"
+	depends on COMP_MEMORY
 	help
 	  Please give the full path
 

@@ -217,7 +217,6 @@ void mm_release(struct task_struct *tsk, struct mm_struct *mm)
 {
 	/* Get rid of any futexes when releasing the mm */
 	if (unlikely(tsk->robust_list)) {
-		WARN_ON(1);
 		exit_robust_list(tsk);
 		tsk->robust_list = NULL;
 	}
@@ -232,7 +231,6 @@ void mm_release(struct task_struct *tsk, struct mm_struct *mm)
 			 * We don't check the error code - if userspace has
 			 * not set up a proper pointer then tough luck.
 			 */
-			WARN_ON(1);
 			ret = copy_to_user(tsk->clear_child_tid, &zero, 4);
 			sys_futex(tsk->clear_child_tid, FUTEX_WAKE,
 					1, NULL, NULL, 0);

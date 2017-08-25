@@ -837,7 +837,6 @@ static inline int fetch_robust_entry(struct robust_list __user **entry,
  */
 int handle_futex_death(u32 __user *uaddr, struct task_struct *curr, int pi)
 {
-#if 0
 	u32 uval, uninitialized_var(nval), mval;
 
 retry:
@@ -866,9 +865,13 @@ retry:
 		 * give up and leave the futex locked.
 		 */
 		if (cmpxchg_futex_value_locked(&nval, uaddr, uval, mval)) {
+			WARN_ON(1);
+			return -1;
+		/*
 			if (fault_in_user_writeable(uaddr))
 				return -1;
 			goto retry;
+		*/
 		}
 		if (nval != uval)
 			goto retry;
@@ -881,10 +884,6 @@ retry:
 			futex_wake(uaddr, 1, 1, FUTEX_BITSET_MATCH_ANY);
 	}
 	return 0;
-#else
-	WARN_ON(1);
-	return 0;
-#endif
 }
 
 /*
