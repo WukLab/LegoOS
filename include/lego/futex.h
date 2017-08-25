@@ -210,4 +210,7 @@ static inline void exit_pi_state_list(struct task_struct *curr)
 
 int __init futex_init(void);
 
+/* Well... */
+#include <asm/futex.h>
+
 #endif /* _LEGO_FUTEX_H_ */

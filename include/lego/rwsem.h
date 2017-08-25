@@ -29,10 +29,10 @@ struct rw_semaphore {
 
 #include <asm/rwsem.h>
 
-#define __RWSEM_INITIALIZER(name) {				  \
-		.count = ATOMIC_LONG_INIT(RWSEM_UNLOCKED_VALUE)	  \
-		.wait_list = LIST_HEAD_INIT((name).wait_list),	  \
-		.wait_lock = __SPIN_LOCK_UNLOCKED(name.wait_lock) \
+#define __RWSEM_INITIALIZER(name) {					\
+		.count = ATOMIC_LONG_INIT(RWSEM_UNLOCKED_VALUE),	\
+		.wait_list = LIST_HEAD_INIT((name).wait_list),		\
+		.wait_lock = __SPIN_LOCK_UNLOCKED(name.wait_lock)	\
 	}
 
 #define DEFINE_RWSEM(name) \

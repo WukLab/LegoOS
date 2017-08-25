@@ -12,6 +12,7 @@
 
 #include <asm/pgtable.h>
 
+#include <lego/rwsem.h>
 #include <lego/types.h>
 #include <lego/rbtree.h>
 #include <lego/spinlock.h>
@@ -70,6 +71,7 @@ struct mm_struct {
 	pgd_t * pgd;
 	int map_count;				/* number of VMAs */
 
+	struct rw_semaphore mmap_sem;
 	spinlock_t page_table_lock;		/* Protects page tables and some counters */
 	struct list_head mmlist;		/* list of all mm_structs */
 

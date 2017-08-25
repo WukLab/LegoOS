@@ -253,6 +253,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 	mm->map_count = 0;
 	mm->pinned_vm = 0;
 	spin_lock_init(&mm->page_table_lock);
+	init_rwsem(&mm->mmap_sem);
 
 	/*
 	 * pgd_alloc() will duplicate the identity kernel mapping

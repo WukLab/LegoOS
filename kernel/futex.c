@@ -7,6 +7,15 @@
  * (at your option) any later version.
  */
 
+/*
+ * BIG FAT NOTE:
+ *
+ * 1) Lego's futex implementation does NOT support shared FUTEX.
+ *    This means user-futex can only be used within one process.
+ *
+ * 2) Lego does NOT support PI-futex, it will return ENOSYS if called.
+ */
+
 #include <lego/pid.h>
 #include <lego/time.h>
 #include <lego/plist.h>
@@ -100,11 +109,68 @@ static inline int cmpxchg_futex_value_locked(u32 *curval, u32 __user *uaddr,
 {
 	int ret;
 
-	//pagefault_disable();
+	pagefault_disable();
 	ret = futex_atomic_cmpxchg_inatomic(curval, uaddr, uval, newval);
-	//pagefault_enable();
+	pagefault_enable();
 
 	return ret;
+}
+
+int fixup_user_fault(struct task_struct *tsk, struct mm_struct *mm,
+		     unsigned long address, unsigned int fault_flags,
+		     bool *unlocked)
+{
+	WARN_ON(1);
+	return -EFAULT;
+}
+
+/**
+ * fault_in_user_writeable() - Fault in user address and verify RW access
+ * @uaddr:	pointer to faulting user space address
+ *
+ * Slow path to fixup the fault we just took in the atomic write
+ * access to @uaddr.
+ *
+ * We have no generic implementation of a non-destructive write to the
+ * user address. We know that we faulted in the atomic pagefault
+ * disabled section so we can as well avoid the #PF overhead by
+ * calling get_user_pages() right away.
+ */
+static int fault_in_user_writeable(u32 __user *uaddr)
+{
+	struct mm_struct *mm = current->mm;
+	int ret;
+
+	down_read(&mm->mmap_sem);
+	ret = fixup_user_fault(current, mm, (unsigned long)uaddr,
+			       FAULT_FLAG_WRITE, NULL);
+	up_read(&mm->mmap_sem);
+
+	return ret < 0 ? ret : 0;
+}
+
+/*
+ * Express the locking dependencies for lockdep:
+ */
+static inline void
+double_lock_hb(struct futex_hash_bucket *hb1, struct futex_hash_bucket *hb2)
+{
+	if (hb1 <= hb2) {
+		spin_lock(&hb1->lock);
+		if (hb1 < hb2)
+			spin_lock(&hb2->lock);
+	} else { /* hb1 > hb2 */
+		spin_lock(&hb2->lock);
+		spin_lock(&hb1->lock);
+	}
+}
+
+static inline void
+double_unlock_hb(struct futex_hash_bucket *hb1, struct futex_hash_bucket *hb2)
+{
+	spin_unlock(&hb1->lock);
+	if (hb1 != hb2)
+		spin_unlock(&hb2->lock);
 }
 
 static inline void futex_get_mm(union futex_key *key)
@@ -299,6 +365,33 @@ get_futex_key(u32 __user *uaddr, int fshared, union futex_key *key, int rw)
 static inline void put_futex_key(union futex_key *key)
 {
 	drop_futex_key_refs(key);
+}
+
+/**
+ * requeue_futex() - Requeue a futex_q from one hb to another
+ * @q:		the futex_q to requeue
+ * @hb1:	the source hash_bucket
+ * @hb2:	the target hash_bucket
+ * @key2:	the new key for the requeued futex_q
+ */
+static inline
+void requeue_futex(struct futex_q *q, struct futex_hash_bucket *hb1,
+		   struct futex_hash_bucket *hb2, union futex_key *key2)
+{
+
+	/*
+	 * If key1 and key2 hash to the same bucket, no need to
+	 * requeue.
+	 */
+	if (likely(&hb1->chain != &hb2->chain)) {
+		plist_del(&q->list, &hb1->chain);
+		hb_waiters_dec(hb1);
+		hb_waiters_inc(hb2);
+		plist_add(&q->list, &hb2->chain);
+		q->lock_ptr = &hb2->lock;
+	}
+	get_futex_key_refs(key2);
+	q->key = *key2;
 }
 
 /* The key must be already stored in q->key. */
@@ -797,8 +890,94 @@ static int futex_requeue(u32 __user *uaddr1, unsigned int flags,
 			 u32 __user *uaddr2, int nr_wake, int nr_requeue,
 			 u32 *cmpval, int requeue_pi)
 {
-	WARN_ON(1);
-	return -ENOSYS;
+	union futex_key key1 = FUTEX_KEY_INIT, key2 = FUTEX_KEY_INIT;
+	int drop_count = 0, task_count = 0, ret;
+	struct futex_hash_bucket *hb1, *hb2;
+	struct futex_q *this, *next;
+	WAKE_Q(wake_q);
+
+retry:
+	ret = get_futex_key(uaddr1, flags & FLAGS_SHARED, &key1, VERIFY_READ);
+	if (unlikely(ret != 0))
+		goto out;
+	ret = get_futex_key(uaddr2, flags & FLAGS_SHARED, &key2, VERIFY_READ);
+	if (unlikely(ret != 0))
+		goto out_put_key1;
+
+	hb1 = hash_futex(&key1);
+	hb2 = hash_futex(&key2);
+
+retry_private:
+	hb_waiters_inc(hb2);
+	double_lock_hb(hb1, hb2);
+
+	if (likely(cmpval != NULL)) {
+		u32 curval;
+
+		ret = get_futex_value_locked(&curval, uaddr1);
+
+		if (unlikely(ret)) {
+			double_unlock_hb(hb1, hb2);
+			hb_waiters_dec(hb2);
+
+			ret = get_user(curval, uaddr1);
+			if (ret)
+				goto out_put_keys;
+
+			if (!(flags & FLAGS_SHARED))
+				goto retry_private;
+
+			put_futex_key(&key2);
+			put_futex_key(&key1);
+			goto retry;
+		}
+		if (curval != *cmpval) {
+			ret = -EAGAIN;
+			goto out_unlock;
+		}
+	}
+
+	plist_for_each_entry_safe(this, next, &hb1->chain, list) {
+		if (task_count - nr_wake >= nr_requeue)
+			break;
+
+		if (!match_futex(&this->key, &key1))
+			continue;
+
+		/*
+		 * Wake nr_wake waiters.  For requeue_pi, if we acquired the
+		 * lock, we already woke the top_waiter.  If not, it will be
+		 * woken by futex_unlock_pi().
+		 */
+		if (++task_count <= nr_wake && !requeue_pi) {
+			mark_wake_futex(&wake_q, this);
+			continue;
+		}
+
+		requeue_futex(this, hb1, hb2, &key2);
+		drop_count++;
+	}
+
+out_unlock:
+	double_unlock_hb(hb1, hb2);
+	wake_up_q(&wake_q);
+	hb_waiters_dec(hb2);
+
+	/*
+	 * drop_futex_key_refs() must be called outside the spinlocks. During
+	 * the requeue we moved futex_q's from the hash bucket at key1 to the
+	 * one at key2 and updated their key pointer.  We no longer need to
+	 * hold the references to key1.
+	 */
+	while (--drop_count >= 0)
+		drop_futex_key_refs(&key1);
+
+out_put_keys:
+	put_futex_key(&key2);
+out_put_key1:
+	put_futex_key(&key1);
+out:
+	return ret ? ret : task_count;
 }
 
 /*
@@ -809,8 +988,75 @@ static int
 futex_wake_op(u32 __user *uaddr1, unsigned int flags, u32 __user *uaddr2,
 	      int nr_wake, int nr_wake2, int op)
 {
-	WARN_ON(1);
-	return -ENOSYS;
+	union futex_key key1 = FUTEX_KEY_INIT, key2 = FUTEX_KEY_INIT;
+	struct futex_hash_bucket *hb1, *hb2;
+	struct futex_q *this, *next;
+	int ret, op_ret;
+	WAKE_Q(wake_q);
+
+retry:
+	ret = get_futex_key(uaddr1, flags & FLAGS_SHARED, &key1, VERIFY_READ);
+	if (unlikely(ret != 0))
+		goto out;
+	ret = get_futex_key(uaddr2, flags & FLAGS_SHARED, &key2, VERIFY_WRITE);
+	if (unlikely(ret != 0))
+		goto out_put_key1;
+
+	hb1 = hash_futex(&key1);
+	hb2 = hash_futex(&key2);
+
+retry_private:
+	double_lock_hb(hb1, hb2);
+	op_ret = futex_atomic_op_inuser(op, uaddr2);
+	if (unlikely(op_ret < 0)) {
+
+		double_unlock_hb(hb1, hb2);
+
+		if (unlikely(op_ret != -EFAULT)) {
+			ret = op_ret;
+			goto out_put_keys;
+		}
+
+		ret = fault_in_user_writeable(uaddr2);
+		if (ret)
+			goto out_put_keys;
+
+		if (!(flags & FLAGS_SHARED))
+			goto retry_private;
+
+		put_futex_key(&key2);
+		put_futex_key(&key1);
+		goto retry;
+	}
+
+	plist_for_each_entry_safe(this, next, &hb1->chain, list) {
+		if (match_futex (&this->key, &key1)) {
+			mark_wake_futex(&wake_q, this);
+			if (++ret >= nr_wake)
+				break;
+		}
+	}
+
+	if (op_ret > 0) {
+		op_ret = 0;
+		plist_for_each_entry_safe(this, next, &hb2->chain, list) {
+			if (match_futex (&this->key, &key2)) {
+				mark_wake_futex(&wake_q, this);
+				if (++op_ret >= nr_wake2)
+					break;
+			}
+		}
+		ret += op_ret;
+	}
+
+	double_unlock_hb(hb1, hb2);
+	wake_up_q(&wake_q);
+out_put_keys:
+	put_futex_key(&key2);
+out_put_key1:
+	put_futex_key(&key1);
+out:
+	return ret;
 }
 
 /*
@@ -865,13 +1111,9 @@ retry:
 		 * give up and leave the futex locked.
 		 */
 		if (cmpxchg_futex_value_locked(&nval, uaddr, uval, mval)) {
-			WARN_ON(1);
-			return -1;
-		/*
 			if (fault_in_user_writeable(uaddr))
 				return -1;
 			goto retry;
-		*/
 		}
 		if (nval != uval)
 			goto retry;
