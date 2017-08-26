@@ -431,6 +431,18 @@ void seq_putc(struct seq_file *m, char c)
 	m->buf[m->count++] = c;
 }
 
+void seq_puts(struct seq_file *m, const char *s)
+{
+	int len = strlen(s);
+
+	if (m->count + len >= m->size) {
+		seq_set_overflow(m);
+		return;
+	}
+	memcpy(m->buf + m->count, s, len);
+	m->count += len;
+}
+
 /*
  * A helper routine for putting decimal numbers without rich format of printf().
  * only 'unsigned long long' is supported.

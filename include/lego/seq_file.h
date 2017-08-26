@@ -119,6 +119,7 @@ int single_release(struct file *file);
 void seq_vprintf(struct seq_file *m, const char *f, va_list args);
 void seq_printf(struct seq_file *m, const char *f, ...);
 void seq_putc(struct seq_file *m, char c);
+void seq_puts(struct seq_file *m, const char *s);
 void seq_put_decimal_ull(struct seq_file *m, const char *delimiter,
 			 unsigned long long num);
 void seq_put_decimal_ll(struct seq_file *m, const char *delimiter, long long num);

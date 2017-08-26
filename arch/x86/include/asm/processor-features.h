@@ -344,6 +344,13 @@ enum cpuid_leafs
 
 extern struct cpu_info default_cpu_info __read_mostly;
 
+#ifdef CONFIG_SMP
+#define cpu_data(cpu)		default_cpu_info
+#else
+#define cpu_info		default_cpu_info
+#define cpu_data(cpu)		default_cpu_info
+#endif
+
 /*
  * CPU capability helpers
  */
