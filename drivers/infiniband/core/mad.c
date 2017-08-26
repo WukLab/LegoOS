@@ -2320,7 +2320,7 @@ again:
 					break;
 				case IB_WC_RECV:
 					mad_got_one++;
-					//pr_info("%s got successful recv cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
+					pr_info("%s got successful recv cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
 					ib_mad_recv_done_handler(port_priv, &wc);
 					break;
 				default:

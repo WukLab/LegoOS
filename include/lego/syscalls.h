@@ -19,6 +19,7 @@
 #include <lego/kernel.h>
 #include <lego/time.h>
 #include <lego/getcpu.h>
+#include <lego/socket.h>
 
 #include <asm/syscalls.h>
 #include <asm/stat.h>
@@ -216,4 +217,19 @@ asmlinkage long sys_arch_prctl(int, unsigned long);
 /* backdoor syscall for testing pcache flush only */
 asmlinkage long sys_pcache_flush(void __user *vaddr);
 
+asmlinkage long sys_socket(int, int, int);
+asmlinkage long sys_setsockopt(int fd, int level, int optname,
+				char __user *optval, int optlen);
+asmlinkage long sys_getsockopt(int fd, int level, int optname,
+				char __user *optval, int __user *optlen);
+asmlinkage long sys_getsockname(int, struct sockaddr __user *, int __user *);
+asmlinkage long sys_sendto(int, void __user *, size_t, unsigned,
+				struct sockaddr __user *, int);
+asmlinkage long sys_recvfrom(int, void __user *, size_t, unsigned,
+				struct sockaddr __user *, int __user *);
+asmlinkage long sys_bind(int, struct sockaddr __user *, int);
+asmlinkage long sys_accept(int, struct sockaddr __user *, int __user *);
+asmlinkage long sys_listen(int, int);
+asmlinkage long sys_select(int n, fd_set __user *inp, fd_set __user *outp,
+			fd_set __user *exp, struct timeval __user *tvp);
 #endif /* _LEGO_SYSCALLS_H_ */

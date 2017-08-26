@@ -42,6 +42,17 @@ int ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_ad
 int ibapi_get_node_id(void);
 int ibapi_num_connected_nodes(void);
 
+#ifdef CONFIG_SOCKET_O_IB
+
+int ibapi_sock_send_message(int target_node, int dest_port, int if_internal_port, void *buf, int size, unsigned long timeout_sec, int if_userspace); 
+int ibapi_sock_receive_message(int *target_node, int port, uintptr_t *ret_addr, int ret_size, int if_userspace, int sock_type);
+
+#define SOCK_IB_MAX_SEND_RECV_SIZE 4096*3
+
+int get_internal_port(int target_node, int port);
+
+#endif
+
 #else
 
 static inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
@@ -62,6 +73,8 @@ static inline int ibapi_receive_message(unsigned int designed_port, void *ret_ad
 
 static inline int ibapi_get_node_id(void) {return 0; }
 static inline int ibapi_num_connected_nodes(void) {return 0; };
-#endif /* CONFIG_FIT */
+static inline int ibapi_sock_send_message(int target_node, int port, int if_internal_port, void *addr, int size, unsigned long timeout_sec, int if_userspace) {return 0; };
+static inline int ibapi_sock_receive_message(int *target_node, int port, uintptr_t *ret_addr, int ret_size, int if_userspace, int sock_type) {return 0; };
+#endif /* CONFIG_FIT*/
 
 #endif /* _INCLUDE_FIT_API_H */

@@ -140,6 +140,9 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 		ret = sys_file_open(f, kname);
 	else if (unlikely(dev_file(kname)))
 		ret = dev_file_open(f, kname);
+	else if (socket_file(kname)) {
+		ret = create_socket_file(f);
+	}
 	else {
 #ifdef CONFIG_USE_RAMFS
 		f->f_op = &debug_ramfs_f_ops;

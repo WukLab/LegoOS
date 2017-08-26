@@ -145,10 +145,20 @@ static int kernel_init(void *unused)
 
 #if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
 	ib_cm_init();
+#ifdef CONFIG_SOCKET_INTERFACE
+	init_socket();
+#endif
 	kthread_run(lego_ib_init, NULL, "ib-initd");
 
 	/* wait until ib finished initialization */
 	wait_for_completion(&ib_init_done);
+#endif
+
+#ifdef CONFIG_SOCKET_SERVER
+	test_socket_server();
+#endif
+#ifdef CONFIG_SOCKET_CLIENT
+	test_socket_client();
 #endif
 
 	/* Final step towards a running component.. */

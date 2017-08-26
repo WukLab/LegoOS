@@ -45,6 +45,36 @@ config FIT_LOCAL_ID
 	  This is the local node id, which has to be unique across connected FIT nodes.
 	  The raneg of FIT_LOCAL_ID is [0, FIT_NR_NODES - 1).
 
+config SAME_MACHINE_VMS 
+	bool "Enable multiple VMs on the same physical machine"
+	default n
+	depends on FIT
+
+config SOCKET_O_IB
+	bool "IB support of Socket"
+	default y
+	depends on FIT
+	help
+	  Always enable if you have at least one node in the cluster that needs socket.
+
+config SOCKET_INTERFACE
+	bool "Socket interface"
+	default n
+	depends on SOCKET_O_IB
+	help
+	  Enable if you need socket APIs on the node (a processor node)
+
+config SOCKET_SERVER
+	bool "socket server test code"
+	default n
+	depends on SOCKET_INTERFACE
+
+config SOCKET_CLIENT
+	bool "socket server test code"
+	default n
+	depends on SOCKET_INTERFACE
+
+
 endif
 
 endmenu

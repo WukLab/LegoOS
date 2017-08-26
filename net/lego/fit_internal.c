@@ -33,6 +33,7 @@
 #else
 static inline void fit_debug(const char *fmt, ...) { }
 #endif
+atomic_t global_sock_avail_recv_bufs;
 
 enum ib_mtu client_mtu_to_enum(int mtu)
 {
@@ -62,6 +63,7 @@ int num_recvd_rdma_ring_mrs;
 
 spinlock_t wq_lock;
 
+spinlock_t sock_qp_lock[MAX_NODE];
 spinlock_t connection_lock[MAX_CONNECTION];
 spinlock_t connection_lock_pedal[MAX_CONNECTION];
 spinlock_t multicast_lock; //only one multicast can be executed at a single time
@@ -79,6 +81,71 @@ spinlock_t LOCK_QUEUE_HASHTABLE_LOCK[1<<HASH_TABLE_SIZE_BIT];
 long long int Internal_Stat_Sum=0;
 int Internal_Stat_Count=0;
 
+/**
+ * gets the page table entry for input address
+ * @mm: memory struct
+ * @addr: input address
+ */
+static __always_inline pte_t *fit_get_pte(struct mm_struct *mm, unsigned long addr)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	pgd = pgd_offset(mm, addr);
+	if (unlikely(pgd_none(*pgd)))
+		return 0;
+
+	pud = pud_offset(pgd, addr);
+	if (unlikely(pud_none(*pud)))
+		return 0;
+
+	pmd = pmd_offset(pud, addr);
+	if (unlikely(pmd_none(*pmd)))
+		return 0;
+
+	pte = pte_offset(pmd, addr);
+	if (unlikely(pte_none(*pte)))
+		return 0;
+
+	return pte;
+}
+
+/*
+ * Checking if user-level virtual mem address map to contiguous physical memory address
+ */
+int fit_check_page_continuous(void *local_addr, int size, unsigned long *answer) //20ns
+{
+	pte_t *pte;
+	struct page *page;
+	unsigned long ret_phys_addr;
+	unsigned long test_phys_addr;
+	void *test_addr;
+
+	pte = fit_get_pte(current->mm, (unsigned long)local_addr);
+	if(!pte)
+		return 0;
+	page = pte_page(*pte);
+	ret_phys_addr = page_to_phys(page) + (((uintptr_t)local_addr) & FIT_LINUX_PAGE_OFFSET);
+
+	test_addr = local_addr + size - 1;
+	pte = fit_get_pte(current->mm, (unsigned long)test_addr);
+	if(!pte)
+		return 0;
+	page = pte_page(*pte);
+	test_phys_addr = page_to_phys(page) + (((uintptr_t)test_addr) & FIT_LINUX_PAGE_OFFSET);
+
+	/* non-contiguous */
+	if(test_phys_addr != ret_phys_addr + size - 1)
+	{
+		return 0;
+	}
+	*answer = ret_phys_addr;
+
+	return 1;
+}
+
 int client_find_cq(ppc *ctx, struct ib_cq *tar_cq)
 {
 	int i;
@@ -95,13 +162,75 @@ int client_find_cq(ppc *ctx, struct ib_cq *tar_cq)
 	return -1;
 }
 
-struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev, int mynodeid)
+#ifdef CONFIG_SOCKET_O_IB
+int init_socket_over_ib(struct lego_context *ctx, int port, int rx_depth, int i)
+{
+	pr_info("%s mynodeid %d remote node %d\n", __func__, ctx->node_id, i);
+
+	ctx->sock_send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
+	//ctx->send_cq[i] = ctx->send_cq[0];
+	struct ib_qp_attr attr;
+	struct ib_qp_init_attr init_attr = {
+		.send_cq = ctx->sock_send_cq[i],
+		.recv_cq = ctx->sock_recv_cq,
+		.cap = {
+			.max_send_wr = 1, //rx_depth + 2,
+			//.max_send_wr = 12000,
+			.max_recv_wr = rx_depth,
+			.max_send_sge = 16,
+			.max_recv_sge = 16
+		},
+		.qp_type = IB_QPT_RC,
+		.sq_sig_type = IB_SIGNAL_REQ_WR
+	};
+
+	ctx->sock_qp[i] = ib_create_qp(ctx->pd, &init_attr);
+	if(!ctx->sock_qp[i])
+	{
+		printk(KERN_ALERT "Fail to create sock_qp\n");
+		return -EINVAL;
+	}
+	ib_query_qp(ctx->sock_qp[i], &attr, IB_QP_CAP, &init_attr);
+	//if(init_attr.cap.max_inline_data >= size)
+	//{
+	//	ctx->send_flags |= IB_SEND_INLINE;
+	//}
+
+	struct ib_qp_attr attr1 = {
+		.qp_state = IB_QPS_INIT,
+		.pkey_index = 0,
+		.port_num = port,
+		.qp_access_flags = IB_ACCESS_REMOTE_WRITE|IB_ACCESS_REMOTE_READ|IB_ACCESS_LOCAL_WRITE|IB_ACCESS_REMOTE_ATOMIC,
+		.path_mtu = IB_MTU_2048,
+		.retry_cnt = 7,
+		.rnr_retry = 7
+	};
+	if(ib_modify_qp(ctx->sock_qp[i], &attr1,
+				IB_QP_STATE		|
+				IB_QP_PKEY_INDEX	|
+				IB_QP_PORT		|
+				IB_QP_ACCESS_FLAGS))
+	{
+		printk(KERN_ALERT "Fail to modify sock_qp\n");
+		ib_destroy_qp(ctx->sock_qp[i]);
+		return -EINVAL;
+	}
+
+	pr_info("%s created sock_qp for %d\n", __func__, i);
+
+	return 0;
+}
+#endif
+
+struct lego_context *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev, int mynodeid)
 {
 	int i;
-	int num_connections = MAX_CONNECTION;
+	int num_total_connections = MAX_CONNECTION;
 	ppc *ctx;
+	int rem_node_id;
 
-	ctx = (struct pingpong_context*)kzalloc(sizeof(struct pingpong_context), GFP_KERNEL);
+	printk(KERN_CRIT "%s\n", __func__);
+	ctx = (struct lego_context*)kzalloc(sizeof(struct lego_context), GFP_KERNEL);
 	if(!ctx)
 	{
 		printk(KERN_ALERT "FAIL to initialize ctx in client_init_ctx\n");
@@ -110,7 +239,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	ctx->node_id = mynodeid;
 	ctx->send_flags = IB_SEND_SIGNALED;
 	ctx->rx_depth = rx_depth;
-	ctx->num_connections = num_connections;
+	ctx->num_connections = num_total_connections;
 	ctx->num_node = MAX_NODE;
 	ctx->num_parallel_connection = NUM_PARALLEL_CONNECTION;
 	ctx->context = (struct ib_context *)ib_dev;
@@ -127,8 +256,8 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 		return NULL;
 	}
 	ctx->proc = ib_get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
-	ctx->send_state = (enum s_state *)kmalloc(num_connections * sizeof(enum s_state), GFP_KERNEL);	
-	ctx->recv_state = (enum r_state *)kmalloc(num_connections * sizeof(enum r_state), GFP_KERNEL);
+	ctx->send_state = (enum s_state *)kmalloc(num_total_connections * sizeof(enum s_state), GFP_KERNEL);	
+	ctx->recv_state = (enum r_state *)kmalloc(num_total_connections * sizeof(enum r_state), GFP_KERNEL);
 
 	fit_debug("proc lkey %d rkey %d\n", ctx->proc->lkey, ctx->proc->rkey);
 
@@ -136,7 +265,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	ctx->num_alive_connection = (atomic_t *)kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
 	atomic_set(&ctx->num_alive_nodes, 1);
 	memset(ctx->num_alive_connection, 0, ctx->num_node*sizeof(atomic_t));
-	for(i=0;i<ctx->num_node;i++)
+	for(i = 0; i < ctx->num_node; i++)
 		atomic_set(&ctx->num_alive_connection[i], 0);
 
 	ctx->recv_num = (int *)kmalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
@@ -151,16 +280,16 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	atomic_set(&ctx->alive_connection, 0);
 	atomic_set(&ctx->num_completed_threads, 0);
 
-	ctx->atomic_buffer = (struct atomic_struct **)kmalloc(num_connections * sizeof(struct atomic_struct *), GFP_KERNEL);
-	ctx->atomic_buffer_total_length = (int *)kmalloc(num_connections * sizeof(int), GFP_KERNEL);
-	for(i=0;i<num_connections;i++)
+	ctx->atomic_buffer = (struct atomic_struct **)kmalloc(num_total_connections * sizeof(struct atomic_struct *), GFP_KERNEL);
+	ctx->atomic_buffer_total_length = (int *)kmalloc(num_total_connections * sizeof(int), GFP_KERNEL);
+	for(i = 0; i < num_total_connections; i++)
 		ctx->atomic_buffer_total_length[i]=0;
-	ctx->atomic_buffer_cur_length = (int *)kmalloc(num_connections * sizeof(int), GFP_KERNEL);
-	for(i=0;i<num_connections;i++)
+	ctx->atomic_buffer_cur_length = (int *)kmalloc(num_total_connections * sizeof(int), GFP_KERNEL);
+	for(i = 0; i < num_total_connections; i++)
 		ctx->atomic_buffer_cur_length[i]=-1;
 
 	ctx->cq = (struct ib_cq **)kmalloc(NUM_POLLING_THREADS * sizeof(struct ib_cq *), GFP_KERNEL);
-	for(i=0;i<NUM_POLLING_THREADS;i++)
+	for(i = 0; i < NUM_POLLING_THREADS; i++)
 	{
 		ctx->cq[i]=ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth*4+1, 0);
 		if(!ctx->cq[i])
@@ -169,9 +298,9 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			return NULL;
 		}
 	}
-	ctx->send_cq = (struct ib_cq **)kmalloc(num_connections * sizeof(struct ib_cq *), GFP_KERNEL);
-	ctx->connection_count = (atomic_t *)kmalloc(num_connections * sizeof(atomic_t), GFP_KERNEL);
-	for(i=0;i<num_connections;i++)
+	ctx->send_cq = (struct ib_cq **)kmalloc(num_total_connections * sizeof(struct ib_cq *), GFP_KERNEL);
+	ctx->connection_count = (atomic_t *)kmalloc(num_total_connections * sizeof(atomic_t), GFP_KERNEL);
+	for(i = 0; i < num_total_connections; i++)
 	{
 		atomic_set(&ctx->connection_count[i], 0);
 	}
@@ -181,20 +310,40 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	atomic_set(&ctx->dist_barrier_counter, 0);
 #endif
 
-	fit_debug("before create qps numconnections %d\n", num_connections);
-	ctx->qp = (struct ib_qp **)kmalloc(num_connections * sizeof(struct ib_qp *), GFP_KERNEL);
+	fit_debug("before create qps total number of connections %d\n", num_total_connections);
+	ctx->qp = (struct ib_qp **)kmalloc(num_total_connections * sizeof(struct ib_qp *), GFP_KERNEL);
 	if(!ctx->qp)
 	{
 		printk(KERN_ALERT "Fail to create master qp / ctx->qp\n");
 		return NULL;
 	}
 
+#ifdef CONFIG_SOCKET_O_IB
+	ctx->sock_send_cq = (struct ib_cq **)kmalloc(MAX_NODE * sizeof(struct ib_cq *), GFP_KERNEL);
+	ctx->sock_qp = (struct ib_qp **)kmalloc(MAX_NODE * sizeof(struct ib_qp *), GFP_KERNEL);
+	ctx->sock_recv_cq = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
+	BUG_ON(!ctx->sock_send_cq || !ctx->sock_recv_cq || !ctx->sock_qp);
+#endif
+
 	//ctx->send_cq[0] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
-	for(i=0;i<num_connections;i++)
+	for(i=0;i<num_total_connections;i++)
 	{
-		fit_debug("mynodeid %d i %d %d\n", ctx->node_id, i, i/NUM_PARALLEL_CONNECTION);
-		if (i/NUM_PARALLEL_CONNECTION == ctx->node_id)
+#ifdef CONFIG_SOCKET_O_IB
+		rem_node_id = i/(NUM_PARALLEL_CONNECTION+1);
+		fit_debug("mynodeid %d i %d connecting node %d\n", ctx->node_id, i, rem_node_id);
+		if (rem_node_id == ctx->node_id)
 			continue;
+		/* last one for every remote node is a socket qp */
+		if (i % (NUM_PARALLEL_CONNECTION+1) == NUM_PARALLEL_CONNECTION) {
+			init_socket_over_ib(ctx, port, rx_depth, rem_node_id);
+			continue;
+		}
+#else
+		rem_node_id = i/NUM_PARALLEL_CONNECTION;
+		fit_debug("mynodeid %d i %d connecting node %d\n", ctx->node_id, i, rem_node_id);
+		if (rem_node_id == ctx->node_id)
+			continue;
+#endif
 		ctx->send_state[i] = SS_INIT;
 		ctx->recv_state[i] = RS_INIT;
 
@@ -254,6 +403,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 		fit_debug("created qp %d\n", i);
 	}
 
+
 	//Do IMM local ring setup (imm-send-reply)
 	ctx->imm_inbox_semaphore = (void **)kmalloc(sizeof(void*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
 	ctx->imm_inbox_semaphore_bitmap = kzalloc(sizeof(unsigned long) * BITS_TO_LONGS(IMM_NUM_OF_SEMAPHORE), GFP_KERNEL);
@@ -265,6 +415,14 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 		spin_lock_init(&ctx->imm_waitqueue_perport_lock[i]);
 		ctx->imm_perport_reg_num[i]=-1;
 	}
+	
+#ifdef CONFIG_SOCKET_O_IB
+	for(i = 0; i < SOCK_MAX_LISTEN_PORTS; i++)
+	{
+		INIT_LIST_HEAD(&(ctx->sock_imm_waitqueue_perport[i].list));
+		spin_lock_init(&ctx->sock_imm_waitqueue_perport_lock[i]);
+	}
+#endif
 	
 #ifdef ADAPTIVE_MODEL
 	ctx->imm_inbox_block_queue = (wait_queue_head_t*)kmalloc((IMM_NUM_OF_SEMAPHORE)*sizeof(wait_queue_head_t), GFP_KERNEL);
@@ -413,6 +571,67 @@ int client_post_receives_message(ppc *ctx, int connection_id, int depth)
 	return depth;
 }
 
+struct page *pp;
+
+#ifdef CONFIG_SOCKET_O_IB
+int sock_post_receives_message(ppc *ctx, int connection_id, int depth)
+{
+	int i;
+
+	for(i=0;i<depth;i++)
+	{
+		struct ib_recv_wr wr, *bad_wr = NULL;
+		wr.wr_id = i + (connection_id << CONNECTION_ID_PUSH_BITS_BASED_ON_RECV_DEPTH);
+		wr.next = NULL;
+		wr.sg_list = NULL;
+		wr.num_sge = 0;
+		ib_post_recv(ctx->sock_qp[connection_id], &wr, &bad_wr);
+		//printk(KERN_CRIT "%s postrecv %d buffers wr_id %d\n", __func__, depth, wr.wr_id);
+	}
+
+	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, FIT_STAT_CLEAR));
+	return depth;
+}
+
+int sock_post_receive_buffer(ppc *ctx, int connection_id, int depth)
+{
+	int i;
+	char *buf;
+	uintptr_t addr;
+	int size = SOCK_MAX_IB_RECV_SIZE;
+	int ret;
+
+	printk(KERN_CRIT "%s post %d buffers\n", __func__, depth);
+	for(i=0;i<depth;i++)
+	{
+		struct ib_sge sge[1];
+
+		buf = kmalloc(SOCK_MAX_IB_RECV_SIZE, GFP_KERNEL);
+		addr = client_ib_reg_mr_addr(ctx, buf, size);
+
+		sge[0].addr = (uintptr_t)addr;
+		sge[0].length = size;
+		sge[0].lkey = ctx->proc->lkey;
+
+		struct ib_recv_wr wr, *bad_wr = NULL;
+		wr.wr_id = (uint64_t)buf;
+		wr.next = NULL;
+		wr.sg_list = sge;
+		wr.num_sge = 1;
+		ret = ib_post_recv(ctx->sock_qp[connection_id], &wr, &bad_wr);
+		if (ret) {
+			printk(KERN_CRIT "ERROR: %s post recv error %d i %d\n", 
+				__func__, ret, i);
+		}
+		printk(KERN_CRIT "%s buf %p addr %p lkey %d\n", 
+				__func__, buf, addr, ctx->proc->lkey);
+	}
+
+	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, FIT_STAT_CLEAR));
+	return depth;
+}
+#endif
+
 int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int depth)
 {
 	int i;
@@ -420,14 +639,19 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 	uintptr_t header_addr;
 	struct ibapi_post_receive_intermediate_struct *p_r_i_struct;
 	uintptr_t addr;
-	int size = sizeof(struct client_ibv_mr);
+	int size;
 	int ret;
 
 	fit_debug("conn %d post %d buffers\n", connection_id, depth);
+#ifdef CONFIG_SOCKET_O_IB
+	size = 2 * sizeof(struct client_ibv_mr);
+#else
+	size = sizeof(struct client_ibv_mr);
+#endif
 	for (i = 0; i < depth; i++) {
 		struct ib_sge sge[2];
 
-		buf = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
+		buf = kmalloc(size, GFP_KERNEL);		
 		addr = client_ib_reg_mr_addr(ctx, buf, size);
 
 		header = kmalloc(sizeof(struct ibapi_header), GFP_KERNEL);
@@ -461,6 +685,61 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, FIT_STAT_CLEAR));
 	return depth;
 }
+
+#ifdef CONFIG_SOCKET_O_IB
+int connect_sock_qp(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, int sl, int destlid, int destqpn)
+{
+	struct ib_qp_attr attr = {
+		.qp_state	= IB_QPS_RTR,
+		.path_mtu	= mtu,
+		.dest_qp_num	= destqpn,
+		.rq_psn		= 1,
+		.max_dest_rd_atomic	= 1,
+		.min_rnr_timer	= 12,
+		.ah_attr	= {
+			.dlid		= destlid,
+			.sl		= sl,
+			.src_path_bits	= 0,
+			.port_num	= port
+		}
+	};
+
+	if(ib_modify_qp(ctx->sock_qp[connection_id], &attr, 
+				IB_QP_STATE	|
+				IB_QP_AV	|
+				IB_QP_PATH_MTU	|
+				IB_QP_DEST_QPN	|
+				IB_QP_RQ_PSN	|
+				IB_QP_MAX_DEST_RD_ATOMIC	|
+				IB_QP_MIN_RNR_TIMER))
+	{
+		printk(KERN_ALERT "Fail to modify QP to RTR at sock-qp\n");
+		return 1;
+	}
+
+
+	attr.qp_state	= IB_QPS_RTS;
+	attr.timeout	= 21;
+	attr.retry_cnt	= 7;
+	attr.rnr_retry	= 7;
+	attr.sq_psn	= 1;
+	attr.max_rd_atomic = 1;
+	if(ib_modify_qp(ctx->sock_qp[connection_id], &attr,
+				IB_QP_STATE	|
+				IB_QP_TIMEOUT	|
+				IB_QP_RETRY_CNT	|
+				IB_QP_RNR_RETRY	|
+				IB_QP_SQ_PSN	|
+				IB_QP_MAX_QP_RD_ATOMIC))
+	{
+		printk(KERN_ALERT "Fail to modify QP to RTS at sock-qp\n");
+		return 2;
+	}
+
+	printk(KERN_CRIT "%s connected sock-qp destqpn %d\n", __func__, destqpn);
+	return 0;
+}
+#endif
 
 int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, int sl, int destlid, int destqpn)
 {
@@ -523,15 +802,52 @@ int get_global_qpn(int mynodeid, int remnodeid, int conn)
 	remote_first_qpn = get_node_first_qpn(remnodeid);
 	BUG_ON(!remote_first_qpn);
 
+#ifdef CONFIG_SOCKET_O_IB
+	/* +1 for sock_qp */
 	if (remnodeid > mynodeid)
-		ret = mynodeid * NUM_PARALLEL_CONNECTION + conn;
+		ret = mynodeid * (NUM_PARALLEL_CONNECTION+1) + conn;
 	else
-		ret = (mynodeid - 1) * NUM_PARALLEL_CONNECTION + conn;
+		ret = (mynodeid - 1) * (NUM_PARALLEL_CONNECTION+1) + conn;
+#else
+	if (remnodeid > mynodeid)
+		ret = mynodeid * (NUM_PARALLEL_CONNECTION) + conn;
+	else
+		ret = (mynodeid - 1) * (NUM_PARALLEL_CONNECTION) + conn;
+#endif
 
 	return ret + remote_first_qpn;
 }
 
 int init_global_connt = 0;
+
+#ifdef CONFIG_SOCKET_O_IB
+int sock_connect_nodes(ppc *ctx, int rem_node_id, int mynodeid)
+{
+	int ret;
+	int global_qpn;
+
+	/* 
+	 * sock_qp is the last qp created on every node 
+	 * only one qp per remote node for socket
+	 */
+	global_qpn = get_global_qpn(ctx->node_id, rem_node_id, NUM_PARALLEL_CONNECTION);
+	printk(KERN_ALERT "%s: mynode %d remnode %d remotelid %d remoteqpn %d\n", 
+			__func__, ctx->node_id, rem_node_id, global_lid[rem_node_id], global_qpn);
+retry:
+	ret = connect_sock_qp(ctx, rem_node_id, ib_port, mtu, sl, global_lid[rem_node_id], global_qpn);
+	if(ret)
+	{
+		printk("fail to connect to node %d sock conn\n", rem_node_id);
+		goto retry;
+	}
+
+	/* post receive IMM buffers */
+	sock_post_receives_message(ctx, rem_node_id, ctx->rx_depth);
+
+	printk(KERN_ALERT "successfully connect sock to node %d\n", rem_node_id);
+	return 0;
+}
+#endif
 
 int client_add_newnode(ppc *ctx, int rem_node_id, int mynodeid)
 {
@@ -541,10 +857,15 @@ int client_add_newnode(ppc *ctx, int rem_node_id, int mynodeid)
 	int global_qpn;
 
 	for (i = 0; i < NUM_PARALLEL_CONNECTION; i++) {
-		cur_connection = (rem_node_id*ctx->num_parallel_connection)+atomic_read(&ctx->num_alive_connection[rem_node_id]);
+#ifdef CONFIG_SOCKET_O_IB
+		cur_connection = (rem_node_id * (ctx->num_parallel_connection + 1)) + atomic_read(&ctx->num_alive_connection[rem_node_id]);
+#else
+		cur_connection = (rem_node_id * ctx->num_parallel_connection) + atomic_read(&ctx->num_alive_connection[rem_node_id]);
+#endif
 		global_qpn = get_global_qpn(ctx->node_id, rem_node_id, i);
-		fit_debug("cur connection %d mynode %d remnode %d remotelid %d remoteqpn %d\n", 
-			cur_connection, ctx->node_id, rem_node_id, global_lid[rem_node_id], global_qpn);
+		fit_debug("cur connection %d mynode %d myqpn %d remnode %d remotelid %d remoteqpn %d\n", 
+			cur_connection, ctx->node_id, ctx->qp[cur_connection]->qp_num, rem_node_id, global_lid[rem_node_id], global_qpn);
+
 retry:
 		ret = client_connect_ctx(ctx, cur_connection, ib_port, mtu, sl, global_lid[rem_node_id], global_qpn);
 		if(ret)
@@ -571,6 +892,15 @@ retry:
 		init_global_connt++;
 	}
 
+#ifdef CONFIG_SOCKET_O_IB
+	ret = sock_connect_nodes(ctx, rem_node_id, mynodeid);
+	if (ret != 0) {
+		pr_info("Error: can't connect socket QP between remote node %d and local node %d\n",
+				rem_node_id, mynodeid);
+		return ret;
+	}
+#endif
+
 	pr_info("***  Successfully built QP for node %2d [LID: %d QPN: %d]\n",
 		rem_node_id, get_node_global_lid(rem_node_id),
 		get_node_first_qpn(rem_node_id));
@@ -581,24 +911,44 @@ retry:
 inline int client_find_qp_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 {
 	int i;
-	for(i=0;i<ctx->num_connections;i++)
+
+	for(i = 0; i < ctx->num_connections; i++)
 	{
-#if 0
-		if (!ctx) {
-			BUG();
-		} else if (!ctx->qp[i]) {
-			printk("%s():%d, i=%d, ctx: %p, ctx->qp[%d]: %p\n",
-				FUNC, LINE, i, ctx, i, ctx->qp[i]);
-			BUG();
-		}
-#endif
-		if (i/NUM_PARALLEL_CONNECTION == ctx->node_id)
+#ifdef CONFIG_SOCKET_O_IB
+		if (i / (NUM_PARALLEL_CONNECTION + 1) == ctx->node_id)
 			continue;
+		/* a socket qp */
+		if (i % (NUM_PARALLEL_CONNECTION + 1) == NUM_PARALLEL_CONNECTION)
+			continue;
+#else
+		if (i / NUM_PARALLEL_CONNECTION == ctx->node_id)
+			continue;
+#endif
 		if(ctx->qp[i]->qp_num==qp_num)
 			return i;
 	}
+
 	return -1;
 }
+
+#ifdef CONFIG_SOCKET_O_IB
+inline int client_find_sock_qp_id_by_qpnum(ppc *ctx, uint32_t qp_num)
+{
+	int i;
+	
+	for(i = 0; i < MAX_NODE; i++)
+	{
+		/* does not support loop back currently */
+		if (i == MY_NODE_ID)
+			continue;
+		if(ctx->sock_qp[i]->qp_num == qp_num)
+			return i;
+	}
+
+	return -1;
+}
+#endif
+
 inline int client_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 {
 	int tmp = client_find_qp_id_by_qpnum(ctx, qp_num);
@@ -716,12 +1066,6 @@ int client_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connectio
 		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 
 		wr.ex.imm_data = imm;
-		/*
-		temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
-		sge[0].addr = temp_addr;
-		sge[0].length = size;
-		sge[0].lkey = ctx->proc->lkey;
-		*/
 	}
 	else
 	{
@@ -730,8 +1074,8 @@ int client_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connectio
 	}
 
 	spin_lock(&connection_lock[connection_id]);
-	//printk(KERN_CRIT "%s about to post send conn %d wr_id %d num_sge %d\n",
-	//		__func__, connection_id, wr.wr_id, wr.num_sge);
+	fit_debug("%s about to post send conn %d wr_id %d num_sge %d\n",
+			__func__, connection_id, wr.wr_id, wr.num_sge);
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
 	
 	if(!ret)
@@ -750,8 +1094,13 @@ int client_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connectio
 
 inline int client_get_connection_by_atomic_number(ppc *ctx, int target_node, int priority)
 {
+#ifdef CONFIG_SOCKET_O_IB
+	return atomic_inc_return(&ctx->atomic_request_num[target_node]) % (atomic_read(&ctx->num_alive_connection[target_node])) 
+			+ (NUM_PARALLEL_CONNECTION +1) * target_node;
+#else	
 	return atomic_inc_return(&ctx->atomic_request_num[target_node]) % (atomic_read(&ctx->num_alive_connection[target_node])) 
 			+ NUM_PARALLEL_CONNECTION * target_node;
+#endif			
 }
 
 int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag)
@@ -859,7 +1208,9 @@ int client_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, i
 	fit_debug("re_connection_id: %d, tmp->source_node_id: %d\n",
 		re_connection_id, tmp->source_node_id);
 
-	client_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->inbox_rkey, tmp->inbox_addr, addr, size, 0, tmp->inbox_semaphore | IMM_SEND_REPLY_RECV, FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+	client_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->inbox_rkey, 
+			tmp->inbox_addr, addr, size, 0, tmp->inbox_semaphore | IMM_SEND_REPLY_RECV, 
+			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
 	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);
 
 	return 0;
@@ -915,6 +1266,326 @@ int client_query_port(ppc *ctx, int target_node, int designed_port, int requery_
 }
 #endif
 
+#ifdef CONFIG_SOCKET_O_IB
+int sock_receive_message(ppc *ctx, int *target_node, int port, void *ret_addr, int receive_size, int if_userspace, int sock_type)
+{
+	int get_size = 0;
+	int offset;
+	int node_id;
+	struct sock_recved_msg_metadata *new_request = NULL, *temp_entry;
+	int last_ack;
+	int ack_flag=0;
+	int total_received_size = 0;
+
+	fit_debug("port %d sock_type %x if_userspace %d\n", port, sock_type, if_userspace);
+
+get_next_request:
+	new_request = NULL;
+	get_size = 0;
+
+	while(1)
+	{
+		spin_lock(&ctx->sock_imm_waitqueue_perport_lock[port]);
+		list_for_each_entry_safe(new_request, temp_entry, 
+			&(ctx->sock_imm_waitqueue_perport[port].list), list)
+		{
+			//printk(KERN_CRIT "%s port %d got req\n", __func__, port);
+			node_id = new_request->source_node_id;
+			get_size = new_request->size;
+			offset = new_request->offset;
+			fit_debug("got new req offset %d sourcenode %d size %d\n", 
+					offset, node_id, get_size);
+			if(get_size > receive_size)
+			{
+				new_request->size -= receive_size;
+				new_request->offset += receive_size;
+				get_size = receive_size;
+			}
+			else
+				list_del(&new_request->list);	
+			break;
+		}
+		spin_unlock(&ctx->sock_imm_waitqueue_perport_lock[port]);
+
+		if (get_size > 0)
+			break;
+		if (sock_type & O_NONBLOCK > 0) {
+			fit_debug("nonblock break %d\n", total_received_size);
+			return total_received_size;
+		}
+		schedule();
+	}
+
+	/* 
+	 * got all current requests
+	 * return immediately for non-block socket
+	 */
+	if (sock_type & O_NONBLOCK > 0 && get_size == 0) {
+		fit_debug("nonblock socket return when running out of received buffer %d\n", total_received_size);
+		return total_received_size;
+	}
+
+	total_received_size += get_size;
+	
+	*target_node = node_id;
+	fit_debug("adjusted new req offset %d sourcenode %d size %d\n", 
+			offset, node_id, get_size);
+	//free list
+	// XXX kmem_cache_free(imm_header_from_cq_to_port_cache, new_request);
+	kfree(new_request);
+
+	/*
+	* copy incoming data to user buffer
+	* size of int is for the internal port header 
+	*/
+	if (if_userspace)
+		copy_to_user(ret_addr, ctx->local_sock_rdma_recv_rings[node_id] + offset, get_size);
+	else
+		memcpy(ret_addr, ctx->local_sock_rdma_recv_rings[node_id] + offset, get_size);
+	fit_debug("offset-%d recv %s srcnodeid-%d\n", offset, ret_addr, node_id);
+
+	//do ack based on the last_ack_index, submit a request to waiting_queue_handler	
+	//printk(KERN_CRIT "%s last_ack %d offset %d\n", __func__, last_ack, offset);
+	spin_lock(&ctx->local_sock_last_ack_index_lock[node_id]);
+	last_ack = ctx->local_sock_last_ack_index[node_id];
+	if( (offset>= last_ack && offset - last_ack >= IMM_ACK_FREQ) || 
+	    (offset< last_ack && offset + IMM_PORT_CACHE_SIZE - last_ack >= IMM_ACK_FREQ))
+	{
+		ack_flag = 1;
+		ctx->local_sock_last_ack_index[node_id] = offset;
+	}
+	spin_unlock(&ctx->local_sock_last_ack_index_lock[node_id]);
+
+	if(ack_flag)
+	{	
+		struct send_and_reply_format *pass;
+
+		pass = kmalloc(sizeof(*pass), GFP_KERNEL);
+		if (!pass)
+			return -ENOMEM;
+
+		pass->msg = (void *)(long)node_id;
+		pass->length = offset;
+		pass->type = MSG_SOCK_DO_ACK_INTERNAL;
+
+		fit_debug("add ack req node %d offset %d\n", node_id, offset);
+		spin_lock(&wq_lock);
+		list_add_tail(&(pass->list), &request_list.list);
+		spin_unlock(&wq_lock);
+	}
+	
+	if (total_received_size < receive_size) {
+		fit_debug("go to next request received size %d total %d\n", total_received_size, receive_size);
+		goto get_next_request;
+	}
+
+	return total_received_size;
+}
+
+int sock_send_message_with_rdma_imm(ppc *ctx, int target_node, uint32_t input_mr_rkey, 
+		uintptr_t input_mr_addr, void *addr, int size, int offset, uint32_t imm_data,
+		void* header, int header_size, enum mode s_mode, int if_use_phys_addr_reg)
+{
+	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_sge sge[2];
+	int ret, i, ne;
+	uintptr_t temp_addr, header_addr;
+	int poll_status = SEND_REPLY_WAIT;
+	struct ib_wc wc[1];
+
+	fit_debug("%s target_node %d rkey %d mraddr %lx addr %p size %d offset %d imm-0x%x mode %d\n", 
+			__func__, target_node, input_mr_rkey, input_mr_addr, addr, size, offset, imm_data, s_mode);
+	memset(&wr, 0, sizeof(struct ib_send_wr));
+	memset(&sge, 0, sizeof(struct ib_sge));
+	
+	wr.sg_list = sge;
+	wr.wr.rdma.remote_addr = (uintptr_t) (input_mr_addr+offset);
+	wr.wr.rdma.rkey = input_mr_rkey;
+
+	fit_debug("wr: remotr_addr: %p, rkey: %#lx header %p header size %d\n",
+			wr.wr.rdma.remote_addr, wr.wr.rdma.rkey, header, header_size);
+
+	if(s_mode == FIT_SEND_MESSAGE_HEADER_AND_IMM)
+	{
+		wr.wr_id = (uint64_t)&poll_status;
+		wr.send_flags = IB_SEND_SIGNALED;
+		wr.num_sge = 2;
+		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+
+		header_addr = client_ib_reg_mr_addr(ctx, header, header_size);
+		wr.ex.imm_data = imm_data;
+		
+		sge[0].addr = header_addr;
+		sge[0].length = header_size;
+		sge[0].lkey = ctx->proc->lkey;
+		if (if_use_phys_addr_reg)
+			temp_addr = client_ib_reg_mr_addr_phys(ctx, addr, size);
+		else
+			temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
+		sge[1].addr = temp_addr;
+		sge[1].length = size;
+		sge[1].lkey = ctx->proc->lkey;
+	}
+	else if(s_mode == FIT_SEND_MESSAGE_IMM_ONLY)
+	{
+		wr.wr_id = (uint64_t)&poll_status;
+		wr.send_flags = IB_SEND_SIGNALED;
+
+		wr.num_sge = 1;
+		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+
+		wr.ex.imm_data = imm_data;
+		if (if_use_phys_addr_reg)
+			temp_addr = client_ib_reg_mr_addr_phys(ctx, addr, size);
+		else
+			temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
+		sge[0].addr = temp_addr;
+		sge[0].length = size;
+		sge[0].lkey = ctx->proc->lkey;
+	}
+	else if(s_mode == FIT_SEND_ACK_IMM_ONLY)
+	{
+		wr.wr_id = (uint64_t)&poll_status;
+		wr.send_flags = IB_SEND_SIGNALED;
+
+		wr.num_sge = 0;
+		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+
+		wr.ex.imm_data = imm_data;
+	}
+	else
+	{
+		printk(KERN_CRIT "%s: wrong mode %d - testing function\n", __func__, s_mode);
+		return -1;
+	}
+
+	spin_lock(&sock_qp_lock[target_node]);
+	//printk(KERN_CRIT "%s about to post send conn %d wr_id %d num_sge %d\n",
+	//		__func__, connection_id, wr.wr_id, wr.num_sge);
+	ret = ib_post_send(ctx->sock_qp[target_node], &wr, &bad_wr);
+	
+	if(!ret)
+	{
+		do{
+			ne = ib_poll_cq(ctx->sock_send_cq[target_node], 1, wc);
+			if(ne < 0)
+			{
+				printk(KERN_ALERT "poll send_cq failed at send-qp\n");
+				spin_unlock(&sock_qp_lock[target_node]);
+				return 1;
+			}
+		}while(ne<1);
+		for(i=0;i<ne;i++)
+		{
+			if(wc[i].status!=IB_WC_SUCCESS)
+			{
+				printk(KERN_ALERT "send failed at send-qp as %d\n", wc[i].status);
+				spin_unlock(&sock_qp_lock[target_node]);
+				return 2;
+			}
+		}
+	}
+	else
+	{
+		spin_unlock(&sock_qp_lock[target_node]);
+		printk(KERN_INFO "%s: send fail %d ret %d\n", __func__, target_node, ret);
+	}
+	spin_unlock(&sock_qp_lock[target_node]);
+
+	return 0;
+}
+
+/*
+ * Return:
+ * Negative values on failues
+ * Positive values indicate the reply message length
+ */
+int sock_send_message(ppc *ctx, int target_node, int dest_port, int if_internal_port, 
+				void *addr, int size, unsigned long timeout_sec, int if_userspace)
+{
+	int tar_offset_start;
+	int imm_data;
+	int real_size = size + sizeof(int);
+	void *remote_addr;
+	uint32_t remote_rkey;
+	struct client_ibv_mr *remote_mr;
+	int last_ack;
+	int ret;
+	int dest_port_data;
+	unsigned long phys_addr;
+	void *kbuf;
+
+	if(size + sizeof(int) > IMM_MAX_SIZE)
+	{
+		printk(KERN_CRIT "%s: message size %d + header is larger than max size %d\n", 
+				__func__, size, IMM_MAX_SIZE);
+		return -1;
+	}
+	if(!addr)
+	{
+		printk(KERN_CRIT "%s: null input addr\n", __func__);
+		return -2;
+	}
+
+	spin_lock(&ctx->remote_sock_imm_offset_lock[target_node]);
+	if(ctx->remote_sock_rdma_ring_mrs_offset[target_node] + real_size >= RDMA_RING_SIZE)//If hits the end of ring, write start from 0 directly
+		ctx->remote_sock_rdma_ring_mrs_offset[target_node] = real_size;//Record the last point
+	else
+		ctx->remote_sock_rdma_ring_mrs_offset[target_node] += real_size;
+	tar_offset_start = ctx->remote_sock_rdma_ring_mrs_offset[target_node] - real_size;//Trace back to the real starting point
+	spin_unlock(&ctx->remote_sock_imm_offset_lock[target_node]);
+
+	//printk(KERN_CRIT "%s tar_offset_start %d real_size %d last_ack_index %d\n", 
+	//		__func__, tar_offset_start, real_size, ctx->remote_last_ack_index[target_node]);
+	//make sure does not over write than lastack
+	while(1)
+	{
+		last_ack = ctx->remote_sock_last_ack_index[target_node];
+		if(tar_offset_start < last_ack && tar_offset_start + real_size > last_ack)
+			schedule();
+		else
+			break;
+	}
+
+	remote_mr = &(ctx->remote_sock_rdma_ring_mrs[target_node]);
+
+	imm_data = SOCK_IMM_SEND | tar_offset_start;
+	
+	remote_addr = remote_mr->addr;
+	remote_rkey = remote_mr->rkey;
+
+	dest_port_data = dest_port | (if_internal_port << SOCK_IF_PORT_INTERNAL_BITS);
+	fit_debug("send imm-0x%x addr-0x%x rkey-%x, tar offset %d dest port %d 0x%x\n",
+		imm_data, remote_addr, remote_rkey, tar_offset_start, dest_port, dest_port_data);
+
+	if (if_userspace) {
+		ret = fit_check_page_continuous(addr, size, &phys_addr);
+		if (ret == 1) {
+			ret = sock_send_message_with_rdma_imm(ctx, target_node, remote_rkey, 
+					(uintptr_t)remote_addr, (void *)phys_addr, size, tar_offset_start, imm_data, 
+					&dest_port_data, sizeof(int),
+					FIT_SEND_MESSAGE_HEADER_AND_IMM, 1);
+		}
+		else {
+			kbuf = kmalloc(size, GFP_KERNEL);
+			copy_from_user(kbuf, addr, size);
+			ret = sock_send_message_with_rdma_imm(ctx, target_node, remote_rkey, 
+					(uintptr_t)remote_addr, kbuf, size, tar_offset_start, imm_data, 
+					&dest_port_data, sizeof(int),
+					FIT_SEND_MESSAGE_HEADER_AND_IMM, 0);
+		}
+	}
+	else {
+		ret = sock_send_message_with_rdma_imm(ctx, target_node, remote_rkey, 
+				(uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, 
+				&dest_port_data, sizeof(int),
+				FIT_SEND_MESSAGE_HEADER_AND_IMM, 0);
+	}
+
+	return ret;
+}
+#endif
+
 void *client_alloc_memory_for_mr(unsigned int length)
 {
 	void *tempptr;
@@ -925,7 +1596,7 @@ void *client_alloc_memory_for_mr(unsigned int length)
 }
 
 /*
- * busy polls IMM
+ * main polling function for all non-socket requests
  */
 int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 {
@@ -941,6 +1612,9 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	int test_result=0;
 #endif
 	struct imm_header_from_cq_to_port *tmp;
+#ifdef CONFIG_SOCKET_O_IB
+	struct sock_recved_msg_metadata *tmp_sock;
+#endif
 	//set_current_state(TASK_INTERRUPTIBLE);
 
 	pr_info("***  recvpollcq runs on CPU%d\n", smp_processor_id());
@@ -970,8 +1644,12 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 
 		for (i = 0; i < ne; i++) {
 			connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
-			fit_debug("conn %d got one recv cq status %d opcode %d",
-				connection_id, wc[i].status, wc[i].opcode);
+			if (connection_id == -1) {
+				pr_crit("Error: cannot find qp number %d\n", wc[i].qp->qp_num);
+				continue;
+			}
+			fit_debug("%s: conn %d got one recv cq status %d opcode %d",
+					__func__, connection_id, wc[i].status, wc[i].opcode);
 
 			if (wc[i].status != IB_WC_SUCCESS)
 				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
@@ -989,6 +1667,9 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 
 				if (type == MSG_SEND_RDMA_RING_MR) {
 					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id], addr, sizeof(struct client_ibv_mr));
+#ifdef CONFIG_SOCKET_O_IB
+					memcpy(&ctx->remote_sock_rdma_ring_mrs[temp_header.src_id], addr + sizeof(struct client_ibv_mr), sizeof(struct client_ibv_mr));
+#endif
 					num_recvd_rdma_ring_mrs++;
 					fit_debug("node %d remote addr %p remote rkey %d num_recvd_rdma_ring_mrs %d\n", 
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
@@ -1064,8 +1745,13 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				
 				if(GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
 				{
-					connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);	
+					connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
+					if (connection_id == -1) {
+						pr_crit("Error: cannot find qp number %d\n", wc[i].qp->qp_num);
+						continue;
+					}
 					client_post_receives_message(ctx, connection_id, ctx->rx_depth/4);
+
 					recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
 					recv->length = ctx->rx_depth/4;
 					recv->src_id = connection_id;
@@ -1086,6 +1772,162 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	}
 	return 0;
 }
+
+#ifdef CONFIG_SOCKET_INTERFACE
+/*
+ * main polling function for all non-socket requests
+ */
+int sock_poll_cq(void *in)
+{
+	ppc *ctx;
+	struct ib_cq *target_cq;
+	int ne;
+	struct ib_wc wc[NUM_PARALLEL_CONNECTION];
+	int i, connection_id;
+	int node_id, port, offset;
+	int semaphore, length, opcode;
+	char *addr;
+	int type;
+	struct send_and_reply_format *recv;
+	int if_internal_port;
+#ifdef NOTIFY_MODEL
+	int test_result=0;
+#endif
+	struct imm_header_from_cq_to_port *tmp;
+	struct sock_recved_msg_metadata *tmp_sock;
+	//set_current_state(TASK_INTERRUPTIBLE);
+	struct thread_pass_struct *input = (struct thread_pass_struct *)in;
+
+	ctx = input->ctx;
+	target_cq = input->target_cq;
+	pr_info("***  recvpollcq runs on CPU%d\n", smp_processor_id());
+
+	set_cpu_active(smp_processor_id(), false);
+
+	while(1) {
+		do {
+			//set_current_state(TASK_RUNNING);
+			ne = ib_poll_cq(target_cq, 1, wc);
+			if (unlikely(ne < 0)) {
+				printk(KERN_ALERT "poll CQ failed %d\n", ne);
+				return 1;
+			}
+			if (ne == 0) {
+				schedule();
+			}
+			//msleep(1);
+		} while(ne < 1);
+
+		for (i = 0; i < ne; i++) {
+			connection_id = client_find_sock_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
+			if (connection_id == -1) {
+				pr_crit("Error: cannot find qp number %d\n", wc[i].qp->qp_num);
+				continue;
+			}
+			fit_debug("socket conn %d got one recv cq status %d opcode %d wr_id %d\n",
+					connection_id, wc[i].status, wc[i].opcode, wc[i].wr_id);
+
+			if (wc[i].status != IB_WC_SUCCESS)
+				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
+
+			if ((int) wc[i].opcode == IB_WC_RECV) {
+				fit_debug("Error: socket qp received normal send wr_id %lx\n", wc[i].wr_id);
+			} else if ((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM) {
+				node_id = connection_id;
+				fit_debug("got imm from node %d imm-0x%x\n", node_id, wc[i].ex.imm_data);
+				if(wc[i].wc_flags&&IB_WC_WITH_IMM)
+				{
+					fit_debug("wc[i].ex.imm_data: %#lx wc[i].byte_len: %#lx\n", wc[i].ex.imm_data, wc[i].byte_len);
+					if((wc[i].ex.imm_data & 0xF0000000) == SOCK_IMM_SEND) // only send
+					{
+						offset = wc[i].ex.imm_data & SOCK_IMM_GET_OFFSET;
+						port = *((int*)(ctx->local_sock_rdma_recv_rings[node_id] + offset));
+						fit_debug("got offset %d port %d %x %x\n", offset, port, port, port & SOCK_GET_IF_PORT_INTERNAL_BIT);
+						if_internal_port = (port & SOCK_GET_IF_PORT_INTERNAL_BIT) >> SOCK_IF_PORT_INTERNAL_BITS;
+						port = port & SOCK_GET_PORT;
+
+						tmp_sock = (struct sock_recved_msg_metadata *)kmalloc(sizeof(struct sock_recved_msg_metadata), GFP_KERNEL); //kmem_cache_alloc(imm_header_from_cq_to_port_cache, GFP_KERNEL);
+						tmp_sock->source_node_id = node_id;
+						tmp_sock->offset = offset + sizeof(int);
+						tmp_sock->size = wc[i].byte_len - sizeof(int);
+						if (if_internal_port)
+							tmp_sock->port = port;
+						else
+							tmp_sock->port = get_internal_port(MY_NODE_ID, port);
+						fit_debug("from node %d access to imm-0x%x offset %d port %d internal port %d mynode %d if-internal %d\n", 
+								node_id, wc[i].ex.imm_data, offset, port, tmp_sock->port, MY_NODE_ID, if_internal_port);
+						spin_lock(&ctx->sock_imm_waitqueue_perport_lock[tmp_sock->port]);
+						list_add_tail(&(tmp_sock->list), &ctx->sock_imm_waitqueue_perport[tmp_sock->port].list);
+						spin_unlock(&ctx->sock_imm_waitqueue_perport_lock[tmp_sock->port]);
+					}
+					else if(wc[i].ex.imm_data & SOCK_IMM_ACK || wc[i].byte_len == 0) // ack socket metadata
+					{
+						offset = wc[i].ex.imm_data & SOCK_IMM_GET_ACK_OFFSET;
+						fit_debug("%s: get ack from node %d offset %d\n", __func__, node_id, offset);
+
+						recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+						recv->src_id = node_id;
+						recv->msg = (char *)(long)offset;
+
+						spin_lock(&wq_lock);
+						list_add_tail(&(recv->list), &request_list.list);
+						spin_unlock(&wq_lock);
+					}
+					else //handle reply
+					{
+						length = wc[i].byte_len;
+						semaphore = wc[i].ex.imm_data & IMM_GET_SEMAPHORE;
+						//printk(KERN_CRIT "%s: case 2 semaphore-%d len-%d\n", __func__, semaphore, wc[i].byte_len);
+						//*(int *)(ctx->imm_inbox_semaphore[semaphore]) = wc[i].byte_len;
+
+						fit_debug("case 2 semaphore-%d len-%d inboxaddr %lx\n",
+							semaphore, wc[i].byte_len, ctx->imm_inbox_semaphore[semaphore]);
+
+						memcpy((void *)ctx->imm_inbox_semaphore[semaphore], &length, sizeof(int));
+
+						#ifdef ADAPTIVE_MODEL
+                	        		wake_up_interruptible(&ctx->imm_inbox_block_queue[semaphore]);//Wakeup waiting queue
+						#endif
+						#ifdef SCHEDULE_MODEL
+						wake_up_process(ctx->imm_inbox_semaphore_task[semaphore]);
+						ctx->imm_inbox_semaphore_task[semaphore]=NULL;
+						#endif
+
+						ctx->imm_inbox_semaphore[semaphore] = NULL;
+						clear_bit(semaphore, ctx->imm_inbox_semaphore_bitmap);
+					}
+				}
+				
+				if(GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
+				{
+					connection_id = client_find_sock_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
+					if (connection_id == -1) {
+						pr_crit("Error: cannot find qp number %d\n", wc[i].qp->qp_num);
+						continue;
+					}
+					sock_post_receives_message(ctx, connection_id, ctx->rx_depth/4);
+
+					recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+					recv->length = ctx->rx_depth/4;
+					recv->src_id = connection_id;
+					recv->type = MSG_DO_RC_POST_RECEIVE;
+
+					spin_lock(&wq_lock);
+					list_add_tail(&(recv->list), &request_list.list);
+					spin_unlock(&wq_lock);
+				}
+			}
+			else
+			{	
+				connection_id = client_find_sock_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
+				printk(KERN_ALERT "%s: connection %d Recv weird event as %d\n", __func__, connection_id, (int)wc[i].opcode);
+			}
+
+		}
+	}
+	return 0;
+}
+#endif
 
 int client_poll_cq_pass(void *in)
 {
@@ -1151,7 +1993,13 @@ int waiting_queue_handler(void *in)
 #endif
 					imm_data = IMM_ACK | offset;
 					//printk(KERN_CRIT "%s sending ack offset %d targetnode %d imm %x\n", __func__, offset, target_node, imm_data);
-					client_send_message_with_rdma_write_with_imm_request(ctx, target_node * NUM_PARALLEL_CONNECTION, 0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+#ifdef CONFIG_SOCKET_O_IB					
+					client_send_message_with_rdma_write_with_imm_request(ctx, target_node * (NUM_PARALLEL_CONNECTION + 1), 
+							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+#else					
+					client_send_message_with_rdma_write_with_imm_request(ctx, target_node * NUM_PARALLEL_CONNECTION, 
+							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+#endif					
 					break;
 				}
 			case MSG_DO_ACK_REMOTE:
@@ -1161,6 +2009,26 @@ int waiting_queue_handler(void *in)
 					ctx->remote_last_ack_index[new_request->src_id] = last_ack;
 					break;
 				}
+#ifdef CONFIG_SOCKET_INTERFACE
+			case MSG_SOCK_DO_ACK_INTERNAL:
+				{
+					//First do check again
+					int offset = new_request->length;
+					int target_node = (int)(long)new_request->msg; //ptr->node;
+					//printk(KERN_CRIT "%s: [generate ACK node-%d port-%d offset-%d]\n", __func__, target_node, target_port, offset);
+					imm_data = SOCK_IMM_ACK | offset;
+					//printk(KERN_CRIT "%s sending ack offset %d targetnode %d imm %x\n", __func__, offset, target_node, imm_data);
+					sock_send_message_with_rdma_imm(ctx, target_node, 0, 0, 0, 0, 0, offset, NULL, 0, FIT_SEND_ACK_IMM_ONLY, FIT_KERNELSPACE_FLAG);
+					break;
+				}
+			case MSG_SOCK_DO_ACK_REMOTE:
+				{
+					last_ack = (int)(long)new_request->msg;
+					//printk(KERN_CRIT "%s: [receive ACK node-%d offset-%d]\n", __func__, new_request->src_id, last_ack);
+					ctx->remote_sock_last_ack_index[new_request->src_id] = last_ack;
+					break;
+				}
+#endif				
 			default:
 				printk(KERN_ALERT "%s: receive weird event %d\n", __func__, new_request->type);
 		}
@@ -1606,19 +2474,31 @@ int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
 	int connection_id;
 	char *msg;
 	int ret;
+	int size;
 
+#ifdef CONFIG_SOCKET_O_IB
+	msg = kmalloc(2 * sizeof(struct client_ibv_mr), GFP_KERNEL);
+	size = 2 * sizeof(struct client_ibv_mr);
+#else
 	msg = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
+	size = sizeof(struct client_ibv_mr);
+#endif
 	for (i = 0; i < ctx->num_node; i++) {
 		if (ctx->node_id == i)
 			continue;
 		memcpy(msg, &ctx->local_rdma_ring_mrs[i], sizeof(struct client_ibv_mr)); 
+#ifdef CONFIG_SOCKET_O_IB
+		connection_id = (NUM_PARALLEL_CONNECTION + 1) * i;
+		memcpy(msg + sizeof(struct client_ibv_mr), &ctx->local_sock_rdma_ring_mrs[i], sizeof(struct client_ibv_mr)); 
+#else
 		connection_id = NUM_PARALLEL_CONNECTION * i;
-		fit_debug("send ringmr addr %p lkey %lx rkey %lx conn %d node %d\n",
+#endif
+		fit_debug("send ringmr addr %p lkey %lx rkey %lx sockaddr %p conn %d node %d\n",
 				ctx->local_rdma_ring_mrs[i].addr,
 				ctx->local_rdma_ring_mrs[i].lkey, 
-				ctx->local_rdma_ring_mrs[i].rkey, connection_id, i);
-		//ret = client_send_test(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);
-		ret = client_send_message_sge(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);
+				ctx->local_rdma_ring_mrs[i].rkey,
+				ctx->local_sock_rdma_ring_mrs[i], connection_id, i);
+		ret = client_send_message_sge(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, size, 0, 0, LOW_PRIORITY);
 	}
 	kfree(msg);
 
@@ -1631,7 +2511,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
         int temp_ctx_number;
 	ppc *ctx;
 	struct client_ibv_mr *ret_mr;
-	struct thread_pass_struct thread_pass_poll_cq;
+	struct thread_pass_struct thread_pass_poll_cq, sock_thread_pass_poll_cq;
 	int num_connected_nodes = 0;
 	num_recvd_rdma_ring_mrs = 0;
 
@@ -1654,10 +2534,17 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
         
         Connected_Ctx[temp_ctx_number-1] = ctx;
 
-	for(i=0;i<MAX_CONNECTION;i++)
+	for (i = 0; i < MAX_CONNECTION; i++)
 	{
 		spin_lock_init(&connection_lock[i]);
 	}
+
+#ifdef CONFIG_SOCKET_O_IB
+	for (i = 0; i < MAX_NODE; i++) {
+		spin_lock_init(&sock_qp_lock[i]);
+	}
+#endif
+
 	//Initialize waiting_queue/request list related items
 	spin_lock_init(&wq_lock);
 	INIT_LIST_HEAD(&(request_list.list));
@@ -1669,6 +2556,11 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	thread_pass_poll_cq.ctx = ctx;
 	thread_pass_poll_cq.target_cq = ctx->cq[0];
 	kthread_run(client_poll_cq_pass, &thread_pass_poll_cq, "recvpollcq");
+#ifdef CONFIG_SOCKET_INTERFACE
+	sock_thread_pass_poll_cq.ctx = ctx;
+	sock_thread_pass_poll_cq.target_cq = ctx->sock_recv_cq;
+	kthread_run(sock_poll_cq, &sock_thread_pass_poll_cq, "sockrecvpollcq");
+#endif
 	//wake_up_process(thread);
 
 	kthread_run(waiting_queue_handler, ctx, "wq_handler");
@@ -1709,7 +2601,36 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		spin_lock_init(&ctx->local_last_ack_index_lock[i]);
 	}
 
+#ifdef CONFIG_SOCKET_O_IB
+	/*
+	 * Allocate and register local RDMA-IMM rings for socket
+	 */
+	ctx->local_sock_rdma_recv_rings = kmalloc(MAX_NODE * sizeof(void *), GFP_KERNEL);
+	ctx->local_sock_rdma_ring_mrs = (struct client_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct client_ibv_mr), GFP_KERNEL);
+	for(i = 0; i < MAX_NODE; i++)
+	{
+		ctx->local_sock_rdma_recv_rings[i] = client_alloc_memory_for_mr(SOCK_PERNODE_RECV_MR_SIZE);
+		ret_mr = client_ib_reg_mr(ctx, ctx->local_sock_rdma_recv_rings[i], SOCK_PERNODE_RECV_MR_SIZE,
+				IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
+		memcpy(&ctx->local_sock_rdma_ring_mrs[i], ret_mr, sizeof(struct client_ibv_mr));
+		//printk(KERN_CRIT "allocated local recv mr for node %d addr %p %p lkey %d rkey %d",
+		//		i, ctx->local_rdma_recv_rings[i], ret_mr->addr, ret_mr->lkey, ret_mr->rkey);
+	}
+	/* array to store rdma ring mr for socket */
+	ctx->remote_sock_rdma_ring_mrs = (struct client_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct client_ibv_mr), GFP_KERNEL);
+	ctx->remote_sock_rdma_ring_mrs_offset = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
+	ctx->remote_sock_last_ack_index = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
+	ctx->local_sock_last_ack_index = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
+	ctx->local_sock_last_ack_index_lock = (spinlock_t *)kmalloc(MAX_NODE * sizeof(spinlock_t), GFP_KERNEL);
+	ctx->remote_sock_imm_offset_lock = (spinlock_t *)kmalloc(MAX_NODE * sizeof(spinlock_t), GFP_KERNEL); 
+	for(i=0; i<MAX_NODE; i++) {
+		spin_lock_init(&ctx->remote_sock_imm_offset_lock[i]);
+		spin_lock_init(&ctx->local_sock_last_ack_index_lock[i]);
+	}
+#endif
+
 	fit_debug("node: %d allocated local rdma buffers, about to connect qps\n", mynodeid);
+
 	ctx->node_id = mynodeid;
 	for (i = 0; i < mynodeid; i++) {
 		client_add_newnode(ctx, i, mynodeid);

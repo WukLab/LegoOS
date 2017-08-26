@@ -1,28 +1,103 @@
 #ifndef _LEGO_SOCKET_H
 #define _LEGO_SOCKET_H
 
-//#include <asm/socket.h>			/* arch-dependent defines	*/
-//#include <lego/sockios.h>		/* the SIOCxxx I/O controls	*/
-//#include <lego/uio.h>			/* iovec support		*/
-#include <lego/types.h>		/* pid_t			*/
+#include <lego/types.h>		
+#include <lego/list.h>
+
+/*
+ * Definitions of the bits in an Internet address integer.
+ * On subnets, host and network parts are found according
+ * to the subnet mask, not these masks.
+ */
+#define	IN_CLASSA(a)		((((long int) (a)) & 0x80000000) == 0)
+#define	IN_CLASSA_NET		0xff000000
+#define	IN_CLASSA_NSHIFT	24
+#define	IN_CLASSA_HOST		(0xffffffff & ~IN_CLASSA_NET)
+#define	IN_CLASSA_MAX		128
+
+#define	IN_CLASSB(a)		((((long int) (a)) & 0xc0000000) == 0x80000000)
+#define	IN_CLASSB_NET		0xffff0000
+#define	IN_CLASSB_NSHIFT	16
+#define	IN_CLASSB_HOST		(0xffffffff & ~IN_CLASSB_NET)
+#define	IN_CLASSB_MAX		65536
+
+#define	IN_CLASSC(a)		((((long int) (a)) & 0xe0000000) == 0xc0000000)
+#define	IN_CLASSC_NET		0xffffff00
+#define	IN_CLASSC_NSHIFT	8
+#define	IN_CLASSC_HOST		(0xffffffff & ~IN_CLASSC_NET)
+
+#define	IN_CLASSD(a)		((((long int) (a)) & 0xf0000000) == 0xe0000000)
+#define	IN_MULTICAST(a)		IN_CLASSD(a)
+#define IN_MULTICAST_NET	0xF0000000
+
+#define	IN_EXPERIMENTAL(a)	((((long int) (a)) & 0xf0000000) == 0xf0000000)
+#define	IN_BADCLASS(a)		IN_EXPERIMENTAL((a))
+
+/* Address to accept any incoming messages. */
+#define	INADDR_ANY		((unsigned long int) 0x00000000)
+
+/* Address to send to all hosts. */
+#define	INADDR_BROADCAST	((unsigned long int) 0xffffffff)
+
+/* Address indicating an error return. */
+#define	INADDR_NONE		((unsigned long int) 0xffffffff)
+
+/* Network number for local host loopback. */
+#define	IN_LOOPBACKNET		127
+
+/* Address to loopback in software to local host.  */
+#define	INADDR_LOOPBACK		0x7f000001	/* 127.0.0.1   */
+#define	IN_LOOPBACK(a)		((((long int) (a)) & 0xff000000) == 0x7f000000)
+
+/* Defines for Multicast INADDR */
+#define INADDR_UNSPEC_GROUP   	0xe0000000U	/* 224.0.0.0   */
+#define INADDR_ALLHOSTS_GROUP 	0xe0000001U	/* 224.0.0.1   */
+#define INADDR_ALLRTRS_GROUP    0xe0000002U	/* 224.0.0.2 */
+#define INADDR_MAX_LOCAL_GROUP  0xe00000ffU	/* 224.0.0.255 */
+
+
+#define SOCK_SUCCEED 0
+#define SOCK_FAIL -1
+
+#define SOCK_MAX_IB_RECV_SIZE 4096*3
+#define MAX_SOCK_FD 100
+#define MAX_BUF_SIZE_FOR_NO_SOCK 1024*1024 /* global buffer for receiving data before socket is created */
+
+#define SOCK_KERNEL_START_PORT_NUM 32768 /* starting port number assigned in kernel */
+#define MAX_KERNEL_SOCK_PORTS 28232 /* maximum number of kernel assigned port numbers */
+
+#define MAX_SOCK_SEND_SIZE 1024*1024*4
+
+#define SOCK_IMM_SEND		0x30000000 // socket send data
+#define SOCK_IMM_ACK		0x10000000 // socket ack new mr offset
+#define MAX_SOCK_PORT_BITS	8 // maximum number of socket ports per node
+#define SOCK_PORT_HASH_BUCKET_BITS	5
+#define SOCK_MAX_OFFSET_BITS	20
+#define SOCK_PERNODE_RECV_MR_SIZE (1 << SOCK_MAX_OFFSET_BITS)
+#define SOCK_MAX_LISTEN_PORTS		(1 << MAX_SOCK_PORT_BITS)
+#define SOCK_IMM_GET_OFFSET	0x0fffffff
+#define SOCK_IMM_GET_ACK_OFFSET	0x00ffffff
+#define SOCK_IMM_GET_PORT	0x000000ff
+#define SOCK_GET_IF_PORT_INTERNAL_BIT	0xf0000000
+#define SOCK_GET_PORT 0x0fffffff
+#define SOCK_IF_PORT_INTERNAL_BITS	28
 
 typedef unsigned short	sa_family_t;
 
 struct in_addr {
-	u32_t s_addr;
+	u32 s_addr;
 };
 
 struct sockaddr_in {
-	sa_family_t	sa_family;	/* address family, AF_xxx	*/
-  	unsigned short sin_port;
-	struct in_addr sin_addr;
+	sa_family_t	sin_family;	/* address family, AF_xxx	*/
+  	unsigned short	sin_port;
+	struct in_addr	sin_addr;
 	char sin_zero[8];
 };
 
 /*
  *	1003.1g requires sa_family_t and that sa_data is char.
  */
- 
 struct sockaddr {
 	sa_family_t	sa_family;	/* address family, AF_xxx	*/
 	char		sa_data[14];	/* 14 bytes of protocol address	*/
@@ -33,111 +108,202 @@ struct linger {
 	int		l_linger;	/* How long to linger for	*/
 };
 
+#define SOCK_BUILD_CONN 123
+
+struct lego_sock_conn {
+	int			op_code;
+	int			fit_node_id; /* this field can store OP when sending conn header */
+	struct sockaddr_in	sockaddr;
+	int			sockaddr_len;
+	int			internal_port;
+	struct list_head	list;
+};
+
+struct sock_recved_msg_metadata
+{       
+        uint32_t        source_node_id;
+	uint32_t	offset;
+	uint32_t	size;
+	uint32_t	port;
+	struct list_head list;
+};
+
+struct lego_socket {
+	int			fd;
+	struct sockaddr_in	sockaddr;
+	int			addr_len;
+	struct sockaddr_in	peer_sockaddr;
+	int			peer_addr_len;
+	int			peer_internal_port;
+	int			local_port;
+	int			local_internal_port;
+	int			status;
+	unsigned short		sa_family;
+	int			type;
+	int			peer_node_id;
+	int			max_num_conn;
+	int			curr_num_conn;
+	struct lego_sock_conn	recvd_conn_list; /* we now assume only one thread calling socket listen, so no need to lock the list */
+	struct list_head	list;
+};
+
+struct lego_sock_header {
+	struct sockaddr_in	*sockaddr;
+	int	addr_len;
+	int	sender;
+	int	flow_id;
+	int	packet_id;
+	int 	flow_size;
+};
+
+struct sock_conn_handshake_metadata {
+	int	status;
+	int	peer_port;
+};
+
+#define SOCK_INVALID 0
+#define SOCK_CREATED 1
+#define SOCK_LISTEN 2
+#define SOCK_BOUND 3
+#define SOCK_CONNECT_REQUESTED 4
+#define SOCK_CONNECT_ACCEPTED 5
+#define SOCK_CONNECT_ACKED 6
+#define SOCK_CONNECTED 7
+
+#define NEW_CONN -1
+
+/* return code */
+#define SOCK_SUCCEED 0
+#define SOCK_RECV_SIZE_TOO_BIG 1
+
+struct sock_port_to_ib_port {
+	int			fit_port;
+	struct hlist_node	hlist;
+};
+
+#define MSG_CMSG_COMPAT	0
+
+/* only supporting 64 bit */
+#ifndef __kernel_size_t
+typedef unsigned long	__kernel_size_t;
+typedef long		__kernel_ssize_t;
+typedef long		__kernel_ptrdiff_t;
+#endif
+
 #if 0
-/*
- *	As we do 4.4BSD message passing we use a 4.4BSD message passing
- *	system, not 4.3. Thus msg_accrights(len) are now missing. They
- *	belong in an obscure libc emulation or the bin.
- */
- 
+struct iov_iter {
+	int type;
+	size_t iov_offset;
+	size_t count;
+	union {
+		const struct iovec *iov;
+	};
+	union {
+		unsigned long nr_segs;
+		struct {
+			int idx;
+			int start_idx;
+		};
+	};
+};
+
 struct msghdr {
-	void	*	msg_name;	/* Socket name			*/
-	int		msg_namelen;	/* Length of name		*/
-	struct iovec *	msg_iov;	/* Data blocks			*/
-	__kernel_size_t	msg_iovlen;	/* Number of blocks		*/
-	void 	*	msg_control;	/* Per protocol magic (eg BSD file descriptor passing) */
-	__kernel_size_t	msg_controllen;	/* Length of cmsg list */
-	unsigned	msg_flags;
+	void		*msg_name;	/* ptr to socket address structure */
+	int		msg_namelen;	/* size of socket address structure */
+	struct iov_iter	msg_iter;	/* data */
+	void		*msg_control;	/* ancillary data */
+	__kernel_size_t	msg_controllen;	/* ancillary data buffer length */
+	unsigned int	msg_flags;	/* flags on received message */
+};
+#endif
+
+struct user_msghdr {
+	void		__user *msg_name;	/* ptr to socket address structure */
+	int		msg_namelen;		/* size of socket address structure */
+	struct iovec	__user *msg_iov;	/* scatter/gather array */
+	__kernel_size_t	msg_iovlen;		/* # elements in msg_iov */
+	void		__user *msg_control;	/* ancillary data */
+	__kernel_size_t	msg_controllen;		/* ancillary data buffer length */
+	unsigned int	msg_flags;		/* flags on received message */
 };
 
-/*
- *	POSIX 1003.1g - ancillary data object information
- *	Ancillary data consits of a sequence of pairs of
- *	(cmsghdr, cmsg_data[])
- */
+#define SOCK_ASYNC_NOSPACE	0
+#define SOCK_ASYNC_WAITDATA	1
+#define SOCK_NOSPACE		2
+#define SOCK_PASSCRED		3
+#define SOCK_PASSSEC		4
+#define SOCK_EXTERNALLY_ALLOCATED 5
 
-struct cmsghdr {
-	__kernel_size_t	cmsg_len;	/* data byte count, including hdr */
-        int		cmsg_level;	/* originating protocol */
-        int		cmsg_type;	/* protocol-specific type */
-};
+#ifndef ARCH_HAS_SOCKET_TYPES
 
-/*
- *	Ancilliary data object information MACROS
- *	Table 5-14 of POSIX 1003.1g
- */
+#define SOCK_MAX (SOCK_PACKET + 1)
+/* Mask which covers at least up to SOCK_MASK-1.  The
+ *  * remaining bits are used as flags. */
+#define SOCK_TYPE_MASK 0xf
 
-#define __CMSG_NXTHDR(ctl, len, cmsg) __cmsg_nxthdr((ctl),(len),(cmsg))
-#define CMSG_NXTHDR(mhdr, cmsg) cmsg_nxthdr((mhdr), (cmsg))
+#ifndef O_CLOEXEC
+#define O_CLOEXEC	02000000	/* set close_on_exec */
+#endif
+#ifndef O_NONBLOCK
+#define O_NONBLOCK	00004000
+#endif
 
-#define CMSG_ALIGN(len) ( ((len)+sizeof(long)-1) & ~(sizeof(long)-1) )
+/* Flags for socket, socketpair, accept4 */
+#define SOCK_CLOEXEC	O_CLOEXEC
+#ifndef SOCK_NONBLOCK
+#define SOCK_NONBLOCK	O_NONBLOCK
+#endif
 
-#define CMSG_DATA(cmsg)	((void *)((char *)(cmsg) + CMSG_ALIGN(sizeof(struct cmsghdr))))
-#define CMSG_SPACE(len) (CMSG_ALIGN(sizeof(struct cmsghdr)) + CMSG_ALIGN(len))
-#define CMSG_LEN(len) (CMSG_ALIGN(sizeof(struct cmsghdr)) + (len))
-
-#define __CMSG_FIRSTHDR(ctl,len) ((len) >= sizeof(struct cmsghdr) ? \
-				  (struct cmsghdr *)(ctl) : \
-				  (struct cmsghdr *)NULL)
-#define CMSG_FIRSTHDR(msg)	__CMSG_FIRSTHDR((msg)->msg_control, (msg)->msg_controllen)
+#endif /* ARCH_HAS_SOCKET_TYPES */
 
 /*
- *	This mess will go away with glibc
+ * defines related to epoll
  */
- 
-#ifdef __KERNEL__
-#define __KINLINE static inline
-#elif  defined(__GNUC__) 
-#define __KINLINE static __inline__
-#elif defined(__cplusplus)
-#define __KINLINE static inline
+
+/* Flags for epoll_create1.  */
+#define EPOLL_CLOEXEC O_CLOEXEC
+
+/* Valid opcodes to issue to sys_epoll_ctl() */
+#define EPOLL_CTL_ADD 1
+#define EPOLL_CTL_DEL 2
+#define EPOLL_CTL_MOD 3
+
+/*
+ * Request the handling of system wakeup events so as to prevent system suspends
+ * from happening while those events are being processed.
+ *
+ * Assuming neither EPOLLET nor EPOLLONESHOT is set, system suspends will not be
+ * re-allowed until epoll_wait is called again after consuming the wakeup
+ * event(s).
+ *
+ * Requires CAP_BLOCK_SUSPEND
+ */
+#define EPOLLWAKEUP (1 << 29)
+
+/* Set the One Shot behaviour for the target file descriptor */
+#define EPOLLONESHOT (1 << 30)
+
+/* Set the Edge Triggered behaviour for the target file descriptor */
+#define EPOLLET (1 << 31)
+
+/* 
+ * On x86-64 make the 64bit structure have the same alignment as the
+ * 32bit structure. This makes 32bit emulation easier.
+ *
+ * UML/x86_64 needs the same packing as x86_64
+ */
+#ifdef __x86_64__
+#define EPOLL_PACKED __attribute__((packed))
 #else
-#define __KINLINE static
+#define EPOLL_PACKED
 #endif
 
+struct epoll_event {
+	__u32 events;
+	__u64 data;
+} EPOLL_PACKED;
 
-/*
- *	Get the next cmsg header
- *
- *	PLEASE, do not touch this function. If you think, that it is
- *	incorrect, grep kernel sources and think about consequences
- *	before trying to improve it.
- *
- *	Now it always returns valid, not truncated ancillary object
- *	HEADER. But caller still MUST check, that cmsg->cmsg_len is
- *	inside range, given by msg->msg_controllen before using
- *	ansillary object DATA.				--ANK (980731)
- */
- 
-__KINLINE struct cmsghdr * __cmsg_nxthdr(void *__ctl, __kernel_size_t __size,
-					       struct cmsghdr *__cmsg)
-{
-	struct cmsghdr * __ptr;
-
-	__ptr = (struct cmsghdr*)(((unsigned char *) __cmsg) +  CMSG_ALIGN(__cmsg->cmsg_len));
-	if ((unsigned long)((char*)(__ptr+1) - (char *) __ctl) > __size)
-		return (struct cmsghdr *)0;
-
-	return __ptr;
-}
-
-__KINLINE struct cmsghdr * cmsg_nxthdr (struct msghdr *__msg, struct cmsghdr *__cmsg)
-{
-	return __cmsg_nxthdr(__msg->msg_control, __msg->msg_controllen, __cmsg);
-}
-
-/* "Socket"-level control message types: */
-
-#define	SCM_RIGHTS	0x01		/* rw: access rights (array of int) */
-#define SCM_CREDENTIALS 0x02		/* rw: struct ucred		*/
-#define SCM_CONNECT	0x03		/* rw: struct scm_connect	*/
-
-struct ucred {
-	__u32	pid;
-	__u32	uid;
-	__u32	gid;
-};
-#endif
+/* end of epoll defines */
 
 /* Supported address families. */
 #define AF_UNSPEC	0
@@ -167,6 +333,27 @@ struct ucred {
 #define AF_IRDA		23	/* IRDA sockets			*/
 #define AF_PPPOX	24	/* PPPoX sockets		*/
 #define AF_MAX		32	/* For now.. */
+
+/**
+ * enum sock_type - Socket types
+ * @SOCK_STREAM: stream (connection) socket
+ * @SOCK_DGRAM: datagram (conn.less) socket
+ * @SOCK_RAW: raw socket
+ * @SOCK_RDM: reliably-delivered message
+ * @SOCK_SEQPACKET: sequential packet socket
+ * @SOCK_DCCP: Datagram Congestion Control Protocol socket
+ * @SOCK_PACKET: linux specific way of getting packets at the dev level.
+ *		  For writing rarp and other similar things on the user level.
+ */
+enum sock_type {
+	SOCK_STREAM	= 1,
+	SOCK_DGRAM	= 2,
+	SOCK_RAW	= 3,
+	SOCK_RDM	= 4,
+	SOCK_SEQPACKET	= 5,
+	SOCK_DCCP	= 6,
+	SOCK_PACKET	= 10,
+};
 
 /* Protocol families, same as address families. */
 #define PF_UNSPEC	AF_UNSPEC
@@ -246,24 +433,5 @@ struct ucred {
 
 /* IPX options */
 #define IPX_TYPE	1
-
-#if 0
-#ifdef __KERNEL__
-extern int memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len);
-extern int memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, 
-				int offset, int len);
-extern int csum_partial_copy_fromiovecend(unsigned char *kdata, 
-					  struct iovec *iov, 
-					  int offset, 
-					  unsigned int len, int *csump);
-
-extern int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode);
-extern int memcpy_toiovec(struct iovec *v, unsigned char *kdata, int len);
-extern void memcpy_tokerneliovec(struct iovec *iov, unsigned char *kdata, int len);
-extern int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen);
-extern int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr);
-extern int put_cmsg(struct msghdr*, int level, int type, int len, void *data);
-#endif
-#endif
 
 #endif /* _LEGO_SOCKET_H */

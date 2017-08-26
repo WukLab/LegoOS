@@ -172,5 +172,12 @@ struct callback_head {
 
 #define rcu_head callback_head
 
+#undef __FD_SETSIZE
+#define __FD_SETSIZE	1024
+
+typedef struct {
+	unsigned long fds_bits[__FD_SETSIZE / (8 * sizeof(long))];
+} fd_set;
+
 #endif /* __ASSEMBLY__ */
 #endif /* _LEGO_TYPES_H_ */
