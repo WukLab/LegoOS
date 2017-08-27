@@ -11,8 +11,15 @@
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
 
-#define EXIT_TO_USERMODE_LOOP_FLAGS				\
-	(_TIF_SIGPENDING | _TIF_NEED_RESCHED)
+#include <lego/comp_processor.h>
+
+/*
+ * Low-level thread flags we need to check before return to user-mode.
+ * Each flag represents a pending job. Flags may be re-set during the
+ * handling of the jobs:
+ */
+#define EXIT_TO_USERMODE_LOOP_FLAGS \
+	(_TIF_SIGPENDING | _TIF_NEED_RESCHED | _TIF_NEED_CHECKPOINT)
 
 static void exit_to_usermode_loop(struct pt_regs *regs, u32 cached_flags)
 {
@@ -27,6 +34,9 @@ static void exit_to_usermode_loop(struct pt_regs *regs, u32 cached_flags)
 	while (true) {
 		/* We have work to do. */
 		local_irq_enable();
+
+		if (cached_flags & _TIF_NEED_CHECKPOINT)
+			checkpoint_process(current);
 
 		if (cached_flags & _TIF_NEED_RESCHED)
 			schedule();

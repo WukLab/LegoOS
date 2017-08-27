@@ -545,10 +545,16 @@ static inline int test_ti_thread_flag(struct thread_info *ti, int flag)
 	test_ti_thread_flag(current_thread_info(), flag)
 
 #define tif_need_resched()	test_thread_flag(TIF_NEED_RESCHED)
+#define tif_need_checkpoint()	test_thread_flag(TIF_NEED_CHECKPOINT)
 
 static __always_inline bool need_resched(void)
 {
 	return unlikely(tif_need_resched());
+}
+
+static __always_inline bool need_checkpoint(void)
+{
+	return unlikely(tif_need_checkpoint());
 }
 
 /*
@@ -593,6 +599,21 @@ static inline void clear_tsk_need_resched(struct task_struct *tsk)
 static inline int test_tsk_need_resched(struct task_struct *tsk)
 {
 	return unlikely(test_tsk_thread_flag(tsk, TIF_NEED_RESCHED));
+}
+
+static inline void set_tsk_need_checkpoint(struct task_struct *tsk)
+{
+	set_tsk_thread_flag(tsk, TIF_NEED_CHECKPOINT);
+}
+
+static inline void clear_tsk_need_checkpoint(struct task_struct *tsk)
+{
+	clear_tsk_thread_flag(tsk, TIF_NEED_CHECKPOINT);
+}
+
+static inline int test_tsk_need_checkpoint(struct task_struct *tsk)
+{
+	return unlikely(test_tsk_thread_flag(tsk, TIF_NEED_CHECKPOINT));
 }
 
 /*

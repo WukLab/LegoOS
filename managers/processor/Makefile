@@ -8,3 +8,4 @@ obj-y += fork.o
 obj-y += exec.o
 obj-y += mmap.o
 obj-y += fs/
+obj-y += checkpoint.o

@@ -27,10 +27,16 @@ static inline int pcache_range_register(u64 start, u64 size)
 {
 	return 0;
 }
+int checkpoint_process(struct task_struct *tsk);
 #endif
 
 int do_execve(const char *filename,
 	      const char * const *argv,
 	      const char * const *envp);
 
+static inline int checkpoint_process(struct task_struct *tsk)
+{
+/* Checkpointing is only available in Processor-Component */
+	BUG();
+}
 #endif /* _LEGO_COMP_PROCESSOR_H_ */
