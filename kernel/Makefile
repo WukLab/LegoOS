@@ -24,3 +24,4 @@ obj-y += signal.o
 obj-y += coredump.o
 obj-y += futex.o
 obj-y += madvise.o
+obj-y += stop_machine.o

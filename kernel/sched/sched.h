@@ -346,26 +346,6 @@ extern const struct sched_class idle_sched_class;
 
 void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask);
 
-#ifdef CONFIG_SMP
-void do_set_cpus_allowed(struct task_struct *p,
-			 const struct cpumask *new_mask);
-
-int set_cpus_allowed_ptr(struct task_struct *p,
-			 const struct cpumask *new_mask);
-#else
-static inline void do_set_cpus_allowed(struct task_struct *p,
-				       const struct cpumask *new_mask)
-{
-}
-static inline int set_cpus_allowed_ptr(struct task_struct *p,
-				       const struct cpumask *new_mask)
-{
-	if (!cpumask_test_cpu(0, new_mask))
-		return -EINVAL;
-	return 0;
-}
-#endif
-
 #define RQCF_REQ_SKIP	0x01
 #define RQCF_ACT_SKIP	0x02
 

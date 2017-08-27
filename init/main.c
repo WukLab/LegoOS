@@ -19,12 +19,13 @@
 #include <lego/list.h>
 #include <lego/slab.h>
 #include <lego/time.h>
+#include <lego/wait.h>
 #include <lego/timex.h>
 #include <lego/futex.h>
-#include <lego/wait.h>
 #include <lego/timer.h>
 #include <lego/delay.h>
 #include <lego/sched.h>
+#include <lego/memory.h>
 #include <lego/string.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>
@@ -35,11 +36,9 @@
 #include <lego/nodemask.h>
 #include <lego/spinlock.h>
 #include <lego/irqdomain.h>
-#include <lego/pci.h>
-#include <lego/net.h>
-#include <lego/memory.h>
 #include <lego/workqueue.h>
 #include <lego/completion.h>
+#include <lego/stop_machine.h>
 
 #include <lego/comp_memory.h>
 #include <lego/comp_processor.h>
@@ -105,6 +104,9 @@ static int kernel_init(void *unused)
 	/* Wait until kthreadd is all set-up. */
 	wait_for_completion(&kthreadd_done);
 	set_task_comm(current, "kernel_init");
+
+	/* Init stop-class threads: */
+	//cpu_stop_init();
 
 	init_workqueues();
 

@@ -669,8 +669,30 @@ void scheduler_tick(void);
 /* Reschedule IPI */
 #ifdef CONFIG_SMP
 void scheduler_ipi(void);
+unsigned long wait_task_inactive(struct task_struct *, long match_state);
+void do_set_cpus_allowed(struct task_struct *p,
+			 const struct cpumask *new_mask);
+
+int set_cpus_allowed_ptr(struct task_struct *p,
+			 const struct cpumask *new_mask);
 #else
 static inline void scheduler_ipi(void) { }
+static inline unsigned long wait_task_inactive(struct task_struct *p,
+					       long match_state)
+{
+	return 1;
+}
+static inline void do_set_cpus_allowed(struct task_struct *p,
+				       const struct cpumask *new_mask)
+{
+}
+static inline int set_cpus_allowed_ptr(struct task_struct *p,
+				       const struct cpumask *new_mask)
+{
+	if (!cpumask_test_cpu(0, new_mask))
+		return -EINVAL;
+	return 0;
+}
 #endif
 
 int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask);
@@ -754,11 +776,29 @@ extern char __sched_text_start[], __sched_text_end[];
 /* Is this address in the __sched functions? */
 int in_sched_functions(unsigned long addr);
 
+static inline int signal_pending(struct task_struct *p)
+{
+	return unlikely(test_tsk_thread_flag(p,TIF_SIGPENDING));
+}
+
+static inline int __fatal_signal_pending(struct task_struct *p)
+{
+	return unlikely(sigismember(&p->pending.signal, SIGKILL));
+}
+
+static inline int fatal_signal_pending(struct task_struct *p)
+{
+	return signal_pending(p) && __fatal_signal_pending(p);
+}
+
 static inline int signal_pending_state(long state, struct task_struct *p)
 {
 	if (!(state & (TASK_INTERRUPTIBLE | TASK_WAKEKILL)))
 		return 0;
-	return 0;
+	if (!signal_pending(p))
+		return 0;
+
+	return (state & TASK_INTERRUPTIBLE) || __fatal_signal_pending(p);
 }
 
 /* arch-specific exit */
@@ -813,21 +853,6 @@ void task_clear_jobctl_pending(struct task_struct *task, unsigned long mask);
 
 void __init fork_init(void);
 extern int arch_task_struct_size __read_mostly;
-
-static inline int signal_pending(struct task_struct *p)
-{
-	return unlikely(test_tsk_thread_flag(p,TIF_SIGPENDING));
-}
-
-static inline int __fatal_signal_pending(struct task_struct *p)
-{
-	return unlikely(sigismember(&p->pending.signal, SIGKILL));
-}
-
-static inline int fatal_signal_pending(struct task_struct *p)
-{
-	return signal_pending(p) && __fatal_signal_pending(p);
-}
 
 void set_current_blocked(sigset_t *);
 void __set_current_blocked(const sigset_t *);

@@ -14,6 +14,8 @@
 #include <lego/spinlock.h>
 #include <lego/completion.h>
 
+#include <asm/numa.h>
+
 static DEFINE_SPINLOCK(kthread_create_lock);
 static LIST_HEAD(kthread_create_list);
 struct task_struct *kthreadd_task;
@@ -47,6 +49,50 @@ enum KTHREAD_BITS {
 	KTHREAD_IS_PARKED,
 };
 
+#define __to_kthread(vfork)	\
+	container_of(vfork, struct kthread, exited)
+
+static inline struct kthread *to_kthread(struct task_struct *k)
+{
+	return __to_kthread(k->vfork_done);
+}
+
+static struct kthread *to_live_kthread(struct task_struct *k)
+{
+	struct completion *vfork = ACCESS_ONCE(k->vfork_done);
+	if (likely(vfork))
+		return __to_kthread(vfork);
+	return NULL;
+}
+
+/**
+ * kthread_should_stop - should this kthread return now?
+ *
+ * When someone calls kthread_stop() on your kthread, it will be woken
+ * and this will return true.  You should then return, and your return
+ * value will be passed through to kthread_stop().
+ */
+bool kthread_should_stop(void)
+{
+	return test_bit(KTHREAD_SHOULD_STOP, &to_kthread(current)->flags);
+}
+
+/**
+ * kthread_should_park - should this kthread park now?
+ *
+ * When someone calls kthread_park() on your kthread, it will be woken
+ * and this will return true.  You should then do the necessary
+ * cleanup and call kthread_parkme()
+ *
+ * Similar to kthread_should_stop(), but this keeps the thread alive
+ * and in a park position. kthread_unpark() "restarts" the thread and
+ * calls the thread function again.
+ */
+bool kthread_should_park(void)
+{
+	return test_bit(KTHREAD_SHOULD_PARK, &to_kthread(current)->flags);
+}
+
 static void __kthread_parkme(struct kthread *self)
 {
 	__set_current_state(TASK_PARKED);
@@ -58,6 +104,11 @@ static void __kthread_parkme(struct kthread *self)
 	}
 	clear_bit(KTHREAD_IS_PARKED, &self->flags);
 	__set_current_state(TASK_RUNNING);
+}
+
+void kthread_parkme(void)
+{
+	__kthread_parkme(to_kthread(current));
 }
 
 static struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
@@ -176,6 +227,7 @@ static int kthread(void *_create)
 	self.data = data;
 	init_completion(&self.exited);
 	init_completion(&self.parked);
+	current->vfork_done = &self.exited;
 
 	/* If user was SIGKILLed, I release the structure. */
 	done = xchg(&create->done, NULL);
@@ -223,6 +275,135 @@ static void create_kthread(struct kthread_create_info *create)
 		create->result = ERR_PTR(pid);
 		complete(done);
 	}
+}
+
+static void __kthread_bind_mask(struct task_struct *p, const struct cpumask *mask, long state)
+{
+	if (!wait_task_inactive(p, state)) {
+		WARN_ON(1);
+		return;
+	}
+
+	do_set_cpus_allowed(p, mask);
+	p->flags |= PF_NO_SETAFFINITY;
+}
+
+static void __kthread_bind(struct task_struct *p, unsigned int cpu, long state)
+{
+	__kthread_bind_mask(p, cpumask_of(cpu), state);
+}
+
+void kthread_bind_mask(struct task_struct *p, const struct cpumask *mask)
+{
+	__kthread_bind_mask(p, mask, TASK_UNINTERRUPTIBLE);
+}
+
+/**
+ * kthread_bind - bind a just-created kthread to a cpu.
+ * @p: thread created by kthread_create().
+ * @cpu: cpu (might not be online, must be possible) for @k to run on.
+ *
+ * Description: This function is equivalent to set_cpus_allowed(),
+ * except that @cpu doesn't need to be online, and the thread must be
+ * stopped (i.e., just returned from kthread_create()).
+ */
+void kthread_bind(struct task_struct *p, unsigned int cpu)
+{
+	__kthread_bind(p, cpu, TASK_UNINTERRUPTIBLE);
+}
+
+/**
+ * kthread_create_on_cpu - Create a cpu bound kthread
+ * @threadfn: the function to run until signal_pending(current).
+ * @data: data ptr for @threadfn.
+ * @cpu: The cpu on which the thread should be bound,
+ * @namefmt: printf-style name for the thread. Format is restricted
+ *	     to "name.*%u". Code fills in cpu number.
+ *
+ * Description: This helper function creates and names a kernel thread
+ * The thread will be woken and put into park mode.
+ */
+struct task_struct *kthread_create_on_cpu(int (*threadfn)(void *data),
+					  void *data, unsigned int cpu,
+					  const char *namefmt)
+{
+	struct task_struct *p;
+
+	p = kthread_create_on_node(threadfn, data, cpu_to_node(cpu), 0,
+				   namefmt, cpu);
+	if (IS_ERR(p))
+		return p;
+	kthread_bind(p, cpu);
+	/* CPU hotplug need to bind once again when unparking the thread. */
+	set_bit(KTHREAD_IS_PER_CPU, &to_kthread(p)->flags);
+	to_kthread(p)->cpu = cpu;
+	return p;
+}
+
+static void __kthread_unpark(struct task_struct *k, struct kthread *kthread)
+{
+	clear_bit(KTHREAD_SHOULD_PARK, &kthread->flags);
+	/*
+	 * We clear the IS_PARKED bit here as we don't wait
+	 * until the task has left the park code. So if we'd
+	 * park before that happens we'd see the IS_PARKED bit
+	 * which might be about to be cleared.
+	 */
+	if (test_and_clear_bit(KTHREAD_IS_PARKED, &kthread->flags)) {
+		/*
+		 * Newly created kthread was parked when the CPU was offline.
+		 * The binding was lost and we need to set it again.
+		 */
+		if (test_bit(KTHREAD_IS_PER_CPU, &kthread->flags))
+			__kthread_bind(k, kthread->cpu, TASK_PARKED);
+		wake_up_state(k, TASK_PARKED);
+	}
+}
+
+/**
+ * kthread_unpark - unpark a thread created by kthread_create().
+ * @k:		thread created by kthread_create().
+ *
+ * Sets kthread_should_park() for @k to return false, wakes it, and
+ * waits for it to return. If the thread is marked percpu then its
+ * bound to the cpu again.
+ */
+void kthread_unpark(struct task_struct *k)
+{
+	struct kthread *kthread = to_live_kthread(k);
+
+	if (kthread)
+		__kthread_unpark(k, kthread);
+}
+
+/**
+ * kthread_park - park a thread created by kthread_create().
+ * @k: thread created by kthread_create().
+ *
+ * Sets kthread_should_park() for @k to return true, wakes it, and
+ * waits for it to return. This can also be called after kthread_create()
+ * instead of calling wake_up_process(): the thread will park without
+ * calling threadfn().
+ *
+ * Returns 0 if the thread is parked, -ENOSYS if the thread exited.
+ * If called by the kthread itself just the park bit is set.
+ */
+int kthread_park(struct task_struct *k)
+{
+	struct kthread *kthread = to_live_kthread(k);
+	int ret = -ENOSYS;
+
+	if (kthread) {
+		if (!test_bit(KTHREAD_IS_PARKED, &kthread->flags)) {
+			set_bit(KTHREAD_SHOULD_PARK, &kthread->flags);
+			if (k != current) {
+				wake_up_process(k);
+				wait_for_completion(&kthread->parked);
+			}
+		}
+		ret = 0;
+	}
+	return ret;
 }
 
 int kthreadd(void *unused)

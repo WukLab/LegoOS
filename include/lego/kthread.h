@@ -65,6 +65,28 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 })
 
 /**
+ * kthread_create_on_cpu - Create a cpu bound kthread
+ * @threadfn: the function to run until signal_pending(current).
+ * @data: data ptr for @threadfn.
+ * @cpu: The cpu on which the thread should be bound,
+ * @namefmt: printf-style name for the thread. Format is restricted
+ *	     to "name.*%u". Code fills in cpu number.
+ *
+ * Description: This helper function creates and names a kernel thread
+ * The thread will be woken and put into park mode.
+ */
+struct task_struct *kthread_create_on_cpu(int (*threadfn)(void *data),
+					  void *data, unsigned int cpu,
+					  const char *namefmt);
+
+bool kthread_should_stop(void);
+bool kthread_should_park(void);
+int kthread_park(struct task_struct *k);
+void kthread_unpark(struct task_struct *k);
+void kthread_bind(struct task_struct *p, unsigned int cpu);
+void kthread_parkme(void);
+
+/**
  * global_kthread_run
  *
  * Create a global-visible lego thread.
