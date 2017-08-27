@@ -123,6 +123,9 @@ int handle_open_request(void *payload, uintptr_t desc){
 	int ret;
 	request rq;
 	rq = constuct_request(m2s_op->uid, m2s_op->filename, m2s_op->permission, 0, 0, m2s_op->flags);
+#ifdef DEBUG_STORAGE
+	pr_info("handle_open_request : [%s]\n", m2s_op->filename);
+#endif
 	ret = grant_access(&rq, &metadata_entry, &user_entry);
 	
 	if (ret)

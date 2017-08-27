@@ -6,12 +6,12 @@
 #define OP_FAILURE		0
 
 
-#define MAX_USERS_ALLOWED 	2
+#define MAX_USERS_ALLOWED 	10
 #define MAX_FILE_NAME		256
 
 #define FILE_METADATA		"/root/yilun/file_metadata.bin"
 
-#define MAX_SIZE		2 
+#define MAX_SIZE		20 
 
 #define TEST_STORAGE
 

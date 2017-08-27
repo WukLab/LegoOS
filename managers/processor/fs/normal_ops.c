@@ -21,8 +21,6 @@
 
 #include "internal.h"
 
-#define STORAGE_NODE 0
-#define MEM_NODE 2 //for test only
 
 static int normal_p2s_open(struct file *f)
 {
@@ -46,7 +44,7 @@ static int normal_p2s_open(struct file *f)
 	int retval;
 
 #ifdef DEBUG_STORAGE
-	pr_info("normal_p2s_open, before net_send_reply\n");
+	pr_info("normal_p2s_open : [%s]\n", payload->filename);
 #endif
 	
 	//net_send_reply(STORAGE_NODE, M2S_OPEN, &payload, sizeof(payload),
@@ -54,7 +52,11 @@ static int normal_p2s_open(struct file *f)
 	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval, sizeof(retval), false);
 
 	kfree(msg);
-
+#ifdef DEBUG_STORAGE
+	char *err;
+	err =  ret_to_string(ERR_TO_LEGO_RET((long)retval));
+	pr_info("normal_p2s_open : %s\n", err);
+#endif
 	return retval;
 }
 
@@ -91,7 +93,7 @@ static ssize_t normal_p2s_read(struct file *f, char __user *buf,
 	/* retbuf should only put in memory side */
 	ssize_t retval;
 
-	ibapi_send_reply_imm(MEM_NODE, msg, len_msg, &retval, sizeof(retval), false);
+	ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg, &retval, sizeof(retval), false);
 
 	if(retval >= 0){
 		*off += retval;
@@ -138,7 +140,7 @@ static ssize_t normal_p2s_write(struct file *f, char __user *buf,
 
 	ssize_t retval;
 
-	ibapi_send_reply_imm(MEM_NODE, msg, len_msg, &retval, sizeof(retval), false);
+	ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg, &retval, sizeof(retval), false);
 
 	if(retval >= 0){
 		*off += retval;

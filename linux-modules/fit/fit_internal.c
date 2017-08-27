@@ -512,15 +512,15 @@ void init_global_lid_qpn(void)
 	global_lid[0] = 7;
 	global_lid[1] = 5;
 
-//for temp test using 04_08
-//#define USE_04_08
-#ifdef USE_04_08
-	global_lid[0] = 7;
-	global_lid[1] = 10;
-#endif
-
 #if (MAX_NODE == 3)
 	global_lid[2] = 10;
+#endif
+
+#define USE_15_16_06
+#ifdef USE_15_16_06
+	global_lid[0] = 17;
+	global_lid[1] = 20;
+	global_lid[2] = 5;
 #endif
 }
 

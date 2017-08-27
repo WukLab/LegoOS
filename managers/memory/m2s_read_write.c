@@ -24,8 +24,6 @@
 #include <memory/include/pid.h>
 #include <memory/include/vm.h>
 
-#define STORAGE_NODE 0
-
 #define O_CREAT		00000100
 #define O_WRONLY	00000001
 #define O_RDONLY 	00000000
