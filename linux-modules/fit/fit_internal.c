@@ -516,7 +516,7 @@ void init_global_lid_qpn(void)
 	global_lid[2] = 10;
 #endif
 
-#define USE_15_16_06
+//#define USE_15_16_06
 #ifdef USE_15_16_06
 	global_lid[0] = 17;
 	global_lid[1] = 20;
