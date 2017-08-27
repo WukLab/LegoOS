@@ -15,7 +15,7 @@
 //#include <linux/wait.h>
 //#include <net/arch/cc.h>
 
-#define MY_NODE_ID 2
+#define MY_NODE_ID 0
 #define DEBUG_SHINYEH
 
 #define MAX_FIT_NUM 4

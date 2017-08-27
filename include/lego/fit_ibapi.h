@@ -21,9 +21,9 @@
  * wuklab08: 2
  */
 #ifdef CONFIG_COMP_PROCESSOR
-#define MY_NODE_ID 0 
+#define MY_NODE_ID 1 
 #elif defined(CONFIG_COMP_MEMORY)
-#define MY_NODE_ID 1
+#define MY_NODE_ID 2
 #endif /* nodeID */
 
 #ifdef CONFIG_FIT
