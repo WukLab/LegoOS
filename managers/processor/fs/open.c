@@ -117,6 +117,9 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 		goto out;
 
 	f = fdget(fd);
+	f->f_flags = flags;
+	f->f_mode = mode;
+
 	if (unlikely(proc_file(kname)))
 		ret = proc_file_open(f, kname);
 	else if (unlikely(sys_file(kname)))
