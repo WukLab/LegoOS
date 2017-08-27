@@ -11,5 +11,5 @@
 
 	.section ".ramfs","ax"
 GLOBAL(ramfs_start)
-.incbin "managers/memory/ramfs/bin/test_read_write"
+.incbin "managers/memory/ramfs/bin/test_read_write_2"
 GLOBAL(ramfs_end)

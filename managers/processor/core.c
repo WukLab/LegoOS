@@ -51,7 +51,7 @@ static int procmgmt(void *unused)
 {
 	const char *init_filename;
 
-	init_filename = "./test_read_write";
+	init_filename = "./test_read_write_2";
 	argv_init[0] = init_filename;
 	//argv_init[1] = "word_count_datafile";
 
