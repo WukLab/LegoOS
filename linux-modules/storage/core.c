@@ -99,6 +99,11 @@ static void storage_dispatch(void *msg, uintptr_t desc){
 	opcode = (__u32 *) msg;
 	payload = (void *) (msg + sizeof(__u32));
 
+#ifdef DEBUG_STORAGE
+	pr_info("storage_dispatch : check pointer address : \n");
+	pr_info("msg %lu\n", msg);
+#endif
+
 	//char *ch_msg = msg;
 	//__u8 *u8_msg = msg;
 

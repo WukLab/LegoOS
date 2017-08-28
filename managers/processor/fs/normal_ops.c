@@ -39,7 +39,7 @@ static int normal_p2s_open(struct file *f)
 	payload->uid = current_uid(); //?
 	strcpy(payload->filename, f->f_name);
 	payload->permission = f->f_mode;
-	payload->flags = f->f_flags;
+	payload->flags = f->f_flags; 
 
 	int retval;
 
@@ -47,6 +47,8 @@ static int normal_p2s_open(struct file *f)
 	pr_info("normal_p2s_open : [%s]\n", payload->filename);
 	pr_info("normal_p2s_open : mode -> [0%o]\n", payload->permission);
 	pr_info("normal_p2s_open : flags -> [0x%x]\n", payload->flags);
+	pr_info("normal_p2s_open : check pointer address : \n");
+	pr_info("msg : %lu, payload : %lu\n", msg, payload);
 #endif
 	
 	//net_send_reply(STORAGE_NODE, M2S_OPEN, &payload, sizeof(payload),

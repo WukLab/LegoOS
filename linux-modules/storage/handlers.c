@@ -124,6 +124,8 @@ int handle_open_request(void *payload, uintptr_t desc){
 	request rq;
 	rq = constuct_request(m2s_op->uid, m2s_op->filename, m2s_op->permission, 0, 0, m2s_op->flags);
 #ifdef DEBUG_STORAGE
+	pr_info("handle_open_request : check pointer address : \n");
+	pr_info("payload : %lu\n", m2s_op);
 	pr_info("handle_open_request : [%s]\n", m2s_op->filename);
 	pr_info("handle_open_request : permission -> [0%o]\n", m2s_op->permission);
 	pr_info("handle_open_request : flags -> [0x%x]\n", m2s_op->flags);
