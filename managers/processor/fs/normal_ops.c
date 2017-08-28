@@ -16,6 +16,8 @@
 #include <lego/comp_common.h>
 #include <lego/comp_storage.h>
 
+#include <lego/seq_file.h>
+
 #include <lego/timer.h>
 #include <lego/fit_ibapi.h>
 
@@ -168,163 +170,13 @@ struct file_operations normal_p2s_f_ops = {
 	.write = normal_p2s_write,
 };
 
-/*static ssize_t normal_m2s_read(struct file *f, char __user *buf,
-				size_t count, loff_t *off)
-{
-	struct m2s_read_write_payload payload;
-	payload.uid = current_uid(); //?
-	strcpy(payload.filename, f->f_name);
-	payload.flags = f->f_flags;
-	payload.len = count;
-	payload.offset = (*off);
- 
-	ssize_t retval;
-	ssize_t *retval_in_buf;
-	void *retbuf;
 
-	retbuf = kmalloc(sizeof(retval)+count, GFP_KERNEL);
-
-	net_send_reply(STORAGE_NODE, M2S_READ, &payload, sizeof(payload),
-		   	&retbuf, sizeof(retbuf), false);
-
-	copy_to_user(buf, retbuf+sizeof(retval), count);
-	retval_in_buf = (ssize_t *) retbuf;
-
-	retval = *retval_in_buf;
-
-	kfree(retbuf);
-
-	return retval;
-}
-
-static ssize_t normal_m2s_write(struct file *f, const char __user *buf,
-				 size_t count, loff_t *off)
-{
-	void *m2s_write_payload;
-	m2s_write_payload = kmalloc(sizeof(struct m2s_read_write_payload)+count, GFP_KERNEL);
-
-	struct m2s_read_write_payload *payload;
-	payload = (struct m2s_read_write_payload *) m2s_write_payload;
-	payload->uid = current_uid(); //?
-	strcpy(payload->filename, f->f_name);
-	payload->flags = f->f_flags;
-	payload->len = count;
-	payload->offset = (*off);
-
-	copy_from_user(m2s_write_payload + sizeof(payload), buf, count);
-
-	ssize_t retval;
-
-	net_send_reply(STORAGE_NODE, M2S_WRITE, &m2s_write_payload, sizeof(m2s_write_payload),
-		   	&retval, sizeof(retval), false);
-
-	kfree(m2s_write_payload);
-
-	return retval;
-}*/
+#ifdef KERNEL_P2S_TEST
 
 #define O_CREAT		00000100
 #define O_WRONLY	00000001
 #define O_RDONLY 	00000000
 #define O_RDWR		00000002
-
-/*static ssize_t test_m2s_read(struct file *f, char *buf,
-				size_t count, loff_t *off)
-{
-	u32 len_msg;
-	void *msg;
-
-	// opcode + payload
-	len_msg = sizeof(__u32) + sizeof(struct m2s_read_write_payload);
-	msg = kmalloc(len_msg, GFP_KERNEL);
-
-	__u32 *opcode;
-	struct m2s_read_write_payload *payload;
-	opcode = (__u32 *) msg;
-	payload = (struct m2s_read_write_payload *) (msg + sizeof(__u32));
-
-	*opcode = M2S_READ;
-
-	payload->uid = current_uid();
-	strcpy(payload->filename, f->f_name);
-	payload->flags = f->f_flags;
-	payload->len = count;
-	payload->offset = (*off);
-
-	ssize_t retval;
-	ssize_t *retval_in_buf;
-	void *retbuf;
-
-	// retbuf = retval + content
-	u32 len_ret = sizeof(retval) + count;
-	retbuf = kmalloc(len_ret, GFP_KERNEL);
-
-	//net_send_reply(STORAGE_NODE, M2S_READ, &payload, sizeof(payload),
-		   	//retbuf, sizeof(retbuf), false);
-	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, retbuf, len_ret, false);
-
-	memcpy(buf, retbuf+sizeof(retval), count);
-	pr_info("buf[0-2] : %c %c %c\n", buf[0], buf[1], buf[2]);
-	retval_in_buf = (ssize_t *) retbuf;
-
-	retval = *retval_in_buf;
-
-	kfree(msg);
-	kfree(retbuf);
-	(*off) += retval;
-
-	return retval;
-}
-
-static ssize_t test_m2s_write(struct file *f, const char *buf,
-				 size_t count, loff_t *off)
-{
-	void *msg;
-	u32 len_msg;
-
-	// msg = opcode + payload + content
-	len_msg = sizeof(__u32) +  sizeof(struct m2s_read_write_payload) + count;
-	msg = kmalloc(len_msg, GFP_KERNEL);
-
-	__u32 *opcode;
-	struct m2s_read_write_payload *payload;
-	char *content;
-	
-	opcode = (__u32 *) msg;
-	payload = (struct m2s_read_write_payload *) (msg + sizeof(__u32));
-	content = (char *) (msg + sizeof(__u32) + sizeof(struct m2s_read_write_payload));
-
-	*opcode = M2S_WRITE;
-
-	payload->uid = current_uid(); //?
-	strcpy(payload->filename, f->f_name);
-	payload->flags = f->f_flags;
-	payload->len = count;
-	payload->offset = (*off);
-
-	memcpy(content, buf, count);
-
-	pr_info("test_m2s_write.\n");
-	pr_info("payload uid [%d].\n", payload->uid);
-	pr_info("payload filename [%s].\n", payload->filename);
-	pr_info("payload flags [%o].\n", payload->flags);
-	pr_info("payload len [%u].\n", payload->len);
-	pr_info("payload offset [%ld].\n", payload->offset);
-
-	pr_info("content is [%s].\n", content);
-
-	ssize_t retval;
-
-	//net_send_reply(STORAGE_NODE, M2S_WRITE, m2s_write_payload, len_msg,
-		   //&retval, sizeof(retval), false);
-	
-	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval, sizeof(retval), false);
-
-	kfree(msg);
-	(*off) += retval;
-
-	return retval;
-}*/
 
 void p2s_test(){
 	struct file *f;
@@ -352,4 +204,13 @@ void p2s_test(){
 
 	kfree(f);
 }
+#endif
 
+SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
+{
+	struct file *f = fdget(fd);
+	if(IS_ERR(f))
+		return -EBADF;
+
+	return seq_lseek(f, offset, whence);
+}
