@@ -24,6 +24,19 @@ static int __checkpoint_process(struct task_struct *tsk)
 
 SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
 {
+	struct task_struct *tsk;
+	long ret = 0;
+
 	syscall_enter("pid: %d\n", pid);
-	return -ENOSYS;
+
+	tsk = find_task_by_pid(pid);
+	if (!tsk) {
+		ret = -ESRCH;
+		goto out;
+	}
+
+	ret = __checkpoint_process(tsk);
+out:
+	syscall_exit(ret);
+	return ret;
 }
