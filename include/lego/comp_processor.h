@@ -26,7 +26,7 @@ int __init pcache_range_register(u64 start, u64 size);
 #ifdef CONFIG_CHECKPOINT
 int checkpoint_thread(struct task_struct *tsk);
 #else
-static inline int checkpoint_thread(struct task_struct *tsk) { }
+static inline int checkpoint_thread(struct task_struct *tsk) { return 0; }
 #endif /* CONFIG_CHECKPOINT */
 
 int do_execve(const char *filename,

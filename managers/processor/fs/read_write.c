@@ -16,29 +16,6 @@
 
 #include "internal.h"
 
-static int default_p2m_open(struct file *f)
-{
-	return 0;
-}
-
-static ssize_t default_p2m_read(struct file *f, char __user *buf,
-				size_t count, loff_t *off)
-{
-	return -EACCES;
-}
-
-static ssize_t default_p2m_write(struct file *f, const char __user *buf,
-				 size_t count, loff_t *off)
-{
-	return -EACCES;
-}
-
-struct file_operations default_f_op = {
-	.open	= default_p2m_open,
-	.read	= default_p2m_read,
-	.write	= default_p2m_write,
-};
-
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
 	struct file *f;

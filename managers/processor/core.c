@@ -67,9 +67,6 @@ static void run_global_thread(void)
 	 * because that one will call do_exit inside. So do_execve
 	 * will not have any effect.
 	 */
-	pr_info("sleep 30s\n");
-	msleep(30000);
-	pr_info("30s elapsed\n");
 	kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD); 
 }
 

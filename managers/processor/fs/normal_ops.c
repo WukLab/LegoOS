@@ -27,12 +27,15 @@
 static int normal_p2s_open(struct file *f)
 {
 	/* opcode + payload */
-	u32 len_msg = sizeof(__u32) + sizeof(struct m2s_open_payload);
-	void *msg;
-	msg = kmalloc(len_msg, GFP_KERNEL);
-
 	__u32 *opcode;
 	struct m2s_open_payload *payload;
+	u32 len_msg = sizeof(__u32) + sizeof(struct m2s_open_payload);
+	void *msg;
+	int retval = 0;
+	char *err;
+
+	msg = kmalloc(len_msg, GFP_KERNEL);
+
 	opcode = (__u32 *) msg;
 	payload = (struct m2s_open_payload *) (msg + sizeof(__u32));
 
@@ -43,16 +46,14 @@ static int normal_p2s_open(struct file *f)
 	payload->permission = f->f_mode;
 	payload->flags = f->f_flags; 
 
-	int retval;
-
 #ifdef DEBUG_STORAGE
 	pr_info("normal_p2s_open : [%s]\n", payload->filename);
 	pr_info("normal_p2s_open : mode -> [0%o]\n", payload->permission);
 	pr_info("normal_p2s_open : flags -> [0x%x]\n", payload->flags);
 	pr_info("normal_p2s_open : check pointer address : \n");
-	pr_info("msg : %lu, payload : %lu\n", msg, payload);
-	pr_info("payload->uid : %lu, payload->filename : %lu\n", &payload->uid, payload->filename);
-	pr_info("payload->permission : %lu, payload->flags : %lu\n", &payload->permission, &payload->flags);
+	pr_info("msg : %p, payload : %p\n", msg, payload);
+	pr_info("payload->uid : %x, payload->filename : %s\n", payload->uid, payload->filename);
+	pr_info("payload->permission : %x, payload->flags : %x\n", payload->permission, payload->flags);
 #endif
 	
 	//net_send_reply(STORAGE_NODE, M2S_OPEN, &payload, sizeof(payload),
@@ -61,7 +62,6 @@ static int normal_p2s_open(struct file *f)
 
 	kfree(msg);
 #ifdef DEBUG_STORAGE
-	char *err;
 	err =  ret_to_string(ERR_TO_LEGO_RET((long)retval));
 	pr_info("normal_p2s_open : %s\n", err);
 #endif
@@ -73,7 +73,10 @@ static int normal_p2s_open(struct file *f)
  */
 
 static ssize_t normal_p2s_read(struct file *f, char __user *buf,
-				size_t count, loff_t *off){
+				size_t count, loff_t *off) {
+	/* retbuf should only put in memory side */
+	ssize_t retval = 0;
+
 	void *msg;
 	/* common_header + p2m_read_write_payload */
 	u32 len_msg = sizeof(struct common_header) + sizeof(struct p2m_read_write_payload);
@@ -98,9 +101,6 @@ static ssize_t normal_p2s_read(struct file *f, char __user *buf,
 	payload->len = count;
 	payload->offset = (*off);
 
-	/* retbuf should only put in memory side */
-	ssize_t retval;
-
 	ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg, &retval, sizeof(retval), false);
 
 	if(retval >= 0){
@@ -118,14 +118,19 @@ static ssize_t normal_p2s_read(struct file *f, char __user *buf,
 	return retval;
 }
 
-static ssize_t normal_p2s_write(struct file *f, char __user *buf,
-				size_t count, loff_t *off){
+static ssize_t normal_p2s_write(struct file *f, const char __user *buf,
+				size_t count, loff_t *off)
+{
 	void *msg;
 	/* common_header + p2s_read_write_payload */
 	u32 len_msg = sizeof(struct common_header) + sizeof(struct p2m_read_write_payload);
 
 	struct common_header *hdr;
 	struct p2m_read_write_payload *payload;
+
+	/* retbuf should only contain a retval */
+
+	ssize_t retval = 0;
 
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	hdr = (struct common_header *) msg;
@@ -136,17 +141,13 @@ static ssize_t normal_p2s_write(struct file *f, char __user *buf,
 	hdr->length = len_msg;
 
 	payload->pid = current->pid;
-	payload->buf = buf;
+	payload->buf = (char *)buf;
 
 	payload->uid = current_uid(); /* should be user uid */
 	strcpy(payload->filename, f->f_name);
 	payload->flags = f->f_flags;
 	payload->len = count;
 	payload->offset = (*off);
-
-	/* retbuf should only contain a retval */
-
-	ssize_t retval;
 
 	ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg, &retval, sizeof(retval), false);
 
@@ -180,18 +181,18 @@ struct file_operations normal_p2s_f_ops = {
 
 void p2s_test(){
 	struct file *f;
+	ssize_t ret;
+	char __user *buf;
+
 	f = kmalloc(sizeof(struct file), GFP_KERNEL);
 	f->f_mode = 0744;
 	f->f_flags = O_WRONLY | O_CREAT;
 	strcpy(f->f_name, "/root/yilun/test_lego_file");
 
-	ssize_t ret;
-
 	pr_info("before sending normal open request\n");	
 	ret = normal_p2s_open(f);
 	pr_info("received reply, retval is [%d]\n", ret);
 
-	char __user *buf;
 	loff_t off = 0;
 	pr_info("test p2s_write.\n");
 	normal_p2s_write(f, buf, 10, &off);
@@ -212,5 +213,6 @@ SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
 	if(IS_ERR(f))
 		return -EBADF;
 
+	/* XXX: seq_lseek is wrong */
 	return seq_lseek(f, offset, whence);
 }
