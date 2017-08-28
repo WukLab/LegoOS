@@ -51,9 +51,9 @@ static int procmgmt(void *unused)
 {
 	const char *init_filename;
 
-	init_filename = "./word_count";
+	init_filename = "./test_read_write_2";
 	argv_init[0] = init_filename;
-	argv_init[1] = "word_count_datafile";
+	//argv_init[1] = "word_count_datafile";
 
 	return do_execve(init_filename,
 		(const char *const *)argv_init,
@@ -67,6 +67,9 @@ static void run_global_thread(void)
 	 * because that one will call do_exit inside. So do_execve
 	 * will not have any effect.
 	 */
+	pr_info("sleep 30s\n");
+	msleep(30000);
+	pr_info("30s elapsed\n");
 	kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD); 
 }
 

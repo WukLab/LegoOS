@@ -16,6 +16,7 @@
 #include <lego/comp_common.h>	/* must come at last */
 
 #define DEF_MEM_HOMENODE 1
+//define DEF_MEM_HOMENODE 2 //if storage in 0, processor 1 and memory 2
 #define DEF_NET_TIMEOUT	 10	/* second */
 
 #ifdef CONFIG_COMP_PROCESSOR

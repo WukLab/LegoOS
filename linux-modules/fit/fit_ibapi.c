@@ -66,6 +66,7 @@ inline int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret
 {
 	ppc *ctx = FIT_ctx;
 	int ret;
+	printk("Calling ibapi_send_reply_imm\n");
 	ret = client_send_reply_with_rdma_write_with_imm(ctx, target_node, addr, size, ret_addr, max_ret_size, 0, if_use_ret_phys_addr);
 	return ret;
 }
@@ -94,6 +95,7 @@ int ibapi_query_port(int target_node, int designed_port, int requery_flag)
 inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor)
 {
 	ppc *ctx = FIT_ctx;
+	printk("Calling ibapi_receive_message\n");
 	return client_receive_message(ctx, designed_port, ret_addr, receive_size, descriptor, 0);
 }
 EXPORT_SYMBOL(ibapi_receive_message);
@@ -101,6 +103,7 @@ EXPORT_SYMBOL(ibapi_receive_message);
 inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
 {
 	ppc *ctx = FIT_ctx;
+	printk("Calling ibapi_reply_message\n");
 	return client_reply_message(ctx, addr, size, descriptor, 0);
 }
 EXPORT_SYMBOL(ibapi_reply_message);
@@ -229,13 +232,17 @@ static void lego_ib_test(void)
 {
 #ifdef FIT_TESTING
 	int ret, i;
-	char *buf = kmalloc(64, GFP_KERNEL);
-	char *retb = kmalloc(64, GFP_KERNEL);
+	char *buf = kmalloc(4096, GFP_KERNEL);
+	char *retb = kmalloc(4096, GFP_KERNEL);
 	uintptr_t desc;
-	if (MY_NODE_ID == 1) {
+	if (MY_NODE_ID == 0) {
 		for (i = 0; i < 10; i++) {
-			ret = ibapi_receive_message(0, buf, 32, &desc);
-			pr_info("received message: [%c%c%c%c]\n", buf[0], buf[1], buf[2], buf[3]);
+			ret = ibapi_receive_message(0, buf, 4096, &desc);
+			pr_info("received message ret %d msg [%s]\n", ret, buf);
+			if (ret == SEND_REPLY_SIZE_TOO_BIG) {
+				printk(KERN_CRIT "received msg wrong size %d\n", ret);
+				return;
+			}
 			retb[0] = '1';
 			retb[1] = '2';
 			retb[2] = '\0';
@@ -246,7 +253,7 @@ static void lego_ib_test(void)
 		buf[1] = 'b';
 		buf[2] = '\0';
 		for (i = 0; i < 10; i++) {
-			ret = ibapi_send_reply_imm(1, buf, 32, retb, 10, 0);
+			ret = ibapi_send_reply_imm(1, buf, 4096, retb, 4096, 0);
 			pr_info("%s(%2d) retbuffer: %s\n", __func__, i, retb);
 		}
 	}

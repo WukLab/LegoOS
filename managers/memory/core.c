@@ -14,6 +14,7 @@
 #include <lego/kthread.h>
 #include <lego/fit_ibapi.h>
 #include <lego/comp_memory.h>
+#include <lego/comp_storage.h>
 
 #include <memory/include/vm.h>
 #include <memory/include/pid.h>
@@ -209,6 +210,14 @@ static int mc_dispatcher(void *passed)
 /* TEST */
 	case P2M_TEST:
 		handle_p2m_test(payload, desc, hdr);
+		break;
+	
+	case M2S_READ:
+		handle_p2s_read(payload, desc, hdr);
+		break;
+	
+	case M2S_WRITE:
+		handle_p2s_write(payload, desc, hdr);
 		break;
 
 	default:
