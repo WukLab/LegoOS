@@ -45,6 +45,8 @@ static int normal_p2s_open(struct file *f)
 
 #ifdef DEBUG_STORAGE
 	pr_info("normal_p2s_open : [%s]\n", payload->filename);
+	pr_info("normal_p2s_open : mode -> [0%o]\n", payload->permission);
+	pr_info("normal_p2s_open : flags -> [0x%x]\n", payload->flags);
 #endif
 	
 	//net_send_reply(STORAGE_NODE, M2S_OPEN, &payload, sizeof(payload),
