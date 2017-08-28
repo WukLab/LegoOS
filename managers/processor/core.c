@@ -15,6 +15,8 @@
 #include <lego/kthread.h>
 #include <lego/syscalls.h>
 #include <lego/comp_processor.h>
+#include <lego/syscalls.h>
+
 #include "processor.h"
 
 #ifndef CONFIG_FIT
@@ -108,3 +110,11 @@ void __init processor_component_init(void)
 	hlt();
 #endif
 }
+
+#ifndef CONFIG_CHECKPOINT
+SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
+{
+	printk_once("Checkpoint is not configured!\n");
+	return -ENOSYS;
+}
+#endif

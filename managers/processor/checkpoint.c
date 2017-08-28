@@ -9,6 +9,7 @@
 
 #include <lego/pid.h>
 #include <lego/sched.h>
+#include <lego/syscalls.h>
 
 int checkpoint_thread(struct task_struct *tsk)
 {
@@ -16,7 +17,13 @@ int checkpoint_thread(struct task_struct *tsk)
 	return 0;
 }
 
-int checkpoint_process(struct task_struct *tsk)
+static int __checkpoint_process(struct task_struct *tsk)
 {
 	return 0;
+}
+
+SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
+{
+	syscall_enter("pid: %d\n", pid);
+	return -ENOSYS;
 }

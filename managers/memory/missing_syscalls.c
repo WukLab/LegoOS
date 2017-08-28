@@ -118,3 +118,8 @@ SYSCALL_DEFINE3(fcntl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 {	
 	BUG();
 }
+
+SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
+{
+	BUG();
+}

@@ -63,3 +63,5 @@
 234	common	tgkill			sys_tgkill
 273	64	set_robust_list		sys_set_robust_list
 274	64	get_robust_list		sys_get_robust_list
+
+666	common	checkpoint_process	sys_checkpoint_process

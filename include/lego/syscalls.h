@@ -171,6 +171,9 @@ asmlinkage long sys_futex(u32 __user *uaddr, int op, u32 val,
 			struct timespec __user *utime, u32 __user *uaddr2,
 			u32 val3);
 
+/* Lego only */
+asmlinkage long sys_checkpoint_process(pid_t pid);
+
 /* x86-64 only */
 asmlinkage long sys_arch_prctl(int, unsigned long);
 
