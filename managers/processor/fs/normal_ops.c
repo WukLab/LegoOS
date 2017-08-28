@@ -49,6 +49,8 @@ static int normal_p2s_open(struct file *f)
 	pr_info("normal_p2s_open : flags -> [0x%x]\n", payload->flags);
 	pr_info("normal_p2s_open : check pointer address : \n");
 	pr_info("msg : %lu, payload : %lu\n", msg, payload);
+	pr_info("payload->uid : %lu, payload->filename : %lu\n", &payload->uid, payload->filename);
+	pr_info("payload->permission : %lu, payload->flags : %lu\n", &payload->permission, &payload->flags);
 #endif
 	
 	//net_send_reply(STORAGE_NODE, M2S_OPEN, &payload, sizeof(payload),
