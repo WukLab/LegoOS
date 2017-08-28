@@ -28,7 +28,7 @@
 
 #define CIRCULAR_BUFFER_LENGTH 256
 
-#define MAX_NODE 2
+#define MAX_NODE 3
 #define MAX_NODE_BIT 5
 
 #define LISTEN_PORT 18500

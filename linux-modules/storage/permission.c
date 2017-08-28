@@ -21,26 +21,32 @@ static int check_permission(request *rq, int owner, int permission){
 	}
 	if (rq->uid == owner){
 		if(rq->flags == O_RDONLY){
-			return (permission >> 3) & READ_MASK;
+			//return (permission >> 3) & READ_MASK;
+			return permission & S_IRUSR;
 		}
 		if(rq->flags & O_WRONLY){
-			return (permission >> 3) & WRITE_MASK;
+			//return (permission >> 3) & WRITE_MASK;
+			return permission & S_IWUSR;
 		}
 		if (rq->flags & O_RDWR){
-			return ((permission >> 3) & (READ_MASK || WRITE_MASK));
+			//return ((permission >> 3) & (READ_MASK || WRITE_MASK));
+			return ((permission & S_IRUSR)>>1) & (permission & S_IWUSR);
 		}
 	}
 
 	// if the user is not the owner.
 	//rq->flags == O_RDONLY is not correct, need to be changed later.
 	if(rq->flags == O_RDONLY){
-		return permission & READ_MASK;
+		//return permission & READ_MASK;
+		return permission & S_IROTH;
 	}
 	if(rq->flags & O_WRONLY){
-		return permission & WRITE_MASK;
+		//return permission & WRITE_MASK;
+		return permission & S_IWOTH;
 	}
 	if (rq->flags & O_RDWR){
-		return permission & (READ_MASK || WRITE_MASK);
+		//return permission & (READ_MASK || WRITE_MASK);
+		return ((permission & S_IROTH)>>1) & (permission & S_IWOTH);
 	}
 	
 	printk("check_permission : bad request flags. rq->flags: [%d], O_RDONLY: [%d], O_WRONLY: [%d], O_RDWR: [%d]", 
@@ -64,9 +70,11 @@ int grant_access (request *rq, int *metadata_entry, int *user_entry) {
 	struct metadata *current_filemetadata;
 	current_filemetadata = global_metadata;
 	
-	if (IS_ERR(rq)) {
-		return OP_FAILURE;
+	if (unlikely(IS_ERR(rq))){
+	   panic("invalid request for grant_access\n");	
+	   return -EACCES;
 	}
+	
 	
 	for (i=0; i<MAX_SIZE; i++) {
 
@@ -91,7 +99,7 @@ int grant_access (request *rq, int *metadata_entry, int *user_entry) {
 
 					*metadata_entry = i;
 					*user_entry = j;
-					return OP_SUCCESS;
+					return 0;
 				}
 			}
 
@@ -121,7 +129,7 @@ int grant_access (request *rq, int *metadata_entry, int *user_entry) {
 					current_filemetadata->noOfUsers++;
 					*metadata_entry = i;
 					*user_entry = j;
-					return OP_SUCCESS;
+					return 0;
 				}	
 			}
 
@@ -160,7 +168,7 @@ int grant_access (request *rq, int *metadata_entry, int *user_entry) {
 				update_metadata();
 				*metadata_entry = i;
 				*user_entry = 0;
-				return OP_SUCCESS;
+				return 0;
 			}
 		}
 	}
@@ -204,12 +212,11 @@ int yield_access(int metadata_entry, int user_entry){
 
 /* generate a request for test*/
 
-static request constuct_request(int uid, char *fileName, int service, int permission,
-	   	int len, int offset, int flags){
+request constuct_request(int uid, char *fileName, fmode_t permission, ssize_t len, 
+		loff_t offset, int flags){
 	request rq;
 	rq.uid = uid;
 	strcpy(rq.fileName, fileName);
-	rq.service = service;
 	rq.permission = permission;
 	rq.len = len;
 	rq.offset = offset;
@@ -219,7 +226,7 @@ static request constuct_request(int uid, char *fileName, int service, int permis
 
 /* set a metadata entry to a specific value for testing */
 
-static void set_metadata(int index, int *users, int noOfUsers, int permission,
+static void set_metadata(int index, int *users, int noOfUsers, fmode_t permission,
 	   	int used, int owner, char *fileName){
 	mutex_lock(&metadata_lock);
 	memcpy(global_metadata[index].users, users, sizeof(int)*MAX_USERS_ALLOWED);
@@ -252,12 +259,15 @@ void test_grant_yield_access(void *data) {
 	 * after init_storage_server, metadata init
 	 * grant_access for new creating files
 	 */
+
+	//only for test
+	//printk_hello(NULL);
 	
 	//test the unused_entry
 	printk("There are [%d] unused metadata entries.\n", unused_entry());
 	request rq;
 	//owner r/w, other r;
-	rq = constuct_request(23, "testfile1", WRITE_MASK, 031, 0, 0, O_CREAT | O_WRONLY);
+	rq = constuct_request(23, "testfile1", 0744, 0, 0, O_CREAT | O_WRONLY);
 	int metadata_entry, user_entry;
 	grant_access(&rq, &metadata_entry, &user_entry);
 	printk("Test O_CREAT, unused entries : [%d], metadata_entry : [%d], user_entry : [%d]\n",
@@ -266,7 +276,7 @@ void test_grant_yield_access(void *data) {
 
 	/* now testing for a request that O_CREAT is not set and file not exist */
 
-	rq = constuct_request(23, "testfile2", WRITE_MASK, 031, 0, 0, O_WRONLY);
+	rq = constuct_request(23, "testfile2", 0744, 0, 0, O_WRONLY);
 	grant_access(&rq, &metadata_entry, &user_entry);
 	printk("\nTest O_CREAT is not set, unused entries : [%d], metadata_entry : [%d], user_entry : [%d]\n",
 			unused_entry(), metadata_entry, user_entry);
@@ -275,7 +285,7 @@ void test_grant_yield_access(void *data) {
 	/* test the case that 23 access exist file testfile1, but use O_RDWR flags
 	 * The user has the permission, grant access
 	 */
-	rq = constuct_request(23, "testfile1", WRITE_MASK, 031, 0, 0, O_RDWR);
+	rq = constuct_request(23, "testfile1", 0744, 0, 0, O_RDWR);
 	grant_access(&rq, &metadata_entry, &user_entry);
 	printk("\nTest O_RDWR is set, unused entries : [%d], metadata_entry : [%d], user_entry : [%d]\n",
 			unused_entry(), metadata_entry, user_entry);
@@ -284,17 +294,17 @@ void test_grant_yield_access(void *data) {
 	/* test the case that 24 access exist file testfile1 using O_RDONLY flags
 	 * The user has the permission, grant access
 	 */
-	rq = constuct_request(24, "testfile1", READ_MASK, 031, 0, 0, O_RDONLY);
+	rq = constuct_request(24, "testfile1", 0744, 0, 0, O_RDONLY);
 	grant_access(&rq, &metadata_entry, &user_entry);
 	printk("\nTest 24 accessing the testfile1 using O_RDONLY, unused entries : [%d], metadata_entry : [%d], user_entry : [%d]\n",
 			unused_entry(), metadata_entry, user_entry);
-	printk("\ncheckpermission value is %d.\n", check_permission(&rq, 23, 031));
+	printk("\ncheckpermission value is %d.\n", check_permission(&rq, 23, 0744));
 	dump_metadata();
 
 	/* test the case that 24 access exist file testfile1 using O_RDWR flags
 	 * The user does not have the permission, do not grant access
 	 */
-	rq = constuct_request(24, "testfile1", WRITE_MASK, 031, 0, 0, O_RDWR);
+	rq = constuct_request(24, "testfile1", 0744, 0, 0, O_RDWR);
 	grant_access(&rq, &metadata_entry, &user_entry);
 	printk("\nTest 24 accessing the testfile1 using O_RDWR, unused entries : [%d], metadata_entry : [%d], user_entry : [%d]\n",
 			unused_entry(), metadata_entry, user_entry);
@@ -307,8 +317,8 @@ void test_grant_yield_access(void *data) {
 	yield_access(metadata_entry, user_entry);
 	dump_metadata();
 
-	/* Test a complex case, assume max_size=2 and max_users_allowed=2, 23 create testfile 1 with 031, 24 create
-	 * testfile2 with 031, and 23, 24 access file1 and file2 now, so no other user can access testfile1 and testfile2
+	/* Test a complex case, assume max_size=2 and max_users_allowed=2, 23 create testfile 1 with 0744, 24 create
+	 * testfile2 with 0744, and 23, 24 access file1 and file2 now, so no other user can access testfile1 and testfile2
 	 * since user list is full. and no other user could create a new file since metadata list is full.
 	 * Then we 24 yield_access testfile1, now 25 should be able to access testfile1 with O_RDONLY flags. 
 	 *
@@ -316,20 +326,20 @@ void test_grant_yield_access(void *data) {
 	int users[2];
 	users[0] = 23;
 	users[1] = 24;
-	set_metadata(0, &users, 2, 031, 1, 23, "testfile1");
-	set_metadata(1, &users, 2, 031, 1, 24, "testfile2");
+	set_metadata(0, &users, 2, 0744, 1, 23, "testfile1");
+	set_metadata(1, &users, 2, 0744, 1, 24, "testfile2");
 	printk("\nCheck if metedata set correct before testing'\n");
 	dump_metadata();
 
 	//Now user 25 coming, test create testfile3;
-	rq = constuct_request(25, "testfile3", WRITE_MASK, 031, 0, 0, O_CREAT | O_WRONLY);
+	rq = constuct_request(25, "testfile3", 0744, 0, 0, O_CREAT | O_WRONLY);
 	grant_access(&rq, &metadata_entry, &user_entry);
 	printk("\nTest 25 creating testfile3, unused entries : [%d], metadata_entry : [%d], user_entry : [%d]\n",
 			unused_entry(), metadata_entry, user_entry);
 	dump_metadata();
 
 	//test access testfile1;
-	rq = constuct_request(25, "testfile1", READ_MASK, 031, 0, 0, O_RDONLY);
+	rq = constuct_request(25, "testfile1", 0744, 0, 0, O_RDONLY);
 	grant_access(&rq, &metadata_entry, &user_entry);
 	printk("\nTest 25 accessing testfile1, unused entries : [%d], metadata_entry : [%d], user_entry : [%d]\n",
 			unused_entry(), metadata_entry, user_entry);

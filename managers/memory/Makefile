@@ -11,6 +11,7 @@ obj-y += handle_mmap.o
 obj-y += handle_file.o
 obj-y += file_ops.o
 obj-y += missing_syscalls.o
+obj-y += m2s_read_write.o
 
 # Virtual Memory Subsystem
 obj-y += vm/
