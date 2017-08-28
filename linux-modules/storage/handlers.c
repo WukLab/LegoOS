@@ -43,10 +43,10 @@ ssize_t handle_read_request(void *payload, uintptr_t desc){
 	pr_info("flags -> [%o].\n", m2s_rq->flags);
 #endif
 
-	*retval = grant_access(&rq, &metadata_entry, &user_entry);
+	/* *retval = grant_access(&rq, &metadata_entry, &user_entry);
 	if (*retval){
 		goto out_reply;
-	}
+	} */ /*enable in future*/
 	struct file *filp;
 	filp = local_file_open(&rq);
 	if (IS_ERR(filp)){
@@ -55,7 +55,7 @@ ssize_t handle_read_request(void *payload, uintptr_t desc){
 	}
 	*retval = local_file_read(filp, (const char __user *)readbuf, rq.len, &rq.offset);
 	local_file_close(filp);
-	yield_access(metadata_entry, user_entry);
+	//yield_access(metadata_entry, user_entry); //enable in future
 	pr_info("Content in readbuf is [%s]\n", readbuf);
 
 out_reply:
@@ -93,10 +93,10 @@ ssize_t handle_write_request(void *payload, uintptr_t desc){
 	//pr_info("%c %c %c %c %c\n", writebuf[0], writebuf[1], writebuf[2], writebuf[3], writebuf[4]);
 	//pr_info("%d %d %d %d %d\n", (int)writebuf[0], (int)writebuf[1], (int)writebuf[2], (int)writebuf[3], (int)writebuf[4]);
 
-	retval = grant_access(&rq, &metadata_entry, &user_entry);
+	/*retval = grant_access(&rq, &metadata_entry, &user_entry);
 	if (retval){
 		goto out_reply;
-	}
+	}*/ //enable in future
 	struct file *filp;
 	filp = local_file_open(&rq);
 	if (IS_ERR(filp)){
@@ -105,7 +105,7 @@ ssize_t handle_write_request(void *payload, uintptr_t desc){
 	}
 	retval = local_file_write(filp, (const char __user *)writebuf, rq.len, &rq.offset);
 	local_file_close(filp);
-	yield_access(metadata_entry, user_entry);
+	//yield_access(metadata_entry, user_entry); //enable in future
 
 out_reply:
 	ibapi_reply_message(&retval, sizeof(retval), desc);
@@ -128,10 +128,11 @@ int handle_open_request(void *payload, uintptr_t desc){
 	pr_info("handle_open_request : permission -> [0%o]\n", m2s_op->permission);
 	pr_info("handle_open_request : flags -> [0x%x]\n", m2s_op->flags);
 #endif
-	ret = grant_access(&rq, &metadata_entry, &user_entry);
+	/*ret = grant_access(&rq, &metadata_entry, &user_entry);
 	
 	if (ret)
 		goto out_reply;
+	*/ //enable in future;
 
 	if (m2s_op->flags & O_CREAT){
 		struct file *filp;
