@@ -37,7 +37,7 @@ static inline void *to_payload(void *msg)
 }
 
 
-#define MAX_FILENAME_LENGTH	256
+#define MAX_FILENAME_LENGTH	128
 
 struct m2s_open_payload{
 	int uid;

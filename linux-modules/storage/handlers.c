@@ -47,6 +47,8 @@ ssize_t handle_read_request(void *payload, uintptr_t desc){
 	if (*retval){
 		goto out_reply;
 	} */ /*enable in future*/
+	*retval = 0;
+
 	struct file *filp;
 	filp = local_file_open(&rq);
 	if (IS_ERR(filp)){
@@ -97,6 +99,8 @@ ssize_t handle_write_request(void *payload, uintptr_t desc){
 	if (retval){
 		goto out_reply;
 	}*/ //enable in future
+	retval = 0;
+
 	struct file *filp;
 	filp = local_file_open(&rq);
 	if (IS_ERR(filp)){
@@ -137,8 +141,9 @@ int handle_open_request(void *payload, uintptr_t desc){
 	if (ret)
 		goto out_reply;
 	*/ //enable in future;
+	ret = 0;
 
-	if (m2s_op->flags & O_CREAT){
+	//if (m2s_op->flags & O_CREAT){
 		struct file *filp;
 		filp = local_file_open(&rq);
 		if (IS_ERR(filp)){
@@ -146,7 +151,7 @@ int handle_open_request(void *payload, uintptr_t desc){
 			goto out_reply;
 		}
 		local_file_close(filp);
-	}
+	//}
 
 out_reply:
 	ibapi_reply_message(&ret, sizeof(ret), desc);
