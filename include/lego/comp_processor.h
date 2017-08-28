@@ -21,22 +21,34 @@
 #ifdef CONFIG_COMP_PROCESSOR
 void __init processor_component_init(void);
 int __init pcache_range_register(u64 start, u64 size);
+
+#ifdef CONFIG_CHECKPOINT
+int checkpoint_thread(struct task_struct *tsk);
 #else
-static inline void processor_component_init(void) { }
-static inline int pcache_range_register(u64 start, u64 size)
-{
-	return 0;
-}
-int checkpoint_process(struct task_struct *tsk);
-#endif
+static inline int checkpoint_thread(struct task_struct *tsk) { }
+#endif /* CONFIG_CHECKPOINT */
 
 int do_execve(const char *filename,
 	      const char * const *argv,
 	      const char * const *envp);
 
-static inline int checkpoint_process(struct task_struct *tsk)
+#else /* !CONFIG_COMP_PROCESSOR */
+static inline void processor_component_init(void) { }
+static inline int pcache_range_register(u64 start, u64 size)
 {
-/* Checkpointing is only available in Processor-Component */
+	return 0;
+}
+
+static inline int checkpoint_thread(struct task_struct *tsk)
+{
 	BUG();
 }
+
+static inline int do_execve(const char *filename, const char * const *argv,
+			    const char * const *envp)
+{
+	BUG();
+}
+#endif /* CONFIG_COMP_PROCESSOR */
+
 #endif /* _LEGO_COMP_PROCESSOR_H_ */

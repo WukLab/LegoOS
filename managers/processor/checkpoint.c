@@ -10,6 +10,12 @@
 #include <lego/pid.h>
 #include <lego/sched.h>
 
+int checkpoint_thread(struct task_struct *tsk)
+{
+	clear_tsk_need_checkpoint(tsk);
+	return 0;
+}
+
 int checkpoint_process(struct task_struct *tsk)
 {
 	return 0;

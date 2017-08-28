@@ -27,6 +27,17 @@ config PCACHE_METADATA_SIZE
 
 	  Default is 8 bytes if the kernel is configured as 64bit.
 
+config CHECKPOINT
+	bool "Enable checkpoint feature"
+	default n
+	---help---
+	  Say Y if you want periodic checkpointing at processor component.
+	  This may slow down application throughput, but could greatly improve
+	  the reliability of your system.
+
+	  If unsure, say N.
+
+menu "Processor DEBUG Options"
 config DEBUG_PROC_SYS
 	bool "Debug /proc and /sys output"
 	default n
@@ -49,5 +60,8 @@ config DEBUG_SYSCALL
 
 	  if unsure, say N.
 
+endmenu
+
 endif
+
 endmenu

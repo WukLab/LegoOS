@@ -10,6 +10,7 @@ config PCACHE_FILL_SPLIT_NR
 	int
 	default 1
 
+menu "General DEBUG Options"
 config DEBUG_PCACHE_FILL
 	bool "Debug L4-cache"
 	default n
@@ -37,5 +38,7 @@ config RAMFS_OBJECT_FILE
 	depends on COMP_MEMORY
 	help
 	  Please give the full path
+
+endmenu
 
 endmenu
