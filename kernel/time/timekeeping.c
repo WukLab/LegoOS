@@ -893,9 +893,22 @@ ktime_t ktime_get(void)
 	return ktime_add_ns(base, nsecs);
 }
 
+static ktime_t *offsets[TK_OFFS_MAX] = {
+	[TK_OFFS_REAL]	= &tk_core.timekeeper.offs_real,
+	[TK_OFFS_BOOT]	= &tk_core.timekeeper.offs_boot,
+	[TK_OFFS_TAI]	= &tk_core.timekeeper.offs_tai,
+};
+
 ktime_t ktime_get_with_offset(enum tk_offsets offs)
 {
-	BUG();
+	struct timekeeper *tk = &tk_core.timekeeper;
+	ktime_t base, *offset = offsets[offs];
+	s64 nsecs;
+
+	base = ktime_add(tk->tkr_mono.base, *offset);
+	nsecs = timekeeping_get_ns(&tk->tkr_mono);
+
+	return ktime_add_ns(base, nsecs);
 }
 
 /**
