@@ -88,7 +88,8 @@
 #define TASK_PARKED		512
 #define TASK_NOLOAD		1024
 #define TASK_NEW		2048
-#define TASK_STATE_MAX		4096
+#define TASK_CHECKPOINTING	4096
+#define TASK_STATE_MAX		8192
 
 #define TASK_STATE_TO_CHAR_STR		"RSDTtXZxKWPNn"
 
@@ -454,6 +455,10 @@ struct task_struct {
 
 /* futex */
 	struct robust_list_head __user *robust_list;
+
+#ifdef CONFIG_CHECKPOINT
+	atomic_t process_barrier;
+#endif
 
 	/* CPU-specific state of this task */
 	struct thread_struct thread;

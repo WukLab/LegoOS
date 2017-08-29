@@ -113,6 +113,7 @@ static struct task_struct *dup_task_struct(struct task_struct *old, int node)
 	 * one for whoever does the "release_task()" (usually parent)
 	 */
 	atomic_set(&new->usage, 2);
+	atomic_set(&new->process_barrier, 0);
 
 	return new;
 
