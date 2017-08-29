@@ -17,6 +17,9 @@
 #undef debug
 #define debug(fmt,...) pr_info(fmt, ##__VA_ARGS__)
 
+/* Timeout for waiting all threads reach to barrier */
+unsigned long checkpoint_barrier_timeout_msec = 20 * MSEC_PER_SEC;
+
 /*
  * Do the real work of checkpoint a whole thread-group
  * @p: thread group leader
@@ -46,8 +49,9 @@ static void wake_up_children(struct task_struct *p)
 int checkpoint_thread(struct task_struct *p)
 {
 	struct task_struct *leader;
+	long saved_state = p->state;
 
-	debug("%s*(): tsk: %d-%d\n", FUNC, p->pid, p->tgid);
+	debug("%s(): tsk: %d-%d\n", FUNC, p->pid, p->tgid);
 
 	leader = p->group_leader;
 	atomic_inc(&leader->process_barrier);
@@ -55,10 +59,30 @@ int checkpoint_thread(struct task_struct *p)
 	if (p != leader) {
 		set_current_state(TASK_CHECKPOINTING);
 		schedule();
+
+		/* Restore saved task state before returning: */
+		set_current_state(saved_state);
 	} else {
+		ktime_t start, end, elapsed;
+		unsigned long timeout, elapsed_msecs;
+
+		start = ktime_get_boottime();
+		timeout = jiffies + msecs_to_jiffies(checkpoint_barrier_timeout_msec);
+
 		while (atomic_read(&p->process_barrier) != p->signal->nr_threads) {
 			cpu_relax();
+
+			if (time_after(jiffies, timeout)) {
+				WARN_ON(1);
+			}
 		}
+
+		end = ktime_get_boottime();
+		elapsed = ktime_sub(end, start);
+		elapsed_msecs = ktime_to_ms(elapsed);
+		debug("Leader wait on barrier for: %d.%3d seconds\n",
+			elapsed_msecs / 1000, elapsed_msecs % 1000);
+
 		do_checkpoint_process(p);
 		wake_up_children(p);
 	}
