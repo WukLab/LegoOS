@@ -37,6 +37,14 @@ config CHECKPOINT
 
 	  If unsure, say N.
 
+config CHECKPOINT_DEBUG
+	bool "Enable to show checkpoint debug messages"
+	default n
+	---help---
+	  Say Y if you want to have more info about what is going on about checkpoint.
+
+	  If unsure, say N.
+
 menu "Processor DEBUG Options"
 config DEBUG_PROC_SYS
 	bool "Debug /proc and /sys output"

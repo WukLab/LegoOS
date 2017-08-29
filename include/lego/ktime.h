@@ -64,6 +64,9 @@ static inline ktime_t ktime_set(const s64 secs, const unsigned long nsecs)
 /* Convert ktime_t to nanoseconds - NOP in the scalar storage format: */
 #define ktime_to_ns(kt)			(kt)
 
+/* Convert ktime_t to microseconds - NOP in the scalar storage format: */
+#define ktime_to_ms(kt)			(kt/NSEC_PER_MSEC)
+
 static inline ktime_t ktime_add_us(const ktime_t kt, const u64 usec)
 {
 	return ktime_add_ns(kt, usec * NSEC_PER_USEC);
