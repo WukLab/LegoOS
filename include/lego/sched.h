@@ -322,6 +322,12 @@ void wake_up_q(struct wake_q_head *head);
 
 struct robust_list_head;
 
+/*
+ * NOTE:
+ * The number of threads within a process is represented by:
+ *	[task_struct->signal->nr_threads]
+ */
+
 struct task_struct {
 	volatile long		state;		/* -1 unrunnable, 0 runnable, >0 stopped */
 	void			*stack;		/* kernel mode stack */

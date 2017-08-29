@@ -9,16 +9,28 @@
 
 #include <lego/pid.h>
 #include <lego/sched.h>
+#include <lego/kernel.h>
 #include <lego/syscalls.h>
 
 int checkpoint_thread(struct task_struct *tsk)
 {
-	clear_tsk_need_checkpoint(tsk);
+	pr_info("%s*(): tsk: %d-%d\n", FUNC, tsk->pid, tsk->tgid);
+	clear_tsk_thread_flag(tsk, TIF_NEED_CHECKPOINT);
 	return 0;
 }
 
-static int __checkpoint_process(struct task_struct *tsk)
+static int checkpoint_process(struct task_struct *p)
 {
+	struct task_struct *t;
+
+	for_each_thread(p, t) {
+		pr_info("%s*(): tsk: %d-%d\n", FUNC, t->pid, t->tgid);
+		set_tsk_thread_flag(t, TIF_NEED_CHECKPOINT);
+
+		if (!wake_up_state(t, TASK_ALL))
+			kick_process(t);
+	}
+
 	return 0;
 }
 
@@ -35,7 +47,7 @@ SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
 		goto out;
 	}
 
-	ret = __checkpoint_process(tsk);
+	ret = checkpoint_process(tsk);
 out:
 	syscall_exit(ret);
 	return ret;
