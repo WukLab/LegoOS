@@ -23,10 +23,14 @@
 #define debug(fmt,...) pr_info(fmt, ##__VA_ARGS__)
 
 /* Timeout for waiting all threads reach to barrier */
-unsigned long __read_mostly checkpoint_barrier_timeout_msec = 100;
+#ifdef CONFIG_CHECKPOINT_DEBUG
+unsigned long __read_mostly checkpoint_barrier_timeout_msec = 5 * MSEC_PER_SEC;
+#else
+unsigned long __read_mostly checkpoint_barrier_timeout_msec = 500;
+#endif
 
 /* Timeout for the real work of checkpointing to remote */
-unsigned long __read_mostly checkpoint_job_timeout_msec = 1000*10;
+unsigned long __read_mostly checkpoint_job_timeout_msec = 10 * MSEC_PER_SEC;
 
 #ifdef CONFIG_CHECKPOINT_DEBUG
 static void paranoid_state_check(struct task_struct *leader)
@@ -61,6 +65,7 @@ static void paranoid_state_check(struct task_struct *leader) { }
 static void do_checkpoint_process(struct task_struct *leader)
 {
 	paranoid_state_check(leader);
+	pr_info("hjahahaa\n");
 }
 
 static void wake_up_thread_group(struct task_struct *leader)
