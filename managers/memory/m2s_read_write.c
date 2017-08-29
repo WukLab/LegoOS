@@ -24,19 +24,13 @@
 #include <memory/include/pid.h>
 #include <memory/include/vm.h>
 
-#define O_CREAT		00000100
-#define O_WRONLY	00000001
-#define O_RDONLY 	00000000
-#define O_RDWR		00000002
-
-
-static ssize_t test_m2s_read(struct file *f, char *buf,
+/*static ssize_t test_m2s_read(struct file *f, char *buf,
 				size_t count, loff_t *off)
 {
 	u32 len_msg;
 	void *msg;
 
-	/* opcode + payload*/
+	// opcode + payload
 	len_msg = sizeof(__u32) + sizeof(struct m2s_read_write_payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
 
@@ -57,7 +51,7 @@ static ssize_t test_m2s_read(struct file *f, char *buf,
 	ssize_t *retval_in_buf;
 	void *retbuf;
 
-	/* retbuf = retval + content*/
+	// retbuf = retval + content
 	u32 len_ret = sizeof(retval) + count;
 	retbuf = kmalloc(len_ret, GFP_KERNEL);
 
@@ -85,7 +79,7 @@ static ssize_t test_m2s_write(struct file *f, const char *buf,
 	void *msg;
 	u32 len_msg;
 
-	/* msg = opcode + payload + content */
+	// msg = opcode + payload + content 
 	len_msg = sizeof(__u32) +  sizeof(struct m2s_read_write_payload) + count;
 	msg = kmalloc(len_msg, GFP_KERNEL);
 
@@ -121,7 +115,8 @@ static ssize_t test_m2s_write(struct file *f, const char *buf,
 	//net_send_reply(STORAGE_NODE, M2S_WRITE, m2s_write_payload, len_msg,
 		   //&retval, sizeof(retval), false);
 	
-	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval, sizeof(retval), false);
+	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval, 
+			sizeof(retval), false);
 
 	kfree(msg);
 	
@@ -129,25 +124,35 @@ static ssize_t test_m2s_write(struct file *f, const char *buf,
 		(*off) += retval;
 
 	return retval;
-}
+}*/
 
-static ssize_t m2s_write(struct p2m_read_write_payload *p2m_payload, 
+static ssize_t m2s_write(void *p2m_void_payload, 
 			    struct lego_task_struct *tsk)
 {
+	struct p2m_read_write_payload *p2m_payload = 
+		(struct p2m_read_write_payload *) p2m_void_payload;
 	void *msg;
 	u32 len_msg;
-
-	/* msg = opcode + payload + content */
-	len_msg = sizeof(__u32) +  sizeof(struct m2s_read_write_payload) + p2m_payload->len;
-	msg = kmalloc(len_msg, GFP_KERNEL);
+	ssize_t retval = 0;
 
 	__u32 *opcode;
 	struct m2s_read_write_payload *payload;
 	char *content;
+
+	/* msg = opcode + payload + content */
+	len_msg = sizeof(__u32) +  sizeof(struct m2s_read_write_payload)
+	       	+ p2m_payload->len;
+
+	msg = kmalloc(len_msg, GFP_KERNEL);
+	if (unlikely(!msg)) {
+		WARN_ON(1);
+		return -ENOMEM;		
+	}
 	
 	opcode = (__u32 *) msg;
 	payload = (struct m2s_read_write_payload *) (msg + sizeof(__u32));
-	content = (char *) (msg + sizeof(__u32) + sizeof(struct m2s_read_write_payload));
+	content = (char *) (msg + sizeof(__u32) + 
+			sizeof(struct m2s_read_write_payload));
 
 	*opcode = M2S_WRITE;
 
@@ -160,17 +165,19 @@ static ssize_t m2s_write(struct p2m_read_write_payload *p2m_payload,
 #ifdef DEBUG_STORAGE
 	pr_info("m2s_write : payload info : \n");
 	pr_info("filename : %s\n", payload->filename);
-	pr_info("uid : %d, flags : %d, len : %d, offset : %d\n",
+	pr_info("uid : %d, flags : %d, len : %zu, offset : %lld\n",
 			payload->uid, payload->flags, payload->len, payload->offset);
 #endif
 
 	/* now copy the user buf to content;
 	 */
-	lego_copy_from_user(tsk, content, p2m_payload->buf, payload->len);
+	//lego_copy_from_user(tsk, content, p2m_payload->buf, payload->len);
+	memcpy(content, p2m_void_payload + sizeof(struct p2m_read_write_payload),
+		       	p2m_payload->len); 
 	//memcpy(content, buf, count);
 
-	ssize_t retval;
-	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval, sizeof(retval), false);
+	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval,
+			sizeof(retval), false);
 
 #ifdef DEBUG_STORAGE
 	pr_info("content string is [%s]\n", content);
@@ -185,18 +192,26 @@ static ssize_t m2s_write(struct p2m_read_write_payload *p2m_payload,
 	return retval;
 }
 
-static ssize_t m2s_read(struct p2m_read_write_payload *p2m_payload,
+//static ssize_t m2s_read(struct p2m_read_write_payload *p2m_payload,
+//				struct lego_task_struct *tsk)
+static void *m2s_read(struct p2m_read_write_payload *p2m_payload,
 				struct lego_task_struct *tsk)
 {
 	u32 len_msg;
 	void *msg;
+	__u32 *opcode;
+	struct m2s_read_write_payload *payload;
+
+	ssize_t retval;
+	ssize_t *retval_in_buf;
+	void *retbuf;
+	char *content;
+	u32 len_ret;
 
 	/* opcode + payload*/
 	len_msg = sizeof(__u32) + sizeof(struct m2s_read_write_payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
 
-	__u32 *opcode;
-	struct m2s_read_write_payload *payload;
 	opcode = (__u32 *) msg;
 	payload = (struct m2s_read_write_payload *) (msg + sizeof(__u32));
 
@@ -211,17 +226,13 @@ static ssize_t m2s_read(struct p2m_read_write_payload *p2m_payload,
 #ifdef DEBUG_STORAGE
 	pr_info("m2s_read : payload info : \n");
 	pr_info("filename : %s\n", payload->filename);
-	pr_info("uid : %d, flags : %d, len : %d, offset : %d\n",
+	pr_info("uid : %d, flags : %d, len : %zu, offset : %lld\n",
 			payload->uid, payload->flags, payload->len, payload->offset);
 #endif
 
-	ssize_t retval;
-	ssize_t *retval_in_buf;
-	void *retbuf;
-	char *content;
 
 	/* retbuf = retval + content*/
-	u32 len_ret = sizeof(retval) + payload->len;
+	len_ret = sizeof(retval) + payload->len;
 	retbuf = kmalloc(len_ret, GFP_KERNEL);
 
 	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, retbuf, len_ret, false);
@@ -243,9 +254,10 @@ static ssize_t m2s_read(struct p2m_read_write_payload *p2m_payload,
 	lego_copy_to_user(tsk, p2m_payload->buf, content, payload->len);
 
 	kfree(msg);
-	kfree(retbuf);
+	//kfree(retbuf);
 
-	return retval;
+	//return retval;
+	return retbuf;
 }
 
 
@@ -255,16 +267,23 @@ static ssize_t m2s_read(struct p2m_read_write_payload *p2m_payload,
 
 ssize_t handle_p2s_read(void *payload, uintptr_t desc, struct common_header *hdr)
 {
-	pr_info("handle_p2s_read\n");
 	struct p2m_read_write_payload *p2m_payload;
-	p2m_payload = (struct p2m_read_write_payload *) payload;
 	struct lego_task_struct *tsk;
-	ssize_t retval;
-	
+	ssize_t retval = 0;
+
+	/* new added */
+	void *retbuf;
+	ssize_t *retval_in_buf;
+
+	pr_info("handle_p2s_read\n");
+
+	p2m_payload = (struct p2m_read_write_payload *) payload;
+
 	tsk = find_lego_task_by_pid(hdr->src_nid, p2m_payload->pid);
 	if (unlikely(!tsk)){
 		/* No such process */
 		retval = -ESRCH;
+		retbuf = &retval;
 		goto out_reply;
 	}
 
@@ -272,10 +291,16 @@ ssize_t handle_p2s_read(void *payload, uintptr_t desc, struct common_header *hdr
 	pr_info("handle_p2s_read : find task_struct, pid : %d", p2m_payload->pid);
 #endif
 
-	retval = m2s_read(p2m_payload, tsk);
+	//retval = m2s_read(p2m_payload, tsk);
+	retbuf = m2s_read(p2m_payload, tsk);
+	retval_in_buf = (ssize_t *) retbuf;
+	retval =  *retval_in_buf;
 
 out_reply:
-	ibapi_reply_message(&retval, sizeof(retval), desc);
+	//ibapi_reply_message(&retval, sizeof(retval), desc);
+	ibapi_reply_message(retbuf, sizeof(ssize_t)+p2m_payload->len, desc);
+	//kfree(retbuf);
+	return retval;
 }
 
 /* payload do not contain opcode
@@ -283,12 +308,14 @@ out_reply:
  */
 ssize_t handle_p2s_write(void *payload, uintptr_t desc, struct common_header *hdr)
 {
-	pr_info("handle_p2s_write\n");
 	struct p2m_read_write_payload *p2m_payload;
-	p2m_payload = (struct p2m_read_write_payload *) payload;
 	struct lego_task_struct *tsk;
 	
 	ssize_t retval;
+
+	pr_info("handle_p2s_write\n");
+
+	p2m_payload = (struct p2m_read_write_payload *) payload;
 
 	tsk = find_lego_task_by_pid(hdr->src_nid, p2m_payload->pid);
 	if (unlikely(!tsk)){
@@ -305,6 +332,7 @@ ssize_t handle_p2s_write(void *payload, uintptr_t desc, struct common_header *hd
 
 out_reply:
 	ibapi_reply_message(&retval, sizeof(retval), desc);
+	return retval;
 }
 
 void m2s_test(){

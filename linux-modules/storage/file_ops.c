@@ -26,7 +26,7 @@ struct file *local_file_open (request *rq) {
 		printk("local_file_open : Cannot open required file [%s].\n", rq->fileName);
 	}
 
-	printk("local_file_open : Open file [%s] success.\n", rq->fileName);
+	//printk("local_file_open : Open file [%s] success.\n", rq->fileName);
 	return filp; 
 
 }
@@ -44,7 +44,7 @@ struct file *local_file_open (request *rq) {
 int local_file_close(struct file *filp){
 	int ret;
 	ret = filp_close(filp, NULL);
-	printk("local_file_close : Close file success.\n");
+	//printk("local_file_close : Close file success.\n");
 	return ret;
 }
 
@@ -58,7 +58,7 @@ int local_file_close(struct file *filp){
 */
 
 ssize_t local_file_write(struct file *file, const char __user *buf, ssize_t len, loff_t *pos){
-	printk("local_file_write : Called\n");
+	//printk("local_file_write : Called\n");
 	ssize_t ret;
 	mm_segment_t old_fs;
 	old_fs = get_fs();

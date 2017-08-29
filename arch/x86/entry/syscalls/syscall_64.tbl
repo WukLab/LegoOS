@@ -68,3 +68,4 @@
 274	64	get_robust_list		sys_get_robust_list
 
 666	common	checkpoint_process	sys_checkpoint_process
+667	common	pcache_flush		sys_pcache_flush

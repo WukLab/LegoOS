@@ -31,6 +31,7 @@ extern unsigned int LEGO_LOCAL_NID;
 
 #define P2M_HEARTBEAT	((__u32)0x10000000)
 #define P2M_LLC_MISS	((__u32)0x20000000)
+#define P2M_LLC_FLUSH	((__u32)0x30000000)
 
 #define P2M_READ	((__u32)__NR_read)
 #define P2M_WRITE	((__u32)__NR_write)
@@ -275,5 +276,13 @@ struct m2s_write {
 	__u32	pid;
 	char    filename[MAX_FILENAME_LENGTH];
 };
+
+struct p2m_flush_payload {
+	__u32 pid;
+	u32 llc_cacheline_size;
+	unsigned long __user flush_vaddr;
+};
+
+int handle_p2m_flush_single(void *, u64, struct common_header *);
 
 #endif /* _LEGO_COMP_COMMON_H_ */

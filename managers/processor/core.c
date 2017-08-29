@@ -48,7 +48,7 @@ static void p_test(void)
 /* http://c-faq.com/decl/spiral.anderson.html */
 static const char *argv_init[MAX_INIT_ARGS+2];
 const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
-
+ 
 static int procmgmt(void *unused)
 {
 	const char *init_filename;

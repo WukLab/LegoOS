@@ -21,6 +21,11 @@
 
 #define DEBUG_STORAGE
 
+#define O_CREAT		00000100
+#define O_WRONLY	00000001
+#define O_RDONLY 	00000000
+#define O_RDWR		00000002
+
 /* we need pass the filename, uid, flags, len, offset
  * and virtual address of user buffer to memory component
  * Also we need nid and pid to convert user virtual address

@@ -510,10 +510,10 @@ void init_global_lid_qpn(void)
 {
 	global_lid = (int *)kmalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
 	global_lid[0] = 7;
-	global_lid[1] = 5;
+	global_lid[1] = 3;
 
 #if (MAX_NODE == 3)
-	global_lid[2] = 10;
+	global_lid[2] = 5;
 #endif
 }
 
@@ -579,6 +579,9 @@ inline int client_find_qp_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 	int i;
 	for(i=0;i<ctx->num_connections;i++)
 	{
+		if (i/NUM_PARALLEL_CONNECTION == ctx->node_id)
+		       continue;	
+		//printk(KERN_CRIT "[%s] qp i %d num_connection %d qp_num %d\n", __func__, i, ctx->num_connections, qp_num);
 		if(ctx->qp[i]->qp_num==qp_num)
 			return i;
 	}

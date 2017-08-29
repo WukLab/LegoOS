@@ -313,4 +313,9 @@ SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 {
 	BUG();
 }
+
+SYSCALL_DEFINE1(pcache_flush, void __user *, vaddr)
+{
+	BUG();
+}
 #endif

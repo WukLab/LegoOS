@@ -17,13 +17,15 @@
 ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,
 		  char __user *buf, size_t count, loff_t *pos)
 {
-	return ramfs_file_ops.read(tsk, file, buf, count, pos);
+	BUG_ON(!file->f_op->read);
+	return file->f_op->read(tsk, file, buf, count, pos);
 }
 
 ssize_t file_write(struct lego_task_struct *tsk, struct lego_file *file,
 		   const char __user *buf, size_t count, loff_t *pos)
 {
-	return ramfs_file_ops.write(tsk, file, buf, count, pos);
+	BUG_ON(!file->f_op->write);
+	return file->f_op->write(tsk, file, buf, count, pos);
 }
 
 /*
@@ -38,8 +40,13 @@ struct lego_file *file_open(struct lego_task_struct *tsk, const char *filename)
 		return ERR_PTR(-ENOMEM);
 
 	strncpy(file->filename, filename, MAX_FILENAME_LEN);
-	file->f_op = &ramfs_file_ops;
 	file->task = tsk;
+
+#ifdef CONFIG_USE_RAMFS
+	file->f_op = &ramfs_file_ops;
+#else
+	file->f_op = &storage_file_ops;
+#endif
 
 	return file;
 }

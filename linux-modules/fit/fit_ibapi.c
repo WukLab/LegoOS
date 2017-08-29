@@ -66,7 +66,7 @@ inline int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret
 {
 	ppc *ctx = FIT_ctx;
 	int ret;
-	printk("Calling ibapi_send_reply_imm\n");
+	//printk("Calling ibapi_send_reply_imm\n");
 	ret = client_send_reply_with_rdma_write_with_imm(ctx, target_node, addr, size, ret_addr, max_ret_size, 0, if_use_ret_phys_addr);
 	return ret;
 }
@@ -95,7 +95,7 @@ int ibapi_query_port(int target_node, int designed_port, int requery_flag)
 inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor)
 {
 	ppc *ctx = FIT_ctx;
-	printk("Calling ibapi_receive_message\n");
+	//printk("Calling ibapi_receive_message\n");
 	return client_receive_message(ctx, designed_port, ret_addr, receive_size, descriptor, 0);
 }
 EXPORT_SYMBOL(ibapi_receive_message);
@@ -103,7 +103,7 @@ EXPORT_SYMBOL(ibapi_receive_message);
 inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
 {
 	ppc *ctx = FIT_ctx;
-	printk("Calling ibapi_reply_message\n");
+	//printk("Calling ibapi_reply_message\n");
 	return client_reply_message(ctx, addr, size, descriptor, 0);
 }
 EXPORT_SYMBOL(ibapi_reply_message);
