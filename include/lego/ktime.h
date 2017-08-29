@@ -105,5 +105,6 @@ static inline ktime_t ms_to_ktime(u64 ms)
 }
 
 extern ktime_t ktime_get(void);
+extern ktime_t ktime_get_with_offset(enum tk_offsets offs);
 
 #endif /* _LEGO_KTIME_H_ */

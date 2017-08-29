@@ -786,17 +786,6 @@ void __init timekeeping_init(void)
 	spin_unlock_irqrestore(&timekeeper_lock, flags);
 }
 
-/* TODO */
-ktime_t ktime_get(void)
-{
-	return jiffies;
-}
-
-ktime_t ktime_get_with_offset(enum tk_offsets offs)
-{
-	return jiffies;
-}
-
 /**
  * ktime_get_seconds - Get the seconds portion of CLOCK_MONOTONIC
  *
@@ -890,6 +879,23 @@ int __do_gettimeofday(struct timespec *ts)
 	timespec_add_ns(ts, nsecs);
 
 	return 0;
+}
+
+ktime_t ktime_get(void)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	ktime_t base;
+	s64 nsecs;
+
+	base = tk->tkr_mono.base;
+	nsecs = timekeeping_get_ns(&tk->tkr_mono);
+
+	return ktime_add_ns(base, nsecs);
+}
+
+ktime_t ktime_get_with_offset(enum tk_offsets offs)
+{
+	BUG();
 }
 
 /**
