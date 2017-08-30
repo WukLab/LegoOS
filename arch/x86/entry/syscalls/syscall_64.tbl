@@ -20,6 +20,7 @@
 13	64	rt_sigaction		sys_rt_sigaction
 14	common	rt_sigprocmask		sys_rt_sigprocmask
 15	64	rt_sigreturn		sys_rt_sigreturn
+16	64	ioctl			sys_ioctl
 19	64	readv			sys_readv
 20	64	writev			sys_writev
 26	common	msync			sys_msync

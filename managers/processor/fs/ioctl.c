@@ -17,8 +17,8 @@
 
 #include "internal.h"
 
-SYSCALL_DEFINE3(fcntl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
-{	
+SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
+{
 	syscall_enter("fd: %u, cmd: %u, arg: %lu\n", fd, cmd, arg);
 	return 0;
 }

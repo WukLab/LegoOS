@@ -115,6 +115,8 @@ asmlinkage long sys_writev(unsigned long fd,
 			   unsigned long vlen);
 asmlinkage long sys_open(const char __user *filename, int flags, umode_t mode);
 asmlinkage long sys_close(unsigned int fd);
+asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg);
+asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg);
 
 asmlinkage long sys_getuid(void);
 asmlinkage long sys_geteuid(void);
