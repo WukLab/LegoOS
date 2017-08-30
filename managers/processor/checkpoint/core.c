@@ -65,12 +65,14 @@ static inline void paranoid_state_check(struct task_struct *leader) { }
 static void __do_checkpoint_process(struct task_struct *leader)
 {
 	struct task_struct *t;
+	struct ss_task_struct *ss;
 
 	paranoid_state_check(leader);
 
 	for_each_thread(leader, t) {
-		struct ss_task_struct *ss;
+		ss->pid = t->pid;
 
+		save_open_files(t, ss);
 		save_thread_regs(t, ss);
 	}
 }

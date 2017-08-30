@@ -78,3 +78,7 @@ void save_thread_regs(struct task_struct *p, struct ss_task_struct *ss)
 	save_thread_gregs(p, ss);
 	save_thread_fpregs(p, ss);
 }
+
+void save_open_files(struct task_struct *p, struct ss_task_struct *ss)
+{
+}

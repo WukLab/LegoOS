@@ -64,7 +64,7 @@ static char __initdata builtin_cmdline[COMMAND_LINE_SIZE] = CONFIG_CMDLINE;
 char __initdata boot_command_line[COMMAND_LINE_SIZE];
 
 /* Concatenated command line from boot and builtin */
-static char command_line[COMMAND_LINE_SIZE];
+char command_line[COMMAND_LINE_SIZE];
 
 /* Setup configured maximum number of CPUs to activate */
 unsigned int setup_max_cpus = NR_CPUS;

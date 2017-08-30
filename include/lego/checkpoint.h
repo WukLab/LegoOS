@@ -11,15 +11,16 @@
 #define _LEGO_CHECKPOINT_H_
 
 #include <lego/types.h>
+#include <lego/files.h>
 #include <lego/ptrace.h>
 
 struct ss_file {
-
-};
-
-struct ss_files {
-
-};
+	unsigned int		fd;
+	unsigned int		f_mode;
+	unsigned int		f_flags;
+	unsigned long		f_pos;
+	char			f_name[FILENAME_LEN_DEFAULT];
+} __packed;
 
 struct ss_thread_gregs {
 	unsigned long r15;
@@ -72,10 +73,8 @@ struct ss_thread_regs {
 struct ss_task_struct {
 	pid_t			pid;
 	struct ss_thread_regs	user_regs;
-};
-
-struct snapshot {
-	
-};
+	struct ss_file*		files;
+	unsigned int		nr_files;
+} __packed;
 
 #endif /* _LEGO_CHECKPOINT_H_ */

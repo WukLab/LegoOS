@@ -19,6 +19,7 @@
 extern struct file_operations proc_stat_ops;
 extern struct file_operations proc_meminfo_ops;
 extern struct file_operations proc_cpuinfo_ops;
+extern struct file_operations proc_cmdline_ops;
 
 struct proc_file_struct {
 	char f_name[FILENAME_LEN_DEFAULT];
@@ -37,6 +38,10 @@ static struct proc_file_struct proc_files[] = {
 	{
 		.f_name = "/proc/cpuinfo",
 		.f_op = &proc_cpuinfo_ops,
+	},
+	{
+		.f_name = "/proc/cmdline",
+		.f_op = &proc_cmdline_ops,
 	},
 };
 

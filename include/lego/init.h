@@ -14,6 +14,7 @@
 #include <lego/compiler.h>
 
 extern char __initdata boot_command_line[];
+extern char command_line[];
 
 asmlinkage void __init start_kernel(void);
 
