@@ -123,3 +123,8 @@ SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
 {
 	BUG();
 }
+
+SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
+{
+	BUG();
+}
