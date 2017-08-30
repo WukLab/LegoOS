@@ -13,7 +13,7 @@
 
 static int cmdline_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "%s\n", command_line);
+	seq_printf(m, "%s\n", boot_command_line);
 	return 0;
 }
 
