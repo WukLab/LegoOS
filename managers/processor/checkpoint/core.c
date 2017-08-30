@@ -62,26 +62,57 @@ static inline void paranoid_state_check(struct task_struct *leader) { }
  * Do the real work of checkpoint a whole thread-group
  * @p: thread group leader
  */
-static void __do_checkpoint_process(struct task_struct *leader)
+static int __do_checkpoint_process(struct task_struct *leader)
 {
 	struct task_struct *t;
-	struct ss_task_struct *ss;
+	struct process_snapshot ps;
+	struct ss_task_struct *ss_tasks, *ss_task;
+	int ret = 0, i = 0;
 
 	paranoid_state_check(leader);
 
-	for_each_thread(leader, t) {
-		ss->pid = t->pid;
+	ps.nr_tasks = leader->signal->nr_threads;
+	ss_tasks = kmalloc(sizeof(*ss_tasks) * ps.nr_tasks, GFP_KERNEL);
+	if (!ss_tasks)
+		return -ENOMEM;
+	ps.tasks = ss_tasks;
 
-		save_open_files(t, ss);
-		save_thread_regs(t, ss);
+	/*
+	 * First save thread-group shared data
+	 */
+
+	ret = save_open_files(leader, &ps);
+	if (ret)
+		goto out;
+
+	/*
+	 * Then save per-thread data
+	 */
+
+	for_each_thread(leader, t) {
+		ss_task = &ss_tasks[i++];
+		ss_task->pid = t->pid;
+		save_thread_regs(t, ss_task);
 	}
+
+	return 0;
+
+revert_files:
+	revert_save_open_files(leader, &ps);
+out:
+	kfree(ss_tasks);
+	return ret;
 }
 
-static void do_checkpoint_process(struct task_struct *leader)
+static int do_checkpoint_process(struct task_struct *leader)
 {
+	int ret;
+
 	preempt_disable();
-	__do_checkpoint_process(leader);
+	ret = __do_checkpoint_process(leader);
 	preempt_enable_no_resched();
+
+	return ret;
 }
 
 static void wake_up_thread_group(struct task_struct *leader)

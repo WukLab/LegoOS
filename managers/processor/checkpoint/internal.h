@@ -14,8 +14,11 @@
 #define debug(fmt,...) pr_info(fmt, ##__VA_ARGS__)
 
 /* Save */
-void save_thread_regs(struct task_struct *p, struct ss_task_struct *ss);
-void save_open_files(struct task_struct *p, struct ss_task_struct *ss);
+void save_thread_regs(struct task_struct *, struct ss_task_struct *);
+int save_open_files(struct task_struct *, struct process_snapshot *);
+
+/* Revert for Save */
+void revert_save_open_files(struct task_struct *, struct process_snapshot *);
 
 /* Restore */
 

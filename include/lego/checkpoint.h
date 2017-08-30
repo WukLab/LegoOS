@@ -14,7 +14,7 @@
 #include <lego/files.h>
 #include <lego/ptrace.h>
 
-struct ss_file {
+struct ss_files {
 	unsigned int		fd;
 	unsigned int		f_mode;
 	unsigned int		f_flags;
@@ -73,8 +73,14 @@ struct ss_thread_regs {
 struct ss_task_struct {
 	pid_t			pid;
 	struct ss_thread_regs	user_regs;
-	struct ss_file*		files;
-	unsigned int		nr_files;
 } __packed;
+
+struct process_snapshot {
+	struct ss_task_struct	*tasks;
+	unsigned int		nr_tasks;
+
+	struct ss_files		*files;
+	unsigned int		nr_files;
+};
 
 #endif /* _LEGO_CHECKPOINT_H_ */

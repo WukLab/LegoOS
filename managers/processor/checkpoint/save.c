@@ -79,6 +79,74 @@ void save_thread_regs(struct task_struct *p, struct ss_task_struct *ss)
 	save_thread_fpregs(p, ss);
 }
 
-void save_open_files(struct task_struct *p, struct ss_task_struct *ss)
+#ifdef CONFIG_CHECKPOINT_DEBUG
+void paranoid_file_debug(struct task_struct *p, struct process_snapshot *ps)
 {
+	int i;
+	struct ss_files *f, *ss_files = ps->files;
+
+	debug("Saved files: %d\n", ps->nr_files);
+	for (i = 0; i < ps->nr_files; i++) {
+		f = &ss_files[i];
+
+		debug("  fd=%d, f_name: %s\n", f->fd, f->f_name);
+		debug("    f_mode:%x,f_flags:%x,f_pos:%lx\n",
+			f->f_mode, f->f_flags, f->f_pos);
+	}
+}
+#else
+static inline void
+paranoid_file_debug(struct task_struct *p, struct process_snapshot *ps) { }
+#endif
+
+void revert_save_open_files(struct task_struct *p, struct process_snapshot *ps)
+{
+	struct ss_files *ss_files = ps->files;
+
+	BUG_ON(!ss_files);
+	kfree(ss_files);
+}
+
+int save_open_files(struct task_struct *p, struct process_snapshot *ps)
+{
+	struct files_struct *files = p->files;
+	struct ss_files *ss_files;
+	unsigned int fd, nr_files;
+	int i = 0;
+
+	nr_files = bitmap_weight(files->fd_bitmap, NR_OPEN_DEFAULT);
+
+	/* No open'ed files */
+	if (nr_files == 0) {
+		ps->files = NULL;
+		ps->nr_files = 0;
+		goto paranoid_debug;
+	}
+
+	ss_files = kmalloc(sizeof(*ss_files) * nr_files, GFP_KERNEL);
+	if (unlikely(!ss_files))
+		return -ENOMEM;
+
+	for_each_set_bit(fd, files->fd_bitmap, NR_OPEN_DEFAULT) {
+		struct ss_files *ss_file = &ss_files[i];
+		struct file *file = files->fd_array[fd];
+
+		BUG_ON(!file);
+
+		ss_file->fd		= fd;
+		ss_file->f_mode		= file->f_mode;
+		ss_file->f_flags	= file->f_flags;
+		ss_file->f_pos		= file->f_pos;
+		memcpy(ss_file->f_name, file->f_name, FILENAME_LEN_DEFAULT);
+
+		i++;
+	}
+	BUG_ON(i != nr_files);
+
+	ps->files = ss_files;
+	ps->nr_files = nr_files;
+
+paranoid_debug:
+	paranoid_file_debug(p, ps);
+	return 0;
 }
