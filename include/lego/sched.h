@@ -652,6 +652,9 @@ void show_stack_content(struct task_struct *task, struct pt_regs *regs, unsigned
 void show_general_task_info(struct task_struct *task);
 void show_regs(struct pt_regs *regs);
 
+/* Dump pt_regs purely */
+void __show_regs(struct pt_regs *regs, int all);
+
 /**
  * dump_stack	-	Dump the current stack
  *

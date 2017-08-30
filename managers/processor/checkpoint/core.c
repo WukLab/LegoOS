@@ -20,8 +20,7 @@
 #include <lego/checkpoint.h>
 #include <lego/timekeeping.h>
 
-#undef debug
-#define debug(fmt,...) pr_info(fmt, ##__VA_ARGS__)
+#include "internal.h"
 
 /* Timeout for waiting all threads reach to barrier */
 #ifdef CONFIG_CHECKPOINT_DEBUG
@@ -65,7 +64,15 @@ static inline void paranoid_state_check(struct task_struct *leader) { }
  */
 static void __do_checkpoint_process(struct task_struct *leader)
 {
+	struct task_struct *t;
+
 	paranoid_state_check(leader);
+
+	for_each_thread(leader, t) {
+		struct ss_task_struct *ss;
+
+		save_thread_regs(t, ss);
+	}
 }
 
 static void do_checkpoint_process(struct task_struct *leader)
@@ -143,7 +150,7 @@ int checkpoint_thread(struct task_struct *p)
 			 */
 			if (time_after(jiffies, timeout)) {
 				barrier_timeout_wakeup(p);
-				goto timeout;
+				goto after_timeout;
 			}
 		}
 
@@ -158,11 +165,11 @@ int checkpoint_thread(struct task_struct *p)
 		/* Wake all threads sleeping in TASK_CHECKPOINTING */
 		wake_up_thread_group(p);
 
+after_timeout:
 		/* Reset barrier info for next run: */
 		atomic_set(&p->process_barrier, 0);
 	}
 
-timeout:
 	clear_tsk_thread_flag(p, TIF_NEED_CHECKPOINT);
 	return 0;
 }

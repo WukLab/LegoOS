@@ -301,7 +301,7 @@ static void show_code(struct pt_regs *regs)
 	pr_cont("\n");
 }
 
-static void __show_regs(struct pt_regs *regs, int all)
+void __show_regs(struct pt_regs *regs, int all)
 {
 	unsigned long cr0 = 0L, cr2 = 0L, cr3 = 0L, cr4 = 0L, fs, gs, shadowgs;
 	unsigned int fsindex, gsindex;
