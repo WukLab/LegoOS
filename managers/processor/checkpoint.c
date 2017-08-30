@@ -17,6 +17,7 @@
 #include <lego/jiffies.h>
 #include <lego/syscalls.h>
 #include <lego/spinlock.h>
+#include <lego/checkpoint.h>
 #include <lego/timekeeping.h>
 
 #undef debug
@@ -55,17 +56,23 @@ static void paranoid_state_check(struct task_struct *leader)
 	spin_unlock_irqrestore(&tasklist_lock, flags);
 }
 #else
-static void paranoid_state_check(struct task_struct *leader) { }
+static inline void paranoid_state_check(struct task_struct *leader) { }
 #endif
 
 /*
  * Do the real work of checkpoint a whole thread-group
  * @p: thread group leader
  */
-static void do_checkpoint_process(struct task_struct *leader)
+static void __do_checkpoint_process(struct task_struct *leader)
 {
 	paranoid_state_check(leader);
-	pr_info("hjahahaa\n");
+}
+
+static void do_checkpoint_process(struct task_struct *leader)
+{
+	preempt_disable();
+	__do_checkpoint_process(leader);
+	preempt_enable_no_resched();
 }
 
 static void wake_up_thread_group(struct task_struct *leader)
@@ -147,7 +154,12 @@ int checkpoint_thread(struct task_struct *p)
 			elapsed_msecs / 1000, elapsed_msecs % 1000);
 
 		do_checkpoint_process(p);
+
+		/* Wake all threads sleeping in TASK_CHECKPOINTING */
 		wake_up_thread_group(p);
+
+		/* Reset barrier info for next run: */
+		atomic_set(&p->process_barrier, 0);
 	}
 
 timeout:
