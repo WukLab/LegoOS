@@ -9,6 +9,7 @@ obj-y += handle_pcache.o
 obj-y += handle_execve.o
 obj-y += handle_mmap.o
 obj-y += handle_file.o
+obj-y += handle_checkpoint.o
 obj-y += file_ops.o
 obj-y += missing_syscalls.o
 obj-y += m2s_read_write.o

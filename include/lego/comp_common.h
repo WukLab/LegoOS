@@ -43,6 +43,7 @@ extern unsigned int LEGO_LOCAL_NID;
 #define P2M_MSYNC	((__u32)__NR_msync)
 #define P2M_FORK	((__u32)__NR_fork)
 #define P2M_EXECVE	((__u32)__NR_execve)
+#define P2M_CHECKPOINT	((__u32)__NR_checkpoint_process)
 #define P2M_TEST	((__u32)0x0fffffff)
 
 #define M2S_BASE	((__u32)0x00100000)
@@ -259,6 +260,9 @@ struct p2m_msync_struct {
 	__u32	flags;
 };
 int handle_p2m_msync(struct p2m_msync_struct *, u64, struct common_header *);
+
+/* P2M_CHECKPOINT */
+int handle_p2m_checkpint(void *, u64, struct common_header *);
 
 /* M2S_READ */
 struct m2s_read {

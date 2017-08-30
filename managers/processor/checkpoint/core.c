@@ -85,6 +85,10 @@ static int __do_checkpoint_process(struct task_struct *leader)
 	if (ret)
 		goto out;
 
+	ret = save_signals(leader, &ps);
+	if (ret)
+		goto revert_files;
+
 	/*
 	 * Then save per-thread data
 	 */

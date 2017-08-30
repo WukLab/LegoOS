@@ -207,6 +207,10 @@ static int mc_dispatcher(void *passed)
 		handle_p2m_execve(payload, desc, hdr);
 		break;
 
+	case P2M_CHECKPOINT:
+		handle_p2m_checkpint(payload, desc, hdr);
+		break;
+
 /* TEST */
 	case P2M_TEST:
 		handle_p2m_test(payload, desc, hdr);

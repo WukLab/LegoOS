@@ -22,6 +22,26 @@
 
 #include "internal.h"
 
+#ifdef CONFIG_CHECKPOINT_DEBUG
+void paranoid_file_debug(struct task_struct *p, struct process_snapshot *ps)
+{
+	int i;
+	struct ss_files *f, *ss_files = ps->files;
+
+	debug("Saved files: %d\n", ps->nr_files);
+	for (i = 0; i < ps->nr_files; i++) {
+		f = &ss_files[i];
+
+		debug("  fd=%d, f_name: %s\n", f->fd, f->f_name);
+		debug("    f_mode:%x,f_flags:%x,f_pos:%lx\n",
+			f->f_mode, f->f_flags, f->f_pos);
+	}
+}
+#else
+static inline void
+paranoid_file_debug(struct task_struct *p, struct process_snapshot *ps) { }
+#endif
+
 static void save_thread_gregs(struct task_struct *p, struct ss_task_struct *ss)
 {
 	struct pt_regs *src = task_pt_regs(p);
@@ -79,26 +99,6 @@ void save_thread_regs(struct task_struct *p, struct ss_task_struct *ss)
 	save_thread_fpregs(p, ss);
 }
 
-#ifdef CONFIG_CHECKPOINT_DEBUG
-void paranoid_file_debug(struct task_struct *p, struct process_snapshot *ps)
-{
-	int i;
-	struct ss_files *f, *ss_files = ps->files;
-
-	debug("Saved files: %d\n", ps->nr_files);
-	for (i = 0; i < ps->nr_files; i++) {
-		f = &ss_files[i];
-
-		debug("  fd=%d, f_name: %s\n", f->fd, f->f_name);
-		debug("    f_mode:%x,f_flags:%x,f_pos:%lx\n",
-			f->f_mode, f->f_flags, f->f_pos);
-	}
-}
-#else
-static inline void
-paranoid_file_debug(struct task_struct *p, struct process_snapshot *ps) { }
-#endif
-
 void revert_save_open_files(struct task_struct *p, struct process_snapshot *ps)
 {
 	struct ss_files *ss_files = ps->files;
@@ -113,6 +113,8 @@ int save_open_files(struct task_struct *p, struct process_snapshot *ps)
 	struct ss_files *ss_files;
 	unsigned int fd, nr_files;
 	int i = 0;
+
+	BUG_ON(p != p->group_leader);
 
 	nr_files = bitmap_weight(files->fd_bitmap, NR_OPEN_DEFAULT);
 
@@ -148,5 +150,12 @@ int save_open_files(struct task_struct *p, struct process_snapshot *ps)
 
 paranoid_debug:
 	paranoid_file_debug(p, ps);
+	return 0;
+}
+
+int save_signals(struct task_struct *p, struct process_snapshot *ps)
+{
+	BUG_ON(p != p->group_leader);
+
 	return 0;
 }
