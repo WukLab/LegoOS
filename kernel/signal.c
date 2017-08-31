@@ -2071,3 +2071,13 @@ SYSCALL_DEFINE4(rt_sigtimedwait, const sigset_t __user *, uthese,
 
 	return ret;
 }
+
+SYSCALL_DEFINE0(pause)
+{
+	__syscall_enter();
+	while (!signal_pending(current)) {
+		__set_current_state(TASK_INTERRUPTIBLE);
+		schedule();
+	}
+	return -ERESTARTNOHAND;
+}

@@ -15,6 +15,7 @@
 #include <lego/percpu.h>
 #include <lego/jiffies.h>
 #include <lego/spinlock.h>
+#include <lego/syscalls.h>
 
 /*
  * The timer wheel has LVL_DEPTH array levels. Each level provides an array of
@@ -1081,4 +1082,22 @@ unsigned long msleep_interruptible(unsigned int msecs)
 	while (timeout)
 		timeout = schedule_timeout_interruptible(timeout);
 	return jiffies_to_msecs(timeout);
+}
+
+SYSCALL_DEFINE2(nanosleep, struct timespec __user *, rqtp,
+		struct timespec __user *, rmtp)
+{
+	struct timespec tu;
+
+	if (copy_from_user(&tu, rqtp, sizeof(tu)))
+		return -EFAULT;
+
+	if (!timespec_valid(&tu))
+		return -EINVAL;
+
+	syscall_enter("WARNING: Not implemented! tu.sec: %lld, tu.nsec: %ld\n",
+		tu.tv_sec, tu.tv_nsec);
+
+	/* TODO We are not able to have nanosleep granularity. Only timer() */
+	return 0;
 }
