@@ -131,6 +131,9 @@ ENTRY(entry_SYSCALL_64)
 	 */
 	cli
 
+	movq	%rsp, %rdi
+	call	prepare_exit_to_usermode
+
 	movq	RIP(%rsp), %rcx
 	movq	EFLAGS(%rsp), %r11
 	RESTORE_C_REGS_EXCEPT_RCX_R11
