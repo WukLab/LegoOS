@@ -1,6 +1,47 @@
 - build_all_zonelists(), based on node order or zone order
 - PCI MSI (may used by IB)
-* timer
 * mutex
 - watchdog and NMI handler (detect deadlock and dump backtrace)
-- ktime, kernel timing code seems incomplete.
+
+
+Wed Aug 30 23:29:18 EDT 2017
+- After signal handler finishes, even after it call back to kernel
+  via sys_rt_sigreturn(). The thread will run for some time and
+  have general protection, log is:
+
+ [35974.669720] STDOUT: ---[
+  Handler: Current-PID: 23
+]---
+[35974.670920] SYSC_write() cpu(0) tsk(23/23/kernel_init) ret: 27
+[35974.672252] sys_rt_sigreturn() cpu(0) tsk(23/23/kernel_init) from-ip:0x40a759
+[35974.673764] SYSC_write() cpu(0) tsk(23/23/kernel_init) user-ip:0x409800
+[35974.674530]     fd: 2 buf: 00000000004a930c count: 21
+[35974.675149] STDOUT: ---[
+After sending signal
+]---
+[35974.676313] SYSC_write() cpu(0) tsk(23/23/kernel_init) ret: 21
+[35974.720711] do_general_protection in CPU0, error_code: 0
+[35974.721306] CPU: 0 PID: 19 Comm: kernel_init 4.0.0-lego+ #42
+[35974.721924] RIP: 0010:[<ffffffff8100096a>]  [<ffffffff8100096a>] __switch_to+0x2ba/0x490
+[35974.722872] RSP: 0000:ffff88083c52fe18  EFLAGS: 00010002
+[35974.726191] RAX: 00000000ffffffff RBX: ffff88083c754810 RCX: ffff88083b08db38
+[35974.726935] RDX: 00000000ffffffff RSI: ffff88083c754810 RDI: ffff88083b08dc38
+[35974.727729] RBP: ffff88083c52fe58 R08: ffff88083b08dc38 R09: ffff88083c754bd0
+[35974.728468] R10: 0000000000000000 R11: 0000000000000000 R12: ffff88083b08d838
+[35974.729208] R13: ffff88083c402040 R14: 0000000000000000 R15: 0000000000000000
+[35974.729951] FS:  00000000006e1880(0000) GS:ffff88083c400000(0000) knlGS:0000000000000000
+[35974.730860] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+[35974.731506] CR2: 0000000000448700 CR3: 0000000001120000 CR4: 00000000000406a0
+[35974.732265] Stack:
+[35974.733121] ffff88083c52c000 ffff88083c754810 ffff88083c405d00 ffffffff8105b360
+[35974.735680] ffff88083c405d00 ffff88083c754810 ffff88083c754a18 ffff88083c4a45f8
+[35974.738218] ffff88083c52fe90 ffffffff810523c7 ffff88083b08d838 ffffffffffffc000
+[35974.740770] ffff88083c5263f8 ffff88083c5264f0 ffff88083c4a4620 ffff88083c52fea8
+[35974.743314] ffffffff810524da ffff88083c4a4560 ffff88083c52ff48 ffffffff810468fb
+[35974.745677] Call Trace:
+[35974.746525] <TSK>
+[35974.747278] [<ffffffff810523c7>] __schedule+0xf7/0x1f0
+[35974.748640] [<ffffffff810524da>] schedule+0x1a/0x40
+[35974.749950] [<ffffffff810468fb>] ib_mad_completion_handler+0x30b/0x7a0
+[35974.751581] [<ffffffff810465f0>] ? ib_mad_send_done_handler.isra.19+0x1e0/0x1e0
+[35974.753573] [<ffffffff8100a952>] ret_from_fork+0x22/0x30
