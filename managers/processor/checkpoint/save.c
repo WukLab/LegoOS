@@ -37,9 +37,22 @@ void paranoid_file_debug(struct task_struct *p, struct process_snapshot *ps)
 			f->f_mode, f->f_flags, f->f_pos);
 	}
 }
+
+void paranoid_signal_debug(struct task_struct *p, struct process_snapshot *ps)
+{
+	struct sigaction *action;
+	int i;
+
+	for (i = 0; i < _NSIG; i++) {
+	
+	}
+}
 #else
 static inline void
 paranoid_file_debug(struct task_struct *p, struct process_snapshot *ps) { }
+
+static inline void
+paranoid_signal_debug(struct task_struct *p, struct process_snapshot *ps) { }
 #endif
 
 static void save_thread_gregs(struct task_struct *p, struct ss_task_struct *ss)
@@ -155,7 +168,23 @@ paranoid_debug:
 
 int save_signals(struct task_struct *p, struct process_snapshot *ps)
 {
+	struct k_sigaction *k_action = p->sighand->action;
+	struct sigaction *src, *dst;
+	int i;
+
 	BUG_ON(p != p->group_leader);
+
+	/* All signal actions */
+	for (i = 0; i < _NSIG; i++) {
+		src = &k_action[i].sa;
+		dst = &ps->action[i];
+		memcpy(dst, src, sizeof(*dst));
+	}
+
+	/* Bitmap for blocked signals */
+	memcpy(&ps->blocked, &p->blocked, sizeof(sigset_t));
+
+	paranoid_signal_debug(p, ps);
 
 	return 0;
 }
