@@ -6,6 +6,8 @@
 #include <sys/syscall.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <string.h>
 #include <linux/unistd.h>
 
 #define __NR_CHECKPOINT	666
@@ -61,21 +63,61 @@ static void create_threads(void)
 	//pthread_join(tid, NULL);
 }
 
+static void hdl(int sig, siginfo_t *siginfo, void *context)
+{
+	printf("  Handler: sig: %d\n", sig);
+	printf("  Handler: Sending PID: %ld, UID: %ld\n",
+		(long)siginfo->si_pid, (long)siginfo->si_uid);
+
+	printf("  Handler: Current-PID: %d\n", getpid());
+}
+
+static void register_signal_handler(void)
+{
+	struct sigaction act;
+
+	memset(&act, 0, sizeof(act));
+
+	act.sa_sigaction = &hdl;
+	act.sa_flags = SA_SIGINFO;
+
+	if (sigaction(SIGALRM, &act, NULL) < 0) {
+		perror("sigaction");
+		exit(-1);
+	}
+}
+
 int main(void)
 {
 	int fd;
 
+	fprintf(stderr, "main(): pid=%d\n", getpid());
+
+	/*
+	 * Signals
+	 */
+	register_signal_handler();
+
+	/*
+	 * Files
+	 */
 	fd = open("/proc/cmdline", 0, 0);
 	if (fd < 0) {
 		perror("open");
 		exit(-1);
 	}
 
-	fprintf(stderr, "pid: %d\n", getpid());
-
+	/*
+	 * thread-group
+	 */
 	create_threads();
+
+	/*
+	 * Checkpoint
+	 */
 	checkpoint_process(getpid());
 
 	fprintf(stderr, "Done \n");
+
 	return 0;
 }
