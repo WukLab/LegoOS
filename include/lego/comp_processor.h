@@ -33,6 +33,38 @@ int do_execve(const char *filename,
 	      const char * const *argv,
 	      const char * const *envp);
 
+/**
+ * Check if the cacheline mapped to @address is present
+ * at pcache.
+ *
+ * Return true if present, otherwise return false.
+ */
+static inline bool pcache_present(unsigned long __user address)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	pgd = pgd_offset(current->mm, address);
+	if (!pgd_present(*pgd))
+		return false;
+
+	pud = pud_offset(pgd, address);
+	if (!pud_present(*pud))
+		return false;
+
+	pmd = pmd_offset(pud, address);
+	if (!pmd_present(*pmd))
+		return false;
+
+	pte = pte_offset(pmd, address);
+	if (!pte_present(*pte))
+		return false;
+
+	return true;
+}
+
 #else /* !CONFIG_COMP_PROCESSOR */
 static inline void processor_component_init(void) { }
 static inline int pcache_range_register(u64 start, u64 size)
