@@ -4,11 +4,11 @@
 
 static void hdl(int sig, siginfo_t *siginfo, void *context)
 {
-	printf("sig: %d\n", sig);
-	printf("Sending PID: %ld, UID: %ld\n",
+	printf("  Handler: sig: %d\n", sig);
+	printf("  Handler: Sending PID: %ld, UID: %ld\n",
 		(long)siginfo->si_pid, (long)siginfo->si_uid);
 
-	exit(1);
+	printf("  Handler: Current-PID: %d\n", getpid());
 }
 
 int main()
@@ -26,8 +26,9 @@ int main()
 		return -1;
 	}
 
-	for (;;)
-		sleep(1);
+	fprintf(stderr, "Before sending signal\n");
+	kill(getpid(), SIGINT);
+	fprintf(stderr, "After sending signal\n");
 
 	return 0;
 }
