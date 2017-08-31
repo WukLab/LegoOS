@@ -13,6 +13,7 @@
 #include <lego/types.h>
 #include <lego/files.h>
 #include <lego/ptrace.h>
+#include <lego/signal.h>
 
 struct ss_files {
 	unsigned int		fd;
@@ -81,6 +82,14 @@ struct process_snapshot {
 
 	struct ss_files		*files;
 	unsigned int		nr_files;
+
+	/*
+	 * All pending signals MUST be handled
+	 * before checkpointing. Hence we do not
+	 * need to save private/shared pending signals.
+	 */
+	struct sigaction	action[_NSIG];
+	sigset_t		blocked;
 };
 
 #endif /* _LEGO_CHECKPOINT_H_ */
