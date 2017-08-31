@@ -440,6 +440,8 @@ int copy_siginfo_to_user(siginfo_t __user *to, const siginfo_t *from);
 /* kernel/coredump.c */
 void do_coredump(const siginfo_t *siginfo);
 
+void dump_sigaction(struct sigaction *action, const char *prefix);
+
 /*
  * In POSIX a signal is sent either to a specific thread (Linux task)
  * or to the process as a whole (Linux thread group).  How the signal

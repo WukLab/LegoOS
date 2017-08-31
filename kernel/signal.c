@@ -2081,3 +2081,20 @@ SYSCALL_DEFINE0(pause)
 	}
 	return -ERESTARTNOHAND;
 }
+
+void dump_sigaction(struct sigaction *action, const char *prefix)
+{
+	if (!action || !prefix)
+		return;
+
+	if (action->sa_handler == SIG_IGN)
+		pr_debug("%ssa_handler: SIG_IGN\n", prefix);
+	else if (action->sa_handler == SIG_DFL)
+		pr_debug("%ssa_handler: SIG_DFL\n", prefix);
+	else
+		pr_debug("%ssa_handler: %p\n", prefix, action->sa_handler);
+
+	pr_debug("%ssa_flags:   %#lx\n", prefix, action->sa_flags);
+	pr_debug("%ssa_restore: %p\n", prefix, action->sa_restorer);
+	pr_debug("%ssa_mask:    %#lx\n", prefix, action->sa_mask.sig[0]);
+}

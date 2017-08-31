@@ -43,8 +43,13 @@ void paranoid_signal_debug(struct task_struct *p, struct process_snapshot *ps)
 	struct sigaction *action;
 	int i;
 
+	debug("Saved blocked signals: %lx\n", ps->blocked.sig[0]);
+	debug("Saved sigactions: \n");
 	for (i = 0; i < _NSIG; i++) {
-	
+		action = &ps->action[i];
+
+		debug("  signr: %d\n", i + 1);
+		dump_sigaction(action, "    ");
 	}
 }
 #else
