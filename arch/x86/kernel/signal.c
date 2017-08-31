@@ -391,8 +391,10 @@ void do_signal(struct pt_regs *regs)
 	struct ksignal ksig;
 
 	if (get_signal(&ksig)) {
-		/* Whee! Actually deliver the signal.  */
-		pr_info("%s(): sig: %d\n", FUNC, ksig.sig);
+		/*
+		 * Got a signal which has user-registered handler
+		 * (Other signals are already handled by get_signal()):
+		 */
 		handle_signal(&ksig, regs);
 		return;
 	}

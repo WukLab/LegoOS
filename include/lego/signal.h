@@ -303,6 +303,10 @@ struct sigaction {
 
 struct k_sigaction {
 	struct sigaction sa;
+	/*
+	 * restorer is obsolete in x86
+	 * So k_sigaction only has one sa field
+	 */
 };
  
 struct sighand_struct {
@@ -416,10 +420,11 @@ void force_sig(int sig, struct task_struct *p);
 
 /* Catch the signal from interrupt return path */
 struct ksignal {
-	struct k_sigaction ka;
-	siginfo_t info;
-	int sig;
+	struct k_sigaction	ka;
+	siginfo_t		info;
+	int			sig;
 };
+
 int get_signal(struct ksignal *ksig);
 void signal_setup_done(int failed, struct ksignal *ksig, int stepping);
 void exit_signals(struct task_struct *tsk);

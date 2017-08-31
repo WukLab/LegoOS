@@ -943,7 +943,7 @@ static void collect_signal(int sig, struct sigpending *list, siginfo_t *info)
 	/*
 	 * Collect the siginfo appropriate to this signal.  Check if
 	 * there is another siginfo for the same signal.
-	*/
+	 */
 	list_for_each_entry(q, &list->list, list) {
 		if (q->info.si_signo == sig) {
 			if (first)
@@ -1049,6 +1049,11 @@ int dequeue_signal(struct task_struct *tsk, sigset_t *mask, siginfo_t *info)
 	return signr;
 }
 
+/*
+ * Return 1 if we have a user-registed signal handler
+ * to handle; Otherwise the signal is SIG_DFL or SIG_IGN,
+ * or there is no signals.
+ */
 int get_signal(struct ksignal *ksig)
 {
 	struct sighand_struct *sighand = current->sighand;
@@ -1107,18 +1112,29 @@ relock:
 		}
 
 		signr = dequeue_signal(current, &current->blocked, &ksig->info);
-		pr_info("%s():%d, signr: %d, handler:%p\n",
-			FUNC, LINE, signr, signr > 0 ? (&sighand->action[signr-1])->sa.sa_handler : NULL);
-		
+		pr_debug("%s(): dequeue_signr: %d, handler:%p\n",
+			FUNC, signr, signr > 0 ? (&sighand->action[signr-1])->sa.sa_handler : NULL);
+
+		/*
+		 * No signal to handle
+		 * Wil return 0
+		 */
 		if (!signr)
-			break; /* will return 0 */
+			break;
 
 		ka = &sighand->action[signr-1];
 
-		if (ka->sa.sa_handler == SIG_IGN) /* Do nothing.  */
+		/*
+		 * Signal catched, but ignore it:
+		 */
+		if (ka->sa.sa_handler == SIG_IGN)
 			continue;
+
+		/*
+		 * Signal catched with customized signal handler.
+		 * Then return and let arch code run the handler:
+		 */
 		if (ka->sa.sa_handler != SIG_DFL) {
-			/* Run the handler.  */
 			ksig->ka = *ka;
 
 			if (ka->sa.sa_flags & SA_ONESHOT)
@@ -1128,7 +1144,7 @@ relock:
 		}
 
 		/*
-		 * Now we are doing the default action for this signal.
+		 * Signal catched with default action:
 		 */
 		if (sig_kernel_ignore(signr)) /* Default is nothing. */
 			continue;
@@ -1771,6 +1787,8 @@ int do_sigaction(int sig, struct k_sigaction *act, struct k_sigaction *oact)
 			sigemptyset(&mask);
 			sigaddset(&mask, sig);
 			flush_sigqueue_mask(&mask, &p->signal->shared_pending);
+
+			/* XXX: need lock to protect the walking against clone() */
 			for_each_thread(p, t)
 				flush_sigqueue_mask(&mask, &t->pending);
 		}
