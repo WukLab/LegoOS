@@ -483,15 +483,6 @@ extern spinlock_t tasklist_lock;
 #define task_thread_info(task)	((struct thread_info *)((task)->stack))
 #define task_stack_page(task)	((void *)((task)->stack))
 
-#define __for_each_thread(signal, t)	\
-	list_for_each_entry(t, &(signal)->thread_head, thread_node)
-
-#define for_each_thread(p, t)		\
-	__for_each_thread((p)->signal, t)
-
-#define while_each_thread(g, t) \
-	while ((t = next_thread(t)) != g)
-
 static inline bool thread_group_leader(struct task_struct *p)
 {
 	return p->exit_signal >= 0;
@@ -513,6 +504,38 @@ static inline struct task_struct *next_thread(const struct task_struct *p)
 	/* list_entry_rcu */
 	return list_entry(p->thread_group.next, struct task_struct, thread_group);
 }
+
+extern union thread_union init_thread_union;
+extern struct task_struct init_task;
+
+#define tasklist_empty() \
+	list_empty(&init_task.tasks)
+
+#define next_task(p) \
+	list_entry((p)->tasks.next, struct task_struct, tasks)
+
+#define for_each_process(p) \
+	for (p = &init_task ; (p = next_task(p)) != &init_task ; )
+
+#define __for_each_thread(signal, t)	\
+	list_for_each_entry(t, &(signal)->thread_head, thread_node)
+
+#define for_each_thread(p, t)		\
+	__for_each_thread((p)->signal, t)
+
+/* Careful: this is a double loop, 'break' won't work as expected. */
+#define for_each_process_thread(p, t)	\
+	for_each_process(p) for_each_thread(p, t)
+
+/*
+ * Careful: do_each_thread/while_each_thread is a double loop so
+ *          'break' will not work as expected - use goto instead.
+ */
+#define do_each_thread(g, t) \
+	for (g = t = &init_task ; (g = t = next_task(g)) != &init_task ; ) do
+
+#define while_each_thread(g, t) \
+	while ((t = next_thread(t)) != g)
 
 /*
  * flag set/clear/test wrappers
@@ -643,9 +666,6 @@ static inline int kstack_end(void *addr)
 	/* Reliable end of stack detection: */
 	return !(((unsigned long)addr+sizeof(void*)-1) & (THREAD_SIZE-sizeof(void*)));
 }
-
-extern union thread_union init_thread_union;
-extern struct task_struct init_task;
 
 void show_call_trace(struct task_struct *task, struct pt_regs *regs, unsigned long *);
 void show_stack_content(struct task_struct *task, struct pt_regs *regs, unsigned long *sp);

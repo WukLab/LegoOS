@@ -7,30 +7,33 @@
  * (at your option) any later version.
  */
 
-#include <lego/init.h>
 #include <lego/files.h>
+#include <lego/utsname.h>
 #include <lego/seq_file.h>
 
-static int cmdline_show(struct seq_file *m, void *v)
+static int version_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "%s\n", boot_command_line);
+	seq_printf(m, lego_proc_banner,
+		utsname.sysname,
+		utsname.release,
+		utsname.version);
 	return 0;
 }
 
-static int cmdline_open(struct file *file)
+static int version_open(struct file *file)
 {
-	return single_open(file, cmdline_show, NULL);
+	return single_open(file, version_show, NULL);
 }
 
-static ssize_t cmdline_write(struct file *f, const char __user *buf,
+static ssize_t version_write(struct file *f, const char __user *buf,
 			     size_t count, loff_t *off)
 {
 	return -EFAULT;
 }
 
-struct file_operations proc_cmdline_ops = {
-	.open		= cmdline_open,
+struct file_operations proc_version_ops = {
+	.open		= version_open,
 	.read		= seq_read,
-	.write		= cmdline_write,
+	.write		= version_write,
 	.release	= single_release,
 };

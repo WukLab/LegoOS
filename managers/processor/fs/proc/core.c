@@ -28,6 +28,11 @@ struct proc_file_struct {
 
 static struct proc_file_struct proc_files[] = {
 	{
+		/* Lego Specific */
+		.f_name = "/proc/processes",
+		.f_op = &proc_cmdline_ops,
+	},
+	{
 		.f_name	= "/proc/stat",
 		.f_op = &proc_stat_ops,
 	},
@@ -41,6 +46,10 @@ static struct proc_file_struct proc_files[] = {
 	},
 	{
 		.f_name = "/proc/cmdline",
+		.f_op = &proc_cmdline_ops,
+	},
+	{
+		.f_name = "/proc/version",
 		.f_op = &proc_cmdline_ops,
 	},
 };

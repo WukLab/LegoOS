@@ -12,6 +12,8 @@ static char *files[] = {
 	"/proc/stat",
 	"/proc/meminfo",
 	"/proc/cmdline",
+	"/proc/version",
+	"/proc/processes",
 	"/sys/devices/system/cpu/online",
 };
 
