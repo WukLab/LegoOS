@@ -25,7 +25,6 @@ static int processes_show(struct seq_file *m, void *v)
 			seq_printf(m, "  PID: %d, TGID: %d\n",
 				t->pid, t->tgid);
 		}
-		seq_putc(m, '\n');
 	}
 	spin_unlock(&tasklist_lock);
 

@@ -20,6 +20,8 @@ extern struct file_operations proc_stat_ops;
 extern struct file_operations proc_meminfo_ops;
 extern struct file_operations proc_cpuinfo_ops;
 extern struct file_operations proc_cmdline_ops;
+extern struct file_operations proc_version_ops;
+extern struct file_operations proc_processes_ops;
 
 struct proc_file_struct {
 	char f_name[FILENAME_LEN_DEFAULT];
@@ -30,7 +32,7 @@ static struct proc_file_struct proc_files[] = {
 	{
 		/* Lego Specific */
 		.f_name = "/proc/processes",
-		.f_op = &proc_cmdline_ops,
+		.f_op = &proc_processes_ops,
 	},
 	{
 		.f_name	= "/proc/stat",
@@ -50,7 +52,7 @@ static struct proc_file_struct proc_files[] = {
 	},
 	{
 		.f_name = "/proc/version",
-		.f_op = &proc_cmdline_ops,
+		.f_op = &proc_version_ops,
 	},
 };
 
