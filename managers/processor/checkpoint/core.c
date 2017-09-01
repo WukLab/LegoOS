@@ -65,27 +65,35 @@ static inline void paranoid_state_check(struct task_struct *leader) { }
 static int __do_checkpoint_process(struct task_struct *leader)
 {
 	struct task_struct *t;
-	struct process_snapshot ps;
+	struct process_snapshot *pss;
 	struct ss_task_struct *ss_tasks, *ss_task;
 	int ret = 0, i = 0;
 
 	paranoid_state_check(leader);
 
-	ps.nr_tasks = leader->signal->nr_threads;
-	ss_tasks = kmalloc(sizeof(*ss_tasks) * ps.nr_tasks, GFP_KERNEL);
-	if (!ss_tasks)
+	pss = kmalloc(sizeof(*pss), GFP_KERNEL);
+	if (!pss)
 		return -ENOMEM;
-	ps.tasks = ss_tasks;
+
+	pss->nr_tasks = leader->signal->nr_threads;
+	ss_tasks = kmalloc(sizeof(*ss_tasks) * pss->nr_tasks, GFP_KERNEL);
+	if (!ss_tasks) {
+		kfree(pss);
+		return -ENOMEM;
+	}
 
 	/*
 	 * First save thread-group shared data
 	 */
 
-	ret = save_open_files(leader, &ps);
+	pss->tasks = ss_tasks;
+	memcpy(pss->comm, leader->comm, TASK_COMM_LEN);
+
+	ret = save_open_files(leader, pss);
 	if (ret)
 		goto out;
 
-	ret = save_signals(leader, &ps);
+	ret = save_signals(leader, pss);
 	if (ret)
 		goto revert_files;
 
@@ -95,16 +103,28 @@ static int __do_checkpoint_process(struct task_struct *leader)
 
 	for_each_thread(leader, t) {
 		ss_task = &ss_tasks[i++];
+
 		ss_task->pid = t->pid;
+		ss_task->set_child_tid = t->set_child_tid;
+		ss_task->clear_child_tid = t->clear_child_tid;
+		ss_task->sas_ss_sp = t->sas_ss_sp;
+		ss_task->sas_ss_size = t->sas_ss_size;
+		ss_task->sas_ss_flags = t->sas_ss_flags;
+
 		save_thread_regs(t, ss_task);
 	}
+
+#ifdef CONFIG_CHECKPOINT_DEBUG
+	dump_process_snapshot(pss);
+#endif
 
 	return 0;
 
 revert_files:
-	revert_save_open_files(leader, &ps);
+	revert_save_open_files(leader, pss);
 out:
 	kfree(ss_tasks);
+	kfree(pss);
 	return ret;
 }
 
@@ -156,6 +176,14 @@ static void barrier_timeout_wakeup(struct task_struct *leader)
 	spin_unlock_irqrestore(&tasklist_lock, flags);
 }
 
+/*
+ * This function is ONLY called if the TIF_NEED_CHECKPOINT is set.
+ * Someone has called sys_checkpoint_process() previously.
+ *
+ * We wait until the whole thread group reach here, then let the
+ * thread group leader do the dirty work. Others will just sleep
+ * until leader wake them up.
+ */
 int checkpoint_thread(struct task_struct *p)
 {
 	struct task_struct *leader;
@@ -211,13 +239,7 @@ after_timeout:
 	return 0;
 }
 
-/**
- * Checkpoint a thread group that @p belongs to.
- * This function is lightweight: set NEED_CHECKPOINT, kick all
- * threads to run, that is all. The real dirty work is done by
- * do_checkpoint_process() above.
- */
-static int checkpoint_process(struct task_struct *p)
+static int checkpoint_process_internal(struct task_struct *p)
 {
 	struct task_struct *t;
 	unsigned long flags;
@@ -235,6 +257,12 @@ static int checkpoint_process(struct task_struct *p)
 	return 0;
 }
 
+/**
+ * Checkpoint a thread group, whose PID is @pid
+ * This function is lightweight: set NEED_CHECKPOINT, kick all
+ * threads to run, that is all. The real dirty work is done by
+ * do_checkpoint_process() above.
+ */
 SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
 {
 	struct task_struct *tsk;
@@ -248,7 +276,7 @@ SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
 		goto out;
 	}
 
-	ret = checkpoint_process(tsk);
+	ret = checkpoint_process_internal(tsk);
 out:
 	syscall_exit(ret);
 	return ret;

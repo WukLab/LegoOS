@@ -90,6 +90,12 @@ static void open_stdio_files(void)
 	}
 }
 
+#ifdef CONFIG_CHECKPOINT
+void __init checkpoint_init(void);
+#else
+static inline void checkpoint_init(void) { }
+#endif
+
 /**
  * processor_component_init
  *
@@ -99,8 +105,23 @@ static void open_stdio_files(void)
 void __init processor_component_init(void)
 {
 	pcache_init();
+
+	/* Create checkpointing restore thread */
+	checkpoint_init();
+
+	/*
+	 * For backward compatibility:
+	 *	Open STDIN, STDOUT, STDERR by default.
+	 * Later on, every child process will inherit
+	 * these 3 open files:
+	 */
 	open_stdio_files();
+
+	/*
+	 * This is the first user-program we run
+	 */
 	run_global_thread();
+
 	pr_info("pc-manager running...\n");
 
 #ifndef CONFIG_FIT

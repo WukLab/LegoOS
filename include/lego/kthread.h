@@ -27,6 +27,7 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
  * kthread_create - create a kthread on the current node
  * @threadfn: the function to run in the thread
  * @data: data pointer for @threadfn()
+ * @flags: extra for clone, normally just pass 0!
  * @namefmt: printf-style format string for the thread name
  * @...: arguments for @namefmt.
  *

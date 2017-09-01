@@ -22,44 +22,6 @@
 
 #include "internal.h"
 
-#ifdef CONFIG_CHECKPOINT_DEBUG
-void paranoid_file_debug(struct task_struct *p, struct process_snapshot *ps)
-{
-	int i;
-	struct ss_files *f, *ss_files = ps->files;
-
-	debug("Saved files: %d\n", ps->nr_files);
-	for (i = 0; i < ps->nr_files; i++) {
-		f = &ss_files[i];
-
-		debug("  fd=%d, f_name: %s\n", f->fd, f->f_name);
-		debug("    f_mode:%x,f_flags:%x,f_pos:%lx\n",
-			f->f_mode, f->f_flags, f->f_pos);
-	}
-}
-
-void paranoid_signal_debug(struct task_struct *p, struct process_snapshot *ps)
-{
-	struct sigaction *action;
-	int i;
-
-	debug("Saved blocked signals: %lx\n", ps->blocked.sig[0]);
-	debug("Saved sigactions: \n");
-	for (i = 0; i < _NSIG; i++) {
-		action = &ps->action[i];
-
-		debug("  signr: %d\n", i + 1);
-		dump_sigaction(action, "    ");
-	}
-}
-#else
-static inline void
-paranoid_file_debug(struct task_struct *p, struct process_snapshot *ps) { }
-
-static inline void
-paranoid_signal_debug(struct task_struct *p, struct process_snapshot *ps) { }
-#endif
-
 static void save_thread_gregs(struct task_struct *p, struct ss_task_struct *ss)
 {
 	struct pt_regs *src = task_pt_regs(p);
@@ -103,12 +65,15 @@ static void save_thread_gregs(struct task_struct *p, struct ss_task_struct *ss)
 	dst->gs_base	= gs_base;
 	dst->ds		= ds;
 	dst->es		= es;
+
+	/* aka. fsindex, gsindex */
 	dst->fs		= fs;
 	dst->gs		= gs;
 }
 
 static void save_thread_fpregs(struct task_struct *p, struct ss_task_struct *ss)
 {
+	pr_info("TODO: Implement %s() please!\n", FUNC);
 }
 
 void save_thread_regs(struct task_struct *p, struct ss_task_struct *ss)
@@ -140,7 +105,7 @@ int save_open_files(struct task_struct *p, struct process_snapshot *ps)
 	if (nr_files == 0) {
 		ps->files = NULL;
 		ps->nr_files = 0;
-		goto paranoid_debug;
+		return 0;
 	}
 
 	ss_files = kmalloc(sizeof(*ss_files) * nr_files, GFP_KERNEL);
@@ -166,8 +131,6 @@ int save_open_files(struct task_struct *p, struct process_snapshot *ps)
 	ps->files = ss_files;
 	ps->nr_files = nr_files;
 
-paranoid_debug:
-	paranoid_file_debug(p, ps);
 	return 0;
 }
 
@@ -188,8 +151,6 @@ int save_signals(struct task_struct *p, struct process_snapshot *ps)
 
 	/* Bitmap for blocked signals */
 	memcpy(&ps->blocked, &p->blocked, sizeof(sigset_t));
-
-	paranoid_signal_debug(p, ps);
 
 	return 0;
 }

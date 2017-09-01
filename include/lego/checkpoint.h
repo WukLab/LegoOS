@@ -10,10 +10,9 @@
 #ifndef _LEGO_CHECKPOINT_H_
 #define _LEGO_CHECKPOINT_H_
 
-#include <lego/types.h>
 #include <lego/files.h>
+#include <lego/sched.h>
 #include <lego/ptrace.h>
-#include <lego/signal.h>
 
 struct ss_files {
 	unsigned int		fd;
@@ -58,6 +57,8 @@ struct ss_thread_gregs {
 	unsigned long gs_base;
 	unsigned long ds;
 	unsigned long es;
+
+	/* aka. fsindex, gsindex */
 	unsigned long fs;
 	unsigned long gs;
 } __packed;
@@ -74,11 +75,19 @@ struct ss_thread_regs {
 struct ss_task_struct {
 	pid_t			pid;
 	struct ss_thread_regs	user_regs;
+
+	int __user		*set_child_tid;
+	int __user		*clear_child_tid;
+
+	unsigned long		sas_ss_sp;
+	size_t			sas_ss_size;
+	unsigned		sas_ss_flags;
 } __packed;
 
 struct process_snapshot {
 	struct ss_task_struct	*tasks;
 	unsigned int		nr_tasks;
+	char			comm[TASK_COMM_LEN];
 
 	struct ss_files		*files;
 	unsigned int		nr_files;
@@ -91,5 +100,13 @@ struct process_snapshot {
 	struct sigaction	action[_NSIG];
 	sigset_t		blocked;
 };
+
+int restore_process(struct process_snapshot *pss);
+
+void dump_process_snapshot_files(struct process_snapshot *pss);
+void dump_process_snapshot_signals(struct process_snapshot *pss);
+void dump_process_snapshot_thread(struct ss_task_struct *t);
+void dump_process_snapshot_threads(struct process_snapshot *pss);
+void dump_process_snapshot(struct process_snapshot *pss);
 
 #endif /* _LEGO_CHECKPOINT_H_ */
