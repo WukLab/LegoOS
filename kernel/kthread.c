@@ -406,6 +406,40 @@ int kthread_park(struct task_struct *k)
 	return ret;
 }
 
+/**
+ * kthread_stop - stop a thread created by kthread_create().
+ * @k: thread created by kthread_create().
+ *
+ * Sets kthread_should_stop() for @k to return true, wakes it, and
+ * waits for it to exit. This can also be called after kthread_create()
+ * instead of calling wake_up_process(): the thread will exit without
+ * calling threadfn().
+ *
+ * If threadfn() may call do_exit() itself, the caller must ensure
+ * task_struct can't go away.
+ *
+ * Returns the result of threadfn(), or %-EINTR if wake_up_process()
+ * was never called.
+ */
+int kthread_stop(struct task_struct *k)
+{
+	struct kthread *kthread;
+	int ret;
+
+	get_task_struct(k);
+	kthread = to_live_kthread(k);
+	if (kthread) {
+		set_bit(KTHREAD_SHOULD_STOP, &kthread->flags);
+		__kthread_unpark(k, kthread);
+		wake_up_process(k);
+		wait_for_completion(&kthread->exited);
+	}
+	ret = k->exit_code;
+	put_task_struct(k);
+
+	return ret;
+}
+
 int kthreadd(void *unused)
 {
 	struct task_struct *tsk = current;

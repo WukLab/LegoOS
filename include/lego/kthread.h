@@ -85,6 +85,7 @@ int kthread_park(struct task_struct *k);
 void kthread_unpark(struct task_struct *k);
 void kthread_bind(struct task_struct *p, unsigned int cpu);
 void kthread_parkme(void);
+int kthread_stop(struct task_struct *k);
 
 /**
  * global_kthread_run
