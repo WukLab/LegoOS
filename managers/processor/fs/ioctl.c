@@ -15,7 +15,7 @@
 #include <lego/spinlock.h>
 #include <lego/comp_processor.h>
 
-#include "internal.h"
+#include <processor/include/fs.h>
 
 SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 {

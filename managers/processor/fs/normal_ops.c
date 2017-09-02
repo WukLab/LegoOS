@@ -15,14 +15,11 @@
 #include <lego/comp_processor.h>
 #include <lego/comp_common.h>
 #include <lego/comp_storage.h>
-
 #include <lego/seq_file.h>
-
 #include <lego/timer.h>
 #include <lego/fit_ibapi.h>
 
-#include "internal.h"
-
+#include <processor/include/fs.h>
 
 static int normal_p2s_open(struct file *f)
 {

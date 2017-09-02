@@ -15,7 +15,7 @@
 #include <lego/spinlock.h>
 #include <lego/seq_file.h>
 
-#include "../internal.h"
+#include <processor/include/fs.h>
 
 static int devices_system_cpu_online_show(struct seq_file *m, void *v)
 {

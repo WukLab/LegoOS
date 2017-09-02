@@ -15,7 +15,7 @@
 #include <lego/spinlock.h>
 #include <lego/comp_processor.h>
 
-#include "internal.h"
+#include <processor/include/fs.h>
 
 /*
  * Find @file by @fd
@@ -58,7 +58,7 @@ static struct file *alloc_file(char *f_name)
  * Allocate both fd and struct file
  * This should be called only from sys_open()
  */
-static int alloc_fd(struct files_struct *files, char *filename)
+int alloc_fd(struct files_struct *files, char *filename)
 {
 	int fd;
 	struct file *filp;
@@ -79,7 +79,7 @@ static int alloc_fd(struct files_struct *files, char *filename)
 	return -EMFILE;
 }
 
-static void free_fd(struct files_struct *files, int fd)
+void free_fd(struct files_struct *files, int fd)
 {
 	struct file *f;
 

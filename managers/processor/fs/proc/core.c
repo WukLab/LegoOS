@@ -14,7 +14,7 @@
 #include <lego/spinlock.h>
 #include <lego/comp_processor.h>
 
-#include "../internal.h"
+#include <processor/include/fs.h>
 
 extern struct file_operations proc_stat_ops;
 extern struct file_operations proc_meminfo_ops;

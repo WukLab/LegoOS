@@ -11,8 +11,6 @@
 #include <lego/kernel.h>
 #include <processor/include/fs.h>
 
-#include "internal.h"
-
 static int stdio_file_open(struct file *f)
 {
 	/* already copied for all process during fork() time */

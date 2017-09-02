@@ -1054,4 +1054,7 @@ static inline void ___might_sleep(const char *file, int line,
 	_cond_resched();			\
 })
 
+/* lib/dump_task_struct.c */
+void dump_task_struct(struct task_struct *p);
+
 #endif /* _LEGO_SCHED_H_ */

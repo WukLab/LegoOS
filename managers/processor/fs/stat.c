@@ -15,7 +15,7 @@
 #include <lego/syscalls.h>
 #include <lego/comp_processor.h>
 
-#include "internal.h"
+#include <processor/include/fs.h>
 
 static void dummy_fillstat(struct kstat *stat)
 {

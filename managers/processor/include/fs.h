@@ -10,6 +10,40 @@
 #ifndef _PROCESSOR_INCLUDE_FS_H_
 #define _PROCESSOR_INCLUDE_FS_H_
 
+#include <lego/bug.h>
+#include <lego/files.h>
+#include <lego/atomic.h>
+#include <lego/string.h>
+
 struct file *fdget(int fd);
+
+void free_fd(struct files_struct *files, int fd);
+int alloc_fd(struct files_struct *files, char *filename);
+
+static inline int f_name_equal(char *f_name1, char *f_name2)
+{
+	return !strncmp(f_name1, f_name2, FILENAME_LEN_DEFAULT);
+}
+
+static inline int proc_file(char *f_name)
+{
+	return !memcmp(f_name, "/proc", 5);
+}
+
+static inline int sys_file(char *f_name)
+{
+	return !memcmp(f_name, "/sys", 4);
+}
+
+int proc_file_open(struct file *, char *f_name);
+int sys_file_open(struct file *, char *f_name);
+
+extern struct file_operations normal_p2s_f_ops;
+
+static inline int normal_file_open(struct file *f, char *f_name)
+{
+	f->f_op = &normal_p2s_f_ops;
+	return 0;
+}
 
 #endif /* _PROCESSOR_INCLUDE_FS_H_ */
