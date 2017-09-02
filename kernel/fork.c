@@ -406,12 +406,8 @@ static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
 	struct files_struct *oldf, *newf;
 	int ret = 0;
 
-	/*
-	 * A background process may not have any files ...
-	 */
 	oldf = current->files;
-	if (!oldf)
-		goto out;
+	BUG_ON(!oldf);
 
 	if (clone_flags & CLONE_FILES) {
 		newf = oldf;

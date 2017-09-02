@@ -65,6 +65,8 @@ static inline bool pcache_present(unsigned long __user address)
 	return true;
 }
 
+void open_stdio_files(void);
+
 #else /* !CONFIG_COMP_PROCESSOR */
 static inline void processor_component_init(void) { }
 static inline int pcache_range_register(u64 start, u64 size)

@@ -88,7 +88,8 @@ void dump_process_snapshot_threads(struct process_snapshot *pss)
 	}
 }
 
-void dump_process_snapshot(struct process_snapshot *pss, const char *who)
+void dump_process_snapshot(struct process_snapshot *pss, const char *who,
+			   int dump_flags)
 {
 	if (!pss || !who) {
 		pr_err("Need both @pss and @who!");
@@ -101,5 +102,7 @@ void dump_process_snapshot(struct process_snapshot *pss, const char *who)
 
 	dump_process_snapshot_threads(pss);
 	dump_process_snapshot_files(pss);
-	dump_process_snapshot_signals(pss);
+
+	if (dump_flags & DUMP_SS_SIGNAL)
+		dump_process_snapshot_signals(pss);
 }

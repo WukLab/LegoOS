@@ -38,6 +38,7 @@ static void dump_task_struct_files(struct task_struct *p)
 	struct files_struct *files = p->files;
 	int fd;
 
+	pr_debug(" Files:\n");
 	spin_lock(&files->file_lock);
 	for_each_set_bit(fd, files->fd_bitmap, NR_OPEN_DEFAULT) {
 		f = files->fd_array[fd];
@@ -65,7 +66,7 @@ static void dump_task_struct_signals(struct task_struct *p)
 	}
 }
 
-void dump_task_struct(struct task_struct *p)
+void dump_task_struct(struct task_struct *p, int dump_flags)
 {
 	if (!p)
 		return;
@@ -77,5 +78,7 @@ void dump_task_struct(struct task_struct *p)
 
 	dump_task_struct_threads(p);
 	dump_task_struct_files(p);
-	dump_task_struct_signals(p);
+
+	if (dump_flags & DUMP_TASK_STRUCT_SIGNAL)
+		dump_task_struct_signals(p);
 }

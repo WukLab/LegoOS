@@ -9,6 +9,7 @@
 
 #include <lego/files.h>
 #include <lego/kernel.h>
+#include <lego/sched.h>
 #include <processor/include/fs.h>
 
 static int stdio_file_open(struct file *f)
@@ -61,3 +62,19 @@ struct file stdio_file = {
 	.f_pos_lock	= __SPIN_LOCK_UNLOCKED(f_pos_lock),
 	.f_op		= &stdio_file_op,
 };
+
+/*
+ * early boot, no race -> no lock
+ */
+void open_stdio_files(void)
+{
+	struct files_struct *files = current->files;
+	struct file *f = &stdio_file;
+	int i;
+
+	for (i = 0; i <= 2; i++) {
+		set_bit(i, files->fd_bitmap);
+		files->fd_array[i] = f;
+		get_file(f);
+	}
+}

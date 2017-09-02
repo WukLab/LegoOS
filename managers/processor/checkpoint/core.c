@@ -141,7 +141,7 @@ static int __do_checkpoint_process(struct task_struct *leader)
 	}
 
 #ifdef CONFIG_CHECKPOINT_DEBUG
-	dump_process_snapshot(pss, "Saver");
+	dump_process_snapshot(pss, "Saver", 0);
 #endif
 
 	/*
@@ -168,6 +168,7 @@ static int do_checkpoint_process(struct task_struct *leader)
 	ret = __do_checkpoint_process(leader);
 	preempt_enable_no_resched();
 
+	restore_process_snapshot(dequeue_pss());
 	return ret;
 }
 

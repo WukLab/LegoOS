@@ -146,6 +146,16 @@ static void rest_init(void)
 {
 	int pid;
 
+#ifdef CONFIG_COMP_PROCESSOR
+	/*
+	 * For backward compatibility:
+	 *	Open STDIN, STDOUT, STDERR by default.
+	 * Later on, every child process will inherit
+	 * these 3 open files:
+	 */
+	open_stdio_files();
+#endif
+
 	/*
 	 * We need to spawn init first so that it obtains pid 1, however
 	 * the init task will end up wanting to create kthreads, which, if

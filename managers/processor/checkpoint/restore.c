@@ -138,7 +138,8 @@ static int restorer(void *_info)
 	struct ss_task_struct *ss_task, *ss_tasks = pss->tasks;
 
 #ifdef CONFIG_CHECKPOINT_DEBUG
-	dump_process_snapshot(pss, "Restorer");
+	dump_task_struct(current, 0);
+	dump_process_snapshot(pss, "Restorer", 0);
 #endif
 
 	/* Restore thread group shared data */
@@ -147,7 +148,7 @@ static int restorer(void *_info)
 	restore_signals(pss);
 
 #ifdef CONFIG_CHECKPOINT_DEBUG
-	dump_task_struct(current);
+	dump_task_struct(current, 0);
 #endif
 
 	/* Pass leader back to restore_process_snapshot() */

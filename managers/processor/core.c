@@ -72,24 +72,6 @@ static void run_global_thread(void)
 	kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD); 
 }
 
-extern struct file stdio_file;
-
-/*
- * early boot, no race -> no lock
- */
-static void open_stdio_files(void)
-{
-	struct files_struct *files = current->files;
-	struct file *f = &stdio_file;
-	int i;
-
-	for (i = 0; i <= 2; i++) {
-		set_bit(i, files->fd_bitmap);
-		files->fd_array[i] = f;
-		get_file(f);
-	}
-}
-
 #ifdef CONFIG_CHECKPOINT
 void __init checkpoint_init(void);
 #else
@@ -108,14 +90,6 @@ void __init processor_component_init(void)
 
 	/* Create checkpointing restore thread */
 	checkpoint_init();
-
-	/*
-	 * For backward compatibility:
-	 *	Open STDIN, STDOUT, STDERR by default.
-	 * Later on, every child process will inherit
-	 * these 3 open files:
-	 */
-	open_stdio_files();
 
 	/*
 	 * This is the first user-program we run

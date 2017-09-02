@@ -1055,6 +1055,7 @@ static inline void ___might_sleep(const char *file, int line,
 })
 
 /* lib/dump_task_struct.c */
-void dump_task_struct(struct task_struct *p);
+#define DUMP_TASK_STRUCT_SIGNAL	0x1
+void dump_task_struct(struct task_struct *p, int dump_flags);
 
 #endif /* _LEGO_SCHED_H_ */
