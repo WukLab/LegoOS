@@ -88,9 +88,14 @@ void dump_process_snapshot_threads(struct process_snapshot *pss)
 	}
 }
 
-void dump_process_snapshot(struct process_snapshot *pss)
+void dump_process_snapshot(struct process_snapshot *pss, const char *who)
 {
-	pr_debug("Snapshot Dump: \n");
+	if (!pss || !who) {
+		pr_err("Need both @pss and @who!");
+		return;
+	}
+
+	pr_debug("Snapshot Dumper (called by %s)\n", who);
 	pr_debug(" nr_tasks: %u\n", pss->nr_tasks);
 	pr_debug(" comm: %s\n", pss->comm);
 

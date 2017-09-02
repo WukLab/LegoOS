@@ -99,14 +99,19 @@ struct process_snapshot {
 	 */
 	struct sigaction	action[_NSIG];
 	sigset_t		blocked;
+
+	struct list_head	list;
 };
 
-int restore_process(struct process_snapshot *pss);
+void enqueue_pss(struct process_snapshot *pss);
+struct process_snapshot *dequeue_pss(void);
+
+struct task_struct *restore_process_snapshot(struct process_snapshot *pss);
 
 void dump_process_snapshot_files(struct process_snapshot *pss);
 void dump_process_snapshot_signals(struct process_snapshot *pss);
 void dump_process_snapshot_thread(struct ss_task_struct *t);
 void dump_process_snapshot_threads(struct process_snapshot *pss);
-void dump_process_snapshot(struct process_snapshot *pss);
+void dump_process_snapshot(struct process_snapshot *pss, const char *who);
 
 #endif /* _LEGO_CHECKPOINT_H_ */

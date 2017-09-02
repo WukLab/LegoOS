@@ -32,6 +32,32 @@ unsigned long __read_mostly checkpoint_barrier_timeout_msec = 500;
 /* Timeout for the real work of checkpointing to remote */
 unsigned long __read_mostly checkpoint_job_timeout_msec = 10 * MSEC_PER_SEC;
 
+/* A list of pss on processor-manager */
+static LIST_HEAD(pss_list);
+static DEFINE_SPINLOCK(pss_lock);
+
+void enqueue_pss(struct process_snapshot *pss)
+{
+	BUG_ON(!pss);
+	spin_lock(&pss_lock);
+	list_add_tail(&pss->list, &pss_list);
+	spin_unlock(&pss_lock);
+}
+
+struct process_snapshot *dequeue_pss(void)
+{
+	struct process_snapshot *pss = NULL;
+
+	spin_lock(&pss_lock);
+	if (!list_empty(&pss_list)) {
+		pss = list_entry(pss_list.next, struct process_snapshot, list);
+		list_del_init(&pss->list);
+	}
+	spin_unlock(&pss_lock);
+
+	return pss;
+}
+
 #ifdef CONFIG_CHECKPOINT_DEBUG
 static void paranoid_state_check(struct task_struct *leader)
 {
@@ -115,9 +141,15 @@ static int __do_checkpoint_process(struct task_struct *leader)
 	}
 
 #ifdef CONFIG_CHECKPOINT_DEBUG
-	dump_process_snapshot(pss);
+	dump_process_snapshot(pss, "Saver");
 #endif
 
+	/*
+	 * TODO:
+	 * Send to memory
+	 */
+
+	enqueue_pss(pss);
 	return 0;
 
 revert_files:
@@ -162,13 +194,13 @@ static void barrier_timeout_wakeup(struct task_struct *leader)
 	unsigned long flags;
 	int i = 0;
 
-	debug("Abort due to barrier timeout. Leader-PID: %d, nr_threads: %d "
+	pr_err("Abort due to barrier timeout. Leader-PID: %d, nr_threads: %d "
 		"barrier_timeout_msec: %lu\n", leader->pid, leader->signal->nr_threads,
 		checkpoint_barrier_timeout_msec);
 
 	spin_lock_irqsave(&tasklist_lock, flags);
 	for_each_thread(leader, t) {
-		debug("    Thread %d: pid=%d, state=%ld, TIF_NEED_CHECKPOINT: %d\n",
+		pr_err("    Thread %d: pid=%d, state=%ld, TIF_NEED_CHECKPOINT: %d\n",
 			i++, t->pid, t->state, test_tsk_need_checkpoint(t));
 
 		wake_up_state(t, TASK_ALL);

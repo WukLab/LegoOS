@@ -19,32 +19,62 @@
 
 #include "internal.h"
 
-static DEFINE_SPINLOCK(restorer_work_lock);
 static LIST_HEAD(restorer_work_list);
-static struct task_struct *restorer_task;
+static DEFINE_SPINLOCK(restorer_work_lock);
+static struct task_struct *restorer_worker;
 
 struct restorer_work_info {
+	/* Info passed to restorer from restore_process_snapshot() */
 	struct process_snapshot	*pss;
+
+	/* Results passed back to restore_process_snapshot() from restorer */
+	struct task_struct	*result;
 	struct completion	*done;
+
 	struct list_head	list;
 };
 
-/*
- * Do the real work of restoring a process from its snapshot.
- * Called from restorer daemon thread.
- */
-static void restore_process_snapshot(struct restorer_work_info *info)
+static int restorer(void *_info)
 {
+	struct restorer_work_info *info = _info;
 	struct process_snapshot *pss = info->pss;
 
-	dump_process_snapshot(pss);
+	dump_process_snapshot(pss, "Restorer");
+
+	/*
+	 * Pass the info back to our caller
+	 * and wake it:
+	 */
+	info->result = current;
+	complete(info->done);
+
+	for(;;);
+	return 0;
 }
 
-int restore_thread_fn(void *unused)
+static void create_restorer(struct restorer_work_info *info)
+{
+	int pid;
+
+	pid = kernel_thread(restorer, info, 0);
+	if (pid < 0) {
+		WARN_ON_ONCE(1);
+		info->result = ERR_PTR(pid);
+		complete(info->done);
+	}
+}
+
+/*
+ * It dequeue work from work_list, and creates a restorer to construct
+ * a new process from snapshot. Any error is reported by restorer in
+ * the info->result field.
+ */
+int restorer_worker_thread(void *unused)
 {
 	set_cpus_allowed_ptr(current, cpu_possible_mask);
 
 	for (;;) {
+		/* Sleep until someone wakes me up before september ends */
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		if (list_empty(&restorer_work_list))
 			schedule();
@@ -58,12 +88,14 @@ int restore_thread_fn(void *unused)
 					struct restorer_work_info, list);
 			list_del_init(&info->list);
 
-			/* Release the lock so others can attach work */
+			/*
+			 * Release the lock so others can attach work.
+			 * The real work may take some time.
+			 */
 			spin_unlock(&restorer_work_lock);
 
-			restore_process_snapshot(info);
+			create_restorer(info);
 
-			/* Obtatin lock again */
 			spin_lock(&restorer_work_lock);
 		}
 		spin_unlock(&restorer_work_lock);
@@ -73,14 +105,17 @@ int restore_thread_fn(void *unused)
 }
 
 /**
- * restore_process	-	Restore a process from snapshot
+ * restore_process_snapshot	-	Restore a process from snapshot
  * @pss: the snapshot
  *
  * This function is synchronized. It will wait until the new process
  * is live from the snapshot. The real work of restoring is done by
- * restorer daemon thread.
+ * restorer thread.
+ *
+ * Return the task_struct of the new process.
+ * On failure, ERR_PTR is returned.
  */
-int restore_process(struct process_snapshot *pss)
+struct task_struct *restore_process_snapshot(struct process_snapshot *pss)
 {
 	DEFINE_COMPLETION(done);
 	struct restorer_work_info info;
@@ -97,18 +132,15 @@ int restore_process(struct process_snapshot *pss)
 	list_add_tail(&info.list, &restorer_work_list);
 	spin_unlock(&restorer_work_lock);
 
-	/*
-	 * Wake up restorer and wait for its completion...
-	 */
-	wake_up_process(restorer_task);
+	wake_up_process(restorer_worker);
 	wait_for_completion(&done);
 
-	return 0;
+	return info.result;
 }
 
 void __init checkpoint_init(void)
 {
-	restorer_task = kthread_run(restore_thread_fn, NULL, "restorer");
-	if (IS_ERR(restorer_task))
+	restorer_worker = kthread_run(restorer_worker_thread, NULL, "restorer");
+	if (IS_ERR(restorer_worker))
 		panic("Fail to create checkpointing restore thread!");
 }
