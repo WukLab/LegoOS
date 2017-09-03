@@ -17,6 +17,8 @@
 #include <lego/completion.h>
 #include <lego/checkpoint.h>
 
+#include <asm/prctl.h>
+
 #include <processor/include/fs.h>
 
 #include "internal.h"
@@ -131,31 +133,144 @@ static void restore_signals(struct process_snapshot *pss)
 	memcpy(&current->blocked, &pss->blocked, sizeof(sigset_t));
 }
 
-static int restorer(void *_info)
+/*
+ * Restore per-thread state
+ * 1) Some thread data fields inside task_struct
+ * 2) the top pt_regs used to return to user-program
+ * 3) fsbase and gsbase
+ */
+static void restore_thread_state(struct task_struct *p,
+				 struct ss_task_struct *ss_task)
+{
+	struct pt_regs *dst = task_pt_regs(p);
+	struct ss_thread_gregs *src = &(ss_task->user_regs.gregs);
+
+	p->set_child_tid = ss_task->set_child_tid;
+	p->clear_child_tid = ss_task->clear_child_tid;
+	p->sas_ss_sp = ss_task->sas_ss_sp;
+	p->sas_ss_size = ss_task->sas_ss_size;
+	p->sas_ss_flags = ss_task->sas_ss_flags;
+
+#define RESTORE_REG(reg)	do { dst->reg = src->reg; } while (0)
+	RESTORE_REG(r15);
+	RESTORE_REG(r14);
+	RESTORE_REG(r13);
+	RESTORE_REG(r12);
+	RESTORE_REG(bp);
+	RESTORE_REG(bx);
+	RESTORE_REG(r11);
+	RESTORE_REG(r10);
+	RESTORE_REG(r9);
+	RESTORE_REG(r8);
+	RESTORE_REG(ax);
+	RESTORE_REG(cx);
+	RESTORE_REG(dx);
+	RESTORE_REG(si);
+	RESTORE_REG(di);
+	RESTORE_REG(orig_ax);
+	RESTORE_REG(ip);
+	RESTORE_REG(cs);
+	RESTORE_REG(flags);
+	RESTORE_REG(sp);
+	RESTORE_REG(ss);
+#undef RESTORE_REG
+
+	if (src->fs_base)
+		do_arch_prctl(p, ARCH_SET_FS, src->fs_base);
+	if (src->gs_base)
+		do_arch_prctl(p, ARCH_SET_GS, src->gs_base);
+}
+
+static int restorer_for_other_threads(void *data)
+{
+	struct ss_task_struct *ss_task = data;
+
+	restore_thread_state(current, ss_task);
+	for(;;);
+	return 0;
+}
+
+static void restore_thread_group(struct task_struct **threads,
+				 struct process_snapshot *pss,
+				 struct restorer_work_info *info)
+{
+	struct ss_task_struct *ss_task, *ss_tasks = pss->tasks;
+	int nr_threads = pss->nr_tasks;
+	int i;
+	unsigned long clone_flags;
+
+	/* Current is leader */
+	threads[0] = current;
+	ss_task = &ss_tasks[0];
+
+	restore_thread_state(current, ss_task);
+
+	clone_flags = CLONE_THREAD | CLONE_SIGHAND |
+		      CLONE_VM | CLONE_FILES | CLONE_PARENT;
+
+	/* Restore other threads in group */
+	for (i = 1; i < nr_threads; i++) {
+		ss_task = &ss_tasks[i];
+
+		threads[i] = copy_process(clone_flags,
+				(unsigned long)restorer_for_other_threads,
+				(unsigned long)ss_task, NULL, 0, NUMA_NO_NODE);
+		if (IS_ERR(threads[i])) {
+			info->result = threads[i];
+			return;
+		}
+
+		wake_up_new_task(threads[i]);
+	}
+
+	/* Return leader's task struct back to caller */
+	info->result = current;
+}
+
+static int restorer_for_group_leader(void *_info)
 {
 	struct restorer_work_info *info = _info;
 	struct process_snapshot *pss = info->pss;
-	struct ss_task_struct *ss_task, *ss_tasks = pss->tasks;
+	struct task_struct **threads;
+	int nr_threads = pss->nr_tasks;
 
 #ifdef CONFIG_CHECKPOINT_DEBUG
 	dump_task_struct(current, 0);
 	dump_process_snapshot(pss, "Restorer", 0);
 #endif
 
-	/* Restore thread group shared data */
+	threads = kmalloc(nr_threads * sizeof(*threads), GFP_KERNEL);
+	if (!threads) {
+		info->result = ERR_PTR(-ENOMEM);
+		goto err;
+	}
+
+	/* Fisrt, restore thread group shared data */
 	memcpy(current->comm, pss->comm, TASK_COMM_LEN);
 	restore_open_files(pss);
 	restore_signals(pss);
+
+	/* Create other threads in group */
+	restore_thread_group(threads, pss, info);
+	if (IS_ERR(info->result))
+		goto free_err;
 
 #ifdef CONFIG_CHECKPOINT_DEBUG
 	dump_task_struct(current, 0);
 #endif
 
-	/* Pass leader back to restore_process_snapshot() */
-	info->result = current;
+	kfree(threads);
 	complete(info->done);
 
 	/* Return to user-space */
+	return 0;
+
+free_err:
+	kfree(threads);
+err:
+	complete(info->done);
+	do_exit(-1);
+	BUG();
 	return 0;
 }
 
@@ -163,7 +278,7 @@ static void create_restorer(struct restorer_work_info *info)
 {
 	int pid;
 
-	pid = kernel_thread(restorer, info, 0);
+	pid = kernel_thread(restorer_for_group_leader, info, 0);
 	if (pid < 0) {
 		WARN_ON_ONCE(1);
 		info->result = ERR_PTR(pid);
@@ -222,7 +337,7 @@ int restorer_worker_thread(void *unused)
  * Return the task_struct of new thread-group leader.
  * On failure, ERR_PTR is returned.
  */
-struct task_struct *restore_process_snapshot(struct process_snapshot *pss)
+struct task_struct __must_check *restore_process_snapshot(struct process_snapshot *pss)
 {
 	DEFINE_COMPLETION(done);
 	struct restorer_work_info info;

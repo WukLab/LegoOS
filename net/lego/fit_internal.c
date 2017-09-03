@@ -523,8 +523,8 @@ void init_global_lid_qpn(void)
 	BUILD_BUG_ON(1);
 #endif
 
-	global_lid[0] = 10;
-	global_lid[1] = 11;
+	global_lid[0] = 19;
+	global_lid[1] = 21;
 
 #if (MAX_NODE == 3)
 	global_lid[2] = 10;

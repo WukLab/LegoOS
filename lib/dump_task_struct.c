@@ -10,12 +10,37 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 
+static void dump_task_struct_thread_registers(struct task_struct *t)
+{
+	struct pt_regs *regs = task_pt_regs(t);
+
+	pr_debug(" Top pt_regs:\n");
+	pr_debug("  RIP: %04lx:[<%016lx>] ", regs->cs & 0xffff, regs->ip);
+	pr_cont(" [<%p>] %pS\n", (void *)regs->ip, (void *)regs->ip);
+	pr_debug("  RSP: %04lx:%016lx  EFLAGS: %08lx\n", regs->ss,
+		regs->sp, regs->flags);
+	pr_debug("  RAX: %016lx RBX: %016lx RCX: %016lx\n",
+		regs->ax, regs->bx, regs->cx);
+	pr_debug("  RDX: %016lx RSI: %016lx RDI: %016lx\n",
+		regs->dx, regs->si, regs->di);
+	pr_debug("  RBP: %016lx R08: %016lx R09: %016lx\n",
+		regs->bp, regs->r8, regs->r9);
+	pr_debug("  R10: %016lx R11: %016lx R12: %016lx\n",
+		regs->r10, regs->r11, regs->r12);
+	pr_debug("  R13: %016lx R14: %016lx R15: %016lx\n",
+		regs->r13, regs->r14, regs->r15);
+	pr_debug("  FS:  %016lx(%04x) GS:%016lx(%04x)\n",
+	       t->thread.fsbase, 0, t->thread.gsbase, 0);
+}
+
 static void dump_task_struct_thread(struct task_struct *t)
 {
 	pr_debug("  pid: %d, set_child_tid: %p, clear_child_tid: %p\n",
 		t->pid, t->set_child_tid, t->clear_child_tid);
 	pr_debug("  sas_ss_sp: %#lx, sas_ss_size: %#lx, sas_ss_flags: %#x\n",
 		t->sas_ss_sp, t->sas_ss_size, t->sas_ss_flags);
+
+	dump_task_struct_thread_registers(t);
 }
 
 static void dump_task_struct_threads(struct task_struct *p)

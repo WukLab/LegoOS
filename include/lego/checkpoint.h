@@ -106,7 +106,8 @@ struct process_snapshot {
 void enqueue_pss(struct process_snapshot *pss);
 struct process_snapshot *dequeue_pss(void);
 
-struct task_struct *restore_process_snapshot(struct process_snapshot *pss);
+struct task_struct __must_check *
+restore_process_snapshot(struct process_snapshot *pss);
 
 void dump_process_snapshot_files(struct process_snapshot *pss);
 void dump_process_snapshot_signals(struct process_snapshot *pss);

@@ -261,4 +261,6 @@ int arch_dup_task_struct(struct task_struct *, struct task_struct *);
 extern unsigned int fpu_kernel_xstate_size;
 extern unsigned int fpu_user_xstate_size;
 
+long do_arch_prctl(struct task_struct *task, int code, unsigned long addr);
+
 #endif /* _ASM_X86_PROCESSOR_H_ */

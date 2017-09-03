@@ -26,8 +26,6 @@ static void save_thread_gregs(struct task_struct *p, struct ss_task_struct *ss)
 {
 	struct pt_regs *src = task_pt_regs(p);
 	struct ss_thread_gregs *dst = &(ss->user_regs.gregs);
-	unsigned long fs_base, gs_base;
-	unsigned int ds, es, fs, gs;
 
 #define COPY_REG(reg)	do { dst->reg = src->reg; } while (0)
 	COPY_REG(r15);
@@ -53,22 +51,16 @@ static void save_thread_gregs(struct task_struct *p, struct ss_task_struct *ss)
 	COPY_REG(ss);
 #undef COPY_REG
 
-	asm("movl %%ds,%0" : "=r" (ds));
-	asm("movl %%es,%0" : "=r" (es));
-	asm("movl %%fs,%0" : "=r" (fs));
-	asm("movl %%gs,%0" : "=r" (gs));
+	dst->fs_base	= p->thread.fsbase;
+	dst->gs_base	= p->thread.gsbase;
 
-	rdmsrl(MSR_FS_BASE, fs_base);
-	rdmsrl(MSR_GS_BASE, gs_base);
-
-	dst->fs_base	= fs_base;
-	dst->gs_base	= gs_base;
-	dst->ds		= ds;
-	dst->es		= es;
-
-	/* aka. fsindex, gsindex */
-	dst->fs		= fs;
-	dst->gs		= gs;
+	/*
+	 * XXX: will this be a problem later?
+	 */
+	dst->ds		= 0;
+	dst->es		= 0;
+	dst->fs		= 0;
+	dst->gs		= 0;
 }
 
 static void save_thread_fpregs(struct task_struct *p, struct ss_task_struct *ss)
