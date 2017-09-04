@@ -709,6 +709,13 @@ struct task_struct *copy_process(unsigned long clone_flags,
 				 int __user *child_tidptr,
 				 unsigned long tls, int node);
 
+pid_t do_fork(unsigned long clone_flags,
+	      unsigned long stack_start,
+	      unsigned long stack_size,
+	      int __user *parent_tidptr,
+	      int __user *child_tidptr,
+	      unsigned long tls);
+
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 
 void __init sched_init(void);
