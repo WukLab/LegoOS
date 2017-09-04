@@ -181,29 +181,46 @@ static void restore_thread_state(struct task_struct *p,
 		do_arch_prctl(p, ARCH_SET_GS, src->gs_base);
 }
 
-static int restorer_for_other_threads(void *data)
+struct wait_info {
+	struct ss_task_struct	*ss_task;
+	struct completion	done;
+};
+
+static int restorer_for_other_threads(void *_wait)
 {
-	struct ss_task_struct *ss_task = data;
+	struct wait_info *wait = _wait;
+	struct ss_task_struct *ss_task = wait->ss_task;
 
 	restore_thread_state(current, ss_task);
-	for(;;);
+
+	pr_info("%s(): %d-%d waiting\n", FUNC, current->pid, current->tgid);
+	wait_for_completion(&wait->done);
+
+	/* Return to user-space */
 	return 0;
 }
 
-static void restore_thread_group(struct task_struct **threads,
-				 struct process_snapshot *pss,
-				 struct restorer_work_info *info)
+static void restore_thread_group(struct restorer_work_info *info)
 {
+	struct process_snapshot *pss = info->pss;
 	struct ss_task_struct *ss_task, *ss_tasks = pss->tasks;
+	struct task_struct *t;
+	struct wait_info *wait;
+	unsigned long clone_flags;
 	int nr_threads = pss->nr_tasks;
 	int i;
-	unsigned long clone_flags;
 
-	/* Current is leader */
-	threads[0] = current;
 	ss_task = &ss_tasks[0];
-
 	restore_thread_state(current, ss_task);
+
+	if (nr_threads == 1)
+		goto done;
+
+	wait = kmalloc(nr_threads * sizeof(*wait), GFP_KERNEL);
+	if (!wait) {
+		info->result = ERR_PTR(-ENOMEM);
+		return;
+	}
 
 	clone_flags = CLONE_THREAD | CLONE_SIGHAND |
 		      CLONE_VM | CLONE_FILES | CLONE_PARENT;
@@ -211,18 +228,23 @@ static void restore_thread_group(struct task_struct **threads,
 	/* Restore other threads in group */
 	for (i = 1; i < nr_threads; i++) {
 		ss_task = &ss_tasks[i];
+		wait[i].ss_task = ss_task;
+		init_completion(&wait[i].done);
 
-		threads[i] = copy_process(clone_flags,
+		t = copy_process(clone_flags,
 				(unsigned long)restorer_for_other_threads,
-				(unsigned long)ss_task, NULL, 0, NUMA_NO_NODE);
-		if (IS_ERR(threads[i])) {
-			info->result = threads[i];
+				(unsigned long)&wait[i], NULL, 0, NUMA_NO_NODE);
+		if (IS_ERR(t)) {
+			WARN_ON(1);
+			info->result = t;
 			return;
 		}
 
-		wake_up_new_task(threads[i]);
+		wake_up_new_task(t);
 	}
 
+	kfree(wait);
+done:
 	/* Return leader's task struct back to caller */
 	info->result = current;
 }
@@ -231,19 +253,11 @@ static int restorer_for_group_leader(void *_info)
 {
 	struct restorer_work_info *info = _info;
 	struct process_snapshot *pss = info->pss;
-	struct task_struct **threads;
-	int nr_threads = pss->nr_tasks;
 
 #ifdef CONFIG_CHECKPOINT_DEBUG
 	dump_task_struct(current, 0);
 	dump_process_snapshot(pss, "Restorer", 0);
 #endif
-
-	threads = kmalloc(nr_threads * sizeof(*threads), GFP_KERNEL);
-	if (!threads) {
-		info->result = ERR_PTR(-ENOMEM);
-		goto err;
-	}
 
 	/* Fisrt, restore thread group shared data */
 	memcpy(current->comm, pss->comm, TASK_COMM_LEN);
@@ -251,22 +265,20 @@ static int restorer_for_group_leader(void *_info)
 	restore_signals(pss);
 
 	/* Create other threads in group */
-	restore_thread_group(threads, pss, info);
+	restore_thread_group(info);
 	if (IS_ERR(info->result))
-		goto free_err;
+		goto err;
 
 #ifdef CONFIG_CHECKPOINT_DEBUG
 	dump_task_struct(current, 0);
 #endif
 
-	kfree(threads);
+	/* Release restore_process_snapshot() */
 	complete(info->done);
 
 	/* Return to user-space */
 	return 0;
 
-free_err:
-	kfree(threads);
 err:
 	complete(info->done);
 	do_exit(-1);
@@ -282,6 +294,8 @@ static void create_restorer(struct restorer_work_info *info)
 	if (pid < 0) {
 		WARN_ON_ONCE(1);
 		info->result = ERR_PTR(pid);
+
+		/* Release restore_process_snapshot() */
 		complete(info->done);
 	}
 }
@@ -332,7 +346,7 @@ int restorer_worker_thread(void *unused)
  *
  * This function is synchronized. It will wait until the new process
  * is live from the snapshot. The real work of restoring is done by
- * restorer thread.
+ * restorer worker thread.
  *
  * Return the task_struct of new thread-group leader.
  * On failure, ERR_PTR is returned.
@@ -341,6 +355,7 @@ struct task_struct __must_check *restore_process_snapshot(struct process_snapsho
 {
 	DEFINE_COMPLETION(done);
 	struct restorer_work_info info;
+	struct task_struct *result;
 
 	/*
 	 * Note:
@@ -357,7 +372,11 @@ struct task_struct __must_check *restore_process_snapshot(struct process_snapsho
 	wake_up_process(restorer_worker);
 	wait_for_completion(&done);
 
-	return info.result;
+	result = info.result;
+
+	pr_debug("%s(): restored task: %d comm:%s\n",
+		FUNC, result->pid, result->comm);
+	return result;
 }
 
 void __init checkpoint_init(void)

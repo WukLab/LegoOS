@@ -285,6 +285,8 @@ int do_execve(const char *filename,
 	ELF_PLAT_INIT(regs);
 #endif
 
+	set_task_comm(current, kbasename(filename));
+
 	/* core-kernel: change the task iret frame */
 	start_thread(regs, new_ip, new_sp);
 	ret = 0;
