@@ -294,7 +294,7 @@ static void create_restorer(struct restorer_work_info *info)
 	 * Use do_fork() instead of kernel_thread() because
 	 * we need a private mm:
 	 */
-	pid = do_fork(SIGCHLD, (unsigned long)restorer_for_other_threads,
+	pid = do_fork(SIGCHLD, (unsigned long)restorer_for_group_leader,
 			(unsigned long)info, NULL, NULL, 0);
 	if (pid < 0) {
 		WARN_ON_ONCE(1);
