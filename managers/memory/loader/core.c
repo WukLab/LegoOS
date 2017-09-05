@@ -306,23 +306,12 @@ out_ret:
 	return retval;
 }
 
-/*
- * TODO: signal
- * This function makes sure the current process has its own signal table,
- * so that flush_signal_handlers can later reset the handlers without
- * disturbing other processes.  (Other processes might share the signal
- * table via the CLONE_SIGHAND option to clone().)
- */
-static int de_thread(struct lego_task_struct *tsk)
-{
-	return 0;
-}
-
 static int exec_mmap(struct lego_task_struct *tsk, struct lego_mm_struct *new_mm)
 {
 	struct lego_mm_struct *old_mm;
 
 	old_mm = tsk->mm;
+	BUG_ON(!old_mm);
 	lego_mm_release(tsk, old_mm);
 
 	lego_task_lock(tsk);
@@ -346,14 +335,6 @@ int flush_old_exec(struct lego_task_struct *tsk, struct lego_binprm *bprm)
 	int retval;
 
 	/*
-	 * Make sure we have a private signal table and that
-	 * we are unassociated from the previous thread group.
-	 */
-	retval = de_thread(tsk);
-	if (retval)
-		return retval;
-
-	/*
 	 * Release all of the old mmap stuff
 	 * Activate new mm
 	 */
@@ -372,10 +353,6 @@ void setup_new_exec(struct lego_task_struct *tsk, struct lego_binprm *bprm)
 	arch_pick_mmap_layout(tsk->mm);
 	lego_set_task_comm(tsk, kbasename(bprm->file->filename));
 	tsk->mm->task_size = TASK_SIZE;
-
-	/*
-	 * TODO: signal
-	 */
 }
 
 /*

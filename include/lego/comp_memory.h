@@ -141,8 +141,8 @@ struct lego_task_struct {
 	struct lego_mm_struct *mm;
 
 	unsigned int node;
-	unsigned int pid;
-	unsigned int tgid;
+	unsigned int pid;		/* User-level pid, or kernel-level tgid */
+	unsigned int parent_pid;
 
 	char comm[LEGO_TASK_COMM_LEN];	/* executable name excluding path
 					 * - access with [gs]et_task_comm (which lock
