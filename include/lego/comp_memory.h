@@ -187,14 +187,26 @@ struct lego_file_operations {
 
 #define MAX_FILENAME_LEN 128
 struct lego_file {
-	char filename[MAX_FILENAME_LEN];
-	struct lego_file_operations *f_op;
-	struct lego_task_struct *task;
+	atomic_t			f_count;
+	char				filename[MAX_FILENAME_LEN];
+	struct lego_file_operations	*f_op;
 };
 
-/* Functions related to the page mapping walk */
-//pte_t *page_mapping_walk(struct lego_mm_struct *, unsigned long);
+static inline void get_lego_file(struct lego_file *filp)
+{
+	atomic_inc(&filp->f_count);
+}
 
-//int page_mapping_update(struct lego_mm_struct *, struct page *);
+static inline void __put_lego_file(struct lego_file *filp)
+{
+	BUG_ON(atomic_read(&filp->f_count) != 0);
+	kfree(filp);
+}
+
+static inline void put_lego_file(struct lego_file *filp)
+{
+	if (atomic_dec_and_test(&filp->f_count))
+		__put_lego_file(filp);
+}
 
 #endif /* _LEGO_COMP_MEMORY_H_ */

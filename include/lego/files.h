@@ -135,7 +135,7 @@ static inline void get_file(struct file *filp)
 	atomic_inc(&filp->f_count);
 }
 
-static void __put_file(struct file *filp)
+static inline void __put_file(struct file *filp)
 {
 	BUG_ON(atomic_read(&filp->f_count) != 0);
 	kfree(filp);

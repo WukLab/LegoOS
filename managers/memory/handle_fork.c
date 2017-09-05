@@ -14,6 +14,20 @@
 #include <memory/include/vm.h>
 #include <memory/include/pid.h>
 
+#ifdef CONFIG_DEBUG_HANDLE_FORK
+#define fork_debug(fmt, ...)	\
+	pr_debug("%s-%s(): " fmt "\n", __FILE__, __func__, __VA_ARGS__)
+
+#define dump_both_vmas(mm, oldmm)		\
+	do {					\
+		dump_all_vmas_simple(mm);	\
+		dump_all_vmas_simple(oldmm);	\
+	} while (0)
+#else
+#define fork_debug(fmt, ...)		do { } while (0)
+#define dump_both_vmas(mm, oldmm)	do { } while (0)
+#endif
+
 /*
  * This function duplicate mmap layout from parent,
  * which is the basic COW guarantee of fork().
@@ -25,7 +39,78 @@
 static int dup_lego_mmap(struct lego_mm_struct *mm,
 			 struct lego_mm_struct *oldmm)
 {
-	return 0;
+	struct vm_area_struct *mpnt, *tmp, *prev, **pprev;
+	struct rb_node **rb_link, *rb_parent;
+	int ret = 0;
+
+	if (down_write_killable(&oldmm->mmap_sem))
+		return -EINTR;
+
+	down_write(&mm->mmap_sem);
+
+	mm->total_vm = oldmm->total_vm;
+	mm->data_vm = oldmm->data_vm;
+	mm->exec_vm = oldmm->exec_vm;
+	mm->stack_vm = oldmm->stack_vm;
+
+	rb_link = &mm->mm_rb.rb_node;
+	rb_parent = NULL;
+	pprev = &mm->mmap;
+
+	prev = NULL;
+	for (mpnt = oldmm->mmap; mpnt; mpnt = mpnt->vm_next) {
+		struct lego_file *file;
+
+		tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
+		if (!tmp) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		*tmp = *mpnt;
+		INIT_LIST_HEAD(&tmp->anon_vma_chain);
+		tmp->vm_mm = mm;
+
+		tmp->vm_flags &=
+			~(VM_LOCKED|VM_LOCKONFAULT|VM_UFFD_MISSING|VM_UFFD_WP);
+		tmp->vm_next = tmp->vm_prev = NULL;
+
+		/* Hold 1 more ref */
+		file = tmp->vm_file;
+		if (file)
+			get_lego_file(file);
+
+		/*
+		 * Link in the new vma and copy the page table entries.
+		 */
+		*pprev = tmp;
+		pprev = &tmp->vm_next;
+		tmp->vm_prev = prev;
+		prev = tmp;
+
+		__vma_link_rb(mm, tmp, rb_link, rb_parent);
+		rb_link = &tmp->vm_rb.rb_right;
+		rb_parent = &tmp->vm_rb;
+
+		mm->map_count++;
+		ret = copy_page_range(mm, oldmm, mpnt);
+
+		/*
+		 * Callback to underlying fs hook if exists:
+		 */
+		if (tmp->vm_ops && tmp->vm_ops->open)
+			tmp->vm_ops->open(tmp);
+
+		if (ret)
+			goto out;
+	}
+
+	dump_both_vmas(mm, oldmm);
+	ret = 0;
+out:
+	up_write(&mm->mmap_sem);
+	up_write(&oldmm->mmap_sem);
+	return ret;
 }
 
 static int dup_lego_mm(struct lego_task_struct *t,
@@ -70,8 +155,8 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	u32 retbuf;
 	int ret;
 
-	pr_info("%s(): nid:%u,pid:%u,tgid:%u,parent_tgid:%u\n",
-		__func__, nid, pid, tgid, parent_tgid);
+	fork_debug("nid:%u,pid:%u,tgid:%u,parent_tgid:%u",
+		nid, pid, tgid, parent_tgid);
 
 	parent = find_lego_task_by_pid(nid, parent_tgid);
 	if (!parent && parent_tgid != 1)
@@ -121,7 +206,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 
 	retbuf = RET_OKAY;
 reply:
+	fork_debug("retbuf: %s", ret_to_string(retbuf));
 	ibapi_reply_message(&retbuf, 4, desc);
-
 	return 0;
 }

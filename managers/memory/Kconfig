@@ -12,9 +12,20 @@ if COMP_MEMORY
 menu "Memory DEBUG Options"
 config DEBUG_VM_RB
 	bool "Debug VM red-black trees"
+	default n
+	depends on COMP_MEMORY
 	help
 	  Enable VM red-black tree debugging information and extra validations.
 
+	  If unsure, say N.
+
+config DEBUG_HANDLE_FORK
+	bool "Debug handle_fork.c"
+	default n
+	depends on COMP_MEMORY
+	help
+	  Enable to have a detailed log of what memory-manager's fork handler has did.
+	  
 	  If unsure, say N.
 
 endmenu
