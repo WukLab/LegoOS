@@ -1741,13 +1741,17 @@ lego_mm_init(struct lego_mm_struct *mm, struct lego_task_struct *p)
 	return mm;
 }
 
-struct lego_mm_struct *lego_mm_alloc(struct lego_task_struct *p)
+struct lego_mm_struct *lego_mm_alloc(struct lego_task_struct *p,
+				     struct lego_task_struct *parent)
 {
 	struct lego_mm_struct *mm;
 
 	mm = kzalloc(sizeof(*mm), GFP_KERNEL);
 	if (!mm)
 		return NULL;
+
+	if (parent)
+		memcpy(mm, parent->mm, sizeof(*mm));
 	return lego_mm_init(mm, p);
 }
 

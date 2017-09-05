@@ -234,7 +234,9 @@ static inline int vma_adjust(struct vm_area_struct *vma, unsigned long start,
 
 struct lego_mm_struct *
 lego_mm_init(struct lego_mm_struct *mm, struct lego_task_struct *p);
-struct lego_mm_struct *lego_mm_alloc(struct lego_task_struct *p);
+
+struct lego_mm_struct *
+lego_mm_alloc(struct lego_task_struct *p, struct lego_task_struct *parent);
 
 /* lego_mmdrop drops the mm and the page tables */
 void __lego_mmdrop(struct lego_mm_struct *);

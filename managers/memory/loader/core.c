@@ -142,7 +142,7 @@ static int bprm_mm_init(struct lego_task_struct *tsk, struct lego_binprm *bprm)
 	struct lego_mm_struct *mm = NULL;
 	int err = -ENOMEM;
 
-	bprm->mm = mm = lego_mm_alloc(tsk);
+	bprm->mm = mm = lego_mm_alloc(tsk, NULL);
 	if (!mm)
 		goto err;
 
