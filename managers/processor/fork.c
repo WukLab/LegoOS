@@ -20,6 +20,7 @@ int p2m_fork(struct task_struct *p, unsigned long clone_flags)
 
 	payload.pid = p->pid;
 	payload.tgid = p->tgid;
+	payload.parent_tgid = p->parent->tgid;
 	payload.clone_flags = clone_flags;
 	memcpy(payload.comm, p->comm, TASK_COMM_LEN);
 

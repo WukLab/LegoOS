@@ -21,11 +21,12 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	unsigned int nid = hdr->src_nid;
 	unsigned int pid = payload->pid;
 	unsigned int tgid = payload->tgid;
+	unsigned int parent_tgid = payload->parent_tgid;
 	struct lego_task_struct *tsk;
 	int ret;
 
-	pr_info("%s(): nid:%u,pid:%u,tgid:%u\n",
-		__func__, nid, pid, tgid);
+	pr_info("%s(): nid:%u,pid:%u,tgid:%u,parent_tgid:%u\n",
+		__func__, nid, pid, tgid, parent_tgid);
 
 	tsk = kmalloc(sizeof(*tsk), GFP_KERNEL);
 	if (unlikely(!tsk)) {
