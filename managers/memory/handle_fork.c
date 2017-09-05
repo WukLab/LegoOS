@@ -37,6 +37,7 @@ static int dup_lego_mm(struct lego_task_struct *t,
 	mm = lego_mm_alloc(t);
 	if (!mm)
 		return -ENOMEM;
+	t->mm = mm;
 
 	if (parent) {
 		oldmm = parent->mm;
