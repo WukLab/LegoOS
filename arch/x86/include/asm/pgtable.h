@@ -603,5 +603,10 @@ static inline int pmd_none_or_clear_bad(pmd_t *pmd)
 	return 0;
 }
 
+static inline void ptep_set_wrprotect(pte_t *ptep)
+{
+	clear_bit(_PAGE_BIT_RW, (unsigned long *)&ptep->pte);
+}
+
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_PGTABLE_H_ */

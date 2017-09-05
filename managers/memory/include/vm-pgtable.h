@@ -14,7 +14,7 @@
  * Hashtable is also feasible.
  *
  * Well, maybe later the *real* memory component will also have
- * some hardaware table walk to walk through this one.
+ * some hardaware table walker to walk through this one.
  */
 
 #ifndef _LEGO_MEMORY_VM_PGTABLE_H_
@@ -69,12 +69,23 @@ static inline spinlock_t *lego_pte_lockptr(struct lego_mm_struct *mm, pmd_t *pmd
 	return &mm->page_table_lock;
 }
 
-#define lego_pte_offset_lock(mm, pmd, address, ptlp)\
+#define lego_pte_offset_lock(mm, pmd, address, ptlp)	\
 ({							\
 	spinlock_t *__ptl = lego_pte_lockptr(mm, pmd);	\
 	pte_t *__pte = pte_offset(pmd, address);	\
 	*(ptlp) = __ptl;				\
 	spin_lock(__ptl);				\
+	__pte;						\
+})
+
+#define lego_pte_alloc_lock(mm, pmd, address, ptlp)	\
+({							\
+	spinlock_t *__ptl = lego_pte_lockptr(mm, pmd);	\
+	pte_t *__pte = lego_pte_alloc(mm, pmd, address);\
+	if (__pte) {					\
+		*(ptlp) = __ptl;			\
+		spin_lock(__ptl);			\
+	}						\
 	__pte;						\
 })
 

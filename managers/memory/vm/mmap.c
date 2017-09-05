@@ -1800,6 +1800,11 @@ void lego_mm_release(struct lego_task_struct *tsk, struct lego_mm_struct *mm)
  * These three helpers classifies VMAs for virtual memory accounting.
  */
 
+static inline bool is_cow_mapping(vm_flags_t flags)
+{
+	return (flags & (VM_SHARED | VM_MAYWRITE)) == VM_MAYWRITE;
+}
+
 /*
  * Executable code area - executable, not writable, not stack
  */
@@ -1913,9 +1918,167 @@ int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 	return 0;
 }
 
-/* TODO */
+/*
+ * copy one vm_area from one task to the other. Assumes the page tables
+ * already present in the new task to be cleared in the whole range
+ * covered by this vma.
+ */
+
+static inline int
+copy_one_pte(struct lego_mm_struct *dst_mm, struct lego_mm_struct *src_mm,
+		pte_t *dst_pte, pte_t *src_pte, struct vm_area_struct *vma,
+		unsigned long addr)
+{
+	unsigned long vm_flags = vma->vm_flags;
+	pte_t pte = *src_pte;
+
+	/*
+	 * PTE contains position in swap or file
+	 * Lego does not have any swap now, so skip.
+	 */
+	if (unlikely(!pte_present(pte)))
+		goto pte_set;
+
+	/*
+	 * If it's a COW mapping, write protect it both
+	 * in the parent and the child
+	 */
+	if (is_cow_mapping(vm_flags)) {
+		ptep_set_wrprotect(src_pte);
+		pte = pte_wrprotect(pte);
+	}
+
+	/*
+	 * If it's a shared mapping, mark it clean in
+	 * the child:
+	 */
+	if (vm_flags & VM_SHARED)
+		pte = pte_mkclean(pte);
+	pte = pte_mkold(pte);
+
+	/*
+	 * TODO:
+	 * If we need rmap in memory component
+	 * we need to increment 1 mapcount here!
+	 */
+
+pte_set:
+	pte_set(dst_pte, pte);
+	return 0;
+}
+
+static int copy_pte_range(struct lego_mm_struct *dst_mm,
+			  struct lego_mm_struct *src_mm,
+		   	  pmd_t *dst_pmd, pmd_t *src_pmd,
+			  struct vm_area_struct *vma,
+		   	  unsigned long addr, unsigned long end)
+{
+	pte_t *orig_src_pte, *orig_dst_pte;
+	pte_t *src_pte, *dst_pte;
+	spinlock_t *src_ptl, *dst_ptl;
+
+again:
+	dst_pte = lego_pte_alloc_lock(dst_mm, dst_pmd, addr, &dst_ptl);
+	if (!dst_pte)
+		return -ENOMEM;
+
+	src_pte = pte_offset(src_pmd, addr);
+	src_ptl = lego_pte_lockptr(src_mm, src_pmd);
+	spin_lock(src_ptl);
+
+	orig_src_pte = src_pte;
+	orig_dst_pte = dst_pte;
+
+	do {
+		if (pte_none(*src_pte))
+			continue;
+		if (copy_one_pte(dst_mm, src_mm, dst_pte, src_pte, vma, addr))
+			break;
+	} while (dst_pte++, src_pte++, addr += PAGE_SIZE, addr != end);
+
+	spin_unlock(src_ptl);
+	spin_unlock(dst_ptl);
+
+	if (addr != end)
+		goto again;
+	return 0;
+}
+
+static inline int copy_pmd_range(struct lego_mm_struct *dst_mm,
+				 struct lego_mm_struct *src_mm,
+				 pud_t *dst_pud, pud_t *src_pud,
+				 struct vm_area_struct *vma,
+				 unsigned long addr, unsigned long end)
+{
+	pmd_t *src_pmd, *dst_pmd;
+	unsigned long next;
+
+	dst_pmd = lego_pmd_alloc(dst_mm, dst_pud, addr);
+	if (!dst_pmd)
+		return -ENOMEM;
+	src_pmd = pmd_offset(src_pud, addr);
+	do {
+		next = pmd_addr_end(addr, end);
+		if (pmd_none_or_clear_bad(src_pmd))
+			continue;
+		if (copy_pte_range(dst_mm, src_mm, dst_pmd, src_pmd,
+						vma, addr, next))
+			return -ENOMEM;
+	} while (dst_pmd++, src_pmd++, addr = next, addr != end);
+	return 0;
+}
+
+static inline int copy_pud_range(struct lego_mm_struct *dst_mm,
+				 struct lego_mm_struct *src_mm,
+				 pgd_t *dst_pgd, pgd_t *src_pgd,
+				 struct vm_area_struct *vma,
+				 unsigned long addr, unsigned long end)
+{
+	pud_t *src_pud, *dst_pud;
+	unsigned long next;
+
+	dst_pud = lego_pud_alloc(dst_mm, dst_pgd, addr);
+	if (!dst_pud)
+		return -ENOMEM;
+	src_pud = pud_offset(src_pgd, addr);
+	do {
+		next = pud_addr_end(addr, end);
+		if (pud_none_or_clear_bad(src_pud))
+			continue;
+		if (copy_pmd_range(dst_mm, src_mm, dst_pud, src_pud,
+						vma, addr, next))
+			return -ENOMEM;
+	} while (dst_pud++, src_pud++, addr = next, addr != end);
+	return 0;
+}
+
+/*
+ * This function is called during fork() time.
+ * It will copy the vma page table mapping from source mm to destination mm.
+ * It will make writable && non-shared pages RO for both mm (for COW).
+ */
 int copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
 		    struct vm_area_struct *vma)
 {
-	return 0;
+	pgd_t *src_pgd, *dst_pgd;
+	unsigned long next;
+	unsigned long addr = vma->vm_start;
+	unsigned long end = vma->vm_end;
+	int ret;
+
+	ret = 0;
+	dst_pgd = pgd_offset(dst, addr);
+	src_pgd = pgd_offset(src, addr);
+	do {
+		next = pgd_addr_end(addr, end);
+		if (pgd_none_or_clear_bad(src_pgd))
+			continue;
+		if (unlikely(copy_pud_range(dst, src, dst_pgd, src_pgd,
+					    vma, addr, next))) {
+			ret = -ENOMEM;
+			break;
+		}
+	} while (dst_pgd++, src_pgd++, addr = next, addr != end);
+
+	return ret;
 }
