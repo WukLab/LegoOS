@@ -13,7 +13,6 @@
 #include <linux/mutex.h>
 #include <linux/mm.h>
 
-#define BLK_SIZE 4096
 #define MAX_RXBUF_SIZE (5*BLK_SIZE+sizeof(__u32)+sizeof(struct m2s_read_write_payload))
 
 // File metadata structure

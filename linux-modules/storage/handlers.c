@@ -16,7 +16,7 @@
 //Send retval+buf
 ssize_t handle_read_request(void *payload, uintptr_t desc){
 
-	pr_info("calling handle_read_request\n");
+	//pr_info("calling handle_read_request\n");
 
 	struct m2s_read_write_payload *m2s_rq;
 	m2s_rq = (struct m2s_read_write_payload *) payload;
@@ -30,7 +30,19 @@ ssize_t handle_read_request(void *payload, uintptr_t desc){
 	void *retbuf;
 
 	int len_retbuf = m2s_rq->len + sizeof(ssize_t);
+
+	if (unlikely(m2s_rq->len > 5*BLK_SIZE)){
+		pr_info("read request is too large, request [%u].\n", m2s_rq->len);
+		ret = -ENOMEM;
+		goto err;
+	}
+
 	retbuf = kmalloc(len_retbuf, GFP_KERNEL);
+	if (unlikely(!retbuf)){
+		pr_info("No memory for read retbuf, request [%u].\n", m2s_rq->len);
+		ret = -ENOMEM;
+		goto err;
+	}
 
 	retval = (ssize_t *) retbuf;
 	readbuf = (char *) (retbuf + sizeof(ssize_t));
@@ -58,12 +70,16 @@ ssize_t handle_read_request(void *payload, uintptr_t desc){
 	*retval = local_file_read(filp, (const char __user *)readbuf, rq.len, &rq.offset);
 	local_file_close(filp);
 	//yield_access(metadata_entry, user_entry); //enable in future
-	pr_info("Content in readbuf is [%s]\n", readbuf);
+	//pr_info("Content in readbuf is [%s]\n", readbuf);
 
 out_reply:
 	ret = *retval;
 	ibapi_reply_message(retbuf, len_retbuf, desc);
 	kfree(retbuf);
+	return ret;
+
+err:
+	ibapi_reply_message(ret, sizeof(ret), desc);
 	return ret;
 	
 }
@@ -71,7 +87,7 @@ out_reply:
 //send retval
 ssize_t handle_write_request(void *payload, uintptr_t desc){
 
-	pr_info("calling handle_write_request\n");
+	//pr_info("calling handle_write_request\n");
 
 	struct m2s_read_write_payload *m2s_wq;
 	m2s_wq = (struct m2s_read_write_payload *) payload;
@@ -119,7 +135,7 @@ out_reply:
 
 int handle_open_request(void *payload, uintptr_t desc){
 
-	pr_info("calling handle_open_request\n");
+	//pr_info("calling handle_open_request\n");
 
 	struct m2s_open_payload *m2s_op;
 	m2s_op = (struct m2s_open_payload *) payload;

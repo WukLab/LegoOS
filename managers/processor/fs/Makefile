@@ -16,3 +16,4 @@ obj-y += normal_ops.o
 obj-y += seq_file.o
 obj-y += proc/
 obj-y += sys/
+obj-y += dev/

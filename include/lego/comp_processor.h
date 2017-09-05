@@ -15,8 +15,8 @@
 #include <generated/unistd_64.h>
 #include <lego/comp_common.h>	/* must come at last */
 
-#define DEF_MEM_HOMENODE 1
-//define DEF_MEM_HOMENODE 2 //if storage in 0, processor 1 and memory 2
+//#define DEF_MEM_HOMENODE 1
+#define DEF_MEM_HOMENODE 2 //if storage in 0, processor 1 and memory 2
 #define DEF_NET_TIMEOUT	 10	/* second */
 
 #ifdef CONFIG_COMP_PROCESSOR
@@ -63,6 +63,32 @@ static inline bool pcache_present(unsigned long __user address)
 		return false;
 
 	return true;
+}
+
+static inline pte_t *addr2pte(unsigned long __user address)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	pgd = pgd_offset(current->mm, address);
+	if (!pgd_present(*pgd))
+		return NULL;
+
+	pud = pud_offset(pgd, address);
+	if (!pud_present(*pud))
+		return NULL;
+
+	pmd = pmd_offset(pud, address);
+	if (!pmd_present(*pmd))
+		return NULL;
+
+	pte = pte_offset(pmd, address);
+	if (!pte_present(*pte))
+		return NULL;
+	
+	return pte;
 }
 
 void open_stdio_files(void);

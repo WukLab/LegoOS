@@ -35,8 +35,14 @@ static inline int sys_file(char *f_name)
 	return !memcmp(f_name, "/sys", 4);
 }
 
+static inline int dev_file(char *f_name)
+{
+	return !memcmp(f_name, "/dev", 4);
+}
+
 int proc_file_open(struct file *, char *f_name);
 int sys_file_open(struct file *, char *f_name);
+int dev_file_open(struct file *, char *f_name);
 
 extern struct file_operations normal_p2s_f_ops;
 

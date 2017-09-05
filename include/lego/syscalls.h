@@ -179,4 +179,7 @@ asmlinkage long sys_checkpoint_process(pid_t pid);
 /* x86-64 only */
 asmlinkage long sys_arch_prctl(int, unsigned long);
 
+/* backdoor syscall for testing pcache flush only */
+asmlinkage long sys_pcache_flush(void __user *vaddr);
+
 #endif /* _LEGO_SYSCALLS_H_ */

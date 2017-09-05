@@ -13,6 +13,7 @@
 #include <lego/comp_memory.h>
 
 extern struct lego_file_operations ramfs_file_ops;
+extern struct lego_file_operations storage_file_ops;
 
 /* Storage APIs */
 ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,

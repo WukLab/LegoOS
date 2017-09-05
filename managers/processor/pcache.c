@@ -20,6 +20,8 @@
 #include <lego/kernel.h>
 #include <lego/comp_processor.h>
 
+#include <lego/syscalls.h>
+
 #include "pcache.h"
 
 static u64 llc_cache_start;
@@ -159,6 +161,166 @@ int pcache_fill(unsigned long missing_vaddr, unsigned long flags,
 	/* for establishing va->pa mapping */
 	*cache_paddr = (unsigned long)pa_cache;
 	return 0;
+}
+
+static void *find_vameta_by_pacache(void *pa_cache)
+{
+	u64 strides;
+	if (unlikely(!llc_cache_size)) {
+		panic("uninitilized cacheline size.\n");	
+	}
+
+	strides = ((u64) pa_cache - phys_start_cacheline) / llc_cacheline_size;
+	return (void *) (virt_start_metadata + strides * llc_cachemeta_size);
+}
+
+/*static void *find_vameta_by_vacache(void *va_cache)
+{
+	u64 strides;
+	if (unlikely(!llc_cacheline_size)) {
+		panic("uninitilized cacheline size.\n");
+	}
+
+	strides = ((u64) va_cache -  virt_start_cacheline) / llc_cacheline_size;
+	return (void *) (virt_start_metadata + strides * llc_cacheline_size);
+}*/
+
+/*static void *find_vameta_by_vaddr(unsigned long __user vaddr)
+{
+	u64 paddr;
+	u64 pa_cache;
+	//translate vaddr to 
+	//???
+	pa_cache = round_down(paddr, llc_cacheline_size);
+	return find_vameta_by_pacache((void *) pa_cache);	
+}*/
+
+int pcache_flush_cacheline_va_user(unsigned long __user vaddr)
+{
+#define DEBUG_CACHE_TEST
+
+	void *msg;
+	u32 len_msg;
+	int retval = 0;
+	unsigned long __user round_down_vaddr;
+	void *va_cacheline;
+	void *pa_cache, *va_meta;
+	pte_t *pte;
+
+	int err;
+	u64 offset = 0;
+
+	struct p2m_flush_payload *payload;
+	void *content;
+
+	pte = addr2pte(vaddr);
+	if (unlikely(!pte)) {
+		panic("Flushing vaddr does not in LLC.\n");
+	}
+
+	round_down_vaddr = round_down(vaddr, llc_cacheline_size);
+	va_cacheline = (void *) round_down_vaddr;
+	pa_cache = (void *) (pte_val(*pte) & PTE_VFN_MASK);
+	va_meta = find_vameta_by_pacache(pa_cache);
+
+	/* 
+	 * check dirty here or functions calling this.
+	 */
+
+	/*if (!pcache_dirty(va_meta)) {
+#ifdef DEBUG_CACHE_TEST
+		pr_info("cacheline is not dirty, unnecessary to flush.\n");
+#endif
+		return 0;
+	}*/
+	
+	len_msg = sizeof(struct p2m_flush_payload) + llc_cacheline_size;
+	msg = kmalloc(len_msg, GFP_KERNEL);
+	if (unlikely(!msg)) {
+		pr_info("No memory for copying flushing page to ib msg.\n");
+		return -ENOMEM;
+	}
+	
+	payload = (struct p2m_flush_payload *) msg;
+	content = (void *) (msg + sizeof(struct p2m_flush_payload));
+	  
+	payload->flush_vaddr = vaddr;
+	payload->pid = current->pid;
+	payload->llc_cacheline_size = llc_cacheline_size; 
+
+#ifdef DEBUG_CACHE_TEST
+	pr_info("pcache_flush_single : vaddr : %#lx\nround_down_vaddr: %#lx\n",
+			vaddr, round_down_vaddr);
+	pr_info("pa_cache address is %#lx\n", (unsigned long) pa_cache);
+#endif
+	
+	//memcpy(content, (void *) vaddr, llc_cacheline_size);
+	err = copy_from_user(content, va_cacheline, llc_cacheline_size);
+	if(unlikely(err)) {
+		panic("Cannot copy cacheline content.\n");
+	}
+
+#ifdef DEBUG_CACHE_TEST
+	offset = vaddr - round_down_vaddr;
+	pr_info("pcache_flush_single : string from content [%s]\n", (char*) (content+offset));
+#endif
+
+	net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_FLUSH,
+			msg, len_msg, &retval, sizeof(retval),
+		       	false, DEF_NET_TIMEOUT);
+
+	kfree(msg);
+	return retval;
+}
+
+/* not used this time */
+/*int pcache_flush_cacheline_va_cache(void *va_cache)
+{
+	void *msg;
+	u32 len_msg;
+	int retval = 0;
+
+	struct p2m_flush_payload *payload;
+	void *content;
+	void *va_meta;
+	
+	va_meta = find_vameta_by_vacache(va_cache);
+
+	if (!pcache_dirty(va_meta)) {
+		return retval;
+	}
+
+	len_msg = sizeof(struct p2m_flush_payload) + llc_cacheline_size;
+	msg = kmalloc(len_msg, GFP_KERNEL);
+	if (unlikely(!msg)) {
+		pr_info("No memory for copying flushing page to ib msg.\n");
+		return -ENOMEM;
+	}
+	
+	payload = (struct p2m_flush_payload *) msg;
+	content = (void *) (msg + sizeof(struct p2m_flush_payload));
+	  
+	payload->flush_vaddr = (unsigned long) va_cache; // This should be wrong, should be vaddr of user page.
+	payload->pid = current->pid; // This should be wrong, should be the pid current cacheline belongs to
+	payload->llc_cacheline_size = llc_cacheline_size;
+
+	
+	memcpy(content, va_cache, llc_cacheline_size);
+
+	net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_FLUSH,
+			msg, len_msg, &retval, sizeof(retval),
+		       	false, DEF_NET_TIMEOUT);
+
+	kfree(msg);
+	return retval;
+}*/
+
+/* backdoor syscall for testing pcache flush only */
+SYSCALL_DEFINE1(pcache_flush, void __user *, vaddr)
+{
+	unsigned long __user address;
+	address = (unsigned long __user) vaddr;
+	return pcache_flush_cacheline_va_user(address);
 }
 
 void __init pcache_init(void)

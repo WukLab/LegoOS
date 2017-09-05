@@ -127,6 +127,8 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 		ret = proc_file_open(f, kname);
 	else if (unlikely(sys_file(kname)))
 		ret = sys_file_open(f, kname);
+	else if (unlikely(dev_file(kname)))
+		ret = dev_file_open(f, kname);
 	else
 		ret = normal_file_open(f, kname);
 

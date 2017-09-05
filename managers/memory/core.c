@@ -105,7 +105,7 @@ static void local_qemu_test(void)
 }
 #endif
 
-#define MAX_RXBUF_SIZE	PAGE_SIZE
+#define MAX_RXBUF_SIZE	PAGE_SIZE*5
 
 #ifdef CONFIG_FIT
 struct info_struct {
@@ -222,6 +222,10 @@ static int mc_dispatcher(void *passed)
 
 	case M2S_WRITE:
 		handle_p2s_write(payload, desc, hdr);
+		break;
+	
+	case P2M_LLC_FLUSH:
+		handle_p2m_flush_single(payload, desc, hdr);
 		break;
 
 	default:

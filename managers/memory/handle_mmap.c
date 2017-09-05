@@ -155,18 +155,11 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	 * If so, we need to allocate a lego_file to attach to this vma:
 	 */
 	if (!(flags & MAP_ANONYMOUS)) {
-		file = kzalloc(sizeof(*file), GFP_KERNEL);
-		if (!file) {
+		file = file_open(tsk, f_name);
+		if (IS_ERR(file)) {
 			reply.ret = RET_ENOMEM;
 			goto out;
 		}
-
-		/*
-		 * TODO: remove ramfs_file_ops to use storage ones
-		 */
-		file->f_op = &ramfs_file_ops;
-		file->task = tsk;
-		memcpy(file->filename, f_name, MAX_FILENAME_LEN);
 	}
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);

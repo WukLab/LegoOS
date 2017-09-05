@@ -121,3 +121,70 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 	do_handle_p2m_llc_miss(p, vaddr, offset, flags, desc);
 	return 0;
 }
+
+/* 0 on success, -ERRNO on failure */
+int handle_p2m_flush_single(void *void_payload, u64 desc, struct common_header *hdr)
+{
+#define DEBUG_CACHE_TEST
+
+	struct p2m_flush_payload *payload;
+	void *pages_content;
+	struct lego_task_struct *tsk;
+	int retval = 0;
+	unsigned long __user round_down_vaddr;
+	void *cacheline_to_va_pages;
+
+#ifdef DEBUG_CACHE_TEST
+	char *kbuf; /* for debug content only */
+	u64 offset;
+#endif
+	
+	payload = (struct p2m_flush_payload *) void_payload;
+	pages_content = (void *) (void_payload + sizeof(struct p2m_flush_payload));
+
+	tsk = find_lego_task_by_pid(hdr->src_nid, payload->pid);
+	if (unlikely(!tsk)){
+		retval = -ESRCH;
+		goto out_reply;
+	}
+
+	round_down_vaddr = round_down(payload->flush_vaddr,
+			       	payload->llc_cacheline_size);
+	cacheline_to_va_pages = (void *) round_down_vaddr;
+
+#ifdef DEBUG_CACHE_TEST
+	offset = payload->flush_vaddr - round_down_vaddr;
+	
+	/* for testing */
+	kbuf = kmalloc(payload->llc_cacheline_size, GFP_KERNEL);
+	if (unlikely(!kbuf)){
+		pr_info("Fail to allocate a kbuf for testing.\n");
+	}
+	memset(kbuf, 0, payload->llc_cacheline_size);
+	
+	lego_copy_from_user(tsk, kbuf, cacheline_to_va_pages,
+			payload->llc_cacheline_size);
+	pr_info("string in user pages before flush is [%s]\n", kbuf+offset); /* end testing */
+#endif
+
+	/* memory copy should be wrong, copy to user space */
+	//memcpy(payload->flush_vaddr, pages_content, payload->llc_cacheline_size);
+	lego_copy_to_user(tsk, cacheline_to_va_pages, 
+			pages_content, payload->llc_cacheline_size);
+
+#ifdef DEBUG_CACHE_TEST
+	/* testing */
+	memset(kbuf, 0, payload->llc_cacheline_size);
+
+	lego_copy_from_user(tsk, kbuf, cacheline_to_va_pages,
+			payload->llc_cacheline_size);
+	pr_info("String in user pages after flush is [%s]\n", kbuf+offset);
+#endif
+
+out_reply:
+	ibapi_reply_message(&retval, sizeof(retval), desc);
+#ifdef DEBUG_CACHE_TEST
+	kfree(kbuf);
+#endif
+	return retval;
+}

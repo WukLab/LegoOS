@@ -144,8 +144,9 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 		 */
 		stat.mode |= S_IFCHR;
 		stat.ino = 3;
-	} else
-		stat.mode |= S_IFREG;
+	} else {
+		stat.mode |= S_IFCHR;
+	}
 	ret = cp_new_stat(&stat, statbuf);
 
 out:

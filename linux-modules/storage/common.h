@@ -19,7 +19,8 @@
 #define LINUX_NODE	0
 #define LEGO_NODE	1
 
-#define DEBUG_STORAGE
+//#define DEBUG_STORAGE
+#define BLK_SIZE 5*4096
 
 /* fit module */
 extern int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int if_use_ret_phys_addr);
