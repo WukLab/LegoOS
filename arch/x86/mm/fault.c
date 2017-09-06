@@ -434,7 +434,7 @@ static inline void __do_page_fault(struct pt_regs *regs, unsigned long address,
 	/* fetch cacheline from memory component */
 	ret = pcache_fill(address, flags, &cache_paddr);
 	if (unlikely(ret)) {
-		bad_area_nosemaphore(regs, address, error_code);
+		bad_area_nosemaphore(regs, error_code, address);
 		return;
 	}
 
