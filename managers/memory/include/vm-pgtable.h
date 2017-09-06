@@ -23,6 +23,15 @@
 #include <asm/pgtable.h>
 #include <lego/comp_memory.h>
 
+/*
+ * On almost all architectures and configurations, 0 can be used as the
+ * upper ceiling to free_pgtables(): on many architectures it has the same
+ * effect as using TASK_SIZE.  However, there is one configuration which
+ * must impose a more careful limit, to avoid freeing kernel pgtables.
+ */
+#define FIRST_USER_ADDRESS	0UL
+#define USER_PGTABLES_CEILING	0UL
+
 #define lego_pgd_offset(mm, address) ((mm)->pgd + pgd_index((address)))
 
 int __lego_pud_alloc(struct lego_mm_struct *mm, pgd_t *pgd, unsigned long address);
@@ -93,8 +102,5 @@ static inline spinlock_t *lego_pte_lockptr(struct lego_mm_struct *mm, pmd_t *pmd
 do {							\
 	spin_unlock(ptl);				\
 } while (0)
-
-void free_pgd_range(struct lego_mm_struct *mm,
-		    unsigned long start, unsigned long end);
 
 #endif /* _LEGO_MEMORY_VM_PGTABLE_H_ */

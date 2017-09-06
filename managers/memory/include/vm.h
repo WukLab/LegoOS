@@ -143,8 +143,43 @@ static inline int vma_growsdown(struct vm_area_struct *vma, unsigned long addr)
 
 static inline bool vma_is_anonymous(struct vm_area_struct *vma)
 {
-	/*TODO*/
-	return true;
+	return !vma->vm_ops;
+}
+
+static inline bool is_cow_mapping(vm_flags_t flags)
+{
+	return (flags & (VM_SHARED | VM_MAYWRITE)) == VM_MAYWRITE;
+}
+
+/*
+ * These three helpers classifies VMAs for virtual memory accounting.
+ */
+
+/*
+ * Executable code area - executable, not writable, not stack
+ */
+static inline bool is_exec_mapping(vm_flags_t flags)
+{
+	return (flags & (VM_EXEC | VM_WRITE | VM_STACK)) == VM_EXEC;
+}
+
+/*
+ * Stack area - atomatically grows in one direction
+ *
+ * VM_GROWSUP / VM_GROWSDOWN VMAs are always private anonymous:
+ * do_mmap() forbids all other combinations.
+ */
+static inline bool is_stack_mapping(vm_flags_t flags)
+{
+	return (flags & VM_STACK) == VM_STACK;
+}
+
+/*
+ * Data area - private, writable, not stack
+ */
+static inline bool is_data_mapping(vm_flags_t flags)
+{
+	return (flags & (VM_WRITE | VM_SHARED | VM_STACK)) == VM_WRITE;
 }
 
 struct vm_unmapped_area_info {
@@ -203,6 +238,9 @@ int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len);
 int do_brk(struct lego_task_struct *p, unsigned long addr,
 	   unsigned long request);
 
+void unmap_vmas(struct vm_area_struct *vma, unsigned long start_addr,
+		unsigned long end_addr);
+
 /*
  * Look up the first VMA which intersects the interval start_addr..end_addr-1,
  * NULL if none.  Assume start_addr < end_addr.
@@ -253,7 +291,6 @@ static inline void lego_mmput(struct lego_mm_struct *mm)
 	if (unlikely(atomic_dec_and_test(&mm->mm_users)))
 		__lego_mmput(mm);
 }
-void lego_mm_release(struct lego_task_struct *tsk, struct lego_mm_struct *mm);
 
 static inline unsigned long vma_pages(struct vm_area_struct *vma)
 {
@@ -268,6 +305,16 @@ int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 
 int copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
 		struct vm_area_struct *vma);
+
+void free_pgd_range(struct lego_mm_struct *mm,
+		    unsigned long addr, unsigned long end,
+		    unsigned long floor, unsigned long ceiling);
+
+void free_pgtables(struct vm_area_struct *start_vma,
+		unsigned long floor, unsigned long ceiling);
+
+void exit_lego_mmap(struct lego_mm_struct *mm);
+
 
 /* fault.c */
 /*
@@ -305,10 +352,8 @@ extern unsigned long move_page_tables(struct vm_area_struct *vma,
 /* debug.c */
 void dump_all_vmas_simple(struct lego_mm_struct *mm);
 void dump_vma_simple(const struct vm_area_struct *vma);
-
 void dump_all_vmas(struct lego_mm_struct *mm);
 void dump_vma(const struct vm_area_struct *vma);
-
 void dump_lego_mm(const struct lego_mm_struct *mm);
 #define VM_BUG_ON_VMA(cond, vma)					\
 	do {								\
@@ -345,7 +390,9 @@ void dump_lego_mm(const struct lego_mm_struct *mm);
 
 int faultin_page(struct vm_area_struct *vma, unsigned long start,
 		 unsigned long flags, unsigned long *kvaddr);
+
 unsigned long find_page(struct vm_area_struct *vma, unsigned long address);
+
 long get_user_pages(struct lego_task_struct *tsk, unsigned long start,
 		    unsigned long nr_pages, unsigned int gup_flags,
 		    unsigned long *pages, struct vm_area_struct **vmas);
@@ -370,5 +417,8 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 
 unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
 				void *to , const void __user *from, size_t n);
+
+void unmap_page_range(struct vm_area_struct *vma,
+		      unsigned long addr, unsigned long end);
 
 #endif /* _LEGO_MEMORY_VM_H_ */

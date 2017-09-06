@@ -312,7 +312,6 @@ static int exec_mmap(struct lego_task_struct *tsk, struct lego_mm_struct *new_mm
 
 	old_mm = tsk->mm;
 	BUG_ON(!old_mm);
-	lego_mm_release(tsk, old_mm);
 
 	lego_task_lock(tsk);
 	tsk->mm = new_mm;
@@ -398,14 +397,20 @@ static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 		return -ENOMEM;
 
 	if (new_end > old_start) {
-		/* when the old and new regions overlap clear from new_end. */
-		free_pgd_range(mm, new_end, old_end);
+		/*
+		 * when the old and new regions overlap clear from new_end.
+		 */
+		free_pgd_range(mm, new_end, old_end, new_end,
+			vma->vm_next ? vma->vm_next->vm_start : USER_PGTABLES_CEILING);
 	} else {
 		/*
 		 * otherwise, clean from old_start; this is done to not touch
-		 * the address space in [new_end, old_start)
+		 * the address space in [new_end, old_start) some architectures
+		 * have constraints on va-space that make this illegal (IA64) -
+		 * for the others its just a little faster.
 		 */
-		free_pgd_range(mm, old_start, old_end);
+		free_pgd_range(mm, old_start, old_end, new_end,
+			vma->vm_next ? vma->vm_next->vm_start : USER_PGTABLES_CEILING);
 	}
 
 	/* Shrink the vma to just the new range.  Always succeeds. */

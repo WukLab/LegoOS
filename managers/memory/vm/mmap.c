@@ -1045,13 +1045,11 @@ static void unmap_region(struct lego_mm_struct *mm,
 		struct vm_area_struct *vma, struct vm_area_struct *prev,
 		unsigned long start, unsigned long end)
 {
-	//struct vm_area_struct *next = prev ? prev->vm_next : mm->mmap;
+	struct vm_area_struct *next = prev ? prev->vm_next : mm->mmap;
 
-	//tlb_gather_mmu(&tlb, mm, start, end);
-	//unmap_vmas(&tlb, vma, start, end);
-	//free_pgtables(&tlb, vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
-	//			 next ? next->vm_start : USER_PGTABLES_CEILING);
-	//tlb_finish_mmu(&tlb, start, end);
+	unmap_vmas(vma, start, end);
+	free_pgtables(vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
+			   next ? next->vm_start : USER_PGTABLES_CEILING);
 }
 
 /*
@@ -1089,14 +1087,10 @@ static struct vm_area_struct *remove_vma(struct vm_area_struct *vma)
 {
 	struct vm_area_struct *next = vma->vm_next;
 
-#if 0
-	might_sleep();
 	if (vma->vm_ops && vma->vm_ops->close)
 		vma->vm_ops->close(vma);
 	if (vma->vm_file)
-		fput(vma->vm_file);
-	mpol_put(vma_policy(vma));
-#endif
+		put_lego_file(vma->vm_file);
 	kfree(vma);
 	return next;
 }
@@ -1769,67 +1763,8 @@ void __lego_mmdrop(struct lego_mm_struct *mm)
 void __lego_mmput(struct lego_mm_struct *mm)
 {
 	BUG_ON(atomic_read(&mm->mm_users));
-	/*
-	 * TODO exit a lot of things here
-	 */
+	exit_lego_mmap(mm);
 	lego_mmdrop(mm);
-}
-
-/*
- * Please note the differences between mmput and mm_release.
- * mmput is called whenever we stop holding onto a mm_struct,
- * error success whatever.
- *
- * mm_release is called after a mm_struct has been removed
- * from the current process.
- *
- * This difference is important for error handling, when we
- * only half set up a mm_struct for a new process and need to restore
- * the old one.  Because we mmput the new mm_struct before
- * restoring the old one. . .
- * Eric Biederman 10 January 1998
- */
-void lego_mm_release(struct lego_task_struct *tsk, struct lego_mm_struct *mm)
-{
-	/*
-	 * TODO: futex
-	 */
-}
-
-/*
- * These three helpers classifies VMAs for virtual memory accounting.
- */
-
-static inline bool is_cow_mapping(vm_flags_t flags)
-{
-	return (flags & (VM_SHARED | VM_MAYWRITE)) == VM_MAYWRITE;
-}
-
-/*
- * Executable code area - executable, not writable, not stack
- */
-static inline bool is_exec_mapping(vm_flags_t flags)
-{
-	return (flags & (VM_EXEC | VM_WRITE | VM_STACK)) == VM_EXEC;
-}
-
-/*
- * Stack area - atomatically grows in one direction
- *
- * VM_GROWSUP / VM_GROWSDOWN VMAs are always private anonymous:
- * do_mmap() forbids all other combinations.
- */
-static inline bool is_stack_mapping(vm_flags_t flags)
-{
-	return (flags & VM_STACK) == VM_STACK;
-}
-
-/*
- * Data area - private, writable, not stack
- */
-static inline bool is_data_mapping(vm_flags_t flags)
-{
-	return (flags & (VM_WRITE | VM_SHARED | VM_STACK)) == VM_WRITE;
 }
 
 void vm_stat_account(struct lego_mm_struct *mm, vm_flags_t flags, long npages)
@@ -1918,167 +1853,68 @@ int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 	return 0;
 }
 
-/*
- * copy one vm_area from one task to the other. Assumes the page tables
- * already present in the new task to be cleared in the whole range
- * covered by this vma.
+static void unmap_single_vma(struct vm_area_struct *vma, unsigned long start_addr,
+			     unsigned long end_addr)
+{
+	unsigned long start;
+	unsigned long end;
+
+	start = max(vma->vm_start, start_addr);
+	if (start >= vma->vm_end)
+		return;
+
+	end = min(vma->vm_end, end_addr);
+	if (end <= vma->vm_start)
+		return;
+
+	if (start != end)
+		unmap_page_range(vma, start, end);
+}
+
+/**
+ * unmap_vmas - unmap a range of memory covered by a list of vma's
+ * @vma: the starting vma
+ * @start_addr: virtual address at which to start unmapping
+ * @end_addr: virtual address at which to end unmapping
+ *
+ * Unmap all pages in the vma list.
+ *
+ * Only addresses between `start' and `end' will be unmapped.
+ *
+ * The VMA list must be sorted in ascending virtual address order.
+ *
+ * unmap_vmas() assumes that the caller will flush the whole unmapped address
+ * range after unmap_vmas() returns.  So the only responsibility here is to
+ * ensure that any thus-far unmapped pages are flushed before unmap_vmas()
+ * drops the lock and schedules.
  */
-
-static inline int
-copy_one_pte(struct lego_mm_struct *dst_mm, struct lego_mm_struct *src_mm,
-		pte_t *dst_pte, pte_t *src_pte, struct vm_area_struct *vma,
-		unsigned long addr)
+void unmap_vmas(struct vm_area_struct *vma, unsigned long start_addr,
+		unsigned long end_addr)
 {
-	unsigned long vm_flags = vma->vm_flags;
-	pte_t pte = *src_pte;
-
-	/*
-	 * PTE contains position in swap or file
-	 * Lego does not have any swap now, so skip.
-	 */
-	if (unlikely(!pte_present(pte)))
-		goto pte_set;
-
-	/*
-	 * If it's a COW mapping, write protect it both
-	 * in the parent and the child
-	 */
-	if (is_cow_mapping(vm_flags)) {
-		ptep_set_wrprotect(src_pte);
-		pte = pte_wrprotect(pte);
-	}
-
-	/*
-	 * If it's a shared mapping, mark it clean in
-	 * the child:
-	 */
-	if (vm_flags & VM_SHARED)
-		pte = pte_mkclean(pte);
-	pte = pte_mkold(pte);
-
-	/*
-	 * TODO:
-	 * If we need rmap in memory component
-	 * we need to increment 1 mapcount here!
-	 */
-
-pte_set:
-	pte_set(dst_pte, pte);
-	return 0;
-}
-
-static int copy_pte_range(struct lego_mm_struct *dst_mm,
-			  struct lego_mm_struct *src_mm,
-		   	  pmd_t *dst_pmd, pmd_t *src_pmd,
-			  struct vm_area_struct *vma,
-		   	  unsigned long addr, unsigned long end)
-{
-	pte_t *orig_src_pte, *orig_dst_pte;
-	pte_t *src_pte, *dst_pte;
-	spinlock_t *src_ptl, *dst_ptl;
-
-again:
-	dst_pte = lego_pte_alloc_lock(dst_mm, dst_pmd, addr, &dst_ptl);
-	if (!dst_pte)
-		return -ENOMEM;
-
-	src_pte = pte_offset(src_pmd, addr);
-	src_ptl = lego_pte_lockptr(src_mm, src_pmd);
-	spin_lock(src_ptl);
-
-	orig_src_pte = src_pte;
-	orig_dst_pte = dst_pte;
-
-	do {
-		if (pte_none(*src_pte))
-			continue;
-		if (copy_one_pte(dst_mm, src_mm, dst_pte, src_pte, vma, addr))
-			break;
-	} while (dst_pte++, src_pte++, addr += PAGE_SIZE, addr != end);
-
-	spin_unlock(src_ptl);
-	spin_unlock(dst_ptl);
-
-	if (addr != end)
-		goto again;
-	return 0;
-}
-
-static inline int copy_pmd_range(struct lego_mm_struct *dst_mm,
-				 struct lego_mm_struct *src_mm,
-				 pud_t *dst_pud, pud_t *src_pud,
-				 struct vm_area_struct *vma,
-				 unsigned long addr, unsigned long end)
-{
-	pmd_t *src_pmd, *dst_pmd;
-	unsigned long next;
-
-	dst_pmd = lego_pmd_alloc(dst_mm, dst_pud, addr);
-	if (!dst_pmd)
-		return -ENOMEM;
-	src_pmd = pmd_offset(src_pud, addr);
-	do {
-		next = pmd_addr_end(addr, end);
-		if (pmd_none_or_clear_bad(src_pmd))
-			continue;
-		if (copy_pte_range(dst_mm, src_mm, dst_pmd, src_pmd,
-						vma, addr, next))
-			return -ENOMEM;
-	} while (dst_pmd++, src_pmd++, addr = next, addr != end);
-	return 0;
-}
-
-static inline int copy_pud_range(struct lego_mm_struct *dst_mm,
-				 struct lego_mm_struct *src_mm,
-				 pgd_t *dst_pgd, pgd_t *src_pgd,
-				 struct vm_area_struct *vma,
-				 unsigned long addr, unsigned long end)
-{
-	pud_t *src_pud, *dst_pud;
-	unsigned long next;
-
-	dst_pud = lego_pud_alloc(dst_mm, dst_pgd, addr);
-	if (!dst_pud)
-		return -ENOMEM;
-	src_pud = pud_offset(src_pgd, addr);
-	do {
-		next = pud_addr_end(addr, end);
-		if (pud_none_or_clear_bad(src_pud))
-			continue;
-		if (copy_pmd_range(dst_mm, src_mm, dst_pud, src_pud,
-						vma, addr, next))
-			return -ENOMEM;
-	} while (dst_pud++, src_pud++, addr = next, addr != end);
-	return 0;
+	for ( ; vma && vma->vm_start < end_addr; vma = vma->vm_next)
+		unmap_single_vma(vma, start_addr, end_addr);
 }
 
 /*
- * This function is called during fork() time.
- * It will copy the vma page table mapping from source mm to destination mm.
- * It will make writable && non-shared pages RO for both mm (for COW).
+ * This function is called when a user-process exit.
+ * Release all mmap resources.
  */
-int copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
-		    struct vm_area_struct *vma)
+void exit_lego_mmap(struct lego_mm_struct *mm)
 {
-	pgd_t *src_pgd, *dst_pgd;
-	unsigned long next;
-	unsigned long addr = vma->vm_start;
-	unsigned long end = vma->vm_end;
-	int ret;
+	struct vm_area_struct *vma;
 
-	ret = 0;
-	dst_pgd = pgd_offset(dst, addr);
-	src_pgd = pgd_offset(src, addr);
-	do {
-		next = pgd_addr_end(addr, end);
-		if (pgd_none_or_clear_bad(src_pgd))
-			continue;
-		if (unlikely(copy_pud_range(dst, src, dst_pgd, src_pgd,
-					    vma, addr, next))) {
-			ret = -ENOMEM;
-			break;
-		}
-	} while (dst_pgd++, src_pgd++, addr = next, addr != end);
+	vma = mm->mmap;
+	BUG_ON(!vma);
 
-	return ret;
+	/* Use -1 here to ensure all VMAs in the mm are unmapped */
+	unmap_vmas(vma, 0, -1);
+
+	free_pgtables(vma, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
+
+	/*
+	 * Walk the list again, actually closing and freeing it,
+	 * with preemption enabled, without holding any MM locks.
+	 */
+	while (vma)
+		vma = remove_vma(vma);
 }
