@@ -202,9 +202,9 @@ static inline void free_pud_range(struct lego_mm_struct *mm, pgd_t *pgd,
 /*
  * This function frees user-level page tables of a process.
  */
-void free_pgd_range(struct lego_mm_struct *mm,
-			unsigned long addr, unsigned long end,
-			unsigned long floor, unsigned long ceiling)
+void lego_free_pgd_range(struct lego_mm_struct *mm,
+			 unsigned long addr, unsigned long end,
+			 unsigned long floor, unsigned long ceiling)
 {
 	pgd_t *pgd;
 	unsigned long next;
@@ -260,8 +260,8 @@ void free_pgd_range(struct lego_mm_struct *mm,
 	} while (pgd++, addr = next, addr != end);
 }
 
-void free_pgtables(struct vm_area_struct *vma,
-		unsigned long floor, unsigned long ceiling)
+void lego_free_pgtables(struct vm_area_struct *vma,
+			unsigned long floor, unsigned long ceiling)
 {
 	struct lego_mm_struct *mm = vma->vm_mm;
 
@@ -269,7 +269,7 @@ void free_pgtables(struct vm_area_struct *vma,
 		struct vm_area_struct *next = vma->vm_next;
 		unsigned long addr = vma->vm_start;
 
-		free_pgd_range(mm, addr, vma->vm_end,
+		lego_free_pgd_range(mm, addr, vma->vm_end,
 			floor, next? next->vm_start: ceiling);
 		vma = next;
 	}
@@ -414,8 +414,8 @@ static inline int copy_pud_range(struct lego_mm_struct *dst_mm,
  * It will copy the vma page table mapping from source mm to destination mm.
  * It will make writable && non-shared pages RO for both mm (for COW).
  */
-int copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
-		    struct vm_area_struct *vma)
+int lego_copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
+			 struct vm_area_struct *vma)
 {
 	pgd_t *src_pgd, *dst_pgd;
 	unsigned long next;
@@ -512,8 +512,8 @@ zap_pud_range(struct vm_area_struct *vma, pgd_t *pgd,
 	return addr;
 }
 
-void unmap_page_range(struct vm_area_struct *vma,
-		      unsigned long addr, unsigned long end)
+void lego_unmap_page_range(struct vm_area_struct *vma,
+			   unsigned long addr, unsigned long end)
 {
 	pgd_t *pgd;
 	unsigned long next;
@@ -528,7 +528,7 @@ void unmap_page_range(struct vm_area_struct *vma,
 	} while (pgd++, addr = next, addr != end);
 }
 
-unsigned long move_page_tables(struct vm_area_struct *vma,
+unsigned long lego_move_page_tables(struct vm_area_struct *vma,
 		unsigned long old_addr, struct vm_area_struct *new_vma,
 		unsigned long new_addr, unsigned long len,
 		bool need_rmap_locks)

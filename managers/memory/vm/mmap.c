@@ -1048,8 +1048,8 @@ static void unmap_region(struct lego_mm_struct *mm,
 	struct vm_area_struct *next = prev ? prev->vm_next : mm->mmap;
 
 	unmap_vmas(vma, start, end);
-	free_pgtables(vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
-			   next ? next->vm_start : USER_PGTABLES_CEILING);
+	lego_free_pgtables(vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
+				next ? next->vm_start : USER_PGTABLES_CEILING);
 }
 
 /*
@@ -1786,7 +1786,6 @@ void vm_stat_account(struct lego_mm_struct *mm, vm_flags_t flags, long npages)
  */
 static int acct_stack_growth(struct vm_area_struct *vma, unsigned long size, unsigned long grow)
 {
-	struct lego_mm_struct *mm = vma->vm_mm;
 	unsigned long actual_size;
 
 /*
@@ -1919,7 +1918,7 @@ static void unmap_single_vma(struct vm_area_struct *vma, unsigned long start_add
 		return;
 
 	if (start != end)
-		unmap_page_range(vma, start, end);
+		lego_unmap_page_range(vma, start, end);
 }
 
 /**
@@ -1969,7 +1968,7 @@ void exit_lego_mmap(struct lego_mm_struct *mm)
 	/* Use -1 here to ensure all VMAs in the mm are unmapped */
 	unmap_vmas(vma, 0, -1);
 
-	free_pgtables(vma, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
+	lego_free_pgtables(vma, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
 
 	/*
 	 * Walk the list again, actually closing and freeing it,

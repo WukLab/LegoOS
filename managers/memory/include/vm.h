@@ -303,16 +303,6 @@ int mprotect_fixup(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 		struct vm_area_struct **pprev, unsigned long start,
 		unsigned long end, unsigned long newflags);
 
-int copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
-		struct vm_area_struct *vma);
-
-void free_pgd_range(struct lego_mm_struct *mm,
-		    unsigned long addr, unsigned long end,
-		    unsigned long floor, unsigned long ceiling);
-
-void free_pgtables(struct vm_area_struct *start_vma,
-		unsigned long floor, unsigned long ceiling);
-
 void exit_lego_mmap(struct lego_mm_struct *mm);
 
 
@@ -344,10 +334,23 @@ struct vm_fault {
 int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 			 unsigned int flags, unsigned long *ret_va);
 /* pgtable.c */
-extern unsigned long move_page_tables(struct vm_area_struct *vma,
+extern unsigned long lego_move_page_tables(struct vm_area_struct *vma,
 		unsigned long old_addr, struct vm_area_struct *new_vma,
 		unsigned long new_addr, unsigned long len,
 		bool need_rmap_locks);
+
+int lego_copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
+		struct vm_area_struct *vma);
+
+void lego_free_pgd_range(struct lego_mm_struct *mm,
+			 unsigned long addr, unsigned long end,
+			 unsigned long floor, unsigned long ceiling);
+
+void lego_free_pgtables(struct vm_area_struct *start_vma,
+		unsigned long floor, unsigned long ceiling);
+
+void lego_unmap_page_range(struct vm_area_struct *vma,
+			   unsigned long addr, unsigned long end);
 
 /* debug.c */
 void dump_all_vmas_simple(struct lego_mm_struct *mm);
@@ -416,9 +419,6 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 				void __user *to, const void *from, size_t n);
 
 unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
-				void *to , const void __user *from, size_t n);
-
-void unmap_page_range(struct vm_area_struct *vma,
-		      unsigned long addr, unsigned long end);
+				  void *to , const void __user *from, size_t n);
 
 #endif /* _LEGO_MEMORY_VM_H_ */

@@ -93,7 +93,7 @@ static int dup_lego_mmap(struct lego_mm_struct *mm,
 		rb_parent = &tmp->vm_rb;
 
 		mm->map_count++;
-		ret = copy_page_range(mm, oldmm, mpnt);
+		ret = lego_copy_page_range(mm, oldmm, mpnt);
 
 		/*
 		 * Callback to underlying fs hook if exists:
@@ -148,7 +148,6 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 		    struct common_header *hdr)
 {
 	unsigned int nid = hdr->src_nid;
-	unsigned int pid = payload->pid;
 	unsigned int tgid = payload->tgid;
 	unsigned int parent_tgid = payload->parent_tgid;
 	struct lego_task_struct *tsk, *parent;
@@ -156,7 +155,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	int ret;
 
 	fork_debug("nid:%u,pid:%u,tgid:%u,parent_tgid:%u",
-		nid, pid, tgid, parent_tgid);
+		nid, payload->pid, tgid, parent_tgid);
 
 	parent = find_lego_task_by_pid(nid, parent_tgid);
 	if (!parent && parent_tgid != 1)

@@ -392,7 +392,7 @@ static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 	 * move the page tables downwards, on failure we rely on
 	 * process cleanup to remove whatever mess we made.
 	 */
-	if (length != move_page_tables(vma, old_start,
+	if (length != lego_move_page_tables(vma, old_start,
 				       vma, new_start, length, false))
 		return -ENOMEM;
 
@@ -400,7 +400,7 @@ static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 		/*
 		 * when the old and new regions overlap clear from new_end.
 		 */
-		free_pgd_range(mm, new_end, old_end, new_end,
+		lego_free_pgd_range(mm, new_end, old_end, new_end,
 			vma->vm_next ? vma->vm_next->vm_start : USER_PGTABLES_CEILING);
 	} else {
 		/*
@@ -409,7 +409,7 @@ static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 		 * have constraints on va-space that make this illegal (IA64) -
 		 * for the others its just a little faster.
 		 */
-		free_pgd_range(mm, old_start, old_end, new_end,
+		lego_free_pgd_range(mm, old_start, old_end, new_end,
 			vma->vm_next ? vma->vm_next->vm_start : USER_PGTABLES_CEILING);
 	}
 
