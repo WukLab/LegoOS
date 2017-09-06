@@ -1904,7 +1904,16 @@ void exit_lego_mmap(struct lego_mm_struct *mm)
 	struct vm_area_struct *vma;
 
 	vma = mm->mmap;
-	BUG_ON(!vma);
+
+	/*
+	 * This may happen if the first user-program
+	 * run fork() and execve() in a row.
+	 *
+	 * Since the first user-program does not have parent
+	 * in memory-component yet, it can not inherit any mmap.
+	 */
+	if (!vma)
+		return;
 
 	/* Use -1 here to ensure all VMAs in the mm are unmapped */
 	unmap_vmas(vma, 0, -1);
