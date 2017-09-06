@@ -123,6 +123,10 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 
 	pr_info("open syscall: flags -> [0%o], mode -> [0x%x]\n", f->f_flags, f->f_mode);
 
+	/*
+	 * Ugh.. Just a dirty workaround for the
+	 * 	Everything is a file philosophy.
+	 */
 	if (unlikely(proc_file(kname)))
 		ret = proc_file_open(f, kname);
 	else if (unlikely(sys_file(kname)))

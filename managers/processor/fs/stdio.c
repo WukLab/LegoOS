@@ -14,8 +14,6 @@
 
 static int stdio_file_open(struct file *f)
 {
-	/* already copied for all process during fork() time */
-	BUG();
 	return 0;
 }
 
@@ -50,7 +48,7 @@ out:
 	return ret;
 }
 
-static const struct file_operations stdio_file_op = {
+const struct file_operations stdio_file_op = {
 	.open		= stdio_file_open,
 	.read		= stdio_file_read,
 	.write		= stdio_file_write,
