@@ -11,5 +11,7 @@
 
 	.section ".ramfs","ax"
 GLOBAL(ramfs_start)
+#ifdef CONFIG_USE_RAMFS
 .incbin CONFIG_RAMFS_OBJECT_FILE
+#endif
 GLOBAL(ramfs_end)
