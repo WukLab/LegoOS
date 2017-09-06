@@ -1780,20 +1780,70 @@ void vm_stat_account(struct lego_mm_struct *mm, vm_flags_t flags, long npages)
 }
 
 /*
+ * Verify that the stack growth is acceptable and
+ * update accounting. This is shared with both the
+ * grow-up and grow-down cases.
+ */
+static int acct_stack_growth(struct vm_area_struct *vma, unsigned long size, unsigned long grow)
+{
+	struct lego_mm_struct *mm = vma->vm_mm;
+	unsigned long actual_size;
+
+/*
+ * TODO:
+ * We need real check here against rlimit
+ * For both the total vm pages and the _STK_LIM
+ */
+#if 0
+	/* address space limit tests */
+	if (!may_expand_vm(mm, vma->vm_flags, grow))
+		return -ENOMEM;
+#endif
+
+	/* Stack limit test */
+	actual_size = size;
+	if (size && (vma->vm_flags & (VM_GROWSUP | VM_GROWSDOWN)))
+		actual_size -= PAGE_SIZE;
+
+	if (actual_size > _STK_LIM)
+		return -ENOMEM;
+
+	return 0;
+}
+
+/*
  * vma is the first one with address < vma->vm_start.  Have to extend vma.
  */
 int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 {
 	struct lego_mm_struct *mm = vma->vm_mm;
+	int error;
 
 	address &= PAGE_MASK;
+
+	/* Somebody else might have raced and expanded it already */
 	if (address < vma->vm_start) {
 		unsigned long size, grow;
 
 		size = vma->vm_end - address;
 		grow = (vma->vm_start - address) >> PAGE_SHIFT;
 
+		error = -ENOMEM;
 		if (grow <= vma->vm_pgoff) {
+			/* Check if we can grow that much */
+			error = acct_stack_growth(vma, size, grow);
+			if (error)
+				goto out;
+
+			/*
+			 * vma_gap_update() doesn't support concurrent
+			 * updates, but we only hold a shared mmap_sem
+			 * lock here, so we need to protect against
+			 * concurrent vma expansions.
+			 *
+			 * So, we reuse mm->page_table_lock to guard
+			 * against concurrent vma expansions.
+			 */
 			spin_lock(&mm->page_table_lock);
 			vm_stat_account(mm, vma->vm_flags, grow);
 			vma->vm_start = address;
@@ -1802,7 +1852,8 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 			spin_unlock(&mm->page_table_lock);
 		}
 	}
-	return 0;
+out:
+	return error;
 }
 
 int expand_stack(struct vm_area_struct *vma, unsigned long address)
