@@ -412,22 +412,6 @@ static void pgtable_bad(struct pt_regs *regs, unsigned long error_code,
 	panic("Fatal exception");
 }
 
-#if 0
-static void user_hlt(void)
-{
-#if 1
-	asm volatile (
-		"movq $39, %rax\n\t"
-		"syscall\n\t"
-		"movq $39, %rax\n\t"
-		"syscall\n\t"
-	);
-#endif
-	for (;;)
-		cpu_relax();
-}
-#endif
-
 static inline void __do_page_fault(struct pt_regs *regs, unsigned long address,
 				   long error_code)
 {
@@ -450,8 +434,8 @@ static inline void __do_page_fault(struct pt_regs *regs, unsigned long address,
 	/* fetch cacheline from memory component */
 	ret = pcache_fill(address, flags, &cache_paddr);
 	if (unlikely(ret)) {
-		show_regs(regs);
-		panic("Pcache fail, ret: %d", ret);
+		bad_area_nosemaphore(regs, address, error_code);
+		return;
 	}
 
 	/*
