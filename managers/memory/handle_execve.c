@@ -19,6 +19,13 @@
 #include <memory/include/pid.h>
 #include <memory/include/loader.h>
 
+#ifdef CONFIG_DEBUG_HANDLE_EXECVE
+#define execve_debug(fmt, ...)	\
+	pr_debug("%s-%s(): " fmt "\n", __FILE__, __func__, __VA_ARGS__)
+#else
+#define execve_debug(fmt, ...)		do { } while (0)
+#endif
+
 int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 		      struct common_header *hdr)
 {
@@ -38,7 +45,7 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 	envc = payload->envc;
 	filename = payload->filename;
 
-	pr_info("pid:%u,argc:%u,envc:%u,file:%s\n",
+	execve_debug("pid:%u,argc:%u,envc:%u,file:%s",
 		pid, argc, envc, filename);
 
 	tsk = find_lego_task_by_pid(hdr->src_nid, pid);
@@ -88,10 +95,18 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 	reply.new_ip = new_ip;
 	reply.new_sp = new_sp;
 
+#ifdef CONFIG_DEBUG_HANDLE_EXECVE
+	dump_all_vmas_simple(tsk->mm);
+#endif
+
 out:
 	kfree(argv);
 	kfree(argv_len);
+
 out_reply:
+	execve_debug("reply_status: %s, new_ip: %#Lx, new_sp: %#Lx",
+		ret_to_string(reply.status), reply.new_ip, reply.new_sp);
+
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 	return 0;
 }

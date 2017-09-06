@@ -28,6 +28,15 @@ config DEBUG_HANDLE_FORK
 	  
 	  If unsure, say N.
 
+config DEBUG_HANDLE_EXECVE
+	bool "Debug handle_execve.c"
+	default n
+	depends on COMP_MEMORY
+	help
+	  Enable to have a detailed dump of mmap after execve() call.
+	  
+	  If unsure, say N.
+
 endmenu
 
 endif
