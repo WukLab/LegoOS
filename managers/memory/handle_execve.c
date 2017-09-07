@@ -7,8 +7,6 @@
  * (at your option) any later version.
  */
 
-#define pr_fmt(fmt) "handle_execve: " fmt
-
 #include <lego/slab.h>
 #include <lego/kernel.h>
 #include <lego/string.h>
@@ -21,7 +19,7 @@
 
 #ifdef CONFIG_DEBUG_HANDLE_EXECVE
 #define execve_debug(fmt, ...)	\
-	pr_debug("%s-%s(): " fmt "\n", __FILE__, __func__, __VA_ARGS__)
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
 #else
 #define execve_debug(fmt, ...)		do { } while (0)
 #endif

@@ -16,7 +16,7 @@
 
 #ifdef CONFIG_DEBUG_HANDLE_FORK
 #define fork_debug(fmt, ...)	\
-	pr_debug("%s-%s(): " fmt "\n", __FILE__, __func__, __VA_ARGS__)
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
 
 #define dump_both_vmas(mm, oldmm)		\
 	do {					\

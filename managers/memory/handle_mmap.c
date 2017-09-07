@@ -24,14 +24,14 @@
 
 #ifdef CONFIG_DEBUG_HANDLE_MMAP
 #define mmap_debug(fmt, ...)	\
-	pr_debug("%s-%s(): " fmt "\n", __FILE__, __func__, __VA_ARGS__)
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
 
 static void dump_vm_all(struct lego_mm_struct *mm, int enter)
 {
 	if (enter)
-		pr_debug("Before");
+		pr_debug("Before\n");
 	else
-		pr_debug("After");
+		pr_debug("After\n");
 	dump_all_vmas_simple(mm);
 }
 #else
