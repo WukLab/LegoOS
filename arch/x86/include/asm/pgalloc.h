@@ -26,6 +26,13 @@ static inline void pmd_populate(struct mm_struct *mm,
 	pmd_set(pmd, __pmd(__pa(pte) | _PAGE_TABLE));
 }
 
+/*
+ * Currently stuck as a macro due to indirect forward reference to
+ * linux/mmzone.h's __section_mem_map_addr() definition:
+ */
+#define pmd_page(pmd)		\
+	pfn_to_page((pmd_val(pmd) & pmd_pfn_mask(pmd)) >> PAGE_SHIFT)
+
 #define pmd_pgtable(pmd) pmd_page(pmd)
 
 static inline void pud_populate(struct mm_struct *mm, pud_t *pud, pmd_t *pmd)

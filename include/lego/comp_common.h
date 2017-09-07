@@ -169,6 +169,12 @@ int handle_p2m_close(struct p2m_close_struct *, u64, struct common_header *);
 /* Task command name length */
 #define LEGO_TASK_COMM_LEN 16
 
+struct p_vm_area_struct {
+	__u64	vm_start;
+	__u64	vm_end;
+	__u64	vm_flags;
+};
+
 struct p2m_fork_struct {
 	__u32	pid;
 	__u32	tgid;

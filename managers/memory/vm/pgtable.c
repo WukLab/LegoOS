@@ -48,6 +48,11 @@ static inline void lego_pte_free(pte_t *pte)
 	free_page((unsigned long)pte);
 }
 
+static inline void __lego_pte_free(struct page *token)
+{
+	__free_page(token);
+}
+
 static inline void lego_pmd_populate(pmd_t *pmd, pte_t *pte)
 {
 	pmd_set(pmd, __pmd(_PAGE_TABLE | __pa(pte)));
@@ -121,18 +126,15 @@ int __lego_pte_alloc(struct lego_mm_struct *mm, pmd_t *pmd, unsigned long addres
 	return 0;
 }
 
-/*
- * Note: this doesn't free the actual pages themselves. That
- * has been handled earlier when unmapping all the memory regions.
- */
 static void free_pte_range(struct lego_mm_struct *mm,
 			   pmd_t *pmd, unsigned long addr)
 {
-	/*
-	 * TODO:
-	 * Where does it free the real pages???
-	 */
+	struct page *token = pmd_pgtable(*pmd);
+
+	atomic_long_dec(&mm->nr_ptes);
+
 	pmd_clear(pmd);
+	__lego_pte_free(token);
 }
 
 static inline void free_pmd_range(struct lego_mm_struct *mm, pud_t *pud,
@@ -165,6 +167,7 @@ static inline void free_pmd_range(struct lego_mm_struct *mm, pud_t *pud,
 
 	pmd = pmd_offset(pud, start);
 	pud_clear(pud);
+	lego_pmd_free(pmd);
 }
 
 static inline void free_pud_range(struct lego_mm_struct *mm, pgd_t *pgd,
@@ -197,10 +200,14 @@ static inline void free_pud_range(struct lego_mm_struct *mm, pgd_t *pgd,
 
 	pud = pud_offset(pgd, start);
 	pgd_clear(pgd);
+	lego_pud_free(pud);
 }
 
 /*
  * This function frees user-level page tables of a process.
+ *
+ * Note: this doesn't free the actual pages themselves. That
+ * has been handled earlier when unmapping all the memory regions.
  */
 void lego_free_pgd_range(struct lego_mm_struct *mm,
 			 unsigned long addr, unsigned long end,
@@ -333,8 +340,8 @@ static int copy_pte_range(struct lego_mm_struct *dst_mm,
 	pte_t *orig_src_pte, *orig_dst_pte;
 	pte_t *src_pte, *dst_pte;
 	spinlock_t *src_ptl, *dst_ptl;
+	int ret;
 
-again:
 	dst_pte = lego_pte_alloc_lock(dst_mm, dst_pmd, addr, &dst_ptl);
 	if (!dst_pte)
 		return -ENOMEM;
@@ -346,18 +353,19 @@ again:
 	orig_src_pte = src_pte;
 	orig_dst_pte = dst_pte;
 
+	ret = 0;
 	do {
 		if (pte_none(*src_pte))
 			continue;
-		if (copy_one_pte(dst_mm, src_mm, dst_pte, src_pte, vma, addr))
+		if (copy_one_pte(dst_mm, src_mm, dst_pte, src_pte, vma, addr)) {
+			ret = -ENOMEM;
 			break;
+		}
 	} while (dst_pte++, src_pte++, addr += PAGE_SIZE, addr != end);
 
 	spin_unlock(src_ptl);
 	spin_unlock(dst_ptl);
 
-	if (addr != end)
-		goto again;
 	return 0;
 }
 
@@ -458,6 +466,9 @@ zap_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 	start_pte = lego_pte_offset_lock(mm, pmd, addr, &ptl);
 	pte = start_pte;
 
+	/*
+	 * TODO: free the real page itself
+	 */
 	do {
 		pte_t ptent = *pte;
 

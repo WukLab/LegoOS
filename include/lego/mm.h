@@ -12,6 +12,7 @@
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/segment.h>
 #include <asm/processor.h>
 
@@ -443,6 +444,41 @@ pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 		NULL : pte_offset(pmd, address);
 }
 
+/*
+ * We use mm->page_table_lock to guard all pagetable pages of the mm.
+ *
+ * TODO: Per-page spinlock if we have large memory
+ */
+static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
+{
+	return &mm->page_table_lock;
+}
+
+#define pte_offset_lock(mm, pmd, address, ptlp)		\
+({							\
+	spinlock_t *__ptl = pte_lockptr(mm, pmd);	\
+	pte_t *__pte = pte_offset(pmd, address);	\
+	*(ptlp) = __ptl;				\
+	spin_lock(__ptl);				\
+	__pte;						\
+})
+
+#define pte_alloc_lock(mm, pmd, address, ptlp)		\
+({							\
+	spinlock_t *__ptl = pte_lockptr(mm, pmd);	\
+	pte_t *__pte = pte_alloc(mm, pmd, address);	\
+	if (__pte) {					\
+		*(ptlp) = __ptl;			\
+		spin_lock(__ptl);			\
+	}						\
+	__pte;						\
+})
+
+#define pte_unlock(pte, ptl)				\
+do {							\
+	spin_unlock(ptl);				\
+} while (0)
+
 #define nth_page(page,n)	pfn_to_page(page_to_pfn((page)) + (n))
 
 #define PAGE_ALIGNED(addr)      IS_ALIGNED((unsigned long)addr, PAGE_SIZE)
@@ -489,5 +525,19 @@ static inline void mmdrop(struct mm_struct *mm)
 	if (unlikely(atomic_dec_and_test(&mm->mm_count)))
 		__mmdrop(mm);
 }
+
+#ifdef CONFIG_COMP_PROCESSOR
+#include <lego/comp_common.h>
+void free_pgd_range(struct mm_struct *mm,
+		    unsigned long addr, unsigned long end,
+		    unsigned long floor, unsigned long ceiling);
+
+void unmap_page_range(struct mm_struct *mm,
+		      unsigned long addr, unsigned long end);
+
+int copy_page_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
+		    struct p_vm_area_struct *vma);
+
+#endif /* CONFIG_COMP_PROCESSOR */
 
 #endif /* _LEGO_MM_H_ */
