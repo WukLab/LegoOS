@@ -117,8 +117,6 @@ struct info_struct {
  * Memory manager is only meaningful when FIT is configured.
  */
 
-static unsigned long nr_rx;
-
 static void handle_bad_request(struct common_header *hdr, u64 desc)
 {
 	u32 retbuf;
@@ -242,7 +240,6 @@ static int mc_dispatcher(void *passed)
 static int mc_manager(void *unused)
 {
 	struct info_struct *info;
-	struct task_struct *ret;
 	int port = 0;
 	int retlen;
 
@@ -266,17 +263,7 @@ static int mc_manager(void *unused)
 		if (unlikely(retlen >= MAX_RXBUF_SIZE))
 			panic("retlen: %d,maxlen: %lu", retlen, MAX_RXBUF_SIZE);
 
-		/*
-		 * XXX:
-		 * The overhead to create a new thread might be too costly
-		 * Later on we should find a more efficient implementation.
-		 * Something like thread pool, or workqueue.
-		 */
-		ret = kthread_run(mc_dispatcher, info, "mcdisp-%lu", nr_rx++);
-		if (unlikely(IS_ERR(ret))) {
-			kfree(info);
-			WARN_ON(1);
-		}
+		mc_dispatcher(info);
 	}
 
 	return 0;
