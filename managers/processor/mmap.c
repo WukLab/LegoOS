@@ -15,7 +15,7 @@
  *	msync
  */
 
-#include <lego/mmap.h>
+#include <lego/mm.h>
 #include <lego/syscalls.h>
 #include <lego/comp_processor.h>
 

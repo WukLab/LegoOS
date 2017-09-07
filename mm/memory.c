@@ -347,7 +347,6 @@ copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 {
 	unsigned long vm_flags = vma->vm_flags;
 	pte_t pte = *src_pte;
-	struct page *page;
 
 	/*
 	 * PTE contains position in swap or file

@@ -149,6 +149,8 @@ typedef u32	gid_t;
 typedef uid_t	kuid_t;
 typedef gid_t	kgid_t;
 
+typedef unsigned long vm_flags_t;
+
 /**
  * struct callback_head - callback structure for use with RCU and task_work
  * @next: next update requests in a list

@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/mm.h>
 #include <lego/rwsem.h>
 #include <lego/kernel.h>
 #include <memory/include/vm.h>

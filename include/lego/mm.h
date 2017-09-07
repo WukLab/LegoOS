@@ -27,6 +27,7 @@
 #include <lego/mm_zone.h>
 #include <lego/mm_types.h>
 #include <lego/mm_debug.h>
+#include <lego/mmap.h>
 #include <lego/memory_model.h>
 #include <lego/page-flags.h>
 #include <lego/gfp.h>
