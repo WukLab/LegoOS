@@ -140,11 +140,15 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	 * Now it is our turn to unmap/free the emulated pgtables.
 	 */
 	if (ret == 0) {
-		unsigned end = addr + len;
+		unsigned long end = addr + len;
 
 		/*
-		 * Free pages themselves. In Lego case, all pages
-		 * come from pcache!
+		 * Free pages themselves.
+		 *
+		 * TODO:
+		 * In Lego case, all pages come from pcache!
+		 * The unmap_page_range() is not fully finished, it should
+		 * call back to pcache code to cleanup cacheline metadata.
 		 */
 		unmap_page_range(current->mm, addr, end);
 
