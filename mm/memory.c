@@ -199,7 +199,7 @@ void free_pgd_range(struct mm_struct *mm,
 		    unsigned long floor, unsigned long ceiling)
 {
 	pgd_t *pgd;
-	unsigned long next;
+	unsigned long next, original_addr = addr;
 
 	/*
 	 * The next few lines have given us lots of grief...
@@ -254,7 +254,7 @@ void free_pgd_range(struct mm_struct *mm,
 	/*
 	 * Flush the stale TLB entries
 	 */
-	flush_tlb_range(mm, addr, end);
+	flush_tlb_mm_range(mm, original_addr, end);
 }
 
 static unsigned long
