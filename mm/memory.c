@@ -187,6 +187,10 @@ static inline void free_pud_range(struct mm_struct *mm, pgd_t *pgd,
  *
  * Note: this doesn't free the actual pages themselves. That
  * has been handled earlier when unmapping all the memory regions.
+ *
+ * All pages used for pgtable are just normal pages. Unlike the actual
+ * pages themselves, which are pcache cachelines who do not have any
+ * associated `struct page'!
  */
 void free_pgd_range(struct mm_struct *mm,
 		    unsigned long __user addr, unsigned long __user end,
@@ -258,7 +262,10 @@ zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	pte = start_pte;
 
 	/*
-	 * TODO: Remove the page itself. Update pcache metadata info!!
+	 * TODO: pcache
+	 * Hmm, all ptes point to pcache pages, which does not have
+	 * a 'struct page' associated. We probaly need to call back
+	 * to pcache code to update cacheline metadata.
 	 */
 	do {
 		pte_t ptent = *pte;

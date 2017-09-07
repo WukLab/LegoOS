@@ -135,6 +135,24 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	else
 		ret = -EIO;
 
+	/*
+	 * Remote memory manager has unmapped this range successfully.
+	 * Now it is our turn to unmap/free the emulated pgtables.
+	 */
+	if (ret == 0) {
+		unsigned end = addr + len;
+
+		/*
+		 * Free pages themselves. In Lego case, all pages
+		 * come from pcache!
+		 */
+		unmap_page_range(current->mm, addr, end);
+
+		/* Clear all pgtable entries and free pgtable pages */
+		free_pgd_range(current->mm, addr, end,
+				FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
+	}
+
 	syscall_exit(ret);
 	return ret;
 }
