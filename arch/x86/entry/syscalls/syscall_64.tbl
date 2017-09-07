@@ -23,6 +23,7 @@
 16	64	ioctl			sys_ioctl
 19	64	readv			sys_readv
 20	64	writev			sys_writev
+25	common	mremap			sys_mremap
 26	common	msync			sys_msync
 28	common	madvise			sys_madvise
 32	common	dup			sys_dup

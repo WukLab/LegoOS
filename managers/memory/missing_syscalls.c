@@ -64,6 +64,13 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	BUG();
 }
 
+SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
+		unsigned long, new_len, unsigned long, flags,
+		unsigned long, new_addr)
+{
+	BUG();
+}
+
 SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
 		unsigned long, prot)
 {
