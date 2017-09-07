@@ -22,18 +22,20 @@
 #include <memory/include/vm-pgtable.h>
 #include <memory/include/file_ops.h>
 
-#ifdef CONFIG_DEBUG_VM_MMAP
-#define mmap_printk(fmt...)	pr_info(fmt)
+#ifdef CONFIG_DEBUG_HANDLE_MMAP
+#define mmap_debug(fmt, ...)	\
+	pr_debug("%s-%s(): " fmt "\n", __FILE__, __func__, __VA_ARGS__)
+
 static void dump_vm_all(struct lego_mm_struct *mm, int enter)
 {
 	if (enter)
-		mmap_printk("Before \n");
+		pr_debug("Before");
 	else
-		mmap_printk("After \n");
+		pr_debug("After");
 	dump_all_vmas_simple(mm);
 }
 #else
-#define mmap_printk(fmt...)	do { } while (0)
+#define mmap_debug(fmt, ...)	do { } while (0)
 static inline void dump_vm_all(struct lego_mm_struct *mm, int enter) { }
 #endif
 
@@ -55,8 +57,7 @@ int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
 	unsigned long ret_brk;
 	int ret;
 
-	mmap_printk("%s():src_nid:%u,pid:%u,brk:%#lx\n",
-		__func__, nid, pid, brk);
+	mmap_debug("src_nid: %u, pid: %u, brk: %#lx", nid, pid, brk);
 
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
@@ -139,8 +140,8 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	struct p2m_mmap_reply_struct reply;
 	s64 ret;
 
-	mmap_printk("%s():src_nid:%u,pid:%u,addr:%#Lx,len:%#Lx,prot:%#Lx,flags:%#Lx"
-		    "pgoff:%#Lx,f_name:[%s]\n", FUNC, nid, pid, addr, len, prot,
+	mmap_debug("src_nid:%u,pid:%u,addr:%#Lx,len:%#Lx,prot:%#Lx,flags:%#Lx"
+		    "pgoff:%#Lx,f_name:[%s]", nid, pid, addr, len, prot,
 		    flags, pgoff, f_name);
 
 	tsk = find_lego_task_by_pid(nid, pid);
@@ -192,8 +193,8 @@ int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 	struct lego_mm_struct *mm;
 	u64 ret;
 
-	mmap_printk("%s():src_nid:%u,pid:%u,addr:%#Lx,len:%#Lx\n",
-		__func__, nid, pid, addr, len);
+	mmap_debug("src_nid:%u, pid:%u, addr:%#Lx, len:%#Lx",
+		nid, pid, addr, len);
 
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
@@ -232,8 +233,8 @@ int handle_p2m_msync(struct p2m_msync_struct *payload, u64 desc,
 	struct vm_area_struct *vma;
 	u32 ret, unmapped_error;
 
-	mmap_printk("%s():src_nid:%u,pid:%u,start:%#Lx,len:%#Lx,flags:%#Lx\n",
-		__func__, nid, pid, start, len, flags);
+	mmap_debug("src_nid:%u,pid:%u,start:%#Lx,len:%#Lx,flags:%#Lx",
+		nid, pid, start, len, flags);
 
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {

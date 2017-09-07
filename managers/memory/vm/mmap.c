@@ -1109,10 +1109,10 @@ static void remove_vma_list(struct lego_mm_struct *mm, struct vm_area_struct *vm
 	validate_mm(mm);
 }
 
-/* Munmap is split into 2 main parts -- this part which finds
+/*
+ * Munmap is split into 2 main parts -- this part which finds
  * what needs doing, and the areas themselves, which do the
  * work.  This now handles partial unmappings.
- * Jeremy Fitzhardinge <jeremy@goop.org>
  */
 int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len)
 {

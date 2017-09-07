@@ -117,8 +117,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 
 	if (offset_in_page(addr) || addr > TASK_SIZE || len > TASK_SIZE - addr)
 		return -EINVAL;
-	if (!len)
-		return -EINVAL;
+
 	len = PAGE_ALIGN(len);
 	if (!len)
 		return -EINVAL;

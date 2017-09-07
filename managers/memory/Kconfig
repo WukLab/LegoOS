@@ -37,6 +37,15 @@ config DEBUG_HANDLE_EXECVE
 	  
 	  If unsure, say N.
 
+config DEBUG_HANDLE_MMAP
+	bool "Debug handle_mmap.c"
+	default n
+	depends on COMP_MEMORY
+	help
+	  Enable to debug mmap(), munmap(), brk() related syscalls.
+
+	  If unsure, say N.
+
 endmenu
 
 endif
