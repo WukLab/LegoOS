@@ -356,7 +356,7 @@ int restorer_worker_thread(void *unused)
  * Return the task_struct of new thread-group leader.
  * On failure, ERR_PTR is returned.
  */
-struct task_struct __must_check *restore_process_snapshot(struct process_snapshot *pss)
+struct task_struct *restore_process_snapshot(struct process_snapshot *pss)
 {
 	DEFINE_COMPLETION(done);
 	struct restorer_work_info info;

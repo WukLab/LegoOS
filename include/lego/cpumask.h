@@ -191,6 +191,8 @@ static inline unsigned int cpumask_local_spread(unsigned int i, int node)
 
 #else
 
+int cpumask_any_but(const struct cpumask *mask, unsigned int cpu);
+
 /**
  * cpumask_first - get the first cpu in a cpumask
  * @srcp: the cpumask pointer
@@ -201,6 +203,7 @@ static inline unsigned int cpumask_first(const struct cpumask *srcp)
 {
 	return find_first_bit(cpumask_bits(srcp), nr_cpumask_bits);
 }
+
 /**
  * cpumask_next - get the next cpu in a cpumask
  * @n: the cpu prior to the place to search (ie. return will be > @n)

@@ -7,15 +7,16 @@
  * (at your option) any later version.
  */
 
-#include <asm/io.h>
-#include <asm/page.h>
-#include <asm/pgalloc.h>
-
 #include <lego/mm.h>
 #include <lego/bug.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
+
+#include <asm/io.h>
+#include <asm/page.h>
+#include <asm/pgalloc.h>
+#include <asm/tlbflush.h>
 
 #include <lego/comp_common.h>
 
@@ -183,10 +184,11 @@ static inline void free_pud_range(struct mm_struct *mm, pgd_t *pgd,
 }
 
 /*
- * Clear all pgtable entries and free pgtable pages.
+ * Clear all pgtable entries and free pgtable pages. Also, flush TLB.
  *
  * Note: this doesn't free the actual pages themselves. That
- * has been handled earlier when unmapping all the memory regions.
+ * has been handled earlier when unmapping all the memory regions,
+ * which is the unmap_page_range().
  *
  * All pages used for pgtable are just normal pages. Unlike the actual
  * pages themselves, which are pcache cachelines who do not have any
@@ -248,6 +250,11 @@ void free_pgd_range(struct mm_struct *mm,
 			continue;
 		free_pud_range(mm, pgd, addr, next, floor, ceiling);
 	} while (pgd++, addr = next, addr != end);
+
+	/*
+	 * Flush the stale TLB entries
+	 */
+	flush_tlb_range(mm, addr, end);
 }
 
 static unsigned long
@@ -329,7 +336,8 @@ zap_pud_range(struct mm_struct *mm, pgd_t *pgd,
  * but it will NOT free the pages used for pgtable, which
  * is handled by free_pgd_range().
  *
- * Only PTEs are cleared. PGD, PUD, and PMD are not cleared.
+ * Only PTEs are cleared. PGD, PUD, and PMD are not cleared
+ * when this function returns.
  */
 void unmap_page_range(struct mm_struct *mm,
 		      unsigned long __user addr, unsigned long __user end)
