@@ -171,8 +171,52 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 		unsigned long, new_len, unsigned long, flags,
 		unsigned long, new_addr)
 {
-	__syscall_enter();
-	return -ENOMEM;
+	struct p2m_mremap_struct payload;
+	struct p2m_mremap_reply_struct reply;
+	unsigned long ret;
+	int retlen;
+
+	syscall_enter("addr: %#lx, old_len: %#lx, new_len: %#lx, flags: %#lx "
+			"new_addr: %#lx\n", addr, old_len, new_len, flags, new_addr);
+
+	/* Sanity checking */
+	ret = -EINVAL;
+	if (flags & ~(MREMAP_FIXED | MREMAP_MAYMOVE))
+		goto out;
+
+	if (flags & MREMAP_FIXED && !(flags & MREMAP_MAYMOVE))
+		goto out;
+
+	if (offset_in_page(addr))
+		goto out;
+
+	old_len = PAGE_ALIGN(old_len);
+	new_len = PAGE_ALIGN(new_len);
+
+	if (!new_len || !old_len)
+		goto out;
+
+	/* All good, talk to memory */
+	payload.pid = current->tgid;
+	payload.addr = addr;
+	payload.old_len = old_len;
+	payload.new_len = new_len;
+	payload.flags = flags;
+	payload.new_addr = new_addr;
+
+	retlen = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MREMAP,
+			&payload, sizeof(payload), &reply, sizeof(reply),
+			false, DEF_NET_TIMEOUT);
+
+	if (unlikely(retlen != sizeof(reply))) {
+		ret = -EIO;
+		goto out;
+	}
+
+	ret = -ENOMEM;
+out:
+	syscall_exit(ret);
+	return ret;
 }
 
 /*

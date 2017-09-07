@@ -21,7 +21,7 @@
 #define execve_debug(fmt, ...)	\
 	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
 #else
-#define execve_debug(fmt, ...)		do { } while (0)
+static inline void execve_debug(const char *fmt, ...) { }
 #endif
 
 int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,

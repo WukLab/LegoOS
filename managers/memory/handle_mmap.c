@@ -35,7 +35,7 @@ static void dump_vm_all(struct lego_mm_struct *mm, int enter)
 	dump_all_vmas_simple(mm);
 }
 #else
-#define mmap_debug(fmt, ...)	do { } while (0)
+static inline void mmap_debug(const char *fmt, ...) { }
 static inline void dump_vm_all(struct lego_mm_struct *mm, int enter) { }
 #endif
 
@@ -303,6 +303,36 @@ out:
 	ibapi_reply_message(&ret, sizeof(ret), desc);
 
 	dump_vm_all(tsk->mm, 0);
+	return 0;
+}
+
+int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
+		      struct common_header *hdr)
+{
+	u32 nid = hdr->src_nid;
+	u32 pid = payload->pid;
+	u64 addr = payload->addr;
+	u64 old_len = payload->old_len;
+	u64 new_len = payload->new_len;
+	u64 flags = payload->flags;
+	u64 new_addr = payload->new_addr;
+	struct lego_task_struct *tsk;
+	struct p2m_mremap_reply_struct reply;
+	int ret;
+
+	mmap_debug("nid:%u,pid:%u,addr:%#Lx,old_len:%#Lx,new_len:%#Lx,"
+		   "flags:%#Lx,new_addr:%#Lx", nid, pid, addr, old_len,
+		   new_len, flags, new_addr);
+
+	tsk = find_lego_task_by_pid(nid, pid);
+	if (unlikely(!tsk)) {
+		ret = RET_ESRCH;
+		goto out;
+	}
+	dump_vm_all(tsk->mm, 1);
+
+out:
+	ibapi_reply_message(&reply, sizeof(reply), desc);
 	return 0;
 }
 

@@ -8,7 +8,7 @@
  */
 
 /*
- * mmap() syscall flags
+ * Flags for vma and mmap related syscalls
  * Used by both processor and memory managers
  */
 
@@ -17,12 +17,18 @@
 
 #include <lego/types.h>
 
+/* mremap() flags */
+#define MREMAP_MAYMOVE	1
+#define MREMAP_FIXED	2
+
+/* mmap() flags */
 #define PROT_READ	0x01		/* page can be read */
 #define PROT_WRITE	0x02		/* page can be written */
 #define PROT_EXEC	0x04		/* page can be executed */
 #define PROT_SEM	0x08		/* page may be used for atomic ops */
 #define PROT_NONE	0x00		/* page can not be accessed */
 
+/* mmap() flags */
 #define MAP_SHARED	0x01		/* Share changes */
 #define MAP_PRIVATE	0x02		/* Changes are private */
 #define MAP_TYPE	0x0f		/* Mask for type of mapping */

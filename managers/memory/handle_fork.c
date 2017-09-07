@@ -24,7 +24,7 @@
 		dump_all_vmas_simple(oldmm);	\
 	} while (0)
 #else
-#define fork_debug(fmt, ...)		do { } while (0)
+static inline void fork_debug(const char *fmt, ...) { }
 #define dump_both_vmas(mm, oldmm)	do { } while (0)
 #endif
 
