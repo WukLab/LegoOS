@@ -153,8 +153,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 		unmap_page_range(current->mm, addr, end);
 
 		/* Clear all pgtable entries and free pgtable pages */
-		free_pgd_range(current->mm, addr, end,
-				FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
+		free_pgd_range(current->mm, addr, end, addr, end);
 	}
 
 	syscall_exit(ret);
