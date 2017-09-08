@@ -245,7 +245,7 @@ int handle_p2m_munmap(struct p2m_munmap_struct *, u64, struct common_header *);
 /* P2M_MREMAP */
 struct p2m_mremap_struct {
 	__u32	pid;
-	__u64	addr;
+	__u64	old_addr;
 	__u64	old_len;
 	__u64	new_len;
 	__u64	flags;

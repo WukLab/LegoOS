@@ -438,7 +438,7 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 addr = payload->addr;
+	u64 old_addr = payload->old_addr;
 	u64 old_len = payload->old_len;
 	u64 new_len = payload->new_len;
 	u64 flags = payload->flags;
@@ -448,8 +448,8 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 	struct p2m_mremap_reply_struct reply;
 	unsigned long ret;
 
-	mmap_debug("nid:%u,pid:%u,addr:%#Lx,old_len:%#Lx,new_len:%#Lx,"
-		   "flags:%#Lx,new_addr:%#Lx", nid, pid, addr, old_len,
+	mmap_debug("nid:%u,pid:%u,old_addr:%#Lx,old_len:%#Lx,new_len:%#Lx,"
+		   "flags:%#Lx,new_addr:%#Lx", nid, pid, old_addr, old_len,
 		   new_len, flags, new_addr);
 
 	tsk = find_lego_task_by_pid(nid, pid);
@@ -467,7 +467,7 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 	}
 
 	if (flags & MREMAP_FIXED) {
-		mremap_to(addr, old_len, new_addr, new_len, tsk, &reply);
+		mremap_to(old_addr, old_len, new_addr, new_len, tsk, &reply);
 		goto out;
 	}
 
@@ -477,7 +477,7 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 	 * do_munmap does all the needed commit accounting
 	 */
 	if (old_len >= new_len) {
-		ret = do_munmap(tsk->mm, addr + new_len, old_len - new_len);
+		ret = do_munmap(tsk->mm, old_addr + new_len, old_len - new_len);
 		if (ret && old_len != new_len) {
 			reply.status = ERR_TO_LEGO_RET(ret);
 			reply.line = __LINE__;
@@ -486,12 +486,12 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 
 		/* Succeed */
 		reply.status = RET_OKAY;
-		reply.new_addr = addr;
+		reply.new_addr = old_addr;
 		goto out;
 	}
 
 	/* Ok, we need to grow.. */
-	vma = vma_to_resize(addr, old_len, new_len, tsk);
+	vma = vma_to_resize(old_addr, old_len, new_len, tsk);
 	if (IS_ERR(vma)) {
 		ret = PTR_ERR(vma);
 		reply.status = ERR_TO_LEGO_RET(ret);
@@ -500,10 +500,10 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 	}
 
 	/* old_len exactly to the end of the area.. */
-	if (old_len == vma->vm_end - addr) {
+	if (old_len == vma->vm_end - old_addr) {
 		/* can we just expand the current mapping? */
 		if (vma_expandable(tsk, vma, new_len - old_len)) {
-			if (vma_adjust(vma, vma->vm_start, addr + new_len,
+			if (vma_adjust(vma, vma->vm_start, old_addr + new_len,
 				       vma->vm_pgoff, NULL)) {
 				reply.status = RET_ENOMEM;
 				reply.line = __LINE__;
@@ -512,7 +512,7 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 
 			/* Succeed */
 			reply.status = RET_OKAY;
-			reply.new_addr = addr;
+			reply.new_addr = old_addr;
 			goto out;
 		}
 	}
@@ -528,7 +528,7 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 
 		new_addr = get_unmapped_area(tsk, vma->vm_file, 0, new_len,
 					vma->vm_pgoff +
-					((addr - vma->vm_start) >> PAGE_SHIFT),
+					((old_addr - vma->vm_start) >> PAGE_SHIFT),
 					map_flags);
 		if (offset_in_page(new_addr)) {
 			ret = new_addr;
@@ -537,7 +537,7 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 			goto out;
 		}
 
-		ret = move_vma(tsk, vma, addr, old_len, new_len, new_addr);
+		ret = move_vma(tsk, vma, old_addr, old_len, new_len, new_addr);
 		if (offset_in_page(ret)) {
 			reply.status = ERR_TO_LEGO_RET(ret);
 			reply.line = __LINE__;

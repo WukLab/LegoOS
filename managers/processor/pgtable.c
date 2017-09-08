@@ -175,6 +175,11 @@ void free_pgd_range(struct mm_struct *mm,
 	flush_tlb_mm_range(mm, original_addr, end);
 }
 
+/*
+ * TODO:
+ * In Lego case, all pages come from pcache!
+ * MUST call back to pcache code to cleanup cacheline metadata.
+ */
 static unsigned long
 zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	      unsigned long addr, unsigned long end)
@@ -186,12 +191,6 @@ zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	start_pte = pte_offset_lock(mm, pmd, addr, &ptl);
 	pte = start_pte;
 
-	/*
-	 * TODO: pcache
-	 * Hmm, all ptes point to pcache pages, which does not have
-	 * a 'struct page' associated. We probaly need to call back
-	 * to pcache code to update cacheline metadata.
-	 */
 	do {
 		pte_t ptent = *pte;
 
@@ -253,9 +252,6 @@ zap_pud_range(struct mm_struct *mm, pgd_t *pgd,
  * This function will free the physical pages themselves,
  * but it will NOT free the pages used for pgtable, which
  * is handled by free_pgd_range().
- *
- * Only PTEs are cleared. PGD, PUD, and PMD are not cleared
- * when this function returns.
  */
 void unmap_page_range(struct mm_struct *mm,
 		      unsigned long __user addr, unsigned long __user end)
@@ -271,6 +267,30 @@ void unmap_page_range(struct mm_struct *mm,
 			continue;
 		next = zap_pud_range(mm, pgd, addr, next);
 	} while (pgd++, addr = next, addr != end);
+}
+
+/*
+ * Release both pgtable pages and the actual pages.
+ * Plus, TLB is flushed at the end.
+ *
+ * WARNING: Only call this function after memory manager
+ * has successfully updated its mmap. Otherwise, it may
+ * 1) lower the performance, or 2) cause segfault.
+ */
+void release_emulated_pgtable(struct mm_struct *mm,
+			      unsigned long __user start,
+			      unsigned long __user end)
+{
+	unmap_page_range(mm, start, end);
+
+	/*
+	 * Clear all pgtable entries and free pgtable pages
+	 *
+	 * Currently processor does not have any knowledge about the what is the
+	 * previous vma end (floor), or the next vma start (ceiling).
+	 * Guess it is okay to use FIRST_USER_ADDRESS and USER_PGTABLES_CEILING
+	 */
+	free_pgd_range(mm, start, end, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
 }
 
 static inline int

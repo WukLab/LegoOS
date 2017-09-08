@@ -112,7 +112,7 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 {
 	struct p2m_munmap_struct payload;
-	long ret, retbuf;
+	long retlen, retbuf;
 
 	syscall_enter("addr:%#lx,len:%#lx\n", addr, len);
 
@@ -127,39 +127,24 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	payload.addr = addr;
 	payload.len = len;
 
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MUNMAP,
+	retlen = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MUNMAP,
 			&payload, sizeof(payload), &retbuf, sizeof(retbuf),
 			false, DEF_NET_TIMEOUT);
 
-	if (likely(ret == sizeof(retbuf)))
-		ret = retbuf;
-	else
-		ret = -EIO;
-
-	/*
-	 * Remote memory manager has unmapped this range successfully.
-	 * Now it is our turn to unmap/free the emulated pgtables.
-	 */
-	if (ret == 0) {
-		unsigned long end = addr + len;
-
-		/*
-		 * Free pages themselves.
-		 *
-		 * TODO:
-		 * In Lego case, all pages come from pcache!
-		 * The unmap_page_range() is not fully finished, it should
-		 * call back to pcache code to cleanup cacheline metadata.
-		 */
-		unmap_page_range(current->mm, addr, end);
-
-		/* Clear all pgtable entries and free pgtable pages */
-		free_pgd_range(current->mm, addr, end, FIRST_USER_ADDRESS,
-			USER_PGTABLES_CEILING);
+	if (unlikely(retlen != sizeof(retbuf))) {
+		retbuf = -EIO;
+		goto out;
 	}
 
-	syscall_exit(ret);
-	return ret;
+	/* Unmap emulated pgtable */
+	if (likely(retbuf == 0))
+		release_emulated_pgtable(current->mm, addr, addr + len);
+	else
+		pr_debug("munmap() fail: %s\n", ret_to_string(retbuf));
+
+out:
+	syscall_exit(retbuf);
+	return retbuf;
 }
 
 /*
@@ -169,7 +154,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
  * MREMAP_FIXED option added 5-Dec-1999 by Benjamin LaHaise
  * This option implies MREMAP_MAYMOVE.
  */
-SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
+SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 		unsigned long, new_len, unsigned long, flags,
 		unsigned long, new_addr)
 {
@@ -178,8 +163,8 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 	unsigned long ret;
 	int retlen;
 
-	syscall_enter("addr: %#lx, old_len: %#lx, new_len: %#lx, flags: %#lx "
-			"new_addr: %#lx\n", addr, old_len, new_len, flags, new_addr);
+	syscall_enter("old_addr: %#lx, old_len: %#lx, new_len: %#lx, flags: %#lx "
+			"new_addr: %#lx\n", old_addr, old_len, new_len, flags, new_addr);
 
 	/* Sanity checking */
 	ret = -EINVAL;
@@ -189,7 +174,7 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 	if (flags & MREMAP_FIXED && !(flags & MREMAP_MAYMOVE))
 		goto out;
 
-	if (offset_in_page(addr))
+	if (offset_in_page(old_addr))
 		goto out;
 
 	old_len = PAGE_ALIGN(old_len);
@@ -200,7 +185,7 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 
 	/* All good, talk to memory */
 	payload.pid = current->tgid;
-	payload.addr = addr;
+	payload.old_addr = old_addr;
 	payload.old_len = old_len;
 	payload.new_len = new_len;
 	payload.flags = flags;
@@ -224,6 +209,15 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 
 	/* Succeed */
 	ret = reply.new_addr;
+
+	/* Update emulated pgtable: */
+	if ((reply.new_addr == old_addr) && (new_len < old_len)) {
+		release_emulated_pgtable(current->mm,
+					 old_addr + new_len,
+					 old_addr + old_len);
+	} else if (reply.new_addr > old_addr) {
+	
+	}
 
 out:
 	syscall_exit(ret);
