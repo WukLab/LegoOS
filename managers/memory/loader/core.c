@@ -393,8 +393,10 @@ static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 	 * process cleanup to remove whatever mess we made.
 	 */
 	if (length != lego_move_page_tables(vma, old_start,
-				       vma, new_start, length, false))
+				       vma, new_start, length)) {
+		WARN(1, "Fail to move lego pgtable!");
 		return -ENOMEM;
+	}
 
 	if (new_end > old_start) {
 		/*

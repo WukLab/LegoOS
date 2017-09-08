@@ -9,7 +9,7 @@
 
 /*
  * Virtual memory map management code
- * Based on mm/mmap.c
+ * Based on mm/mmap.c and mm/mremap.c
  */
 
 #include <lego/mm.h>
@@ -541,7 +541,6 @@ int insert_vm_struct(struct lego_mm_struct *mm, struct vm_area_struct *vma)
 	 * Similarly in do_mmap_pgoff and in do_brk.
 	 */
 	if (vma_is_anonymous(vma)) {
-		BUG_ON(vma->anon_vma);
 		vma->vm_pgoff = vma->vm_start >> PAGE_SHIFT;
 	}
 
@@ -1138,13 +1137,7 @@ int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len)
 	if (vma->vm_start >= end)
 		return 0;
 
-	/*
-	 * If we need to split any vma, do it now to save pain later.
-	 *
-	 * Note: mremap's move_vma VM_ACCOUNT handling assumes a partially
-	 * unmapped vm_area_struct will remain in use: so lower split_vma
-	 * places tmp vma above, and higher split_vma places tmp vma below.
-	 */
+	/* If we need to split any vma, do it now to save pain later */
 	if (start > vma->vm_start) {
 		int error;
 
@@ -1181,6 +1174,113 @@ int vm_munmap(struct lego_task_struct *p, unsigned long start, size_t len)
 
 	ret = do_munmap(p->mm, start, len);
 	return ret;
+}
+
+/*
+ * Copy the vma structure to a new location in the same mm,
+ * prior to moving page table entries, to effect an mremap move.
+ */
+struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
+	unsigned long addr, unsigned long len, pgoff_t pgoff)
+{
+	struct vm_area_struct *vma = *vmap;
+	unsigned long vma_start = vma->vm_start;
+	struct lego_mm_struct *mm = vma->vm_mm;
+	struct vm_area_struct *new_vma, *prev;
+	struct rb_node **rb_link, *rb_parent;
+	bool faulted_in_anon_vma = true;
+
+	/*
+	 * If anonymous vma has not yet been faulted, update new pgoff
+	 * to match new location, to increase its chance of merging.
+	 *
+	 * XXX: I'm not quite understand what is anon_vma doing here.
+	 * It is always NULL, will this be a problem???
+	 */
+	if (unlikely(vma_is_anonymous(vma) && !vma->anon_vma)) {
+		pgoff = addr >> PAGE_SHIFT;
+		faulted_in_anon_vma = false;
+	}
+
+	if (find_vma_links(mm, addr, addr + len, &prev, &rb_link, &rb_parent))
+		return NULL;	/* should never get here */
+	new_vma = vma_merge(mm, prev, addr, addr + len, vma->vm_flags,
+			    vma->anon_vma, vma->vm_file, pgoff);
+	if (new_vma) {
+		/*
+		 * Source vma may have been merged into new_vma
+		 */
+		if (unlikely(vma_start >= new_vma->vm_start &&
+			     vma_start < new_vma->vm_end)) {
+			/*
+			 * The only way we can get a vma_merge with
+			 * self during an mremap is if the vma hasn't
+			 * been faulted in yet and we were allowed to
+			 * reset the dst vma->vm_pgoff to the
+			 * destination address of the mremap to allow
+			 * the merge to happen. mremap must change the
+			 * vm_pgoff linearity between src and dst vmas
+			 * (in turn preventing a vma_merge) to be
+			 * safe. It is only safe to keep the vm_pgoff
+			 * linear if there are no pages mapped yet.
+			 */
+			VM_BUG_ON_VMA(faulted_in_anon_vma, new_vma);
+			*vmap = vma = new_vma;
+		}
+	} else {
+		new_vma = kmalloc(sizeof(*new_vma), GFP_KERNEL);
+		if (!new_vma)
+			return NULL;
+		*new_vma = *vma;
+		new_vma->vm_start = addr;
+		new_vma->vm_end = addr + len;
+		new_vma->vm_pgoff = pgoff;
+		INIT_LIST_HEAD(&new_vma->anon_vma_chain);
+		if (new_vma->vm_file)
+			get_lego_file(new_vma->vm_file);
+		if (new_vma->vm_ops && new_vma->vm_ops->open)
+			new_vma->vm_ops->open(new_vma);
+		vma_link(mm, new_vma, prev, rb_link, rb_parent);
+	}
+	return new_vma;
+}
+
+/* Called by mremap() */
+unsigned long move_vma(struct lego_task_struct *tsk, struct vm_area_struct *vma,
+		unsigned long old_addr, unsigned long old_len,
+		unsigned long new_len, unsigned long new_addr)
+{
+	struct lego_mm_struct *mm = vma->vm_mm;
+	struct vm_area_struct *new_vma;
+	unsigned long new_pgoff;
+	unsigned long moved_len;
+	int err;
+
+	new_pgoff = vma->vm_pgoff + ((old_addr - vma->vm_start) >> PAGE_SHIFT);
+	new_vma = copy_vma(&vma, new_addr, new_len, new_pgoff);
+	if (!new_vma)
+		return -ENOMEM;
+
+	moved_len = lego_move_page_tables(vma, old_addr, new_vma, new_addr, old_len);
+	if (moved_len < old_len)
+		err = -ENOMEM;
+
+	if (unlikely(err)) {
+		/*
+		 * On error, move entries back from new area to old,
+		 * which will succeed since page tables still there,
+		 * and then proceed to unmap new area instead of old.
+		 */
+		lego_move_page_tables(new_vma, new_addr, vma, old_addr, moved_len);
+		vma = new_vma;
+		old_len = new_len;
+		old_addr = new_addr;
+		new_addr = err;
+	}
+
+	do_munmap(mm, old_addr, old_len);
+
+	return new_addr;
 }
 
 unsigned long unmapped_area(struct lego_task_struct *p,
@@ -1385,7 +1485,7 @@ found_highest:
 	return gap_end;
 }
 
-static unsigned long
+unsigned long
 get_unmapped_area(struct lego_task_struct *p, struct lego_file *file,
 		  unsigned long addr, unsigned long len, unsigned long pgoff,
 		  unsigned long flags)
@@ -1780,6 +1880,16 @@ void vm_stat_account(struct lego_mm_struct *mm, vm_flags_t flags, long npages)
 }
 
 /*
+ * Return true if the calling process may expand its vm space by the passed
+ * number of pages
+ */
+bool may_expand_vm(struct lego_mm_struct *mm, vm_flags_t flags, unsigned long npages)
+{
+	/* TODO: check if the process can have more memory! */
+	return true;
+}
+
+/*
  * Verify that the stack growth is acceptable and
  * update accounting. This is shared with both the
  * grow-up and grow-down cases.
@@ -1788,16 +1898,9 @@ static int acct_stack_growth(struct vm_area_struct *vma, unsigned long size, uns
 {
 	unsigned long actual_size;
 
-/*
- * TODO:
- * We need real check here against rlimit
- * For both the total vm pages and the _STK_LIM
- */
-#if 0
 	/* address space limit tests */
-	if (!may_expand_vm(mm, vma->vm_flags, grow))
+	if (!may_expand_vm(vma->vm_mm, vma->vm_flags, grow))
 		return -ENOMEM;
-#endif
 
 	/* Stack limit test */
 	actual_size = size;

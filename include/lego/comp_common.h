@@ -251,8 +251,11 @@ struct p2m_mremap_struct {
 	__u64	flags;
 	__u64	new_addr;
 };
+
 struct p2m_mremap_reply_struct {
 	__u32	status;
+	__u32	line;			/* which line fails... */
+	__u64	new_addr;
 };
 int handle_p2m_mremap(struct p2m_mremap_struct *, u64, struct common_header *);
 

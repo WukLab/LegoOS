@@ -128,6 +128,11 @@ unmapped_area(struct lego_task_struct *p, struct vm_unmapped_area_info *info);
 unsigned long
 unmapped_area_topdown(struct lego_task_struct *p, struct vm_unmapped_area_info *info);
 
+unsigned long
+get_unmapped_area(struct lego_task_struct *p, struct lego_file *file,
+		  unsigned long addr, unsigned long len, unsigned long pgoff,
+		  unsigned long flags);
+
 /*
  * Search for an unmapped address range.
  *
@@ -152,6 +157,8 @@ pgprot_t vm_get_page_prot(unsigned long vm_flags);
 void arch_pick_mmap_layout(struct lego_mm_struct *mm);
 
 int insert_vm_struct(struct lego_mm_struct *, struct vm_area_struct *);
+
+bool may_expand_vm(struct lego_mm_struct *, vm_flags_t, unsigned long npages);
 
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 struct vm_area_struct *find_vma(struct lego_mm_struct *mm, unsigned long addr);
@@ -200,6 +207,10 @@ static inline int vma_adjust(struct vm_area_struct *vma, unsigned long start,
 {
 	return __vma_adjust(vma, start, end, pgoff, insert, NULL);
 }
+
+unsigned long move_vma(struct lego_task_struct *tsk, struct vm_area_struct *vma,
+		unsigned long old_addr, unsigned long old_len,
+		unsigned long new_len, unsigned long new_addr);
 
 struct lego_mm_struct *
 lego_mm_init(struct lego_mm_struct *mm, struct lego_task_struct *p);
@@ -267,8 +278,7 @@ int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 /* pgtable.c */
 extern unsigned long lego_move_page_tables(struct vm_area_struct *vma,
 		unsigned long old_addr, struct vm_area_struct *new_vma,
-		unsigned long new_addr, unsigned long len,
-		bool need_rmap_locks);
+		unsigned long new_addr, unsigned long len);
 
 int lego_copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
 		struct vm_area_struct *vma);

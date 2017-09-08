@@ -122,7 +122,8 @@ int __lego_pte_alloc(struct lego_mm_struct *mm, pmd_t *pmd, unsigned long addres
 	else {
 		atomic_long_inc(&mm->nr_ptes);
 		lego_pmd_populate(pmd, new);
-	} spin_unlock(&mm->page_table_lock);
+	}
+	spin_unlock(&mm->page_table_lock);
 	return 0;
 }
 
@@ -348,7 +349,8 @@ static int copy_pte_range(struct lego_mm_struct *dst_mm,
 
 	src_pte = pte_offset(src_pmd, addr);
 	src_ptl = lego_pte_lockptr(src_mm, src_pmd);
-	spin_lock(src_ptl);
+	if (src_ptl != dst_ptl)
+		spin_lock(src_ptl);
 
 	orig_src_pte = src_pte;
 	orig_dst_pte = dst_pte;
@@ -363,7 +365,8 @@ static int copy_pte_range(struct lego_mm_struct *dst_mm,
 		}
 	} while (dst_pte++, src_pte++, addr += PAGE_SIZE, addr != end);
 
-	spin_unlock(src_ptl);
+	if (src_ptl != dst_ptl)
+		spin_unlock(src_ptl);
 	spin_unlock(dst_ptl);
 
 	return 0;
@@ -539,10 +542,113 @@ void lego_unmap_page_range(struct vm_area_struct *vma,
 	} while (pgd++, addr = next, addr != end);
 }
 
+static pmd_t *get_old_pmd(struct lego_mm_struct *mm, unsigned long addr)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+
+	pgd = lego_pgd_offset(mm, addr);
+	if (pgd_none_or_clear_bad(pgd))
+		return NULL;
+
+	pud = pud_offset(pgd, addr);
+	if (pud_none_or_clear_bad(pud))
+		return NULL;
+
+	pmd = pmd_offset(pud, addr);
+	if (pmd_none(*pmd))
+		return NULL;
+
+	return pmd;
+}
+
+static pmd_t *alloc_new_pmd(struct lego_mm_struct *mm, struct vm_area_struct *vma,
+			    unsigned long addr)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+
+	pgd = lego_pgd_offset(mm, addr);
+	pud = lego_pud_alloc(mm, pgd, addr);
+	if (!pud)
+		return NULL;
+
+	pmd = lego_pmd_alloc(mm, pud, addr);
+	if (!pmd)
+		return NULL;
+
+	return pmd;
+}
+
+static void move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
+		unsigned long old_addr, unsigned long old_end,
+		struct vm_area_struct *new_vma, pmd_t *new_pmd,
+		unsigned long new_addr)
+{
+	struct lego_mm_struct *mm = vma->vm_mm;
+	pte_t *old_pte, *new_pte, pte;
+	spinlock_t *old_ptl, *new_ptl;
+
+	/*
+	 * We don't have to worry about the ordering of src and dst
+	 * pte locks because exclusive mmap_sem prevents deadlock.
+	 */
+	old_pte = lego_pte_offset_lock(mm, old_pmd, old_addr, &old_ptl);
+
+	new_pte = pte_offset(new_pmd, new_addr);
+	new_ptl = lego_pte_lockptr(mm, new_pmd);
+	if (new_ptl != old_ptl)
+		spin_lock(new_ptl);
+
+	for (; old_addr < old_end; old_pte++, old_addr += PAGE_SIZE,
+				   new_pte++, new_addr += PAGE_SIZE) {
+		if (pte_none(*old_pte))
+			continue;
+
+		pte = ptep_get_and_clear(old_addr, old_pte);
+		pte_set(new_pte, pte);
+	}
+
+	if (new_ptl != old_ptl)
+		spin_unlock(new_ptl);
+	spin_unlock(old_ptl);
+}
+
+#define LATENCY_LIMIT	(64 * PAGE_SIZE)
+
 unsigned long lego_move_page_tables(struct vm_area_struct *vma,
 		unsigned long old_addr, struct vm_area_struct *new_vma,
-		unsigned long new_addr, unsigned long len,
-		bool need_rmap_locks)
+		unsigned long new_addr, unsigned long len)
 {
-	return 0;
+	unsigned long extent, next, old_end;
+	pmd_t *old_pmd, *new_pmd;
+
+	old_end = old_addr + len;
+
+	for (; old_addr < old_end; old_addr += extent, new_addr += extent) {
+		next = (old_addr + PMD_SIZE) & PMD_MASK;
+		/* even if next overflowed, extent below will be ok */
+		extent = next - old_addr;
+		if (extent > old_end - old_addr)
+			extent = old_end - old_addr;
+		old_pmd = get_old_pmd(vma->vm_mm, old_addr);
+		if (!old_pmd)
+			continue;
+		new_pmd = alloc_new_pmd(vma->vm_mm, vma, new_addr);
+		if (!new_pmd)
+			break;
+		if (lego_pte_alloc(new_vma->vm_mm, new_pmd, new_addr))
+			break;
+		next = (new_addr + PMD_SIZE) & PMD_MASK;
+		if (extent > next - new_addr)
+			extent = next - new_addr;
+		if (extent > LATENCY_LIMIT)
+			extent = LATENCY_LIMIT;
+		move_ptes(vma, old_pmd, old_addr, old_addr + extent, new_vma,
+			  new_pmd, new_addr);
+	}
+
+	return len + old_addr - old_end;	/* how much done */
 }

@@ -214,7 +214,16 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 		goto out;
 	}
 
-	ret = -ENOMEM;
+	if (unlikely(reply.status != RET_OKAY)) {
+		ret = -ENOMEM;
+		pr_debug("mremap() fail: %s (line: %u)\n",
+			ret_to_string(reply.status), reply.line);
+		goto out;
+	}
+
+	/* Succeed */
+	ret = reply.new_addr;
+
 out:
 	syscall_exit(ret);
 	return ret;
