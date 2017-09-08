@@ -7,5 +7,6 @@ obj-y += pcache.o
 obj-y += fork.o
 obj-y += exec.o
 obj-y += mmap.o
+obj-y += pgtable.o
 obj-y += fs/
 obj-$(CONFIG_CHECKPOINT) += checkpoint/

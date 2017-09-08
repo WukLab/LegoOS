@@ -13,16 +13,15 @@
 
 #define pr_fmt(fmt)  "P$: " fmt
 
-#include <asm/io.h>
 #include <lego/mm.h>
 #include <lego/slab.h>
 #include <lego/log2.h>
 #include <lego/kernel.h>
-#include <lego/comp_processor.h>
-
 #include <lego/syscalls.h>
+#include <lego/comp_processor.h>
+#include <asm/io.h>
 
-#include "pcache.h"
+#include <processor/include/pcache.h>
 
 static u64 llc_cache_start;
 static u64 llc_cache_registered_size;

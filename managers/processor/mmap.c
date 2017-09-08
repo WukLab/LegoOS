@@ -20,6 +20,7 @@
 #include <lego/comp_processor.h>
 
 #include <processor/include/fs.h>
+#include <processor/include/pgtable.h>
 
 #ifdef CONFIG_DEBUG_VM_MMAP
 #define mmap_printk(fmt...)	pr_info(fmt)

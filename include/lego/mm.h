@@ -527,18 +527,4 @@ static inline void mmdrop(struct mm_struct *mm)
 		__mmdrop(mm);
 }
 
-#ifdef CONFIG_COMP_PROCESSOR
-#include <lego/comp_common.h>
-void free_pgd_range(struct mm_struct *mm,
-		    unsigned long addr, unsigned long end,
-		    unsigned long floor, unsigned long ceiling);
-
-void unmap_page_range(struct mm_struct *mm,
-		      unsigned long addr, unsigned long end);
-
-int copy_page_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
-		    struct p_vm_area_struct *vma);
-
-#endif /* CONFIG_COMP_PROCESSOR */
-
 #endif /* _LEGO_MM_H_ */
