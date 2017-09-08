@@ -1254,7 +1254,7 @@ unsigned long move_vma(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 	struct vm_area_struct *new_vma;
 	unsigned long new_pgoff;
 	unsigned long moved_len;
-	int err;
+	int err = 0;
 
 	new_pgoff = vma->vm_pgoff + ((old_addr - vma->vm_start) >> PAGE_SHIFT);
 	new_vma = copy_vma(&vma, new_addr, new_len, new_pgoff);
