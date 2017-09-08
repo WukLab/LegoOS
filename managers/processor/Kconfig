@@ -46,9 +46,20 @@ config CHECKPOINT_DEBUG
 	  If unsure, say N.
 
 menu "Processor DEBUG Options"
+config DEBUG_SYSCALL
+	bool "Debug all SYSCALL enter/exit"
+	default n
+	depends on COMP_PROCESSOR
+	help
+	  Enable to have a detailed dump log of syscall entering and exit.
+	  Only used for testing purpose.
+
+	  If unsure, say N.
+
 config DEBUG_PROC_SYS
 	bool "Debug /proc and /sys output"
 	default n
+	depends on COMP_PROCESSOR
 	help
 	  Some user-program will open /proc and /sys files to get information
 	  about lego-kernel. We are having these two interfaces to maintain
@@ -57,18 +68,18 @@ config DEBUG_PROC_SYS
 	  Enable to print the msg everytime /proc and /sys files are read
 	  by user program.
 
-	  if unsure, sya N.
+	  If unsure, say N.
 
-config DEBUG_SYSCALL
-	bool "Debug all SYSCALL enter/exit"
+config DEBUG_EMULATED_PGTABLE
+	bool "Debug emulated pgtable release"
 	default n
+	depends on COMP_PROCESSOR
 	help
-	  Enable to have a detailed dump log of syscall entering and exit.
-	  Only used for testing purpose.
+	  Enable to trace the emulated pgtable release function, which is
+	  normally invoked by munmap() and mremap().
 
-	  if unsure, say N.
-
-endmenu
+	  If unsure, say N.
+endmenu # "Debug Option"
 
 endif
 

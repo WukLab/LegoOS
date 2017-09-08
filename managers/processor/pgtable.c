@@ -14,7 +14,7 @@
  */
 
 #include <lego/mm.h>
-#include <lego/bug.h>
+#include <lego/sched.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
@@ -25,6 +25,13 @@
 #include <asm/tlbflush.h>
 
 #include <processor/include/pgtable.h>
+
+#ifdef CONFIG_DEBUG_EMULATED_PGTABLE
+#define pgtable_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void pgtable_debug(const char *fmt, ...) { }
+#endif
 
 static void free_pte_range(struct mm_struct *mm, pmd_t *pmd,
 			   unsigned long addr)
@@ -281,6 +288,9 @@ void release_emulated_pgtable(struct mm_struct *mm,
 			      unsigned long __user start,
 			      unsigned long __user end)
 {
+	pgtable_debug("%s[%d]: [%#lx - %#lx]",
+		current->comm, current->tgid, start, end);
+
 	unmap_page_range(mm, start, end);
 
 	/*
