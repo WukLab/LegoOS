@@ -138,7 +138,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 
 	/* Unmap emulated pgtable */
 	if (likely(retbuf == 0))
-		release_emulated_pgtable(current->mm, addr, addr + len);
+		release_emulated_pgtable(current, addr, addr + len);
 	else
 		pr_debug("munmap() fail: %s\n", ret_to_string(retbuf));
 
@@ -210,13 +210,24 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 	/* Succeed */
 	ret = reply.new_addr;
 
-	/* Update emulated pgtable: */
-	if ((reply.new_addr == old_addr) && (new_len < old_len)) {
-		release_emulated_pgtable(current->mm,
+	/* Update emulated pgtable */
+	if (old_len > new_len) {
+		release_emulated_pgtable(current,
 					 old_addr + new_len,
 					 old_addr + old_len);
-	} else if (reply.new_addr > old_addr) {
-	
+		old_len = new_len;
+	}
+	if (reply.new_addr != old_addr) {
+		unsigned long moved_len;
+
+		moved_len = move_page_tables(current, old_addr,
+					     reply.new_addr, old_len);
+		if (unlikely(moved_len < old_len)) {
+			WARN(1, "May have issue here");
+			release_emulated_pgtable(current, old_addr,
+						 old_addr + old_len);
+			ret = -EFAULT;
+		}
 	}
 
 out:
