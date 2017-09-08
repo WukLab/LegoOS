@@ -138,7 +138,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 
 	/* Unmap emulated pgtable */
 	if (likely(retbuf == 0))
-		release_emulated_pgtable(current, addr, addr + len);
+		release_pgtable(current, addr, addr + len);
 	else
 		pr_debug("munmap() fail: %s\n", ret_to_string(retbuf));
 
@@ -210,10 +210,15 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 	/* Succeed */
 	ret = reply.new_addr;
 
-	/* Update emulated pgtable */
+	/*
+	 * Update emulated pgtable
+	 *
+	 * NOTE: For any cases, if new_len is larger than old_len,
+	 * we don't really fetch the cacheline and establish the mapping
+	 * here. Just let following pgfault bring them in.
+	 */
 	if (old_len > new_len) {
-		release_emulated_pgtable(current,
-					 old_addr + new_len,
+		release_pgtable(current, old_addr + new_len,
 					 old_addr + old_len);
 		old_len = new_len;
 	}
@@ -224,7 +229,7 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 					     reply.new_addr, old_len);
 		if (unlikely(moved_len < old_len)) {
 			WARN(1, "May have issue here");
-			release_emulated_pgtable(current, old_addr,
+			release_pgtable(current, old_addr,
 						 old_addr + old_len);
 			ret = -EFAULT;
 		}

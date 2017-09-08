@@ -526,6 +526,7 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 
 	for (; old_addr < old_end; old_pte++, old_addr += PAGE_SIZE,
 				   new_pte++, new_addr += PAGE_SIZE) {
+
 		if (pte_none(*old_pte))
 			continue;
 
@@ -580,10 +581,10 @@ unsigned long move_page_tables(struct task_struct *tsk,
 			continue;
 		
 		new_pmd = alloc_new_pmd(mm, new_addr);
-		if (!new_pmd)
+		if (WARN_ON_ONCE(!new_pmd))
 			break;
 	
-		if (!pte_alloc(mm, new_pmd, new_addr))
+		if (WARN_ON_ONCE(!pte_alloc(mm, new_pmd, new_addr)))
 			break;
 
 		next = (new_addr + PMD_SIZE) & PMD_MASK;

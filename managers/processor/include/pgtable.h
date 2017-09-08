@@ -23,9 +23,8 @@ void unmap_page_range(struct mm_struct *mm,
 int copy_page_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		    struct p_vm_area_struct *vma);
 
-void release_emulated_pgtable(struct task_struct *tsk,
-			      unsigned long __user start,
-			      unsigned long __user end);
+void release_pgtable(struct task_struct *tsk,
+		     unsigned long __user start, unsigned long __user end);
 
 unsigned long move_page_tables(struct task_struct *tsk,
 			       unsigned long __user old_addr,
