@@ -284,12 +284,14 @@ void unmap_page_range(struct mm_struct *mm,
  * has successfully updated its mmap. Otherwise, it may
  * 1) lower the performance, or 2) cause segfault.
  */
-void release_emulated_pgtable(struct mm_struct *mm,
+void release_emulated_pgtable(struct task_struct *tsk,
 			      unsigned long __user start,
 			      unsigned long __user end)
 {
-	pgtable_debug("%s[%d]: [%#lx - %#lx]",
-		current->comm, current->tgid, start, end);
+	struct mm_struct *mm = tsk->mm;
+
+	pgtable_debug("%s[%d] [%#lx - %#lx]",
+		tsk->comm, tsk->tgid, start, end);
 
 	unmap_page_range(mm, start, end);
 
@@ -303,6 +305,10 @@ void release_emulated_pgtable(struct mm_struct *mm,
 	free_pgd_range(mm, start, end, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
 }
 
+/*
+ * TODO:
+ * Callback to pcache, let pcache update metadata keeping if any.
+ */
 static inline int
 copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		pte_t *dst_pte, pte_t *src_pte, struct p_vm_area_struct *vma,
@@ -336,12 +342,6 @@ copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	if (vm_flags & VM_SHARED)
 		pte = pte_mkclean(pte);
 	pte = pte_mkold(pte);
-
-	/*
-	 * TODO:
-	 * If we need rmap in memory component
-	 * we need to increment 1 mapcount here!
-	 */
 
 pte_set:
 	pte_set(dst_pte, pte);
@@ -507,7 +507,8 @@ static pmd_t *alloc_new_pmd(struct mm_struct *mm, unsigned long addr)
 
 /*
  * TODO:
- * Should tell pcache that we are moving. Pcache need to update metadata keeping!
+ * Should tell pcache that we are moving.
+ * Pcache need to update metadata keeping!
  */
 static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 		unsigned long old_addr, unsigned long old_end,
@@ -544,11 +545,25 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 
 #define LATENCY_LIMIT	(64 * PAGE_SIZE)
 
-unsigned long move_page_tables(struct mm_struct *mm, unsigned long old_addr,
-			       unsigned long new_addr, unsigned long len)
+/*
+ * Shift emulated pgtable mapping from
+ * 	[old_addr, old_addr + len) ---> [new_addr, new_addr + len)
+ * The original mapping for old_addr will be cleared. And the
+ * TLB will be flushed at last.
+ *
+ * RETURN: how much work has been done. Return @len measn fully shifted.
+ */
+unsigned long move_page_tables(struct task_struct *tsk,
+			       unsigned long __user old_addr,
+			       unsigned long __user new_addr, unsigned long len)
 {
+	struct mm_struct *mm = tsk->mm;
 	unsigned long extent, next, old_end;
 	pmd_t *old_pmd, *new_pmd;
+
+	pgtable_debug("%s[%u] [%#lx - %#lx] -> [%#lx - %#lx]",
+		tsk->comm, tsk->tgid, old_addr, old_addr + len,
+		new_addr, new_addr + len);
 
 	old_end = old_addr + len;
 
