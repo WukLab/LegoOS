@@ -186,6 +186,8 @@ void free_pgd_range(struct mm_struct *mm,
  * TODO:
  * In Lego case, all pages come from pcache!
  * MUST call back to pcache code to cleanup cacheline metadata.
+ *
+ * TODO: Flush back dirty pages back to memory component!
  */
 static unsigned long
 zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
@@ -284,25 +286,24 @@ void unmap_page_range(struct mm_struct *mm,
  * has successfully updated its mmap. Otherwise, it may
  * 1) lower the performance, or 2) cause segfault.
  */
-void release_emulated_pgtable(struct task_struct *tsk,
-			      unsigned long __user start,
-			      unsigned long __user end)
+void release_pgtable(struct task_struct *tsk,
+		     unsigned long __user start, unsigned long __user end)
 {
 	struct mm_struct *mm = tsk->mm;
 
 	pgtable_debug("%s[%d] [%#lx - %#lx]",
 		tsk->comm, tsk->tgid, start, end);
 
+	/*
+	 * Free actual pages, also need to flush
+	 * dirty pages back to memory componnet
+	 */
 	unmap_page_range(mm, start, end);
 
 	/*
 	 * Clear all pgtable entries and free pgtable pages
-	 *
-	 * Currently processor does not have any knowledge about the what is the
-	 * previous vma end (floor), or the next vma start (ceiling).
-	 * Guess it is okay to use FIRST_USER_ADDRESS and USER_PGTABLES_CEILING
 	 */
-	free_pgd_range(mm, start, end, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
+	free_pgd_range(mm, start, end, start, end);
 }
 
 /*
