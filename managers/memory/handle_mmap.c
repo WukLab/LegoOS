@@ -557,6 +557,10 @@ out:
 	up_write(&tsk->mm->mmap_sem);
 
 out_nolock:
+	mmap_debug("status: %s, new_addr: %#Lx, line: %u",
+		ret_to_string(reply.status), reply.new_addr,
+		(reply.status != RET_OKAY) ? reply.line : 0);
+
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;

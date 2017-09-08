@@ -41,9 +41,9 @@ do {										\
 } while (0)
 
 #define syscall_exit(ret)							\
-	pr_info("%s() cpu(%d) tsk(%u/%u/%s) ret: %ld\n",			\
+	pr_info("%s() cpu(%d) tsk(%u/%u/%s) ret: %#lx\n",			\
 		__func__, smp_processor_id(), current->pid, current->tgid,	\
-		current->comm, (long)ret);
+		current->comm, (unsigned long)ret);
 
 #else
 #define debug_syscall_print()	do { } while (0)
