@@ -21,6 +21,7 @@ static int stdio_file_open(struct file *f)
 static ssize_t stdio_file_read(struct file *f, char __user *buf,
 				size_t count, loff_t *off)
 {
+	WARN_ONCE(1, "Process wants STDIN!");
 	return -EIO;
 }
 

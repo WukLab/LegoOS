@@ -415,7 +415,10 @@ static int copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 
 	src_pte = pte_offset(src_pmd, addr);
 	src_ptl = pte_lockptr(src_mm, src_pmd);
-	spin_lock(src_ptl);
+
+	/* we may not using per-PTE lock */
+	if (src_ptl != dst_ptl)
+		spin_lock(src_ptl);
 
 	orig_src_pte = src_pte;
 	orig_dst_pte = dst_pte;
@@ -431,7 +434,8 @@ static int copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		}
 	} while (dst_pte++, src_pte++, addr += PAGE_SIZE, addr != end);
 
-	spin_unlock(src_ptl);
+	if (src_ptl != dst_ptl)
+		spin_unlock(src_ptl);
 	spin_unlock(dst_ptl);
 
 	return ret;
