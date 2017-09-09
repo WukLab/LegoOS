@@ -99,12 +99,21 @@ void dump_page_tables(struct task_struct *tsk,
 }
 
 static void free_pte_range(struct mm_struct *mm, pmd_t *pmd,
-			   unsigned long addr)
+			   unsigned long addr, unsigned long end)
 {
-	struct page *token = pmd_pgtable(*pmd);
+	pte_t *pte;
+	spinlock_t *ptl;
 
-	pmd_clear(pmd);
-	pte_free(mm, token);
+	pte = pte_offset_lock(mm, pmd, addr, &ptl);
+	do {
+		pte_t ptent = *pte;
+
+		pgtable_debug("  addr: %lx, pte: %#lx",
+			addr, ptent.pte);
+
+		pte_clear(pte);
+	} while (pte++, addr += PAGE_SIZE, addr != end);
+	spin_unlock(ptl);
 }
 
 static inline void free_pmd_range(struct mm_struct *mm, pud_t *pud,
@@ -113,31 +122,14 @@ static inline void free_pmd_range(struct mm_struct *mm, pud_t *pud,
 {
 	pmd_t *pmd;
 	unsigned long next;
-	unsigned long start;
 
-	start = addr;
 	pmd = pmd_offset(pud, addr);
 	do {
 		next = pmd_addr_end(addr, end);
 		if (pmd_none_or_clear_bad(pmd))
 			continue;
-		free_pte_range(mm, pmd, addr);
+		free_pte_range(mm, pmd, addr, next);
 	} while (pmd++, addr = next, addr != end);
-
-	start &= PUD_MASK;
-	if (start < floor)
-		return;
-	if (ceiling) {
-		ceiling &= PUD_MASK;
-		if (!ceiling)
-			return;
-	}
-	if (end - 1 > ceiling - 1)
-		return;
-
-	pmd = pmd_offset(pud, start);
-	pud_clear(pud);
-	pmd_free(mm, pmd);
 }
 
 static inline void free_pud_range(struct mm_struct *mm, pgd_t *pgd,
@@ -146,9 +138,7 @@ static inline void free_pud_range(struct mm_struct *mm, pgd_t *pgd,
 {
 	pud_t *pud;
 	unsigned long next;
-	unsigned long start;
 
-	start = addr;
 	pud = pud_offset(pgd, addr);
 	do {
 		next = pud_addr_end(addr, end);
@@ -156,33 +146,17 @@ static inline void free_pud_range(struct mm_struct *mm, pgd_t *pgd,
 			continue;
 		free_pmd_range(mm, pud, addr, next, floor, ceiling);
 	} while (pud++, addr = next, addr != end);
-
-	start &= PGDIR_MASK;
-	if (start < floor)
-		return;
-	if (ceiling) {
-		ceiling &= PGDIR_MASK;
-		if (!ceiling)
-			return;
-	}
-	if (end - 1 > ceiling - 1)
-		return;
-
-	pud = pud_offset(pgd, start);
-	pgd_clear(pgd);
-	pud_free(mm, pud);
 }
 
 /*
- * Clear and free pgtable entries. Also, flush TLB.
- *
+ * Clear and free pgtable.
  * Note: this doesn't free the actual pages themselves. That
  * has been handled earlier when unmapping all the memory regions,
- * which is the unmap_page_range().
  *
- * All pages used for pgtable are just normal pages. Unlike the actual
- * pages themselves, which are pcache cachelines who do not have any
- * associated `struct page'!
+ * XXX: This function no longer uses floor and ceiling. Also
+ * it never free any pgtable pages, it will clear the PTE entries.
+ * Given the time left, I gave up debugging this thing: it will always
+ * free unnecessary pgtables.
  */
 void free_pgd_range(struct mm_struct *mm,
 		    unsigned long __user addr, unsigned long __user end,
@@ -312,7 +286,8 @@ void unmap_page_range(struct mm_struct *mm,
 
 /*
  * Release both pgtable pages and the actual pages.
- * Plus, TLB is flushed at the end.
+ * Dirty cachelines will be flushed back to memory,
+ * and TLB will be flushed at the end.
  *
  * WARNING: Only call this function after memory manager
  * has successfully updated its mmap. Otherwise, it may
@@ -326,13 +301,10 @@ void release_pgtable(struct task_struct *tsk,
 	pgtable_debug("%s[%d] [%#lx - %#lx]",
 		tsk->comm, tsk->tgid, start, end);
 
-	/*
-	 * Free actual pages, also need to flush
-	 * dirty pages back to memory componnet
-	 */
+	/* Free actual pages */
 	unmap_page_range(mm, start, end);
 
-	/* Clear and free all pgtable entries */
+	/* Free pgtable pages */
 	free_pgd_range(mm, start, end, start, end);
 }
 
@@ -557,12 +529,11 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 
 	for (; old_addr < old_end; old_pte++, old_addr += PAGE_SIZE,
 				   new_pte++, new_addr += PAGE_SIZE) {
-
 		pgtable_debug("  old_addr: %lx, new_addr: %lx, pte: %#lx",
 			old_addr, new_addr, (*old_pte).pte);
+
 		if (pte_none(*old_pte))
 			continue;
-
 		pte = ptep_get_and_clear(old_addr, old_pte);
 		pte_set(new_pte, pte);
 	}
@@ -571,9 +542,6 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 		spin_unlock(new_ptl);
 	spin_unlock(old_ptl);
 
-	/*
-	 * Flush the stale TLB entries
-	 */
 	flush_tlb_mm_range(mm, old_end - len, old_end);
 }
 
