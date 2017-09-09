@@ -31,15 +31,23 @@ static void dumpit(char *f_name)
 
 	memset(buf, 0, 8192);
 	read(fd, buf, 8192);
-	printf("\t\t%s\n", f_name);
-	printf("---[\n%s\n]---\n\n", buf);
+	printf("%s\n", f_name);
+	printf("%s\n", buf);
 
 	close(fd);
 }
 
 int main()
 {
-	int i;
+	int i, fd;
+
+	fd = open("/dev/tty", 0, 0);
+	if (fd < 0) {
+		perror("open /dev/tty");
+		return;
+	}
+	printf("/dev/tty new fd: %d\n", fd);
+	write(fd, "nihao", 5);
 
 	for (i = 0; i < ARRAY_SIZE(files); i++)
 		dumpit(files[i]);

@@ -2,7 +2,8 @@
 #include "includeme.h"
 #include <sys/mman.h>
 
-#define MREMAP_MAYMOVE 1
+#define MREMAP_MAYMOVE	1
+#define MREMAP_FIXED	2
 
 int main(void)
 {
@@ -18,6 +19,7 @@ int main(void)
 	printf("mmap returned base: %p\n", base);
 
 	/* Shrink from 8 pages to 4 pages */
+#if 0
 	new_addr = mremap(base, PAGE_SIZE*8, PAGE_SIZE*4, MREMAP_MAYMOVE);
 	printf("mremap(): new_addr: %#lx\n", new_addr);
 	if (new_addr == MAP_FAILED) {
@@ -26,6 +28,43 @@ int main(void)
 	}
 
 	*(int *)(new_addr + PAGE_SIZE*5) = 66;
+	printf("mremap() BUG! Should have segfault!\n");
+#endif
+
+	/* Enlarge 8 pages to 1024 pages */
+#if 0
+	new_addr = mremap(base, PAGE_SIZE*8, PAGE_SIZE*1024, MREMAP_MAYMOVE);
+	printf("mremap(): new_addr: %#lx\n", new_addr);
+	if (new_addr == MAP_FAILED) {
+		perror("mremap");
+		return -1;
+	}
+
+	*(int *)(new_addr + PAGE_SIZE * 512) = 66;
+	printf("mremap(): enlarge from 8 pages to 1024 pages work!\n");
+#endif
+
+	/*
+	 * Strategy:
+	 * 1) Before remap, write something into old base
+	 * 2) remap base to new_addr
+	 * 3) Check if new_addr has the value written in step 1)
+	 * 4) Check if old base is still accessiable (BUG!)
+	 */
+	*(int *)(base) = 666666;
+	new_addr = mremap(base, PAGE_SIZE*8, PAGE_SIZE*4, MREMAP_MAYMOVE | MREMAP_FIXED,
+			base - PAGE_SIZE * 1024);
+	printf("mremap(): new_addr: %#lx\n", new_addr);
+	if (new_addr == MAP_FAILED) {
+		perror("mremap");
+		return -1;
+	}
+
+	/* test if it really moved */
+	printf("value is: %d\n", *(int *)new_addr);
+
+	/* test if old address is invalidated */
+	*(int *)(base) = 66;
 	printf("mremap() BUG! Should have segfault!\n");
 
 	return 0;
