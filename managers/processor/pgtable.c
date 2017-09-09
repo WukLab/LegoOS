@@ -33,6 +33,74 @@
 static inline void pgtable_debug(const char *fmt, ...) { }
 #endif
 
+static void dump_pte_range(struct mm_struct *mm, pmd_t *pmd,
+			   unsigned long addr, unsigned long end)
+{
+	pte_t *pte;
+
+	pte = pte_offset(pmd, addr);
+	do {
+		pte_t ptent = *pte;
+
+		if (pte_none(ptent))
+			continue;
+
+		pr_debug("  addr: %#lx, pte: %#lx\n",
+			addr, (unsigned long)ptent.pte);
+	} while (pte++, addr += PAGE_SIZE, addr != end);
+}
+
+static void dump_pmd_range(struct mm_struct *mm, pud_t *pud,
+			   unsigned long addr, unsigned long end)
+{
+	pmd_t *pmd;
+	unsigned long next;
+
+	pmd = pmd_offset(pud, addr);
+	do {
+		next = pmd_addr_end(addr, end);
+		if (pmd_none_or_clear_bad(pmd))
+			continue;
+		dump_pte_range(mm, pmd, addr, next);
+	} while (pmd++, addr = next, addr != end);
+}
+
+static void dump_pud_range(struct mm_struct *mm, pgd_t *pgd,
+			   unsigned long addr, unsigned long end)
+{
+	pud_t *pud;
+	unsigned long next;
+
+	pud = pud_offset(pgd, addr);
+	do {
+		next = pud_addr_end(addr, end);
+		if (pud_none_or_clear_bad(pud))
+			continue;
+		dump_pmd_range(mm, pud, addr, next);
+	} while (pud++, addr = next, addr != end);
+}
+
+void dump_page_tables(struct task_struct *tsk,
+		      unsigned long __user start, unsigned long __user end)
+{
+	pgd_t *pgd;
+	unsigned long next;
+
+	if (!tsk || start < end)
+		return;
+
+	pr_debug("Dump pgtables [%s-%u]: [%#lx - %#lx]\n",
+			tsk->comm, tsk->tgid, start, end);
+
+	pgd = pgd_offset(tsk->mm, start);
+	do {
+		next = pgd_addr_end(start, end);
+		if (pgd_none_or_clear_bad(pgd))
+			continue;
+		dump_pud_range(tsk->mm, pgd, start, next);
+	} while (pgd++, start = next, start != end);
+}
+
 static void free_pte_range(struct mm_struct *mm, pmd_t *pmd,
 			   unsigned long addr)
 {

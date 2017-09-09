@@ -7,11 +7,18 @@
  * (at your option) any later version.
  */
 
+/*
+ * Your friends to play with pgtables
+ */
+
 #ifndef _PROCESSOR_MANAGER_PGTABLE_H_
 #define _PROCESSOR_MANAGER_PGTABLE_H_
 
 #include <lego/mm.h>
 #include <lego/comp_common.h>
+
+void dump_page_tables(struct task_struct *tsk,
+		      unsigned long __user start, unsigned long __user end);
 
 void free_pgd_range(struct mm_struct *mm,
 		    unsigned long addr, unsigned long end,
