@@ -153,10 +153,10 @@ static inline void free_pud_range(struct mm_struct *mm, pgd_t *pgd,
  * Note: this doesn't free the actual pages themselves. That
  * has been handled earlier when unmapping all the memory regions,
  *
- * XXX: This function no longer uses floor and ceiling. Also
- * it never free any pgtable pages, it will clear the PTE entries.
- * Given the time left, I gave up debugging this thing: it will always
- * free unnecessary pgtables.
+ * TODO: This function no longer uses floor and ceiling. Also
+ * it never free any pgtable pages, it will only clear the PTE entries.
+ * This won't violate logic things, it will only waste some pages.
+ * Come back and fix this after deadline!
  */
 void free_pgd_range(struct mm_struct *mm,
 		    unsigned long __user addr, unsigned long __user end,

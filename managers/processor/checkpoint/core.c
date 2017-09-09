@@ -23,7 +23,7 @@
 #include "internal.h"
 
 /* Timeout for waiting all threads reach to barrier */
-#ifdef CONFIG_CHECKPOINT_DEBUG
+#ifdef CONFIG_DEBUG_CHECKPOINT
 unsigned long __read_mostly checkpoint_barrier_timeout_msec = 5 * MSEC_PER_SEC;
 #else
 unsigned long __read_mostly checkpoint_barrier_timeout_msec = 500;
@@ -58,7 +58,7 @@ struct process_snapshot *dequeue_pss(void)
 	return pss;
 }
 
-#ifdef CONFIG_CHECKPOINT_DEBUG
+#ifdef CONFIG_DEBUG_CHECKPOINT
 static void paranoid_state_check(struct task_struct *leader)
 {
 	struct task_struct *t;
@@ -140,7 +140,7 @@ static int __do_checkpoint_process(struct task_struct *leader)
 		save_thread_regs(t, ss_task);
 	}
 
-#ifdef CONFIG_CHECKPOINT_DEBUG
+#ifdef CONFIG_DEBUG_CHECKPOINT
 	dump_process_snapshot(pss, "Saver", 0);
 #endif
 
@@ -222,7 +222,7 @@ int checkpoint_thread(struct task_struct *p)
 	struct task_struct *leader;
 	long saved_state = p->state;
 
-	debug("%s(): tsk: %d-%d\n", FUNC, p->pid, p->tgid);
+	chk_debug("%s(): tsk: %d-%d\n", FUNC, p->pid, p->tgid);
 	BUG_ON(!test_tsk_need_checkpoint(p));
 
 	leader = p->group_leader;
@@ -255,7 +255,7 @@ int checkpoint_thread(struct task_struct *p)
 		end = ktime_get_boottime();
 		elapsed = ktime_sub(end, start);
 		elapsed_msecs = ktime_to_ms(elapsed);
-		debug("Barrier elapsed %lu.%3lu seconds\n",
+		chk_debug("Barrier elapsed %lu.%3lu seconds\n",
 			elapsed_msecs / 1000, elapsed_msecs % 1000);
 
 		do_checkpoint_process(p);
@@ -279,7 +279,7 @@ static int checkpoint_process_internal(struct task_struct *p)
 
 	spin_lock_irqsave(&tasklist_lock, flags);
 	for_each_thread(p, t) {
-		debug("Set NEED_CHECKPOINT for tsk: %d-%d\n", t->pid, t->tgid);
+		chk_debug("Set NEED_CHECKPOINT for tsk: %d-%d\n", t->pid, t->tgid);
 		set_tsk_thread_flag(t, TIF_NEED_CHECKPOINT);
 
 		if (!wake_up_state(t, TASK_ALL))

@@ -10,8 +10,12 @@
 #ifndef _CHECKPOINT_INTERNAL_H_
 #define _CHECKPOINT_INTERNAL_H_
 
-#undef debug
-#define debug(fmt,...) pr_info(fmt, ##__VA_ARGS__)
+#ifdef CONFIG_DEBUG_CHECKPOINT
+#define chk_debug(fmt,...)	\
+	pr_debug("%s(): "fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void chk_debug(const char *fmt, ...) { }
+#endif
 
 /* Save */
 int save_open_files(struct task_struct *, struct process_snapshot *);

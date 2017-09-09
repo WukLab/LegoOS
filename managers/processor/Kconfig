@@ -37,14 +37,6 @@ config CHECKPOINT
 
 	  If unsure, say N.
 
-config CHECKPOINT_DEBUG
-	bool "Enable to show checkpoint debug messages"
-	default n
-	---help---
-	  Say Y if you want to have more info about what is going on about checkpoint.
-
-	  If unsure, say N.
-
 menu "Processor DEBUG Options"
 config DEBUG_SYSCALL
 	bool "Debug all SYSCALL enter/exit"
@@ -53,6 +45,16 @@ config DEBUG_SYSCALL
 	help
 	  Enable to have a detailed dump log of syscall entering and exit.
 	  Only used for testing purpose.
+
+	  If unsure, say N.
+
+config DEBUG_MMAP
+	bool "Debug mmap related syscalls"
+	default n
+	depends on COMP_PROCESSOR
+	help
+	  Enable to debug mmap(), brk(), munmap(), mremap() syscalls
+	  in processor side. Mostly, it tells you what is returned.
 
 	  If unsure, say N.
 
@@ -71,7 +73,7 @@ config DEBUG_PROC_SYS
 	  If unsure, say N.
 
 config DEBUG_EMULATED_PGTABLE
-	bool "Debug emulated pgtable release"
+	bool "Debug emulated pgtable release (may have tons of messages)"
 	default n
 	depends on COMP_PROCESSOR
 	help
@@ -79,6 +81,15 @@ config DEBUG_EMULATED_PGTABLE
 	  normally invoked by munmap() and mremap().
 
 	  If unsure, say N.
+
+config DEBUG_CHECKPOINT
+	bool "Enable to show checkpoint debug messages"
+	default n
+	---help---
+	  Say Y if you want to have more info about what is going on about checkpoint.
+
+	  If unsure, say N.
+
 endmenu # "Debug Option"
 
 endif

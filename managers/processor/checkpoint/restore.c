@@ -193,7 +193,7 @@ static int restorer_for_other_threads(void *_wait)
 
 	restore_thread_state(current, ss_task);
 
-	pr_info("%s(): %d-%d waiting\n", FUNC, current->pid, current->tgid);
+	chk_debug("%s(): %d-%d waiting\n", FUNC, current->pid, current->tgid);
 	wait_for_completion(&wait->done);
 
 	/* Return to user-space */
@@ -254,7 +254,7 @@ static int restorer_for_group_leader(void *_info)
 	struct restorer_work_info *info = _info;
 	struct process_snapshot *pss = info->pss;
 
-#ifdef CONFIG_CHECKPOINT_DEBUG
+#ifdef CONFIG_DEBUG_CHECKPOINT
 	dump_task_struct(current, 0);
 	dump_process_snapshot(pss, "Restorer", 0);
 #endif
@@ -269,7 +269,7 @@ static int restorer_for_group_leader(void *_info)
 	if (IS_ERR(info->result))
 		goto err;
 
-#ifdef CONFIG_CHECKPOINT_DEBUG
+#ifdef CONFIG_DEBUG_CHECKPOINT
 	dump_task_struct(current, 0);
 #endif
 

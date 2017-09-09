@@ -46,8 +46,21 @@ config DEBUG_HANDLE_MMAP
 
 	  If unsure, say N.
 
-endmenu
+endmenu # Memory DEBUG Options
 
-endif
+config USE_RAMFS
+	bool "Use RAMFS in memory component instead of real storage"
+	default y
+	help
+	  Enable to use RAMFS in memory component. Debug only.
+
+config RAMFS_OBJECT_FILE
+	string "The static-linked image embedded into Lego"
+	default "managers/memory/ramfs/bin/word_count-seq"
+	depends on COMP_MEMORY && USE_RAMFS
+	help
+	  Please give the full path
+
+endif # if COMP_MEMORY
 
 endmenu

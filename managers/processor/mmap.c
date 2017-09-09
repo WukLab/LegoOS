@@ -22,10 +22,11 @@
 #include <processor/include/fs.h>
 #include <processor/include/pgtable.h>
 
-#ifdef CONFIG_DEBUG_VM_MMAP
-#define mmap_printk(fmt...)	pr_info(fmt)
+#ifdef CONFIG_DEBUG_MMAP
+#define mmap_debug(fmt, ...)	\
+	pr_debug("%s: " fmt "\n", __func__, __VA_ARGS__)
 #else
-#define mmap_printk(fmt...)	do { } while (0)
+static inline void mmap_debug(const char *fmt, ...) { }
 #endif
 
 SYSCALL_DEFINE1(brk, unsigned long, brk)
@@ -42,7 +43,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 			&payload, sizeof(payload), &ret_brk, sizeof(ret_brk),
 			false, DEF_NET_TIMEOUT);
 
-	mmap_printk("%s(): ret_brk: %#lx\n", FUNC, ret_brk);
+	mmap_debug("ret_brk: %#lx", ret_brk);
 	if (likely(ret_len == sizeof(ret_brk))) {
 		if (WARN_ON(ret_brk == RET_ESRCH || ret_brk == RET_EINTR))
 			return -EINTR;
@@ -94,7 +95,7 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 			&payload, sizeof(payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
 
-	mmap_printk("%s(): ret_addr:%#Lx\n", FUNC, reply.ret_addr);
+	mmap_debug("ret_addr:%#Lx", reply.ret_addr);
 
 	if (likely(ret_len == sizeof(reply))) {
 		if (likely(reply.ret == RET_OKAY))
@@ -235,6 +236,7 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 		}
 	}
 
+	mmap_debug("new_addr: %lx", ret);
 out:
 	syscall_exit(ret);
 	return ret;

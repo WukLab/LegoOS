@@ -21,30 +21,6 @@ config DEBUG_PCACHE_FILL
 	  on both processor and memory side.
 
 	  if unsure, say N
-
-config DEBUG_VM_MMAP
-	bool "Debug mmap() brk() related syscalls"
-	default n
-	depends on COMP_PROCESSOR || COMP_MEMORY
-	help
-	  Enable to have a detailed dump on each mmap(), brk() syscall handlers.
-	  Dumpers will be enabled at both processor and memory components.
-
-	  if unsure, say N.
-
-config USE_RAMFS
-	bool "Use RAMFS in memory component instead of real storage"
-	default y
-	help
-	  Enable to use RAMFS in memory component. Debug only.
-
-config RAMFS_OBJECT_FILE
-	string "The static-linked image embedded into Lego"
-	default "managers/memory/ramfs/bin/word_count-seq"
-	depends on COMP_MEMORY && USE_RAMFS
-	help
-	  Please give the full path
-
 endmenu
 
 endmenu
