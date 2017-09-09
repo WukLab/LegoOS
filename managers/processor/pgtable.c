@@ -42,9 +42,6 @@ static void dump_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	do {
 		pte_t ptent = *pte;
 
-		if (pte_none(ptent))
-			continue;
-
 		pr_debug("  addr: %#lx, pte: %#lx\n",
 			addr, (unsigned long)ptent.pte);
 	} while (pte++, addr += PAGE_SIZE, addr != end);
@@ -59,7 +56,7 @@ static void dump_pmd_range(struct mm_struct *mm, pud_t *pud,
 	pmd = pmd_offset(pud, addr);
 	do {
 		next = pmd_addr_end(addr, end);
-		if (pmd_none_or_clear_bad(pmd))
+		if (pmd_none(*pmd))
 			continue;
 		dump_pte_range(mm, pmd, addr, next);
 	} while (pmd++, addr = next, addr != end);
@@ -74,7 +71,7 @@ static void dump_pud_range(struct mm_struct *mm, pgd_t *pgd,
 	pud = pud_offset(pgd, addr);
 	do {
 		next = pud_addr_end(addr, end);
-		if (pud_none_or_clear_bad(pud))
+		if (pud_none(*pud))
 			continue;
 		dump_pmd_range(mm, pud, addr, next);
 	} while (pud++, addr = next, addr != end);
@@ -86,16 +83,16 @@ void dump_page_tables(struct task_struct *tsk,
 	pgd_t *pgd;
 	unsigned long next;
 
-	if (!tsk || start < end)
-		return;
-
 	pr_debug("Dump pgtables [%s-%u]: [%#lx - %#lx]\n",
 			tsk->comm, tsk->tgid, start, end);
+
+	if (!tsk || start < end - 1)
+		return;
 
 	pgd = pgd_offset(tsk->mm, start);
 	do {
 		next = pgd_addr_end(start, end);
-		if (pgd_none_or_clear_bad(pgd))
+		if (pgd_none(*pgd))
 			continue;
 		dump_pud_range(tsk->mm, pgd, start, next);
 	} while (pgd++, start = next, start != end);
@@ -177,7 +174,7 @@ static inline void free_pud_range(struct mm_struct *mm, pgd_t *pgd,
 }
 
 /*
- * Clear all pgtable entries and free pgtable pages. Also, flush TLB.
+ * Clear and free pgtable entries. Also, flush TLB.
  *
  * Note: this doesn't free the actual pages themselves. That
  * has been handled earlier when unmapping all the memory regions,
@@ -194,45 +191,9 @@ void free_pgd_range(struct mm_struct *mm,
 	pgd_t *pgd;
 	unsigned long next, original_addr = addr;
 
-	/*
-	 * The next few lines have given us lots of grief...
-	 *
-	 * Why are we testing PMD* at this top level?  Because often
-	 * there will be no work to do at all, and we'd prefer not to
-	 * go all the way down to the bottom just to discover that.
-	 *
-	 * Why all these "- 1"s?  Because 0 represents both the bottom
-	 * of the address space and the top of it (using -1 for the
-	 * top wouldn't help much: the masks would do the wrong thing).
-	 * The rule is that addr 0 and floor 0 refer to the bottom of
-	 * the address space, but end 0 and ceiling 0 refer to the top
-	 * Comparisons need to use "end - 1" and "ceiling - 1" (though
-	 * that end 0 case should be mythical).
-	 *
-	 * Wherever addr is brought up or ceiling brought down, we must
-	 * be careful to reject "the opposite 0" before it confuses the
-	 * subsequent tests.  But what about where end is brought down
-	 * by PMD_SIZE below? no, end can't go down to 0 there.
-	 *
-	 * Whereas we round start (addr) and ceiling down, by different
-	 * masks at different levels, in order to test whether a table
-	 * now has no other vmas using it, so can be freed, we don't
-	 * bother to round floor or end up - the tests don't need that.
-	 */
+	pgtable_debug("[%#lx - %#lx], floor: %#lx, ceiling: %#lx",
+		addr, end, floor, ceiling);
 
-	addr &= PMD_MASK;
-	if (addr < floor) {
-		addr += PMD_SIZE;
-		if (!addr)
-			return;
-	}
-	if (ceiling) {
-		ceiling &= PMD_MASK;
-		if (!ceiling)
-			return;
-	}
-	if (end - 1 > ceiling - 1)
-		end -= PMD_SIZE;
 	if (addr > end - 1)
 		return;
 
@@ -244,9 +205,6 @@ void free_pgd_range(struct mm_struct *mm,
 		free_pud_range(mm, pgd, addr, next, floor, ceiling);
 	} while (pgd++, addr = next, addr != end);
 
-	/*
-	 * Flush the stale TLB entries
-	 */
 	flush_tlb_mm_range(mm, original_addr, end);
 }
 
@@ -271,9 +229,11 @@ zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	do {
 		pte_t ptent = *pte;
 
+		pgtable_debug("  addr: %lx, pte: %#lx",
+			addr, ptent.pte);
+
 		if (pte_none(ptent))
 			continue;
-
 		if (pte_present(ptent)) {
 			ptent = ptep_get_and_clear_full(pte);
 			continue;
@@ -329,12 +289,16 @@ zap_pud_range(struct mm_struct *mm, pgd_t *pgd,
  * This function will free the physical pages themselves,
  * but it will NOT free the pages used for pgtable, which
  * is handled by free_pgd_range().
+ *
+ * PTEs are cleared, but not PGD, PUD, and PMD.
  */
 void unmap_page_range(struct mm_struct *mm,
 		      unsigned long __user addr, unsigned long __user end)
 {
 	pgd_t *pgd;
 	unsigned long next;
+
+	pgtable_debug("[%#lx - %#lx]", addr, end);
 
 	BUG_ON(addr >= end);
 	pgd = pgd_offset(mm, addr);
@@ -368,9 +332,7 @@ void release_pgtable(struct task_struct *tsk,
 	 */
 	unmap_page_range(mm, start, end);
 
-	/*
-	 * Clear all pgtable entries and free pgtable pages
-	 */
+	/* Clear and free all pgtable entries */
 	free_pgd_range(mm, start, end, start, end);
 }
 
@@ -596,6 +558,8 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 	for (; old_addr < old_end; old_pte++, old_addr += PAGE_SIZE,
 				   new_pte++, new_addr += PAGE_SIZE) {
 
+		pgtable_debug("  old_addr: %lx, new_addr: %lx, pte: %#lx",
+			old_addr, new_addr, (*old_pte).pte);
 		if (pte_none(*old_pte))
 			continue;
 
