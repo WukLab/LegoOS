@@ -9,6 +9,7 @@ int main(void)
 {
 	void *base;
 	void *new_addr;
+	int i;
 
 	base = mmap(NULL, PAGE_SIZE*8, PROT_WRITE | PROT_READ,
 		MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
@@ -51,7 +52,14 @@ int main(void)
 	 * 3) Check if new_addr has the value written in step 1)
 	 * 4) Check if old base is still accessiable (BUG!)
 	 */
-	*(int *)(base) = 666666;
+
+	printf("Save some value into first 8 pages:\n");
+	for (i = 0; i < 8; i++) {
+		int j = rand();
+
+		*(int *)(base + i * PAGE_SIZE) = j;
+		printf("  %#lx, value: %d\n", base + i * PAGE_SIZE, j);
+	}
 	new_addr = mremap(base, PAGE_SIZE*8, PAGE_SIZE*4, MREMAP_MAYMOVE | MREMAP_FIXED,
 			base - PAGE_SIZE * 1024);
 	printf("mremap(): new_addr: %#lx\n", new_addr);
@@ -60,12 +68,18 @@ int main(void)
 		return -1;
 	}
 
-	/* test if it really moved */
-	printf("value is: %d\n", *(int *)new_addr);
+	printf("Test if old pages are rempped\n");
+	for (i = 0; i < 4; i++) {
+		int j;
+		
+		j = *(int *)(new_addr + i * PAGE_SIZE);
+		printf("  %#lx, value: %d\n", new_addr + i * PAGE_SIZE, j);
+	}
 
-	/* test if old address is invalidated */
+	printf("Test if old base %#lx is invalidated (Segfault follows)\n", base);
 	*(int *)(base) = 66;
 	printf("mremap() BUG! Should have segfault!\n");
 
+	i = 0;
 	return 0;
 }
