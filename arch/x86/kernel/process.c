@@ -115,7 +115,7 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	struct pt_regs *childregs;
 	struct fork_frame *fork_frame;
 	struct inactive_task_frame *frame;
-	struct task_struct *me =current;
+	struct task_struct *me = current;
 	int err;
 
 	p->thread.sp0 = (unsigned long)task_stack_page(p) + THREAD_SIZE;

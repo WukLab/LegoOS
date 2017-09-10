@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# LegoOS/x86 0.0.1 Kernel Configuration
+# LegoOS/x86 4.0.0 Kernel Configuration
 #
 CONFIG_64BIT=y
 CONFIG_X86_64=y
@@ -29,6 +29,7 @@ CONFIG_KALLSYMS_ALL=y
 CONFIG_KALLSYMS_ABSOLUTE_PERCPU=y
 CONFIG_KALLSYMS_BASE_RELATIVE=y
 CONFIG_DEFAULT_HOSTNAME="(none)"
+CONFIG_FUTEX=y
 
 #
 # Compile-time checks and compiler options
@@ -68,8 +69,8 @@ CONFIG_HZ=100
 #
 # Preemption Configuration
 #
-# CONFIG_PREEMPT_NONE is not set
-CONFIG_PREEMPT=y
+CONFIG_PREEMPT_NONE=y
+# CONFIG_PREEMPT is not set
 
 #
 # Memory Management
@@ -121,3 +122,12 @@ CONFIG_TTY_SERIAL=y
 # Lego Memory Component Configurations
 #
 # CONFIG_COMP_MEMORY is not set
+
+#
+# General Manager Config/Debug Options
+#
+CONFIG_PCACHE_FILL_SPLIT_NR=1
+
+#
+# General DEBUG Options
+#
