@@ -56,7 +56,7 @@ extern void fpstate_init(union fpregs_state *state);
  */
 static __always_inline __pure bool use_eager_fpu(void)
 {
-	return cpu_has(X86_FEATURE_EAGER_FPU);
+	return true;
 }
 
 static __always_inline __pure bool use_xsaveopt(void)
