@@ -7,18 +7,19 @@
  * (at your option) any later version.
  */
 
-#include <asm/desc.h>
-#include <asm/traps.h>
-#include <asm/ptrace.h>
-#include <asm/irq_vectors.h>
-#include <asm/fpu/internal.h>
-
 #include <lego/sched.h>
 #include <lego/panic.h>
 #include <lego/printk.h>
 #include <lego/kernel.h>
 #include <lego/signal.h>
 #include <lego/linkage.h>
+
+#include <asm/desc.h>
+#include <asm/traps.h>
+#include <asm/ptrace.h>
+#include <asm/kdebug.h>
+#include <asm/irq_vectors.h>
+#include <asm/fpu/internal.h>
 
 /*
  * The default IDT table
@@ -77,12 +78,88 @@ struct bad_iret_stack *fixup_bad_iret(struct bad_iret_stack *s)
 	return new_stack;
 }
 
+static int
+do_trap_no_signal(struct task_struct *tsk, int trapnr, char *str,
+		  struct pt_regs *regs,	long error_code)
+{
+	if (!user_mode(regs)) {
+		if (!fixup_exception(regs, trapnr)) {
+			tsk->thread.error_code = error_code;
+			tsk->thread.trap_nr = trapnr;
+			die(str, regs, error_code);
+		}
+		return 0;
+	}
+	return -1;
+}
+
+static siginfo_t *fill_trap_info(struct pt_regs *regs, int signr, int trapnr,
+				siginfo_t *info)
+{
+	unsigned long siaddr;
+	int sicode;
+
+	switch (trapnr) {
+	default:
+		return SEND_SIG_PRIV;
+
+	case X86_TRAP_DE:
+		sicode = FPE_INTDIV;
+		siaddr = 0;
+		break;
+	case X86_TRAP_UD:
+		sicode = ILL_ILLOPN;
+		siaddr = 0;
+		break;
+	case X86_TRAP_AC:
+		sicode = BUS_ADRALN;
+		siaddr = 0;
+		break;
+	}
+
+	info->si_signo = signr;
+	info->si_errno = 0;
+	info->si_code = sicode;
+	info->si_addr = (void __user *)siaddr;
+	return info;
+}
+
+static void
+do_trap(int trapnr, int signr, char *str, struct pt_regs *regs,
+	long error_code, siginfo_t *info)
+{
+	struct task_struct *tsk = current;
+
+	if (!do_trap_no_signal(tsk, trapnr, str, regs, error_code))
+		return;
+
+	/*
+	 * We want error_code and trap_nr set for userspace faults and
+	 * kernelspace faults which result in die(), but not
+	 * kernelspace faults which are fixed up.  die() gives the
+	 * process no chance to handle the signal and notice the
+	 * kernel fault information, so that won't result in polluting
+	 * the information about previously queued, but not yet
+	 * delivered, faults.  See also do_general_protection below.
+	 */
+	tsk->thread.error_code = error_code;
+	tsk->thread.trap_nr = trapnr;
+
+	pr_info("%s[%d] trap %s ip:%lx sp:%lx error:%lx\n",
+		tsk->comm, tsk->pid, str,
+		regs->ip, regs->sp, error_code);
+
+	force_sig_info(signr, info ?: SEND_SIG_PRIV, tsk);
+}
+
 static void do_error_trap(struct pt_regs *regs, long error_code, char *str,
 			  unsigned long trapnr, int signr)
 {
-	show_regs(regs);
-	printk("%s, trapnr=%lu\n", str, trapnr);
-	hlt();
+	siginfo_t info;
+
+	cond_local_irq_enable(regs);
+	do_trap(trapnr, signr, str, regs, error_code,
+		fill_trap_info(regs, signr, trapnr, &info));
 }
 
 #define DO_ERROR_TRAP(str, name, trapnr, signr)				\
@@ -106,10 +183,26 @@ DO_ERROR_TRAP("coprocessor segment overrun", coprocessor_segment_overrun, X86_TR
 
 dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 {
-	pr_crit("%s in CPU%d, error_code: %ld\n",
-		__func__, smp_processor_id(), error_code);
-	show_regs(regs);
-	hlt();
+	struct task_struct *tsk = current;
+
+	cond_local_irq_enable(regs);
+	if (!user_mode(regs)) {
+		if (fixup_exception(regs, X86_TRAP_GP))
+			return;
+
+		tsk->thread.error_code = error_code;
+		tsk->thread.trap_nr = X86_TRAP_GP;
+		die("general protection fault", regs, error_code);
+		return;
+	}
+
+	tsk->thread.error_code = error_code;
+	tsk->thread.trap_nr = X86_TRAP_GP;
+
+	pr_info("%s[%d] general protection ip:%lx sp:%lx error:%lx\n",
+		tsk->comm, tsk->pid, regs->ip, regs->sp, error_code);
+
+	force_sig_info(SIGSEGV, SEND_SIG_PRIV, tsk);
 }
 
 dotraplinkage void do_nmi(struct pt_regs *regs, long error_code)

@@ -18,6 +18,7 @@
 #include <asm/asm.h>
 #include <asm/msr.h>
 #include <asm/prctl.h>
+#include <asm/kdebug.h>
 #include <asm/ptrace.h>
 #include <asm/segment.h>
 #include <asm/processor.h>
@@ -399,4 +400,35 @@ Looks like this code break the system
 
 	fpu__clear(&tsk->thread.fpu);
 #endif
+}
+
+static int die_counter;
+
+int __die(const char *str, struct pt_regs *regs, long err)
+{
+	printk(KERN_DEFAULT
+	       "%s: %04lx [#%d]%s%s%s%s\n", str, err & 0xffff, ++die_counter,
+	       IS_ENABLED(CONFIG_PREEMPT)	? " PREEMPT"	: "",
+	       IS_ENABLED(CONFIG_SMP)		? " SMP"	: "",
+	       IS_ENABLED(CONFIG_COMP_PROCESSOR)? " PROCESSOR"	: "",
+	       IS_ENABLED(CONFIG_COMP_MEMORY)	? " MEMORY"	: "");
+
+	show_regs(regs);
+
+	/* Executive summary in case the oops scrolled away */
+	printk(KERN_ALERT "RIP ");
+	pr_cont(" [<%p>] %pS\n", (void *)regs->ip, (void *)regs->ip);
+	printk(" RSP <%016lx>\n", regs->sp);
+
+	return 0;
+}
+
+/*
+ * This is gone through when something in the kernel has done something bad
+ * and is about to be terminated:
+ */
+void die(const char *str, struct pt_regs *regs, long err)
+{
+	__die(str, regs, err);
+	panic("Fatal exception");
 }

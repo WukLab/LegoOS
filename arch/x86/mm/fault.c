@@ -12,6 +12,7 @@
 #include <asm/traps.h>
 #include <asm/pgtable.h>
 #include <asm/current.h>
+#include <asm/kdebug.h>
 
 #include <lego/mm.h>
 #include <lego/slab.h>
@@ -254,27 +255,6 @@ static void show_fault_oops(struct pt_regs *regs, unsigned long error_code,
 	printk(KERN_ALERT "IP: [<%p>] %pS\n", (void *)address, (void *)address);
 
 	dump_pagetable(address);
-}
-
-static int die_counter;
-
-int __die(const char *str, struct pt_regs *regs, long err)
-{
-	printk(KERN_DEFAULT
-	       "%s: %04lx [#%d]%s%s%s%s\n", str, err & 0xffff, ++die_counter,
-	       IS_ENABLED(CONFIG_PREEMPT)	? " PREEMPT"	: "",
-	       IS_ENABLED(CONFIG_SMP)		? " SMP"	: "",
-	       IS_ENABLED(CONFIG_COMP_PROCESSOR)? " PROCESSOR"	: "",
-	       IS_ENABLED(CONFIG_COMP_MEMORY)	? " MEMORY"	: "");
-
-	show_regs(regs);
-
-	/* Executive summary in case the oops scrolled away */
-	printk(KERN_ALERT "RIP ");
-	pr_cont(" [<%p>] %pS\n", (void *)regs->ip, (void *)regs->ip);
-	printk(" RSP <%016lx>\n", regs->sp);
-
-	return 0;
 }
 
 #define task_stack_end_corrupted(task) \
