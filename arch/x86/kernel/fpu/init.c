@@ -15,6 +15,88 @@
 #include <asm/fpu/internal.h>
 
 /*
+ * Initialize the TS bit in CR0 according to the style of context-switches
+ * we are using:
+ */
+static void fpu__init_cpu_ctx_switch(void)
+{
+	/*
+	 * If the TS flag is set and the EM flag (bit 2 of CR0) is clear,
+	 * a device-not-available exception (#NM) is raised prior to the
+	 * execution of any x87 FPU/MMX/SSE/SSE2/SSE3/SSSE3/SSE4.
+	 *
+	 * The fault handler for the #NM exception can then be used to
+	 * clear the TS flag (with the CLTS instruction) and save the
+	 * context of the x87 FPU, XMM, and MXCSR registers.
+	 *
+	 *	Yizhou, 24 Jul 2017
+	 */
+	clts();
+}
+
+/*
+ * Initialize the registers found in all CPUs, CR0 and CR4:
+ */
+static void fpu__init_cpu_generic(void)
+{
+	unsigned long cr0;
+	unsigned long cr4_mask = 0;
+
+	if (cpu_has(X86_FEATURE_FXSR)) {
+		cr4_mask |= X86_CR4_OSFXSR;
+		pr_debug_once("x86/fpu: cpu has FXSR\n");
+	}
+	if (cpu_has(X86_FEATURE_XMM)) {
+		cr4_mask |= X86_CR4_OSXMMEXCPT;
+		pr_debug_once("x86/fpu: cpu has XMM\n");
+	}
+	if (cr4_mask)
+		cr4_set_bits(cr4_mask);
+
+	/* clear TS and EM */
+	cr0 = read_cr0();
+	cr0 &= ~(X86_CR0_TS|X86_CR0_EM);
+	write_cr0(cr0);
+
+	asm volatile ("fninit");
+}
+
+/*
+ * Enable the extended processor state save/restore feature.
+ * Called once per CPU onlining.
+ */
+void fpu__init_cpu_xstate(void)
+{
+	if (!cpu_has(X86_FEATURE_XSAVE) || !xfeatures_mask)
+		return;
+
+	pr_debug_once("x86/fpu: cpu has XSAVE\n");
+
+	/*
+	 * Make it clear that XSAVES supervisor states are not yet
+	 * implemented should anyone expect it to work by changing
+	 * bits in XFEATURE_MASK_* macros and XCR0.
+	 */
+	WARN_ONCE((xfeatures_mask & XFEATURE_MASK_SUPERVISOR),
+		"x86/fpu: XSAVES supervisor states are not yet implemented.\n");
+
+	xfeatures_mask &= ~XFEATURE_MASK_SUPERVISOR;
+
+	cr4_set_bits(X86_CR4_OSXSAVE);
+	xsetbv(XCR_XFEATURE_ENABLED_MASK, xfeatures_mask);
+}
+
+/*
+ * Enable all supported FPU features. Called when a CPU is brought online:
+ */
+void fpu__init_cpu(void)
+{
+	fpu__init_cpu_generic();
+	fpu__init_cpu_xstate();
+	fpu__init_cpu_ctx_switch();
+}
+
+/*
  * Size of the FPU context state. All tasks in the system use the
  * same context size, regardless of what portion they use.
  * This is inherent to the XSAVE architecture which puts all state
@@ -90,81 +172,6 @@ u64 __init fpu__get_supported_xfeatures_mask(void)
 
 	/* Return a mask that masks out all features requiring eagerfpu mode */
 	return ~XFEATURE_MASK_EAGER;
-}
-
-static void fpu__init_cpu_ctx_switch(void)
-{
-	if (!cpu_has(X86_FEATURE_EAGER_FPU))
-		/*
-		 * If the TS flag is set and the EM flag (bit 2 of CR0) is clear,
-		 * a device-not-available exception (#NM) is raised prior to the
-		 * execution of any x87 FPU/MMX/SSE/SSE2/SSE3/SSSE3/SSE4.
-		 *
-		 * The fault handler for the #NM exception can then be used to
-		 * clear the TS flag (with the CLTS instruction) and save the
-		 * context of the x87 FPU, XMM, and MXCSR registers.
-		 *
-		 *	Yizhou, 24 Jul 2017
-		 */
-		stts();
-	else
-		clts();
-}
-
-/*
- * Enable the extended processor state save/restore feature.
- * Called once per CPU onlining.
- */
-void fpu__init_cpu_xstate(void)
-{
-	if (!cpu_has(X86_FEATURE_XSAVE) || !xfeatures_mask)
-		return;
-
-	/*
-	 * Make it clear that XSAVES supervisor states are not yet
-	 * implemented should anyone expect it to work by changing
-	 * bits in XFEATURE_MASK_* macros and XCR0.
-	 */
-	WARN_ONCE((xfeatures_mask & XFEATURE_MASK_SUPERVISOR),
-		"x86/fpu: XSAVES supervisor states are not yet implemented.\n");
-
-	xfeatures_mask &= ~XFEATURE_MASK_SUPERVISOR;
-
-	cr4_set_bits(X86_CR4_OSXSAVE);
-	xsetbv(XCR_XFEATURE_ENABLED_MASK, xfeatures_mask);
-}
-
-/*
- * Initialize the registers found in all CPUs, CR0 and CR4:
- */
-static void fpu__init_cpu_generic(void)
-{
-	unsigned long cr0;
-	unsigned long cr4_mask = 0;
-
-	if (cpu_has(X86_FEATURE_FXSR))
-		cr4_mask |= X86_CR4_OSFXSR;
-	if (cpu_has(X86_FEATURE_XMM))
-		cr4_mask |= X86_CR4_OSXMMEXCPT;
-	if (cr4_mask)
-		cr4_set_bits(cr4_mask);
-
-	/* clear TS and EM */
-	cr0 = read_cr0();
-	cr0 &= ~(X86_CR0_TS|X86_CR0_EM);
-	write_cr0(cr0);
-
-	asm volatile ("fninit");
-}
-
-/*
- * Enable all supported FPU features. Called when a CPU is brought online:
- */
-void fpu__init_cpu(void)
-{
-	fpu__init_cpu_generic();
-	fpu__init_cpu_xstate();
-	fpu__init_cpu_ctx_switch();
 }
 
 /*
