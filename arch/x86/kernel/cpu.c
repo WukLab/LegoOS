@@ -345,12 +345,18 @@ void cpu_init(void)
 	struct tss_struct *tss;
 	int i;
 
+	pr_debug("Initializing CPU#%d\n", cpu);
+
+	cr4_clear_bits(X86_CR4_VME|X86_CR4_PVI|X86_CR4_TSD|X86_CR4_DE);
+
 	/* Initialize the per-CPU GDT table */
 	switch_to_new_gdt(cpu);
+	loadsegment(fs, 0);
 
 	/* All CPUs share the same IDT table */
 	load_idt((const struct desc_ptr *)&idt_desc);
 
+	memset(current->thread.tls_array, 0, GDT_ENTRY_TLS_ENTRIES * 8);
 	syscall_init();
 
 	wrmsrl(MSR_FS_BASE, 0);
