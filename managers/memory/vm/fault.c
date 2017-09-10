@@ -15,6 +15,7 @@
 #include <memory/include/vm.h>
 #include <memory/include/vm-pgtable.h>
 
+#if 0
 /*
  * empty_zero_page is a shared zero-filled page.
  * Used to map to read-first anonymous page.
@@ -27,6 +28,7 @@ static inline unsigned long my_zero_vfn(void)
 {
 	return (unsigned long)empty_zero_page >> PAGE_SHIFT;
 }
+#endif
 
 static int do_swap_page(struct vm_area_struct *vma, unsigned long address,
 			unsigned int flags, pte_t *ptep, pmd_t *pmd,
@@ -100,21 +102,6 @@ static int do_anonymous_page(struct vm_area_struct *vma, unsigned long address,
 	unsigned long vaddr;
 	struct lego_mm_struct *mm = vma->vm_mm;
 
-	/* Use the zero-page for reads */
-	if (!(flags & FAULT_FLAG_WRITE)) {
-#ifdef CONFIG_DEBUG_PCACHE_FILL
-		pr_info("zero vfn used for: address: %#lx\n", address);
-#endif
-		entry = lego_vfn_pte(my_zero_vfn(),
-				     vma->vm_page_prot);
-
-		/* Someone else set it */
-		page_table = lego_pte_offset_lock(mm, pmd, address, &ptl);
-		if (!pte_none(*page_table))
-			goto unlock;
-		goto setpte;
-	}
-
 	vaddr = __get_free_page(GFP_KERNEL);
 	if (!vaddr)
 		return VM_FAULT_OOM;
@@ -136,7 +123,6 @@ static int do_anonymous_page(struct vm_area_struct *vma, unsigned long address,
 	if (!pte_none(*page_table))
 		goto unlock;
 
-setpte:
 	pte_set(page_table, entry);
 unlock:
 	lego_pte_unlock(page_table, ptl);

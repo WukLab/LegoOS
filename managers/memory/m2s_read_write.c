@@ -12,17 +12,111 @@
  */
 
 #include <lego/slab.h>
-#include <lego/kernel.h>
-#include <lego/comp_memory.h>
-#include <lego/uaccess.h>
 #include <lego/files.h>
-
+#include <lego/kernel.h>
+#include <lego/uaccess.h>
+#include <lego/fit_ibapi.h>
+#include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 #include <lego/comp_storage.h>
-#include <lego/fit_ibapi.h>
 
 #include <memory/include/pid.h>
 #include <memory/include/vm.h>
+
+static ssize_t storage_read(struct lego_task_struct *tsk,
+			    struct lego_file *file,
+			    char __user *buf, size_t count, loff_t *pos)
+{
+	u32 len_msg, len_ret, *opcode;
+	void *msg, *retbuf, *content;
+	ssize_t retval, *retval_in_buf;
+	struct m2s_read_write_payload *payload;
+
+	/* opcode + payload*/
+	len_msg = sizeof(*opcode) + sizeof(*payload);
+	msg = kmalloc(len_msg, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	opcode = msg;
+	*opcode = M2S_READ;
+
+	payload = (msg + sizeof(u32));
+	payload->uid = current_uid();
+	strncpy(payload->filename, file->filename, MAX_FILENAME_LENGTH);
+	payload->flags = O_RDONLY;
+	payload->len = count;
+	payload->offset = *pos;
+
+	/* retbuf = retval + content */
+	len_ret = sizeof(retval) + count;
+	retbuf = kmalloc(len_ret, GFP_KERNEL);
+	if(!retbuf) {
+		kfree(msg);
+		return -ENOMEM;
+	}
+
+	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, retbuf, len_ret, false);
+
+	retval_in_buf = (ssize_t *)retbuf;
+	content = retbuf + sizeof(ssize_t);
+
+	retval = *retval_in_buf;
+
+	/* now copy content to __user buf */
+	lego_copy_to_user(current, buf, content, count);
+
+	kfree(msg);
+	kfree(retbuf);
+	return retval;	
+}
+
+static ssize_t storage_write(struct lego_task_struct *tsk, struct lego_file *file,
+		const char *buf, size_t count, loff_t *pos)
+{
+	return -EINVAL;
+}
+
+static int storage_vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	struct lego_task_struct *tsk;
+	struct lego_file *file;
+	size_t count;
+	loff_t pos;
+	unsigned long page;
+
+	page = __get_free_page(GFP_KERNEL);
+	if (unlikely(!page))
+		return VM_FAULT_OOM;
+
+	tsk = vma->vm_mm->task;
+	file = vma->vm_file;
+	count = PAGE_SIZE;
+	pos = vmf->pgoff << PAGE_SHIFT;
+
+	storage_read(tsk, file, (char *)page, count, &pos);
+
+	vmf->page = page;
+
+	return 0;
+}
+
+static struct vm_operations_struct storage_vma_ops = {
+	.fault = &storage_vma_fault,
+};
+
+static int storage_mmap(struct lego_task_struct *tsk, struct lego_file *file,
+		      struct vm_area_struct *vma)
+{
+	vma->vm_ops = &storage_vma_ops;
+	return 0;
+}
+
+struct lego_file_operations storage_file_ops = {
+	.read	= storage_read,
+	.write	= storage_write,
+	.mmap	= storage_mmap,
+};
 
 /*static ssize_t test_m2s_read(struct file *f, char *buf,
 				size_t count, loff_t *off)

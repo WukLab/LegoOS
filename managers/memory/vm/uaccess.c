@@ -37,6 +37,11 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 	if (!n)
 		return 0;
 
+	if ((unsigned long)to > TASK_SIZE) {
+		memcpy(to, from, n);
+		return n;
+	}
+
 	first_page = (unsigned long)to & PAGE_MASK;
 	last_page = ((unsigned long)to + n) & PAGE_MASK;
 	nr_pages = ((last_page - first_page) >> PAGE_SHIFT) + 1;
@@ -109,6 +114,11 @@ unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
 
 	if (!n)
 		return 0;
+
+	if ((unsigned long)from > TASK_SIZE) {
+		memcpy(to, from, n);
+		return n;
+	}
 
 	first_page = (unsigned long)from & PAGE_MASK;
 	last_page = ((unsigned long)from + n) & PAGE_MASK;
