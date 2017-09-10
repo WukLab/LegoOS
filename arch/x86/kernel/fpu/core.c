@@ -51,11 +51,6 @@ static void kernel_fpu_enable(void)
 	this_cpu_write(in_kernel_fpu, false);
 }
 
-static bool kernel_fpu_disabled(void)
-{
-	return this_cpu_read(in_kernel_fpu);
-}
-
 void __kernel_fpu_begin(void)
 {
 	struct fpu *fpu = &current->thread.fpu;

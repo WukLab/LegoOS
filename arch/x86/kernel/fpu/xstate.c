@@ -7,6 +7,10 @@
  * (at your option) any later version.
  */
 
+/*
+ * xsave/xrstor support
+ */
+
 #include <asm/asm.h>
 #include <asm/processor.h>
 #include <lego/kernel.h>
@@ -47,6 +51,222 @@ static unsigned int xstate_comp_offsets[sizeof(xfeatures_mask)*8];
  * mode standard format size used for signal and ptrace frames.
  */
 unsigned int fpu_user_xstate_size;
+
+/*
+ * Return whether the system supports a given xfeature.
+ *
+ * Also return the name of the (most advanced) feature that the caller requested:
+ */
+int cpu_has_xfeatures(u64 xfeatures_needed, const char **feature_name)
+{
+	u64 xfeatures_missing = xfeatures_needed & ~xfeatures_mask;
+
+	if (unlikely(feature_name)) {
+		long xfeature_idx, max_idx;
+		u64 xfeatures_print;
+		/*
+		 * So we use FLS here to be able to print the most advanced
+		 * feature that was requested but is missing. So if a driver
+		 * asks about "XFEATURE_MASK_SSE | XFEATURE_MASK_YMM" we'll print the
+		 * missing AVX feature - this is the most informative message
+		 * to users:
+		 */
+		if (xfeatures_missing)
+			xfeatures_print = xfeatures_missing;
+		else
+			xfeatures_print = xfeatures_needed;
+
+		xfeature_idx = fls64(xfeatures_print)-1;
+		max_idx = ARRAY_SIZE(xfeature_names)-1;
+		xfeature_idx = min(xfeature_idx, max_idx);
+
+		*feature_name = xfeature_names[xfeature_idx];
+	}
+
+	if (xfeatures_missing)
+		return 0;
+
+	return 1;
+}
+
+static int xfeature_is_supervisor(int xfeature_nr)
+{
+	/*
+	 * We currently do not support supervisor states, but if
+	 * we did, we could find out like this.
+	 *
+	 * SDM says: If state component 'i' is a user state component,
+	 * ECX[0] return 0; if state component i is a supervisor
+	 * state component, ECX[0] returns 1.
+	 */
+	u32 eax, ebx, ecx, edx;
+
+	cpuid_count(XSTATE_CPUID, xfeature_nr, &eax, &ebx, &ecx, &edx);
+	return !!(ecx & 1);
+}
+
+static int xfeature_is_user(int xfeature_nr)
+{
+	return !xfeature_is_supervisor(xfeature_nr);
+}
+
+/*
+ * When executing XSAVEOPT (or other optimized XSAVE instructions), if
+ * a processor implementation detects that an FPU state component is still
+ * (or is again) in its initialized state, it may clear the corresponding
+ * bit in the header.xfeatures field, and can skip the writeout of registers
+ * to the corresponding memory layout.
+ *
+ * This means that when the bit is zero, the state component might still contain
+ * some previous - non-initialized register state.
+ *
+ * Before writing xstate information to user-space we sanitize those components,
+ * to always ensure that the memory layout of a feature will be in the init state
+ * if the corresponding header bit is zero. This is to ensure that user-space doesn't
+ * see some stale state in the memory layout during signal handling, debugging etc.
+ */
+void fpstate_sanitize_xstate(struct fpu *fpu)
+{
+	struct fxregs_state *fx = &fpu->state.fxsave;
+	int feature_bit;
+	u64 xfeatures;
+
+	if (!use_xsaveopt())
+		return;
+
+	xfeatures = fpu->state.xsave.header.xfeatures;
+
+	/*
+	 * None of the feature bits are in init state. So nothing else
+	 * to do for us, as the memory layout is up to date.
+	 */
+	if ((xfeatures & xfeatures_mask) == xfeatures_mask)
+		return;
+
+	/*
+	 * FP is in init state
+	 */
+	if (!(xfeatures & XFEATURE_MASK_FP)) {
+		fx->cwd = 0x37f;
+		fx->swd = 0;
+		fx->twd = 0;
+		fx->fop = 0;
+		fx->rip = 0;
+		fx->rdp = 0;
+		memset(&fx->st_space[0], 0, 128);
+	}
+
+	/*
+	 * SSE is in init state
+	 */
+	if (!(xfeatures & XFEATURE_MASK_SSE))
+		memset(&fx->xmm_space[0], 0, 256);
+
+	/*
+	 * First two features are FPU and SSE, which above we handled
+	 * in a special way already:
+	 */
+	feature_bit = 0x2;
+	xfeatures = (xfeatures_mask & ~xfeatures) >> 2;
+
+	/*
+	 * Update all the remaining memory layouts according to their
+	 * standard xstate layout, if their header bit is in the init
+	 * state:
+	 */
+	while (xfeatures) {
+		if (xfeatures & 0x1) {
+			int offset = xstate_comp_offsets[feature_bit];
+			int size = xstate_sizes[feature_bit];
+
+			memcpy((void *)fx + offset,
+			       (void *)&init_fpstate.xsave + offset,
+			       size);
+		}
+
+		xfeatures >>= 1;
+		feature_bit++;
+	}
+}
+
+/*
+ * Note that in the future we will likely need a pair of
+ * functions here: one for user xstates and the other for
+ * system xstates.  For now, they are the same.
+ */
+static int xfeature_enabled(enum xfeature xfeature)
+{
+	return !!(xfeatures_mask & (1UL << xfeature));
+}
+
+/*
+ * Record the offsets and sizes of various xstates contained
+ * in the XSAVE state memory layout.
+ */
+static void __init setup_xstate_features(void)
+{
+	u32 eax, ebx, ecx, edx, i;
+	/* start at the beginnning of the "extended state" */
+	unsigned int last_good_offset = offsetof(struct xregs_state,
+						 extended_state_area);
+	/*
+	 * The FP xstates and SSE xstates are legacy states. They are always
+	 * in the fixed offsets in the xsave area in either compacted form
+	 * or standard form.
+	 */
+	xstate_offsets[0] = 0;
+	xstate_sizes[0] = offsetof(struct fxregs_state, xmm_space);
+	xstate_offsets[1] = xstate_sizes[0];
+	xstate_sizes[1] = FIELD_SIZEOF(struct fxregs_state, xmm_space);
+
+	for (i = FIRST_EXTENDED_XFEATURE; i < XFEATURE_MAX; i++) {
+		if (!xfeature_enabled(i))
+			continue;
+
+		cpuid_count(XSTATE_CPUID, i, &eax, &ebx, &ecx, &edx);
+
+		/*
+		 * If an xfeature is supervisor state, the offset
+		 * in EBX is invalid. We leave it to -1.
+		 */
+		if (xfeature_is_user(i))
+			xstate_offsets[i] = ebx;
+
+		xstate_sizes[i] = eax;
+		/*
+		 * In our xstate size checks, we assume that the
+		 * highest-numbered xstate feature has the
+		 * highest offset in the buffer.  Ensure it does.
+		 */
+		WARN_ONCE(last_good_offset > xstate_offsets[i],
+			"x86/fpu: misordered xstate at %d\n", last_good_offset);
+		last_good_offset = xstate_offsets[i];
+	}
+}
+
+static void __init print_xstate_feature(u64 xstate_mask)
+{
+	const char *feature_name;
+
+	if (cpu_has_xfeatures(xstate_mask, &feature_name))
+		pr_info("x86/fpu: Supporting XSAVE feature 0x%03Lx: '%s'\n", xstate_mask, feature_name);
+}
+
+/*
+ * Print out all the supported xstate features:
+ */
+static void __init print_xstate_features(void)
+{
+	print_xstate_feature(XFEATURE_MASK_FP);
+	print_xstate_feature(XFEATURE_MASK_SSE);
+	print_xstate_feature(XFEATURE_MASK_YMM);
+	print_xstate_feature(XFEATURE_MASK_BNDREGS);
+	print_xstate_feature(XFEATURE_MASK_BNDCSR);
+	print_xstate_feature(XFEATURE_MASK_OPMASK);
+	print_xstate_feature(XFEATURE_MASK_ZMM_Hi256);
+	print_xstate_feature(XFEATURE_MASK_Hi16_ZMM);
+	print_xstate_feature(XFEATURE_MASK_PKRU);
+}
 
 static unsigned int __init get_xsave_size(void)
 {
@@ -111,16 +331,6 @@ int using_compacted_format(void)
 }
 
 /*
- * Note that in the future we will likely need a pair of
- * functions here: one for user xstates and the other for
- * system xstates.  For now, they are the same.
- */
-static int xfeature_enabled(enum xfeature xfeature)
-{
-	return !!(xfeatures_mask & (1UL << xfeature));
-}
-
-/*
  * This check is important because it is easy to get XSTATE_*
  * confused with XSTATE_BIT_*.
  */
@@ -145,27 +355,6 @@ static int xfeature_is_aligned(int xfeature_nr)
 	 * of the extended region of an XSAVE area is used:
 	 */
 	return !!(ecx & 2);
-}
-
-static int xfeature_is_supervisor(int xfeature_nr)
-{
-	/*
-	 * We currently do not support supervisor states, but if
-	 * we did, we could find out like this.
-	 *
-	 * SDM says: If state component 'i' is a user state component,
-	 * ECX[0] return 0; if state component i is a supervisor
-	 * state component, ECX[0] returns 1.
-	 */
-	u32 eax, ebx, ecx, edx;
-
-	cpuid_count(XSTATE_CPUID, xfeature_nr, &eax, &ebx, &ecx, &edx);
-	return !!(ecx & 1);
-}
-
-static int xfeature_is_user(int xfeature_nr)
-{
-	return !xfeature_is_supervisor(xfeature_nr);
 }
 
 static int xfeature_size(int xfeature_nr)
@@ -347,112 +536,6 @@ static int init_xstate_size(void)
 }
 
 /*
- * Record the offsets and sizes of various xstates contained
- * in the XSAVE state memory layout.
- */
-static void __init setup_xstate_features(void)
-{
-	u32 eax, ebx, ecx, edx, i;
-	/* start at the beginnning of the "extended state" */
-	unsigned int last_good_offset = offsetof(struct xregs_state,
-						 extended_state_area);
-	/*
-	 * The FP xstates and SSE xstates are legacy states. They are always
-	 * in the fixed offsets in the xsave area in either compacted form
-	 * or standard form.
-	 */
-	xstate_offsets[0] = 0;
-	xstate_sizes[0] = offsetof(struct fxregs_state, xmm_space);
-	xstate_offsets[1] = xstate_sizes[0];
-	xstate_sizes[1] = FIELD_SIZEOF(struct fxregs_state, xmm_space);
-
-	for (i = FIRST_EXTENDED_XFEATURE; i < XFEATURE_MAX; i++) {
-		if (!xfeature_enabled(i))
-			continue;
-
-		cpuid_count(XSTATE_CPUID, i, &eax, &ebx, &ecx, &edx);
-
-		/*
-		 * If an xfeature is supervisor state, the offset
-		 * in EBX is invalid. We leave it to -1.
-		 */
-		if (xfeature_is_user(i))
-			xstate_offsets[i] = ebx;
-
-		xstate_sizes[i] = eax;
-		/*
-		 * In our xstate size checks, we assume that the
-		 * highest-numbered xstate feature has the
-		 * highest offset in the buffer.  Ensure it does.
-		 */
-		WARN_ONCE(last_good_offset > xstate_offsets[i],
-			"x86/fpu: misordered xstate at %d\n", last_good_offset);
-		last_good_offset = xstate_offsets[i];
-	}
-}
-
-/*
- * Return whether the system supports a given xfeature.
- *
- * Also return the name of the (most advanced) feature that the caller requested:
- */
-int cpu_has_xfeatures(u64 xfeatures_needed, const char **feature_name)
-{
-	u64 xfeatures_missing = xfeatures_needed & ~xfeatures_mask;
-
-	if (unlikely(feature_name)) {
-		long xfeature_idx, max_idx;
-		u64 xfeatures_print;
-		/*
-		 * So we use FLS here to be able to print the most advanced
-		 * feature that was requested but is missing. So if a driver
-		 * asks about "XFEATURE_MASK_SSE | XFEATURE_MASK_YMM" we'll print the
-		 * missing AVX feature - this is the most informative message
-		 * to users:
-		 */
-		if (xfeatures_missing)
-			xfeatures_print = xfeatures_missing;
-		else
-			xfeatures_print = xfeatures_needed;
-
-		xfeature_idx = fls64(xfeatures_print)-1;
-		max_idx = ARRAY_SIZE(xfeature_names)-1;
-		xfeature_idx = min(xfeature_idx, max_idx);
-
-		*feature_name = xfeature_names[xfeature_idx];
-	}
-
-	if (xfeatures_missing)
-		return 0;
-
-	return 1;
-}
-
-static void __init print_xstate_feature(u64 xstate_mask)
-{
-	const char *feature_name;
-
-	if (cpu_has_xfeatures(xstate_mask, &feature_name))
-		pr_info("x86/fpu: Supporting XSAVE feature 0x%03Lx: '%s'\n", xstate_mask, feature_name);
-}
-
-/*
- * Print out all the supported xstate features:
- */
-static void __init print_xstate_features(void)
-{
-	print_xstate_feature(XFEATURE_MASK_FP);
-	print_xstate_feature(XFEATURE_MASK_SSE);
-	print_xstate_feature(XFEATURE_MASK_YMM);
-	print_xstate_feature(XFEATURE_MASK_BNDREGS);
-	print_xstate_feature(XFEATURE_MASK_BNDCSR);
-	print_xstate_feature(XFEATURE_MASK_OPMASK);
-	print_xstate_feature(XFEATURE_MASK_ZMM_Hi256);
-	print_xstate_feature(XFEATURE_MASK_Hi16_ZMM);
-	print_xstate_feature(XFEATURE_MASK_PKRU);
-}
-
-/*
  * setup the xstate image representing the init state
  */
 static void __init setup_init_fpu_buf(void)
@@ -618,80 +701,114 @@ out_disable:
 }
 
 /*
- * When executing XSAVEOPT (or other optimized XSAVE instructions), if
- * a processor implementation detects that an FPU state component is still
- * (or is again) in its initialized state, it may clear the corresponding
- * bit in the header.xfeatures field, and can skip the writeout of registers
- * to the corresponding memory layout.
- *
- * This means that when the bit is zero, the state component might still contain
- * some previous - non-initialized register state.
- *
- * Before writing xstate information to user-space we sanitize those components,
- * to always ensure that the memory layout of a feature will be in the init state
- * if the corresponding header bit is zero. This is to ensure that user-space doesn't
- * see some stale state in the memory layout during signal handling, debugging etc.
+ * Restore minimal FPU state after suspend:
  */
-void fpstate_sanitize_xstate(struct fpu *fpu)
+void fpu__resume_cpu(void)
 {
-	struct fxregs_state *fx = &fpu->state.fxsave;
-	int feature_bit;
-	u64 xfeatures;
-
-	if (!use_xsaveopt())
-		return;
-
-	xfeatures = fpu->state.xsave.header.xfeatures;
-
 	/*
-	 * None of the feature bits are in init state. So nothing else
-	 * to do for us, as the memory layout is up to date.
+	 * Restore XCR0 on xsave capable CPUs:
 	 */
-	if ((xfeatures & xfeatures_mask) == xfeatures_mask)
-		return;
+	if (cpu_has(X86_FEATURE_XSAVE))
+		xsetbv(XCR_XFEATURE_ENABLED_MASK, xfeatures_mask);
+}
 
-	/*
-	 * FP is in init state
-	 */
-	if (!(xfeatures & XFEATURE_MASK_FP)) {
-		fx->cwd = 0x37f;
-		fx->swd = 0;
-		fx->twd = 0;
-		fx->fop = 0;
-		fx->rip = 0;
-		fx->rdp = 0;
-		memset(&fx->st_space[0], 0, 128);
+/*
+ * Given an xstate feature mask, calculate where in the xsave
+ * buffer the state is.  Callers should ensure that the buffer
+ * is valid.
+ *
+ * Note: does not work for compacted buffers.
+ */
+void *__raw_xsave_addr(struct xregs_state *xsave, int xstate_feature_mask)
+{
+	int feature_nr = fls64(xstate_feature_mask) - 1;
+
+	if (!xfeature_enabled(feature_nr)) {
+		WARN_ON_FPU(1);
+		return NULL;
 	}
 
+	return (void *)xsave + xstate_comp_offsets[feature_nr];
+}
+
+/*
+ * Given the xsave area and a state inside, this function returns the
+ * address of the state.
+ *
+ * This is the API that is called to get xstate address in either
+ * standard format or compacted format of xsave area.
+ *
+ * Note that if there is no data for the field in the xsave buffer
+ * this will return NULL.
+ *
+ * Inputs:
+ *	xstate: the thread's storage area for all FPU data
+ *	xstate_feature: state which is defined in xsave.h (e.g.
+ *	XFEATURE_MASK_FP, XFEATURE_MASK_SSE, etc...)
+ * Output:
+ *	address of the state in the xsave area, or NULL if the
+ *	field is not present in the xsave buffer.
+ */
+void *get_xsave_addr(struct xregs_state *xsave, int xstate_feature)
+{
 	/*
-	 * SSE is in init state
+	 * Do we even *have* xsave state?
 	 */
-	if (!(xfeatures & XFEATURE_MASK_SSE))
-		memset(&fx->xmm_space[0], 0, 256);
+	if (!cpu_has(X86_FEATURE_XSAVE))
+		return NULL;
 
 	/*
-	 * First two features are FPU and SSE, which above we handled
-	 * in a special way already:
+	 * We should not ever be requesting features that we
+	 * have not enabled.  Remember that pcntxt_mask is
+	 * what we write to the XCR0 register.
 	 */
-	feature_bit = 0x2;
-	xfeatures = (xfeatures_mask & ~xfeatures) >> 2;
-
+	WARN_ONCE(!(xfeatures_mask & xstate_feature),
+		  "get of unsupported state");
 	/*
-	 * Update all the remaining memory layouts according to their
-	 * standard xstate layout, if their header bit is in the init
-	 * state:
+	 * This assumes the last 'xsave*' instruction to
+	 * have requested that 'xstate_feature' be saved.
+	 * If it did not, we might be seeing and old value
+	 * of the field in the buffer.
+	 *
+	 * This can happen because the last 'xsave' did not
+	 * request that this feature be saved (unlikely)
+	 * or because the "init optimization" caused it
+	 * to not be saved.
 	 */
-	while (xfeatures) {
-		if (xfeatures & 0x1) {
-			int offset = xstate_comp_offsets[feature_bit];
-			int size = xstate_sizes[feature_bit];
+	if (!(xsave->header.xfeatures & xstate_feature))
+		return NULL;
 
-			memcpy((void *)fx + offset,
-			       (void *)&init_fpstate.xsave + offset,
-			       size);
-		}
+	return __raw_xsave_addr(xsave, xstate_feature);
+}
 
-		xfeatures >>= 1;
-		feature_bit++;
-	}
+/*
+ * This wraps up the common operations that need to occur when retrieving
+ * data from xsave state.  It first ensures that the current task was
+ * using the FPU and retrieves the data in to a buffer.  It then calculates
+ * the offset of the requested field in the buffer.
+ *
+ * This function is safe to call whether the FPU is in use or not.
+ *
+ * Note that this only works on the current task.
+ *
+ * Inputs:
+ *	@xsave_state: state which is defined in xsave.h (e.g. XFEATURE_MASK_FP,
+ *	XFEATURE_MASK_SSE, etc...)
+ * Output:
+ *	address of the state in the xsave area or NULL if the state
+ *	is not present or is in its 'init state'.
+ */
+const void *get_xsave_field_ptr(int xsave_state)
+{
+	struct fpu *fpu = &current->thread.fpu;
+
+	if (!fpu->fpstate_active)
+		return NULL;
+	/*
+	 * fpu__save() takes the CPU's xstate registers
+	 * and saves them off to the 'fpu memory buffer.
+	 */
+	fpu__save(fpu);
+
+	return get_xsave_addr(&fpu->state.xsave, xsave_state);
 }
