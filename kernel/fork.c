@@ -21,6 +21,7 @@
 #include <lego/comp_processor.h>
 
 #include <asm/pgalloc.h>
+#include <asm/fpu/internal.h>
 
 /* Initialized by the architecture: */
 int arch_task_struct_size __read_mostly = sizeof(struct task_struct);
@@ -836,6 +837,8 @@ SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)
 
 void __init fork_init(void)
 {
-	pr_info("fork: arch_task_struct_size: %d, task_struct: %lu\n",
+	pr_debug("fork: arch_task_struct_size: %d, task_struct: %lu\n",
 		arch_task_struct_size, sizeof(struct task_struct));
+	pr_debug("fork: xstate_sigframe_size: %#x bytes\n",
+		xstate_sigframe_size());
 }

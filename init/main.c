@@ -49,6 +49,7 @@
 #include <asm/numa.h>
 #include <asm/traps.h>
 #include <asm/setup.h>
+#include <asm/fpu/internal.h>
 
 enum system_states system_state __read_mostly;
 
@@ -107,7 +108,6 @@ static int kernel_init(void *unused)
 
 	/* Init stop-class threads: */
 	//cpu_stop_init();
-
 	init_workqueues();
 
 #if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)

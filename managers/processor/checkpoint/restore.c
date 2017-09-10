@@ -387,8 +387,6 @@ struct task_struct *restore_process_snapshot(struct process_snapshot *pss)
 
 void __init checkpoint_init(void)
 {
-	pr_debug("xstate_sigframe_size: %#x bytes\n", xstate_sigframe_size());
-
 	restorer_worker = kthread_run(restorer_worker_thread, NULL, "restorer");
 	if (IS_ERR(restorer_worker))
 		panic("Fail to create checkpointing restore thread!");
