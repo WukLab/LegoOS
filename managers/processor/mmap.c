@@ -167,6 +167,9 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 	syscall_enter("old_addr: %#lx, old_len: %#lx, new_len: %#lx, flags: %#lx "
 			"new_addr: %#lx\n", old_addr, old_len, new_len, flags, new_addr);
 
+	mmap_debug("old_addr: %#lx, old_len: %#lx, new_len: %#lx, flags: %#lx "
+			"new_addr: %#lx", old_addr, old_len, new_len, flags, new_addr);
+
 	/* Sanity checking */
 	ret = -EINVAL;
 	if (flags & ~(MREMAP_FIXED | MREMAP_MAYMOVE))
@@ -236,8 +239,8 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 		}
 	}
 
-	mmap_debug("new_addr: %lx", ret);
 out:
+	mmap_debug("new_addr: %lx or (%ld)", ret, (long)ret);
 	syscall_exit(ret);
 	return ret;
 }
