@@ -79,6 +79,12 @@ config DEBUG_M2S_READ_WRITE
 
 endmenu # Memory DEBUG Options
 
+config MEM_PREFETCH
+	bool "Use Prefetch for handle file backed page fault"
+	default n
+	help
+	  Enable to prefetch pages from storage for page fault
+
 endif # if COMP_MEMORY
 
 endmenu

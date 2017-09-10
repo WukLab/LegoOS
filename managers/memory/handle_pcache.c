@@ -9,6 +9,7 @@
 
 #include <lego/fit_ibapi.h>
 #include <lego/comp_memory.h>
+#include <lego/comp_storage.h>
 
 #include <memory/include/vm.h>
 #include <memory/include/pid.h>
@@ -92,6 +93,48 @@ unlock:
 	bad_area(p, vaddr, offset, desc);
 }
 
+#ifdef CONFIG_MEM_PREFETCH
+static void do_mmap_prefetch(struct lego_task_struct *p, u64 vaddr,
+		u32 flags, u32 nr_pages)
+{
+	struct vm_area_struct *vma;
+	struct lego_mm_struct *mm = p->mm;
+	u32 real_nr_pages = nr_pages;
+	u32 empty_entries;
+
+	down_read(&mm->mmap_sem);
+
+	vma = find_vma(mm, vaddr);
+
+	if (unlikely(!vma)) {
+		goto unlock;
+	}
+
+	if (unlikely(vma_is_anonymous(vma))) {
+		goto unlock;
+	}
+
+	/* file backed pages */
+	if (unlikely(round_down(vaddr, PAGE_SIZE) + PAGE_SIZE*nr_pages)
+			> vma->vm_end)
+		real_nr_pages = (vma->vm_end - round_down(vaddr, PAGE_SIZE))/PAGE_SIZE;
+
+	empty_entries = count_empty_entries(vma, vaddr, real_nr_pages);
+	if (5*empty_entries < 4*real_nr_pages)
+		goto unlock;
+	/* handle_lego_faults */
+	handle_lego_mmap_faults(vma, vaddr, flags, real_nr_pages);
+
+unlock:
+	up_read(&mm->mmap_sem);
+	return;
+}
+#else
+static void do_mmap_prefetch(struct lego_task_struct *p, u64 vaddr,
+		u32 flags, u32 nr_pages)
+{ }
+#endif
+
 static int fault_in_kernel_space(unsigned long address)
 {
 	return address >= TASK_SIZE_MAX;
@@ -126,6 +169,8 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 	}
 
 	do_handle_p2m_llc_miss(p, vaddr, offset, flags, desc);
+
+	do_mmap_prefetch(p, vaddr, flags, 1 << PREFETCH_ORDER);
 
 	pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx offset: %#Lx nr_split: %d",
 		nid, pid, tgid, flags, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);

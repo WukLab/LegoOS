@@ -12,23 +12,11 @@
 #include <lego/spinlock.h>
 #include <lego/comp_memory.h>
 
+#include <lego/comp_storage.h>
+
 #include <memory/include/vm.h>
+#include <memory/include/file_ops.h>
 #include <memory/include/vm-pgtable.h>
-
-#if 0
-/*
- * empty_zero_page is a shared zero-filled page.
- * Used to map to read-first anonymous page.
- */
-static const unsigned long
-empty_zero_page[PAGE_SIZE / sizeof(unsigned long)]
-__attribute__((aligned(PAGE_SIZE)));
-
-static inline unsigned long my_zero_vfn(void)
-{
-	return (unsigned long)empty_zero_page >> PAGE_SHIFT;
-}
-#endif
 
 static int do_swap_page(struct vm_area_struct *vma, unsigned long address,
 			unsigned int flags, pte_t *ptep, pmd_t *pmd,
@@ -229,4 +217,156 @@ int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	*ret_va = pte_val(*pte) & PTE_VFN_MASK;
 
 	return 0;
+}
+
+/*
+ * These functions are used for handle mmap faults with multiple page faults
+ */
+static int __do_prefetch_fault(struct lego_mm_struct *mm, struct vm_area_struct *vma,
+		unsigned long address, pmd_t *pmd,
+		pgoff_t pgoff, unsigned int flags, pte_t orig_pte, unsigned long page)
+{
+	struct vm_fault vmf;
+	pte_t *page_table;
+	pte_t entry;
+	spinlock_t *ptl;
+	int ret;
+
+	vmf.virtual_address = address & PAGE_MASK;
+	vmf.pgoff = pgoff;
+	vmf.flags = flags;
+	vmf.page = page;
+
+	ret = 0; 
+	if (unlikely(ret & VM_FAULT_ERROR))
+		return ret;
+
+	page_table = lego_pte_offset_lock(mm, pmd, address, &ptl);
+
+	/* Only go through if we didn't race with anybody else... */
+	if (likely(pte_same(*page_table, orig_pte))) {
+		entry = lego_vfn_pte(((signed long)vmf.page >> PAGE_SHIFT),
+					vma->vm_page_prot);
+		if (vma->vm_flags & VM_WRITE)
+			entry = pte_mkwrite(pte_mkdirty(entry));
+		pte_set(page_table, entry);
+	}
+
+	lego_pte_unlock(page_table, ptl);
+
+	return 0;
+}
+
+static int do_linear_prefetch_fault(struct vm_area_struct *vma, unsigned long address,
+			   unsigned int flags, pte_t *page_table, pmd_t *pmd,
+			   pte_t orig_pte, unsigned long page)
+{
+	pgoff_t pgoff = (((address & PAGE_MASK)
+			- vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
+
+	return __do_prefetch_fault(vma->vm_mm, vma, address, pmd, pgoff, flags, orig_pte, page);
+}
+
+
+/* should not be a none pte */
+static int handle_prefetch_pte_fault(struct vm_area_struct *vma, unsigned long address,
+			unsigned int flags, pte_t *pte, pmd_t *pmd, unsigned long page)
+{
+	pte_t entry;
+	entry = *pte;
+
+	return do_linear_prefetch_fault(vma, address, flags, pte, pmd, entry, page);	
+}
+
+int handle_lego_mmap_faults(struct vm_area_struct *vma, unsigned long address,
+		unsigned int flags, u32 nr_pages)
+{
+	struct lego_mm_struct *mm = vma->vm_mm;
+	struct lego_task_struct *tsk = vma->vm_mm->task;
+	struct lego_file *file;
+	size_t count;
+	loff_t pos;
+	pgoff_t pgoff;
+
+	int i;
+	pgd_t *pgd; 
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+	unsigned long pages = 0;
+	unsigned long cur_addr = round_down(address, PAGE_SIZE);
+	unsigned long cur_page_addr;
+
+	pages = __get_free_pages(GFP_KERNEL, PREFETCH_ORDER);
+	if (unlikely(!pages))
+		return VM_FAULT_OOM;
+
+	pgoff = (((address & PAGE_MASK)
+			- vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
+	file = vma->vm_file;
+	count = nr_pages * PAGE_SIZE;
+	pos = pgoff << PAGE_SHIFT;
+
+	storage_read(tsk, file, (char *) pages, count, &pos);
+
+	cur_page_addr = pages;
+
+	for (i = 0; i < nr_pages; i++) {
+		pgd = lego_pgd_offset(mm, cur_addr);
+		pud = lego_pud_alloc(mm, pgd, cur_addr);
+		if (!pud)
+			return VM_FAULT_OOM;
+		pmd = lego_pmd_alloc(mm, pud, cur_addr);
+		if (!pmd)
+			return VM_FAULT_OOM;
+		pte = lego_pte_alloc(mm, pmd, cur_addr);
+		if (!pte)
+			return VM_FAULT_OOM;
+
+		if (!pte_none(*pte)){
+			/* TODO: how to free one page in pages
+			 */
+			goto next_round;	
+		}
+
+		handle_prefetch_pte_fault(vma, cur_addr, flags, pte, pmd, cur_page_addr);
+next_round:
+		cur_addr += PAGE_SIZE;
+		cur_page_addr += PAGE_SIZE;
+	}
+
+	//pr_info("%s: handles [%lu] faults\n", __func__, faults);
+	return 0;
+}
+
+int count_empty_entries(struct vm_area_struct *vma, unsigned long address,
+		u32 nr_pages)
+{
+	int i, ret = 0;
+	struct lego_mm_struct *mm = vma->vm_mm;
+	unsigned long cur_addr = address;
+
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	for (i = 0; i < nr_pages; i++) {
+		pgd = lego_pgd_offset(mm, cur_addr);
+		pud = lego_pud_alloc(mm, pgd, cur_addr);
+		if (!pud)
+			return -ENOMEM;
+		pmd = lego_pmd_alloc(mm, pud, cur_addr);
+		if (!pmd)
+			return -ENOMEM;
+		pte = lego_pte_alloc(mm, pmd, cur_addr);
+		if (!pte)
+			return -ENOMEM;
+		if (pte_none(*pte))
+			ret++;
+
+		cur_addr += PAGE_SIZE;
+	}
+
+	return ret;
 }

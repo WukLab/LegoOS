@@ -23,4 +23,6 @@
 #define O_RDONLY 	00000000
 #define O_RDWR		00000002
 
+#define PREFETCH_ORDER 7 /* prefetching 128 pages a time */
+
 #endif

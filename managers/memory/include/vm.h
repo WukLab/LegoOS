@@ -258,6 +258,12 @@ struct vm_fault {
 
 int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 			 unsigned int flags, unsigned long *ret_va);
+
+int handle_lego_mmap_faults(struct vm_area_struct *vma, unsigned long address,
+			unsigned int flags, u32 nr_pages);
+
+int count_empty_entries(struct vm_area_struct *vma, unsigned long address,
+	       		u32 nr_pages);
 /* pgtable.c */
 extern unsigned long lego_move_page_tables(struct vm_area_struct *vma,
 		unsigned long old_addr, struct vm_area_struct *new_vma,

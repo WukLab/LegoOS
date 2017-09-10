@@ -453,7 +453,7 @@ int __init pcache_range_register(u64 start, u64 size)
 	return 0;
 }
 
-static void *find_vameta_by_pacache(void *pa_cache)
+__used static void *find_vameta_by_pacache(void *pa_cache)
 {
 	u64 strides;
 	if (unlikely(!llc_cache_size)) {
@@ -494,8 +494,6 @@ int pcache_flush_cacheline_va_user(unsigned long __user vaddr)
 	int retval = 0;
 	unsigned long __user round_down_vaddr;
 	void *va_cacheline;
-	void *pa_cache, *va_meta;
-	pte_t *pte;
 
 	int err;
 	u64 offset = 0;
@@ -503,27 +501,9 @@ int pcache_flush_cacheline_va_user(unsigned long __user vaddr)
 	struct p2m_flush_payload *payload;
 	void *content;
 
-	pte = addr2pte(vaddr);
-	if (unlikely(!pte)) {
-		panic("Flushing vaddr does not in LLC.\n");
-	}
-
 	round_down_vaddr = round_down(vaddr, llc_cacheline_size);
 	va_cacheline = (void *) round_down_vaddr;
-	pa_cache = (void *) (pte_val(*pte) & PTE_VFN_MASK);
-	va_meta = find_vameta_by_pacache(pa_cache);
 
-	/* 
-	 * check dirty here or functions calling this.
-	 */
-
-	/*if (!pcache_dirty(va_meta)) {
-#ifdef DEBUG_CACHE_TEST
-		pr_info("cacheline is not dirty, unnecessary to flush.\n");
-#endif
-		return 0;
-	}*/
-	
 	len_msg = sizeof(struct p2m_flush_payload) + llc_cacheline_size;
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (unlikely(!msg)) {
@@ -541,7 +521,6 @@ int pcache_flush_cacheline_va_user(unsigned long __user vaddr)
 #ifdef DEBUG_CACHE_TEST
 	pr_info("pcache_flush_single : vaddr : %#lx\nround_down_vaddr: %#lx\n",
 			vaddr, round_down_vaddr);
-	pr_info("pa_cache address is %#lx\n", (unsigned long) pa_cache);
 #endif
 	
 	//memcpy(content, (void *) vaddr, llc_cacheline_size);
@@ -563,47 +542,52 @@ int pcache_flush_cacheline_va_user(unsigned long __user vaddr)
 	return retval;
 }
 
-/* not used this time */
-/*int pcache_flush_cacheline_va_cache(void *va_cache)
+void pcache_flush_current(void)
 {
-	void *msg;
-	u32 len_msg;
-	int retval = 0;
+	/* scanning page table */
+	unsigned long cur_addr = 0;
+	pte_t entry;
+	struct mm_struct *mm = current->mm;
+	spinlock_t *ptl;
 
-	struct p2m_flush_payload *payload;
-	void *content;
-	void *va_meta;
-	
-	va_meta = find_vameta_by_vacache(va_cache);
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *ptep;
 
-	if (!pcache_dirty(va_meta)) {
-		return retval;
-	}
+	while(cur_addr < TASK_SIZE_MAX) {
 
-	len_msg = sizeof(struct p2m_flush_payload) + llc_cacheline_size;
-	msg = kmalloc(len_msg, GFP_KERNEL);
-	if (unlikely(!msg)) {
-		pr_info("No memory for copying flushing page to ib msg.\n");
-		return -ENOMEM;
-	}
-	
-	payload = (struct p2m_flush_payload *) msg;
-	content = (void *) (msg + sizeof(struct p2m_flush_payload));
-	  
-	payload->flush_vaddr = (unsigned long) va_cache; // This should be wrong, should be vaddr of user page.
-	payload->pid = current->pid; // This should be wrong, should be the pid current cacheline belongs to
-	payload->llc_cacheline_size = llc_cacheline_size;
+		pgd = pgd_offset(mm, cur_addr);
+		if (!pgd_present(*pgd))
+			goto next_round;
 
-	
-	memcpy(content, va_cache, llc_cacheline_size);
+		pud = pud_offset(pgd, cur_addr);
+		if (!pud_present(*pud))
+		       goto next_round;
 
-	net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_FLUSH,
-			msg, len_msg, &retval, sizeof(retval),
-		       	false, DEF_NET_TIMEOUT);
+		pmd = pmd_offset(pud, cur_addr);
+		if (!pmd_present(*pmd))	
+			goto next_round;
 
-	kfree(msg);
-	return retval;
-}*/
+		ptep = pte_offset_lock(mm, pmd, cur_addr, &ptl);	
+		if (!ptep || !pte_dirty(*ptep))
+			goto unlock;
+
+		entry = (*ptep);
+		entry = pte_wrprotect(entry);
+		/* wrprotect the page table entry */
+		pte_set(ptep, entry);
+
+		pcache_flush_cacheline_va_user(cur_addr);
+
+		entry = pte_mkclean(pte_mkwrite(entry));
+		pte_set(ptep, entry);
+unlock:
+		spin_unlock(ptl);
+next_round:
+		cur_addr += PAGE_SIZE;
+	}	
+}
 
 /* backdoor syscall for testing pcache flush only */
 SYSCALL_DEFINE1(pcache_flush, void __user *, vaddr)

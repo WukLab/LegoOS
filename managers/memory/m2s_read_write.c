@@ -83,9 +83,9 @@ ssize_t __storage_read(struct lego_task_struct *tsk, char *f_name,
 	return retval;	
 }
 
-static ssize_t storage_read(struct lego_task_struct *tsk,
-			    struct lego_file *file,
-			    char *buf, size_t count, loff_t *pos)
+ssize_t storage_read(struct lego_task_struct *tsk,
+		     struct lego_file *file,
+		     char *buf, size_t count, loff_t *pos)
 {
 	BUG_ON(!file->filename);
 	return __storage_read(tsk, file->filename, buf, count, pos);
@@ -111,8 +111,8 @@ static int storage_vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 	tsk = vma->vm_mm->task;
 	file = vma->vm_file;
-	count = PAGE_SIZE;
 	pos = vmf->pgoff << PAGE_SHIFT;
+	count = PAGE_SIZE;
 
 	storage_read(tsk, file, (char *)page, count, &pos);
 
