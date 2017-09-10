@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-#define pr_fmt(fmt) "Checkpoint: " fmt
+#define pr_fmt(fmt) "Chkpt: " fmt
 
 #include <lego/pid.h>
 #include <lego/timer.h>

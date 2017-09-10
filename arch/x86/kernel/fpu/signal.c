@@ -313,12 +313,6 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 	return 0;
 }
 
-static inline int xstate_sigframe_size(void)
-{
-	return use_xsave() ? fpu_user_xstate_size + FP_XSTATE_MAGIC2_SIZE :
-			fpu_user_xstate_size;
-}
-
 /*
  * Restore FPU state from a sigframe:
  */

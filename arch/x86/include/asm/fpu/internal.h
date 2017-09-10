@@ -633,8 +633,16 @@ static inline void xsetbv(u32 index, u64 value)
 		     : : "a" (eax), "d" (edx), "c" (index));
 }
 
+static inline int xstate_sigframe_size(void)
+{
+	return use_xsave() ? fpu_user_xstate_size + FP_XSTATE_MAGIC2_SIZE :
+			fpu_user_xstate_size;
+}
+
 int copy_fpstate_to_sigframe(void __user *buf, void __user *buf_fx, int size);
+
 unsigned long
 fpu__alloc_mathframe(unsigned long sp, int ia32_frame,
 		     unsigned long *buf_fx, unsigned long *size);
+
 #endif /* _ASM_X86_FPU_INTERNAL_H_ */

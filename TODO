@@ -3,6 +3,9 @@
 * mutex
 - watchdog and NMI handler (detect deadlock and dump backtrace)
 
+09/10/17
+Phoniex's munmap has bug.
+We commented out all free(), it works then...
 
 Wed Aug 30 23:29:18 EDT 2017
 - After signal handler finishes, even after it call back to kernel
