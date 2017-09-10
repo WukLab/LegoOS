@@ -81,11 +81,11 @@ static ssize_t do_writev(unsigned long fd, const struct iovec __user *vec,
 	pr_info("%s: fd: %lu, nrvec: %lu\n",
 		__func__, fd, vlen);
 
-	kvec = kmalloc(vlen * sizeof(*kvec), GFP_KERNEL);
+	kvec = kzalloc(vlen * sizeof(*kvec), GFP_KERNEL);
 	if (!kvec)
 		return -ENOMEM;
 
-	buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!buf) {
 		kfree(kvec);
 		return -ENOMEM;
@@ -104,6 +104,7 @@ static ssize_t do_writev(unsigned long fd, const struct iovec __user *vec,
 		ret += kvec[i].iov_len;
 
 		pr_info("  vec[%d]: %s\n", i, buf);
+		memset(buf, 0, PAGE_SIZE);
 	}
 
 free:
