@@ -672,4 +672,6 @@ do {										\
 	if (unlikely(__gu_err)) goto err_label;					\
 } while (0)
 
+long strncpy_from_user(char *dst, const char __user *src, long count);
+
 #endif /* _ASM_X86_UACCESS_H_ */

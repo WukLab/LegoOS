@@ -64,7 +64,7 @@ static ssize_t storage_read(struct lego_task_struct *tsk,
 	retval = *retval_in_buf;
 
 	/* now copy content to __user buf */
-	lego_copy_to_user(current, buf, content, count);
+	lego_copy_to_user(tsk, buf, content, count);
 
 	kfree(msg);
 	kfree(retbuf);
