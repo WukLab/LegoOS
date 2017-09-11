@@ -52,6 +52,14 @@ unsigned long clear_user(void __user *to, unsigned long n)
 	return n;
 }
 
+unsigned long copy_in_user(void __user *to, const void __user *from, unsigned len)
+{
+	if (access_ok(VERIFY_WRITE, to, len) && access_ok(VERIFY_READ, from, len)) { 
+		return copy_user_generic((__force void *)to, (__force void *)from, len);
+	} 
+	return len;		
+}
+
 /*
  * Try to copy last bytes and clear the rest if needed.
  * Since protection fault in copy_from/to_user is not a normal situation,
@@ -63,9 +71,9 @@ copy_user_handle_tail(char *to, char *from, unsigned len)
 	for (; len; --len, to++) {
 		char c;
 
-		if (get_user(c, from++))
+		if (__get_user_nocheck(c, from++, sizeof(char)))
 			break;
-		if (put_user(c, to))
+		if (__put_user_nocheck(c, to, sizeof(char)))
 			break;
 	}
 

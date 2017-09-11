@@ -48,6 +48,9 @@
 
 #ifdef __ASSEMBLY__
 
+#define ASM_CLAC
+#define ASM_STAC
+
 #define _ASM_EXTABLE_HANDLE(from, to, handler)			\
 	.pushsection "__ex_table","a" ;				\
 	.balign 4 ;						\

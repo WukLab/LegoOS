@@ -14,6 +14,7 @@
 #ifndef _ASM_X86_PROCESSOR_FEATURES_H_
 #define _ASM_X86_PROCESSOR_FEATURES_H_
 
+#ifndef __ASSEMBLY__
 enum cpuid_leafs
 {
 	CPUID_1_EDX		= 0,
@@ -35,6 +36,7 @@ enum cpuid_leafs
 	CPUID_7_ECX,
 	CPUID_8000_0007_EBX,
 };
+#endif
 
 /*
  * Defines x86 CPU feature bits
@@ -339,6 +341,7 @@ enum cpuid_leafs
 #define X86_BUG_SWAPGS_FENCE	X86_BUG(11) /* SWAPGS without input dep on GS */
 #define X86_BUG_MONITOR		X86_BUG(12) /* IPI required to wake up remote CPU */
 
+#ifndef __ASSEMBLY__
 #include <lego/bitops.h>
 #include <lego/compiler.h>
 
@@ -359,5 +362,7 @@ extern struct cpu_info default_cpu_info __read_mostly;
 #define cpu_clear_cap(c, bit)	clear_bit(bit, (unsigned long *)(c)->x86_capability)
 
 #define cpu_has(bit)		cpu_has_cap(&default_cpu_info, bit)
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_PROCESSOR_FEATURES_H_ */

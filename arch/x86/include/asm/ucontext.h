@@ -12,6 +12,7 @@
 
 #include <asm/signal.h>
 #include <asm/sigcontext.h>
+#include <asm/processor-features.h>
 
 typedef struct sigaltstack {
 	void __user *ss_sp;

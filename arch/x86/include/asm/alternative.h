@@ -35,6 +35,8 @@ extern int alternatives_patched;
 void alternative_instructions(void);
 void apply_alternatives(struct alt_instr *start, struct alt_instr *end);
 
+#endif /* __ASSEMBLY__ */
+
 #define b_replacement(num)	"664"#num
 #define e_replacement(num)	"665"#num
 
@@ -188,7 +190,5 @@ void apply_alternatives(struct alt_instr *start, struct alt_instr *end);
  * alternative_{input,io,call}()
  */
 #define ASM_NO_INPUT_CLOBBER(clbr...) "i" (0) : clbr
-
-#endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_ALTERNATIVE_H_ */

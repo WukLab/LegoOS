@@ -29,15 +29,18 @@
  */
 
 #define ENTER	mov PER_CPU_VAR(current_task), %_ASM_BX
+#define EXIT	ASM_CLAC ;	\
+		ret
 
-	.text
+.text
 ENTRY(__put_user_1)
 	ENTER
 	cmp TASK_addr_limit(%_ASM_BX),%_ASM_CX
 	jae bad_put_user
+	ASM_STAC
 1:	movb %al,(%_ASM_CX)
 	xor %eax,%eax
-	ret
+	EXIT
 ENDPROC(__put_user_1)
 
 ENTRY(__put_user_2)
@@ -46,9 +49,10 @@ ENTRY(__put_user_2)
 	sub $1,%_ASM_BX
 	cmp %_ASM_BX,%_ASM_CX
 	jae bad_put_user
+	ASM_STAC
 2:	movw %ax,(%_ASM_CX)
 	xor %eax,%eax
-	ret
+	EXIT
 ENDPROC(__put_user_2)
 
 ENTRY(__put_user_4)
@@ -57,9 +61,10 @@ ENTRY(__put_user_4)
 	sub $3,%_ASM_BX
 	cmp %_ASM_BX,%_ASM_CX
 	jae bad_put_user
+	ASM_STAC
 3:	movl %eax,(%_ASM_CX)
 	xor %eax,%eax
-	ret
+	EXIT
 ENDPROC(__put_user_4)
 
 ENTRY(__put_user_8)
@@ -68,17 +73,18 @@ ENTRY(__put_user_8)
 	sub $7,%_ASM_BX
 	cmp %_ASM_BX,%_ASM_CX
 	jae bad_put_user
+	ASM_STAC
 4:	mov %_ASM_AX,(%_ASM_CX)
 #ifdef CONFIG_X86_32
 5:	movl %edx,4(%_ASM_CX)
 #endif
 	xor %eax,%eax
-	ret
+	EXIT
 ENDPROC(__put_user_8)
 
 bad_put_user:
 	movl $-EFAULT,%eax
-	ret
+	EXIT
 END(bad_put_user)
 
 	_ASM_EXTABLE(1b,bad_put_user)

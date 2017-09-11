@@ -87,7 +87,6 @@ long strncpy_from_user(char *dst, const char __user *src, long count)
 		unsigned long max = max_addr - src_addr;
 		long retval;
 
-		check_object_size(dst, count, false);
 		retval = do_strncpy_from_user(dst, src, count, max);
 		return retval;
 	}
