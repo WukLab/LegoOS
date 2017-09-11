@@ -529,12 +529,6 @@ void init_global_lid_qpn(void)
 #if (MAX_NODE == 3)
 	global_lid[2] = 5;
 #endif
-
-#define USE_STORAGE
-#ifdef USE_STORAGE
-	global_lid[0] = 7;
-	global_lid[1] = 3;
-#endif
 }
 
 int get_global_qpn(int mynodeid, int remnodeid, int conn)
