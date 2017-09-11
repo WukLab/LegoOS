@@ -17,7 +17,6 @@
 #include <lego/comp_common.h>
 
 #define M2S_OPEN ((__u32)(M2S_BASE)+3)
-#define STORAGE_NODE 0
 
 #define DEBUG_STORAGE
 

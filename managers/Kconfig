@@ -5,6 +5,14 @@
 source "managers/processor/Kconfig"
 source "managers/memory/Kconfig"
 
+config DEFAULT_MEM_NODE
+	int
+	default 1
+
+config DEFAULT_STORAGE_NODE
+	int
+	default 2
+
 menu "General Manager Config/Debug Options"
 config PCACHE_FILL_SPLIT_NR
 	int
