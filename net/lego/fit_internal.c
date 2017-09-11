@@ -523,12 +523,9 @@ void init_global_lid_qpn(void)
 	BUILD_BUG_ON(1);
 #endif
 
-	global_lid[0] = 19;
-	global_lid[1] = 21;
-
-#if (MAX_NODE == 3)
-	global_lid[2] = 5;
-#endif
+	global_lid[0] = 18;
+	global_lid[1] = 19;
+	global_lid[2] = 21;
 }
 
 int get_global_qpn(int mynodeid, int remnodeid, int conn)
@@ -1700,9 +1697,14 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	//schedule();
 
 #ifdef CONFIG_FIT_INITIAL_SLEEP_TIMEOUT
-	msleep(CONFIG_FIT_INITIAL_SLEEP_TIMEOUT*1000);
+	for (i = 0; i < CONFIG_FIT_INITIAL_SLEEP_TIMEOUT * 1000; i++) {
+		udelay(1000);
+	}
 #else
-	msleep(30*1000);
+	/* Default is 30 s */
+	for (i = 0; i < 30 * 1000; i++) {
+		udelay(1000);
+	}
 #endif
 
 	printk(KERN_CRIT "now sending mr info\n");
