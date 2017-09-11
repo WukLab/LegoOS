@@ -5,15 +5,22 @@
 source "managers/processor/Kconfig"
 source "managers/memory/Kconfig"
 
+menu "General Manager Config/Debug Options"
+#
+# Assume P node is 0
+#
 config DEFAULT_MEM_NODE
-	int
+	int "Default memory homenode ID (normally 1)"
 	default 1
+	help
+	  asd
 
 config DEFAULT_STORAGE_NODE
-	int
+	int "Default storage node ID (normally 2)"
 	default 2
+	help
+	  asd
 
-menu "General Manager Config/Debug Options"
 config PCACHE_FILL_SPLIT_NR
 	int
 	default 1

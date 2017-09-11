@@ -33,7 +33,7 @@ config FIT_NR_NODES
 
 config FIT_LOCAL_ID
 	int "FIT Unique Local ID [0, FIT_NR_NODES)"
-	depends on FIT
+	depends on FIT || FIT_NR_NODES
 	help
 	  This is the local node id, which has to be unique across connected FIT nodes.
 	  The raneg of FIT_LOCAL_ID is [0, FIT_NR_NODES - 1).
