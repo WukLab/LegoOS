@@ -38,4 +38,17 @@ config DEBUG_PCACHE_FILL
 	  if unsure, say N
 endmenu
 
+config USE_RAMFS
+	bool "Use RAMFS in P or M"
+	default y
+	help
+	  Enable to use RAMFS in memory or processor component. Debug only.
+
+config RAMFS_OBJECT_FILE
+	string "The static-linked image embedded into Lego"
+	default "managers/memory/ramfs/bin/word_count-seq"
+	depends on COMP_MEMORY && USE_RAMFS
+	help
+	  Please give the full path
+
 endmenu

@@ -95,6 +95,9 @@ void free_fd(struct files_struct *files, int fd)
 	spin_unlock(&files->file_lock);
 }
 
+static struct file_operations debug_ramfs_f_ops = {
+};
+
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
 	char kname[FILENAME_LEN_DEFAULT];
@@ -133,8 +136,14 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 		ret = sys_file_open(f, kname);
 	else if (unlikely(dev_file(kname)))
 		ret = dev_file_open(f, kname);
-	else
+	else {
+#ifdef CONFIG_USE_RAMFS
+		f->f_op = &debug_ramfs_f_ops;
+		ret = 0;
+#else
 		ret = normal_file_open(f, kname);
+#endif
+	}
 
 	if (unlikely(ret)) {
 		free_fd(current->files, fd);
@@ -142,11 +151,12 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 		goto put;
 	}
 
-	BUG_ON(!f->f_op->open);
-	ret = f->f_op->open(f);
-	if (unlikely(ret)) {
-		free_fd(current->files, fd);
-		fd = ret;
+	if (f->f_op->open) {
+		ret = f->f_op->open(f);
+		if (unlikely(ret)) {
+			free_fd(current->files, fd);
+			fd = ret;
+		}
 	}
 
 put:
