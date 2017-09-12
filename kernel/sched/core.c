@@ -7,8 +7,6 @@
  * (at your option) any later version.
  */
 
-#define pr_fmt(fmt) "sched: " fmt
-
 #include <lego/smp.h>
 #include <lego/pid.h>
 #include <lego/time.h>
@@ -606,9 +604,13 @@ long sched_setaffinity(pid_t pid, const struct cpumask *new_mask)
 	int ret;
 	struct task_struct *p;
 
-	p = find_task_by_pid(pid);
-	if (!p)
-		return -ESRCH;
+	if (pid == 0)
+		p = current;
+	else {
+		p = find_task_by_pid(pid);
+		if (!p)
+			return -ESRCH;
+	}
 
 	/* Prevent p going away */
 	get_task_struct(p);
@@ -650,12 +652,25 @@ SYSCALL_DEFINE3(sched_setaffinity, pid_t, pid, unsigned int, len,
 	cpumask_var_t new_mask;
 	int retval;
 
-	syscall_enter("pid: %d, len: %u, user_mask_ptr: %p\n",
-		pid, len, user_mask_ptr);
-
 	retval = get_user_cpu_mask(user_mask_ptr, len, new_mask);
-	if (retval == 0)
-		retval = sched_setaffinity(pid, new_mask);
+	if (retval)
+		goto out;
+
+#ifdef CONFIG_DEBUG_SYSCALL
+	do {
+		char buf[64];
+
+		scnprintf(buf, 64, "%*pbl", num_online_cpus(), new_mask);
+		syscall_enter("pid: %d, len: %u, user_mask_ptr: %p -> cpulist: %s\n",
+			pid, len, user_mask_ptr, buf);
+
+	} while (0);
+#endif
+
+	retval = sched_setaffinity(pid, new_mask);
+
+out:
+	syscall_exit(retval);
 	return retval;
 }
 
@@ -664,11 +679,17 @@ long sched_getaffinity(pid_t pid, struct cpumask *mask)
 	struct task_struct *p;
 	int retval;
 
-	retval = -ESRCH;
-	p = find_task_by_pid(pid);
-	if (!p)
-		goto out;
+	if (pid == 0)
+		p = current;
+	else {
+		p = find_task_by_pid(pid);
+		if (!p) {
+			retval = -ESRCH;
+			goto out;
+		}
+	}
 
+	retval = 0;
 	cpumask_and(mask, &p->cpus_allowed, cpu_online_mask);
 out:
 	return retval;
@@ -689,13 +710,14 @@ SYSCALL_DEFINE3(sched_getaffinity, pid_t, pid, unsigned int, len,
 	int ret;
 	cpumask_var_t mask;
 
-	syscall_enter("pid: %d, len: %u, user_mask_ptr: %p\n",
-		pid, len, user_mask_ptr);
-
-	if ((len * BITS_PER_BYTE) < nr_cpu_ids)
-		return -EINVAL;
-	if (len & (sizeof(unsigned long)-1))
-		return -EINVAL;
+	if ((len * BITS_PER_BYTE) < nr_cpu_ids) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (len & (sizeof(unsigned long)-1)) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	ret = sched_getaffinity(pid, mask);
 	if (ret == 0) {
@@ -707,6 +729,19 @@ SYSCALL_DEFINE3(sched_getaffinity, pid_t, pid, unsigned int, len,
 			ret = retlen;
 	}
 
+#ifdef CONFIG_DEBUG_SYSCALL
+	do {
+		char buf[64];
+
+		scnprintf(buf, 64, "%*pbl", num_online_cpus(), mask);
+		syscall_enter("pid: %d, len: %u, user_mask_ptr: %p -> cpulist: %s\n",
+			pid, len, user_mask_ptr, buf);
+
+	} while (0);
+#endif
+
+out:
+	syscall_exit(ret);
 	return ret;
 }
 
@@ -1578,6 +1613,9 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	INIT_LIST_HEAD(&p->rt.run_list);
 	p->rt.timeout			= 0;
 	p->rt.time_slice		= sysctl_sched_rr_timeslice;
+
+	/* XXX: Always reset on fork, may violate linux promise */
+	set_cpus_allowed_common(p, cpu_online_mask);
 }
 
 /*
