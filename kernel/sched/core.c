@@ -543,7 +543,9 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 	 * We should never call set_task_cpu() on a blocked task,
 	 * ttwu() will sort out the placement.
 	 */
-	WARN_ON_ONCE(p->state != TASK_RUNNING && !p->on_rq);
+	WARN_ON_ONCE(p->state != TASK_RUNNING && p->state != TASK_WAKING &&
+			!p->on_rq);
+
 	__set_task_cpu(p, new_cpu);
 }
 
