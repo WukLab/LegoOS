@@ -730,6 +730,7 @@ void scheduler_tick(void);
 
 /* Reschedule IPI */
 #ifdef CONFIG_SMP
+void sched_ttwu_pending(void);
 void scheduler_ipi(void);
 unsigned long wait_task_inactive(struct task_struct *, long match_state);
 void do_set_cpus_allowed(struct task_struct *p,
@@ -738,6 +739,7 @@ void do_set_cpus_allowed(struct task_struct *p,
 int set_cpus_allowed_ptr(struct task_struct *p,
 			 const struct cpumask *new_mask);
 #else
+static inline void sched_ttwu_pending(void) { }
 static inline void scheduler_ipi(void) { }
 static inline unsigned long wait_task_inactive(struct task_struct *p,
 					       long match_state)

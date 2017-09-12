@@ -372,6 +372,7 @@ move_queued_task(struct rq *rq, struct task_struct *p, int new_cpu)
 	BUG_ON(task_cpu(p) != new_cpu);
 	enqueue_task(rq, p, 0);
 	p->on_rq = TASK_ON_RQ_QUEUED;
+	check_preempt_curr(rq, p, 0);
 
 	return rq;
 }
@@ -421,14 +422,25 @@ static int migration_cpu_stop(void *data)
 	 */
 	local_irq_disable();
 
+	/*
+	 * We need to explicitly wake pending tasks before running
+	 * __migrate_task() such that we will not miss enforcing cpus_allowed
+	 * during wakeups, see set_cpus_allowed_ptr()'s TASK_WAKING test.
+	 */
+	sched_ttwu_pending();
+
 	spin_lock(&rq->lock);
 	/*
 	 * If task_rq(p) != rq, it cannot be migrated here, because we're
 	 * holding rq->lock, if p->on_rq == 0 it cannot get enqueued because
 	 * we're holding p->pi_lock.
 	 */
-	if (task_rq(p) == rq && task_on_rq_queued(p))
-		rq = __migrate_task(rq, p, arg->dest_cpu);
+	if (task_rq(p) == rq) {
+		if (task_on_rq_queued(p))
+			rq = __migrate_task(rq, p, arg->dest_cpu);
+		else
+			p->wake_cpu = arg->dest_cpu;
+	}
 	spin_unlock(&rq->lock);
 
 	local_irq_enable();
@@ -1167,7 +1179,7 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags)
 }
 
 #ifdef CONFIG_SMP
-static void sched_ttwu_pending(void)
+void sched_ttwu_pending(void)
 {
 	struct rq *rq = this_rq();
 	struct llist_node *llist = llist_del_all(&rq->wake_list);

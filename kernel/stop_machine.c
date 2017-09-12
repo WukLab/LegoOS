@@ -1,4 +1,4 @@
-/*
+/**//*
  * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -12,21 +12,29 @@
 #include <lego/kernel.h>
 #include <lego/kthread.h>
 #include <lego/percpu.h>
+#include <lego/smpboot.h>
 #include <lego/completion.h>
 #include <lego/stop_machine.h>
 
+/*
+ * Structure to determine completion condition and record errors.  May
+ * be shared by works on different cpus.
+ */
 struct cpu_stop_done {
-	atomic_t		nr_todo;
-	int			ret;
-	struct completion	completion;
+	atomic_t		nr_todo;	/* nr left to execute */
+	int			ret;		/* collected return value */
+	struct completion	completion;	/* fired if nr_todo reaches 0 */
 };
 
+/* the actual stopper, one per every possible cpu, enabled on online cpus */
 struct cpu_stopper {
 	struct task_struct	*thread;
 
 	spinlock_t		lock;
-	struct list_head	works;
-	struct cpu_stop_work	stop_work;
+	bool			enabled;	/* is this stopper enabled? */
+	struct list_head	works;		/* list of pending works */
+
+	struct cpu_stop_work	stop_work;	/* for stop_cpus */
 };
 
 static DEFINE_PER_CPU(struct cpu_stopper, cpu_stopper);
@@ -61,12 +69,17 @@ static bool cpu_stop_queue_work(unsigned int cpu, struct cpu_stop_work *work)
 {
 	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
 	unsigned long flags;
+	bool enabled;
 
 	spin_lock_irqsave(&stopper->lock, flags);
-	__cpu_stop_queue_work(stopper, work);
+	enabled = stopper->enabled;
+	if (enabled)
+		__cpu_stop_queue_work(stopper, work);
+	else if (work->done)
+		cpu_stop_signal_done(work->done);
 	spin_unlock_irqrestore(&stopper->lock, flags);
 
-	return true;
+	return enabled;
 }
 
 /**
@@ -209,6 +222,18 @@ int stop_cpus(const struct cpumask *cpumask, cpu_stop_fn_t fn, void *arg)
 	return ret;
 }
 
+static int cpu_stop_should_run(unsigned int cpu)
+{
+	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
+	unsigned long flags;
+	int run;
+
+	spin_lock_irqsave(&stopper->lock, flags);
+	run = !list_empty(&stopper->works);
+	spin_unlock_irqrestore(&stopper->lock, flags);
+	return run;
+}
+
 static void cpu_stopper_thread(unsigned int cpu)
 {
 	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
@@ -245,86 +270,61 @@ repeat:
 	}
 }
 
-static int cpu_stop_should_run(unsigned int cpu)
+void stop_machine_park(int cpu)
 {
 	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
-	unsigned long flags;
-	int run;
-
-	spin_lock_irqsave(&stopper->lock, flags);
-	run = !list_empty(&stopper->works);
-	spin_unlock_irqrestore(&stopper->lock, flags);
-	return run;
-}
-
-static int smpboot_thread_fn(void *unused)
-{
-	int cpu = smp_processor_id();
-	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
-
-	pr_debug("%d-%s, running on cpu: %d\n",
-		current->pid, current->comm, cpu);
-
-	while (1) {
-		set_current_state(TASK_INTERRUPTIBLE);
-		preempt_disable();
-
-		if (kthread_should_park()) {
-			__set_current_state(TASK_RUNNING);
-			preempt_enable();
-			WARN_ON(!list_empty(&stopper->works));
-			kthread_parkme();
-
-			/* We might have been woken for stop */
-			continue;
-		}
-
-		if (!cpu_stop_should_run(cpu)) {
-			preempt_enable_no_resched();
-			schedule();
-		} else {
-			__set_current_state(TASK_RUNNING);
-			preempt_enable();
-			cpu_stopper_thread(cpu);
-		}
-	}
-
-	return 0;
+	/*
+	 * Lockless. cpu_stopper_thread() will take stopper->lock and flush
+	 * the pending works before it parks, until then it is fine to queue
+	 * the new works.
+	 */
+	stopper->enabled = false;
+	kthread_park(stopper->thread);
 }
 
 void sched_set_stop_task(int cpu, struct task_struct *stop);
+
+static void cpu_stop_create(unsigned int cpu)
+{
+	sched_set_stop_task(cpu, per_cpu(cpu_stopper.thread, cpu));
+}
+
+static void cpu_stop_park(unsigned int cpu)
+{
+	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
+
+	WARN_ON(!list_empty(&stopper->works));
+}
+
+void stop_machine_unpark(int cpu)
+{
+	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
+
+	stopper->enabled = true;
+	kthread_unpark(stopper->thread);
+}
+
+static struct smp_hotplug_thread cpu_stop_threads = {
+	.store			= &cpu_stopper.thread,
+	.thread_should_run	= cpu_stop_should_run,
+	.thread_fn		= cpu_stopper_thread,
+	.thread_comm		= "migration/%u",
+	.create			= cpu_stop_create,
+	.park			= cpu_stop_park,
+	.selfparking		= true,
+};
 
 void __init cpu_stop_init(void)
 {
 	unsigned int cpu;
 
 	for_each_possible_cpu(cpu) {
-		struct task_struct *tsk;
 		struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
 
-		/*
-		 * Simplified version of smpboot_thread_fn
-		 * but keep its name anyway..
-		 */
-		tsk = kthread_create_on_cpu(smpboot_thread_fn, NULL, cpu,
-				"migration/%d");
-		BUG_ON(IS_ERR(tsk));
-
-		/* Park first */
-		kthread_park(tsk);
-
-		get_task_struct(tsk);
-		stopper->thread = tsk;
 		spin_lock_init(&stopper->lock);
 		INIT_LIST_HEAD(&stopper->works);
-
-		/*
-		 * Make sure it actually scheduled out into
-		 * park position:
-		 */
-		if (!wait_task_inactive(tsk, TASK_PARKED))
-			WARN_ON(1);
-		else
-			sched_set_stop_task(cpu, tsk);
 	}
+
+	BUG_ON(smpboot_register_percpu_thread(&cpu_stop_threads));
+	stop_machine_unpark(smp_processor_id());
 }
