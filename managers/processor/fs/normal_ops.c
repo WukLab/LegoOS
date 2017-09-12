@@ -207,13 +207,3 @@ struct file_operations normal_p2s_f_ops = {
 	.read	= normal_p2m_read,
 	.write	= normal_p2m_write,
 };
-
-SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
-{
-	struct file *f = fdget(fd);
-	if(IS_ERR(f))
-		return -EBADF;
-
-	/* XXX: seq_lseek is wrong */
-	return seq_lseek(f, offset, whence);
-}

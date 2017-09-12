@@ -136,3 +136,45 @@ SYSCALL_DEFINE3(writev, unsigned long, fd, const struct iovec __user *, vec,
 	syscall_exit(ret);
 	return ret;
 }
+
+SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
+{
+        struct file *f = fdget(fd);
+
+	syscall_enter("fd: %u", fd);
+
+        if(IS_ERR(f))
+                return -EBADF;
+	if(whence > SEEK_MAX)
+		return -ESPIPE;
+	switch(whence){
+		case SEEK_END:
+			printk("file seek_end is failed\n");
+			break;		
+		case SEEK_CUR:
+			if (offset == 0) {
+				return f->f_pos;
+			}
+				offset += f->f_pos;
+			break;
+		case SEEK_DATA:
+			printk("warning:seek data is failed\n");
+			/*if (offset >= size) {
+				return -ENXIO;
+			}*/
+			break;
+		case SEEK_HOLE:
+			printk("warning:file seek hole is failed\n");
+			/*if (offset >= size) {
+				return -ENXIO;
+			}
+			offset = size;*/
+			break;
+	}
+	if (offset != f->f_pos) {
+		f->f_pos = offset;
+	}
+	if(offset < 0)
+		return -EINVAL;
+	return offset;
+}

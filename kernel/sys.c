@@ -246,6 +246,11 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 	BUG();
 }
 
+SYSCALL_DEFINE3(lseek,unsigned int, fd, off_t, offset, unsigned int, whence)
+{
+	BUG();
+}
+
 SYSCALL_DEFINE3(execve,
 		const char __user*, filename,
 		const char __user *const __user *, argv,

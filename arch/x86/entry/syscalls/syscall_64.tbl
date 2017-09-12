@@ -13,6 +13,7 @@
 4	common	stat			sys_newstat
 5	common	fstat			sys_newfstat
 6	common	lstat			sys_newlstat
+8	common  lseek			sys_lseek
 9	common	mmap			sys_mmap
 10	common	mprotect		sys_mprotect
 11	common	munmap			sys_munmap

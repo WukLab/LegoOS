@@ -53,8 +53,9 @@ static int procmgmt(void *unused)
 {
 	const char *init_filename;
 
-	init_filename = "usr/checkpoint.o";
+	init_filename = "/root/yilun/benchmark";
 	argv_init[0] = init_filename;
+	argv_init[1] = "--graph=/root/yilun/test.pb";
 
 	return do_execve(init_filename,
 		(const char *const *)argv_init,

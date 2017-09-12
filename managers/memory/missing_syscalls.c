@@ -33,6 +33,10 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
 	BUG();
 }
+SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
+{
+	BUG();
+}
 
 SYSCALL_DEFINE1(close, unsigned int, fd)
 {
