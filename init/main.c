@@ -107,7 +107,7 @@ static int kernel_init(void *unused)
 	set_task_comm(current, "kernel_init");
 
 	/* Init stop-class threads: */
-	cpu_stop_init();
+	//cpu_stop_init();
 	init_workqueues();
 
 #if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)

@@ -102,6 +102,8 @@ static bool cpu_stop_queue_work(unsigned int cpu, struct cpu_stop_work *work)
  */
 int stop_one_cpu(unsigned int cpu, cpu_stop_fn_t fn, void *arg)
 {
+/* TODO: stop class has issue */
+#if 0
 	struct cpu_stop_done done;
 	struct cpu_stop_work work = { .fn = fn, .arg = arg, .done = &done };
 
@@ -115,6 +117,8 @@ int stop_one_cpu(unsigned int cpu, cpu_stop_fn_t fn, void *arg)
 	cond_resched();
 	wait_for_completion(&done.completion);
 	return done.ret;
+#endif
+	return 0;
 }
 
 /**

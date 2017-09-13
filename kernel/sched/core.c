@@ -675,7 +675,7 @@ SYSCALL_DEFINE3(sched_setaffinity, pid_t, pid, unsigned int, len,
 		char buf[64];
 
 		scnprintf(buf, 64, "%*pbl", num_online_cpus(), new_mask);
-		syscall_enter("pid: %d, len: %u, user_mask_ptr: %p -> cpulist: %s\n",
+		syscall_enter("pid:%d,len:%u,user_mask_ptr:%p->cpulist:%s\n",
 			pid, len, user_mask_ptr, buf);
 
 	} while (0);
