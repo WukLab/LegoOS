@@ -435,7 +435,9 @@ static void pgtable_bad(struct pt_regs *regs, unsigned long error_code,
 	panic("Fatal exception");
 }
 
-static inline void component_failure_check(void)
+static void component_failure_check(struct pt_regs *regs,
+				    unsigned long error_code,
+				    unsigned long address)
 {
 #ifndef CONFIG_COMP_PROCESSOR
 	bad_area_nosemaphore(regs, error_code, address);
@@ -472,7 +474,7 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 		pgtable_bad(regs, error_code, address);
 
 	/* Only processor component can proceed */
-	component_failure_check();
+	component_failure_check(regs, error_code, address);
 
 	/*
 	 * If we're in a region with pagefaults disabled

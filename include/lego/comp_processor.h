@@ -98,6 +98,12 @@ static inline int pcache_range_register(u64 start, u64 size)
 	return 0;
 }
 
+static inline int
+pcache_handle_fault(unsigned long address, unsigned long flags)
+{
+	BUG();
+}
+
 static inline int checkpoint_thread(struct task_struct *tsk)
 {
 	BUG();
