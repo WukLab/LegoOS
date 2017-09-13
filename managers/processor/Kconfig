@@ -37,6 +37,24 @@ config CHECKPOINT
 
 	  If unsure, say N.
 
+config LEGO_SPECIAL_MEMMAP
+	bool "Enable Lego's special memmap $ parsing semantic" if EXPERT
+	default y
+	---help---
+	  By default, memmap $ option reserves a range of physical memory.
+	  This reserved memory will be marked reserved in e820 table, which
+	  means this range will not even be registered into memblock.
+	  Only memory that has been registered into memblock will be assigned
+	  `struct page` with it (both memblock.memory and memblock.reserver
+	  will have).
+
+	  However, for pcache code and pgfault handling code we really need
+	  the `struct page` to work with pcache. So we change the semantic
+	  to: any memory marked by using memmap=NG$NG will be reserved by memblock,
+	  instead of bailing out from e820.
+
+	  If unsure, leave it alone.
+
 menu "Processor DEBUG Options"
 config DEBUG_SYSCALL
 	bool "Debug all SYSCALL enter/exit"

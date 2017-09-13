@@ -322,13 +322,49 @@ SYSCALL_DEFINE1(pcache_flush, void __user *, vaddr)
 	return pcache_flush_cacheline_va_user(address);
 }
 
+/*
+ * We are using special memmap semantic.
+ * Pcache pages are mared reserved in memblock, so all
+ * pages should have been marked as PageReserve by reserve_bootmem_region().
+ */
+static void pcache_sanity_check(void)
+{
+	int i;
+	struct page *page;
+	unsigned long nr_pages = llc_cache_registered_size / PAGE_SIZE;
+	unsigned long va = virt_start_cacheline;
+
+	for (i = 0; i < nr_pages; i++, va += PAGE_SIZE) {
+		page = virt_to_page(va);
+
+		if (unlikely(!PageReserved(page))) {
+			dump_page(page, NULL);
+			panic("Bug indeed");
+		}
+	}
+}
+
 void __init pcache_init(void)
 {
 	u64 nr_cachelines_per_page, nr_units;
 	u64 unit_size;
 
 	if (llc_cache_start == 0 || llc_cache_registered_size == 0)
-		panic("Processor cache not registered.");
+		panic("Processor cache not registered, memmap $ needed!");
+
+	if (!IS_ENABLED(CONFIG_LEGO_SPECIAL_MEMMAP))
+		panic("Require special memmap $ semantic!");
+
+	virt_start_cacheline = (unsigned long)phys_to_virt(llc_cache_start);
+
+	/*
+	 * Clear any stale value
+	 * This may happen if running on QEMU.
+	 * Not sure about physical machine.
+	 */
+	memset((void *)virt_start_cacheline, 0, llc_cache_size);
+
+	pcache_sanity_check();
 
 	nr_cachelines_per_page = PAGE_SIZE / llc_cachemeta_size;
 	unit_size = nr_cachelines_per_page * llc_cacheline_size;
@@ -344,20 +380,6 @@ void __init pcache_init(void)
 
 	/* final valid used size */
 	llc_cache_size = nr_units * unit_size;
-
-	virt_start_cacheline = (unsigned long)ioremap_cache(llc_cache_start,
-							    llc_cache_size);
-	if (!virt_start_cacheline) {
-		pr_info("fail to ioremap: [%#llx - %#llx]\n", llc_cache_start,
-			llc_cache_start + llc_cache_size);
-	}
-
-	/*
-	 * Clear any stale value
-	 * This may happen if running on QEMU.
-	 * Not sure about physical machine.
-	 */
-	memset((void *)virt_start_cacheline, 0, llc_cache_size);
 
 	nr_cachelines = nr_units * nr_cachelines_per_page;
 	nr_cachesets = nr_cachelines / llc_cache_associativity;
@@ -432,11 +454,21 @@ void __init pcache_init(void)
  * processor component. It is invoked at early boot before everything about
  * memory is initialized. For x86, this is registered during the parsing of
  * memmap=N$N command line option.
+ *
+ * If CONFIG_LEGO_SPECIAL_MEMMAP is ON, this range will not be bailed out
+ * from e820 table, it is marked as reserved in memblock. So pages within
+ * this range still have `struct page`, yeah!
  */
 int __init pcache_range_register(u64 start, u64 size)
 {
 	if (WARN_ON(!start && !size))
 		return -EINVAL;
+
+	if (WARN_ON(offset_in_page(start) || offset_in_page(size)))
+		return -EINVAL;
+
+	if (llc_cache_start || llc_cache_registered_size)
+		panic("Remove extra memmap from kernel parameters!");
 
 	llc_cache_start = start;
 	llc_cache_registered_size = size;

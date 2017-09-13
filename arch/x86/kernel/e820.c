@@ -46,8 +46,14 @@ static int __init parse_memmap_one(char *p)
 		e820_add_region(start_at, mem_size, E820_ACPI);
 	} else if (*p == '$') {
 		start_at = memparse(p+1, &p);
-		e820_add_region(start_at, mem_size, E820_RESERVED);
+
+/* Check managers/processor/Kconfig for detail */
+#ifdef CONFIG_LEGO_SPECIAL_MEMMAP
+		memblock_reserve(start_at, mem_size);
 		pcache_range_register(start_at, mem_size);
+#else
+		e820_add_region(start_at, mem_size, E820_RESERVED);
+#endif
 	} else if (*p == '!') {
 		start_at = memparse(p+1, &p);
 		e820_add_region(start_at, mem_size, E820_PRAM);
@@ -633,6 +639,10 @@ unsigned long __init e820_end_of_ram_pfn(void)
 	return e820_end_pfn(MAX_ARCH_PFN, E820_RAM);
 }
 
+/*
+ * Final parsing of e820 table
+ * after parsing user-passed memmap
+ */
 void __init finish_e820_parsing(void)
 {
 	if (userdef && !userdef_error) {
