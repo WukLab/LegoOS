@@ -162,6 +162,11 @@ int pcache_fill(unsigned long missing_vaddr, unsigned long flags,
 	return 0;
 }
 
+int pcache_handle_fault(unsigned long address, unsigned long flags)
+{
+	return 0;
+}
+
 static void *find_vameta_by_pacache(void *pa_cache)
 {
 	u64 strides;

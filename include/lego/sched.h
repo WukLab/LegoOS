@@ -456,6 +456,8 @@ struct task_struct {
 /* futex */
 	struct robust_list_head __user *robust_list;
 
+	int pagefault_disabled;
+
 #ifdef CONFIG_CHECKPOINT
 	atomic_t process_barrier;
 #endif

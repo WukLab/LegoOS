@@ -142,7 +142,6 @@ struct p2m_llc_miss_struct {
 	__u64	missing_vaddr;
 	__u64	offset;
 };
-int pcache_fill(unsigned long, unsigned long, unsigned long *);
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64,
 			struct common_header *);
 

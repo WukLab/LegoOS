@@ -12,26 +12,9 @@
 
 #include <lego/bug.h>
 #include <lego/mmap.h>
+#include <lego/pgfault.h>
 #include <lego/comp_memory.h>
 #include <memory/include/vm-pgtable.h>
-
-/*
- * Different kinds of faults, as returned by handle_mm_fault().
- * Used to decide whether a process gets delivered SIGBUS or
- * just gets major/minor fault counters bumped up.
- */
-#define VM_FAULT_OOM		0x0001
-#define VM_FAULT_SIGBUS		0x0002
-#define VM_FAULT_MAJOR		0x0004
-#define VM_FAULT_WRITE		0x0008	/* Special case for get_user_pages */
-#define VM_FAULT_HWPOISON	0x0010	/* Hit poisoned small page */
-#define VM_FAULT_SIGSEGV	0x0040
-#define VM_FAULT_NOPAGE		0x0100	/* ->fault installed pte, not return page */
-#define VM_FAULT_LOCKED		0x0200	/* ->fault locked the returned page */
-#define VM_FAULT_RETRY		0x0400	/* ->fault blocked, must retry */
-
-#define VM_FAULT_ERROR	(VM_FAULT_OOM | VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV | \
-			 VM_FAULT_HWPOISON )
 
 /*
  * Optimisation macro.  It is equivalent to:

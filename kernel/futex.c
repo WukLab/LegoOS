@@ -398,6 +398,12 @@ get_futex_key(u32 __user *uaddr, int fshared, union futex_key *key, int rw)
 	}
 
 	/*
+	 * TODO:
+	 * Check linux's implementation
+	 * this place need get_user_page.
+	 */
+
+	/*
 	 * Lego now we only support PRIVATE FUTEX
 	 */
 	WARN_ON(1);
@@ -434,6 +440,10 @@ static int fault_in_user_writeable(u32 __user *uaddr)
 	return ret < 0 ? ret : 0;
 }
 
+/*
+ * We need to pgfault (user pgfault) here to avoid pcache to
+ * fetch pages from memory side. Otherwiese it won't be atomic.
+ */
 static inline int cmpxchg_futex_value_locked(u32 *curval, u32 __user *uaddr,
 					     u32 uval, u32 newval)
 {

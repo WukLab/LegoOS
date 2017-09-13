@@ -602,6 +602,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	p->utime = p->stime = p->gtime = 0;
 	p->start_time = ktime_get_ns();
 	p->real_start_time = ktime_get_boot_ns();
+	p->pagefault_disabled = 0;
 
 	/*
 	 * Now do the dirty work.

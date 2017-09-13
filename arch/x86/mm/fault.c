@@ -20,9 +20,10 @@
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
 #include <lego/memory.h>
+#include <lego/signal.h>
 #include <lego/uaccess.h>
 #include <lego/extable.h>
-#include <lego/signal.h>
+#include <lego/pgfault.h>
 #include <lego/comp_processor.h>
 
 /*
@@ -373,6 +374,48 @@ bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 	__bad_area_nosemaphore(regs, error_code, address, SEGV_MAPERR);
 }
 
+static void
+do_sigbus(struct pt_regs *regs, unsigned long error_code,
+	  unsigned long address, unsigned int fault)
+{
+	struct task_struct *tsk = current;
+	int code = BUS_ADRERR;
+
+	/* Kernel mode? Handle exceptions or die: */
+	if (!(error_code & PF_USER)) {
+		no_context(regs, error_code, address, SIGBUS);
+		return;
+	}
+
+	tsk->thread.cr2		= address;
+	tsk->thread.error_code	= error_code;
+	tsk->thread.trap_nr	= X86_TRAP_PF;
+
+	force_sig_info_fault(SIGBUS, code, address, tsk, fault);
+}
+
+static noinline void
+mm_fault_error(struct pt_regs *regs, unsigned long error_code,
+	       unsigned long address, unsigned int fault)
+{
+	if (fatal_signal_pending(current) && !(error_code & PF_USER)) {
+		no_context(regs, error_code, address, 0);
+		return;
+	}
+
+	if (fault & VM_FAULT_OOM) {
+		no_context(regs, error_code, address, SIGSEGV);
+		return;
+	} else {
+		if (fault & VM_FAULT_SIGBUS)
+			do_sigbus(regs, error_code, address, fault);
+		else if (fault & VM_FAULT_SIGSEGV)
+			bad_area_nosemaphore(regs, error_code, address);
+		else
+			BUG();
+	}
+}
+
 static void pgtable_bad(struct pt_regs *regs, unsigned long error_code,
 			unsigned long address)
 {
@@ -392,62 +435,13 @@ static void pgtable_bad(struct pt_regs *regs, unsigned long error_code,
 	panic("Fatal exception");
 }
 
-static inline void __do_page_fault(struct pt_regs *regs, unsigned long address,
-				   long error_code)
+static inline void component_failure_check(void)
 {
-	pgd_t *pgd;
-	pud_t *pud;
-	pmd_t *pmd;
-	pte_t *ptep;
-	pte_t pte;
-	pgprot_t pgprot;
-	int ret;
-	unsigned long cache_paddr;
-	unsigned long flags = FAULT_FLAG_KILLABLE | FAULT_FLAG_USER;
-	struct mm_struct *mm = current->mm;
-
-	if (error_code & PF_WRITE)
-		flags |= FAULT_FLAG_WRITE;
-	if (error_code & PF_INSTR)
-		flags |= FAULT_FLAG_INSTRUCTION;
-
-	/* fetch cacheline from memory component */
-	ret = pcache_fill(address, flags, &cache_paddr);
-	if (unlikely(ret)) {
-		bad_area_nosemaphore(regs, error_code, address);
-		return;
-	}
-
-	/*
-	 * TODO: sync establishing and should sync before sending request
-	 * so that request will be only sent once to memory
-	 *
-	 * establish pgtable mapping
-	 */
-	pgd = pgd_offset(mm, address);
-	pud = pud_alloc(mm, pgd, address);
-	if (unlikely(!pud))
-		goto oom;
-	pmd = pmd_alloc(mm, pud, address);
-	if (unlikely(!pmd))
-		goto oom;
-	ptep = pte_alloc(mm, pmd, address);
-	if (unlikely(!ptep))
-		goto oom;
-
-	if (!pte_none(*ptep)) {
-		dump_pagetable(address);
-		panic("BUG");
-		return;
-	}
-
-	pgprot = PAGE_SHARED_EXEC;
-	pte = pfn_pte(cache_paddr >> PAGE_SHIFT, pgprot);
-	pte_set(ptep, pte);
-
-	return;
-oom:
-	panic("oom\n");
+#ifndef CONFIG_COMP_PROCESSOR
+	bad_area_nosemaphore(regs, error_code, address);
+	/* unreachable - just to make it safer */
+	BUG();
+#endif
 }
 
 /*
@@ -457,7 +451,9 @@ oom:
  */
 dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 {
+	int fault;
 	unsigned long address = read_cr2();
+	unsigned long flags = FAULT_FLAG_KILLABLE | FAULT_FLAG_USER;
 
 	if (unlikely(fault_in_kernel_space(address))) {
 		if (!(error_code & (PF_RSVD | PF_USER | PF_PROT))) {
@@ -475,9 +471,54 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	if (unlikely(error_code & PF_RSVD))
 		pgtable_bad(regs, error_code, address);
 
-#ifdef CONFIG_COMP_PROCESSOR
-	__do_page_fault(regs, address, error_code);
-#else
-	bad_area_nosemaphore(regs, error_code, address);
-#endif
+	/* Only processor component can proceed */
+	component_failure_check();
+
+	/*
+	 * If we're in a region with pagefaults disabled
+	 * then we must not take the fault, go straight to
+	 * the fixup (normally it is introduced by uaccess):
+	 */
+	if (unlikely(faulthandler_disabled())) {
+		bad_area_nosemaphore(regs, error_code, address);
+		return;
+	}
+
+	if (user_mode(regs)) {
+		local_irq_enable();
+		error_code |= PF_USER;
+		flags |= FAULT_FLAG_USER;
+	} else {
+		if (regs->flags & X86_EFLAGS_IF)
+			local_irq_enable();
+	}
+
+	if (error_code & PF_WRITE)
+		flags |= FAULT_FLAG_WRITE;
+	if (error_code & PF_INSTR)
+		flags |= FAULT_FLAG_INSTRUCTION;
+
+	if (error_code & PF_USER) {
+		/*
+		 * Accessing the stack below %sp is always a bug.
+		 * The large cushion allows instructions like enter
+		 * and pusha to work. ("enter $65535, $31" pushes
+		 * 32 pointers and then decrements %sp by 65535.)
+		 */
+		if (unlikely(address + 65536 + 32 * sizeof(unsigned long) < regs->sp)) {
+			bad_area_nosemaphore(regs, error_code, address);
+			return;
+		}
+	}
+
+	/*
+	 * If for any reason at all we couldn't handle the fault,
+	 * make sure we exit gracefully rather than endlessly redo
+	 * the fault.
+	 */
+	fault = pcache_handle_fault(address, flags);
+	if (unlikely(fault & VM_FAULT_ERROR)) {
+		mm_fault_error(regs, error_code, address, fault);
+		return;
+	}
 }

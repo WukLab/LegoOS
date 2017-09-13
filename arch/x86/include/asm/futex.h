@@ -11,6 +11,7 @@
 #define _ASM_X86_FUTEX_H_
 
 #include <asm/extable.h>
+#include <lego/uaccess.h>
 
 #ifndef _LEGO_FUTEX_H_
 #error Use lego/futex.h instead
@@ -45,9 +46,6 @@
 		     : "=&a" (oldval), "=&r" (ret),		\
 		       "+m" (*uaddr), "=&r" (tem)		\
 		     : "r" (oparg), "i" (-EFAULT), "1" (0))
-
-#define pagefault_disable()	do {} while (0)
-#define pagefault_enable()	do {} while (0)
 
 static inline int futex_atomic_op_inuser(int encoded_op, u32 __user *uaddr)
 {
