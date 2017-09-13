@@ -3,6 +3,14 @@
 * mutex
 - watchdog and NMI handler (detect deadlock and dump backtrace)
 
+
+Wed Sep 13 00:52:42 EDT 2017
+- futex: get_futex_key()
+	Currently, we only support private futex.
+	Shared futex can be implemented if we any struct page associated
+	with each cachline page (memmep does not have now). Any way we have
+	one process running now, so it should be fine now!
+
 09/10/17
 Phoniex's munmap has bug.
 We commented out all free(), it works then...

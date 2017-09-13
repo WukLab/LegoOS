@@ -220,23 +220,25 @@ static int wait_for_vfork_done(struct task_struct *child,
  */
 void mm_release(struct task_struct *tsk, struct mm_struct *mm)
 {
+#ifdef CONFIG_FUTEX
 	/* Get rid of any futexes when releasing the mm */
 	if (unlikely(tsk->robust_list)) {
 		exit_robust_list(tsk);
 		tsk->robust_list = NULL;
 	}
+#endif
 
 	/* Get rid of any cached register state */
 	deactivate_mm(tsk, mm);
 
+	/* Signal userspace we are exiting: */
 	if (tsk->clear_child_tid) {
 		if (atomic_read(&mm->mm_users) > 1) {
-			int ret, zero = 0;
 			/*
 			 * We don't check the error code - if userspace has
 			 * not set up a proper pointer then tough luck.
 			 */
-			ret = copy_to_user(tsk->clear_child_tid, &zero, 4);
+			put_user(0, tsk->clear_child_tid);
 			sys_futex(tsk->clear_child_tid, FUTEX_WAKE,
 					1, NULL, NULL, 0);
 		}
@@ -646,6 +648,10 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	 * Clear TID on mm_release()?
 	 */
 	p->clear_child_tid = (clone_flags & CLONE_CHILD_CLEARTID) ? child_tidptr : NULL;
+
+#ifdef CONFIG_FUTEX
+	p->robust_list = NULL;
+#endif
 
 	/*
 	 * sigaltstack should be cleared when sharing the same VM
