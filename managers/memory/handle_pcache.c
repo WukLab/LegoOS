@@ -93,22 +93,23 @@ static int fault_in_kernel_space(unsigned long address)
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 			struct common_header *hdr)
 {
-	u32 pid, nid, flags;
+	u32 tgid, pid, nid, flags;
 	u64 vaddr, offset;
 	struct lego_task_struct *p;
 
 	nid    = hdr->src_nid;
 	pid    = payload->pid;
+	tgid   = payload->tgid;
 	flags  = payload->flags;
 	vaddr  = payload->missing_vaddr;
 	offset = payload->offset; 
 
 #ifdef CONFIG_DEBUG_PCACHE
-	pr_info("%s: nid: %u, pid: %u, flags: %x, missing_vaddr: %#Lx, offset: %#Lx, nr_split: %d\n",
-		__func__, nid, pid, flags, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
+	pr_info("%s: nid: %u, pid: %u, tgid: %u, flags: %x, missing_vaddr: %#Lx, offset: %#Lx, nr_split: %d\n",
+		__func__, nid, pid, tgid, flags, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
 #endif
 
-	p = find_lego_task_by_pid(hdr->src_nid, payload->pid);
+	p = find_lego_task_by_pid(hdr->src_nid, tgid);
 	if (unlikely(!p)) {
 		llc_miss_error(RET_ESRCH, desc, p, vaddr);
 		return 0;

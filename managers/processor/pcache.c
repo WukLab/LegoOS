@@ -129,11 +129,12 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags, struc
 	struct p2m_llc_miss_struct payload;
 	void *pa_cache = (void *)PFN_PHYS(page_to_pfn(page));
 
-	payload.pid = current->tgid;
+	payload.pid = current->pid;
+	payload.tgid = current->tgid;
 	payload.flags = flags;
 	payload.missing_vaddr = address;
 
-	pcache_debug("pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
+	pcache_debug("Enter pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
 
 	slice = PAGE_SIZE / nr_split;
@@ -160,6 +161,9 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags, struc
 			}
 		}
 	}
+	pcache_debug("Exit pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
+		current->pid, current->tgid, address, flags, pa_cache);
+
 	return 0;
 }
 

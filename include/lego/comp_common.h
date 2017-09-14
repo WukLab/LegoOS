@@ -138,6 +138,7 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 
 struct p2m_llc_miss_struct {
 	__u32	pid;
+	__u32	tgid;
 	__u32	flags;
 	__u64	missing_vaddr;
 	__u64	offset;
