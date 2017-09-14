@@ -120,7 +120,7 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags, struc
 	u64 offset, slice;
 	int i, nr_split = CONFIG_PCACHE_FILL_SPLIT_NR;
 	struct p2m_llc_miss_struct payload;
-	void *va_cache = page_to_virt(page);
+	void *pa_cache = (void *)PFN_PHYS(page_to_pfn(page));
 
 	payload.pid = current->tgid;
 	payload.flags = flags;
@@ -133,14 +133,15 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags, struc
 
 		ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
 				&payload, sizeof(payload),
-				va_cache + offset, slice, false,
+				pa_cache + offset, slice, true,
 				DEF_NET_TIMEOUT);
 
 		if (unlikely(ret < slice)) {
-			if (likely(ret == sizeof(int)))
+			if (likely(ret == sizeof(int))) {
 				/* remote reported error */
-				return -(*(int *)va_cache);
-			else if (ret < 0)
+				int *va_cache = page_to_virt(page);
+				return -(*va_cache);
+			} else if (ret < 0)
 				/* IB is not available */
 				return -EIO;
 			else {
@@ -187,7 +188,7 @@ static int pcache_fill_page(struct mm_struct *mm, unsigned long address,
 
 	/* Fetch page from remote memory... */
 	ret = do_pcache_fill_page(address, flags, page);
-	if (unlikely(!ret)) {
+	if (unlikely(ret)) {
 		pcache_free_cacheline(page);
 		spin_unlock(ptl);
 		return VM_FAULT_SIGSEGV;
