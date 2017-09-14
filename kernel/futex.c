@@ -1428,8 +1428,11 @@ void __init futex_detect_cmpxchg(void)
 	 * guaranteed to fault and we get -EFAULT on functional
 	 * implementation, the non-functional ones will return
 	 * -ENOSYS.
+	 *
+	 *
+	 * Any invalid address would work.
 	 */
-	if (cmpxchg_futex_value_locked(&curval, NULL, 0, 0) == -EFAULT) {
+	if (cmpxchg_futex_value_locked(&curval, (void *)0xC000C000, 0, 0) == -EFAULT) {
 		futex_cmpxchg_enabled = 1;
 		pr_debug("futex cmpxchg enabled!\n");
 	} else
