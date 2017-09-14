@@ -19,7 +19,8 @@
 void __init processor_component_init(void);
 int __init pcache_range_register(u64 start, u64 size);
 
-int pcache_handle_fault(unsigned long address, unsigned long flags);
+int pcache_handle_fault(struct mm_struct *mm,
+			unsigned long address, unsigned long flags);
 
 #ifdef CONFIG_CHECKPOINT
 int checkpoint_thread(struct task_struct *);
@@ -99,7 +100,7 @@ static inline int pcache_range_register(u64 start, u64 size)
 }
 
 static inline int
-pcache_handle_fault(unsigned long address, unsigned long flags)
+pcache_handle_fault(struct mm_struct *mm, unsigned long address, unsigned long flags)
 {
 	BUG();
 }

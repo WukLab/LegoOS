@@ -42,25 +42,19 @@ static void do_handle_p2m_llc_miss(struct lego_task_struct *p,
 	down_read(&mm->mmap_sem);
 
 	vma = find_vma(mm, vaddr);
-	if (unlikely(!vma)) {
-		bad_area(p, vaddr, offset, desc);
-		return;
-	}
+	if (unlikely(!vma))
+		goto unlock;
 
 	/* VMAs except stack */
 	if (likely(vma->vm_start <= vaddr))
 		goto good_area;
 
 	/* stack? */
-	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN))) {
-		bad_area(p, vaddr, offset, desc);
-		return;
-	}
+	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN)))
+		goto unlock;
 
-	if (unlikely(expand_stack(vma, vaddr))) {
-		bad_area(p, vaddr, offset, desc);
-		return;
-	}
+	if (unlikely(expand_stack(vma, vaddr)))
+		goto unlock;
 
 	/*
 	 * Ok, we have a good vm_area for this memory access,
@@ -73,6 +67,8 @@ good_area:
 			ret = RET_ENOMEM;
 		else if (ret & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV))
 			ret = RET_ESIGSEGV;
+
+		up_read(&mm->mmap_sem);
 		llc_miss_error(ret, desc, p, vaddr);
 		return;
 	}
@@ -82,6 +78,11 @@ good_area:
 	/* Send the cacheline back to processor! */
 	ibapi_reply_message((void *)(new_page + offset),
 		PAGE_SIZE / CONFIG_PCACHE_FILL_SPLIT_NR, desc);
+	return;
+
+unlock:
+	up_read(&mm->mmap_sem);
+	bad_area(p, vaddr, offset, desc);
 }
 
 static int fault_in_kernel_space(unsigned long address)

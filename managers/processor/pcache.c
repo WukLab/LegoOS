@@ -17,6 +17,7 @@
 #include <lego/slab.h>
 #include <lego/log2.h>
 #include <lego/kernel.h>
+#include <lego/pgfault.h>
 #include <lego/syscalls.h>
 #include <lego/comp_processor.h>
 #include <asm/io.h>
@@ -64,6 +65,8 @@ static inline unsigned long addr2set(unsigned long addr)
 	return (addr & pcache_set_mask) >> nr_bits_cacheline;
 }
 
+static DEFINE_SPINLOCK(pcache_alloc_lock);
+
 /*
  * Walk through all N-way cachelines within a set
  * @addr: the address in question
@@ -82,23 +85,46 @@ static inline unsigned long addr2set(unsigned long addr)
 	     va_cache += pcache_way_cache_stride, 					\
 	     va_meta += pcache_way_meta_stride)
 
-static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cache,
-			  void *va_cache, void *va_meta, unsigned int way)
+static struct page *pcache_alloc_cacheline(struct mm_struct *mm, unsigned long address)
 {
-	struct p2m_llc_miss_struct payload;
-	int ret;
-	int i, nr_split = CONFIG_PCACHE_FILL_SPLIT_NR;
-	u64 offset, slice;
+	void *pa_cache, *va_cache, *va_meta;
+	unsigned int way;
+	struct page *page;
 
-#ifdef CONFIG_DEBUG_PCACHE_FILL
-	pr_info("cpu:%d,pid:%u,va:%#lx,flag:%#lx,p$:%p,v$:%p,vM:%p,way:%u\n",
-		smp_processor_id(), current->pid, vaddr, flags, pa_cache, va_cache,
-		va_meta, way);
-#endif
+	spin_lock(&pcache_alloc_lock);
+	for_each_way_set(address, pa_cache, va_cache, va_meta, way) {
+		if (!pcache_valid(va_meta)) {
+			pcache_mkvalid(va_meta);
+			break;
+		}
+	}
+	spin_unlock(&pcache_alloc_lock);
+
+	if (unlikely(way == llc_cache_associativity)) {
+		WARN(1, "Cache eviction needed!\n");
+		return NULL;
+	}
+
+	page = virt_to_page(va_cache);
+	return page;
+}
+
+static void pcache_free_cacheline(struct page *page)
+{
+	/* TODO */
+}
+
+static int do_pcache_fill_page(unsigned long address, unsigned long flags, struct page *page)
+{
+	int ret;
+	u64 offset, slice;
+	int i, nr_split = CONFIG_PCACHE_FILL_SPLIT_NR;
+	struct p2m_llc_miss_struct payload;
+	void *va_cache = page_to_virt(page);
 
 	payload.pid = current->tgid;
 	payload.flags = flags;
-	payload.missing_vaddr = vaddr;
+	payload.missing_vaddr = address;
 
 	slice = PAGE_SIZE / nr_split;
 	for (i = 0; i < nr_split; i++) {
@@ -107,7 +133,7 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 
 		ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
 				&payload, sizeof(payload),
-				pa_cache + offset, slice, true,
+				va_cache + offset, slice, false,
 				DEF_NET_TIMEOUT);
 
 		if (unlikely(ret < slice)) {
@@ -117,53 +143,296 @@ static int do_pcache_fill(unsigned long vaddr, unsigned long flags, void *pa_cac
 			else if (ret < 0)
 				/* IB is not available */
 				return -EIO;
-			else
+			else {
 				WARN(1, "invalid retbuf size: %d\n", ret);
+				return -EFAULT;
+			}
 		}
 	}
-
-	pcache_mkvalid(va_meta);
-	pcache_mkaccessed(va_meta);
-
 	return 0;
 }
 
 /*
- * Fill a cacheline given a missing virtual address
- * Return 0 on success, others on failure
- *
- * TODO: sync in SMP
+ * This function handles missing cache lines.
+ * We enter with pte unlocked, we return with pte unlocked.
  */
-int pcache_fill(unsigned long missing_vaddr, unsigned long flags,
-		unsigned long *cache_paddr)
+static int pcache_fill_page(struct mm_struct *mm, unsigned long address,
+			    pte_t *page_table, pmd_t *pmd, unsigned long flags)
 {
-	void *pa_cache, *va_cache, *va_meta;
-	unsigned int way;
+	struct page *page;
+	spinlock_t *ptl;
+	pte_t entry;
 	int ret;
 
-	for_each_way_set(missing_vaddr, pa_cache, va_cache, va_meta, way) {
-		if (!pcache_valid(va_meta))
-			break;
+	page = pcache_alloc_cacheline(mm, address);
+	if (!page)
+		return VM_FAULT_OOM;
+
+	/* TODO: Need right permission bits */
+	entry = mk_pte(page, PAGE_SHARED_EXEC);
+
+	page_table = pte_offset_lock(mm, pmd, address, &ptl);
+	if (unlikely(!pte_none(*page_table))) {
+		/*
+		 * Concurrent faults
+		 *
+		 * TODO:
+		 * 1) Wait until pcache fill finish
+		 */
+		WARN_ON(1);
+		pcache_free_cacheline(page);
+		spin_unlock(ptl);
+		return 0;
 	}
 
-	if (unlikely(way == llc_cache_associativity)) {
-		WARN(1, "Cache eviction needed!\n");
-		return -ENOMEM;
+	/* Fetch page from remote memory... */
+	ret = do_pcache_fill_page(address, flags, page);
+	if (unlikely(!ret)) {
+		pcache_free_cacheline(page);
+		spin_unlock(ptl);
+		return VM_FAULT_SIGSEGV;
 	}
 
-	ret = do_pcache_fill(missing_vaddr, flags, pa_cache, va_cache, va_meta, way);
-	if (unlikely(ret)) {
-		*cache_paddr = 0;
-		return ret;
-	}
-
-	/* for establishing va->pa mapping */
-	*cache_paddr = (unsigned long)pa_cache;
+	pte_set(page_table, entry);
+	spin_unlock(ptl);
 	return 0;
 }
 
-int pcache_handle_fault(unsigned long address, unsigned long flags)
+/*
+ * This function handles present write-protected cache lines.
+ * We enter wirh pte locked, we return with pte unlocked.
+ */
+static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
+			     pte_t *page_table, pmd_t *pmd, spinlock_t *ptl,
+			     pte_t orig_pte)
+			__releases(ptl)
 {
+	/*
+	 * Use cases
+	 * 1) Used for cache flush. Wait until flush finishes
+	 * 2) Used to implement COW for fork()
+	 */
+	panic("TODO");
+	return 0;
+}
+
+static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
+				   pte_t *pte, pmd_t *pmd, unsigned long flags)
+{
+	pte_t entry;
+	spinlock_t *ptl;
+
+	entry = *pte;
+	if (!pte_present(entry))
+		return pcache_fill_page(mm, address, pte, pmd, flags);
+
+	ptl = pte_lockptr(mm, pmd);
+	spin_lock(ptl);
+	if (unlikely(!pte_same(*pte, entry))) {
+		/*
+		 * PTE changed before we aquire the lock.
+		 * Permission maybe upgraded from RO to RW
+		 * by others in the middle (maybe pcache flush routine).
+		 */
+		goto unlock;
+	}
+	if (flags & FAULT_FLAG_WRITE) {
+		if (!pte_write(entry))
+			return pcache_do_wp_page(mm, address, pte, pmd, ptl, entry);
+		entry = pte_mkdirty(entry);
+	}
+
+	/*
+	 * If we are here, it means the PTE is both present and writable.
+	 * Then why pgfault happens at all? The case is: two or more CPUs
+	 * fault into the same address concurrently. One established the
+	 * mapping even before other CPUs do "entry = *pte".
+	 */
+	entry = pte_mkyoung(entry);
+	if (!pte_same(*pte, entry) && (flags & FAULT_FLAG_WRITE))
+		*pte = entry;
+
+unlock:
+	spin_unlock(ptl);
+	return 0;
+}
+
+/*
+ * Return 0 on success, otherwise return VM_FAULT_XXX flags.
+ */
+int pcache_handle_fault(struct mm_struct *mm,
+			unsigned long address, unsigned long flags)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	pgd = pgd_offset(mm, address);
+	pud = pud_alloc(mm, pgd, address);
+	if (!pud)
+		return VM_FAULT_OOM;
+	pmd = pmd_alloc(mm, pud, address);
+	if (!pmd)
+		return VM_FAULT_OOM;
+	pte = pte_alloc(mm, pmd, address);
+	if (!pte)
+		return VM_FAULT_OOM;
+
+	return pcache_handle_pte_fault(mm, address, pte, pmd, flags);
+}
+
+/*
+ * We are using special memmap semantic.
+ * Pcache pages are mared reserved in memblock, so all
+ * pages should have been marked as PageReserve by reserve_bootmem_region().
+ */
+static void pcache_sanity_check(void)
+{
+	int i;
+	struct page *page;
+	unsigned long nr_pages = llc_cache_registered_size / PAGE_SIZE;
+	unsigned long va = virt_start_cacheline;
+
+	for (i = 0; i < nr_pages; i++, va += PAGE_SIZE) {
+		page = virt_to_page(va);
+
+		if (unlikely(!PageReserved(page))) {
+			dump_page(page, NULL);
+			panic("Bug indeed");
+		}
+	}
+}
+
+void __init pcache_init(void)
+{
+	u64 nr_cachelines_per_page, nr_units;
+	u64 unit_size;
+
+	if (llc_cache_start == 0 || llc_cache_registered_size == 0)
+		panic("Processor cache not registered, memmap $ needed!");
+
+	if (!IS_ENABLED(CONFIG_LEGO_SPECIAL_MEMMAP))
+		panic("Require special memmap $ semantic!");
+
+	virt_start_cacheline = (unsigned long)phys_to_virt(llc_cache_start);
+
+	/*
+	 * Clear any stale value
+	 * This may happen if running on QEMU.
+	 * Not sure about physical machine.
+	 */
+	memset((void *)virt_start_cacheline, 0, llc_cache_size);
+
+	pcache_sanity_check();
+
+	nr_cachelines_per_page = PAGE_SIZE / llc_cachemeta_size;
+	unit_size = nr_cachelines_per_page * llc_cacheline_size;
+	unit_size += PAGE_SIZE;
+
+	/*
+	 * nr_cachelines_per_page must already be a power of 2.
+	 * We must make nr_units a power of 2, then the total
+	 * number of cache lines can be a power of 2, too.
+	 */
+	nr_units = llc_cache_registered_size / unit_size;
+	nr_units = rounddown_pow_of_two(nr_units);
+
+	/* final valid used size */
+	llc_cache_size = nr_units * unit_size;
+
+	nr_cachelines = nr_units * nr_cachelines_per_page;
+	nr_cachesets = nr_cachelines / llc_cache_associativity;
+
+	nr_pages_cacheline = nr_cachelines;
+	nr_pages_metadata = nr_units;
+
+	/* Save physical/virtual starting address */
+	phys_start_cacheline = llc_cache_start;
+	phys_start_metadata = phys_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
+	virt_start_metadata = virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
+
+	nr_bits_cacheline = ilog2(llc_cacheline_size);
+	nr_bits_set = ilog2(nr_cachesets);
+	nr_bits_tag = 64 - nr_bits_cacheline - nr_bits_set;
+
+	pr_info("Processor LLC Configurations:\n");
+	pr_info("    PhysStart:         %#llx\n",	llc_cache_start);
+	pr_info("    VirtStart:         %#llx\n",	virt_start_cacheline);
+	pr_info("    Registered Size:   %#llx\n",	llc_cache_registered_size);
+	pr_info("    Actual Used Size:  %#llx\n",	llc_cache_size);
+	pr_info("    NR cachelines:     %llu\n",	nr_cachelines);
+	pr_info("    Associativity:     %u\n",		llc_cache_associativity);
+	pr_info("    NR Sets:           %llu\n",	nr_cachesets);
+	pr_info("    Cacheline size:    %u B\n",	llc_cacheline_size);
+	pr_info("    Metadata size:     %u B\n",	llc_cachemeta_size);
+
+	pcache_cacheline_mask = (1ULL << nr_bits_cacheline) - 1;
+	pcache_set_mask = ((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1) & ~pcache_cacheline_mask;
+	pcache_tag_mask = ~((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1);
+
+	pr_info("    NR cacheline bits: %2llu [%2llu - %2llu] %#llx\n",
+		nr_bits_cacheline,
+		0ULL,
+		nr_bits_cacheline - 1,
+		pcache_cacheline_mask);
+	pr_info("    NR set-index bits: %2llu [%2llu - %2llu] %#llx\n",
+		nr_bits_set,
+		nr_bits_cacheline,
+		nr_bits_cacheline + nr_bits_set - 1,
+		pcache_set_mask);
+	pr_info("    NR tag bits:       %2llu [%2llu - %2llu] %#llx\n",
+		nr_bits_tag,
+		nr_bits_cacheline + nr_bits_set,
+		nr_bits_cacheline + nr_bits_set + nr_bits_tag - 1,
+		pcache_tag_mask);
+
+	pr_info("    NR pages for data: %llu\n",	nr_pages_cacheline);
+	pr_info("    NR pages for meta: %llu\n",	nr_pages_metadata);
+	pr_info("    Cacheline (pa) range:   [%#18llx - %#18llx]\n",
+		phys_start_cacheline, phys_start_metadata - 1);
+	pr_info("    Metadata (pa) range:    [%#18llx - %#18llx]\n",
+		phys_start_metadata, phys_start_metadata + nr_pages_metadata * PAGE_SIZE - 1);
+
+	pr_info("    Cacheline (va) range:   [%#18llx - %#18llx]\n",
+		virt_start_cacheline, virt_start_metadata - 1);
+	pr_info("    Metadata (va) range:    [%#18llx - %#18llx]\n",
+		virt_start_metadata, virt_start_metadata + nr_pages_metadata * PAGE_SIZE - 1);
+
+	pcache_way_cache_stride = nr_cachesets * llc_cacheline_size;
+	pcache_way_meta_stride =  nr_cachesets * llc_cachemeta_size;
+	pr_info("    Way cache stride:  %#llx\n", pcache_way_cache_stride);
+	pr_info("    Way meta stride:   %#llx\n", pcache_way_meta_stride);
+}
+
+/**
+ * pcache_range_register
+ * @start: physical address of the first byte of the cache
+ * @size: size of the cache
+ *
+ * Register a consecutive physical memory range as the last-level cache for
+ * processor component. It is invoked at early boot before everything about
+ * memory is initialized. For x86, this is registered during the parsing of
+ * memmap=N$N command line option.
+ *
+ * If CONFIG_LEGO_SPECIAL_MEMMAP is ON, this range will not be bailed out
+ * from e820 table, it is marked as reserved in memblock. So pages within
+ * this range still have `struct page`, yeah!
+ */
+int __init pcache_range_register(u64 start, u64 size)
+{
+	if (WARN_ON(!start && !size))
+		return -EINVAL;
+
+	if (WARN_ON(offset_in_page(start) || offset_in_page(size)))
+		return -EINVAL;
+
+	if (llc_cache_start || llc_cache_registered_size)
+		panic("Remove extra memmap from kernel parameters!");
+
+	llc_cache_start = start;
+	llc_cache_registered_size = size;
+
 	return 0;
 }
 
@@ -325,158 +594,4 @@ SYSCALL_DEFINE1(pcache_flush, void __user *, vaddr)
 	unsigned long __user address;
 	address = (unsigned long __user) vaddr;
 	return pcache_flush_cacheline_va_user(address);
-}
-
-/*
- * We are using special memmap semantic.
- * Pcache pages are mared reserved in memblock, so all
- * pages should have been marked as PageReserve by reserve_bootmem_region().
- */
-static void pcache_sanity_check(void)
-{
-	int i;
-	struct page *page;
-	unsigned long nr_pages = llc_cache_registered_size / PAGE_SIZE;
-	unsigned long va = virt_start_cacheline;
-
-	for (i = 0; i < nr_pages; i++, va += PAGE_SIZE) {
-		page = virt_to_page(va);
-
-		if (unlikely(!PageReserved(page))) {
-			dump_page(page, NULL);
-			panic("Bug indeed");
-		}
-	}
-}
-
-void __init pcache_init(void)
-{
-	u64 nr_cachelines_per_page, nr_units;
-	u64 unit_size;
-
-	if (llc_cache_start == 0 || llc_cache_registered_size == 0)
-		panic("Processor cache not registered, memmap $ needed!");
-
-	if (!IS_ENABLED(CONFIG_LEGO_SPECIAL_MEMMAP))
-		panic("Require special memmap $ semantic!");
-
-	virt_start_cacheline = (unsigned long)phys_to_virt(llc_cache_start);
-
-	/*
-	 * Clear any stale value
-	 * This may happen if running on QEMU.
-	 * Not sure about physical machine.
-	 */
-	memset((void *)virt_start_cacheline, 0, llc_cache_size);
-
-	pcache_sanity_check();
-
-	nr_cachelines_per_page = PAGE_SIZE / llc_cachemeta_size;
-	unit_size = nr_cachelines_per_page * llc_cacheline_size;
-	unit_size += PAGE_SIZE;
-
-	/*
-	 * nr_cachelines_per_page must already be a power of 2.
-	 * We must make nr_units a power of 2, then the total
-	 * number of cache lines can be a power of 2, too.
-	 */
-	nr_units = llc_cache_registered_size / unit_size;
-	nr_units = rounddown_pow_of_two(nr_units);
-
-	/* final valid used size */
-	llc_cache_size = nr_units * unit_size;
-
-	nr_cachelines = nr_units * nr_cachelines_per_page;
-	nr_cachesets = nr_cachelines / llc_cache_associativity;
-
-	nr_pages_cacheline = nr_cachelines;
-	nr_pages_metadata = nr_units;
-
-	/* Save physical/virtual starting address */
-	phys_start_cacheline = llc_cache_start;
-	phys_start_metadata = phys_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
-	virt_start_metadata = virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
-
-	nr_bits_cacheline = ilog2(llc_cacheline_size);
-	nr_bits_set = ilog2(nr_cachesets);
-	nr_bits_tag = 64 - nr_bits_cacheline - nr_bits_set;
-
-	pr_info("Processor LLC Configurations:\n");
-	pr_info("    PhysStart:         %#llx\n",	llc_cache_start);
-	pr_info("    VirtStart:         %#llx\n",	virt_start_cacheline);
-	pr_info("    Registered Size:   %#llx\n",	llc_cache_registered_size);
-	pr_info("    Actual Used Size:  %#llx\n",	llc_cache_size);
-	pr_info("    NR cachelines:     %llu\n",	nr_cachelines);
-	pr_info("    Associativity:     %u\n",		llc_cache_associativity);
-	pr_info("    NR Sets:           %llu\n",	nr_cachesets);
-	pr_info("    Cacheline size:    %u B\n",	llc_cacheline_size);
-	pr_info("    Metadata size:     %u B\n",	llc_cachemeta_size);
-
-	pcache_cacheline_mask = (1ULL << nr_bits_cacheline) - 1;
-	pcache_set_mask = ((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1) & ~pcache_cacheline_mask;
-	pcache_tag_mask = ~((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1);
-
-	pr_info("    NR cacheline bits: %2llu [%2llu - %2llu] %#llx\n",
-		nr_bits_cacheline,
-		0ULL,
-		nr_bits_cacheline - 1,
-		pcache_cacheline_mask);
-	pr_info("    NR set-index bits: %2llu [%2llu - %2llu] %#llx\n",
-		nr_bits_set,
-		nr_bits_cacheline,
-		nr_bits_cacheline + nr_bits_set - 1,
-		pcache_set_mask);
-	pr_info("    NR tag bits:       %2llu [%2llu - %2llu] %#llx\n",
-		nr_bits_tag,
-		nr_bits_cacheline + nr_bits_set,
-		nr_bits_cacheline + nr_bits_set + nr_bits_tag - 1,
-		pcache_tag_mask);
-
-	pr_info("    NR pages for data: %llu\n",	nr_pages_cacheline);
-	pr_info("    NR pages for meta: %llu\n",	nr_pages_metadata);
-	pr_info("    Cacheline (pa) range:   [%#18llx - %#18llx]\n",
-		phys_start_cacheline, phys_start_metadata - 1);
-	pr_info("    Metadata (pa) range:    [%#18llx - %#18llx]\n",
-		phys_start_metadata, phys_start_metadata + nr_pages_metadata * PAGE_SIZE - 1);
-
-	pr_info("    Cacheline (va) range:   [%#18llx - %#18llx]\n",
-		virt_start_cacheline, virt_start_metadata - 1);
-	pr_info("    Metadata (va) range:    [%#18llx - %#18llx]\n",
-		virt_start_metadata, virt_start_metadata + nr_pages_metadata * PAGE_SIZE - 1);
-
-	pcache_way_cache_stride = nr_cachesets * llc_cacheline_size;
-	pcache_way_meta_stride =  nr_cachesets * llc_cachemeta_size;
-	pr_info("    Way cache stride:  %#llx\n", pcache_way_cache_stride);
-	pr_info("    Way meta stride:   %#llx\n", pcache_way_meta_stride);
-}
-
-/**
- * pcache_range_register
- * @start: physical address of the first byte of the cache
- * @size: size of the cache
- *
- * Register a consecutive physical memory range as the last-level cache for
- * processor component. It is invoked at early boot before everything about
- * memory is initialized. For x86, this is registered during the parsing of
- * memmap=N$N command line option.
- *
- * If CONFIG_LEGO_SPECIAL_MEMMAP is ON, this range will not be bailed out
- * from e820 table, it is marked as reserved in memblock. So pages within
- * this range still have `struct page`, yeah!
- */
-int __init pcache_range_register(u64 start, u64 size)
-{
-	if (WARN_ON(!start && !size))
-		return -EINVAL;
-
-	if (WARN_ON(offset_in_page(start) || offset_in_page(size)))
-		return -EINVAL;
-
-	if (llc_cache_start || llc_cache_registered_size)
-		panic("Remove extra memmap from kernel parameters!");
-
-	llc_cache_start = start;
-	llc_cache_registered_size = size;
-
-	return 0;
 }
