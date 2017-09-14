@@ -192,6 +192,9 @@ union futex_key {
 #define FUTEX_KEY_INIT (union futex_key) { .both = { .ptr = NULL } }
 
 #ifdef CONFIG_FUTEX
+int __init futex_init(void);
+void __init futex_detect_cmpxchg(void);
+
 void exit_robust_list(struct task_struct *curr);
 void exit_pi_state_list(struct task_struct *curr);
 #ifdef CONFIG_HAVE_FUTEX_CMPXCHG
@@ -207,8 +210,6 @@ static inline void exit_pi_state_list(struct task_struct *curr)
 {
 }
 #endif /* CONFIG_FUTEX */
-
-int __init futex_init(void);
 
 /* Well... */
 #include <asm/futex.h>

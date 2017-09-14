@@ -224,7 +224,6 @@ asmlinkage void __init start_kernel(void)
 	/* Allocate pid mapping array */
 	pid_init();
 	fork_init();
-
 	futex_init();
 
 	/*
@@ -267,6 +266,8 @@ asmlinkage void __init start_kernel(void)
 	register_refined_jiffies(CLOCK_TICK_RATE);
 	time_init();
 	calibrate_delay();
+
+	futex_detect_cmpxchg();
 
 	/*
 	 * Set up the scheduler prior starting any interrupts,

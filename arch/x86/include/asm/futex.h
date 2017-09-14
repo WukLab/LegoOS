@@ -113,4 +113,10 @@ static inline int futex_atomic_op_inuser(int encoded_op, u32 __user *uaddr)
 	return ret;
 }
 
+static inline int futex_atomic_cmpxchg_inatomic(u32 *uval, u32 __user *uaddr,
+						u32 oldval, u32 newval)
+{
+	return user_atomic_cmpxchg_inatomic(uval, uaddr, oldval, newval);
+}
+
 #endif /* _ASM_X86_FUTEX_H_ */

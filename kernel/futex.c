@@ -201,12 +201,6 @@ static struct {
 #define futex_queues   (__futex_data.queues)
 #define futex_hashsize (__futex_data.hashsize)
 
-static inline int futex_atomic_cmpxchg_inatomic(u32 *uval, u32 __user *uaddr,
-						u32 oldval, u32 newval)
-{
-	return user_atomic_cmpxchg_inatomic(uval, uaddr, oldval, newval);
-}
-
 int fixup_user_fault(struct task_struct *tsk, struct mm_struct *mm,
 		     unsigned long address, unsigned int fault_flags,
 		     bool *unlocked)
@@ -1421,7 +1415,7 @@ out:
 	return ret;
 }
 
-static void __init futex_detect_cmpxchg(void)
+void __init futex_detect_cmpxchg(void)
 {
 	u32 curval;
 
@@ -1462,8 +1456,6 @@ int __init futex_init(void)
 					       &futex_shift, NULL,
 					       futex_hashsize, futex_hashsize);
 	futex_hashsize = 1UL << futex_shift;
-
-	futex_detect_cmpxchg();
 
 	for (i = 0; i < futex_hashsize; i++) {
 		atomic_set(&futex_queues[i].waiters, 0);
