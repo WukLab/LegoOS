@@ -56,6 +56,17 @@ config LEGO_SPECIAL_MEMMAP
 	  If unsure, leave it alone.
 
 menu "Processor DEBUG Options"
+config DEBUG_PCACHE
+	bool "Debug L4-cache"
+	default n
+	depends on COMP_PROCESSOR
+	help
+	  Enable to have a detailed dump log of L4 cache subsystem.
+	  Mostly, it tells you the missing address and how it was handled
+	  on both processor and memory side.
+
+	  If unsure, say N
+
 config DEBUG_SYSCALL
 	bool "Debug all SYSCALL enter/exit"
 	default n

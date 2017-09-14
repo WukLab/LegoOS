@@ -24,6 +24,13 @@
 
 #include <processor/include/pcache.h>
 
+#ifdef CONFIG_DEBUG_PCACHE
+#define pcache_debug(fmt, ...)	\
+	printk(KERN_DEBUG "%s(): " fmt "\n", __func__, __VA_ARGS__);
+#else
+static inline void pcache_debug(const char *fmt, ...) { }
+#endif
+
 static u64 llc_cache_start;
 static u64 llc_cache_registered_size;
 
@@ -125,6 +132,9 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags, struc
 	payload.pid = current->tgid;
 	payload.flags = flags;
 	payload.missing_vaddr = address;
+
+	pcache_debug("pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
+		current->pid, current->tgid, address, flags, pa_cache);
 
 	slice = PAGE_SIZE / nr_split;
 	for (i = 0; i < nr_split; i++) {
@@ -323,7 +333,7 @@ void __init pcache_init(void)
 	 * This may happen if running on QEMU.
 	 * Not sure about physical machine.
 	 */
-	memset((void *)virt_start_cacheline, 0, llc_cache_size);
+	memset((void *)virt_start_cacheline, 0, llc_cache_registered_size);
 
 	pcache_sanity_check();
 

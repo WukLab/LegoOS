@@ -25,19 +25,6 @@ config PCACHE_FILL_SPLIT_NR
 	int
 	default 1
 
-menu "General DEBUG Options"
-config DEBUG_PCACHE_FILL
-	bool "Debug L4-cache"
-	default n
-	depends on COMP_PROCESSOR || COMP_MEMORY
-	help
-	  Enable to have a detailed dump log of L4 cache subsystem.
-	  Mostly, it tells you the missing address and how it was handled
-	  on both processor and memory side.
-
-	  if unsure, say N
-endmenu
-
 config USE_RAMFS
 	bool "Use RAMFS in P or M"
 	default y

@@ -46,6 +46,17 @@ config DEBUG_HANDLE_MMAP
 
 	  If unsure, say N.
 
+config DEBUG_PCACHE
+	bool "Debug L4-cache"
+	default n
+	depends on COMP_MEMORY
+	help
+	  Enable to have a detailed dump log of L4 cache subsystem.
+	  Mostly, it tells you the missing address and how it was handled
+	  on both processor and memory side.
+
+	  If unsure, say N
+
 endmenu # Memory DEBUG Options
 
 endif # if COMP_MEMORY
