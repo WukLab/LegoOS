@@ -195,20 +195,15 @@ union futex_key {
 int __init futex_init(void);
 void __init futex_detect_cmpxchg(void);
 
-void exit_robust_list(struct task_struct *curr);
-void exit_pi_state_list(struct task_struct *curr);
-#ifdef CONFIG_HAVE_FUTEX_CMPXCHG
-#define futex_cmpxchg_enabled 1
-#else
 extern int futex_cmpxchg_enabled;
-#endif /* CONFIG_HAVE_FUTEX_CMPXCHG*/
+void exit_robust_list(struct task_struct *curr);
+
 #else
 static inline void exit_robust_list(struct task_struct *curr)
 {
 }
-static inline void exit_pi_state_list(struct task_struct *curr)
-{
-}
+static inline int __init futex_init(void) { return 0; }
+static inline void __init futex_detect_cmpxchg(void) { }
 #endif /* CONFIG_FUTEX */
 
 /* Well... */

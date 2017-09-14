@@ -723,7 +723,11 @@ void __init init_mem_mapping(void)
 
 	end = max_pfn << PAGE_SHIFT;
 
-	init_memory_mapping(0, ISA_END_ADDRESS);
+	/*
+	 * DO NOT MAP the first page.
+	 * So all NULL dereference will be caught!
+	 */
+	init_memory_mapping(PAGE_SIZE, ISA_END_ADDRESS);
 
 	/*
 	 * X86 maps top->down direction

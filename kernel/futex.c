@@ -1431,9 +1431,9 @@ void __init futex_detect_cmpxchg(void)
 	 */
 	if (cmpxchg_futex_value_locked(&curval, NULL, 0, 0) == -EFAULT) {
 		futex_cmpxchg_enabled = 1;
-		pr_debug("Futex cmpxchg enabled\n");
+		pr_debug("futex cmpxchg enabled!\n");
 	} else
-		pr_debug("Futex cmpxchg disabled\n");
+		pr_debug("futex cmpxchg disabled!\n");
 }
 
 int __init futex_init(void)
