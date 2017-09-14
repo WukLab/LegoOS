@@ -193,9 +193,6 @@ union futex_key {
 
 #ifdef CONFIG_FUTEX
 int __init futex_init(void);
-void __init futex_detect_cmpxchg(void);
-
-extern int futex_cmpxchg_enabled;
 void exit_robust_list(struct task_struct *curr);
 
 #else
@@ -203,7 +200,6 @@ static inline void exit_robust_list(struct task_struct *curr)
 {
 }
 static inline int __init futex_init(void) { return 0; }
-static inline void __init futex_detect_cmpxchg(void) { }
 #endif /* CONFIG_FUTEX */
 
 /* Well... */

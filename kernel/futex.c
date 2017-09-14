@@ -126,8 +126,6 @@
  * double_lock_hb() and double_unlock_hb(), respectively.
  */
 
-int __read_mostly futex_cmpxchg_enabled;
-
 /*
  * Futex flags used to encode options to functions and preserve them across
  * restarts.
@@ -1114,11 +1112,6 @@ SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
 
 	syscall_enter("head: %p, len: %zu\n", head, len);
 
-	if (!futex_cmpxchg_enabled) {
-		ret = -ENOSYS;
-		goto out;
-	}
-
 	/*
 	 * The kernel knows only one size for now:
 	 */
@@ -1151,11 +1144,6 @@ SYSCALL_DEFINE3(get_robust_list, int, pid,
 
 	syscall_enter("pid: %u, head_ptr: %p, len_ptr: %p\n",
 		pid, head_ptr, len_ptr);
-
-	if (!futex_cmpxchg_enabled) {
-		ret = -ENOSYS;
-		goto out;
-	}
 
 	if (!pid)
 		p = current;
@@ -1262,9 +1250,6 @@ void exit_robust_list(struct task_struct *curr)
 	unsigned int uninitialized_var(next_pi);
 	unsigned long futex_offset;
 	int rc;
-
-	if (!futex_cmpxchg_enabled)
-		return;
 
 	/*
 	 * Fetch the list head (which was registered earlier, via
@@ -1413,30 +1398,6 @@ SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
 out:
 	syscall_exit(ret);
 	return ret;
-}
-
-void __init futex_detect_cmpxchg(void)
-{
-	u32 curval;
-
-	/*
-	 * This will fail and we want it. Some arch implementations do
-	 * runtime detection of the futex_atomic_cmpxchg_inatomic()
-	 * functionality. We want to know that before we call in any
-	 * of the complex code paths. Also we want to prevent
-	 * registration of robust lists in that case. NULL is
-	 * guaranteed to fault and we get -EFAULT on functional
-	 * implementation, the non-functional ones will return
-	 * -ENOSYS.
-	 *
-	 *
-	 * Any invalid address would work.
-	 */
-	if (cmpxchg_futex_value_locked(&curval, (void *)0xC000C000, 0, 0) == -EFAULT) {
-		futex_cmpxchg_enabled = 1;
-		pr_debug("futex cmpxchg enabled!\n");
-	} else
-		pr_debug("futex cmpxchg disabled!\n");
 }
 
 int __init futex_init(void)

@@ -267,9 +267,6 @@ asmlinkage void __init start_kernel(void)
 	time_init();
 	calibrate_delay();
 
-	/* Last part of futex init */
-	futex_detect_cmpxchg();
-
 	/*
 	 * Set up the scheduler prior starting any interrupts,
 	 * such as timer interrupt. Full topology setup happens
