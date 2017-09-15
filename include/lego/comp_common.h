@@ -40,7 +40,6 @@ extern unsigned int LEGO_LOCAL_NID;
 
 #define P2M_READ	((__u32)__NR_read)
 #define P2M_WRITE	((__u32)__NR_write)
-#define P2M_OPEN	((__u32)__NR_open)
 #define P2M_CLOSE	((__u32)__NR_close)
 #define P2M_MMAP	((__u32)__NR_mmap)
 #define P2M_MPROTECT	((__u32)__NR_mprotect)
@@ -53,10 +52,12 @@ extern unsigned int LEGO_LOCAL_NID;
 #define P2M_CHECKPOINT	((__u32)__NR_checkpoint_process)
 #define P2M_TEST	((__u32)0x0fffffff)
 
-#define M2S_BASE	((__u32)0x00100000)
-#define M2S_OPEN	((__u32)(M2S_BASE)+3)
-#define M2S_READ	((__u32)(M2S_BASE)+1)
-#define M2S_WRITE	((__u32)(M2S_BASE)+2)
+/* Processor to Storage directly */
+#define P2S_OPEN	((__u32)__NR_open)	/* open() goes to storage directly */
+
+/* Memory to Storage */
+#define M2S_READ	P2M_READ		/* Reuse the same nr */
+#define M2S_WRITE	P2M_WRITE		/* Reuse the same nr */
 
 /* Return status */
 #define RET_OKAY	((__u32)0)	/* Operation succeed */
@@ -147,23 +148,28 @@ struct p2m_llc_miss_struct {
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64,
 			struct common_header *);
 
+#define MAX_FILENAME_LENGTH	128
+
 /* P2M_READ */
-struct p2m_read_struct {
-	__u32 pid;
-};
-int handle_p2m_read(struct p2m_read_struct *, u64, struct common_header *);
-
 /* P2M_WRITE */
-struct p2m_write_struct {
-	__u32 pid;
+/*
+ * We need pass the filename, uid, flags, len, offset
+ * and virtual address of user buffer to memory component
+ * Also we need nid and pid to convert user virtual address
+ * to coresponding kernel virtual address.
+ */
+struct p2m_read_write_payload {
+	u32	pid;
+	u32	tgid;
+	char __user *buf;
+	int	uid;
+	char	filename[MAX_FILENAME_LENGTH];
+	int	flags;
+	ssize_t	len;
+	loff_t	offset;
 };
-int handle_p2m_write(struct p2m_write_struct *, u64, struct common_header *);
-
-/* P2M_OPEN */
-struct p2m_open_struct {
-	__u32 pid;
-};
-int handle_p2m_open(struct p2m_open_struct *, u64, struct common_header *);
+int handle_p2m_read(struct p2m_read_write_payload*, u64, struct common_header *);
+int handle_p2m_write(struct p2m_read_write_payload*, u64, struct common_header *);
 
 /* P2M_CLOSE */
 struct p2m_close_struct {
@@ -203,7 +209,6 @@ int handle_p2m_fork(struct p2m_fork_struct *, u64, struct common_header *);
 #define MAX_ARG_STRLEN		(PAGE_SIZE * 32)
 #define MAX_ARG_STRINGS		0x7FFFFFFF
 
-#define MAX_FILENAME_LENGTH	128
 struct p2m_execve_struct {
 	__u32	pid;
 	__u32	payload_size;
@@ -296,16 +301,22 @@ int handle_p2m_msync(struct p2m_msync_struct *, u64, struct common_header *);
 /* P2M_CHECKPOINT */
 int handle_p2m_checkpint(void *, u64, struct common_header *);
 
-/* M2S_READ */
-struct m2s_read {
-	__u32	pid;
-	char    filename[MAX_FILENAME_LENGTH];
+/* P2S_OPEN */
+struct p2s_open_struct{
+	int	uid;
+	char	filename[MAX_FILENAME_LENGTH];
+	fmode_t	permission;
+	int	flags;
 };
 
+/* M2S_READ */
 /* M2S_WRITE */
-struct m2s_write {
-	__u32	pid;
-	char    filename[MAX_FILENAME_LENGTH];
+struct m2s_read_write_payload{
+	int	uid;
+	char	filename[MAX_FILENAME_LENGTH];
+	int	flags;
+	size_t	len;
+	loff_t	offset;
 };
 
 struct p2m_flush_payload {

@@ -12,10 +12,8 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 
-#define M2S_BASE	((__u32)0x00100000)
-#define M2S_READ	((__u32)(M2S_BASE)+1)
-#define M2S_WRITE	((__u32)(M2S_BASE)+2)
-#define M2S_OPEN	((__u32)(M2S_BASE)+3)
+#include <../../include/lego/comp_common.h>
+
 #define LINUX_NODE	0
 #define LEGO_NODE	1
 
@@ -36,21 +34,3 @@ static inline void *to_payload(void *msg)
 {
 	return (void *)(msg + sizeof(__u32));
 }
-
-
-#define MAX_FILENAME_LENGTH	128
-
-struct m2s_open_payload{
-	int uid;
-	char filename[MAX_FILENAME_LENGTH];
-	fmode_t permission;
-	int flags;
-};
-
-struct m2s_read_write_payload{
-	int uid;
-	char filename[MAX_FILENAME_LENGTH];
-	int flags;
-	size_t len;
-	loff_t offset;
-};

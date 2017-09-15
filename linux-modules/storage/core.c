@@ -115,7 +115,7 @@ static void storage_dispatch(void *msg, uintptr_t desc){
 		case M2S_WRITE:
 			handle_write_request(payload, desc);
 			break;
-		case M2S_OPEN:
+		case P2S_OPEN:
 			handle_open_request(payload, desc);
 			break;
 	}

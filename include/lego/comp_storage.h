@@ -23,41 +23,4 @@
 #define O_RDONLY 	00000000
 #define O_RDWR		00000002
 
-/* we need pass the filename, uid, flags, len, offset
- * and virtual address of user buffer to memory component
- * Also we need nid and pid to convert user virtual address
- * to coresponding kernel virtual address.
- */
-
-struct p2m_read_write_payload{
-	int pid;
-	char __user *buf;
-	int uid;
-	char filename[MAX_FILENAME_LENGTH];
-	int flags;
-	ssize_t len;
-	loff_t offset;
-};
-
-struct m2s_open_payload{
-	int uid;
-	char filename[MAX_FILENAME_LENGTH];
-	fmode_t permission;
-	int flags;
-};
-
-struct m2s_read_write_payload{
-	int uid;
-	char filename[MAX_FILENAME_LENGTH];
-	int flags;
-	size_t len;
-	loff_t offset;
-};
-
-ssize_t handle_p2s_read(void *payload, uintptr_t desc, struct common_header *hdr);
-ssize_t handle_p2s_write(void *payload, uintptr_t desc, struct common_header *hdr);
-
-void p2s_test(void);
-void m2s_test(void);
-
 #endif

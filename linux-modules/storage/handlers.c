@@ -133,12 +133,10 @@ out_reply:
 	
 }
 
-int handle_open_request(void *payload, uintptr_t desc){
-
-	//pr_info("calling handle_open_request\n");
-
-	struct m2s_open_payload *m2s_op;
-	m2s_op = (struct m2s_open_payload *) payload;
+/* Open request from processor directly */
+int handle_open_request(void *payload, uintptr_t desc)
+{
+	struct p2s_open_struct *m2s_op = payload;
 	int metadata_entry, user_entry;
 	int ret;
 	request rq;
@@ -152,22 +150,17 @@ int handle_open_request(void *payload, uintptr_t desc){
 	pr_info("handle_open_request : permission -> [0%o]\n", m2s_op->permission);
 	pr_info("handle_open_request : flags -> [0x%x]\n", m2s_op->flags);
 #endif
-	/*ret = grant_access(&rq, &metadata_entry, &user_entry);
-	
-	if (ret)
-		goto out_reply;
-	*/ //enable in future;
 	ret = 0;
 
-	//if (m2s_op->flags & O_CREAT){
-		struct file *filp;
-		filp = local_file_open(&rq);
-		if (IS_ERR(filp)){
-			ret = PTR_ERR(filp);
-			goto out_reply;
-		}
-		local_file_close(filp);
-	//}
+	struct file *filp;
+
+	filp = local_file_open(&rq);
+	if (IS_ERR(filp)){
+		ret = PTR_ERR(filp);
+		goto out_reply;
+	}
+
+	local_file_close(filp);
 
 out_reply:
 	ibapi_reply_message(&ret, sizeof(ret), desc);

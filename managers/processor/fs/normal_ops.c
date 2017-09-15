@@ -21,24 +21,34 @@
 
 #include <processor/include/fs.h>
 
+#ifdef CONFIG_DEBUG_FILE
+#define file_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void file_debug(const char *fmt, ...) { }
+#endif
+
+/*
+ * p2s_open:
+ * Send request to storage directly.
+ */
 static int normal_p2s_open(struct file *f)
 {
 	int retval = 0;
 	char *err;
 	void *msg;
 	u32 len_msg, *opcode;
-	struct m2s_open_payload *payload;
+	struct p2s_open_struct *payload;
 
-	len_msg = sizeof(__u32) + sizeof(struct m2s_open_payload);
+	len_msg = sizeof(*opcode) + sizeof(*payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 
-	opcode = (u32 *)msg;
-	payload = (struct m2s_open_payload *)(msg + sizeof(__u32));
+	opcode = msg;
+	*opcode = P2S_OPEN;
 
-	*opcode = M2S_OPEN;
-
+	payload = msg + sizeof(*opcode);
 	payload->uid = current_uid();
 	strcpy(payload->filename, f->f_name);
 	payload->permission = f->f_mode;
@@ -67,142 +77,148 @@ static int normal_p2s_open(struct file *f)
 	return retval;
 }
 
-static ssize_t normal_p2s_read(struct file *f, char __user *buf,
-				size_t count, loff_t *off) {
-	/* retbuf should only put in memory side */
-	ssize_t retval = 0;
-	ssize_t *retval_in_buf;
-
-	/* new added */
-	char *content;
-	void *retbuf;
-	u32 len_ret = sizeof(ssize_t) + count;
-
-	void *msg;
-	/* common_header + p2m_read_write_payload */
-	u32 len_msg = sizeof(struct common_header) + sizeof(struct p2m_read_write_payload);
-	
+/*
+ * p2m_read
+ * Send request to memory manager
+ */
+static ssize_t normal_p2m_read(struct file *f, char __user *buf,
+			       size_t count, loff_t *off)
+{
+	ssize_t retval, retlen;
+	ssize_t *retval_ptr;
+	u32 len_retbuf, len_msg;
+	void *retbuf, *msg, *content;
 	struct common_header *hdr;
 	struct p2m_read_write_payload *payload;
-	int err = 0;
 
-	retbuf = kmalloc(len_ret, GFP_KERNEL);
+	len_retbuf = sizeof(ssize_t) + count;
+	retbuf = kmalloc(len_retbuf, GFP_KERNEL);
+	if (!retbuf)
+		return -ENOMEM;
+
+	len_msg = sizeof(*hdr) + sizeof(*payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
-	hdr = (struct common_header *) msg;
-	payload = (struct p2m_read_write_payload *) (msg + sizeof(struct common_header));
+	if (!msg) {
+		kfree(retbuf);
+		return -ENOMEM;
+	}
 
-	hdr->opcode = M2S_READ;
+	/* Construct payload */
+	hdr = msg;
+	hdr->opcode = P2M_READ;
 	hdr->src_nid = LEGO_LOCAL_NID;
 	hdr->length = len_msg;
 
+	payload = msg + sizeof(*hdr);
 	payload->pid = current->pid;
+	payload->tgid = current->tgid;
 	payload->buf = buf;
-
-	payload->uid = current_uid();/* should be user uid */
-	strcpy(payload->filename, f->f_name);
+	payload->uid = current_uid();
+	strncpy(payload->filename, f->f_name, MAX_FILENAME_LENGTH);
 	payload->flags = f->f_flags;
 	payload->len = count;
-	payload->offset = (*off);
+	payload->offset = *off;
 
-	//ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg, &retval, sizeof(retval), false);
-	ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg, retbuf, len_ret, false);
-	retval_in_buf = (ssize_t *) retbuf;
-	retval = *retval_in_buf;
-	content = (char *) (retbuf + sizeof(ssize_t));
-#ifdef DEBUG_STORAGE
-	pr_info("normal_p2s_read : received content [%s]\n", content);
+	retlen = ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg,
+				      retbuf, len_retbuf, false);
+	if (unlikely(retlen == sizeof(ssize_t))) {
+		retval = *(ssize_t *)retbuf;
+		file_debug("%s", ret_to_string(ERR_TO_LEGO_RET(retval)));
+		goto out;
+	} else if (unlikely(retlen > len_retbuf)) {
+		panic("BUG: retlen: %zu, len_retbuf: %u\n",
+				retlen, len_retbuf);
+	}
+
+	/*
+	 * The first 8 bytes stores the nr of bytes been read
+	 * The left is the real content
+	 */
+	retval_ptr = retbuf;
+	retval = *retval_ptr;
+	content = retbuf + sizeof(ssize_t);
+
+	/* If success, we copy the content into user's cacheline */
+	if (likely(retval >= 0)) {
+#ifdef CONFIG_DEBUG_FILE
+		print_hex_dump_bytes("Read Content: ", DUMP_PREFIX_ADDRESS, content, retval);
 #endif
-	if(retval >= 0){
 		*off += retval;
-		err = copy_to_user(buf, content, count);
-		if(unlikely(err)){
-			panic("normal_p2s_read : cannot copy content to user buffer.\n");
+		if (copy_to_user(buf, content, count)) {
+			retval = -EFAULT;
+			goto out;
 		}
+	} else {
+		/* should only got 8 bytes return buffer */
+		BUG();
 	}
 
-	if (retval < 0){
-#ifdef DEBUG_STORAGE
-		char *errstr;
-		errstr = ret_to_string(ERR_TO_LEGO_RET((long)retval));
-		pr_info("%s\n", errstr);		
-#endif
-	}
-	
+out:
+	file_debug("retval: %d", retval);
+	kfree(msg);
+	kfree(retbuf);
 	return retval;
 }
 
-static ssize_t normal_p2s_write(struct file *f, const char __user *buf,
+static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
 				size_t count, loff_t *off)
 {
-	void *msg;
-	/* common_header + p2s_read_write_payload */
-	//u32 len_msg = sizeof(struct common_header) + sizeof(struct p2m_read_write_payload);
-	/* need append the content to payload */
-	u32 len_msg = sizeof(struct common_header)
-	       		+ sizeof(struct p2m_read_write_payload) + count;
-
+	ssize_t retval, retlen;
+	u32 len_msg;
+	void *msg, *content;
 	struct common_header *hdr;
 	struct p2m_read_write_payload *payload;
-	char *content;
 
-	/* retbuf should only contain a retval */
-	ssize_t retval = 0;
-	int err;
-
+	len_msg = sizeof(*hdr) + sizeof(*payload) + count;
 	msg = kmalloc(len_msg, GFP_KERNEL);
-	if (unlikely(!msg)) {
+	if (!msg)
 		return -ENOMEM;
-	}
-	
-	hdr = (struct common_header *) msg;
-	payload = (struct p2m_read_write_payload *) (msg + sizeof(struct common_header));
 
-	hdr->opcode = M2S_WRITE;
+	/* Construct payload */
+	hdr = (struct common_header *)msg;
+	hdr->opcode = P2M_WRITE;
 	hdr->src_nid = LEGO_LOCAL_NID;
 	hdr->length = len_msg;
 
+	payload = (struct p2m_read_write_payload *)(msg + sizeof(*hdr));
 	payload->pid = current->pid;
+	payload->tgid = current->tgid;
 	payload->buf = (char *)buf;
-
-	payload->uid = current_uid(); /* should be user uid */
-	strcpy(payload->filename, f->f_name);
+	payload->uid = current_uid();
 	payload->flags = f->f_flags;
 	payload->len = count;
 	payload->offset = (*off);
+	strncpy(payload->filename, f->f_name, MAX_FILENAME_LENGTH);
 
-	/* copy_from_user to get content */
-	content = (char *) (msg + sizeof(struct common_header)
-		       		+ sizeof(struct p2m_read_write_payload));
-	err = copy_from_user(content, buf, count);
-	if (unlikely(err)) {
-		panic("normal_p2s_write : cannot copy the content from user buffer.\n"); 
+	/* Copy the contents into the payload */
+	content = msg + sizeof(*hdr) + sizeof(*payload);
+	if (copy_from_user(content, buf, count)) {
+		retval = -EFAULT;
+		goto out;
 	}
 
-#ifdef DEBUG_STORAGE
-	pr_info("content copyed from user [%s]\n", content);
-#endif
+	/* Send to memory home node */
+	retlen = ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg,
+			&retval, sizeof(retval), false);
+	if (unlikely(retlen != sizeof(retval))) {
+		WARN_ON(1);
+		retval = -EIO;
+		goto out;
+	}
 
-
-	ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg, &retval, sizeof(retval), false);
-
-	if(retval >= 0){
+	if (retval >= 0)
 		*off += retval;
-	}
 
-	if(retval < 0){
-#ifdef DEBUG_STORAGE
-		char *errstr;
-		errstr = ret_to_string(ERR_TO_LEGO_RET((long)retval));
-		pr_info("%s\n", errstr);		
-#endif
-	}
+out:
+	file_debug("retval: %d", retval);
+	kfree(msg);
 	return retval;
 }
 
 struct file_operations normal_p2s_f_ops = {
 	.open	= normal_p2s_open,
-	.read	= normal_p2s_read,
-	.write	= normal_p2s_write,
+	.read	= normal_p2m_read,
+	.write	= normal_p2m_write,
 };
 
 SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)

@@ -169,10 +169,6 @@ static int mc_dispatcher(void *passed)
 		handle_p2m_write(payload, desc, hdr);
 		break;
 
-	case P2M_OPEN:
-		handle_p2m_open(payload, desc, hdr);
-		break;
-
 	case P2M_CLOSE:
 		handle_p2m_close(payload, desc, hdr);
 		break;
@@ -218,14 +214,6 @@ static int mc_dispatcher(void *passed)
 		handle_p2m_test(payload, desc, hdr);
 		break;
 
-	case M2S_READ:
-		handle_p2s_read(payload, desc, hdr);
-		break;
-
-	case M2S_WRITE:
-		handle_p2s_write(payload, desc, hdr);
-		break;
-	
 	case P2M_LLC_FLUSH:
 		handle_p2m_flush_single(payload, desc, hdr);
 		break;

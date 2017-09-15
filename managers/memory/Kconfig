@@ -57,6 +57,15 @@ config DEBUG_HANDLE_MMAP
 
 	  If unsure, say N.
 
+config DEBUG_HANDLE_FILE
+	bool "Debug handle_file.c"
+	default n
+	depends on COMP_MEMORY
+	help
+	  Enable to debug read(), write(), and some fs syscalls.
+
+	  If unsure, say N.
+
 endmenu # Memory DEBUG Options
 
 endif # if COMP_MEMORY
