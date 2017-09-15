@@ -67,6 +67,15 @@ config DEBUG_PCACHE
 
 	  If unsure, say N
 
+config DEBUG_FILE
+	bool "Debug open/read/close calls"
+	default n
+	depends on COMP_PROCESSOR
+	help
+	  Enable to debug file related calls
+
+	  If unsure, say N.
+
 config DEBUG_SYSCALL
 	bool "Debug all SYSCALL enter/exit"
 	default n

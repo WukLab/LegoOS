@@ -35,7 +35,6 @@ static inline void file_debug(const char *fmt, ...) { }
 static int normal_p2s_open(struct file *f)
 {
 	int retval = 0;
-	char *err;
 	void *msg;
 	u32 len_msg, *opcode;
 	struct p2s_open_struct *payload;
@@ -54,26 +53,14 @@ static int normal_p2s_open(struct file *f)
 	payload->permission = f->f_mode;
 	payload->flags = f->f_flags;
 
-#ifdef DEBUG_STORAGE
-	pr_info("normal_p2s_open : [%s]\n", payload->filename);
-	pr_info("normal_p2s_open : mode -> [0%o]\n", payload->permission);
-	pr_info("normal_p2s_open : flags -> [0x%x]\n", payload->flags);
-	pr_info("normal_p2s_open : check pointer address : \n");
-	pr_info("msg : %p, payload : %p\n", msg, payload);
-	pr_info("payload->uid : %x, payload->filename : %s\n", payload->uid, payload->filename);
-	pr_info("payload->permission : %x, payload->flags : %x\n", payload->permission, payload->flags);
-#endif
+	file_debug("f_name: %s, mode: 0%o, flags: %x",
+		payload->filename, payload->permission, payload->flags);
 
 	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval, sizeof(retval), false);
+	if (retval < 0)
+		pr_debug("%s: %s\n", FUNC, ret_to_string(ERR_TO_LEGO_RET((long)retval)));
 
 	kfree(msg);
-
-#ifdef DEBUG_STORAGE
-	if (retval < 0) {
-		err =  ret_to_string(ERR_TO_LEGO_RET((long)retval));
-		pr_info("normal_p2s_open : %s\n", err);
-	}
-#endif
 	return retval;
 }
 
@@ -154,7 +141,7 @@ static ssize_t normal_p2m_read(struct file *f, char __user *buf,
 	}
 
 out:
-	file_debug("retval: %d", retval);
+	file_debug("retval: %zu", retval);
 	kfree(msg);
 	kfree(retbuf);
 	return retval;
@@ -210,7 +197,7 @@ static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
 		*off += retval;
 
 out:
-	file_debug("retval: %d", retval);
+	file_debug("retval: %zu", retval);
 	kfree(msg);
 	return retval;
 }
