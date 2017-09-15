@@ -25,8 +25,9 @@
 #include <processor/include/pcache.h>
 
 #ifdef CONFIG_DEBUG_PCACHE
-#define pcache_debug(fmt, ...)	\
-	printk(KERN_DEBUG "%s(): " fmt "\n", __func__, __VA_ARGS__);
+#define pcache_debug(fmt, ...)					\
+	printk(KERN_DEBUG "%s() cpu%2d "fmt"\n",		\
+		__func__, smp_processor_id(), __VA_ARGS__);
 #else
 static inline void pcache_debug(const char *fmt, ...) { }
 #endif
@@ -121,9 +122,10 @@ static void pcache_free_cacheline(struct page *page)
 	/* TODO */
 }
 
-static int do_pcache_fill_page(unsigned long address, unsigned long flags, struct page *page)
+static int do_pcache_fill_page(unsigned long address,
+			       unsigned long flags, struct page *page)
 {
-	int ret;
+	int ret, len;
 	u64 offset, slice;
 	int i, nr_split = CONFIG_PCACHE_FILL_SPLIT_NR;
 	struct p2m_llc_miss_struct payload;
@@ -134,7 +136,7 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags, struc
 	payload.flags = flags;
 	payload.missing_vaddr = address;
 
-	pcache_debug("Enter pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
+	pcache_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
 
 	slice = PAGE_SIZE / nr_split;
@@ -142,29 +144,35 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags, struc
 		offset = i * slice;
 		payload.offset = offset;
 
-		ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
+		len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
 				&payload, sizeof(payload),
 				pa_cache + offset, slice, true,
 				DEF_NET_TIMEOUT);
 
-		if (unlikely(ret < slice)) {
-			if (likely(ret == sizeof(int))) {
-				/* remote reported error */
+		if (unlikely(len < slice)) {
+			if (likely(len == sizeof(int))) {
 				int *va_cache = page_to_virt(page);
-				return -(*va_cache);
-			} else if (ret < 0)
+
+				/* remote reported error */
+				ret = -(*va_cache);
+				goto out;
+			} else if (len < 0) {
 				/* IB is not available */
-				return -EIO;
-			else {
-				WARN(1, "invalid retbuf size: %d\n", ret);
-				return -EFAULT;
+				ret = -EIO;
+				goto out;
+			} else {
+				WARN(1, "Invalid size: %d\n", len);
+				ret = -EFAULT;
+				goto out;
 			}
 		}
 	}
-	pcache_debug("Exit pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
-		current->pid, current->tgid, address, flags, pa_cache);
 
-	return 0;
+	ret = 0;
+out:
+	pcache_debug("O pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p ret:%d",
+		current->pid, current->tgid, address, flags, pa_cache, ret);
+	return ret;
 }
 
 /*
@@ -188,13 +196,7 @@ static int pcache_fill_page(struct mm_struct *mm, unsigned long address,
 
 	page_table = pte_offset_lock(mm, pmd, address, &ptl);
 	if (unlikely(!pte_none(*page_table))) {
-		/*
-		 * Concurrent faults
-		 *
-		 * TODO:
-		 * 1) Wait until pcache fill finish
-		 */
-		WARN_ON(1);
+		pcache_debug("Concurrent faults: %#lx", address);
 		pcache_free_cacheline(page);
 		spin_unlock(ptl);
 		return 0;

@@ -523,9 +523,8 @@ void init_global_lid_qpn(void)
 	BUILD_BUG_ON(1);
 #endif
 
-	global_lid[0] = 18;
-	global_lid[1] = 19;
-	global_lid[2] = 21;
+	global_lid[0] = 19;
+	global_lid[1] = 21;
 }
 
 int get_global_qpn(int mynodeid, int remnodeid, int conn)
@@ -590,6 +589,17 @@ inline int client_find_qp_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 	int i;
 	for(i=0;i<ctx->num_connections;i++)
 	{
+#if 0
+		if (!ctx) {
+			BUG();
+		} else if (!ctx->qp[i]) {
+			printk("%s():%d, i=%d, ctx: %p, ctx->qp[%d]: %p\n",
+				FUNC, LINE, i, ctx, i, ctx->qp[i]);
+			BUG();
+		}
+#endif
+		if (i/NUM_PARALLEL_CONNECTION == ctx->node_id)
+			continue;
 		if(ctx->qp[i]->qp_num==qp_num)
 			return i;
 	}
