@@ -106,13 +106,13 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	int fd, ret;
 	struct file *f;
 
-	syscall_enter("filename: %p, flags: %x, mode: %x\n",
-		filename, flags, mode);
-
 	if (strncpy_from_user(kname, filename, FILENAME_LEN_DEFAULT) < 0) {
 		fd = -EFAULT;
 		goto out;
 	}
+
+	syscall_enter("f_name: %s, flags: %x, mode: %x\n",
+		kname, flags, mode);
 
 	/*
 	 * Allocate fd and struct file
