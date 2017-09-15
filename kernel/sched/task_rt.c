@@ -395,8 +395,12 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int wake_flags)
 	int new_cpu = cpu;
 
 	/* Only fork time? */
-	if (sd_flag == SD_BALANCE_FORK)
+	if (sd_flag == SD_BALANCE_FORK) {
+retry:
 		new_cpu = find_next_rr_cpu(p, cpu);
+		if (unlikely(!cpu_active(new_cpu)))
+			goto retry;
+	}
 	return new_cpu;
 }
 #endif

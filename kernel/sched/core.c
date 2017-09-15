@@ -505,7 +505,7 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
 	if (cpumask_equal(&p->cpus_allowed, new_mask))
 		goto out;
 
-	if (!cpumask_intersects(new_mask, cpu_online_mask)) {
+	if (!cpumask_intersects(new_mask, cpu_active_mask)) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -516,7 +516,7 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
 	if (cpumask_test_cpu(task_cpu(p), new_mask))
 		goto out;
 
-	dest_cpu = cpumask_any_and(cpu_online_mask, new_mask);
+	dest_cpu = cpumask_any_and(cpu_active_mask, new_mask);
 	if (task_running(rq, p) || p->state == TASK_WAKING) {
 		struct migration_arg arg = { p, dest_cpu };
 		/* Need help from migration thread: drop lock and wait. */
@@ -704,7 +704,7 @@ long sched_getaffinity(pid_t pid, struct cpumask *mask)
 	}
 
 	retval = 0;
-	cpumask_and(mask, &p->cpus_allowed, cpu_online_mask);
+	cpumask_and(mask, &p->cpus_allowed, cpu_active_mask);
 out:
 	return retval;
 }
@@ -1339,7 +1339,7 @@ int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
 	 *   not worry about this generic constraint ]
 	 */
 	if (unlikely(!cpumask_test_cpu(cpu, &p->cpus_allowed) ||
-		     !cpu_online(cpu)))
+		     !cpu_active(cpu)))
 		cpu = select_fallback_rq(task_cpu(p), p);
 
 	return cpu;
@@ -1629,7 +1629,7 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->rt.time_slice		= sysctl_sched_rr_timeslice;
 
 	/* XXX: Always reset on fork, may violate linux promise */
-	set_cpus_allowed_common(p, cpu_online_mask);
+	set_cpus_allowed_common(p, cpu_active_mask);
 }
 
 /*

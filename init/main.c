@@ -97,6 +97,16 @@ static void inline setup_nr_cpu_ids(void)
 
 static __initdata DEFINE_COMPLETION(kthreadd_done);
 
+static void dump_cpumasks(void)
+{
+	char buf[64];
+
+	sprintf(buf, "Online CPU: %*pbl\n", nr_cpu_ids, cpu_online_mask);
+	pr_debug("%s", buf);
+	sprintf(buf, "Active CPU: %*pbl\n", nr_cpu_ids, cpu_active_mask);
+	pr_debug("%s", buf);
+}
+
 /*
  * This is our first kernel thread (pid 1),
  */
@@ -124,6 +134,7 @@ static int kernel_init(void *unused)
 	wait_for_completion(&ib_init_done);
 #endif
 
+	dump_cpumasks();
 	/* Final step towards a running component.. */
 #ifdef CONFIG_COMP_PROCESSOR
 	processor_component_init();

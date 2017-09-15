@@ -933,8 +933,10 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	struct imm_header_from_cq_to_port *tmp;
 	//set_current_state(TASK_INTERRUPTIBLE);
 
-	pr_info("NOTICE: %s(): IB polling thread on CPU%d\n",
+	pr_info("NOTICE: %s(): IB polling on CPU%d, remove it from active cpumask!\n",
 		__func__, smp_processor_id());
+
+	set_cpu_active(smp_processor_id(), false);
 
 	while(1) {
 		do {

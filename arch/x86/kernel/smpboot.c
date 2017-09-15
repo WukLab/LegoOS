@@ -212,7 +212,9 @@ static void start_secondary_cpu(void)
 
 	/* Initialize the vectors on this cpu */
 	setup_vector_irq(smp_processor_id());
+
 	set_cpu_online(smp_processor_id(), true);
+	set_cpu_active(smp_processor_id(), true);
 
 	/* Enable local interrupts */
 	local_irq_enable();
