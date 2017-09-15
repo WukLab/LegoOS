@@ -62,7 +62,18 @@ config DEBUG_HANDLE_FILE
 	default n
 	depends on COMP_MEMORY
 	help
-	  Enable to debug read(), write(), and some fs syscalls.
+	  Enable to debug handle_file.c
+	  Handlers for read(), write() syscalls.
+
+	  If unsure, say N.
+
+config DEBUG_M2S_READ_WRITE
+	bool "Debug m2s_read_write.c"
+	default n
+	depends on COMP_MEMORY
+	help
+	  Enable to debug all interactions between memory and storage
+	  components. Mostly, m2s_read_write.c
 
 	  If unsure, say N.
 

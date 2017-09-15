@@ -7,10 +7,6 @@
  * (at your option) any later version.
  */
 
-/*
- * This file describes all file-related syscall handlers
- */
-
 #include <lego/slab.h>
 #include <lego/files.h>
 #include <lego/kernel.h>
@@ -22,6 +18,14 @@
 
 #include <memory/include/pid.h>
 #include <memory/include/vm.h>
+
+#ifdef CONFIG_DEBUG_M2S_READ_WRITE
+#define m2s_debug(fmt, ...)					\
+	pr_debug("%s() cpu%d "fmt"\n",				\
+		__func__, smp_processor_id(), __VA_ARGS__)
+#else
+static inline void m2s_debug(const char *fmt, ...) { }
+#endif
 
 ssize_t __storage_read(struct lego_task_struct *tsk, char *f_name,
 		       char __user *buf, size_t count, loff_t *pos)
@@ -47,18 +51,23 @@ ssize_t __storage_read(struct lego_task_struct *tsk, char *f_name,
 	opcode = msg;
 	*opcode = M2S_READ;
 
-	payload = (msg + sizeof(*opcode));
+	payload = msg + sizeof(*opcode);
 	payload->uid = current_uid();
 	payload->flags = O_RDONLY;
 	payload->len = count;
 	payload->offset = *pos;
 	strncpy(payload->filename, f_name, MAX_FILENAME_LENGTH);
 
+	m2s_debug("f_name:[%s] len:%#lx offset:%#Lx",
+		payload->filename, payload->len, payload->offset);
+
 	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, retbuf, len_ret, false);
 
 	/* The first 8 bytes are the nr of bytes been read */
 	retval_ptr = retbuf;
 	retval = *retval_ptr;
+
+	m2s_debug("2 retval: %zu", retval);
 
 	/* The left is the content itself */
 	content = retbuf + sizeof(*retval_ptr);
