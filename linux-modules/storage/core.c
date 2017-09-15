@@ -30,6 +30,7 @@ static int init_metadata(void)
 	struct metadata fake_metadata[MAX_SIZE];
 	int i, j;
 	ssize_t ret;
+	mm_segment_t old_fs;
 	struct file *filp;
 
 	for (i=0; i<MAX_SIZE; i++) {
@@ -56,7 +57,6 @@ static int init_metadata(void)
 		return OP_FAILURE;
 	}
 	
-	mm_segment_t old_fs;
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	ret = filp->f_op->write(filp, (char *)fake_metadata, sizeof(struct metadata)*MAX_SIZE, &filp->f_pos);
@@ -79,9 +79,19 @@ static int init_metadata(void)
 	return OP_SUCCESS;
 }
 
+static void handle_bad_request(u32 opcode, uintptr_t desc)
+{
+	int retbuf;
+
+	pr_debug("WARNING: Invalid opcode: %u\n", opcode);
+
+	retbuf = RET_EFAULT;
+	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
+}
+
 static void storage_dispatch(void *msg, uintptr_t desc)
 {
-	__u32 *opcode;
+	u32 *opcode;
 	void *payload;
 
 	opcode = msg;
@@ -102,11 +112,14 @@ static void storage_dispatch(void *msg, uintptr_t desc)
 	case P2S_OPEN:
 		handle_open_request(payload, desc);
 		break;
+
+	default:
+		handle_bad_request(*opcode, desc);
 	}
 	return;
 }
 
-static void storage_manager(void *data)
+static int storage_manager(void *data)
 {
 	int retlen;
 	void *msg;
@@ -115,7 +128,7 @@ static void storage_manager(void *data)
 	msg = kmalloc(MAX_RXBUF_SIZE, GFP_KERNEL);
 	if (!msg) {
 		WARN_ON(1);
-		return;
+		return -ENOMEM;
 	}
 
 	while(1) {
@@ -127,12 +140,11 @@ static void storage_manager(void *data)
 
 		storage_dispatch(msg, desc);
 	}
-	return;	
+	return 0;	
 }
 
 static int __init init_storage_server(void)
 {
-	int i;
 	struct file *filp;
 	struct task_struct *tsk;
 
