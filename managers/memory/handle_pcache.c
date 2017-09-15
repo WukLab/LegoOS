@@ -13,6 +13,13 @@
 #include <memory/include/vm.h>
 #include <memory/include/pid.h>
 
+#ifdef CONFIG_DEBUG_HANDLE_PCACHE
+#define pcache_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void pcache_debug(const char *fmt, ...) { }
+#endif
+
 /*
  * Processor manager rely on the length of replied
  * message to know if us succeed or failed.
@@ -104,10 +111,8 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 	vaddr  = payload->missing_vaddr;
 	offset = payload->offset; 
 
-#ifdef CONFIG_DEBUG_PCACHE
-	pr_info("%s: nid: %u, pid: %u, tgid: %u, flags: %x, missing_vaddr: %#Lx, offset: %#Lx, nr_split: %d\n",
-		__func__, nid, pid, tgid, flags, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
-#endif
+	pcache_debug("I nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx offset: %#Lx nr_split: %d",
+		nid, pid, tgid, flags, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
 
 	p = find_lego_task_by_pid(hdr->src_nid, tgid);
 	if (unlikely(!p)) {
@@ -121,6 +126,9 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 	}
 
 	do_handle_p2m_llc_miss(p, vaddr, offset, flags, desc);
+
+	pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx offset: %#Lx nr_split: %d",
+		nid, pid, tgid, flags, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
 	return 0;
 }
 
