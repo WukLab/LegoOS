@@ -54,6 +54,7 @@ extern unsigned int LEGO_LOCAL_NID;
 #define P2M_TEST	((__u32)0x0fffffff)
 
 #define M2S_BASE	((__u32)0x00100000)
+#define M2S_OPEN	((__u32)(M2S_BASE)+3)
 #define M2S_READ	((__u32)(M2S_BASE)+1)
 #define M2S_WRITE	((__u32)(M2S_BASE)+2)
 

@@ -95,8 +95,10 @@ void free_fd(struct files_struct *files, int fd)
 	spin_unlock(&files->file_lock);
 }
 
+#ifdef CONFIG_USE_RAMFS
 static struct file_operations debug_ramfs_f_ops = {
 };
+#endif
 
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
@@ -123,8 +125,6 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	f = fdget(fd);
 	f->f_flags = flags;
 	f->f_mode = mode;
-
-	pr_info("open syscall: flags -> [0%o], mode -> [0x%x]\n", f->f_flags, f->f_mode);
 
 	/*
 	 * Ugh.. Just a dirty workaround for the
@@ -160,7 +160,6 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	}
 
 put:
-	pr_info("%s(): [%d] -> [%s]\n", __func__, fd, filename);
 	put_file(f);
 out:
 	syscall_exit(fd);
