@@ -260,8 +260,6 @@ static void lego_ib_test(void)
 #endif
 }
 
-__initdata DEFINE_COMPLETION(ib_init_done);
-
 static int __init lego_ib_init(void)
 {
 	int ret;
@@ -296,3 +294,4 @@ static void __exit lego_ib_cleanup(void)
 
 module_init(lego_ib_init);
 module_exit(lego_ib_cleanup);
+MODULE_LICENSE("GPLv3");
