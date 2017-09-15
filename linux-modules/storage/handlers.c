@@ -13,32 +13,27 @@
 #include <linux/mutex.h>
 #include <linux/mm.h>
 
-//Send retval+buf
-ssize_t handle_read_request(void *payload, uintptr_t desc){
-
-	//pr_info("calling handle_read_request\n");
-
+ssize_t handle_read_request(void *payload, uintptr_t desc)
+{
 	struct m2s_read_write_payload *m2s_rq;
 	m2s_rq = (struct m2s_read_write_payload *) payload;
-	request rq = constuct_request(m2s_rq->uid, m2s_rq->filename, 0, m2s_rq->len, 
-			m2s_rq->offset, m2s_rq->flags);
-
 	int metadata_entry, user_entry;
 	ssize_t ret;
 	ssize_t *retval;
 	char *readbuf;
 	void *retbuf;
-
 	int len_retbuf = m2s_rq->len + sizeof(ssize_t);
+	request rq = constuct_request(m2s_rq->uid, m2s_rq->filename, 0, m2s_rq->len, 
+			m2s_rq->offset, m2s_rq->flags);
 
-	if (unlikely(m2s_rq->len > 5*BLK_SIZE)){
+	if (unlikely(m2s_rq->len > 5*BLK_SIZE)) {
 		pr_info("read request is too large, request [%u].\n", m2s_rq->len);
 		ret = -ENOMEM;
 		goto err;
 	}
 
 	retbuf = kmalloc(len_retbuf, GFP_KERNEL);
-	if (unlikely(!retbuf)){
+	if (unlikely(!retbuf)) {
 		pr_info("No memory for read retbuf, request [%u].\n", m2s_rq->len);
 		ret = -ENOMEM;
 		goto err;
@@ -84,11 +79,8 @@ err:
 	
 }
 
-//send retval
-ssize_t handle_write_request(void *payload, uintptr_t desc){
-
-	//pr_info("calling handle_write_request\n");
-
+ssize_t handle_write_request(void *payload, uintptr_t desc)
+{
 	struct m2s_read_write_payload *m2s_wq;
 	m2s_wq = (struct m2s_read_write_payload *) payload;
 	request rq = constuct_request(m2s_wq->uid, m2s_wq->filename, 0, m2s_wq->len, 
@@ -140,7 +132,10 @@ int handle_open_request(void *payload, uintptr_t desc)
 	int metadata_entry, user_entry;
 	int ret;
 	request rq;
+	struct file *filp;
+
 	rq = constuct_request(m2s_op->uid, m2s_op->filename, m2s_op->permission, 0, 0, m2s_op->flags);
+
 #ifdef DEBUG_STORAGE
 	pr_info("handle_open_request : check pointer address : \n");
 	pr_info("payload : %lu\n", m2s_op);
@@ -151,8 +146,6 @@ int handle_open_request(void *payload, uintptr_t desc)
 	pr_info("handle_open_request : flags -> [0x%x]\n", m2s_op->flags);
 #endif
 	ret = 0;
-
-	struct file *filp;
 
 	filp = local_file_open(&rq);
 	if (IS_ERR(filp)){

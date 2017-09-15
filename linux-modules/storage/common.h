@@ -7,12 +7,11 @@
  * (at your option) any later version.
  */
 
-
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 
-#include <../../include/lego/comp_common.h>
+#include "../../include/lego/comp_common.h"
 
 #define LINUX_NODE	0
 #define LEGO_NODE	1
@@ -21,16 +20,6 @@
 #define BLK_SIZE 5*4096
 
 /* fit module */
-extern int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int if_use_ret_phys_addr);
-extern int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor);
-extern int ibapi_reply_message(void *addr, int size, uintptr_t descriptor);
-
-/*static inline struct common_header *to_common_header(void *msg)
-{
-	return (struct common_header *)(msg);
-}*/
-
-static inline void *to_payload(void *msg)
-{
-	return (void *)(msg + sizeof(__u32));
-}
+int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int if_use_ret_phys_addr);
+int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor);
+int ibapi_reply_message(void *addr, int size, uintptr_t descriptor);
