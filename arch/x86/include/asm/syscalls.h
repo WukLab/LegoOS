@@ -13,6 +13,14 @@
 #include <lego/ptrace.h>
 #include <lego/linkage.h>
 
+#ifdef CONFIG_TRACE_SYSCALL
+void trace_syscall_enter(void);
+void trace_syscall_exit(void);
+#else
+static inline void trace_syscall_enter(void) { }
+static inline void trace_syscall_exit(void) { }
+#endif
+
 void entry_SYSCALL_64(void);
 
 typedef asmlinkage long (*sys_call_ptr_t)(unsigned long, unsigned long,

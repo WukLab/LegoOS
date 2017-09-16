@@ -157,6 +157,10 @@ config FUTEX
 	help
 	  Enable futex support.
 
+config TRACE_SYSCALL
+	bool "Trace and debug possible syscall errors"
+	default n
+
 menu "Compile-time checks and compiler options"
 
 config DEBUG_INFO
