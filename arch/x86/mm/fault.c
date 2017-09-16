@@ -323,8 +323,9 @@ show_signal_msg(struct pt_regs *regs, unsigned long error_code,
 	printk("%s[%d]: segfault at %#lx ip %p sp %p error %lx",
 		tsk->comm, tsk->pid, address,
 		(void *)regs->ip, (void *)regs->sp, error_code);
-
 	printk(KERN_CONT "\n");
+
+	show_regs(regs);
 }
 
 static noinline void
