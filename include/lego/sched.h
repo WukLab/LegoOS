@@ -453,8 +453,10 @@ struct task_struct {
 	 */
 	spinlock_t alloc_lock;
 
+#ifdef CONFIG_FUTEX
 /* futex */
 	struct robust_list_head __user *robust_list;
+#endif
 
 	int pagefault_disabled;
 

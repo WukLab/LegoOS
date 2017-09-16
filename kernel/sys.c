@@ -198,6 +198,28 @@ SYSCALL_DEFINE1(setgid, gid_t, gid)
 	return 0;
 }
 
+#ifndef CONFIG_FUTEX
+SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
+		size_t, len)
+{
+	return -ENOSYS;
+}
+
+SYSCALL_DEFINE3(get_robust_list, int, pid,
+		struct robust_list_head __user * __user *, head_ptr,
+		size_t __user *, len_ptr)
+{
+	return -ENOSYS;
+}
+
+SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
+		struct timespec __user *, utime, u32 __user *, uaddr2,
+		u32, val3)
+{
+	return -ENOSYS;
+}
+#endif
+
 /*
  * This section defines SYSCALLs that are only available to processor component
  * We are having this to make the kernel compile

@@ -152,7 +152,7 @@ config DEFAULT_HOSTNAME
 	  system more usable with less configuration.
 
 config FUTEX
-	bool
+	bool "FUTEX Support"
 	default y
 	help
 	  Enable futex support.
