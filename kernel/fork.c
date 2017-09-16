@@ -115,6 +115,8 @@ static struct task_struct *dup_task_struct(struct task_struct *old, int node)
 	 */
 	atomic_set(&new->usage, 2);
 
+	new->wake_q.next = NULL;
+
 #ifdef CONFIG_CHECKPOINT
 	atomic_set(&new->process_barrier, 0);
 #endif
@@ -747,7 +749,6 @@ pid_t do_fork(unsigned long clone_flags,
 	struct task_struct *p;
 	struct completion vfork;
 	pid_t pid;
-	int ret;
 
 	p = copy_process(clone_flags, stack_start, stack_size,
 			 child_tidptr, tls, NUMA_NO_NODE);
@@ -773,7 +774,7 @@ pid_t do_fork(unsigned long clone_flags,
 	 */
 	pid = p->pid;
 	if (clone_flags & CLONE_PARENT_SETTID)
-		ret = copy_to_user(parent_tidptr, &pid, 4);
+		put_user(pid, parent_tidptr);
 
 	if (clone_flags & CLONE_VFORK) {
 		p->vfork_done = &vfork;
@@ -823,6 +824,8 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 		 int __user *, child_tidptr,
 		 unsigned long, tls)
 {
+	pid_t pid;
+
 	syscall_enter("clone_flags:%#lx,newsp:%#lx,parent_tidptr:%p,child_tidptr:%p,tls:%lx\n",
 		clone_flags, newsp, parent_tidptr, child_tidptr, tls);
 
@@ -832,7 +835,9 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 	 */
 	if (!(clone_flags & CLONE_THREAD))
 		clone_flags |= CLONE_GLOBAL_THREAD;
-	return do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
+	pid = do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
+	syscall_exit(pid);
+	return pid;
 }
 
 SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)

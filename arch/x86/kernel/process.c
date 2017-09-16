@@ -144,7 +144,7 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 		return 0;
 	}
 	frame->bx = 0;
-	*childregs = *task_pt_regs(current);
+	*childregs = *current_pt_regs();
 
 	childregs->ax = 0;
 	if (sp)
