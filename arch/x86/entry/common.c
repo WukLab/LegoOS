@@ -10,8 +10,9 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
-
+#include <lego/syscalls.h>
 #include <lego/comp_processor.h>
+#include <generated/asm-offsets.h>
 
 /*
  * Low-level thread flags we need to check before return to user-mode.
@@ -80,4 +81,24 @@ __visible inline void syscall_return_slowpath(struct pt_regs *regs)
 {
 	local_irq_disable();
 	prepare_exit_to_usermode(regs);
+}
+
+__visible void do_syscall_64(struct pt_regs *regs)
+{
+	unsigned long nr = regs->orig_ax;
+
+	local_irq_enable();
+
+	/*
+	 * NB: Native and x32 syscalls are dispatched from the same
+	 * table.  The only functional difference is the x32 bit in
+	 * regs->orig_ax, which changes the behavior of some syscalls.
+	 */
+	if (likely(nr < NR_syscalls)) {
+		regs->ax = sys_call_table[nr](
+			regs->di, regs->si, regs->dx,
+			regs->r10, regs->r8, regs->r9);
+	}
+
+	syscall_return_slowpath(regs);
 }

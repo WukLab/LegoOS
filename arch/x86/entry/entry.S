@@ -18,6 +18,7 @@
 #include <asm/segment.h>
 #include <asm/irq_vectors.h>
 #include <asm/thread_info.h>
+#include <asm/processor-flags.h>
 
 #include <lego/errno.h>
 #include <lego/linkage.h>
@@ -105,42 +106,93 @@ ENTRY(entry_SYSCALL_64)
 	pushq	%r9				/* pt_regs->r9 */
 	pushq	%r10				/* pt_regs->r10 */
 	pushq	%r11				/* pt_regs->r11 */
-	pushq	%rbx				/* pt_regs->bx */
-	pushq	%rbp				/* pt_regs->bp */
-	pushq	%r12				/* pt_regs->r12 */
-	pushq	%r13				/* pt_regs->r13 */
-	pushq	%r14				/* pt_regs->r14 */
-	pushq	%r15				/* pt_regs->r15 */
 
-	/*
-	 * Easy case: enable interrupts and issue the syscall
-	 */
-	sti
-	cmpq	$__NR_syscall_max, %rax
-	ja	1f				/* return -ENOSYS (already in pt_regs->ax) */
-
-	movq	%r10, %rcx
-	call	*sys_call_table(, %rax, 8)	/* dispatch */
-	movq	%rax, RAX(%rsp)			/* put return value into %rax */
-
-1:
-	/*
-	 * If we get here, then we know that pt_regs is clean for SYSRET64.
-	 * If we see that no exit work is required (which we are required
-	 * to check with IRQs off), then we can go straight to SYSRET64.
-	 */
-	cli
+/* SYSCALL slowpath... */
+	sub	$(6*8), %rsp			/* pt_regs->bp, bx, r12-15 */
+	SAVE_EXTRA_REGS
 
 	movq	%rsp, %rdi
-	call	prepare_exit_to_usermode
+	call	do_syscall_64			/* return with IRQs disabled */
 
-	movq	RIP(%rsp), %rcx
-	movq	EFLAGS(%rsp), %r11
+return_from_SYSCALL_64:
+	RESTORE_EXTRA_REGS
+
+	/*
+	 * Try to use SYSRET instead of IRET if we're returning to
+	 * a completely clean 64-bit userspace context.
+	 */
+	movq	RCX(%rsp), %rcx
+	movq	RIP(%rsp), %r11
+	cmpq	%rcx, %r11			/* RCX == RIP */
+	jne	opportunistic_sysret_failed
+
+	/*
+	 * On Intel CPUs, SYSRET with non-canonical RCX/RIP will #GP
+	 * in kernel space.  This essentially lets the user take over
+	 * the kernel, since userspace controls RSP.
+	 *
+	 * If width of "canonical tail" ever becomes variable, this will need
+	 * to be updated to remain correct on both old and new CPUs.
+	 */
+	.ifne __VIRTUAL_MASK_SHIFT - 47
+	.error "virtual address width changed -- SYSRET checks need update"
+	.endif
+
+	/* Change top 16 bits to be the sign-extension of 47th bit */
+	shl	$(64 - (__VIRTUAL_MASK_SHIFT+1)), %rcx
+	sar	$(64 - (__VIRTUAL_MASK_SHIFT+1)), %rcx
+
+	/* If this changed %rcx, it was not canonical */
+	cmpq	%rcx, %r11
+	jne	opportunistic_sysret_failed
+
+	cmpq	$__USER_CS, CS(%rsp)		/* CS must match SYSRET */
+	jne	opportunistic_sysret_failed
+
+	movq	R11(%rsp), %r11
+	cmpq	%r11, EFLAGS(%rsp)		/* R11 == RFLAGS */
+	jne	opportunistic_sysret_failed
+
+	/*
+	 * SYSCALL clears RF when it saves RFLAGS in R11 and SYSRET cannot
+	 * restore RF properly. If the slowpath sets it for whatever reason, we
+	 * need to restore it correctly.
+	 *
+	 * SYSRET can restore TF, but unlike IRET, restoring TF results in a
+	 * trap from userspace immediately after SYSRET.  This would cause an
+	 * infinite loop whenever #DB happens with register state that satisfies
+	 * the opportunistic SYSRET conditions.  For example, single-stepping
+	 * this user code:
+	 *
+	 *           movq	$stuck_here, %rcx
+	 *           pushfq
+	 *           popq %r11
+	 *   stuck_here:
+	 *
+	 * would never get past 'stuck_here'.
+	 */
+	testq	$(X86_EFLAGS_RF|X86_EFLAGS_TF), %r11
+	jnz	opportunistic_sysret_failed
+
+	/* nothing to check for RSP */
+
+	cmpq	$__USER_DS, SS(%rsp)		/* SS must match SYSRET */
+	jne	opportunistic_sysret_failed
+
+	/*
+	 * We win! This label is here just for ease of understanding
+	 * perf profiles. Nothing jumps here.
+	 */
+syscall_return_via_sysret:
+	/* rcx and r11 are already restored (see code above) */
 	RESTORE_C_REGS_EXCEPT_RCX_R11
 	movq	RSP(%rsp), %rsp
 	SWAPGS
 	sysretq
 
+opportunistic_sysret_failed:
+	SWAPGS
+	jmp	restore_c_regs_and_iret
 END(entry_SYSCALL_64)
 
 	/*
