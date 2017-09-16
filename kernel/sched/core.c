@@ -871,11 +871,8 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 	 * When set_child_tid is set, the very first thing the new process
 	 * does is writing its PID at this address:
 	 */
-	if (current->set_child_tid) {
-		int ret;
-		ret = copy_to_user(current->set_child_tid,
-				   &current->pid, 4);
-	}
+	if (current->set_child_tid)
+		put_user(current->pid, current->set_child_tid);
 }
 
 /*
