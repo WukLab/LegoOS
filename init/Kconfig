@@ -155,7 +155,20 @@ config FUTEX
 	bool "FUTEX Support"
 	default y
 	help
-	  Enable futex support.
+	  Yes, it is futex, something that no one wants to touch but everyone
+	  uses every single day. Yes, it is embedded into your glibc.
+
+	  If unsure, just say Y.
+
+config TRACE_SYSCALL
+	bool "Kernel-version strace"
+	default n
+	help
+	  This option will help us debug syscall. Currently it is whole
+	  feature is to detect possible pt_regs corruption during syscall
+	  exit. To note that it can be extended to a full-hourse strace.
+
+	  If unsure, say N.
 
 menu "Compile-time checks and compiler options"
 

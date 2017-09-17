@@ -87,6 +87,8 @@ __visible void do_syscall_64(struct pt_regs *regs)
 {
 	unsigned long nr = regs->orig_ax;
 
+	trace_syscall_enter();
+
 	local_irq_enable();
 
 	/*
@@ -101,4 +103,6 @@ __visible void do_syscall_64(struct pt_regs *regs)
 	}
 
 	syscall_return_slowpath(regs);
+
+	trace_syscall_exit();
 }

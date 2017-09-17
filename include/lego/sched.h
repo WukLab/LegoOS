@@ -25,6 +25,7 @@
 #include <lego/magic.h>
 #include <lego/signal.h>
 #include <lego/rbtree.h>
+#include <lego/strace.h>
 #include <lego/preempt.h>
 #include <lego/sched_prio.h>
 
@@ -462,6 +463,10 @@ struct task_struct {
 
 #ifdef CONFIG_CHECKPOINT
 	atomic_t process_barrier;
+#endif
+
+#ifdef CONFIG_TRACE_SYSCALL
+	struct strace *strace;
 #endif
 
 	/* CPU-specific state of this task */

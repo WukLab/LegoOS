@@ -22,6 +22,9 @@ extern struct file_operations proc_cpuinfo_ops;
 extern struct file_operations proc_cmdline_ops;
 extern struct file_operations proc_version_ops;
 extern struct file_operations proc_processes_ops;
+extern struct file_operations proc_sys_vm_overcommit_kbytes_ops;
+extern struct file_operations proc_sys_vm_overcommit_memory_ops;
+extern struct file_operations proc_sys_vm_overcommit_ratio_ops;
 
 struct proc_file_struct {
 	char f_name[FILENAME_LEN_DEFAULT];
@@ -53,6 +56,18 @@ static struct proc_file_struct proc_files[] = {
 	{
 		.f_name = "/proc/version",
 		.f_op = &proc_version_ops,
+	},
+	{
+		.f_name = "/proc/sys/vm/overcommit_kbytes",
+		.f_op = &proc_sys_vm_overcommit_kbytes_ops,
+	},
+	{
+		.f_name = "/proc/sys/vm/overcommit_memory",
+		.f_op = &proc_sys_vm_overcommit_memory_ops,
+	},
+	{
+		.f_name = "/proc/sys/vm/overcommit_ratio",
+		.f_op = &proc_sys_vm_overcommit_ratio_ops,
 	},
 };
 

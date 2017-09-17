@@ -201,6 +201,7 @@ dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 
 	pr_info("%s[%d] general protection ip:%lx sp:%lx error:%lx\n",
 		tsk->comm, tsk->pid, regs->ip, regs->sp, error_code);
+	show_regs(regs);
 
 	force_sig_info(SIGSEGV, SEND_SIG_PRIV, tsk);
 }

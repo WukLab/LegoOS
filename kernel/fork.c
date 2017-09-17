@@ -656,6 +656,10 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	p->robust_list = NULL;
 #endif
 
+#ifdef CONFIG_TRACE_SYSCALL
+	p->strace = NULL;
+#endif
+
 	/*
 	 * sigaltstack should be cleared when sharing the same VM
 	 */
@@ -692,6 +696,8 @@ struct task_struct *copy_process(unsigned long clone_flags,
 		p->parent_exec_id = current->self_exec_id;
 	}
 
+	spin_lock(&current->sighand->siglock);
+
 	if (likely(p->pid)) {
 		if (thread_group_leader(p)) {
 			p->signal->leader_pid = pid;
@@ -710,6 +716,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	}
 
 	total_forks++;
+	spin_unlock(&current->sighand->siglock);
 	spin_unlock_irqrestore(&tasklist_lock, flags);
 
 	return p;
