@@ -798,6 +798,12 @@ static inline void get_task_struct(struct task_struct *t)
 	atomic_inc(&t->usage);
 }
 
+static inline void put_signal_struct(struct signal_struct *sig)
+{
+	if (atomic_dec_and_test(&sig->sigcnt))
+		kfree(sig);
+}
+
 /*
  * Protects ->fs, ->files, ->mm, ->group_info, ->comm, keyring
  * subscriptions and synchronises with wait4().  Also used in procfs.  Also

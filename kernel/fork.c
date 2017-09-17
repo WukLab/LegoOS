@@ -32,7 +32,7 @@ int nr_threads;			/* The idle threads do not count.. */
 
 static inline struct task_struct *alloc_task_struct_node(int node)
 {
-	return kmalloc(arch_task_struct_size, GFP_KERNEL);
+	return kzalloc(arch_task_struct_size, GFP_KERNEL);
 }
 
 static inline void free_task_struct(struct task_struct *tsk)
@@ -45,7 +45,7 @@ alloc_thread_stack_node(struct task_struct *tsk, int node)
 {
 	struct page *page;
 
-	page = alloc_pages_node(node, GFP_KERNEL, THREAD_SIZE_ORDER);
+	page = alloc_pages_node(node, GFP_KERNEL | __GFP_ZERO, THREAD_SIZE_ORDER);
 	return page ? page_address(page) : NULL;
 }
 
@@ -70,6 +70,12 @@ void __put_task_struct(struct task_struct *tsk)
 {
 	WARN_ON(atomic_read(&tsk->usage));
 	WARN_ON(tsk == current);
+	WARN_ON(tsk->state != TASK_DEAD);
+
+	put_signal_struct(tsk->signal);
+	free_thread_stack(tsk);
+	tsk->stack = NULL;
+	free_task_struct(tsk);
 }
 
 /*
@@ -544,12 +550,6 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	task_unlock(current->group_leader);
 
 	return 0;
-}
-
-static inline void put_signal_struct(struct signal_struct *sig)
-{
-	if (atomic_dec_and_test(&sig->sigcnt))
-		kfree(sig);
 }
 
 /*
