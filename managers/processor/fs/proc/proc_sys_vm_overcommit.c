@@ -26,19 +26,19 @@ unsigned long sysctl_overcommit_kbytes = 0;
 
 static int oc_kbytes_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "%lu\n", sysctl_overcommit_kbytes);
+	seq_printf(m, "%lu", sysctl_overcommit_kbytes);
 	return 0;
 }
 
 static int oc_memory_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "%d\n", sysctl_overcommit_memory);
+	seq_printf(m, "%d", sysctl_overcommit_memory);
 	return 0;
 }
 
 static int oc_ratio_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "%d\n", sysctl_overcommit_ratio);
+	seq_printf(m, "%d", sysctl_overcommit_ratio);
 	return 0;
 }
 
