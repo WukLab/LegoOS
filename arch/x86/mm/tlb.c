@@ -15,7 +15,8 @@
 void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			struct task_struct *tsk)
 {
-	load_cr3(next->pgd);
+	if (likely(prev != next))
+		load_cr3(next->pgd);
 }
 
 /*
@@ -37,16 +38,46 @@ void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	local_irq_restore(flags);
 }
 
-/* TODO */
+/*
+ * TLB flush funcation:
+ * Flush the tlb entries if the cpu uses the mm that's being flushed.
+ */
+static void flush_tlb_func(void *info)
+{
+	struct flush_tlb_info *f = info;
+
+	if (f->flush_end == TLB_FLUSH_ALL) {
+		local_flush_tlb();
+	} else {
+		unsigned long addr;
+		unsigned long nr_pages =
+			(f->flush_end - f->flush_start) / PAGE_SIZE;
+		addr = f->flush_start;
+		while (addr < f->flush_end) {
+			__flush_tlb_single(addr);
+			addr += PAGE_SIZE;
+		}
+	}
+}
+
 void flush_tlb_others(const struct cpumask *cpumask, struct mm_struct *mm,
 		      unsigned long start, unsigned long end)
 {
+	struct flush_tlb_info info;
+
+	if (end == 0)
+		end = start + PAGE_SIZE;
+	info.flush_mm = mm;
+	info.flush_start = start;
+	info.flush_end = end;
+
+	smp_call_function_many(cpumask, flush_tlb_func, &info, 1);
 }
 
 /* TODO */
 static inline const cpumask_t *mm_cpumask(struct mm_struct *mm)
 {
-	return cpu_online_mask;
+	return cpu_active_mask;
 }
 
 void flush_tlb_current_task(void)
