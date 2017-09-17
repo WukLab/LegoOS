@@ -357,11 +357,14 @@ static void complete_signal(int sig, struct task_struct *p, int group)
 			signal->group_exit_code = sig;
 			signal->group_stop_count = 0;
 			t = p;
+
+			spin_lock(&tasklist_lock);
 			do {
 				task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 				sigaddset(&t->pending.signal, SIGKILL);
 				signal_wake_up(t, 1);
 			} while_each_thread(p, t);
+			spin_unlock(&tasklist_lock);
 			return;
 		}
 	}
@@ -567,6 +570,7 @@ static void retarget_shared_pending(struct task_struct *tsk, sigset_t *which)
 		return;
 
 	t = tsk;
+	spin_lock(&tasklist_lock);
 	while_each_thread(tsk, t) {
 		if (t->flags & PF_EXITING)
 			continue;
@@ -582,6 +586,7 @@ static void retarget_shared_pending(struct task_struct *tsk, sigset_t *which)
 		if (sigisemptyset(&retarget))
 			break;
 	}
+	spin_unlock(&tasklist_lock);
 }
 
 static void __set_task_blocked(struct task_struct *tsk, const sigset_t *newset)
@@ -795,14 +800,13 @@ static bool do_signal_stop(int signr)
 		if (!(sig->flags & SIGNAL_STOP_STOPPED))
 			sig->group_exit_code = signr;
 
-		printk("testing9\n");
 		sig->group_stop_count = 0;
 
 		if (task_set_jobctl_pending(current, signr | gstop))
 			sig->group_stop_count++;
 
 		t = current;
-		//task_lock(current);
+		spin_lock(&tasklist_lock);
 		while_each_thread(current, t) {
 			/*
 			 * Setting state to TASK_STOPPED for a group
@@ -815,8 +819,7 @@ static bool do_signal_stop(int signr)
 				signal_wake_up(t, 0);
 			}
 		}
-		//task_unlock(current);
-		printk("testing10\n");
+		spin_unlock(&tasklist_lock);
 	}
 
 	if (likely(!current->ptrace)) {
@@ -849,10 +852,8 @@ static bool do_signal_stop(int signr)
 			spin_unlock(&tasklist_lock);
 		}
 
-		printk("testing11\n");
 		/* Now we don't run again until woken by SIGCONT or SIGKILL */
 		schedule();
-		printk("testing13\n");
 		return true;
 	} else {
 		/*
@@ -1275,6 +1276,7 @@ int zap_other_threads(struct task_struct *p)
 
 	p->signal->group_stop_count = 0;
 	
+	spin_lock(&tasklist_lock);
 	while_each_thread(p, t) {
 		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 		count++;
@@ -1285,6 +1287,7 @@ int zap_other_threads(struct task_struct *p)
 		sigaddset(&t->pending.signal, SIGKILL);
 		signal_wake_up(t, 1);
 	}
+	spin_unlock(&tasklist_lock);
 
 	return count;
 }
@@ -1788,9 +1791,10 @@ int do_sigaction(int sig, struct k_sigaction *act, struct k_sigaction *oact)
 			sigaddset(&mask, sig);
 			flush_sigqueue_mask(&mask, &p->signal->shared_pending);
 
-			/* XXX: need lock to protect the walking against clone() */
+			spin_lock(&tasklist_lock);
 			for_each_thread(p, t)
 				flush_sigqueue_mask(&mask, &t->pending);
+			spin_unlock(&tasklist_lock);
 		}
 	}
 
