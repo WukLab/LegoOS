@@ -7,22 +7,23 @@
  * (at your option) any later version.
  */
 
-/*
- * SYSCALL Tracer
- */
-
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
 #include <lego/syscalls.h>
-#include <lego/comp_processor.h>
 #include <generated/asm-offsets.h>
 
-static DEFINE_PER_CPU(struct pt_regs, strace_regs);
-
-static inline struct pt_regs *this_strace_regs(void)
+/* Ugly */
+static struct strace *get_current_strace(void)
 {
-	return this_cpu_ptr(&strace_regs);
+	struct strace *strace = current->strace;
+
+	if (!strace) {
+		strace = kmalloc(sizeof(*strace), GFP_KERNEL);
+		if (strace)
+			current->strace = strace;
+	}
+	return strace;
 }
 
 /*
@@ -30,14 +31,20 @@ static inline struct pt_regs *this_strace_regs(void)
  */
 void trace_syscall_enter(void)
 {
+	struct strace *strace;
 	struct pt_regs *curr, *saved;
 
 	if (WARN_ON(!irqs_disabled()))
 		local_irq_disable();
 
+	strace = get_current_strace();
+	if (!strace)
+		return;
+
 	curr = current_pt_regs();
-	saved = this_strace_regs();
+	saved = &strace->regs;
 	memcpy(saved, curr, sizeof(*saved));
+	strace->enter_cpu = smp_processor_id();
 }
 
 static int compare_pt_regs(struct pt_regs *src, struct pt_regs *dst)
@@ -83,23 +90,25 @@ do {							\
  */
 void trace_syscall_exit(void)
 {
+	struct strace *strace = current->strace;
 	struct pt_regs *curr, *saved;
 
+	BUG_ON(!strace);
 	if (WARN_ON(!irqs_disabled()))
 		local_irq_disable();
 
 	curr = current_pt_regs();
-	saved = this_strace_regs();
+	saved = &strace->regs;
 
 	if (unlikely(compare_pt_regs(curr, saved))) {
 		int nr = saved->orig_ax;
 
-		/* gocha! */
+		/* gotcha! */
 		pr_err("Saved pt_regs:\n");
-		__show_regs(saved, 0);
+		show_regs(saved);
 
 		pr_err("Current corrupted pt_regs:\n");
-		__show_regs(curr, 0);
+		show_regs(curr);
 		panic("Catched buggy SYSCALL: %pS",
 			sys_call_table[nr]);
 	}

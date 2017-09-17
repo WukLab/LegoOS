@@ -656,6 +656,10 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	p->robust_list = NULL;
 #endif
 
+#ifdef CONFIG_TRACE_SYSCALL
+	p->strace = NULL;
+#endif
+
 	/*
 	 * sigaltstack should be cleared when sharing the same VM
 	 */
