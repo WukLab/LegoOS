@@ -8,19 +8,26 @@
  */
 
 #include <asm/ipi.h>
-#include <asm/smp.h>
 #include <asm/apic.h>
 #include <asm/hw_irq.h>
 #include <asm/ptrace.h>
 
+#include <lego/smp.h>
 #include <lego/sched.h>
 #include <lego/kernel.h>
+
+#if 1
+#define smp_debug(fmt, ...)	\
+	pr_debug("%s " fmt, __func__, __VA_ARGS__)
+#else
+#define smp_debug(fmt, ...)	do { } while (0)
+#endif
 
 asmlinkage __visible void
 reboot_interrupt(struct pt_regs *regs)
 {
 	ack_APIC_irq();
-	pr_info("CPU(%d) PID(%d) in %s() IPI handler\n",
+	smp_debug("CPU(%d) PID(%d) in %s() IPI handler\n",
 		smp_processor_id(), current->pid, __func__);
 
 	local_irq_disable();
@@ -33,16 +40,18 @@ asmlinkage __visible void
 call_function_single_interrupt(struct pt_regs *regs)
 {
 	ack_APIC_irq();
-	pr_info("CPU(%d) PID(%d) in %s() IPI handler\n",
+	smp_debug("CPU(%d) PID(%d) in %s() IPI handler\n",
 		smp_processor_id(), current->pid, __func__);
+	generic_smp_call_function_single_interrupt();
 }
 
 asmlinkage __visible void
 call_function_interrupt(struct pt_regs *regs)
 {
 	ack_APIC_irq();
-	pr_info("CPU(%d) PID(%d) in %s() IPI handler\n",
+	smp_debug("CPU(%d) PID(%d) in %s() IPI handler\n",
 		smp_processor_id(), current->pid, __func__);
+	generic_smp_call_function_single_interrupt();
 }
 
 /* Handler for RESCHEDULE_VECTOR */
@@ -51,7 +60,7 @@ reschedule_interrupt(struct pt_regs *regs)
 {
 	ack_APIC_irq();
 	scheduler_ipi();
-	pr_info("CPU(%d) PID(%d) in %s() IPI handler\n",
+	smp_debug("CPU(%d) PID(%d) in %s() IPI handler\n",
 		smp_processor_id(), current->pid, __func__);
 }
 

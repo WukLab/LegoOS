@@ -285,6 +285,7 @@ asmlinkage void __init start_kernel(void)
 	 * scheduler:
 	 */
 	sched_init();
+	call_function_init();
 
 	/*
 	 * Disable preemption - early bootup scheduling is extremely

@@ -21,8 +21,30 @@ void cpu_up(int cpu, struct task_struct *tidle);
 
 void __init smp_prepare_cpus(unsigned int maxcpus);
 void __init smp_init(void);
+void __init call_function_init(void);
 
 #define get_cpu()		({ preempt_disable(); smp_processor_id(); })
 #define put_cpu()		preempt_enable()
+
+typedef void (*smp_call_func_t)(void *info);
+
+struct call_single_data {
+	struct llist_node llist;
+	smp_call_func_t func;
+	void *info;
+	unsigned int flags;
+};
+
+/*
+ * Call a function on all other processors
+ */
+int smp_call_function(smp_call_func_t func, void *info, int wait);
+void smp_call_function_many(const struct cpumask *mask,
+			    smp_call_func_t func, void *info, bool wait);
+
+int smp_call_function_any(const struct cpumask *mask,
+			  smp_call_func_t func, void *info, int wait);
+
+void generic_smp_call_function_single_interrupt(void);
 
 #endif /* _LEGO_SMP_H_ */

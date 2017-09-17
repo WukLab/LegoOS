@@ -8,9 +8,16 @@
  */
 
 #include <lego/mm.h>
+#include <lego/smp.h>
 #include <lego/sched.h>
 #include <lego/cpumask.h>
 #include <asm/tlbflush.h>
+
+struct flush_tlb_info {
+	struct mm_struct *flush_mm;
+	unsigned long flush_start;
+	unsigned long flush_end;
+};
 
 void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			struct task_struct *tsk)
@@ -50,8 +57,6 @@ static void flush_tlb_func(void *info)
 		local_flush_tlb();
 	} else {
 		unsigned long addr;
-		unsigned long nr_pages =
-			(f->flush_end - f->flush_start) / PAGE_SIZE;
 		addr = f->flush_start;
 		while (addr < f->flush_end) {
 			__flush_tlb_single(addr);
