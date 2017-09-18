@@ -841,6 +841,7 @@ apic_timer_interrupt(struct pt_regs *regs)
 		pr_warn("Spurious LAPIC timer interrupt on cpu %d\n", cpu);
 		/* Switch it off */
 		lapic_timer_shutdown(levt);
+		set_irq_regs(old_regs);
 		return;
 	}
 

@@ -69,6 +69,7 @@ do_IRQ(struct pt_regs *regs)
 		} else {
 			__this_cpu_write(vector_irq[vector], VECTOR_UNUSED);
 		}
+		set_irq_regs(old_regs);
 		return 1;
 	}
 
