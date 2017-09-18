@@ -170,6 +170,14 @@ config TRACE_SYSCALL
 
 	  If unsure, say N.
 
+config TRACE_SMP_IPI
+	bool "TRACE SMP IPI Handler"
+	default n
+	help
+	  Enable to print some message in every IPI handler.
+
+	  If unsure, say N.
+
 menu "Compile-time checks and compiler options"
 
 config DEBUG_INFO
