@@ -405,7 +405,7 @@ mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 	}
 
 	if (fault & VM_FAULT_OOM) {
-		no_context(regs, error_code, address, SIGSEGV);
+		bad_area_nosemaphore(regs, error_code, address);
 		return;
 	} else {
 		if (fault & VM_FAULT_SIGBUS)
