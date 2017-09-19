@@ -477,6 +477,8 @@ static u8 get_src_path_mask(struct ib_device *device, u8 port_num)
 	u8 src_path_mask;
 
 	pr_info("%s need back\n");
+	/* TODO */
+	sa_dev = NULL;
 	//sa_dev = ib_get_client_data(device, &sa_client);
 	//if (!sa_dev)
 	//	return 0x7f;

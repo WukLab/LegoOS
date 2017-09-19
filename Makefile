@@ -233,6 +233,8 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
+		   -Werror=uninitialized \
+		   -Werror=maybe-uninitialized \
 		   -std=gnu89
 
 KBUILD_AFLAGS	:= -D__ASSEMBLY__
