@@ -160,24 +160,6 @@ config FUTEX
 
 	  If unsure, just say Y.
 
-config TRACE_SYSCALL
-	bool "Kernel-version strace"
-	default n
-	help
-	  This option will help us debug syscall. Currently it is whole
-	  feature is to detect possible pt_regs corruption during syscall
-	  exit. To note that it can be extended to a full-hourse strace.
-
-	  If unsure, say N.
-
-config TRACE_SMP_IPI
-	bool "TRACE SMP IPI Handler"
-	default n
-	help
-	  Enable to print some message in every IPI handler.
-
-	  If unsure, say N.
-
 menu "Compile-time checks and compiler options"
 
 config DEBUG_INFO
@@ -209,5 +191,35 @@ config DEBUG_INFO_SPLIT
 	  Incompatible with older versions of ccache.
 
 endmenu
+
+menu "Basic Kernel Debug and Trace Options"
+config TRACE_SYSCALL
+	bool "Kernel-version strace"
+	default n
+	help
+	  This option will help us debug syscall. Currently it is whole
+	  feature is to detect possible pt_regs corruption during syscall
+	  exit. To note that it can be extended to a full-hourse strace.
+
+	  If unsure, say N.
+
+config TRACE_SMP_IPI
+	bool "TRACE SMP IPI Handler"
+	default n
+	help
+	  Enable to print some message in every IPI handler.
+
+	  If unsure, say N.
+
+config DEBUG_FORCE_ZERO_ALLOCATION
+	bool "Pass __GFP_ZERO to every page allocation"
+	default n
+	help
+	  Enable to always allocate clean pages.
+	  Hurt performance a lot. Do not enable me.
+
+	  If unsure, say N.
+
+endmenu # Basic Kernel Debug and Trace Options
 
 endmenu

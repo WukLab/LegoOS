@@ -923,6 +923,10 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 {
 	struct page *page;
 
+#ifdef CONFIG_DEBUG_FORCE_ZERO_ALLOCATION
+	gfp_mask |= __GFP_ZERO;
+#endif
+
 	/*
 	 * Check the zones suitable for the gfp_mask contain at least one
 	 * valid zone. It's possible to have an empty zonelist as a result
