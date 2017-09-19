@@ -12,6 +12,13 @@ config FIT
 	default y
 	depends on INFINIBAND
 
+config FIT_DEBUG
+	bool "Enable fit_debug"
+	default n
+	depends on FIT
+	help
+	  Enable to enable fit_debug() marco
+
 config FIT_INITIAL_SLEEP_TIMEOUT
 	int "FIT initial sleep timeout (s) for connection"
 	default 10

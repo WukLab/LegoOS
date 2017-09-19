@@ -10,6 +10,15 @@ config COMP_MEMORY
 if COMP_MEMORY
 
 menu "Memory DEBUG Options"
+config DEBUG_MEMORY_CORE
+	bool "Debug core.c"
+	default n
+	help
+	  Enable if you want to debug memory/core.c. Basically, to hava
+	  a detailed log about imcoming requests.
+
+	  If unsure, say N.
+
 config DEBUG_HANDLE_PCACHE
 	bool "Debug handle L4-cache"
 	default n

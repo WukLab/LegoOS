@@ -7,8 +7,6 @@
  * (at your option) any later version.
  */
 
-#define pr_fmt(fmt) "mc-manager: " fmt
-
 #include <lego/slab.h>
 #include <lego/kernel.h>
 #include <lego/kthread.h>
@@ -19,6 +17,13 @@
 #include <memory/include/vm.h>
 #include <memory/include/pid.h>
 #include <memory/include/loader.h>
+
+#ifdef CONFIG_DEBUG_MEMORY_CORE
+#define mm_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void mm_debug(const char *fmt, ...) { } 
+#endif
 
 #ifndef CONFIG_FIT
 static void local_qemu_test(void)
@@ -105,7 +110,7 @@ static void local_qemu_test(void)
 }
 #endif
 
-#define MAX_RXBUF_SIZE	PAGE_SIZE*5
+#define MAX_RXBUF_SIZE	(PAGE_SIZE * 7)
 
 #ifdef CONFIG_FIT
 struct info_struct {
@@ -223,10 +228,18 @@ static int mc_dispatcher(void *passed)
 	}
 
 	/* Our responsibility to free it */
-	kfree(info);
-
 	return 0;
 }
+
+#ifdef CONFIG_DEBUG_MEMORY_CORE
+static unsigned long nr_requests = 0;
+static void req_counting(struct info_struct *info)
+{
+	mm_debug("nr_reqs: %ld desc: %#lx\n", nr_requests++, info->desc);
+}
+#else
+static inline void req_counting(struct info_struct *info) { }
+#endif
 
 /* Memory Manager Daemon */
 static int mc_manager(void *unused)
@@ -237,17 +250,18 @@ static int mc_manager(void *unused)
 
 	pr_info("Memory-component manager is up and running.\n");
 
-	while (1) {
-		info = kmalloc(sizeof(*info), GFP_KERNEL);
-		if (unlikely(!info)) {
-			WARN_ON(1);
-			do_exit(-1);
-		}
+	info = kmalloc(sizeof(*info), GFP_KERNEL);
+	if (unlikely(!info)) {
+		WARN_ON(1);
+		do_exit(-1);
+	}
 
+	while (1) {
 		/*
 		 * This function is blocking,
 		 * will return until FIT gets a messages:
 		 */
+		memset(info, 0, sizeof(*info));
 		retlen = ibapi_receive_message(port,
 				info->msg, MAX_RXBUF_SIZE,
 				&info->desc);
@@ -255,6 +269,7 @@ static int mc_manager(void *unused)
 		if (unlikely(retlen >= MAX_RXBUF_SIZE))
 			panic("retlen: %d,maxlen: %lu", retlen, MAX_RXBUF_SIZE);
 
+		req_counting(info);
 		mc_dispatcher(info);
 	}
 

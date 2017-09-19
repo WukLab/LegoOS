@@ -373,6 +373,7 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 	return ret;
 }
 
+#define SAFE_SLOB
 #ifndef SAFE_SLOB
 void kfree(const void *block)
 {

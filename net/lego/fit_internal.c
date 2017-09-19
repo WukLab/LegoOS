@@ -13,8 +13,6 @@
 #include <lego/net.h>
 #include <lego/kthread.h>
 #include <lego/workqueue.h>
-//#include <lego/semaphore.h>
-//#include <lego/completion.h>
 #include <lego/list.h>
 #include <lego/string.h>
 #include <lego/jiffies.h>
@@ -28,8 +26,12 @@
 
 #include "fit_internal.h"
 
+#ifdef CONFIG_FIT_DEBUG
 #define fit_debug(fmt, ...) \
 	pr_debug("%s():%d " fmt, __func__, __LINE__, __VA_ARGS__)
+#else
+static inline void fit_debug(const char *fmt, ...) { }
+#endif
 
 enum ib_mtu client_mtu_to_enum(int mtu)
 {
@@ -98,7 +100,6 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	int num_connections = MAX_CONNECTION;
 	ppc *ctx;
 
-	printk(KERN_CRIT "%s\n", __func__);
 	ctx = (struct pingpong_context*)kzalloc(sizeof(struct pingpong_context), GFP_KERNEL);
 	if(!ctx)
 	{
@@ -203,8 +204,13 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			.send_cq = ctx->send_cq[i],//ctx->cq
 			.recv_cq = ctx->cq[i%NUM_POLLING_THREADS],
 			.cap = {
-				.max_send_wr = 1, //rx_depth + 2,
-				//.max_send_wr = 12000,
+				/*
+				 * Stands for concurrent outgoing requests?
+				 * We always have 1 IB polling thread running,
+				 * and we remove it from cpu_active_mask, which
+				 * means scheduler won't schedule to it.
+				 */
+				.max_send_wr = num_online_cpu(),
 				.max_recv_wr = rx_depth,
 				.max_send_sge = 16,
 				.max_recv_sge = 16
@@ -536,10 +542,10 @@ int get_global_qpn(int mynodeid, int remnodeid, int conn)
 	int first_qpn;
 	int ret;
 
-       if (remnodeid == 0)
-               first_qpn = 74;
-       else
-               first_qpn = 72;
+	if (remnodeid == 0)
+		first_qpn = 74;
+	else
+		first_qpn = 72;
 
 	if (remnodeid > mynodeid)
 		ret = mynodeid * NUM_PARALLEL_CONNECTION + conn;
@@ -870,6 +876,9 @@ int client_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, i
 	unsigned long phys_addr;
 	void *real_addr;
 	struct ib_device *ibd = (struct ib_device *)ctx->context;
+
+	fit_debug("re_connection_id: %d, tmp->source_node_id: %d\n",
+		re_connection_id, tmp->source_node_id);
 
 	client_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->inbox_rkey, tmp->inbox_addr, addr, size, 0, tmp->inbox_semaphore | IMM_SEND_REPLY_RECV, FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
 	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);

@@ -84,8 +84,13 @@ good_area:
 	up_read(&mm->mmap_sem);
 
 	/* Send the cacheline back to processor! */
+	int foo = *(int *)(new_page + offset);
+	pcache_debug("  Before ibai_reply desc: %#Lx addr: %#Lx len: %#Lx, foo: %d",
+		desc, new_page + offset, PAGE_SIZE / CONFIG_PCACHE_FILL_SPLIT_NR, foo);
 	ibapi_reply_message((void *)(new_page + offset),
 		PAGE_SIZE / CONFIG_PCACHE_FILL_SPLIT_NR, desc);
+	pcache_debug("  Before ibai_reply desc: %#Lx addr: %#Lx len: %#Lx",
+		desc, new_page + offset, PAGE_SIZE / CONFIG_PCACHE_FILL_SPLIT_NR);
 	return;
 
 unlock:
