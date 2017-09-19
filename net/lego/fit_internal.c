@@ -28,6 +28,9 @@
 
 #include "fit_internal.h"
 
+#define fit_debug(fmt, ...) \
+	pr_debug("%s():%d " fmt, __func__, __LINE__, __VA_ARGS__)
+
 enum ib_mtu client_mtu_to_enum(int mtu)
 {
 	switch (mtu) {
@@ -700,6 +703,7 @@ retry_send_imm_request:
 		sge[0].length = sizeof(struct imm_message_metadata);
 		sge[0].lkey = ctx->proc->lkey;
 		temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
+		fit_debug("temp_addr: %#lx\n", temp_addr);
 		sge[1].addr = temp_addr;
 		sge[1].length = size;
 		sge[1].lkey = ctx->proc->lkey;
@@ -828,6 +832,7 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 	//has to keep data in descriptor
 	memcpy(descriptor, tmp, sizeof(struct imm_message_metadata));
 	*reply_descriptor = (uintptr_t)descriptor;
+	fit_debug("descriptor: %#lx, *reply_descriptor: %#lx\n", descriptor, *reply_descriptor);
 	
 	//do ack based on the last_ack_index, submit a request to waiting_queue_handler	
 	//printk(KERN_CRIT "%s last_ack %d offset %d\n", __func__, last_ack, offset);
@@ -1010,6 +1015,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				//printk(KERN_CRIT "%s got imm from node %d immdata %x\n", __func__, node_id, wc[i].ex.imm_data);
 				if(wc[i].wc_flags&&IB_WC_WITH_IMM)
 				{
+					fit_debug("wc[i].ex.imm_data: %#lx wc[i].byte_len: %#lx\n", wc[i].ex.imm_data, wc[i].byte_len);
 					if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND && wc[i].ex.imm_data & IMM_SEND_REPLY_RECV)//opcode
 					{
 						//printk(KERN_CRIT "%s: opcode from node %d\n", __func__, node_id);
@@ -1053,8 +1059,9 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 						semaphore = wc[i].ex.imm_data & IMM_GET_SEMAPHORE;
 						//printk(KERN_CRIT "%s: case 2 semaphore-%d len-%d\n", __func__, semaphore, wc[i].byte_len);
 						//*(int *)(ctx->imm_inbox_semaphore[semaphore]) = wc[i].byte_len;
+						printk(KERN_CRIT "%s()%d: case 2 semaphore-%d len-%d inboxaddr %lx\n",
+							__func__, __LINE__, semaphore, wc[i].byte_len, ctx->imm_inbox_semaphore[semaphore]);
 						memcpy((void *)ctx->imm_inbox_semaphore[semaphore], &length, sizeof(int));
-						printk(KERN_CRIT "%s()%d: case 2 semaphore-%d len-%d inboxaddr %lx\n", __func__, __LINE__, semaphore, wc[i].byte_len, ctx->imm_inbox_semaphore[semaphore]);
 
 						#ifdef ADAPTIVE_MODEL
                 	        		wake_up_interruptible(&ctx->imm_inbox_block_queue[semaphore]);//Wakeup waiting queue
@@ -1349,7 +1356,9 @@ retry_send_reply_with_imm_request:
 	output_header.size = size;
 	remote_addr = remote_mr->addr;
 	remote_rkey = remote_mr->rkey;
-	printk(KERN_CRIT "%s(): send imm-%x addr-%x rkey-%x oaddr-%x orkey-%x\n", __func__, imm_data, remote_addr, remote_rkey, output_header.inbox_addr, output_header.inbox_rkey);
+
+	fit_debug("send imm-%x addr-%x rkey-%x oaddr-%x orkey-%x\n",
+		imm_data, remote_addr, remote_rkey, output_header.inbox_addr, output_header.inbox_rkey);
 
 #ifdef SCHEDULE_MODEL
 	ctx->imm_inbox_semaphore_task[inbox_id] = get_current();
