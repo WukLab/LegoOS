@@ -90,7 +90,7 @@ static int do_anonymous_page(struct vm_area_struct *vma, unsigned long address,
 	unsigned long vaddr;
 	struct lego_mm_struct *mm = vma->vm_mm;
 
-	vaddr = __get_free_page(GFP_KERNEL);
+	vaddr = __get_free_page(GFP_KERNEL | GFP_ZERO);
 	if (!vaddr)
 		return VM_FAULT_OOM;
 
