@@ -210,7 +210,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 				 * and we remove it from cpu_active_mask, which
 				 * means scheduler won't schedule to it.
 				 */
-				.max_send_wr = num_online_cpus(),
+				.max_send_wr = 1,
 				.max_recv_wr = rx_depth,
 				.max_send_sge = 16,
 				.max_recv_sge = 16
