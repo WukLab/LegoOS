@@ -210,7 +210,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 				 * and we remove it from cpu_active_mask, which
 				 * means scheduler won't schedule to it.
 				 */
-				.max_send_wr = num_online_cpus(),
+				.max_send_wr = 1,
 				.max_recv_wr = rx_depth,
 				.max_send_sge = 16,
 				.max_recv_sge = 16
@@ -532,8 +532,21 @@ void init_global_lid_qpn(void)
 	BUILD_BUG_ON(1);
 #endif
 
-	global_lid[0] = 19;
-	global_lid[1] = 21;
+	global_lid[0] = 18;
+	global_lid[1] = 19;
+	global_lid[2] = 21;
+}
+
+void print_gloabl_lid(void)
+{
+	int i;
+
+	pr_debug("--------- cut here ---------\n");
+	pr_debug("FIT_TIMEOUT:      %d\n", CONFIG_FIT_INITIAL_SLEEP_TIMEOUT);
+	pr_debug("FIT_LOCAL_ID:     %d\n", CONFIG_FIT_LOCAL_ID);
+	for (i = 0; i < CONFIG_FIT_NR_NODES; i++) {
+		pr_debug("  global_lid[%d]=%d\n", i, global_lid[i]);
+	}
 }
 
 int get_global_qpn(int mynodeid, int remnodeid, int conn)
@@ -541,6 +554,9 @@ int get_global_qpn(int mynodeid, int remnodeid, int conn)
 	int first_qpn;
 	int ret;
 
+	if (remnodeid == 0)
+		first_qpn = 74;
+	else
 		first_qpn = 72;
 
 	if (remnodeid > mynodeid)
