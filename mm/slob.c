@@ -373,6 +373,7 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 	return ret;
 }
 
+#ifndef SAFE_SLOB
 void kfree(const void *block)
 {
 	struct page *sp;
@@ -392,6 +393,7 @@ void kfree(const void *block)
 		set_page_private(sp, 0);
 	}
 }
+#endif
 
 size_t ksize(const void *block)
 {
@@ -474,6 +476,7 @@ void kfree_tmp(size_t size, const void *p)
  * for general use, and so are not documented here. For a full list of
  * potential flags, always refer to linux/gfp.h.
  */
+#ifndef SAFE_SLOB
 void *kmalloc(size_t size, gfp_t flags)
 {
 	return __do_kmalloc_node(size, flags, NUMA_NO_NODE, _RET_IP_);
@@ -486,6 +489,23 @@ void *kmalloc(size_t size, gfp_t flags)
 //
 //	return (void *)__get_free_pages(GFP_KERNEL, order);
 }
+#else
+static DEFINE_SPINLOCK(s_lock);
+
+void *kmalloc(size_t size, gfp_t flags)
+{
+	void *p;
+
+	spin_lock(&s_lock);
+	p = __do_kmalloc_node(size, flags, NUMA_NO_NODE, _RET_IP_);
+	spin_unlock(&s_lock);
+	return p;
+}
+
+void kfree(const void *block)
+{
+}
+#endif
 
 
 void *kmalloc_tmp(size_t size, gfp_t flags)
