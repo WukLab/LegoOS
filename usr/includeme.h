@@ -25,6 +25,11 @@ static inline void die(const char * str, ...)
 	exit(1);
 }
 
+/*
+ * result: diff
+ * x: end time
+ * y: start time
+ */
 static inline timeval_sub(struct timeval *result, struct timeval *x,
 			  struct timeval *y)
 {
