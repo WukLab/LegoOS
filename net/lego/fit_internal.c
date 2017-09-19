@@ -523,14 +523,20 @@ void init_global_lid_qpn(void)
 	BUILD_BUG_ON(1);
 #endif
 
-	global_lid[0] = 19;
-	global_lid[1] = 21;
+	global_lid[0] = 18;
+	global_lid[1] = 19;
+	global_lid[2] = 21;
 }
 
 int get_global_qpn(int mynodeid, int remnodeid, int conn)
 {
-	int first_qpn = 72;
+	int first_qpn;
 	int ret;
+
+       if (remnodeid == 0)
+               first_qpn = 74;
+       else
+               first_qpn = 72;
 
 	if (remnodeid > mynodeid)
 		ret = mynodeid * NUM_PARALLEL_CONNECTION + conn;
@@ -677,6 +683,8 @@ retry_send_imm_request:
 	wr.sg_list = sge;
 	wr.wr.rdma.remote_addr = (uintptr_t) (input_mr_addr+offset);
 	wr.wr.rdma.rkey = input_mr_rkey;
+	printk("%s() wr: remotr_addr: %p, rkey: %#lx\n",
+	                __func__, wr.wr.rdma.remote_addr, wr.wr.rdma.rkey);
 
 	if(s_mode == FIT_SEND_MESSAGE_HEADER_AND_IMM)
 	{
@@ -1046,6 +1054,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 						//printk(KERN_CRIT "%s: case 2 semaphore-%d len-%d\n", __func__, semaphore, wc[i].byte_len);
 						//*(int *)(ctx->imm_inbox_semaphore[semaphore]) = wc[i].byte_len;
 						memcpy((void *)ctx->imm_inbox_semaphore[semaphore], &length, sizeof(int));
+						printk(KERN_CRIT "%s()%d: case 2 semaphore-%d len-%d inboxaddr %lx\n", __func__, __LINE__, semaphore, wc[i].byte_len, ctx->imm_inbox_semaphore[semaphore]);
 
 						#ifdef ADAPTIVE_MODEL
                 	        		wake_up_interruptible(&ctx->imm_inbox_block_queue[semaphore]);//Wakeup waiting queue
@@ -1340,7 +1349,7 @@ retry_send_reply_with_imm_request:
 	output_header.size = size;
 	remote_addr = remote_mr->addr;
 	remote_rkey = remote_mr->rkey;
-	//printk(KERN_CRIT "%s: send imm-%x addr-%x rkey-%x oaddr-%x orkey-%x\n", __func__, imm_data, remote_addr, remote_rkey, output_header.inbox_addr, output_header.inbox_rkey);
+	printk(KERN_CRIT "%s(): send imm-%x addr-%x rkey-%x oaddr-%x orkey-%x\n", __func__, imm_data, remote_addr, remote_rkey, output_header.inbox_addr, output_header.inbox_rkey);
 
 #ifdef SCHEDULE_MODEL
 	ctx->imm_inbox_semaphore_task[inbox_id] = get_current();
