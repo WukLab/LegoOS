@@ -13,7 +13,26 @@
 #include <linux/unistd.h>
 
 #define PAGE_SIZE 4096
+#define PAGE_MASK (~(PAGE_SIZE - 1))
 
+/*
+ * This looks more complex than it should be. But we need to
+ * get the type for the ~ right in round_down (it needs to be
+ * as wide as the result!), and we want to evaluate the macro
+ * arguments just once each.
+ */
+#define __round_mask(x, y)	((__typeof__(x))((y)-1))
+#define round_up(x, y)		((((x)-1) | __round_mask(x, y))+1)
+#define round_down(x, y)	((x) & ~__round_mask(x, y))
+
+#define DIV_ROUND_UP(n,d)	(((n) + (d) - 1) / (d))
+
+#define __ALIGN_MASK(x, mask)	(((x) + (mask)) & ~(mask))
+#define ALIGN(x, a)		__ALIGN_MASK(x, (typeof(x))(a) - 1)
+#define PTR_ALIGN(p, a)		((typeof(p))ALIGN((unsigned long)(p), (a)))
+#define IS_ALIGNED(x, a)	(((x) & ((typeof(x))(a) - 1)) == 0)
+
+#define ARRAY_SIZE(x)		(sizeof(x) / sizeof((x)[0]))
 #define __NR_CHECKPOINT	666
 
 static inline void die(const char * str, ...)
