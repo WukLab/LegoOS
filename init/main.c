@@ -122,8 +122,6 @@ static int kernel_init(void *unused)
 	init_workqueues();
 
 #if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
-	print_gloabl_lid();
-	mdelay(2*1000);
 	ib_mad_init();
 #endif
 

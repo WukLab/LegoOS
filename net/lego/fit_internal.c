@@ -532,9 +532,8 @@ void init_global_lid_qpn(void)
 	BUILD_BUG_ON(1);
 #endif
 
-	global_lid[0] = 18;
-	global_lid[1] = 19;
-	global_lid[2] = 21;
+	global_lid[0] = 19;
+	global_lid[1] = 21;
 }
 
 void print_gloabl_lid(void)
@@ -554,9 +553,6 @@ int get_global_qpn(int mynodeid, int remnodeid, int conn)
 	int first_qpn;
 	int ret;
 
-	if (remnodeid == 0)
-		first_qpn = 74;
-	else
 		first_qpn = 72;
 
 	if (remnodeid > mynodeid)

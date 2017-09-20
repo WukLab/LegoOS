@@ -247,6 +247,8 @@ int lego_ib_init(void *unused)
 	fit_internal_init();
 
 	printk(KERN_CRIT "%s\n", __func__);
+	print_gloabl_lid();
+
 	while (mad_got_one < 10) {
 		schedule();
 	}

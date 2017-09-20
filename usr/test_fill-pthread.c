@@ -1,5 +1,6 @@
 #include "includeme.h"
 #include <assert.h>
+#include <pthread.h>
 
 #define NR_BITS 12
 #define SET_MASK ((1ULL << 28) - 1) 
