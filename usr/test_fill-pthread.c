@@ -5,7 +5,7 @@
 #define SET_MASK ((1ULL << 28) - 1) 
 
 #define RUN_SIZE	(1024*1024*128)
-#define NR_THREADS	4
+#define NR_THREADS	1
 
 double rand_val(int seed);
 int zipf(double alpha, int n);
@@ -47,6 +47,8 @@ void seq_heap_run(void)
 }
 
 static unsigned long *zipf_addresses;
+static pthread_spinlock_t zipf_lock;
+static pthread_barrier_t zipf_barrier;
 
 static void zipf_run(void)
 {
@@ -57,11 +59,8 @@ static void zipf_run(void)
 
 	nr_pages = RUN_SIZE / PAGE_SIZE;
 
-	/* random seed */
-	rand_val(1);
-
 	/* The larger alpha, the better locality */
-	alpha = 0.99;
+	alpha = 1;
 
 	zipf_addresses = malloc(sizeof(zipf_addresses) * nr_pages);
 	if (!zipf_addresses)
@@ -69,6 +68,9 @@ static void zipf_run(void)
 
 	/* Generate array */
 	fprintf(stderr, "  Generating zipf array... \n");
+	pthread_spin_lock(&zipf_lock);
+	/* random seed */
+	rand_val(1);
 	for (i = 0; i < nr_pages; i++) {
 		int page_index;
 
@@ -81,7 +83,11 @@ static void zipf_run(void)
 				(unsigned long)base + RUN_SIZE);
 		}
 	}
+	pthread_spin_unlock(&zipf_lock);
 	fprintf(stderr, "  Generating zipf array... Done\n");
+
+	/* Wait until all threads finish computation */
+	pthread_barrier_wait(&zipf_barrier);
 
 	gettimeofday(&ts, NULL);
 	for (i = 0; i < nr_pages; i++) {
@@ -158,9 +164,9 @@ static void *thread_func(void *arg)
 	int tid = gettid();
 
 	printf("Thread [%d] running\n", tid);
-	//seq_heap_run();
+	seq_heap_run();
 	//zipf_run();
-	ran_run();
+	//ran_run();
 }
 
 int main(void)
@@ -176,6 +182,9 @@ int main(void)
 	base = malloc(RUN_SIZE);
 	if (!base)
 		die("fail to malloc");
+	
+	pthread_spin_init(&zipf_lock, PTHREAD_PROCESS_PRIVATE);
+	pthread_barrier_init(&zipf_barrier, NULL, NR_THREADS);
 
 	for (i = 0; i < nr_threads; i++) {
 		ret = pthread_create(&tid[i], NULL, thread_func, NULL);
@@ -203,7 +212,7 @@ int zipf(double alpha, int n)
   static double c = 0;          // Normalization constant
   double z;                     // Uniform random number (0 < z < 1)
   double sum_prob;              // Sum of probabilities
-  double zipf_value;            // Computed exponential value to be returned
+  double zipf_value=0;            // Computed exponential value to be returned
   int    i;                     // Loop counter
 
   // Compute normalization constant on first call only
@@ -236,6 +245,7 @@ int zipf(double alpha, int n)
 
   // Assert that zipf_value is between 1 and N
   assert((zipf_value >=1) && (zipf_value <= n));
+  //printf("zipf_value: %ld\n", zipf_value);
 
   return(zipf_value);
 }
