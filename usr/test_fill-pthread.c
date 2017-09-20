@@ -102,13 +102,65 @@ static void zipf_run(void)
 	nr_run++;
 }
 
+static unsigned long *random_addresses;
+
+static void ran_run(void)
+{
+	int tid = gettid();
+	long i, nr_pages;
+	struct timeval ts, te, result;
+
+	srand(time(NULL));
+
+	nr_pages = RUN_SIZE / PAGE_SIZE;
+
+	random_addresses = malloc(sizeof(random_addresses) * nr_pages);
+	if (!random_addresses)
+		die("oom");
+
+	/* Generate array */
+	fprintf(stderr, "  Generating random array... \n");
+	for (i = 0; i < nr_pages; i++) {
+		int page_index;
+
+		page_index = rand() % nr_pages;
+		random_addresses[i] = (unsigned long)base + (page_index * PAGE_SIZE);
+
+		/* paranoid check */
+		if (random_addresses[i] > (unsigned long)base + RUN_SIZE) {
+			die("bug: %#lx, %#lx", random_addresses[i],
+				(unsigned long)base + RUN_SIZE);
+		}
+	}
+	fprintf(stderr, "  Generating random array... Done\n");
+
+	gettimeofday(&ts, NULL);
+	for (i = 0; i < nr_pages; i++) {
+		unsigned long *bar;
+
+		bar = (unsigned long *)random_addresses[i];
+		*bar = 100;
+	}
+	gettimeofday(&te, NULL);
+	timeval_sub(&result, &te, &ts);
+
+	fprintf(stderr, " %s(nr=%d)(tid=%d)  Total LLC runtime [%ld.%ld (s)] / "
+		"nr_pages [%d] (%dMB) ---> LLC_miss_latency [%ld (ns)]\n", __func__,
+		nr_run, tid, result.tv_sec, result.tv_usec/1000, nr_pages,
+		(nr_pages * PAGE_SIZE)/1024/1024,
+		(1000000000*result.tv_sec + 1000*result.tv_usec)/nr_pages);
+
+	nr_run++;
+}
+
 static void *thread_func(void *arg)
 {
 	int tid = gettid();
 
 	printf("Thread [%d] running\n", tid);
-	seq_heap_run();
+	//seq_heap_run();
 	//zipf_run();
+	ran_run();
 }
 
 int main(void)
