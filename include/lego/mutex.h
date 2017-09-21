@@ -14,6 +14,8 @@
 #include <lego/atomic.h>
 #include <lego/spinlock.h>
 
+#include <asm/mutex.h>
+
 /*
  * Simple, straightforward mutexes with strict semantics:
  *
@@ -43,18 +45,14 @@
  *   locks and tasks (and only those tasks)
  */
 struct mutex {
-	atomic_long_t		owner;
+	/* 1: unlocked, 0: locked, negative: locked, possible waiters */
+	atomic_t		count;
 	spinlock_t		wait_lock;
 	struct list_head	wait_list;
-#ifdef CONFIG_DEBUG_MUTEXES
-	void			*magic;
+#if defined(CONFIG_DEBUG_MUTEXES)
+	struct task_struct	*owner;
 #endif
 };
-
-static inline struct task_struct *__mutex_owner(struct mutex *lock)
-{
-	return (struct task_struct *)(atomic_long_read(&lock->owner) & ~0x07);
-}
 
 struct mutex_waiter {
 	struct list_head	list;
@@ -88,13 +86,11 @@ do {					\
 	__mutex_init((mutex), #mutex);	\
 } while (0)
 
-#define __MUTEX_INITIALIZER(lockname)				\
-{								\
-	.owner = ATOMIC_LONG_INIT(0),				\
-	.wait_lock = __SPIN_LOCK_UNLOCKED(lockname.wait_lock),	\
-	.wait_list = LIST_HEAD_INIT(lockname.wait_list)		\
-	__DEBUG_MUTEX_INITIALIZER(lockname)			\
-}
+#define __MUTEX_INITIALIZER(lockname) \
+		{ .count = ATOMIC_INIT(1) \
+		, .wait_lock = __SPIN_LOCK_UNLOCKED(lockname.wait_lock) \
+		, .wait_list = LIST_HEAD_INIT(lockname.wait_list) \
+		__DEBUG_MUTEX_INITIALIZER(lockname) }
 
 #define DEFINE_MUTEX(mutexname) \
 	struct mutex mutexname = __MUTEX_INITIALIZER(mutexname)
@@ -107,8 +103,12 @@ do {					\
  */
 static inline int mutex_is_locked(struct mutex *lock)
 {
-	return __mutex_owner(lock) != NULL;
+	return atomic_read(&lock->count) != 1;
 }
+
+void mutex_lock(struct mutex *lock);
+int __must_check mutex_lock_interruptible(struct mutex *lock);
+int __must_check mutex_lock_killable(struct mutex *lock);
 
 /*
  * NOTE: mutex_trylock() follows the spin_trylock() convention,
@@ -118,6 +118,33 @@ static inline int mutex_is_locked(struct mutex *lock)
  */
 int mutex_trylock(struct mutex *lock);
 void mutex_unlock(struct mutex *lock);
-void mutex_lock(struct mutex *lock);
+
+int atomic_dec_and_mutex_lock(atomic_t *cnt, struct mutex *lock);
+
+#ifdef CONFIG_MUTEX_SPIN_ON_OWNER
+/*
+ * The mutex owner can get read and written to locklessly.
+ * We should use WRITE_ONCE when writing the owner value to
+ * avoid store tearing, otherwise, a thread could potentially
+ * read a partially written and incomplete owner value.
+ */
+static inline void mutex_set_owner(struct mutex *lock)
+{
+	WRITE_ONCE(lock->owner, current);
+}
+
+static inline void mutex_clear_owner(struct mutex *lock)
+{
+	WRITE_ONCE(lock->owner, NULL);
+}
+#else
+static inline void mutex_set_owner(struct mutex *lock)
+{
+}
+
+static inline void mutex_clear_owner(struct mutex *lock)
+{
+}
+#endif
 
 #endif /* _LEGO_MUTEX_H_ */

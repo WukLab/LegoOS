@@ -159,6 +159,11 @@ do {							\
 	smp_store_mb(current->state, (state_value));	\
 } while (0)
 
+#define __set_task_state(tsk, state_value)		\
+	do { (tsk)->state = (state_value); } while (0)
+#define set_task_state(tsk, state_value)		\
+	smp_store_mb((tsk)->state, (state_value))
+
 /*
  * task->flags
  */
