@@ -68,9 +68,21 @@ static u64 pcache_tag_mask;
 static u64 pcache_way_cache_stride;
 static u64 pcache_way_meta_stride;
 
+/*
+ * Given an user virtual address, return its set number.
+ */
 static inline unsigned long addr2set(unsigned long addr)
 {
 	return (addr & pcache_set_mask) >> nr_bits_cacheline;
+}
+
+/*
+ * Given an user virtual address, find the corresponding cacheline
+ * metadata, return metadata's kernel virtual address
+ */
+static inline unsigned long addr2meta(unsigned long addr)
+{
+	return addr2set(addr) * llc_cachemeta_size;
 }
 
 static DEFINE_SPINLOCK(pcache_alloc_lock);
@@ -86,7 +98,7 @@ static DEFINE_SPINLOCK(pcache_alloc_lock);
 #define for_each_way_set(addr, pa_cache, va_cache, va_meta, way)			\
 	for (va_cache = (void *)((addr & pcache_set_mask) + virt_start_cacheline),	\
 	     pa_cache = (void *)((addr & pcache_set_mask) + phys_start_cacheline),	\
-	     va_meta = (void *)(addr2set(addr) + virt_start_metadata), way = 0;		\
+	     va_meta = (void *)(addr2meta(addr) + virt_start_metadata), way = 0;	\
 	     way < llc_cache_associativity;						\
 	     way++,									\
 	     pa_cache += pcache_way_cache_stride, 					\
