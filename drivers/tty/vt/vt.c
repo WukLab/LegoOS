@@ -16,6 +16,7 @@
 #include <lego/bug.h>
 #include <lego/tty.h>
 #include <lego/ctype.h>
+#include <lego/mutex.h>
 #include <lego/kernel.h>
 #include <lego/termios.h>
 #include <lego/console.h>
@@ -592,6 +593,7 @@ struct n_tty_data vt_ldisc_data;
 
 void __init vt_init(void)
 {
+	mutex_init(&vt_ldisc_data.output_lock);
 	vt_tty_struct.termios = tty_std_termios;
 
 	/*

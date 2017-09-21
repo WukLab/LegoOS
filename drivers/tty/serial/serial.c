@@ -11,6 +11,7 @@
 #include <asm/asm.h>
 
 #include <lego/tty.h>
+#include <lego/mutex.h>
 
 /* ttyS0 */
 #define __DEFAULT_SERIAL_PORT_0 0x3f8
@@ -91,6 +92,7 @@ static void __init serial_init_hw(int port, int baud)
 
 void __init serial_init(void)
 {
+	mutex_init(&serial_ldisc_data.output_lock);
 	serial_init_hw(DEFAULT_SERIAL_PORT, DEFAULT_BAUD);
 
 	serial_tty_struct.termios = tty_std_termios;
