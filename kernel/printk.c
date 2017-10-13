@@ -13,6 +13,7 @@
 #include <lego/printk.h>
 #include <lego/linkage.h>
 #include <lego/spinlock.h>
+#include <lego/ratelimit.h>
 
 #define LOG_LINE_MAX	1024
 
@@ -127,4 +128,17 @@ int vprintk(const char *fmt, va_list args)
 	spin_unlock_irqrestore(&printk_lock, flags);
 
 	return ret_len;
+}
+
+/*
+ * printk rate limiting, lifted from the networking subsystem.
+ *
+ * This enforces a rate limit: not more than 10 kernel messages
+ * every 5s to make a denial-of-service attack impossible.
+ */
+DEFINE_RATELIMIT_STATE(printk_ratelimit_state, 5 * HZ, 10);
+
+int __printk_ratelimit(const char *func)
+{
+	return ___ratelimit(&printk_ratelimit_state, func);
 }

@@ -132,7 +132,7 @@ static inline int spin_trylock_irq(spinlock_t *lock)
 	typecheck(unsigned long, (flags));		\
 	local_irq_save((flags));			\
 	preempt_disable();				\
-	arch_spin_trylock(&(lock)->arch_flags) ? 1 :	\
+	arch_spin_trylock(&(lock)->arch_lock) ? 1 :	\
 	({						\
 		local_irq_restore((flags));		\
 		preempt_enable();			\

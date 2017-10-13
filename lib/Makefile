@@ -19,3 +19,4 @@ obj-y += strncpy_from_user.o
 obj-y += strnlen_user.o
 obj-y += plist.o
 obj-y += dump_task_struct.o
+obj-y += ratelimit.o
