@@ -35,7 +35,7 @@ static inline void __flush_tlb(void)
 
 static inline void __flush_tlb_global(void)
 {
-	/* TODO: CR4 */
+	/* TODO: CR4 Global and local TLB differences */
 	preempt_disable();
 	write_cr3(read_cr3());
 	preempt_enable();

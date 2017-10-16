@@ -1,3 +1,16 @@
+	stackslots_per_line=N
+			stackslots_per_line=8
+			stackslots_per_line=10
+
+			Determing how many slots will be printed per line
+			during kernel panic dump.
+	stack_lines=N
+			stack_lines=8
+			stack_lines=10
+
+			Determining how many lines are printed during
+			kernel panic dump.
+
 	earlyprintk=	[X86]
 			earlyprintk=serial[,ttySn[,baudrate]]
 			earlyprintk=serial[,0x...[,baudrate]]

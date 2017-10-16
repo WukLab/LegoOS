@@ -219,21 +219,34 @@ void show_call_trace(struct task_struct *task, struct pt_regs *regs,
 static int stackslots_per_line = 4;
 static int stack_lines = 5;
 
-/* TODO: once we have kstrtoint() */
 static int __init setup_stackslots_per_line(char *s)
 {
+	ssize_t ret;
+	unsigned long val;
+
 	if (!s)
 		return -EINVAL;
 
+	ret = kstrtoul(s, 0, &val);
+	if (ret)
+		return ret;
+	stackslots_per_line = val;
 	return 0;
 }
 __setup("stackslots_per_line", setup_stackslots_per_line);
 
 static int __init setup_stack_lines(char *s)
 {
+	ssize_t ret;
+	unsigned long val;
+
 	if (!s)
 		return -EINVAL;
 
+	ret = kstrtoul(s, 0, &val);
+	if (ret)
+		return ret;
+	stack_lines = val;
 	return 0;
 }
 __setup("stack_lines", setup_stack_lines);

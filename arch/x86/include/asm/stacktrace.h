@@ -48,10 +48,9 @@ get_frame_pointer(struct task_struct *task, struct pt_regs *regs)
 		return (unsigned long *)regs->bp;
 
 	if (task == current)
-		return	__builtin_frame_address(0);
+		return __builtin_frame_address(0);
 
-	/*TODO*/
-	return NULL;
+	return (unsigned long *)((struct inactive_task_frame *)task->thread.sp)->bp;
 }
 #else
 static inline unsigned long *
