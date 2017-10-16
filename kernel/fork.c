@@ -267,6 +267,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 	atomic_set(&mm->mm_count, 1);
 	mm->map_count = 0;
 	mm->pinned_vm = 0;
+	mm_init_cpumask(mm);
 	spin_lock_init(&mm->page_table_lock);
 	init_rwsem(&mm->mmap_sem);
 

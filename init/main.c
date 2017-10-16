@@ -196,6 +196,7 @@ asmlinkage void __init start_kernel(void)
 	local_irq_disable();
 
 	setup_task_stack_end_magic(&init_task);
+	mm_init_cpumask(&init_mm);
 
 	boot_cpumask_init();
 

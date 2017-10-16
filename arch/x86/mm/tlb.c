@@ -13,6 +13,13 @@
 #include <lego/cpumask.h>
 #include <asm/tlbflush.h>
 
+/*
+ * TODO:
+ * Make use of mm_cpumask. Need to set and unset it properly.
+ * Currently I'm using cpu_active_mask instead of it.
+ * Check mm_cpumask() function.
+ */
+
 struct flush_tlb_info {
 	struct mm_struct *flush_mm;
 	unsigned long flush_start;
@@ -26,15 +33,6 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		load_cr3(next->pgd);
 }
 
-/*
- * TODO:
- * This function should be optimized. Maybe we should follow the linux
- * mm and borrowed active_mm way. At first, I totally did not get why
- * using 2 mms. Now I understand, but need sometime to patch the mm
- * and active_mm code.
- *
- * Now just use this way.
- */
 void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 	       struct task_struct *tsk)
 {
@@ -77,12 +75,6 @@ void flush_tlb_others(const struct cpumask *cpumask, struct mm_struct *mm,
 	info.flush_end = end;
 
 	smp_call_function_many(cpumask, flush_tlb_func, &info, 1);
-}
-
-/* TODO */
-static inline const cpumask_t *mm_cpumask(struct mm_struct *mm)
-{
-	return cpu_active_mask;
 }
 
 void flush_tlb_current_task(void)

@@ -15,6 +15,7 @@
 #include <lego/rwsem.h>
 #include <lego/types.h>
 #include <lego/rbtree.h>
+#include <lego/cpumask.h>
 #include <lego/spinlock.h>
 
 /*
@@ -94,6 +95,19 @@ struct mm_struct {
 
 	int gpid;
 	struct list_head list;
+
+	cpumask_var_t cpu_vm_mask_var;		/* CPUs this VM has run on */
 };
+
+static inline void mm_init_cpumask(struct mm_struct *mm)
+{
+	cpumask_clear(mm->cpu_vm_mask_var);
+}
+
+/* Future-safe accessor for struct mm_struct's cpu_vm_mask. */
+static inline cpumask_t *mm_cpumask(struct mm_struct *mm)
+{
+	return ((struct cpumask *)&__cpu_active_mask);
+}
 
 #endif /* _LEGO_MM_TYPES_H */
