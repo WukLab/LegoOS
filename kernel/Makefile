@@ -13,6 +13,7 @@ obj-y += workqueue.o
 obj-y += time/
 obj-y += irq/
 obj-y += sched/
+obj-y += locking/
 obj-y += fork.o
 obj-y += pid.o
 obj-y += exit.o

@@ -491,9 +491,6 @@ static __always_inline bool x86_this_cpu_constant_test_bit(unsigned int nr,
 #endif
 }
 
-#define CC_SET(c) "\n\tset" #c " %[_cc_" #c "]\n"
-#define CC_OUT(c) [_cc_ ## c] "=qm"
-
 static inline bool x86_this_cpu_variable_test_bit(int nr,
                         const unsigned long *addr)
 {
