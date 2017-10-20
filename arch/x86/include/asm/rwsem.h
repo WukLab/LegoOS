@@ -7,7 +7,8 @@
  * (at your option) any later version.
  */
 
-/* rwsem.h: R/W semaphores implemented using XADD/CMPXCHG for i486+
+/*
+ * R/W semaphores implemented using XADD/CMPXCHG for i486+
  *
  * The MSW of the count is the negated number of active writers and waiting
  * lockers, and the LSW is the total number of active locks
@@ -59,6 +60,10 @@
 #define RWSEM_WAITING_BIAS		(-RWSEM_ACTIVE_MASK-1)
 #define RWSEM_ACTIVE_READ_BIAS		RWSEM_ACTIVE_BIAS
 #define RWSEM_ACTIVE_WRITE_BIAS		(RWSEM_WAITING_BIAS + RWSEM_ACTIVE_BIAS)
+
+/*
+ * call_rwsem_xxx are defined in arch/x86/lib/rwsem.S
+ */
 
 /*
  * lock for reading
@@ -139,10 +144,9 @@ static inline int __down_write_killable(struct rw_semaphore *sem)
 /*
  * trylock for writing -- returns 1 if successful, 0 if contention
  */
-static inline bool __down_write_trylock(struct rw_semaphore *sem)
+static inline int __down_write_trylock(struct rw_semaphore *sem)
 {
-	bool result;
-	long tmp0, tmp1;
+	long result, tmp;
 	asm volatile("# beginning __down_write_trylock\n\t"
 		     "  mov          %0,%1\n\t"
 		     "1:\n\t"
@@ -150,16 +154,16 @@ static inline bool __down_write_trylock(struct rw_semaphore *sem)
 		     /* was the active mask 0 before? */
 		     "  jnz          2f\n\t"
 		     "  mov          %1,%2\n\t"
-		     "  add          %4,%2\n\t"
+		     "  add          %3,%2\n\t"
 		     LOCK_PREFIX "  cmpxchg  %2,%0\n\t"
 		     "  jnz	     1b\n\t"
 		     "2:\n\t"
-		     CC_SET(e)
+		     "  sete         %b1\n\t"
+		     "  movzbl       %b1, %k1\n\t"
 		     "# ending __down_write_trylock\n\t"
-		     : "+m" (sem->count), "=&a" (tmp0), "=&r" (tmp1),
-		       CC_OUT(e) (result)
+		     : "+m" (sem->count), "=&a" (result), "=&r" (tmp)
 		     : "er" (RWSEM_ACTIVE_WRITE_BIAS)
-		     : "memory");
+		     : "memory", "cc");
 	return result;
 }
 

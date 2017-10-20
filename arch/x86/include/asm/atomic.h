@@ -12,7 +12,6 @@
 
 #include <asm/asm.h>
 #include <asm/cmpxchg.h>
-#include <asm/atomic64.h>
 
 #include <lego/types.h>
 #include <lego/compiler.h>
@@ -285,5 +284,11 @@ static __always_inline short int atomic_inc_short(short int *v)
 	asm(LOCK_PREFIX "addw $1, %0" : "+m" (*v));
 	return *v;
 }
+
+#ifdef CONFIG_X86_64
+# include <asm/atomic64.h>
+#else
+# error "need atomic64_32.h"
+#endif
 
 #endif /* _ASM_X86_ATOMIC_H_ */

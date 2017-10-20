@@ -7,6 +7,13 @@
  * (at your option) any later version.
  */
 
+/*
+ * NOTE:
+ * Linux has two different implementations: xadd and spinlock.
+ * Lego currently is only using xadd version, which will need
+ * arch-specific code. Please check asm/rwsem.h for more details.
+ */
+
 #ifndef _LEGO_RWSEM_H_
 #define _LEGO_RWSEM_H_
 
@@ -26,6 +33,12 @@ struct rw_semaphore {
 	struct list_head	wait_list;
 	spinlock_t		wait_lock;
 };
+
+struct rw_semaphore *rwsem_down_read_failed(struct rw_semaphore *sem);
+struct rw_semaphore *rwsem_down_write_failed(struct rw_semaphore *sem);
+struct rw_semaphore *rwsem_down_write_failed_killable(struct rw_semaphore *sem);
+struct rw_semaphore *rwsem_wake(struct rw_semaphore *);
+struct rw_semaphore *rwsem_downgrade_wake(struct rw_semaphore *sem);
 
 #include <asm/rwsem.h>
 
