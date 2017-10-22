@@ -13,6 +13,9 @@
 #include <lego/types.h>
 #include <lego/compiler.h>
 
+/* arch-specific string functions */
+#include <asm/string.h>
+
 #ifndef __HAVE_ARCH_STRCPY
 extern char * strcpy(char *,const char *);
 #endif

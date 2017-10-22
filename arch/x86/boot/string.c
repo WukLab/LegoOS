@@ -10,6 +10,12 @@
 int memcmp(const void *s1, const void *s2, size_t len)
 {
 	u8 diff;
+	
+	/*
+	 * rep does not check the status of the flags between repetitions
+	 * so we need to use repe instead: repe check zero flag for each
+	 * repetition and stop the repetitions if the zero flag is set.
+	 */
 	asm("repe; cmpsb; setnz %0"
 	    : "=qm" (diff), "+D" (s1), "+S" (s2), "+c" (len));
 	return diff;
