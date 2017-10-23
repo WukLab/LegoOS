@@ -17,11 +17,18 @@ struct task_struct;
 int native_cpu_up(int cpu, struct task_struct *tidle);
 
 DECLARE_PER_CPU_READ_MOSTLY(int, cpu_number);
+DECLARE_PER_CPU_READ_MOSTLY(int, node_number);
 
 #ifdef CONFIG_SMP
-#define smp_processor_id()	(this_cpu_read(cpu_number))
+#  define smp_processor_id()	(this_cpu_read(cpu_number))
+# ifdef CONFIG_NUMA
+#  define smp_node_id()		(this_cpu_read(node_number))
+# else
+#  define smp_node_id()		0
+# endif
 #else
-#define smp_processor_id()	0
+#  define smp_processor_id()	0
+#  define smp_node_id()		0
 #endif
 
 struct smp_ops {

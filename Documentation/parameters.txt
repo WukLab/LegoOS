@@ -56,6 +56,10 @@
 			Enable to print info from arch/x86/kernel/smpboot.c
 			Used to debug booting secondary cpus.
 
+	numa_zonelist_order= [KNL, BOOT] Select zonelist order for NUMA.
+			one of ['zone', 'node', 'default'] can be specified
+			By default, 64bit will node node order. 32bit will use zone order.
+
 	memblock=debug	[KNL]
 			Enable memblock debug messages. Enable this if you want
 			to check the memblock allocation and the memory regions managed

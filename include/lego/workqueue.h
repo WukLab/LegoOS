@@ -1,11 +1,19 @@
-#ifndef _LEGO_WORKQUEUE_H
-#define _LEGO_WORKQUEUE_H
+/*
+ * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
 
-//#include <lego/timer.h>
-//#include <lego/threads.h>
+#ifndef _LEGO_WORKQUEUE_H_
+#define _LEGO_WORKQUEUE_H_
+
+#include <lego/smp.h>
+#include <lego/timer.h>
 #include <lego/atomic.h>
 #include <lego/cpumask.h>
-#include <lego/smp.h>
 
 struct workqueue_struct;
 struct work_struct;
@@ -107,15 +115,19 @@ struct workqueue_attrs {
 #define DECLARE_WORK(n, f)						\
 	struct work_struct n = __WORK_INITIALIZER(n, f)
 
-#if 0
 struct delayed_work {
 	struct work_struct work;
-//	struct timer_list timer;
+	struct timer_list timer;
 
 	/* target workqueue and CPU ->timer uses to queue ->work */
 	struct workqueue_struct *wq;
 	int cpu;
 };
+
+static inline struct delayed_work *to_delayed_work(struct work_struct *work)
+{
+	return container_of(work, struct delayed_work, work);
+}
 
 #define __DELAYED_WORK_INITIALIZER(n, f, tflags) {			\
 	.work = __WORK_INITIALIZER((n).work, (f)),			\
@@ -126,7 +138,6 @@ struct delayed_work {
 
 #define DECLARE_DELAYED_WORK(n, f)					\
 	struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, 0)
-#endif
 
 static inline void __init_work(struct work_struct *work) { }
 
@@ -241,4 +252,4 @@ static inline bool queue_delayed_work(struct workqueue_struct *wq,
 
 int init_workqueues(void);
 
-#endif //_LEGO_WORKQUEUE_H
+#endif /* _LEGO_WORKQUEUE_H_ */

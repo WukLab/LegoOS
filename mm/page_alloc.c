@@ -7,10 +7,14 @@
  * (at your option) any later version.
  */
 
-#include <asm/io.h>
-#include <asm/page.h>
+/*
+ * Physical page management:
+ * 1) Boot-time initilization
+ * 2) Runtime buddy allocator
+ */
 
 #include <lego/mm.h>
+#include <lego/init.h>
 #include <lego/numa.h>
 #include <lego/sched.h>
 #include <lego/string.h>
@@ -18,6 +22,10 @@
 #include <lego/nodemask.h>
 #include <lego/memblock.h>
 #include <lego/spinlock.h>
+
+#include <asm/io.h>
+#include <asm/page.h>
+#include <asm/numa.h>
 
 static unsigned long nr_kernel_pages;
 static unsigned long nr_all_pages;
@@ -984,19 +992,6 @@ void __init __free_pages_bootmem(struct page *page, unsigned long pfn,
 	return __free_pages_boot_core(page, order);
 }
 
-/*
- * zonelist_order:
- * 0 = automatic detection of better ordering.
- * 1 = order by ([node] distance, -zonetype)
- * 2 = order by (-zonetype, [node] distance)
- *
- * If not NUMA, ZONELIST_ORDER_ZONE and ZONELIST_ORDER_NODE will create
- * the same zonelist. So only NUMA can configure this param.
- */
-#define ZONELIST_ORDER_DEFAULT  0
-#define ZONELIST_ORDER_NODE     1
-#define ZONELIST_ORDER_ZONE     2
-
 static void zoneref_set_zone(struct zone *zone, struct zoneref *zoneref)
 {
 	zoneref->zone = zone;
@@ -1030,7 +1025,128 @@ static int build_zonelists_node(pg_data_t *pgdat, struct zonelist *zonelist,
 	return nr_zones;
 }
 
+/*
+ * zonelist_order:
+ * 0 = automatic detection of better ordering.
+ * 1 = order by ([node] distance, -zonetype)
+ * 2 = order by (-zonetype, [node] distance)
+ *
+ * If not NUMA, ZONELIST_ORDER_ZONE and ZONELIST_ORDER_NODE will create
+ * the same zonelist. So only NUMA can configure this param.
+ */
+#define ZONELIST_ORDER_DEFAULT  0
+#define ZONELIST_ORDER_NODE     1
+#define ZONELIST_ORDER_ZONE     2
+
+/* zonelist order in the kernel.
+ * set_zonelist_order() will set this to NODE or ZONE.
+ */
+static int current_zonelist_order = ZONELIST_ORDER_DEFAULT;
+static char zonelist_order_name[3][8] = {"Default", "Node", "Zone"};
+
 #ifdef CONFIG_NUMA
+/* The value user specified ....changed by config */
+static int user_zonelist_order = ZONELIST_ORDER_DEFAULT;
+
+/*
+ * Interface for configure zonelist ordering.
+ * command line option "numa_zonelist_order"
+ *	= "[dD]efault	- default, automatic configuration.
+ *	= "[nN]ode 	- order by node locality, then by zone within node
+ *	= "[zZ]one      - order by zone, then by locality within zone
+ */
+static int __parse_numa_zonelist_order(char *s)
+{
+	if (*s == 'd' || *s == 'D') {
+		user_zonelist_order = ZONELIST_ORDER_DEFAULT;
+	} else if (*s == 'n' || *s == 'N') {
+		user_zonelist_order = ZONELIST_ORDER_NODE;
+	} else if (*s == 'z' || *s == 'Z') {
+		user_zonelist_order = ZONELIST_ORDER_ZONE;
+	} else {
+		pr_warn("Ignoring invalid numa_zonelist_order value:  %s\n", s);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static __init int setup_numa_zonelist_order(char *s)
+{
+	int ret;
+
+	if (!s)
+		return 0;
+
+	ret = __parse_numa_zonelist_order(s);
+	return ret;
+}
+__setup("numa_zonelist_order", setup_numa_zonelist_order);
+
+#define MAX_NODE_LOAD (nr_online_nodes)
+static int node_load[MAX_NUMNODES];
+
+#define PENALTY_FOR_NODE_WITH_CPUS	(1)
+
+/**
+ * find_next_best_node - find the next node that should appear in a given node's fallback list
+ * @node: node whose fallback list we're appending
+ * @used_node_mask: nodemask_t of already used nodes
+ *
+ * We use a number of factors to determine which is the next node that should
+ * appear on a given node's fallback list.  The node should not have appeared
+ * already in @node's fallback list, and it should be the next closest node
+ * according to the distance array (which contains arbitrary distance values
+ * from each node to each node in the system), and should also prefer nodes
+ * with no CPUs, since presumably they'll have very little allocation pressure
+ * on them otherwise.
+ * It returns -1 if no node is found.
+ */
+static int find_next_best_node(int node, nodemask_t *used_node_mask)
+{
+	int n, val;
+	int min_val = INT_MAX;
+	int best_node = NUMA_NO_NODE;
+	const struct cpumask *tmp = cpumask_of_node(0);
+
+	/* Use the local node if we haven't already */
+	if (!node_isset(node, *used_node_mask)) {
+		node_set(node, *used_node_mask);
+		return node;
+	}
+
+	for_each_node_state(n, N_NORMAL_MEMORY) {
+
+		/* Don't want a node to appear more than once */
+		if (node_isset(n, *used_node_mask))
+			continue;
+
+		/* Use the distance array to find the distance */
+		val = node_distance(node, n);
+
+		/* Penalize nodes under us ("prefer the next node") */
+		val += (n < node);
+
+		/* Give preference to headless and unused nodes */
+		tmp = cpumask_of_node(n);
+		if (!cpumask_empty(tmp))
+			val += PENALTY_FOR_NODE_WITH_CPUS;
+
+		/* Slight preference for less loaded node */
+		val *= (MAX_NODE_LOAD*MAX_NUMNODES);
+		val += node_load[n];
+
+		if (val < min_val) {
+			min_val = val;
+			best_node = n;
+		}
+	}
+
+	if (best_node >= 0)
+		node_set(best_node, *used_node_mask);
+
+	return best_node;
+}
+
 /*
  * Build zonelists ordered by node and zones within node.
  * This results in maximum locality--normal zone overflows into local
@@ -1044,6 +1160,11 @@ static void build_zonelists_in_node_order(pg_data_t *pgdat, int node)
 	zonelist = &pgdat->node_zonelists[ZONELIST_FALLBACK];
 	for (j = 0; zonelist->_zonerefs[j].zone != NULL; j++)
 		;
+
+	/*
+	 * All @node's zones into @pgdat's zonelist
+	 * That is why we call it is node order.
+	 */
 	j = build_zonelists_node(NODE_DATA(node), zonelist, j);
 	zonelist->_zonerefs[j].zone = NULL;
 	zonelist->_zonerefs[j].zone_idx = 0;
@@ -1063,10 +1184,77 @@ static void build_thisnode_zonelists(pg_data_t *pgdat)
 	zonelist->_zonerefs[j].zone_idx = 0;
 }
 
+/*
+ * Build zonelists ordered by zone and nodes within zones.
+ * This results in conserving DMA zone[s] until all Normal memory is
+ * exhausted, but results in overflowing to remote node while memory
+ * may still exist in local DMA zone.
+ */
+static int node_order[MAX_NUMNODES];
+
+static void build_zonelists_in_zone_order(pg_data_t *pgdat, int nr_nodes)
+{
+	int pos, j, node;
+	int zone_type;		/* needs to be signed */
+	struct zone *z;
+	struct zonelist *zonelist;
+
+	zonelist = &pgdat->node_zonelists[ZONELIST_FALLBACK];
+	pos = 0;
+	for (zone_type = MAX_NR_ZONES - 1; zone_type >= 0; zone_type--) {
+		for (j = 0; j < nr_nodes; j++) {
+			node = node_order[j];
+			z = &NODE_DATA(node)->node_zones[zone_type];
+			if (managed_zone(z)) {
+				zoneref_set_zone(z,
+					&zonelist->_zonerefs[pos++]);
+			}
+		}
+	}
+	zonelist->_zonerefs[pos].zone = NULL;
+	zonelist->_zonerefs[pos].zone_idx = 0;
+}
+
+#if defined(CONFIG_64BIT)
+/*
+ * Devices that require DMA32/DMA are relatively rare and do not justify a
+ * penalty to every machine in case the specialised case applies. Default
+ * to Node-ordering on 64-bit NUMA machines
+ */
+static int default_zonelist_order(void)
+{
+	return ZONELIST_ORDER_NODE;
+}
+#else
+/*
+ * On 32-bit, the Normal zone needs to be preserved for allocations accessible
+ * by the kernel. If processes running on node 0 deplete the low memory zone
+ * then reclaim will occur more frequency increasing stalls and potentially
+ * be easier to OOM if a large percentage of the zone is under writeback or
+ * dirty. The problem is significantly worse if CONFIG_HIGHPTE is not set.
+ * Hence, default to zone ordering on 32-bit.
+ */
+static int default_zonelist_order(void)
+{
+	return ZONELIST_ORDER_ZONE;
+}
+#endif /* CONFIG_64BIT */
+
+static void set_zonelist_order(void)
+{
+	if (user_zonelist_order == ZONELIST_ORDER_DEFAULT)
+		current_zonelist_order = default_zonelist_order();
+	else
+		current_zonelist_order = user_zonelist_order;
+}
+
 static void build_zonelists(pg_data_t *pgdat)
 {
-	int i, node;
+	int i, node, load;
+	nodemask_t used_mask;
+	int local_node, prev_node;
 	struct zonelist *zonelist;
+	unsigned int order = current_zonelist_order;
 
 	/* initialize zonelists */
 	for (i = 0; i < MAX_ZONELISTS; i++) {
@@ -1075,26 +1263,43 @@ static void build_zonelists(pg_data_t *pgdat)
 		zonelist->_zonerefs[0].zone_idx = 0;
 	}
 
-	/*
-	 * TODO:
-	 *
-	 * Different NODES *should* use different orders of node
-	 * so zonelists inside each pgdat will have different orders.
-	 *
-	 * As we only use for_each_online_node, then all allocation will
-	 * allocate from node 0's memory first.
-	 *
-	 * At least it should base on order of nodes!
-	 *
-	 * Linux also base on numa_distance
-	 */
-	for_each_online_node(node) {
-		build_zonelists_in_node_order(pgdat, node);
+	/* NUMA-aware ordering of nodes */
+	local_node = pgdat->node_id;
+	load = nr_online_nodes;
+	prev_node = local_node;
+	nodes_clear(used_mask);
+
+	memset(node_order, 0, sizeof(node_order));
+	i = 0;
+
+	while ((node = find_next_best_node(local_node, &used_mask)) >= 0) {
+		/*
+		 * We don't want to pressure a particular node.
+		 * So adding penalty to the first node in same
+		 * distance group to make it round-robin.
+		 */
+		if (node_distance(local_node, node) !=
+		    node_distance(local_node, prev_node))
+			node_load[node] = load;
+
+		prev_node = node;
+		load--;
+		if (order == ZONELIST_ORDER_NODE)
+			build_zonelists_in_node_order(pgdat, node);
+		else
+			node_order[i++] = node;	/* remember order */
+	}
+
+	if (order == ZONELIST_ORDER_ZONE) {
+		/* calculate node order -- i.e., DMA last! */
+		build_zonelists_in_zone_order(pgdat, i);
 	}
 
 	build_thisnode_zonelists(pgdat);
 }
-#else
+
+#else /* CONFIG_NUMA */
+
 static void build_zonelists(pg_data_t *pgdat)
 {
 	int node, local_node;
@@ -1128,15 +1333,29 @@ static void build_zonelists(pg_data_t *pgdat)
 	zonelist->_zonerefs[j].zone = NULL;
 	zonelist->_zonerefs[j].zone_idx = 0;
 }
-#endif
+
+static void set_zonelist_order(void)
+{
+	current_zonelist_order = ZONELIST_ORDER_ZONE;
+}
+
+#endif /* CONFIG_NUMA */
 
 static void __init build_all_zonelists(void)
 {
 	int nid;
-	pg_data_t *pgdat;
+
+	set_zonelist_order();
+	pr_debug("zonelist_order: %s\n", zonelist_order_name[current_zonelist_order]);
+
+#ifdef CONFIG_NUMA
+	memset(node_load, 0, sizeof(node_load));
+#endif
 
 	for_each_online_node(nid) {
-		pgdat = NODE_DATA(nid);
+		pg_data_t *pgdat = NODE_DATA(nid);
+
+		/* Highly depends on if NUMA is configured.. */
 		build_zonelists(pgdat);
 	}
 }

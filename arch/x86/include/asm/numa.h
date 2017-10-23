@@ -39,6 +39,7 @@ void __init x86_numa_init(void);
 
 int __init numa_add_memblk(int nodeid, u64 start, u64 end);
 int __init numa_set_distance(int from, int to, int distance);
+int node_distance(int from, int to);
 
 extern bool acpi_numa_disabled;
 

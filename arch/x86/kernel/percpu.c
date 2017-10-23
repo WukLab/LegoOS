@@ -35,6 +35,10 @@ unsigned long __per_cpu_offset[NR_CPUS] = {
 
 DEFINE_PER_CPU_READ_MOSTLY(int, cpu_number);
 
+#ifdef CONFIG_NUMA
+DEFINE_PER_CPU_READ_MOSTLY(int, node_number);
+#endif
+
 static int __init pcpu_cpu_distance(unsigned int from, unsigned int to)
 {
 	if (cpu_to_node(from) == cpu_to_node(to))
@@ -94,6 +98,10 @@ void load_percpu_segment(int cpu)
 	wrmsrl(MSR_GS_BASE, (unsigned long)per_cpu_offset(cpu));
 }
 
+/*
+ * Yup! This function will init our beloved smp_processor_id()!
+ * Also, lego specific smp_node_id()!
+ */
 void __init setup_per_cpu_areas(void)
 {
 	const size_t dyn_size = PERCPU_DYNAMIC_RESERVE;
@@ -116,6 +124,9 @@ void __init setup_per_cpu_areas(void)
 		per_cpu_offset(cpu) = delta + pcpu_unit_offsets[cpu];
 		per_cpu(this_cpu_off, cpu) = per_cpu_offset(cpu);
 		per_cpu(cpu_number, cpu) = cpu;
+#ifdef CONFIG_NUMA
+		per_cpu(node_number, cpu) = cpu_to_node(cpu);
+#endif
 	}
 
 	/* Reload percpu %gs on CPU0 */

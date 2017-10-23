@@ -90,10 +90,21 @@ nodemask_t numa_nodes_parsed;
 static int numa_distance_cnt;
 static u8 *numa_distance;
 
+/**
+ * numa_reset_distance - Reset NUMA distance table
+ *
+ * The current table is freed.  The next numa_set_distance() call will
+ * create a new one.
+ */
 static void __init numa_reset_distance(void)
 {
+	size_t size = numa_distance_cnt * numa_distance_cnt * sizeof(numa_distance[0]);
+
+	/* numa_distance could be 1LU marking allocation failure, test cnt */
+	if (numa_distance_cnt)
+		memblock_free(__pa(numa_distance), size);
 	numa_distance_cnt = 0;
-	numa_distance = NULL;
+	numa_distance = NULL;	/* enable table creation */
 }
 
 static int __init numa_add_memblk_to(int nid, u64 start, u64 end,
@@ -230,6 +241,13 @@ int __init numa_set_distance(int from, int to, int distance)
 	numa_distance[from * numa_distance_cnt + to] = distance;
 
 	return 0;
+}
+
+int node_distance(int from, int to)
+{
+	if (from >= numa_distance_cnt || to >= numa_distance_cnt)
+		return from == to ? LOCAL_DISTANCE : REMOTE_DISTANCE;
+	return numa_distance[from * numa_distance_cnt + to];
 }
 
 /**

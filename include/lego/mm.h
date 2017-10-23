@@ -338,12 +338,11 @@ static __always_inline struct page *
 alloc_pages_node(int nid, gfp_t gfp_mask, unsigned int order)
 {
 	if (nid == NUMA_NO_NODE)
-		nid = 0;
+		nid = smp_node_id();
 	return __alloc_pages_node(nid, gfp_mask, order);
 }
 
-/* TODO: Use current node instead of NUMA_NO_NODE */
-#define alloc_pages(gfp_mask, order)	alloc_pages_node(NUMA_NO_NODE, gfp_mask, order)
+#define alloc_pages(gfp_mask, order)	alloc_pages_node(smp_node_id(), gfp_mask, order)
 #define _alloc_page(gfp_mask)		alloc_pages(gfp_mask, 0)
 #define alloc_page()			_alloc_page(GFP_KERNEL)
 
