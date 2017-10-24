@@ -1376,6 +1376,33 @@ static void __init sparse_memory_present_with_active_regions(int nid)
 		memory_present(this_nid, start_pfn, end_pfn);
 }
 
+/*
+ * This function is used to inspect for_each_zone_zonelist_nodemask
+ * or mainly if the zonelist is built in the right way. Zones order
+ * matter here, becasue page allocation use the same macro to walk
+ * through zones.
+ */
+void dump_zonelists(void)
+{
+	int nid;
+	struct zone *zone;
+	struct zoneref *z;
+	enum zone_type high_zoneidx = __MAX_NR_ZONES;
+
+	for_each_online_node(nid) {
+		pg_data_t *pg_data = NODE_DATA(nid);
+		struct zonelist *zonelist = &pg_data->node_zonelists[0];
+
+		pr_debug("Node %d Page Allocation Order\n", nid);
+		for_each_zone_zonelist_nodemask(zone, z, zonelist, high_zoneidx, NULL) {
+			pr_debug("   zone: node=%d, name=%s \t [%#lx - %#lx]\n",
+				zone->zone_pgdat->node_id, zone->name,
+				zone->zone_start_pfn << PAGE_SHIFT,
+				((zone->zone_start_pfn + zone->spanned_pages) << PAGE_SHIFT) - 1);
+		}
+	}
+}
+
 void __init memory_init(void)
 {
 	sparse_memory_present_with_active_regions(MAX_NUMNODES);
@@ -1391,6 +1418,8 @@ void __init memory_init(void)
 
 	/* Put all avaiable memory to allocator */
 	free_all_bootmem();
+
+	dump_zonelists();
 }
 
 /*
