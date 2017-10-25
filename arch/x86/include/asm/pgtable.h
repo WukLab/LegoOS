@@ -185,13 +185,13 @@ static inline void pgd_clear(pgd_t *pgdp)
 static inline pte_t pfn_pte(unsigned long page_nr, pgprot_t pgprot)
 {
 	return __pte(((phys_addr_t)page_nr << PAGE_SHIFT) |
-		     pgprot_val(pgprot));
+		     massage_pgprot(pgprot));
 }
 
 static inline pmd_t pfn_pmd(unsigned long page_nr, pgprot_t pgprot)
 {
 	return __pmd(((phys_addr_t)page_nr << PAGE_SHIFT) |
-		     pgprot_val(pgprot));
+		     massage_pgprot(pgprot));
 }
 
 static inline pte_t pte_set_flags(pte_t pte, pteval_t set)
@@ -325,6 +325,8 @@ static inline pmd_t pmd_mknotpresent(pmd_t pmd)
 #define pte_pgprot(x) __pgprot(pte_flags(x))
 #define pmd_pgprot(x) __pgprot(pmd_flags(x))
 #define pud_pgprot(x) __pgprot(pud_flags(x))
+
+#define canon_pgprot(p) __pgprot(massage_pgprot(p))
 
 static inline int pte_none(pte_t pte)
 {
