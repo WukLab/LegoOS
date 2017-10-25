@@ -34,6 +34,7 @@ int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receiv
 int ibapi_get_node_id(void);
 int ibapi_num_connected_nodes(void);
 
+void init_global_lid_qpn(void);
 void print_gloabl_lid(void);
 #else
 static inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
@@ -46,7 +47,6 @@ static inline int ibapi_receive_message(unsigned int designed_port, void *ret_ad
 { return -EIO; }
 static inline int ibapi_get_node_id(void) {return 0; }
 static inline int ibapi_num_connected_nodes(void) {return 0; };
-static inline void print_gloabl_lid(void) { }
 #endif /* CONFIG_FIT*/
 
 #endif /* _INCLUDE_FIT_API_H */

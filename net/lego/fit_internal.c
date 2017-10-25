@@ -519,6 +519,7 @@ int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, i
 }
 
 int global_lid[CONFIG_FIT_NR_NODES];
+static int first_qpn = 72;
 
 /*
  * Statically setting LIDs and QPNs now
@@ -532,7 +533,7 @@ void init_global_lid_qpn(void)
 	BUILD_BUG_ON(1);
 #endif
 
-	global_lid[0] = 19;
+	global_lid[0] = 17;
 	global_lid[1] = 21;
 }
 
@@ -541,8 +542,9 @@ void print_gloabl_lid(void)
 	int i;
 
 	pr_debug("--------- cut here ---------\n");
-	pr_debug("FIT_TIMEOUT:      %d\n", CONFIG_FIT_INITIAL_SLEEP_TIMEOUT);
-	pr_debug("FIT_LOCAL_ID:     %d\n", CONFIG_FIT_LOCAL_ID);
+	pr_debug("FIT_timeout:      %d\n", CONFIG_FIT_INITIAL_SLEEP_TIMEOUT);
+	pr_debug("FIT_first_qpn:    %d\n", first_qpn);
+	pr_debug("FIT_local_id:     %d\n", CONFIG_FIT_LOCAL_ID);
 	for (i = 0; i < CONFIG_FIT_NR_NODES; i++) {
 		pr_debug("  global_lid[%d]=%d\n", i, global_lid[i]);
 	}
@@ -550,10 +552,7 @@ void print_gloabl_lid(void)
 
 int get_global_qpn(int mynodeid, int remnodeid, int conn)
 {
-	int first_qpn;
 	int ret;
-
-		first_qpn = 72;
 
 	if (remnodeid > mynodeid)
 		ret = mynodeid * NUM_PARALLEL_CONNECTION + conn;
@@ -640,7 +639,7 @@ inline int client_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 
 int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check)
 {
-#if SEPARATE_SEND_POLL_THREAD
+#ifdef SEPARATE_SEND_POLL_THREAD
 	/* 
 	 * using a separate thread to poll send cq
 	 */
@@ -689,11 +688,10 @@ int client_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connectio
 	uintptr_t temp_addr;
 	uintptr_t temp_header_addr;
 	int poll_status = SEND_REPLY_WAIT;
-	int flag=0;
 
 	//printk(KERN_CRIT "%s conn %d rkey %d mraddr %lx addr %p size %d offset %d imm %d\n", 
 	//		__func__, connection_id, input_mr_rkey, input_mr_addr, addr, size, offset, imm);
-retry_send_imm_request:
+//retry_send_imm_request:
 	memset(&wr, 0, sizeof(struct ib_send_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 	
@@ -791,7 +789,6 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 	int get_size;
 	int offset;
 	int node_id;
-	int ret = 0;
 	struct imm_message_metadata *descriptor;
 	struct imm_header_from_cq_to_port *new_request;
 	int last_ack;
@@ -882,9 +879,6 @@ int client_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, i
 {
 	struct imm_message_metadata *tmp = (struct imm_message_metadata *)descriptor;
 	int re_connection_id = client_get_connection_by_atomic_number(ctx, tmp->source_node_id, LOW_PRIORITY);
-	unsigned long phys_addr;
-	void *real_addr;
-	struct ib_device *ibd = (struct ib_device *)ctx->context;
 
 	fit_debug("re_connection_id: %d, tmp->source_node_id: %d\n",
 		re_connection_id, tmp->source_node_id);
@@ -964,7 +958,6 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	int i, connection_id;
 	int node_id, port, offset;
 	int semaphore, length, opcode;
-	struct imm_message_metadata *descriptor; 
 	char *addr;
 	int type;
 	struct send_and_reply_format *recv;
@@ -1323,7 +1316,6 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 	uint32_t remote_rkey;
 	struct client_ibv_mr *remote_mr;
 	struct imm_message_metadata output_header;
-	unsigned long phys_addr;
 	int last_ack;
 	
 	if(size+sizeof(struct imm_message_metadata) > IMM_MAX_SIZE)
@@ -1359,7 +1351,7 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 
 	remote_mr = &(ctx->remote_rdma_ring_mrs[target_node]);
 
-retry_send_reply_with_imm_request:
+//retry_send_reply_with_imm_request:
 
 	connection_id = client_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);
 	inbox_id = client_get_inbox_by_addr(ctx, &wait_send_reply_id);
@@ -1504,8 +1496,6 @@ int client_send_test(ppc *ctx, int connection_id, int type, void *addr, int size
 	int ret;
 	int ne, i;
 	struct ib_wc wc[2];
-	struct ibapi_header output_header;
-	void *output_header_addr;
 
 	printk(KERN_CRIT "%s conn %d addr %p size %d sendcq %p\n", __func__, connection_id, addr, size, ctx->send_cq[connection_id]);
 	spin_lock(&connection_lock[connection_id]);
@@ -1643,26 +1633,23 @@ int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
 
 ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 {
-	int     ret;
 	int     i;
-        int             temp_ctx_number;
+        int temp_ctx_number;
 	ppc *ctx;
-        temp_ctx_number = atomic_inc_return(&Connected_FIT_Num);
 	struct client_ibv_mr *ret_mr;
-	//struct task_struct *thread;
 	struct thread_pass_struct thread_pass_poll_cq;
 	int num_connected_nodes = 0;
 	num_recvd_rdma_ring_mrs = 0;
 
+        temp_ctx_number = atomic_inc_return(&Connected_FIT_Num);
         if(temp_ctx_number>=MAX_FIT_NUM)
         {
                 printk(KERN_CRIT "%s Error: already meet the upper bound of connected FIT %d\n", __func__, temp_ctx_number);
                 atomic_dec(&Connected_FIT_Num);
                 return 0;
         }
-	
+
 	printk(KERN_CRIT "Start establish connection node %d\n", mynodeid);
-	init_global_lid_qpn();
 
 	ctx = client_init_interface(ib_port, ib_dev, mynodeid);
 	if(!ctx)

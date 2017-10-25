@@ -246,12 +246,14 @@ int lego_ib_init(void *unused)
 
 	fit_internal_init();
 
-	printk(KERN_CRIT "%s\n", __func__);
+	pr_debug("%s() ...\n", __func__);
+
+	/* Statically assigned info... */
+	init_global_lid_qpn();
 	print_gloabl_lid();
 
-	while (mad_got_one < 10) {
+	while (mad_got_one < 10)
 		schedule();
-	}
 
 	ret = ib_register_client(&ibv_client);
 	if (ret) {
@@ -267,6 +269,8 @@ int lego_ib_init(void *unused)
 
 	/* notify init that ib has done initialization */
 	complete(&ib_init_done);
+	pr_debug("%s() ... OK\n", __func__);
+
 	return 0;
 }
 
