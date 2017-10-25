@@ -7,18 +7,19 @@
  * (at your option) any later version.
  */
 
+#include <lego/init.h>
+#include <lego/string.h>
+#include <lego/linkage.h>
+#include <lego/sections.h>
+#include <lego/screen_info.h>
+
 #include <asm/asm.h>
 #include <asm/desc.h>
 #include <asm/page.h>
 #include <asm/setup.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
-
-#include <lego/init.h>
-#include <lego/string.h>
-#include <lego/linkage.h>
-#include <lego/sections.h>
-#include <lego/screen_info.h>
+#include <asm/tlbflush.h>
 
 extern pgd_t early_level4_pgt[PTRS_PER_PGD];
 extern pmd_t early_dynamic_pgts[EARLY_DYNAMIC_PAGE_TABLES][PTRS_PER_PMD];
@@ -132,6 +133,8 @@ early_idt_handler_array[NUM_EXCEPTION_VECTORS][EARLY_IDT_HANDLER_SIZE];
 asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data)
 {
 	int i;
+
+	cr4_init_shadow();
 
 	reset_early_page_tables();
 

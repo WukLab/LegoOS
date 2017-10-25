@@ -11,9 +11,11 @@
  * xsave/xrstor support
  */
 
-#include <asm/asm.h>
-#include <asm/processor.h>
 #include <lego/kernel.h>
+
+#include <asm/asm.h>
+#include <asm/tlbflush.h>
+#include <asm/processor.h>
 #include <asm/fpu/internal.h>
 
 /*

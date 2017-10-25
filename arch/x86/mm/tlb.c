@@ -13,6 +13,14 @@
 #include <lego/cpumask.h>
 #include <asm/tlbflush.h>
 
+DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate) = {
+#ifdef CONFIG_SMP
+	.active_mm = &init_mm,
+	.state = 0,
+#endif
+	.cr4 = ~0UL,	/* fail hard if we screw up cr4 shadow initialization */
+};
+
 /*
  * TODO:
  * Make use of mm_cpumask. Need to set and unset it properly.

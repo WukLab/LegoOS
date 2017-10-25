@@ -7,20 +7,21 @@
  * (at your option) any later version.
  */
 
+#include <lego/smp.h>
+#include <lego/ctype.h>
+#include <lego/sched.h>
+#include <lego/string.h>
+#include <lego/kernel.h>
+
 #include <asm/asm.h>
 #include <asm/msr.h>
 #include <asm/page.h>
 #include <asm/desc.h>
 #include <asm/pgtable.h>
 #include <asm/syscalls.h>
+#include <asm/tlbflush.h>
 #include <asm/processor.h>
 #include <asm/fpu/internal.h>
-
-#include <lego/smp.h>
-#include <lego/ctype.h>
-#include <lego/sched.h>
-#include <lego/string.h>
-#include <lego/kernel.h>
 
 /* Everything about CPU, filled at early boot */
 struct cpu_info default_cpu_info __read_mostly;
@@ -346,6 +347,12 @@ void cpu_init(void)
 	int i;
 
 	pr_debug("Initializing CPU#%d\n", cpu);
+
+	/*
+	 * Initialize the CR4 shadow before doing anything that could
+	 * try to read it.
+	 */
+	cr4_init_shadow();
 
 	cr4_clear_bits(X86_CR4_VME|X86_CR4_PVI|X86_CR4_TSD|X86_CR4_DE);
 

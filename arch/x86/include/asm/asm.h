@@ -325,30 +325,6 @@ static inline void clflush(volatile void *__p)
 	asm volatile("clflush %0" : "+m" (*(volatile char *)__p));
 }
 
-/* Set in this cpu's CR4. */
-static inline void cr4_set_bits(unsigned long mask)
-{
-	unsigned long cr4;
-
-	cr4 = read_cr4();
-	if ((cr4 | mask) != cr4) {
-		cr4 |= mask;
-		write_cr4(cr4);
-	}
-}
-
-/* Clear in this cpu's CR4. */
-static inline void cr4_clear_bits(unsigned long mask)
-{
-	unsigned long cr4;
-
-	cr4 = read_cr4();
-	if ((cr4 & ~mask) != cr4) {
-		cr4 &= ~mask;
-		write_cr4(cr4);
-	}
-}
-
 #define nop() asm volatile ("nop")
 
 #define stts() write_cr0(read_cr0() | X86_CR0_TS)

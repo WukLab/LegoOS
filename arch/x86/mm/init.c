@@ -146,9 +146,6 @@ struct map_range {
 int direct_gbpages = IS_ENABLED(CONFIG_X86_DIRECT_GBPAGES);
 static int page_size_mask;
 
-static inline void cr4_set_bits_and_update_boot(unsigned long mask)
-{
-}
 static void __init probe_page_size_mask(void)
 {
 	/* Enable PSE if available */

@@ -19,6 +19,7 @@
 #include <asm/fixmap.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
+#include <asm/tlbflush.h>
 #include <asm/processor.h>
 #include <asm/bootparam.h>
 #include <asm/trampoline.h>
@@ -34,6 +35,12 @@
 #include <lego/memblock.h>
 #include <lego/resource.h>
 #include <lego/early_ioremap.h>
+
+#if !defined(CONFIG_X86_PAE) || defined(CONFIG_X86_64)
+__visible unsigned long mmu_cr4_features;
+#else
+__visible unsigned long mmu_cr4_features = X86_CR4_PAE;
+#endif
 
 /*
  * max_pfn_mapped:     highest direct mapped pfn over 4GB
@@ -221,6 +228,13 @@ void __init setup_arch(void)
 
 	/* Setup identity mapping */
 	init_mem_mapping();
+
+	/*
+	 * Update mmu_cr4_features with the current CR4 value.
+	 * This may not be necessary, but auditing all the early-boot
+	 * CR4 manipulation would be needed to rule it out.
+	 */
+	mmu_cr4_features = read_cr4();
 
 	/*
 	 * Before parsing ACPI tables,
