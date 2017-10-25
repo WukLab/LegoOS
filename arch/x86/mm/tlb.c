@@ -7,6 +7,13 @@
  * (at your option) any later version.
  */
 
+/*
+ * TODO:
+ * Make use of mm_cpumask. Need to set and unset it properly.
+ * Currently I'm using cpu_active_mask instead of it.
+ * Check mm_cpumask() function.
+ */
+
 #include <lego/mm.h>
 #include <lego/smp.h>
 #include <lego/sched.h>
@@ -21,19 +28,19 @@ DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate) = {
 	.cr4 = ~0UL,	/* fail hard if we screw up cr4 shadow initialization */
 };
 
-/*
- * TODO:
- * Make use of mm_cpumask. Need to set and unset it properly.
- * Currently I'm using cpu_active_mask instead of it.
- * Check mm_cpumask() function.
- */
-
 struct flush_tlb_info {
 	struct mm_struct *flush_mm;
 	unsigned long flush_start;
 	unsigned long flush_end;
 };
 
+/*
+ * If CR4.PCIDE=0 (lego's case), the load_cr3 invalidates all TLB entries
+ * associated with PCID 0000H except those for global pages.
+ *
+ * All kernel direct mapped pages are global pages. This at least ensures
+ * kernel mapping entries won't go back and forth with respect to TLB.
+ */
 void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			struct task_struct *tsk)
 {

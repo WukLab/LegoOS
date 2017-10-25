@@ -16,6 +16,55 @@
 
 #include <asm/asm.h>
 
+/* Reference: SDM(vol3), sec4.10.4.1 */
+static inline void __invpcid(unsigned long pcid, unsigned long addr,
+			     unsigned long type)
+{
+	struct { u64 d[2]; } desc = { { pcid, addr } };
+
+	/*
+	 * The memory clobber is because the whole point is to invalidate
+	 * stale TLB entries and, especially if we're flushing global
+	 * mappings, we don't want the compiler to reorder any subsequent
+	 * memory accesses before the TLB flush.
+	 *
+	 * The hex opcode is invpcid (%ecx), %eax in 32-bit mode and
+	 * invpcid (%rcx), %rax in long mode.
+	 */
+	asm volatile (".byte 0x66, 0x0f, 0x38, 0x82, 0x01"
+		      : : "m" (desc), "a" (type), "c" (&desc) : "memory");
+}
+
+#define INVPCID_TYPE_INDIV_ADDR		0
+#define INVPCID_TYPE_SINGLE_CTXT	1
+#define INVPCID_TYPE_ALL_INCL_GLOBAL	2
+#define INVPCID_TYPE_ALL_NON_GLOBAL	3
+
+/* Flush all mappings for a given pcid and addr, not including globals. */
+static inline void invpcid_flush_one(unsigned long pcid,
+				     unsigned long addr)
+{
+	__invpcid(pcid, addr, INVPCID_TYPE_INDIV_ADDR);
+}
+
+/* Flush all mappings for a given PCID, not including globals. */
+static inline void invpcid_flush_single_context(unsigned long pcid)
+{
+	__invpcid(pcid, 0, INVPCID_TYPE_SINGLE_CTXT);
+}
+
+/* Flush all mappings, including globals, for all PCIDs. */
+static inline void invpcid_flush_all(void)
+{
+	__invpcid(0, 0, INVPCID_TYPE_ALL_INCL_GLOBAL);
+}
+
+/* Flush all mappings for all PCIDs except globals. */
+static inline void invpcid_flush_all_nonglobals(void)
+{
+	__invpcid(0, 0, INVPCID_TYPE_ALL_NON_GLOBAL);
+}
+
 struct tlb_state {
 #ifdef CONFIG_SMP
 	struct mm_struct *active_mm;
@@ -82,7 +131,18 @@ static inline void cr4_set_bits_and_update_boot(unsigned long mask)
 	cr4_set_bits(mask);
 }
 
-static inline void __native_flush_tlb_global_irq_disabled(void)
+/*
+ * Intel SDM(vol3), Sec4.10.4 Invalidation of TLBs and Paging-Structure Caches:
+ * ->
+ *   The instruction invalidates all TLB entries (including global entries)
+ *   and all entries in all paging-structure caches (for all PCIDs) if
+ *   (1) it changes the value of CR4.PGE (If CR4.PGE is changing from 0 to 1,
+ *   there were no global TLB entries before the execution; if CR4.PGE is
+ *   changing from 1 to 0, there will be no global TLB entries after the
+ *   execution.); or
+ *   (2) it changes the value of the CR4.PCIDE from 1 to 0.
+ */
+static inline void __flush_tlb_global_irq_disabled(void)
 {
 	unsigned long cr4;
 
@@ -109,13 +169,22 @@ static inline void __flush_tlb_global(void)
 {
 	unsigned long flags;
 
+	if (cpu_has(X86_FEATURE_INVPCID)) {
+		/*
+		 * Using INVPCID is considerably faster than a pair of writes
+		 * to CR4 sandwiched inside an IRQ flag save/restore.
+		 */
+		invpcid_flush_all();
+		return;
+	}
+
 	/*
 	 * Read-modify-write to CR4 - protect it from preemption and
 	 * from interrupts. (Use the raw variant because this code can
 	 * be called from deep inside debugging code.)
 	 */
 	local_irq_save(flags);
-	__native_flush_tlb_global_irq_disabled();
+	__flush_tlb_global_irq_disabled();
 	local_irq_restore(flags);
 }
 
@@ -133,6 +202,21 @@ static inline void __flush_tlb_all(void)
 	else
 		__flush_tlb();
 }
+
+/*
+ * TLB flushing:
+ *
+ *  - flush_tlb() flushes the current mm struct TLBs
+ *  - flush_tlb_all() flushes all processes TLBs
+ *  - flush_tlb_mm(mm) flushes the specified mm context TLB's
+ *  - flush_tlb_page(vma, vmaddr) flushes one page
+ *  - flush_tlb_range(vma, start, end) flushes a range of pages
+ *  - flush_tlb_kernel_range(start, end) flushes a range of kernel pages
+ *  - flush_tlb_others(cpumask, mm, start, end) flushes TLBs on other cpus
+ *
+ * ..but the i386 has somewhat limited tlb flushing capabilities,
+ * and page-granular flushes are available only on i486 and up.
+ */
 
 #ifdef CONFIG_SMP
 
