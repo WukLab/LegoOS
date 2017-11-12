@@ -9,23 +9,7 @@ config COMP_PROCESSOR
 
 if COMP_PROCESSOR
 
-config PCACHE_ASSOCIATIVITY_SHIFT
-	int
-	default 3
-	---help---
-	  Configure the LLC cache associativity shift for processor components.
-	  Default is 3, which means the default associativity is 2^3=8.
-
-config PCACHE_METADATA_SIZE
-	int
-	default 8 if 64BIT
-	default 4
-
-	---help---
-	  This defines the metadata byte size for each cache line. The metadata
-	  includes: tag bits, valid bit, dirty bit, etc.
-
-	  Default is 8 bytes if the kernel is configured as 64bit.
+source "managers/processor/pcache/Kconfig"
 
 config CHECKPOINT
 	bool "Enable checkpoint feature"

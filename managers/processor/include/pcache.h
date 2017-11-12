@@ -10,80 +10,19 @@
 #ifndef _COMPONENT_PROCESSOR_PCACHE_H_
 #define _COMPONENT_PROCESSOR_PCACHE_H_
 
-extern u64 llc_cache_start;
-extern u64 llc_cache_registered_size;
-
-/* Final used size */
-extern u64 llc_cache_size;
-
-extern u32 llc_cacheline_size;
-extern u32 llc_cachemeta_size;
-
-/* nr_cachelines = nr_cachesets * associativity */
-extern u64 nr_cachelines;
-extern u64 nr_cachesets;
-extern u32 llc_cache_associativity;
-
-/* pages used by cacheline and metadata */
-extern u64 nr_pages_cacheline;
-extern u64 nr_pages_metadata;
-
-/* original physical and ioremap'd virtual address */
-extern u64 phys_start_cacheline;
-extern u64 phys_start_metadata;
-extern u64 virt_start_cacheline;
-extern u64 virt_start_metadata;
-
-/* Address bits usage */
-extern u64 nr_bits_cacheline;
-extern u64 nr_bits_set;
-extern u64 nr_bits_tag;
-
-extern u64 pcache_cacheline_mask;
-extern u64 pcache_set_mask;
-extern u64 pcache_tag_mask;
-
-extern u64 pcache_way_cache_stride;
-extern u64 pcache_way_meta_stride;
-
-/*
- * Given an user virtual address, return its set number.
- */
-static inline unsigned long addr2set(unsigned long addr)
-{
-	return (addr & pcache_set_mask) >> nr_bits_cacheline;
-}
-
-/*
- * Given an user virtual address, find the corresponding cacheline
- * metadata, return metadata's kernel virtual address
- */
-static inline unsigned long addr2meta(unsigned long addr)
-{
-	return addr2set(addr) * llc_cachemeta_size;
-}
-
-/*
- * Walk through all N-way cachelines within a set
- * @addr: the address in question
- * @pa_cache: physical address of the cacheline 
- * @va_cache: virtual address of the cacheline 
- * @va_meta: virtual address of the metadata
- * @way: current way number (maximum is llc_cache_associativity)
- */
-#define for_each_way_set(addr, pa_cache, va_cache, va_meta, way)			\
-	for (va_cache = (void *)((addr & pcache_set_mask) + virt_start_cacheline),	\
-	     pa_cache = (void *)((addr & pcache_set_mask) + phys_start_cacheline),	\
-	     va_meta = (void *)(addr2meta(addr) + virt_start_metadata), way = 0;	\
-	     way < llc_cache_associativity;						\
-	     way++,									\
-	     pa_cache += pcache_way_cache_stride, 					\
-	     va_cache += pcache_way_cache_stride, 					\
-	     va_meta += pcache_way_meta_stride)
-
 /*
  * Cacheline metadata definition and helpers:
  */
+
+/**
+ * struct pcacheline	- Metadata about one pcache line
+ *
+ * Note that this structure is CPU cacheline size aligned
+ * to minimize line pingpong between different cores.
+ */
+struct pcacheline {
+	u8 bits;
+} ____cacheline_aligned;
 
 /* Cacheline metadata bits layout: */
 #define _PCACHE_BIT_VALID	0
@@ -145,5 +84,75 @@ static inline void __pcache_mknx(unsigned long *meta)
 #define pcache_mkdirty(meta)	__pcache_mkdirty((unsigned long *)meta)
 #define pcache_mkaccessed(meta)	__pcache_mkaccessed((unsigned long *)meta)
 #define pcache_mknx(meta)	__pcache_mknx((unsigned long *)meta)
+
+extern u64 llc_cache_start;
+extern u64 llc_cache_registered_size;
+
+/* Final used size */
+extern u64 llc_cache_size;
+
+extern u32 llc_cacheline_size;
+
+/* nr_cachelines = nr_cachesets * associativity */
+extern u64 nr_cachelines;
+extern u64 nr_cachesets;
+extern u32 llc_cache_associativity;
+
+/* pages used by cacheline and metadata */
+extern u64 nr_pages_cacheline;
+extern u64 nr_pages_metadata;
+
+/* original physical and ioremap'd virtual address */
+extern u64 phys_start_cacheline;
+extern u64 phys_start_metadata;
+extern u64 virt_start_cacheline;
+extern u64 virt_start_metadata;
+
+/* Address bits usage */
+extern u64 nr_bits_cacheline;
+extern u64 nr_bits_set;
+extern u64 nr_bits_tag;
+
+extern u64 pcache_cacheline_mask;
+extern u64 pcache_set_mask;
+extern u64 pcache_tag_mask;
+
+extern u64 pcache_way_cache_stride;
+extern u64 pcache_way_meta_stride;
+
+/*
+ * Given an user virtual address, return its set number.
+ */
+static inline unsigned long addr2set(unsigned long addr)
+{
+	return (addr & pcache_set_mask) >> nr_bits_cacheline;
+}
+
+/*
+ * Given an user virtual address, find the corresponding cacheline
+ * metadata, return metadata's kernel virtual address
+ */
+static inline unsigned long addr2meta(unsigned long addr)
+{
+	return addr2set(addr) * sizeof(struct pcacheline);
+}
+
+/*
+ * Walk through all N-way cachelines within a set
+ * @addr: the address in question
+ * @pa_cache: physical address of the cacheline 
+ * @va_cache: virtual address of the cacheline 
+ * @va_meta: virtual address of the metadata
+ * @way: current way number (maximum is llc_cache_associativity)
+ */
+#define for_each_way_set(addr, pa_cache, va_cache, va_meta, way)			\
+	for (va_cache = (void *)((addr & pcache_set_mask) + virt_start_cacheline),	\
+	     pa_cache = (void *)((addr & pcache_set_mask) + phys_start_cacheline),	\
+	     va_meta = (void *)(addr2meta(addr) + virt_start_metadata), way = 0;	\
+	     way < llc_cache_associativity;						\
+	     way++,									\
+	     pa_cache += pcache_way_cache_stride, 					\
+	     va_cache += pcache_way_cache_stride, 					\
+	     va_meta += pcache_way_meta_stride)
 
 #endif /* _COMPONENT_PROCESSOR_PCACHE_H_ */

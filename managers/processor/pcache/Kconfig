@@ -1,0 +1,6 @@
+config PCACHE_ASSOCIATIVITY_SHIFT
+	int
+	default 3
+	---help---
+	  Configure the LLC cache associativity shift for processor components.
+	  Default is 3, which means the default associativity is 2^3=8.

@@ -25,7 +25,7 @@ u64 llc_cache_registered_size;
 u64 llc_cache_size;
 
 u32 llc_cacheline_size = PAGE_SIZE;
-u32 llc_cachemeta_size = CONFIG_PCACHE_METADATA_SIZE;
+u32 llc_cachemeta_size;
 
 /* nr_cachelines = nr_cachesets * associativity */
 u64 nr_cachelines;
@@ -98,6 +98,7 @@ void __init pcache_init(void)
 
 	pcache_sanity_check();
 
+	llc_cachemeta_size = sizeof(struct pcacheline);
 	nr_cachelines_per_page = PAGE_SIZE / llc_cachemeta_size;
 	unit_size = nr_cachelines_per_page * llc_cacheline_size;
 	unit_size += PAGE_SIZE;
@@ -143,17 +144,17 @@ void __init pcache_init(void)
 	pcache_set_mask = ((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1) & ~pcache_cacheline_mask;
 	pcache_tag_mask = ~((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1);
 
-	pr_info("    NR cacheline bits: %2llu [%2llu - %2llu] %#llx\n",
+	pr_info("    NR cacheline bits: %2llu [%2llu - %2llu] %#018llx\n",
 		nr_bits_cacheline,
 		0ULL,
 		nr_bits_cacheline - 1,
 		pcache_cacheline_mask);
-	pr_info("    NR set-index bits: %2llu [%2llu - %2llu] %#llx\n",
+	pr_info("    NR set-index bits: %2llu [%2llu - %2llu] %#018llx\n",
 		nr_bits_set,
 		nr_bits_cacheline,
 		nr_bits_cacheline + nr_bits_set - 1,
 		pcache_set_mask);
-	pr_info("    NR tag bits:       %2llu [%2llu - %2llu] %#llx\n",
+	pr_info("    NR tag bits:       %2llu [%2llu - %2llu] %#018llx\n",
 		nr_bits_tag,
 		nr_bits_cacheline + nr_bits_set,
 		nr_bits_cacheline + nr_bits_set + nr_bits_tag - 1,

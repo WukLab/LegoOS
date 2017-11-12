@@ -18,16 +18,6 @@
 
 #include <processor/include/pcache.h>
 
-__used static void *find_vameta_by_pacache(void *pa_cache)
-{
-	u64 strides;
-	if (unlikely(!llc_cache_size)) {
-		panic("uninitilized cacheline size.\n");	
-	}
-
-	strides = ((u64) pa_cache - phys_start_cacheline) / llc_cacheline_size;
-	return (void *) (virt_start_metadata + strides * llc_cachemeta_size);
-}
 
 int pcache_flush_cacheline_va_user(unsigned long __user vaddr)
 {

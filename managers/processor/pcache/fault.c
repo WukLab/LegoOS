@@ -7,10 +7,6 @@
  * (at your option) any later version.
  */
 
-/*
- * Lego Processor Last-Level Cache Management
- */
-
 #include <lego/mm.h>
 #include <lego/slab.h>
 #include <lego/log2.h>
@@ -213,7 +209,17 @@ unlock:
 	return 0;
 }
 
-/*
+/**
+ * pcache_handle_fault		-	Emulate DRAM cache miss
+ * @mm: address space in question
+ * @address: the missing virtual address
+ * @flags: how the page fault happens
+ *
+ * This function emulate a DRAM cache miss. This function will
+ * look up the mapping, send LLC miss request to corresponding
+ * memory component, and establish the pgtable mapping at last.
+ * This function is synchronous, and will involve network.
+ *
  * Return 0 on success, otherwise return VM_FAULT_XXX flags.
  */
 int pcache_handle_fault(struct mm_struct *mm,
