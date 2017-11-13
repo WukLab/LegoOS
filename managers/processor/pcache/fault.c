@@ -36,10 +36,12 @@ static struct page *pcache_alloc_cacheline(struct mm_struct *mm, unsigned long a
 
 	spin_lock(&pcache_alloc_lock);
 	for_each_way_set(address, pa_cache, va_cache, va_meta, way) {
+		/*
 		if (!pcache_valid(va_meta)) {
-			pcache_mkvalid(va_meta);
+			//pcache_mkvalid(va_meta);
 			break;
 		}
+		*/
 	}
 	spin_unlock(&pcache_alloc_lock);
 

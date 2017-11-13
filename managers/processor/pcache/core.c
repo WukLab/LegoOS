@@ -40,7 +40,7 @@ u64 nr_pages_metadata;
 u64 phys_start_cacheline;
 u64 phys_start_metadata;
 u64 virt_start_cacheline;
-u64 virt_start_metadata;
+struct pcache_meta *virt_start_metadata;
 
 /* Address bits usage */
 u64 nr_bits_cacheline;
@@ -53,6 +53,8 @@ u64 pcache_tag_mask;
 
 u64 pcache_way_cache_stride;
 u64 pcache_way_meta_stride;
+
+struct pcache_set *pcache_set_map;
 
 /*
  * We are using special memmap semantic.
@@ -73,6 +75,24 @@ static void pcache_sanity_check(void)
 			dump_page(page, NULL);
 			panic("Bug indeed");
 		}
+	}
+}
+
+static void init_pcache_set_map(void)
+{
+	u64 size;
+	int i;
+	struct pcache_set *pset;
+
+	size = nr_cachesets * sizeof(struct pcache_set);
+
+	pcache_set_map = kmalloc(size, GFP_KERNEL);
+	if (!pcache_set_map)
+		panic("Unable to allocate pcache set array!");
+
+	for (i = 0; i < nr_cachesets; i++) {
+		pset = pcache_set_map + i;
+		spin_lock_init(&pset->lock);
 	}
 }
 
@@ -98,7 +118,7 @@ void __init pcache_init(void)
 
 	pcache_sanity_check();
 
-	llc_cachemeta_size = sizeof(struct pcacheline);
+	llc_cachemeta_size = sizeof(struct pcache_meta);
 	nr_cachelines_per_page = PAGE_SIZE / llc_cachemeta_size;
 	unit_size = nr_cachelines_per_page * llc_cacheline_size;
 	unit_size += PAGE_SIZE;
@@ -117,13 +137,19 @@ void __init pcache_init(void)
 	nr_cachelines = nr_units * nr_cachelines_per_page;
 	nr_cachesets = nr_cachelines / llc_cache_associativity;
 
+	/*
+	 * now the number of sets is known,
+	 * initialize the pcache_set array
+	 */
+	init_pcache_set_map();
+
 	nr_pages_cacheline = nr_cachelines;
 	nr_pages_metadata = nr_units;
 
 	/* Save physical/virtual starting address */
 	phys_start_cacheline = llc_cache_start;
 	phys_start_metadata = phys_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
-	virt_start_metadata = virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
+	virt_start_metadata = (struct pcache_meta *)(virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE);
 
 	nr_bits_cacheline = ilog2(llc_cacheline_size);
 	nr_bits_set = ilog2(nr_cachesets);
@@ -167,10 +193,10 @@ void __init pcache_init(void)
 	pr_info("    Metadata (pa) range:    [%#18llx - %#18llx]\n",
 		phys_start_metadata, phys_start_metadata + nr_pages_metadata * PAGE_SIZE - 1);
 
-	pr_info("    Cacheline (va) range:   [%#18llx - %#18llx]\n",
-		virt_start_cacheline, virt_start_metadata - 1);
-	pr_info("    Metadata (va) range:    [%#18llx - %#18llx]\n",
-		virt_start_metadata, virt_start_metadata + nr_pages_metadata * PAGE_SIZE - 1);
+	pr_info("    Cacheline (va) range:   [%#18llx - %#18lx]\n",
+		virt_start_cacheline, (unsigned long)virt_start_metadata - 1);
+	pr_info("    Metadata (va) range:    [%18p - %#18lx]\n",
+		virt_start_metadata, (unsigned long)(virt_start_metadata + nr_cachelines) - 1);
 
 	pcache_way_cache_stride = nr_cachesets * llc_cacheline_size;
 	pcache_way_meta_stride =  nr_cachesets * llc_cachemeta_size;
@@ -207,4 +233,20 @@ int __init pcache_range_register(u64 start, u64 size)
 	llc_cache_registered_size = size;
 
 	return 0;
+}
+
+struct pcache *pcache_alloc(struct mm_struct *mm, unsigned long address)
+{
+	struct pcache_set *pset;
+
+	pset = pcache_addr2set(address);
+	spin_lock(&pset->lock);
+	spin_unlock(&pset->lock);
+
+	return NULL;
+}
+
+void pcache_free(struct pcache *p)
+{
+
 }
