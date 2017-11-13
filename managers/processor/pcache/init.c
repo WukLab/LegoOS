@@ -18,8 +18,8 @@
 
 #include <processor/include/pcache.h>
 
-u64 llc_cache_start;
-u64 llc_cache_registered_size;
+u64 pcache_registered_start;
+u64 pcache_registered_size;
 
 /* Final used size */
 u64 llc_cache_size;
@@ -69,7 +69,7 @@ static void pcache_sanity_check(void)
 {
 	int i;
 	struct page *page;
-	unsigned long nr_pages = llc_cache_registered_size / PAGE_SIZE;
+	unsigned long nr_pages = pcache_registered_size / PAGE_SIZE;
 	unsigned long va = virt_start_cacheline;
 
 	for (i = 0; i < nr_pages; i++, va += PAGE_SIZE) {
@@ -118,20 +118,20 @@ void __init pcache_init(void)
 	u64 nr_cachelines_per_page, nr_units;
 	u64 unit_size;
 
-	if (llc_cache_start == 0 || llc_cache_registered_size == 0)
+	if (pcache_registered_start == 0 || pcache_registered_size == 0)
 		panic("Processor cache not registered, memmap $ needed!");
 
 	if (!IS_ENABLED(CONFIG_LEGO_SPECIAL_MEMMAP))
 		panic("Require special memmap $ semantic!");
 
-	virt_start_cacheline = (unsigned long)phys_to_virt(llc_cache_start);
+	virt_start_cacheline = (unsigned long)phys_to_virt(pcache_registered_start);
 
 	/*
 	 * Clear any stale value
 	 * This may happen if running on QEMU.
 	 * Not sure about physical machine.
 	 */
-	memset((void *)virt_start_cacheline, 0, llc_cache_registered_size);
+	memset((void *)virt_start_cacheline, 0, pcache_registered_size);
 
 	pcache_sanity_check();
 
@@ -144,7 +144,7 @@ void __init pcache_init(void)
 	 * We must make nr_units a power of 2, then the total
 	 * number of cache lines can be a power of 2, too.
 	 */
-	nr_units = llc_cache_registered_size / unit_size;
+	nr_units = pcache_registered_size / unit_size;
 	nr_units = rounddown_pow_of_two(nr_units);
 
 	/* final valid used size */
@@ -157,7 +157,7 @@ void __init pcache_init(void)
 	nr_pages_metadata = nr_units;
 
 	/* Save physical/virtual starting address */
-	phys_start_cacheline = llc_cache_start;
+	phys_start_cacheline = pcache_registered_start;
 	phys_start_metadata = phys_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
 	pcache_meta_map = (struct pcache_meta *)(virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE);
 
@@ -170,9 +170,9 @@ void __init pcache_init(void)
 	nr_bits_tag = 64 - nr_bits_cacheline - nr_bits_set;
 
 	pr_info("Processor LLC Configurations:\n");
-	pr_info("    PhysStart:         %#llx\n",	llc_cache_start);
+	pr_info("    PhysStart:         %#llx\n",	pcache_registered_start);
 	pr_info("    VirtStart:         %#llx\n",	virt_start_cacheline);
-	pr_info("    Registered Size:   %#llx\n",	llc_cache_registered_size);
+	pr_info("    Registered Size:   %#llx\n",	pcache_registered_size);
 	pr_info("    Actual Used Size:  %#llx\n",	llc_cache_size);
 	pr_info("    NR cachelines:     %llu\n",	nr_cachelines);
 	pr_info("    Associativity:     %lu\n",		PCACHE_ASSOCIATIVITY);
@@ -238,50 +238,11 @@ int __init pcache_range_register(u64 start, u64 size)
 	if (WARN_ON(offset_in_page(start) || offset_in_page(size)))
 		return -EINVAL;
 
-	if (llc_cache_start || llc_cache_registered_size)
+	if (pcache_registered_start || pcache_registered_size)
 		panic("Remove extra memmap from kernel parameters!");
 
-	llc_cache_start = start;
-	llc_cache_registered_size = size;
+	pcache_registered_start = start;
+	pcache_registered_size = size;
 
 	return 0;
-}
-
-static struct pcache_meta *pcache_alloc_slowpath(unsigned long address)
-{
-	return NULL;
-}
-
-struct pcache_meta *pcache_alloc(unsigned long address)
-{
-	struct pcache_set *pset;
-	struct pcache_meta *pcache;
-	int way;
-
-	pset = pcache_addr2set(address);
-
-	spin_lock(&pset->lock);
-	for_each_way_set(pcache, way, address) {
-		/* Atomically test and set cacheline's valid bit */
-		if (!TestSetPcacheAllocated(pcache)) {
-			spin_unlock(&pset->lock);
-			goto found;
-		}
-	}
-	spin_unlock(&pset->lock);
-
-	pcache = pcache_alloc_slowpath(address);
-	if (unlikely(!pcache)) {
-		WARN(1, "Even eviction failed?");
-		return NULL;
-	}
-
-found:
-	/* May need further initilization in the future */
-	return pcache;
-}
-
-void pcache_free(struct pcache_meta *p)
-{
-
 }

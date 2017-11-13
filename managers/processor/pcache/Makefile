@@ -3,5 +3,6 @@
 #
 
 obj-y := fault.o
-obj-y += core.o
+obj-y += init.o
 obj-y += flush.o
+obj-y += alloc.o

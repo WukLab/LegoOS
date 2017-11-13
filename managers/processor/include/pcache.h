@@ -23,8 +23,8 @@ struct pcache_meta;
 #define PCACHE_ASSOCIATIVITY		(_AC(1,UL) << PCACHE_ASSOCIATIVITY_SHIFT)
 #define PCACHE_META_SIZE		(sizeof(struct pcache_meta))
 
-extern u64 llc_cache_start;
-extern u64 llc_cache_registered_size;
+extern u64 pcache_registered_start;
+extern u64 pcache_registered_size;
 
 /* Final used size */
 extern u64 llc_cache_size;
