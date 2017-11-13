@@ -188,6 +188,22 @@ PCACHE_META_BITS(Allocated, allocated)
 PCACHE_META_BITS(Valid, valid)
 PCACHE_META_BITS(Dirty, dirty)
 
+/* TODO */
+static inline int trylock_pcache(struct pcache_meta *pcm)
+{
+	return 0;
+}
+
+static inline void lock_pcache(struct pcache_meta *pcm)
+{
+	
+}
+
+static inline void unlock_pcache(struct pcache_meta *pcm)
+{
+
+}
+
 extern struct pcache_meta *pcache_meta_map;
 
 /*

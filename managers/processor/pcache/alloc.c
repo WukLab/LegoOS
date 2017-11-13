@@ -28,7 +28,22 @@
 static struct pcache_meta *
 pcache_find_line_to_evict(struct pcache_set *pset, unsigned long address)
 {
-	return NULL;
+	struct pcache_meta *pcm;
+	int way;
+
+	spin_lock(&pset->lock);
+	for_each_way_set(pcm, way, address) {
+		/* First encountered? */
+		if (PcacheAllocated(pcm)) {
+			lock_pcache(pcm);
+			break;
+		}
+	}
+	spin_unlock(&pset->lock);
+
+	if (unlikely(way == PCACHE_ASSOCIATIVITY))
+		pcm = NULL;
+	return pcm;
 }
 
 /**
