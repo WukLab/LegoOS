@@ -24,37 +24,41 @@ u64 llc_cache_registered_size;
 /* Final used size */
 u64 llc_cache_size;
 
-u32 llc_cacheline_size = PAGE_SIZE;
-u32 llc_cachemeta_size;
-
-/* nr_cachelines = nr_cachesets * associativity */
-u64 nr_cachelines;
-u64 nr_cachesets;
-u32 llc_cache_associativity = 1 << CONFIG_PCACHE_ASSOCIATIVITY_SHIFT;
-
 /* pages used by cacheline and metadata */
 u64 nr_pages_cacheline;
 u64 nr_pages_metadata;
 
-/* original physical and ioremap'd virtual address */
-u64 phys_start_cacheline;
-u64 phys_start_metadata;
-u64 virt_start_cacheline;
-struct pcache_meta *virt_start_metadata;
+/* nr_cachelines = nr_cachesets * associativity */
+u64 nr_cachelines __read_mostly;
+u64 nr_cachesets __read_mostly;
+
+/*
+ * Original physical and ioremap'd kernel virtual address
+ * These are read frequently to calculate offsets between structures:
+ */
+u64 phys_start_cacheline __read_mostly;
+u64 phys_start_metadata __read_mostly;
+u64 virt_start_cacheline __read_mostly;
+struct pcache_meta *pcache_meta_map __read_mostly;
+
+struct pcache_set *pcache_set_map __read_mostly;
+
+/*
+ * Bits to mask virtual address:
+ * |MSB ..     |    ...   |      ...      LSB|
+ *   [tag_mask] [set_mask] [ cacheline_mask]
+ */
+u64 pcache_cacheline_mask __read_mostly;
+u64 pcache_set_mask __read_mostly;
+u64 pcache_tag_mask __read_mostly;
 
 /* Address bits usage */
 u64 nr_bits_cacheline;
 u64 nr_bits_set;
 u64 nr_bits_tag;
 
-u64 pcache_cacheline_mask;
-u64 pcache_set_mask;
-u64 pcache_tag_mask;
-
-u64 pcache_way_cache_stride;
-u64 pcache_way_meta_stride;
-
-struct pcache_set *pcache_set_map;
+/* Offset between neighbouring ways within a set */
+u64 pcache_way_cache_stride __read_mostly;
 
 /*
  * We are using special memmap semantic.
@@ -78,6 +82,7 @@ static void pcache_sanity_check(void)
 	}
 }
 
+/* Allocate and init pcache_set array */
 static void init_pcache_set_map(void)
 {
 	u64 size;
@@ -93,6 +98,18 @@ static void init_pcache_set_map(void)
 	for (i = 0; i < nr_cachesets; i++) {
 		pset = pcache_set_map + i;
 		spin_lock_init(&pset->lock);
+	}
+}
+
+/* Init pcache_meta array */
+static void init_pcache_meta_map(void)
+{
+	struct pcache_meta *pcl;
+	int i;
+
+	for (i = 0; i < nr_cachelines; i++) {
+		pcl = pcache_meta_map + i;
+		memset(pcl, 0, sizeof(*pcl));
 	}
 }
 
@@ -118,9 +135,8 @@ void __init pcache_init(void)
 
 	pcache_sanity_check();
 
-	llc_cachemeta_size = sizeof(struct pcache_meta);
-	nr_cachelines_per_page = PAGE_SIZE / llc_cachemeta_size;
-	unit_size = nr_cachelines_per_page * llc_cacheline_size;
+	nr_cachelines_per_page = PAGE_SIZE / PCACHE_META_SIZE;
+	unit_size = nr_cachelines_per_page * PCACHE_LINE_SIZE;
 	unit_size += PAGE_SIZE;
 
 	/*
@@ -135,13 +151,7 @@ void __init pcache_init(void)
 	llc_cache_size = nr_units * unit_size;
 
 	nr_cachelines = nr_units * nr_cachelines_per_page;
-	nr_cachesets = nr_cachelines / llc_cache_associativity;
-
-	/*
-	 * now the number of sets is known,
-	 * initialize the pcache_set array
-	 */
-	init_pcache_set_map();
+	nr_cachesets = nr_cachelines / PCACHE_ASSOCIATIVITY;
 
 	nr_pages_cacheline = nr_cachelines;
 	nr_pages_metadata = nr_units;
@@ -149,9 +159,13 @@ void __init pcache_init(void)
 	/* Save physical/virtual starting address */
 	phys_start_cacheline = llc_cache_start;
 	phys_start_metadata = phys_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
-	virt_start_metadata = (struct pcache_meta *)(virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE);
+	pcache_meta_map = (struct pcache_meta *)(virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE);
 
-	nr_bits_cacheline = ilog2(llc_cacheline_size);
+	/* Now the pcache_set and pcache_meta array */
+	init_pcache_set_map();
+	init_pcache_meta_map();
+
+	nr_bits_cacheline = ilog2(PCACHE_LINE_SIZE);
 	nr_bits_set = ilog2(nr_cachesets);
 	nr_bits_tag = 64 - nr_bits_cacheline - nr_bits_set;
 
@@ -161,10 +175,10 @@ void __init pcache_init(void)
 	pr_info("    Registered Size:   %#llx\n",	llc_cache_registered_size);
 	pr_info("    Actual Used Size:  %#llx\n",	llc_cache_size);
 	pr_info("    NR cachelines:     %llu\n",	nr_cachelines);
-	pr_info("    Associativity:     %u\n",		llc_cache_associativity);
+	pr_info("    Associativity:     %lu\n",		PCACHE_ASSOCIATIVITY);
 	pr_info("    NR Sets:           %llu\n",	nr_cachesets);
-	pr_info("    Cacheline size:    %u B\n",	llc_cacheline_size);
-	pr_info("    Metadata size:     %u B\n",	llc_cachemeta_size);
+	pr_info("    Cacheline size:    %lu B\n",	PCACHE_LINE_SIZE);
+	pr_info("    Metadata size:     %lu B\n",	PCACHE_META_SIZE);
 
 	pcache_cacheline_mask = (1ULL << nr_bits_cacheline) - 1;
 	pcache_set_mask = ((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1) & ~pcache_cacheline_mask;
@@ -194,14 +208,12 @@ void __init pcache_init(void)
 		phys_start_metadata, phys_start_metadata + nr_pages_metadata * PAGE_SIZE - 1);
 
 	pr_info("    Cacheline (va) range:   [%#18llx - %#18lx]\n",
-		virt_start_cacheline, (unsigned long)virt_start_metadata - 1);
+		virt_start_cacheline, (unsigned long)pcache_meta_map - 1);
 	pr_info("    Metadata (va) range:    [%18p - %#18lx]\n",
-		virt_start_metadata, (unsigned long)(virt_start_metadata + nr_cachelines) - 1);
+		pcache_meta_map, (unsigned long)(pcache_meta_map + nr_cachelines) - 1);
 
-	pcache_way_cache_stride = nr_cachesets * llc_cacheline_size;
-	pcache_way_meta_stride =  nr_cachesets * llc_cachemeta_size;
+	pcache_way_cache_stride = nr_cachesets * PCACHE_LINE_SIZE;
 	pr_info("    Way cache stride:  %#llx\n", pcache_way_cache_stride);
-	pr_info("    Way meta stride:   %#llx\n", pcache_way_meta_stride);
 }
 
 /**
@@ -235,18 +247,41 @@ int __init pcache_range_register(u64 start, u64 size)
 	return 0;
 }
 
-struct pcache *pcache_alloc(struct mm_struct *mm, unsigned long address)
+static struct pcache_meta *pcache_alloc_slowpath(unsigned long address)
 {
-	struct pcache_set *pset;
-
-	pset = pcache_addr2set(address);
-	spin_lock(&pset->lock);
-	spin_unlock(&pset->lock);
-
 	return NULL;
 }
 
-void pcache_free(struct pcache *p)
+struct pcache_meta *pcache_alloc(unsigned long address)
+{
+	struct pcache_set *pset;
+	struct pcache_meta *pcache;
+	int way;
+
+	pset = pcache_addr2set(address);
+
+	spin_lock(&pset->lock);
+	for_each_way_set(pcache, way, address) {
+		/* Atomically test and set cacheline's valid bit */
+		if (!TestSetPcacheAllocated(pcache)) {
+			spin_unlock(&pset->lock);
+			goto found;
+		}
+	}
+	spin_unlock(&pset->lock);
+
+	pcache = pcache_alloc_slowpath(address);
+	if (unlikely(!pcache)) {
+		WARN(1, "Even eviction failed?");
+		return NULL;
+	}
+
+found:
+	/* May need further initilization in the future */
+	return pcache;
+}
+
+void pcache_free(struct pcache_meta *p)
 {
 
 }

@@ -10,10 +10,18 @@
 #ifndef _COMPONENT_PROCESSOR_PCACHE_H_
 #define _COMPONENT_PROCESSOR_PCACHE_H_
 
+#include <lego/const.h>
 #include <lego/bitops.h>
 #include <lego/spinlock.h>
 
 struct pcache_meta;
+
+#define PCACHE_LINE_SIZE_SHIFT		(CONFIG_PCACHE_LINE_SIZE_SHIFT)
+#define PCACHE_ASSOCIATIVITY_SHIFT	(CONFIG_PCACHE_ASSOCIATIVITY_SHIFT)
+
+#define PCACHE_LINE_SIZE		(_AC(1,UL) << PCACHE_LINE_SIZE_SHIFT)
+#define PCACHE_ASSOCIATIVITY		(_AC(1,UL) << PCACHE_ASSOCIATIVITY_SHIFT)
+#define PCACHE_META_SIZE		(sizeof(struct pcache_meta))
 
 extern u64 llc_cache_start;
 extern u64 llc_cache_registered_size;
@@ -21,12 +29,9 @@ extern u64 llc_cache_registered_size;
 /* Final used size */
 extern u64 llc_cache_size;
 
-extern u32 llc_cacheline_size;
-
 /* nr_cachelines = nr_cachesets * associativity */
 extern u64 nr_cachelines;
 extern u64 nr_cachesets;
-extern u32 llc_cache_associativity;
 
 /* pages used by cacheline and metadata */
 extern u64 nr_pages_cacheline;
@@ -47,7 +52,6 @@ extern u64 pcache_set_mask;
 extern u64 pcache_tag_mask;
 
 extern u64 pcache_way_cache_stride;
-extern u64 pcache_way_meta_stride;
 
 /* Given an user virtual address, return its set index number */
 static inline unsigned long __addr2set(unsigned long address)
@@ -69,6 +73,13 @@ struct pcache_set {
 
 extern struct pcache_set *pcache_set_map;
 
+/**
+ * pcache_addr2set
+ * @address: address in question
+ *
+ * Given an user virtual address, find its corresponding set.
+ * Return struct pcache_set for this set, which is unique for every set.
+ */
 static inline struct pcache_set *pcache_addr2set(unsigned long address)
 {
 	return pcache_set_map + __addr2set(address);
@@ -78,10 +89,13 @@ static inline struct pcache_set *pcache_addr2set(unsigned long address)
  * struct pcache_meta	- Metadata about one pcache line
  *
  * You can think this structure as the traditional metadata
- * part for a cache line, but with some addtional fields.
+ * part for a cache line, but with some addtional fields. And
+ * this structure is *CPU cacheline size* aligned to minimize
+ * CPU cacheline pingpong between different cores.
  *
- * Note that this structure is *CPU cacheline size* aligned
- * to minimize CPU cacheline pingpong between different cores.
+ * FAT NOTE:
+ * If you add anything here, do not forget to check if this
+ * new field needs to be initialized in init_pcache_meta_map().
  */
 struct pcache_meta {
 	u8 bits;
@@ -91,11 +105,13 @@ struct pcache_meta {
  * pcacheline->bits
  *
  * PC_locked:		Pcacheline is locked. DO NOT TOUCH.
- * PC_valid:		Pcacheline is valid
+ * PC_allocated:	Pcacheline is allocated, but may not be valid.
+ * PC_valid:		Pcacheline has a valid mapping and content.
  * PC_dirty:		Pcacheline is dirty
  */
 enum pcache_meta_bits {
 	PC_locked,
+	PC_allocated,
 	PC_valid,
 	PC_dirty,
 
@@ -168,46 +184,95 @@ static inline int __TestClearPcache##uname(struct pcache_meta *p)\
 	__TEST_CLEAR_BITS(uname, lname)
 
 PCACHE_META_BITS(Locked, locked)
+PCACHE_META_BITS(Allocated, allocated)
 PCACHE_META_BITS(Valid, valid)
 PCACHE_META_BITS(Dirty, dirty)
 
-extern struct pcache_meta *virt_start_metadata;
+extern struct pcache_meta *pcache_meta_map;
 
 /*
  * Given an user virtual address, return the first cache line within
  * its corresponding set. This can be used to walk through a set.
+ *
+ * Not public APIs!
  */
-static inline struct pcache_meta *pcache_addr2meta(unsigned long address)
+static inline struct pcache_meta *__addr2meta(unsigned long address)
 {
-	return virt_start_metadata + __addr2set(address);
+	return pcache_meta_map + __addr2set(address);
 }
 
-static inline unsigned long pcache_addr2line_va(unsigned long address)
+static inline unsigned long __addr2line_va(unsigned long address)
 {
-	return (address & pcache_set_mask) + virt_start_cacheline;
+	return virt_start_cacheline + (address & pcache_set_mask);
 }
 
-static inline unsigned long pcache_addr2line_pa(unsigned long address)
+static inline unsigned long __addr2line_pa(unsigned long address)
 {
-	return (address & pcache_set_mask) + phys_start_cacheline;
+	return phys_start_cacheline + (address & pcache_set_mask);
 }
 
 /*
- * Walk through all N-way cachelines within a set
- * @addr: the address in question
- * @pa_cache: physical address of the cacheline 
- * @va_cache: virtual address of the cacheline 
- * @va_meta: virtual address of the metadata
- * @way: current way number (maximum is llc_cache_associativity)
+ * Given the va/pa of cacheline's meta/data line, return the next way's
+ * corresponding address, within the same set.
+ *
+ * Not public APIs!
  */
-#define for_each_way_set(addr, pa_cache, va_cache, va_meta, way)			\
-	for (va_cache = (void *)(pcache_addr2line_va(addr)),				\
-	     pa_cache = (void *)(pcache_addr2line_pa(addr)),				\
-	     va_meta = (void *)(pcache_addr2meta(addr)), way = 0;			\
-	     way < llc_cache_associativity;						\
-	     way++,									\
-	     pa_cache += pcache_way_cache_stride, 					\
-	     va_cache += pcache_way_cache_stride, 					\
-	     va_meta += pcache_way_meta_stride)
+static inline struct pcache_meta *__pmeta_next_way(struct pcache_meta *p)
+{
+	return p + nr_cachesets;
+}
+
+static inline unsigned long __pline_va_next_way(unsigned long address)
+{
+	return address + pcache_way_cache_stride;
+}
+
+static inline unsigned long __pline_pa_next_way(unsigned long address)
+{
+	return address + pcache_way_cache_stride;
+}
+
+/*
+ * Walk through N-way cache clines within a set
+ * @pcache: struct pcache_meta as indicator
+ * @way: current way
+ * @address: address in question
+ */
+#define for_each_way_set(pcache, way, address)			\
+	for (pcache = __addr2meta(address), way = 0;		\
+	     way < PCACHE_ASSOCIATIVITY;			\
+	     pcache = __pmeta_next_way(pcache), way++)
+
+/* Given a @pcm, return its corresponding cacheline's physical address */
+static inline void *pcache_meta_to_pa(struct pcache_meta *pcm)
+{
+	unsigned long offset = pcm - pcache_meta_map;
+
+	BUG_ON(offset >= nr_cachelines);
+	return (void *) (phys_start_cacheline + offset * PCACHE_LINE_SIZE);
+}
+
+/* Given a @pcm, return its corresponding cacheline's virtual address */
+static inline void *pcache_meta_to_va(struct pcache_meta *pcm)
+{
+	unsigned long offset = pcm - pcache_meta_map;
+
+	BUG_ON(offset >= nr_cachelines);
+	return (void *) (virt_start_cacheline + offset * PCACHE_LINE_SIZE);
+}
+
+static inline unsigned long pcache_meta_to_pfn(struct pcache_meta *pcm)
+{
+	return ((unsigned long)pcache_meta_to_pa(pcm)) >> PCACHE_LINE_SIZE_SHIFT;
+}
+
+static inline pte_t pcache_meta_mk_pte(struct pcache_meta *pcm, pgprot_t pgprot)
+{
+	return pfn_pte(pcache_meta_to_pfn(pcm), pgprot);
+}
+
+/* Public APIs: allocate/free cachelines based on address pointed set */
+struct pcache_meta *pcache_alloc(unsigned long address);
+void pcache_free(struct pcache_meta *p);
 
 #endif /* _COMPONENT_PROCESSOR_PCACHE_H_ */

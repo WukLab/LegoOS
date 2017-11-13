@@ -26,47 +26,14 @@
 static inline void pcache_debug(const char *fmt, ...) { }
 #endif
 
-static DEFINE_SPINLOCK(pcache_alloc_lock);
-
-static struct page *pcache_alloc_cacheline(struct mm_struct *mm, unsigned long address)
-{
-	void *pa_cache, *va_cache, *va_meta;
-	unsigned int way;
-	struct page *page;
-
-	spin_lock(&pcache_alloc_lock);
-	for_each_way_set(address, pa_cache, va_cache, va_meta, way) {
-		/*
-		if (!pcache_valid(va_meta)) {
-			//pcache_mkvalid(va_meta);
-			break;
-		}
-		*/
-	}
-	spin_unlock(&pcache_alloc_lock);
-
-	if (unlikely(way == llc_cache_associativity)) {
-		WARN(1, "Cache eviction needed!\n");
-		return NULL;
-	}
-
-	page = virt_to_page(va_cache);
-	return page;
-}
-
-static void pcache_free_cacheline(struct page *page)
-{
-	/* TODO */
-}
-
-static int do_pcache_fill_page(unsigned long address,
-			       unsigned long flags, struct page *page)
+static int do_pcache_fill_page(unsigned long address, unsigned long flags,
+			       struct pcache_meta *pcm)
 {
 	int ret, len;
 	u64 offset, slice;
 	int i, nr_split = CONFIG_PCACHE_FILL_SPLIT_NR;
 	struct p2m_llc_miss_struct payload;
-	void *pa_cache = (void *)PFN_PHYS(page_to_pfn(page));
+	void *pa_cache = pcache_meta_to_pa(pcm);
 
 	payload.pid = current->pid;
 	payload.tgid = current->tgid;
@@ -88,7 +55,7 @@ static int do_pcache_fill_page(unsigned long address,
 
 		if (unlikely(len < slice)) {
 			if (likely(len == sizeof(int))) {
-				int *va_cache = page_to_virt(page);
+				int *va_cache = pcache_meta_to_va(pcm);
 
 				/* remote reported error */
 				ret = -(*va_cache);
@@ -119,30 +86,30 @@ out:
 static int pcache_fill_page(struct mm_struct *mm, unsigned long address,
 			    pte_t *page_table, pmd_t *pmd, unsigned long flags)
 {
-	struct page *page;
+	struct pcache_meta *pcm;
 	spinlock_t *ptl;
 	pte_t entry;
 	int ret;
 
-	page = pcache_alloc_cacheline(mm, address);
-	if (!page)
+	pcm = pcache_alloc(address);
+	if (unlikely(!pcm))
 		return VM_FAULT_OOM;
 
 	/* TODO: Need right permission bits */
-	entry = mk_pte(page, PAGE_SHARED_EXEC);
+	entry = pcache_meta_mk_pte(pcm, PAGE_SHARED_EXEC);
 
 	page_table = pte_offset_lock(mm, pmd, address, &ptl);
 	if (unlikely(!pte_none(*page_table))) {
 		pcache_debug("Concurrent faults: %#lx", address);
-		pcache_free_cacheline(page);
+		pcache_free(pcm);
 		spin_unlock(ptl);
 		return 0;
 	}
 
 	/* Fetch page from remote memory... */
-	ret = do_pcache_fill_page(address, flags, page);
+	ret = do_pcache_fill_page(address, flags, pcm);
 	if (unlikely(ret)) {
-		pcache_free_cacheline(page);
+		pcache_free(pcm);
 		spin_unlock(ptl);
 		return VM_FAULT_SIGSEGV;
 	}
