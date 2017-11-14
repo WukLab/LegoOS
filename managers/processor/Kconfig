@@ -9,8 +9,6 @@ config COMP_PROCESSOR
 
 if COMP_PROCESSOR
 
-source "managers/processor/pcache/Kconfig"
-
 config CHECKPOINT
 	bool "Enable checkpoint feature"
 	default n
