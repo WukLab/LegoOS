@@ -13,6 +13,7 @@
 #include <lego/kernel.h>
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
+#include <lego/jiffies.h>
 #include <lego/comp_processor.h>
 #include <asm/io.h>
 
@@ -90,6 +91,9 @@ __pcache_alloc_from_set(struct pcache_set *pset, unsigned long address)
 	return NULL;
 }
 
+/* By default, abort pcache allocation after 5 seconds */
+unsigned long sysctl_pcache_alloc_timeout __read_mostly = 5 * HZ;
+
 /*
  * Slowpath: find line to evict and initalize the eviction process,
  * if eviction succeed, return the just available line.
@@ -99,11 +103,18 @@ __pcache_alloc_slowpath(struct pcache_set *pset, unsigned long address)
 {
 	struct pcache_meta *pcm;
 	int ret;
+	unsigned long alloc_start = jiffies;
 
 retry:
 	ret = pcache_evict_line(pset, address);
 	if (unlikely(ret))
 		return NULL;
+
+	if (time_after(jiffies, alloc_start + sysctl_pcache_alloc_timeout)) {
+		pr_warn("Abort pcache alloc (%ums) from pid:%u, addr: %#lx\n",
+			jiffies_to_msecs(jiffies - alloc_start), current->pid, address);
+		return NULL;
+	}
 
 	pcm = __pcache_alloc_from_set(pset, address);
 	if (unlikely(!pcm))
