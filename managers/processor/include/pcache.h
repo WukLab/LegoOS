@@ -108,12 +108,14 @@ struct pcache_meta {
  * PC_allocated:	Pcacheline is allocated, but may not be valid.
  * PC_valid:		Pcacheline has a valid mapping and content.
  * PC_dirty:		Pcacheline is dirty
+ * PC_writeback:	Pcacheline is being writtern back to memory
  */
 enum pcache_meta_bits {
 	PC_locked,
 	PC_allocated,
 	PC_valid,
 	PC_dirty,
+	PC_writeback,
 
 	__NR_PCLBITS,
 };
@@ -187,21 +189,20 @@ PCACHE_META_BITS(Locked, locked)
 PCACHE_META_BITS(Allocated, allocated)
 PCACHE_META_BITS(Valid, valid)
 PCACHE_META_BITS(Dirty, dirty)
+PCACHE_META_BITS(Writeback, writeback)
 
-/* TODO */
+void unlock_pcache(struct pcache_meta *pcm);
+void __lock_pcache(struct pcache_meta *pcm);
+
 static inline int trylock_pcache(struct pcache_meta *pcm)
 {
-	return 0;
+	return (likely(!test_and_set_bit(PC_locked, (void *)&pcm->bits)));
 }
 
 static inline void lock_pcache(struct pcache_meta *pcm)
 {
-	
-}
-
-static inline void unlock_pcache(struct pcache_meta *pcm)
-{
-
+	if (!trylock_pcache(pcm))
+		__lock_pcache(pcm);
 }
 
 extern struct pcache_meta *pcache_meta_map;
@@ -289,6 +290,6 @@ static inline pte_t pcache_meta_mk_pte(struct pcache_meta *pcm, pgprot_t pgprot)
 
 /* Public APIs: allocate/free cachelines based on address pointed set */
 struct pcache_meta *pcache_alloc(unsigned long address);
-void pcache_free(struct pcache_meta *p);
+void pcache_free(struct pcache_meta *);
 
 #endif /* _COMPONENT_PROCESSOR_PCACHE_H_ */

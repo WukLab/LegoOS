@@ -30,8 +30,6 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags,
 			       struct pcache_meta *pcm)
 {
 	int ret, len;
-	u64 offset, slice;
-	int i, nr_split = CONFIG_PCACHE_FILL_SPLIT_NR;
 	struct p2m_llc_miss_struct payload;
 	void *pa_cache = pcache_meta_to_pa(pcm);
 
@@ -39,36 +37,30 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags,
 	payload.tgid = current->tgid;
 	payload.flags = flags;
 	payload.missing_vaddr = address;
+	payload.offset = 0;
 
 	pcache_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
 
-	slice = PAGE_SIZE / nr_split;
-	for (i = 0; i < nr_split; i++) {
-		offset = i * slice;
-		payload.offset = offset;
+	len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
+			&payload, sizeof(payload),
+			pa_cache, PCACHE_LINE_SIZE, true, DEF_NET_TIMEOUT);
 
-		len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
-				&payload, sizeof(payload),
-				pa_cache + offset, slice, true,
-				DEF_NET_TIMEOUT);
+	if (unlikely(len < PCACHE_LINE_SIZE)) {
+		if (likely(len == sizeof(int))) {
+			int *va_cache = pcache_meta_to_va(pcm);
 
-		if (unlikely(len < slice)) {
-			if (likely(len == sizeof(int))) {
-				int *va_cache = pcache_meta_to_va(pcm);
-
-				/* remote reported error */
-				ret = -(*va_cache);
-				goto out;
-			} else if (len < 0) {
-				/* IB is not available */
-				ret = -EIO;
-				goto out;
-			} else {
-				WARN(1, "Invalid size: %d\n", len);
-				ret = -EFAULT;
-				goto out;
-			}
+			/* remote reported error */
+			ret = -(*va_cache);
+			goto out;
+		} else if (len < 0) {
+			/* IB is not available */
+			ret = -EIO;
+			goto out;
+		} else {
+			WARN(1, "Invalid size: %d\n", len);
+			ret = -EFAULT;
+			goto out;
 		}
 	}
 
@@ -92,7 +84,7 @@ static int pcache_fill_page(struct mm_struct *mm, unsigned long address,
 	int ret;
 
 	pcm = pcache_alloc(address);
-	if (unlikely(!pcm))
+	if (!pcm)
 		return VM_FAULT_OOM;
 
 	/* TODO: Need right permission bits */
@@ -100,23 +92,28 @@ static int pcache_fill_page(struct mm_struct *mm, unsigned long address,
 
 	page_table = pte_offset_lock(mm, pmd, address, &ptl);
 	if (unlikely(!pte_none(*page_table))) {
-		pcache_debug("Concurrent faults: %#lx", address);
-		pcache_free(pcm);
-		spin_unlock(ptl);
-		return 0;
+		ret = 0;
+		goto out;
 	}
 
-	/* Fetch page from remote memory... */
+	/* Fetch page from remote memory */
 	ret = do_pcache_fill_page(address, flags, pcm);
-	if (unlikely(ret)) {
-		pcache_free(pcm);
-		spin_unlock(ptl);
-		return VM_FAULT_SIGSEGV;
+	if (ret) {
+		ret = VM_FAULT_SIGSEGV;
+		goto out;
 	}
+
+	SetPcacheValid(pcm);
 
 	pte_set(page_table, entry);
+
 	spin_unlock(ptl);
 	return 0;
+
+out:
+	pcache_free(pcm);
+	spin_unlock(ptl);
+	return ret;
 }
 
 /*

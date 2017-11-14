@@ -13,6 +13,7 @@
 
 #include <memory/include/vm.h>
 #include <memory/include/pid.h>
+#include <processor/include/pcache.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_PCACHE
 #define pcache_debug(fmt, ...)	\
@@ -84,7 +85,7 @@ good_area:
 	up_read(&mm->mmap_sem);
 
 	ibapi_reply_message((void *)(new_page + offset),
-		PAGE_SIZE / CONFIG_PCACHE_FILL_SPLIT_NR, desc);
+		PCACHE_LINE_SIZE, desc);
 	return;
 
 unlock:
@@ -153,8 +154,8 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 	vaddr  = payload->missing_vaddr;
 	offset = payload->offset; 
 
-	pcache_debug("I nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx offset: %#Lx nr_split: %d",
-		nid, pid, tgid, flags, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
+	pcache_debug("I nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx offset: %#Lx",
+		nid, pid, tgid, flags, vaddr, offset);
 
 	p = find_lego_task_by_pid(hdr->src_nid, tgid);
 	if (unlikely(!p)) {
@@ -171,8 +172,8 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 
 	do_mmap_prefetch(p, vaddr, flags, 1 << PREFETCH_ORDER);
 
-	pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx offset: %#Lx nr_split: %d",
-		nid, pid, tgid, flags, vaddr, offset, CONFIG_PCACHE_FILL_SPLIT_NR);
+	pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx offset: %#Lx",
+		nid, pid, tgid, flags, vaddr, offset);
 	return 0;
 }
 

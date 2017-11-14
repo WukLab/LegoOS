@@ -21,10 +21,6 @@ config DEFAULT_STORAGE_NODE
 	help
 	  asd
 
-config PCACHE_FILL_SPLIT_NR
-	int
-	default 1
-
 config USE_RAMFS
 	bool "Use RAMFS in P or M"
 	default y
