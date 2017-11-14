@@ -143,7 +143,6 @@ struct p2m_llc_miss_struct {
 	__u32	tgid;
 	__u32	flags;
 	__u64	missing_vaddr;
-	__u64	offset;
 };
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64,
 			struct common_header *);

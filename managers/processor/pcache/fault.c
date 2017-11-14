@@ -37,7 +37,6 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags,
 	payload.tgid = current->tgid;
 	payload.flags = flags;
 	payload.missing_vaddr = address;
-	payload.offset = 0;
 
 	pcache_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
