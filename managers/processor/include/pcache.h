@@ -215,38 +215,6 @@ static inline unsigned long __addr2line_pa(unsigned long address)
 	return phys_start_cacheline + (address & pcache_set_mask);
 }
 
-/*
- * Given the va/pa of cacheline's meta/data line, return the next way's
- * corresponding address, within the same set.
- *
- * Not public APIs!
- */
-static inline struct pcache_meta *__pmeta_next_way(struct pcache_meta *p)
-{
-	return p + nr_cachesets;
-}
-
-static inline unsigned long __pline_va_next_way(unsigned long address)
-{
-	return address + pcache_way_cache_stride;
-}
-
-static inline unsigned long __pline_pa_next_way(unsigned long address)
-{
-	return address + pcache_way_cache_stride;
-}
-
-/*
- * Walk through N-way cache clines within a set
- * @pcache: struct pcache_meta as indicator
- * @way: current way
- * @address: address in question
- */
-#define for_each_way_set(pcache, way, address)			\
-	for (pcache = __addr2meta(address), way = 0;		\
-	     way < PCACHE_ASSOCIATIVITY;			\
-	     pcache = __pmeta_next_way(pcache), way++)
-
 /**
  * pcache_addr_to_pcache_set
  * @address: address in question
@@ -322,6 +290,38 @@ static inline pte_t pcache_meta_mk_pte(struct pcache_meta *pcm, pgprot_t pgprot)
 {
 	return pfn_pte(pcache_meta_to_pfn(pcm), pgprot);
 }
+
+static inline struct pcache_meta *
+__pcache_meta_next_way(struct pcache_meta *pcm)
+{
+	return pcm + nr_cachesets;
+}
+
+/**
+ * pcache_meta_next_way
+ * @pcm: pcache meta in question
+ *
+ * Given a @pcm, return the next way's @pcm within same set.
+ * If @pcm is already the last way, return NULL.
+ */
+static inline struct pcache_meta *
+pcache_meta_next_way(struct pcache_meta *pcm)
+{
+	unsigned long offset, way_idx;
+
+	offset = pcm - pcache_meta_map;
+	BUG_ON(offset >= nr_cachelines);
+
+	way_idx = offset / nr_cachesets;
+	if (unlikely(way_idx >= PCACHE_ASSOCIATIVITY))
+		return NULL;
+	return __pcache_meta_next_way(pcm);
+}
+
+#define for_each_way_set(pcm, pset, way)				\
+	for (pcm = pcache_set_to_first_pcache_meta(pset), way = 0;	\
+	     way < PCACHE_ASSOCIATIVITY;				\
+	     pcm = __pcache_meta_next_way(pcm), way++)
 
 /* Public APIs: allocate/free cachelines based on address pointed set */
 struct pcache_meta *pcache_alloc(unsigned long address);

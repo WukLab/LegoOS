@@ -21,13 +21,13 @@
 
 /* Pcache is locked upon return */
 static struct pcache_meta *
-pcache_evict_find_line(struct pcache_set *pset, unsigned long address)
+pcache_evict_find_line(struct pcache_set *pset)
 {
 	struct pcache_meta *pcm;
 	int way;
 
 	spin_lock(&pset->lock);
-	for_each_way_set(pcm, way, address) {
+	for_each_way_set(pcm, pset, way) {
 		/*
 		 * Must be lines that have these bits set:
 		 *	Allocated && Valid
@@ -64,7 +64,7 @@ static int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int ret;
 
-	pcm = pcache_evict_find_line(pset, address);
+	pcm = pcache_evict_find_line(pset);
 	if (unlikely(!pcm))
 		return -1;
 
@@ -75,13 +75,13 @@ static int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 }
 
 static inline struct pcache_meta *
-__pcache_alloc_from_set(struct pcache_set *pset, unsigned long address)
+__pcache_alloc_from_set(struct pcache_set *pset)
 {
 	int way;
 	struct pcache_meta *pcm;
 
 	spin_lock(&pset->lock);
-	for_each_way_set(pcm, way, address) {
+	for_each_way_set(pcm, pset, way) {
 		if (!TestSetPcacheAllocated(pcm)) {
 			spin_unlock(&pset->lock);
 			return pcm;
@@ -116,7 +116,7 @@ retry:
 		return NULL;
 	}
 
-	pcm = __pcache_alloc_from_set(pset, address);
+	pcm = __pcache_alloc_from_set(pset);
 	if (unlikely(!pcm))
 		goto retry;
 	return pcm;
@@ -136,7 +136,7 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 	struct pcache_meta *pcm;
 
 	pset = pcache_addr_to_pcache_set(address);
-	pcm = __pcache_alloc_from_set(pset, address);
+	pcm = __pcache_alloc_from_set(pset);
 	if (likely(pcm))
 		goto out;
 
