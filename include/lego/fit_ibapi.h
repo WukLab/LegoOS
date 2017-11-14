@@ -24,29 +24,45 @@
 int ibapi_establish_conn(int ib_port, int mynodeid);
 void ibapi_free_recv_buf(void *input_buf);
 
-//uint64_t ibapi_dist_barrier(unsigned int checknum);
-
 /* IMM related */
 int ibapi_reply_message(void *addr, int size, uintptr_t descriptor);
-int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int if_use_ret_phys_addr);
 int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor);
+
+int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr,
+			 int max_ret_size, int if_use_ret_phys_addr);
+
+extern unsigned long sysctl_send_reply_max_timeout_sec;
+
+int ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr,
+			     int max_ret_size, int if_use_ret_phys_addr,
+			     unsigned long timeout_sec);
 
 int ibapi_get_node_id(void);
 int ibapi_num_connected_nodes(void);
 
 void init_global_lid_qpn(void);
 void print_gloabl_lid(void);
+
 #else
+
 static inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
 { return -EIO; }
+
 static inline int ibapi_send_reply_imm(int target_node, void *addr, int size,
 				       void *ret_addr, int max_ret_size, bool if_use_ret_phys_addr)
 { return -EIO; }
+
+static inline int ibapi_send_reply_timeout(int target_node, void *addr, int size,
+				       void *ret_addr, int max_ret_size, bool if_use_ret_phys_addr,
+				       unsigned long timeout_sec)
+{ return -EIO; }
+
 static inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr,
 					int receive_size, uintptr_t *descriptor)
 { return -EIO; }
+
 static inline int ibapi_get_node_id(void) {return 0; }
 static inline int ibapi_num_connected_nodes(void) {return 0; };
-#endif /* CONFIG_FIT*/
+#endif /* CONFIG_FIT */
 
 #endif /* _INCLUDE_FIT_API_H */

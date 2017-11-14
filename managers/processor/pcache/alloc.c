@@ -91,8 +91,13 @@ __pcache_alloc_from_set(struct pcache_set *pset)
 	return NULL;
 }
 
-/* By default, abort pcache allocation after 5 seconds */
-unsigned long sysctl_pcache_alloc_timeout __read_mostly = 5 * HZ;
+/**
+ * sysctl_pcache_alloc_timeout_sec
+ *
+ * The maximum time a pcache_alloc can take due to slowpath eviction.
+ * By default, abort pcache allocation after 5 seconds
+ */
+unsigned long sysctl_pcache_alloc_timeout_sec __read_mostly = 5;
 
 /*
  * Slowpath: find line to evict and initalize the eviction process,
@@ -110,7 +115,7 @@ retry:
 	if (unlikely(ret))
 		return NULL;
 
-	if (time_after(jiffies, alloc_start + sysctl_pcache_alloc_timeout)) {
+	if (time_after(jiffies, alloc_start + sysctl_pcache_alloc_timeout_sec * HZ)) {
 		pr_warn("Abort pcache alloc (%ums) from pid:%u, addr: %#lx\n",
 			jiffies_to_msecs(jiffies - alloc_start), current->pid, address);
 		return NULL;

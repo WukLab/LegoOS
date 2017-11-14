@@ -53,8 +53,12 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags,
 			ret = -(*va_cache);
 			goto out;
 		} else if (len < 0) {
-			/* IB is not available */
-			ret = -EIO;
+			/*
+			 * Network error:
+			 * EIO: IB is not available
+			 * ETIMEDOUT: timeout for reply
+			 */
+			ret = len;
 			goto out;
 		} else {
 			WARN(1, "Invalid size: %d\n", len);

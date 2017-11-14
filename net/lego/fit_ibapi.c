@@ -54,12 +54,48 @@ static void ibv_remove_one(struct ib_device *device)
 	return;
 }
 
-inline int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int if_use_ret_phys_addr)
+static inline int
+__ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr,
+			   int max_ret_size, int if_use_ret_phys_addr,
+			   unsigned long timeout_sec)
 {
 	ppc *ctx = FIT_ctx;
 	int ret;
-	ret = client_send_reply_with_rdma_write_with_imm(ctx, target_node, addr, size, ret_addr, max_ret_size, 0, if_use_ret_phys_addr);
+
+	ret = client_send_reply_with_rdma_write_with_imm(ctx, target_node, addr,
+			size, ret_addr, max_ret_size, 0, if_use_ret_phys_addr,
+			timeout_sec);
 	return ret;
+}
+
+/* Default to use maximum timeout */
+int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr,
+			 int max_ret_size, int if_use_ret_phys_addr)
+{
+	return __ibapi_send_reply_timeout(target_node, addr, size, ret_addr,
+			max_ret_size, if_use_ret_phys_addr, 0);
+}
+
+/**
+ * ibapi_send_reply_timeout
+ * @target_node: target node id
+ * @addr
+ * @size
+ * @ret_addr
+ * @max_ret_size
+ * @if_use_ret_phys_addr:
+ * @timeout_sec:
+ *
+ * Return:
+ * Negative values on failure (-ETIMEDOUT for timeout)
+ * Positive values indicate the reply message length
+ */
+int ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr,
+			     int max_ret_size, int if_use_ret_phys_addr,
+			     unsigned long timeout_sec)
+{
+	return __ibapi_send_reply_timeout(target_node, addr, size, ret_addr,
+			max_ret_size, if_use_ret_phys_addr, timeout_sec);
 }
 
 #if 0
