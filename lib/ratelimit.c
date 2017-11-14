@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/sched.h>
 #include <lego/ratelimit.h>
 
 /*
