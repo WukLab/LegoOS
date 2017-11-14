@@ -68,22 +68,8 @@ static inline unsigned long __addr2set(unsigned long address)
  * new field needs to be initialized in init_pcache_set_map().
  */
 struct pcache_set {
-	spinlock_t	lock;
+	spinlock_t		lock;
 };
-
-extern struct pcache_set *pcache_set_map;
-
-/**
- * pcache_addr2set
- * @address: address in question
- *
- * Given an user virtual address, find its corresponding set.
- * Return struct pcache_set for this set, which is unique for every set.
- */
-static inline struct pcache_set *pcache_addr2set(unsigned long address)
-{
-	return pcache_set_map + __addr2set(address);
-}
 
 /**
  * struct pcache_meta	- Metadata about one pcache line
@@ -100,6 +86,9 @@ static inline struct pcache_set *pcache_addr2set(unsigned long address)
 struct pcache_meta {
 	u8 bits;
 } ____cacheline_aligned;
+
+extern struct pcache_set *pcache_set_map;
+extern struct pcache_meta *pcache_meta_map;
 
 /*
  * pcacheline->bits
@@ -205,8 +194,6 @@ static inline void lock_pcache(struct pcache_meta *pcm)
 		__lock_pcache(pcm);
 }
 
-extern struct pcache_meta *pcache_meta_map;
-
 /*
  * Given an user virtual address, return the first cache line within
  * its corresponding set. This can be used to walk through a set.
@@ -259,6 +246,54 @@ static inline unsigned long __pline_pa_next_way(unsigned long address)
 	for (pcache = __addr2meta(address), way = 0;		\
 	     way < PCACHE_ASSOCIATIVITY;			\
 	     pcache = __pmeta_next_way(pcache), way++)
+
+/**
+ * pcache_addr_to_pcache_set
+ * @address: address in question
+ *
+ * Given an user virtual address, find its corresponding set.
+ * Return struct pcache_set for this set, which is unique for every set.
+ */
+static inline struct pcache_set *
+pcache_addr_to_pcache_set(unsigned long address)
+{
+	return pcache_set_map + __addr2set(address);
+}
+
+/**
+ * pcache_meta_to_pcache_set
+ * @pcm: pcache meta in question
+ *
+ * Given a @pcm, return the pcache_set that @pcm belongs to.
+ * In all, there are PCACHE_ASSOCIATIVITY @pcm can map to the same set.
+ */
+static inline struct pcache_set *
+pcache_meta_to_pcache_set(struct pcache_meta *pcm)
+{
+	unsigned long offset;
+
+	offset = pcm - pcache_meta_map;
+	BUG_ON(offset >= nr_cachelines);
+	offset = offset % nr_cachesets;
+
+	return pcache_set_map + offset;
+}
+
+/**
+ * pcache_set_to_first_pcache_meta
+ * @pset: pcache set in question
+ *
+ * Given a @pset, return the first way's pcache meta.
+ */
+static inline struct pcache_meta *
+pcache_set_to_first_pcache_meta(struct pcache_set *pset)
+{
+	unsigned long offset;
+
+	offset = pset - pcache_set_map;
+	BUG_ON(offset >= nr_cachesets);
+	return pcache_meta_map + offset;
+}
 
 /* Given a @pcm, return its corresponding cacheline's physical address */
 static inline void *pcache_meta_to_pa(struct pcache_meta *pcm)

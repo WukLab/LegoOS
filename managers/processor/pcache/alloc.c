@@ -135,7 +135,7 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 	struct pcache_set *pset;
 	struct pcache_meta *pcm;
 
-	pset = pcache_addr2set(address);
+	pset = pcache_addr_to_pcache_set(address);
 	pcm = __pcache_alloc_from_set(pset, address);
 	if (likely(pcm))
 		goto out;
