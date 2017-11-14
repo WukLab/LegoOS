@@ -3,9 +3,7 @@
  * Borrowed from i386
  */
 #include <lego/slab.h>
-#include <lego/kernel.h>
 #include <lego/dma-mapping.h>
-#include <lego/spinlock.h>
 
 struct dma_coherent_mem {
 	void		*virt_base;
@@ -17,115 +15,6 @@ struct dma_coherent_mem {
 	spinlock_t	spinlock;
 };
 
-enum {
-	/* See memremap() kernel-doc for usage description... */
-	MEMREMAP_WB = 1 << 0,
-	MEMREMAP_WT = 1 << 1,
-	MEMREMAP_WC = 1 << 2,
-};
-
-void *memremap(resource_size_t offset, size_t size, unsigned long flags)
-{
-	WARN_ON(1);
-	return NULL;
-}
-
-void memunmap(void *addr)
-{
-	WARN_ON(1);
-}
-
-static bool dma_init_coherent_memory(
-	phys_addr_t phys_addr, dma_addr_t device_addr, size_t size, int flags,
-	struct dma_coherent_mem **mem)
-{
-	struct dma_coherent_mem *dma_mem = NULL;
-	void __iomem *mem_base = NULL;
-	int pages = size >> PAGE_SHIFT;
-	int bitmap_size = BITS_TO_LONGS(pages) * sizeof(long);
-
-	if ((flags & (DMA_MEMORY_MAP | DMA_MEMORY_IO)) == 0)
-		goto out;
-	if (!size)
-		goto out;
-
-	if (flags & DMA_MEMORY_MAP)
-		mem_base = memremap(phys_addr, size, MEMREMAP_WC);
-	else
-		mem_base = ioremap(phys_addr, size);
-	if (!mem_base)
-		goto out;
-
-	dma_mem = kzalloc(sizeof(struct dma_coherent_mem), GFP_KERNEL);
-	if (!dma_mem)
-		goto out;
-	dma_mem->bitmap = kzalloc(bitmap_size, GFP_KERNEL);
-	if (!dma_mem->bitmap)
-		goto out;
-
-	dma_mem->virt_base = mem_base;
-	dma_mem->device_base = device_addr;
-	dma_mem->pfn_base = PFN_DOWN(phys_addr);
-	dma_mem->size = pages;
-	dma_mem->flags = flags;
-	spin_lock_init(&dma_mem->spinlock);
-
-	*mem = dma_mem;
-	return true;
-
-out:
-	kfree(dma_mem);
-	if (mem_base) {
-		if (flags & DMA_MEMORY_MAP)
-			memunmap(mem_base);
-		else
-			iounmap(mem_base);
-	}
-	return false;
-}
-
-static void dma_release_coherent_memory(struct dma_coherent_mem *mem)
-{
-	if (!mem)
-		return;
-
-	if (mem->flags & DMA_MEMORY_MAP)
-		memunmap(mem->virt_base);
-	else
-		iounmap(mem->virt_base);
-	kfree(mem->bitmap);
-	kfree(mem);
-}
-
-static int dma_assign_coherent_memory(struct pci_dev *dev,
-				      struct dma_coherent_mem *mem)
-{
-	if (dev->dma_mem)
-		return -EBUSY;
-
-	dev->dma_mem = mem;
-	/* FIXME: this routine just ignores DMA_MEMORY_INCLUDES_CHILDREN */
-
-	return 0;
-}
-
-int dma_declare_coherent_memory(struct pci_dev *dev, phys_addr_t phys_addr,
-				dma_addr_t device_addr, size_t size, int flags)
-{
-	struct dma_coherent_mem *mem;
-
-	if (!dma_init_coherent_memory(phys_addr, device_addr, size, flags,
-				      &mem))
-		return 0;
-
-	if (dma_assign_coherent_memory(dev, mem) == 0)
-		return flags & DMA_MEMORY_MAP ? DMA_MEMORY_MAP : DMA_MEMORY_IO;
-
-	dma_release_coherent_memory(mem);
-	return 0;
-}
-
-#if 0
 int dma_declare_coherent_memory(struct pci_dev *dev, dma_addr_t bus_addr,
 				dma_addr_t device_addr, size_t size, int flags)
 {
@@ -158,6 +47,7 @@ int dma_declare_coherent_memory(struct pci_dev *dev, dma_addr_t bus_addr,
 	dev->dma_mem->pfn_base = PFN_DOWN(bus_addr);
 	dev->dma_mem->size = pages;
 	dev->dma_mem->flags = flags;
+	spin_lock_init(&dma_mem->spinlock);
 
 	if (flags & DMA_MEMORY_MAP)
 		return DMA_MEMORY_MAP;
@@ -171,7 +61,6 @@ int dma_declare_coherent_memory(struct pci_dev *dev, dma_addr_t bus_addr,
 		iounmap(mem_base);
 	return 0;
 }
-#endif
 
 void dma_release_declared_memory(struct pci_dev *dev)
 {
@@ -179,16 +68,18 @@ void dma_release_declared_memory(struct pci_dev *dev)
 
 	if (!mem)
 		return;
-	dma_release_coherent_memory(mem);
 	dev->dma_mem = NULL;
+	iounmap(mem->virt_base);
+	kfree(mem->bitmap);
+	kfree(mem);
 }
 
 void *dma_mark_declared_memory_occupied(struct pci_dev *dev,
 					dma_addr_t device_addr, size_t size)
 {
 	struct dma_coherent_mem *mem = dev->dma_mem;
-	int pos, err;
 	unsigned long flags;
+	int pos, err;
 
 	size += device_addr & ~PAGE_MASK;
 
@@ -225,12 +116,15 @@ int dma_alloc_from_coherent(struct pci_dev *dev, ssize_t size,
 {
 	struct dma_coherent_mem *mem;
 	int order = get_order(size);
-	unsigned long flags;
 	int pageno;
+	unsigned long flags;
 
+//	pr_debug("%s dev %p\n", __func__, dev);
+		return 0;
 	if (!dev)
 		return 0;
 	mem = dev->dma_mem;
+	//pr_debug("%s dev %p mem %p\n", __func__, dev, mem);
 	if (!mem)
 		return 0;
 
@@ -241,6 +135,7 @@ int dma_alloc_from_coherent(struct pci_dev *dev, ssize_t size,
 		goto err;
 
 	pageno = bitmap_find_free_region(mem->bitmap, mem->size, order);
+	//pr_debug("%s free pageno %lx\n", __func__, pageno);
 	if (unlikely(pageno < 0))
 		goto err;
 
@@ -289,7 +184,49 @@ int dma_release_from_coherent(struct pci_dev *dev, int order, void *vaddr)
 		spin_lock_irqsave(&mem->spinlock, flags);
 		bitmap_release_region(mem->bitmap, page, order);
 		spin_unlock_irqrestore(&mem->spinlock, flags);
+
 		return 1;
 	}
 	return 0;
 }
+
+#if 0
+/**
+ * dma_mmap_from_coherent() - try to mmap the memory allocated from
+ * per-device coherent memory pool to userspace
+ * @dev:	pci_dev from which the memory was allocated
+ * @vma:	vm_area for the userspace memory
+ * @vaddr:	cpu address returned by dma_alloc_from_coherent
+ * @size:	size of the memory buffer allocated by dma_alloc_from_coherent
+ * @ret:	result from remap_pfn_range()
+ *
+ * This checks whether the memory was allocated from the per-device
+ * coherent memory pool and if so, maps that memory to the provided vma.
+ *
+ * Returns 1 if we correctly mapped the memory, or 0 if the caller should
+ * proceed with mapping memory from generic pools.
+ */
+int dma_mmap_from_coherent(struct pci_dev *dev, struct vm_area_struct *vma,
+			   void *vaddr, size_t size, int *ret)
+{
+	struct dma_coherent_mem *mem = dev ? dev->dma_mem : NULL;
+
+	if (mem && vaddr >= mem->virt_base && vaddr + size <=
+		   (mem->virt_base + (mem->size << PAGE_SHIFT))) {
+		unsigned long off = vma->vm_pgoff;
+		int start = (vaddr - mem->virt_base) >> PAGE_SHIFT;
+		int user_count = (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
+		int count = size >> PAGE_SHIFT;
+
+		*ret = -ENXIO;
+		if (off < count && user_count <= count - off) {
+			unsigned pfn = mem->pfn_base + start + off;
+			*ret = remap_pfn_range(vma, vma->vm_start, pfn,
+					       user_count << PAGE_SHIFT,
+					       vma->vm_page_prot);
+		}
+		return 1;
+	}
+	return 0;
+}
+#endif
