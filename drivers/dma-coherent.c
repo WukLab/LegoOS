@@ -47,7 +47,7 @@ int dma_declare_coherent_memory(struct pci_dev *dev, dma_addr_t bus_addr,
 	dev->dma_mem->pfn_base = PFN_DOWN(bus_addr);
 	dev->dma_mem->size = pages;
 	dev->dma_mem->flags = flags;
-	spin_lock_init(&dma_mem->spinlock);
+	spin_lock_init(&dev->dma_mem->spinlock);
 
 	if (flags & DMA_MEMORY_MAP)
 		return DMA_MEMORY_MAP;
