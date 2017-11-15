@@ -1320,7 +1320,7 @@ unsigned long sysctl_send_reply_max_timeout_sec __read_mostly = 10;
 int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
 					       int size, void *ret_addr, int max_ret_size,
 					       int userspace_flag, int if_use_ret_phys_addr,
-					       unsigned long timeout_sec)
+					       unsigned long timeout_sec, void *caller)
 {
 	int tar_offset_start;
 	int connection_id;
@@ -1412,8 +1412,8 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 	while (wait_send_reply_id == SEND_REPLY_WAIT) {
 		cpu_relax();
 		if (unlikely(time_after(jiffies, start_time + timeout_sec * HZ))) {
-			pr_warn("ibapi_send_reply polling timeout (%u ms)\n",
-				jiffies_to_msecs(jiffies - start_time));
+			pr_warn("ibapi_send_reply() polling timeout (%u ms), caller: %pS\n",
+				jiffies_to_msecs(jiffies - start_time), caller);
 			return -ETIMEDOUT;
 		}
 	}
