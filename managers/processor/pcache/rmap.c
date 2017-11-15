@@ -85,7 +85,8 @@ enum pcache_rmap_status pcache_try_to_unmap(struct pcache_meta *pcm)
 
 	pset = pcache_meta_to_pcache_set(pcm);
 	spin_lock(&pset->lock);
-	list_for_each_entry(rmap, &pcm->rmap, next) {
+	while (!list_empty(&pcm->rmap)) {
+		rmap = list_first_entry(&pcm->rmap, struct pcache_rmap, next);
 		page_table = rmap->page_table;
 		BUG_ON(!page_table);
 
@@ -97,6 +98,9 @@ enum pcache_rmap_status pcache_try_to_unmap(struct pcache_meta *pcm)
 			flush_tlb_mm_range(rmap->owner->mm,
 					   rmap->address,
 					   rmap->address + PAGE_SIZE -1);
+
+		list_del(&rmap->next);
+		kfree(rmap);
 	}
 	spin_unlock(&pset->lock);
 

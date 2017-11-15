@@ -21,7 +21,7 @@
 
 #ifdef CONFIG_DEBUG_PCACHE
 /* 4 msg/sec at most? */
-static DEFINE_RATELIMIT_STATE(pcache_debug_rs, 1, 10);
+static DEFINE_RATELIMIT_STATE(pcache_debug_rs, 1, 4);
 
 #define pcache_debug(fmt, ...)						\
 ({									\
