@@ -13,14 +13,15 @@
 #include <lego/kernel.h>
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
+#include <lego/ratelimit.h>
 #include <lego/comp_processor.h>
 #include <asm/io.h>
 
 #include <processor/include/pcache.h>
 
 #ifdef CONFIG_DEBUG_PCACHE
-static DEFINE_RATELIMIT_STATE(pcache_debug_rs,
-	DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
+/* 4 msg/sec at most? */
+static DEFINE_RATELIMIT_STATE(pcache_debug_rs, 1, 10);
 
 #define pcache_debug(fmt, ...)						\
 ({									\
@@ -50,7 +51,7 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags,
 			&payload, sizeof(payload),
 			pa_cache, PCACHE_LINE_SIZE, true, DEF_NET_TIMEOUT);
 
-	if (unlikely(len < PCACHE_LINE_SIZE)) {
+	if (unlikely(len < (int)PCACHE_LINE_SIZE)) {
 		if (likely(len == sizeof(int))) {
 			int *va_cache = pcache_meta_to_va(pcm);
 

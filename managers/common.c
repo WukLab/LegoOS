@@ -59,8 +59,9 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 	/* Synchronously send it out */
 	ret = ibapi_send_reply_timeout(node, msg, len_msg, retbuf,
 				   max_len_retbuf, retbuf_is_phys, timeout);
-	if (unlikely(ret == -ETIMEDOUT))
-		pr_info(" %s() caller: %pS", FUNC, __builtin_return_address(0));
+	if (ret == -ETIMEDOUT)
+		pr_info(" %s() caller: %pS\n",
+			FUNC, __builtin_return_address(0));
 
 	kfree(msg);
 	return ret;

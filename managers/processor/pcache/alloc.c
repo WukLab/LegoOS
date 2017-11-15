@@ -43,6 +43,8 @@ pcache_evict_find_line(struct pcache_set *pset)
 	}
 	spin_unlock(&pset->lock);
 
+	pr_info("%s(): way: %d, pcm: %p, line_pa: %p\n",
+		FUNC, way, pcm, pcache_meta_to_pa(pcm));
 	if (unlikely(way == PCACHE_ASSOCIATIVITY))
 		pcm = NULL;
 	return pcm;
@@ -55,6 +57,7 @@ pcache_evict_find_line(struct pcache_set *pset)
  */
 static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 {
+	unlock_pcache(pcm);
 	return 0;
 }
 
@@ -64,6 +67,7 @@ static int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int ret;
 
+	pr_info("%s:%d, address: %#lx\n", FUNC, LINE, address);
 	pcm = pcache_evict_find_line(pset);
 	if (unlikely(!pcm))
 		return -1;
