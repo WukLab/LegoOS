@@ -217,8 +217,8 @@ static inline bool pa_is_pcache(unsigned long address)
 	return false;
 }
 
-/* virtual address is one of pcache data lines? */
-static inline bool va_is_pcache(unsigned long address)
+/* kernel virtual address is one of pcache data lines? */
+static inline bool kva_is_pcache(unsigned long address)
 {
 	if (likely(address >= virt_start_cacheline &&
 		   address < (unsigned long)pcache_meta_map))
@@ -297,12 +297,12 @@ static inline void *pcache_meta_to_pa(struct pcache_meta *pcm)
 }
 
 /**
- * pcache_meta_to_va
+ * pcache_meta_to_kva
  * @pcm: pcache meta in question
  *
- * Given a @pcm, return its corresponding cacheline's virtual address
+ * Given a @pcm, return its corresponding cacheline's kernel virtual address
  */
-static inline void *pcache_meta_to_va(struct pcache_meta *pcm)
+static inline void *pcache_meta_to_kva(struct pcache_meta *pcm)
 {
 	unsigned long offset = pcm - pcache_meta_map;
 
@@ -330,15 +330,15 @@ static inline struct pcache_meta *pa_to_pcache_meta(unsigned long address)
 }
 
 /**
- * va_to_pcache_meta
+ * kva_to_pcache_meta
  * @address: kernel virtual address of the pcache data line
  *
- * Given a virtual address, find its pcache meta.
+ * Given a kernel virtual address, find its pcache meta.
  * If @address is not valid, return NULL
  */
-static inline struct pcache_meta *va_to_pcache_meta(unsigned long address)
+static inline struct pcache_meta *kva_to_pcache_meta(unsigned long address)
 {
-	if (likely(va_is_pcache(address))) {
+	if (likely(kva_is_pcache(address))) {
 		unsigned long offset;
 
 		offset = (address & PAGE_MASK) - virt_start_cacheline;
@@ -366,17 +366,17 @@ static inline struct pcache_set *pa_to_pcache_set(unsigned long address)
 }
 
 /**
- * va_to_pcache_set
+ * kva_to_pcache_set
  * @address: kernel virtual address of the pcache data line
  *
- * Given a virtual address, find its pcache set.
+ * Given a kernel virtual address, find its pcache set.
  * If @address is not valid, return NULL
  */
-static inline struct pcache_set *va_to_pcache_set(unsigned long address)
+static inline struct pcache_set *kva_to_pcache_set(unsigned long address)
 {
 	struct pcache_meta *pcm;
 
-	pcm = va_to_pcache_meta(address);
+	pcm = kva_to_pcache_meta(address);
 	if (likely(pcm))
 		return pcache_meta_to_pcache_set(pcm);
 	return NULL;

@@ -53,7 +53,7 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags,
 
 	if (unlikely(len < (int)PCACHE_LINE_SIZE)) {
 		if (likely(len == sizeof(int))) {
-			int *va_cache = pcache_meta_to_va(pcm);
+			int *va_cache = pcache_meta_to_kva(pcm);
 
 			/* remote reported error */
 			ret = -(*va_cache);
