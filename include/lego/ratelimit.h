@@ -10,6 +10,7 @@
 #ifndef _LEGO_RATELIMIT_H_
 #define _LEGO_RATELIMIT_H_
 
+#include <lego/sched.h>
 #include <lego/jiffies.h>
 #include <lego/spinlock.h>
 

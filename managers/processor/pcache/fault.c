@@ -19,9 +19,14 @@
 #include <processor/include/pcache.h>
 
 #ifdef CONFIG_DEBUG_PCACHE
-#define pcache_debug(fmt, ...)					\
-	printk(KERN_DEBUG "%s() cpu%2d "fmt"\n",		\
-		__func__, smp_processor_id(), __VA_ARGS__);
+static DEFINE_RATELIMIT_STATE(pcache_debug_rs,
+	DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
+
+#define pcache_debug(fmt, ...)						\
+({									\
+	if (__ratelimit(&pcache_debug_rs))				\
+		pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__);	\
+})
 #else
 static inline void pcache_debug(const char *fmt, ...) { }
 #endif
