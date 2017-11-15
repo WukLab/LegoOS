@@ -61,7 +61,8 @@ static inline unsigned long __addr2set(unsigned long address)
 
 /**
  * struct pcache_set	- Metadata for each cache set
- * @lock: protecting allocation of lines within this set
+ * @lock: protect (de-)allocation of all ways within this set
+ *        protect rmap operations against all ways within this set
  *
  * FAT NOTE:
  * If you add anything here, do not forget to check if this
@@ -73,6 +74,9 @@ struct pcache_set {
 
 /**
  * struct pcache_meta	- Metadata about one pcache line
+ * @bits: various state bits (see below)
+ * @rmap: reverse mapping info
+ * @mapcount: count of ptes mapped to this pcm
  *
  * You can think this structure as the traditional metadata
  * part for a cache line, but with some addtional fields. And
@@ -85,7 +89,15 @@ struct pcache_set {
  */
 struct pcache_meta {
 	u8 bits;
+	struct list_head rmap;
+	atomic_t mapcount;
 } ____cacheline_aligned;
+
+struct pcache_rmap {
+	pte_t *page_table;
+	struct task_struct *owner;
+	struct list_head next;
+};
 
 extern struct pcache_set *pcache_set_map;
 extern struct pcache_meta *pcache_meta_map;
@@ -327,5 +339,14 @@ pcache_meta_next_way(struct pcache_meta *pcm)
 /* Public APIs: allocate/free cachelines based on address pointed set */
 struct pcache_meta *pcache_alloc(unsigned long address);
 void pcache_free(struct pcache_meta *);
+
+/* rmap */
+enum pcache_rmap_status {
+	PCACHE_RMAP_SUCCEED,
+	PCACHE_RMAP_AGAIN,
+};
+
+int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table);
+enum pcache_rmap_status pcache_try_to_unmap(struct pcache_meta *pcm);
 
 #endif /* _COMPONENT_PROCESSOR_PCACHE_H_ */

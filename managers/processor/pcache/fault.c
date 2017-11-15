@@ -112,6 +112,12 @@ static int pcache_fill_page(struct mm_struct *mm, unsigned long address,
 		goto out;
 	}
 
+	ret = pcache_add_rmap(pcm, page_table);
+	if (ret) {
+		ret = VM_FAULT_OOM;
+		goto out;
+	}
+
 	SetPcacheValid(pcm);
 
 	pte_set(page_table, entry);

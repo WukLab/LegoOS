@@ -104,12 +104,15 @@ static void init_pcache_set_map(void)
 /* Init pcache_meta array */
 static void init_pcache_meta_map(void)
 {
-	struct pcache_meta *pcl;
+	struct pcache_meta *pcm;
 	int i;
 
 	for (i = 0; i < nr_cachelines; i++) {
-		pcl = pcache_meta_map + i;
-		memset(pcl, 0, sizeof(*pcl));
+		pcm = pcache_meta_map + i;
+		memset(pcm, 0, sizeof(*pcm));
+
+		INIT_LIST_HEAD(&pcm->rmap);
+		atomic_set(&pcm->mapcount, 0);
 	}
 }
 
