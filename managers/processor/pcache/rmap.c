@@ -15,11 +15,13 @@
 #include <lego/syscalls.h>
 #include <lego/ratelimit.h>
 #include <lego/comp_processor.h>
+
 #include <asm/io.h>
+#include <asm/tlbflush.h>
 
 #include <processor/include/pcache.h>
 
-int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table)
+int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table, unsigned long address)
 {
 	struct pcache_rmap *rmap, *pos;
 	struct pcache_set *pset;
@@ -28,6 +30,7 @@ int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table)
 	if (!rmap)
 		return -ENOMEM;
 	rmap->page_table = page_table;
+	rmap->address = address;
 	rmap->owner = current;
 
 	/*
@@ -90,7 +93,10 @@ enum pcache_rmap_status pcache_try_to_unmap(struct pcache_meta *pcm)
 		atomic_dec(&pcm->mapcount);
 		pcache_paronoid_unmap_check(pteval, pcm);
 
-		/* TODO: *right* TLB flush function! */
+		if (pte_present(pteval))
+			flush_tlb_mm_range(rmap->owner->mm,
+					   rmap->address,
+					   rmap->address + PAGE_SIZE -1);
 	}
 	spin_unlock(&pset->lock);
 

@@ -17,6 +17,7 @@
 #include <lego/syscalls.h>
 #include <lego/jiffies.h>
 #include <lego/comp_processor.h>
+
 #include <asm/io.h>
 
 #include <processor/include/pcache.h>
@@ -110,6 +111,7 @@ pcache_evict_find_line(struct pcache_set *pset)
 	}
 	spin_unlock(&pset->lock);
 
+	pr_info("%s(): %p %p\n", FUNC, pcm, pcache_meta_to_pa(pcm));
 	if (unlikely(way == PCACHE_ASSOCIATIVITY))
 		pcm = NULL;
 	return pcm;
@@ -119,11 +121,54 @@ pcache_evict_find_line(struct pcache_set *pset)
  * @pcm must be locked when called.
  * Only dirty cachelines need to be flushed back to memory component.
  * Return 0 on success, otherwise return negative error values.
+ *
+ * Note while developing:
+ * 1) need to invalidate pte and flush dirty page back to memory
+ * 2) If we invalidate pte first, other threads may try to read/write at the same time,
+ *    which means a pgfault will happen right after invalidation. The other thread will
+ *    find its pte empty, and try to allocate a new cacheline and then fetch from remote.
+ *    Meanwhile, this function may still has NOT finished flushing back the dirty page.
+ *    Then this is not doable.
+ * 3) If we flush first, and do not change the PTE. Then other thread may write to this page
+ *    concurrently, then the page flushed back is broken.
+ *    What if we a) make pte read-only, b) flush, c) invalidate?
+ *    Then if a thread write to the page while we are in the middle of b) flush, then that thread
+ *    will have a page fault. It will be able to find the pte, and corresponding pa/pcm. Then
+ *    it can do lock_pcache(), it will be put to sleep. We wake them (may have N threads) after
+ *    we finish c) invalidate.
+ *    Sounds doable.
  */
 static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 {
+	int ret;
+
 	BUG_ON(!PcacheLocked(pcm));
-	return 0;
+
+	ClearPcacheValid(pcm);
+	pcache_free(pcm);
+
+	pcache_try_to_unmap(pcm);
+
+	/*
+	 * 1) make all ptes read-only
+	 */
+
+	/*
+	 * 2) flush back the cache line
+	 */
+
+	/*
+	 * 4) invalidate
+	 */
+
+	/*
+	 * 3) invalidate all ptes
+	 */
+
+	ret = 0;
+
+	unlock_pcache(pcm);
+	return ret;
 }
 
 /* Return 0 if a line has been evicted, otherwise -1 */
@@ -225,5 +270,6 @@ out:
 
 void pcache_free(struct pcache_meta *p)
 {
-	BUG_ON(!PcacheAllocated(p) || PcacheLocked(p));
+	BUG_ON(!PcacheAllocated(p) || PcacheValid(p) || PcacheLocked(p));
+	ClearPcacheAllocated(p);
 }

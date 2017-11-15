@@ -96,6 +96,7 @@ struct pcache_meta {
 struct pcache_rmap {
 	pte_t *page_table;
 	struct task_struct *owner;
+	unsigned long address;
 	struct list_head next;
 };
 
@@ -346,7 +347,7 @@ enum pcache_rmap_status {
 	PCACHE_RMAP_AGAIN,
 };
 
-int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table);
+int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table, unsigned long address);
 enum pcache_rmap_status pcache_try_to_unmap(struct pcache_meta *pcm);
 
 #endif /* _COMPONENT_PROCESSOR_PCACHE_H_ */
