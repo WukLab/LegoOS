@@ -46,6 +46,7 @@ struct wait_queue {
 struct wait_bit_key {
 	void			*flags;
 	int			bit_nr;
+	unsigned long		timeout;
 };
 
 struct wait_bit_queue {
@@ -219,6 +220,7 @@ void prepare_to_wait_exclusive(wait_queue_head_t *q, wait_queue_t *wait, int sta
 long prepare_to_wait_event(wait_queue_head_t *q, wait_queue_t *wait, int state);
 void finish_wait(wait_queue_head_t *q, wait_queue_t *wait);
 int autoremove_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key);
+int wake_bit_function(wait_queue_t *wait, unsigned mode, int sync, void *key);
 
 #define DEFINE_WAIT_FUNC(name, function)				\
 	wait_queue_t name = {						\
@@ -247,6 +249,9 @@ int autoremove_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *
 		INIT_LIST_HEAD(&(wait)->task_list);			\
 		(wait)->flags = 0;					\
 	} while (0)
+
+extern int bit_wait(struct wait_bit_key *, int);
+extern int bit_wait_timeout(struct wait_bit_key *, int);
 
 #define ___wait_is_interruptible(state)					\
 	(!__builtin_constant_p(state) ||				\

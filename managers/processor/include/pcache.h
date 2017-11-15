@@ -180,11 +180,7 @@ PCACHE_META_BITS(Valid, valid)
 PCACHE_META_BITS(Dirty, dirty)
 PCACHE_META_BITS(Writeback, writeback)
 
-static inline void unlock_pcache(struct pcache_meta *pcm)
-{
-	ClearPcacheLocked(pcm);
-}
-
+void unlock_pcache(struct pcache_meta *pcm);
 void __lock_pcache(struct pcache_meta *pcm);
 
 static inline int trylock_pcache(struct pcache_meta *pcm)
@@ -194,6 +190,7 @@ static inline int trylock_pcache(struct pcache_meta *pcm)
 
 static inline void lock_pcache(struct pcache_meta *pcm)
 {
+	might_sleep();
 	if (!trylock_pcache(pcm))
 		__lock_pcache(pcm);
 }

@@ -396,3 +396,22 @@ wait_queue_head_t *bit_waitqueue(void *word, int bit)
 
 	return bit_wait_table + hash_long(val, WAIT_TABLE_BITS);
 }
+
+__sched int bit_wait(struct wait_bit_key *word, int mode)
+{
+	schedule();
+	if (signal_pending_state(mode, current))
+		return -EINTR;
+	return 0;
+}
+
+__sched int bit_wait_timeout(struct wait_bit_key *word, int mode)
+{
+	unsigned long now = READ_ONCE(jiffies);
+	if (time_after_eq(now, word->timeout))
+		return -EAGAIN;
+	schedule_timeout(word->timeout - now);
+	if (signal_pending_state(mode, current))
+		return -EINTR;
+	return 0;
+}

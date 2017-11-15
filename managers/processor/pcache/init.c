@@ -113,6 +113,8 @@ static void init_pcache_meta_map(void)
 	}
 }
 
+void __init pcache_init_waitqueue(void);
+
 void __init pcache_init(void)
 {
 	u64 nr_cachelines_per_page, nr_units;
@@ -214,6 +216,8 @@ void __init pcache_init(void)
 
 	pcache_way_cache_stride = nr_cachesets * PCACHE_LINE_SIZE;
 	pr_info("    Way cache stride:  %#llx\n", pcache_way_cache_stride);
+
+	pcache_init_waitqueue();
 }
 
 /**
