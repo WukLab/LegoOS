@@ -116,13 +116,13 @@ pcache_evict_find_line(struct pcache_set *pset)
 }
 
 /*
- * @pcm is locked by caller.
+ * @pcm must be locked when called.
  * Only dirty cachelines need to be flushed back to memory component.
  * Return 0 on success, otherwise return negative error values.
  */
 static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 {
-	unlock_pcache(pcm);
+	BUG_ON(!PcacheLocked(pcm));
 	return 0;
 }
 
@@ -164,9 +164,8 @@ __pcache_alloc_from_set(struct pcache_set *pset)
  * sysctl_pcache_alloc_timeout_sec
  *
  * The maximum time a pcache_alloc can take due to slowpath eviction.
- * By default, abort pcache allocation after 5 seconds
  */
-unsigned long sysctl_pcache_alloc_timeout_sec __read_mostly = 5;
+unsigned long sysctl_pcache_alloc_timeout_sec __read_mostly = 10;
 
 /*
  * Slowpath: find line to evict and initalize the eviction process,
@@ -226,5 +225,5 @@ out:
 
 void pcache_free(struct pcache_meta *p)
 {
-	BUG_ON(!PcacheAllocated(p));
+	BUG_ON(!PcacheAllocated(p) || PcacheLocked(p));
 }
