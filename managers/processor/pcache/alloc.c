@@ -145,7 +145,6 @@ static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 	BUG_ON(!PcacheLocked(pcm));
 
 	ClearPcacheValid(pcm);
-	pcache_free(pcm);
 
 	pcache_try_to_unmap(pcm);
 
@@ -168,6 +167,7 @@ static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 	ret = 0;
 
 	unlock_pcache(pcm);
+	pcache_free(pcm);
 	return ret;
 }
 
@@ -253,7 +253,7 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 	struct pcache_set *pset;
 	struct pcache_meta *pcm;
 
-	pset = pcache_addr_to_pcache_set(address);
+	pset = user_vaddr_to_pcache_set(address);
 	pcm = __pcache_alloc_from_set(pset);
 	if (likely(pcm))
 		goto out;

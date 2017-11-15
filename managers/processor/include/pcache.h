@@ -54,7 +54,7 @@ extern u64 pcache_tag_mask;
 extern u64 pcache_way_cache_stride;
 
 /* Given an user virtual address, return its set index number */
-static inline unsigned long __addr2set(unsigned long address)
+static inline unsigned long __vaddr2set(unsigned long address)
 {
 	return (address & pcache_set_mask) >> nr_bits_cacheline;
 }
@@ -208,6 +208,24 @@ static inline void lock_pcache(struct pcache_meta *pcm)
 		__lock_pcache(pcm);
 }
 
+/* physical address is one of pcache data lines? */
+static inline bool pa_is_pcache(unsigned long address)
+{
+	if (likely(address >= phys_start_cacheline &&
+		   address < phys_start_metadata))
+		return true;
+	return false;
+}
+
+/* virtual address is one of pcache data lines? */
+static inline bool va_is_pcache(unsigned long address)
+{
+	if (likely(address >= virt_start_cacheline &&
+		   address < (unsigned long)pcache_meta_map))
+		return true;
+	return false;
+}
+
 /*
  * Given an user virtual address, return the first cache line within
  * its corresponding set. This can be used to walk through a set.
@@ -216,7 +234,7 @@ static inline void lock_pcache(struct pcache_meta *pcm)
  */
 static inline struct pcache_meta *__addr2meta(unsigned long address)
 {
-	return pcache_meta_map + __addr2set(address);
+	return pcache_meta_map + __vaddr2set(address);
 }
 
 static inline unsigned long __addr2line_va(unsigned long address)
@@ -227,19 +245,6 @@ static inline unsigned long __addr2line_va(unsigned long address)
 static inline unsigned long __addr2line_pa(unsigned long address)
 {
 	return phys_start_cacheline + (address & pcache_set_mask);
-}
-
-/**
- * pcache_addr_to_pcache_set
- * @address: address in question
- *
- * Given an user virtual address, find its corresponding set.
- * Return struct pcache_set for this set, which is unique for every set.
- */
-static inline struct pcache_set *
-pcache_addr_to_pcache_set(unsigned long address)
-{
-	return pcache_set_map + __addr2set(address);
 }
 
 /**
@@ -277,7 +282,12 @@ pcache_set_to_first_pcache_meta(struct pcache_set *pset)
 	return pcache_meta_map + offset;
 }
 
-/* Given a @pcm, return its corresponding cacheline's physical address */
+/**
+ * pcache_meta_to_pa
+ * @pcm: pcache meta in question
+ *
+ * Given a @pcm, return its corresponding cacheline's physical address
+ */
 static inline void *pcache_meta_to_pa(struct pcache_meta *pcm)
 {
 	unsigned long offset = pcm - pcache_meta_map;
@@ -286,13 +296,103 @@ static inline void *pcache_meta_to_pa(struct pcache_meta *pcm)
 	return (void *) (phys_start_cacheline + offset * PCACHE_LINE_SIZE);
 }
 
-/* Given a @pcm, return its corresponding cacheline's virtual address */
+/**
+ * pcache_meta_to_va
+ * @pcm: pcache meta in question
+ *
+ * Given a @pcm, return its corresponding cacheline's virtual address
+ */
 static inline void *pcache_meta_to_va(struct pcache_meta *pcm)
 {
 	unsigned long offset = pcm - pcache_meta_map;
 
 	BUG_ON(offset >= nr_cachelines);
 	return (void *) (virt_start_cacheline + offset * PCACHE_LINE_SIZE);
+}
+
+/**
+ * pa_to_pcache_meta
+ * @address: physical address of the pcache data line
+ *
+ * Given a physical address, find its pcache meta.
+ * If @address is not valid, return NULL
+ */
+static inline struct pcache_meta *pa_to_pcache_meta(unsigned long address)
+{
+	if (likely(pa_is_pcache(address))) {
+		unsigned long offset;
+
+		offset = (address & PAGE_MASK) - phys_start_cacheline;
+		offset = offset >> PAGE_SHIFT;
+		return pcache_meta_map + offset;
+	}
+	return NULL;
+}
+
+/**
+ * va_to_pcache_meta
+ * @address: kernel virtual address of the pcache data line
+ *
+ * Given a virtual address, find its pcache meta.
+ * If @address is not valid, return NULL
+ */
+static inline struct pcache_meta *va_to_pcache_meta(unsigned long address)
+{
+	if (likely(va_is_pcache(address))) {
+		unsigned long offset;
+
+		offset = (address & PAGE_MASK) - virt_start_cacheline;
+		offset = offset >> PAGE_SHIFT;
+		return pcache_meta_map + offset;
+	}
+	return NULL;
+}
+
+/**
+ * pa_to_pcache_set
+ * @address: physical address of the pcache data line
+ *
+ * Given a physical address, find its pcache set.
+ * If @address is not valid, return NULL
+ */
+static inline struct pcache_set *pa_to_pcache_set(unsigned long address)
+{
+	struct pcache_meta *pcm;
+
+	pcm = pa_to_pcache_meta(address);
+	if (likely(pcm))
+		return pcache_meta_to_pcache_set(pcm);
+	return NULL;
+}
+
+/**
+ * va_to_pcache_set
+ * @address: kernel virtual address of the pcache data line
+ *
+ * Given a virtual address, find its pcache set.
+ * If @address is not valid, return NULL
+ */
+static inline struct pcache_set *va_to_pcache_set(unsigned long address)
+{
+	struct pcache_meta *pcm;
+
+	pcm = va_to_pcache_meta(address);
+	if (likely(pcm))
+		return pcache_meta_to_pcache_set(pcm);
+	return NULL;
+}
+
+/**
+ * user_vaddr_to_pcache_set
+ * @address: user virtual address in question
+ *
+ * Given an user virtual address, find its corresponding set.
+ * Return struct pcache_set for this set, which is unique for every set.
+ */
+static inline struct pcache_set *
+user_vaddr_to_pcache_set(unsigned long address)
+{
+	return pcache_set_map + __vaddr2set(address);
 }
 
 static inline unsigned long pcache_meta_to_pfn(struct pcache_meta *pcm)
