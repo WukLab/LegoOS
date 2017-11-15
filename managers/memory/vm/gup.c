@@ -311,7 +311,9 @@ long populate_vma_page_range(struct vm_area_struct *vma,
 /*
  * __lego_mm_populate - populate pages within a range of address space.
  *
- * mmap_sem must not be held.
+ * This is used to implement mlock() and the MAP_POPULATE / MAP_LOCKED mmap
+ * flags. VMAs must be already marked with the desired vm_flags, and
+ * mmap_sem must *not* be held.
  */
 int __lego_mm_populate(struct lego_mm_struct *mm, unsigned long start,
 		       unsigned long len, int ignore_errors)
@@ -332,7 +334,8 @@ int __lego_mm_populate(struct lego_mm_struct *mm, unsigned long start,
 		 */
 		if (!locked) {
 			locked = 1;
-			down_read(&mm->mmap_sem);
+			if (!down_read_trylock(&mm->mmap_sem))
+				return -EINTR;
 			vma = find_vma(mm, nstart);
 		} else if (nstart >= vma->vm_end)
 			vma = vma->vm_next;

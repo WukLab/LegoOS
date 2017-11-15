@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-#define pr_fmt(fmt) "pc-manager: " fmt
+#define pr_fmt(fmt) "Processor: " fmt
 
 #include <lego/slab.h>
 #include <lego/timer.h>
@@ -18,29 +18,6 @@
 #include <lego/syscalls.h>
 
 #include "processor.h"
-
-#ifndef CONFIG_FIT
-static void p_test(void)
-{
-	char *buf;
-	int fd;
-
-	buf = kmalloc(8192, GFP_KERNEL);
-
-	fd = sys_open("/proc/stat", 0, 0);
-	sys_read(fd, buf, 8192);
-	pr_info("fd: %d buf: \n%s\n", fd, buf);
-	sys_close(fd);
-
-	memset(buf, 0, 8192);
-	fd = sys_open("/sys/devices/system/cpu/online", 0, 0);
-	sys_read(fd, buf, 8192);
-	pr_info("fd: %d buf: \n%s\n", fd, buf);
-	sys_close(fd);
-
-	kfree(buf);
-}
-#endif
 
 #define MAX_INIT_ARGS	CONFIG_INIT_ENV_ARG_LIMIT
 #define MAX_INIT_ENVS	CONFIG_INIT_ENV_ARG_LIMIT
@@ -88,6 +65,11 @@ void __init processor_component_init(void)
 {
 	pcache_init();
 
+#ifndef CONFIG_FIT
+	pr_info("Network is not compiled. Halt.");
+	while (1) hlt();
+#endif
+
 	/* Create checkpointing restore thread */
 	checkpoint_init();
 
@@ -96,14 +78,7 @@ void __init processor_component_init(void)
 	 */
 	run_global_thread();
 
-	pr_info("pc-manager running...\n");
-
-#ifndef CONFIG_FIT
-	pr_info("Test start...\n");
-	p_test();
-	pr_info("Test end...\n");
-	hlt();
-#endif
+	pr_info("Processor manager is running.\n");
 }
 
 #ifndef CONFIG_CHECKPOINT

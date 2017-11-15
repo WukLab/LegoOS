@@ -1304,7 +1304,23 @@ inline int client_get_inbox_by_addr(ppc *ctx, void *addr)
 	return tar;
 }
 
-int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int userspace_flag, int if_use_ret_phys_addr)
+/**
+ * sysctl_send_reply_max_timeout_sec
+ *
+ * The maximum time in seconds that ibapi_send_reply() can take.
+ * Function should return ETIMEDOUT upon timeout.
+ */
+unsigned long sysctl_send_reply_max_timeout_sec __read_mostly = 10;
+
+/*
+ * Return:
+ * Negative values on failues
+ * Positive values indicate the reply message length
+ */
+int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
+					       int size, void *ret_addr, int max_ret_size,
+					       int userspace_flag, int if_use_ret_phys_addr,
+					       unsigned long timeout_sec, void *caller)
 {
 	int tar_offset_start;
 	int connection_id;
@@ -1317,7 +1333,8 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 	struct client_ibv_mr *remote_mr;
 	struct imm_message_metadata output_header;
 	int last_ack;
-	
+	unsigned long start_time;
+
 	if(size+sizeof(struct imm_message_metadata) > IMM_MAX_SIZE)
 	{
 		printk(KERN_CRIT "%s: message size %d + header is larger than max size %d\n", __func__, size, IMM_MAX_SIZE);
@@ -1386,9 +1403,19 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 #endif
 
 #ifdef CPURELAX_MODEL
-	while(wait_send_reply_id==SEND_REPLY_WAIT)
-	{
+	if (timeout_sec >= sysctl_send_reply_max_timeout_sec)
+		timeout_sec = sysctl_send_reply_max_timeout_sec;
+	if (timeout_sec == 0)
+		timeout_sec = sysctl_send_reply_max_timeout_sec;
+
+	start_time = jiffies;
+	while (wait_send_reply_id == SEND_REPLY_WAIT) {
 		cpu_relax();
+		if (unlikely(time_after(jiffies, start_time + timeout_sec * HZ))) {
+			pr_warn("ibapi_send_reply() polling timeout (%u ms), caller: %pS\n",
+				jiffies_to_msecs(jiffies - start_time), caller);
+			return -ETIMEDOUT;
+		}
 	}
 #endif
 

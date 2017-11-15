@@ -127,10 +127,6 @@ static inline void *to_payload(void *msg)
 	return (void *)(msg + sizeof(struct common_header));
 }
 
-int net_send_reply(u32 node, u32 opcode,
-		   void *payload, u32 len_payload,
-		   void *retbuf, u32 max_len_retbuf, bool retbuf_is_phys);
-
 int net_send_reply_timeout(u32 node, u32 opcode,
 			   void *payload, u32 len_payload,
 			   void *retbuf, u32 max_len_retbuf, bool retbuf_is_phys,
@@ -143,7 +139,6 @@ struct p2m_llc_miss_struct {
 	__u32	tgid;
 	__u32	flags;
 	__u64	missing_vaddr;
-	__u64	offset;
 };
 int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64,
 			struct common_header *);

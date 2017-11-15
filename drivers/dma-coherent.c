@@ -12,6 +12,7 @@ struct dma_coherent_mem {
 	int		size;
 	int		flags;
 	unsigned long	*bitmap;
+	spinlock_t	spinlock;
 };
 
 int dma_declare_coherent_memory(struct pci_dev *dev, dma_addr_t bus_addr,
@@ -46,6 +47,7 @@ int dma_declare_coherent_memory(struct pci_dev *dev, dma_addr_t bus_addr,
 	dev->dma_mem->pfn_base = PFN_DOWN(bus_addr);
 	dev->dma_mem->size = pages;
 	dev->dma_mem->flags = flags;
+	spin_lock_init(&dev->dma_mem->spinlock);
 
 	if (flags & DMA_MEMORY_MAP)
 		return DMA_MEMORY_MAP;
@@ -76,6 +78,7 @@ void *dma_mark_declared_memory_occupied(struct pci_dev *dev,
 					dma_addr_t device_addr, size_t size)
 {
 	struct dma_coherent_mem *mem = dev->dma_mem;
+	unsigned long flags;
 	int pos, err;
 
 	size += device_addr & ~PAGE_MASK;
@@ -83,8 +86,11 @@ void *dma_mark_declared_memory_occupied(struct pci_dev *dev,
 	if (!mem)
 		return ERR_PTR(-EINVAL);
 
+	spin_lock_irqsave(&mem->spinlock, flags);
 	pos = (device_addr - mem->device_base) >> PAGE_SHIFT;
 	err = bitmap_allocate_region(mem->bitmap, pos, get_order(size));
+	spin_unlock_irqrestore(&mem->spinlock, flags);
+
 	if (err != 0)
 		return ERR_PTR(err);
 	return mem->virt_base + (pos << PAGE_SHIFT);
@@ -111,6 +117,7 @@ int dma_alloc_from_coherent(struct pci_dev *dev, ssize_t size,
 	struct dma_coherent_mem *mem;
 	int order = get_order(size);
 	int pageno;
+	unsigned long flags;
 
 //	pr_debug("%s dev %p\n", __func__, dev);
 		return 0;
@@ -122,6 +129,7 @@ int dma_alloc_from_coherent(struct pci_dev *dev, ssize_t size,
 		return 0;
 
 	*ret = NULL;
+	spin_lock_irqsave(&mem->spinlock, flags);
 
 	if (unlikely(size > (mem->size << PAGE_SHIFT)))
 		goto err;
@@ -136,11 +144,13 @@ int dma_alloc_from_coherent(struct pci_dev *dev, ssize_t size,
 	 */
 	*dma_handle = mem->device_base + (pageno << PAGE_SHIFT);
 	*ret = mem->virt_base + (pageno << PAGE_SHIFT);
+	spin_unlock_irqrestore(&mem->spinlock, flags);
 	memset(*ret, 0, size);
 
 	return 1;
 
 err:
+	spin_unlock_irqrestore(&mem->spinlock, flags);
 	/*
 	 * In the case where the allocation can not be satisfied from the
 	 * per-device area, try to fall back to generic memory if the
@@ -169,8 +179,12 @@ int dma_release_from_coherent(struct pci_dev *dev, int order, void *vaddr)
 	if (mem && vaddr >= mem->virt_base && vaddr <
 		   (mem->virt_base + (mem->size << PAGE_SHIFT))) {
 		int page = (vaddr - mem->virt_base) >> PAGE_SHIFT;
+		unsigned long flags;
 
+		spin_lock_irqsave(&mem->spinlock, flags);
 		bitmap_release_region(mem->bitmap, page, order);
+		spin_unlock_irqrestore(&mem->spinlock, flags);
+
 		return 1;
 	}
 	return 0;
