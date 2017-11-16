@@ -143,7 +143,6 @@ static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 	int ret;
 
 	BUG_ON(!PcacheLocked(pcm));
-
 	ClearPcacheValid(pcm);
 
 	pcache_try_to_unmap(pcm);
@@ -229,7 +228,7 @@ retry:
 		return NULL;
 
 	if (time_after(jiffies, alloc_start + sysctl_pcache_alloc_timeout_sec * HZ)) {
-		pr_warn("Abort pcache alloc (%ums) from pid:%u, addr: %#lx\n",
+		WARN(1, "Abort pcache alloc (%ums) pid:%u, addr:%#lx",
 			jiffies_to_msecs(jiffies - alloc_start), current->pid, address);
 		return NULL;
 	}
