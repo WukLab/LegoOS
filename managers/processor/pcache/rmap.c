@@ -52,17 +52,29 @@ add:
 	return 0;
 }
 
-static inline void pcache_paronoid_unmap_check(pte_t pte, struct pcache_meta *pcm)
+static inline void pcache_paronoid_unmap_check(pte_t pte, struct pcache_meta *pcm,
+					       struct pcache_rmap *rmap)
 {
 	unsigned long pcm_pfn, pgtable_pfn;
 
 	pcm_pfn = pcache_meta_to_pfn(pcm);
 	pgtable_pfn = pte_pfn(pte);
 	if (unlikely(pcm_pfn != pgtable_pfn)) {
-		pr_err("pcm_pfn: %lu, pgtable_pfn: %lu\n",
-			pcm_pfn, pgtable_pfn);
+		pr_err("owner: %u pcm_pfn: %#lx, pte_pfn: %#lx\n",
+			rmap->owner->pid, pcm_pfn, pgtable_pfn);
 		BUG();
 	}
+}
+
+static void __unmap_dump(struct pcache_rmap *rmap)
+{
+	unsigned long va = rmap->address;
+	struct task_struct *owner = rmap->owner;
+	pte_t pte, *ptep = rmap->page_table;
+
+	pte = *ptep;
+	pr_info("%s() owner: %u, va: %#lx pfn: %#lx dirty: %d\n",
+		FUNC, owner->pid, va, pte_pfn(pte), pte_dirty(pte)? 1:0);
 }
 
 /**
@@ -92,11 +104,11 @@ enum pcache_rmap_status pcache_try_to_unmap(struct pcache_meta *pcm)
 		page_table = rmap->page_table;
 		BUG_ON(!page_table);
 
-		pr_info("pgtable: %p (%#lx) owner: %d, addr: %#lx\n",
-			page_table, pte_val(*page_table), rmap->owner->pid, rmap->address);
+		__unmap_dump(rmap);
+
 		pteval = ptep_get_and_clear(0, page_table);
 		atomic_dec(&pcm->mapcount);
-		pcache_paronoid_unmap_check(pteval, pcm);
+		pcache_paronoid_unmap_check(pteval, pcm, rmap);
 
 		if (pte_present(pteval))
 			flush_tlb_mm_range(rmap->owner->mm,
