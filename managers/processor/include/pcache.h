@@ -20,6 +20,7 @@ struct pcache_meta;
 #define PCACHE_ASSOCIATIVITY_SHIFT	(CONFIG_PCACHE_ASSOCIATIVITY_SHIFT)
 
 #define PCACHE_LINE_SIZE		(_AC(1,UL) << PCACHE_LINE_SIZE_SHIFT)
+#define PCACHE_LINE_MASK		(~(PCACHE_LINE_SIZE-1))
 #define PCACHE_ASSOCIATIVITY		(_AC(1,UL) << PCACHE_ASSOCIATIVITY_SHIFT)
 #define PCACHE_META_SIZE		(sizeof(struct pcache_meta))
 
@@ -322,8 +323,8 @@ static inline struct pcache_meta *pa_to_pcache_meta(unsigned long address)
 	if (likely(pa_is_pcache(address))) {
 		unsigned long offset;
 
-		offset = (address & PAGE_MASK) - phys_start_cacheline;
-		offset = offset >> PAGE_SHIFT;
+		offset = (address & PCACHE_LINE_MASK) - phys_start_cacheline;
+		offset = offset >> PCACHE_LINE_SIZE_SHIFT;
 		return pcache_meta_map + offset;
 	}
 	return NULL;
@@ -341,8 +342,8 @@ static inline struct pcache_meta *kva_to_pcache_meta(unsigned long address)
 	if (likely(kva_is_pcache(address))) {
 		unsigned long offset;
 
-		offset = (address & PAGE_MASK) - virt_start_cacheline;
-		offset = offset >> PAGE_SHIFT;
+		offset = (address & PCACHE_LINE_MASK) - virt_start_cacheline;
+		offset = offset >> PCACHE_LINE_SIZE_SHIFT;
 		return pcache_meta_map + offset;
 	}
 	return NULL;
