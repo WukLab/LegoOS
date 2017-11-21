@@ -26,7 +26,7 @@ ssize_t handle_read_request(void *payload, uintptr_t desc)
 	request rq = constuct_request(m2s_rq->uid, m2s_rq->filename, 0, m2s_rq->len, 
 			m2s_rq->offset, m2s_rq->flags);
 
-	if (unlikely(m2s_rq->len > 5*BLK_SIZE)) {
+	if (unlikely(m2s_rq->len > 512*BLK_SIZE)) {
 		pr_info("read request is too large, request [%u].\n", m2s_rq->len);
 		ret = -ENOMEM;
 		goto err;
@@ -157,4 +157,43 @@ int handle_open_request(void *payload, uintptr_t desc)
 
 out_reply:
 	ibapi_reply_message(&ret, sizeof(ret), desc);
+}
+
+int handle_stat_request(void *payload, uintptr_t desc)
+{
+	struct p2s_stat_struct *stat_rq = payload;
+	struct kstat stat;
+	void *ret_msg;
+	int *retval_in_msg;
+	struct kstat *stat_in_msg;
+	int res;
+	int ret_len = sizeof(int) + sizeof(struct kstat);
+	
+	ret_msg = kmalloc(ret_len, GFP_KERNEL);
+	if (unlikely(!ret_msg)) {
+		panic("NO MEM for allocating return message.\n");
+	}
+	retval_in_msg = ret_msg;
+	stat_in_msg = ret_msg + sizeof(int);
+
+	res = kernel_fs_stat(stat_rq->filename, stat_rq->is_lstat, &stat);
+
+	/* ib return msg format, retval + stat */
+	*retval_in_msg = res;
+	*stat_in_msg = stat;
+
+	ibapi_reply_message(ret_msg, ret_len, desc);
+}
+
+int handle_access_request(void *payload, uintptr_t desc)
+{
+	/* filepath + mode */
+	struct p2s_access_struct *acc = payload;
+	int ret;
+	
+	ret = faccessat_root(acc->filename, acc->mode);
+
+	pr_info("%s %s %d, %d\n", __func__, acc->filename, acc->mode, ret);
+	ibapi_reply_message(&ret, sizeof(int), desc);
+	
 }

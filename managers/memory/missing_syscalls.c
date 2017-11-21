@@ -145,3 +145,8 @@ SYSCALL_DEFINE1(pcache_stat, struct pcache_stat __user *, statbuf)
 {
 	BUG();
 }
+
+SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
+{
+	BUG();
+}

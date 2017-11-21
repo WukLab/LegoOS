@@ -15,6 +15,7 @@
 #include <lego/spinlock.h>
 #include <processor/fs.h>
 #include <processor/processor.h>
+#include <lego/fit_ibapi.h>
 
 /*
  * Find @file by @fd
@@ -239,4 +240,52 @@ SYSCALL_DEFINE1(dup, unsigned int, fildes)
 out:
 	syscall_exit(ret);
 	return ret;
+}
+
+#ifndef CONFIG_USE_RAMFS
+static int p2s_access(char *kname, int mode)
+{
+	int retval; 
+	void *msg;
+	u32 len_msg, *opcode;
+	struct p2s_access_struct *payload;
+
+	len_msg = sizeof(*opcode) + sizeof(*payload);
+	msg = kmalloc(len_msg, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	opcode = msg;
+	*opcode = P2S_ACCESS;
+
+	payload = msg + sizeof(*opcode);
+	payload->mode = mode;
+	strncpy(payload->filename, kname, MAX_FILENAME_LENGTH);
+
+	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval,
+			sizeof(retval), false);
+
+	kfree(msg);
+	return retval;
+}
+#endif
+
+SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
+{
+	char kname[FILENAME_LEN_DEFAULT];
+
+	if (strncpy_from_user(kname, filename, FILENAME_LEN_DEFAULT) < 0)
+		return -EFAULT;
+
+	syscall_enter("f_name: %s, mode: %x\n", kname, mode);
+
+	/* Now allowing these special access for simplicity */
+	if (unlikely(proc_file(kname) || sys_file(kname) || dev_file(kname)))
+		return 0;
+
+#ifdef CONFIG_USE_RAMFS
+	return 0;
+#else
+	return p2s_access(kname, mode);
+#endif
 }

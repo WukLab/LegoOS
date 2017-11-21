@@ -85,7 +85,7 @@ static void handle_bad_request(u32 opcode, uintptr_t desc)
 
 	pr_debug("WARNING: Invalid opcode: %u\n", opcode);
 
-	retbuf = RET_EFAULT;
+	retbuf = EFAULT;
 	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
 }
 
@@ -111,6 +111,12 @@ static void storage_dispatch(void *msg, uintptr_t desc)
 		break;
 	case P2S_OPEN:
 		handle_open_request(payload, desc);
+		break;
+	case P2S_ACCESS:
+		handle_access_request(payload, desc);
+		break;
+	case P2S_STAT:
+		handle_stat_request(payload, desc);
 		break;
 
 	default:

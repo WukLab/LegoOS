@@ -56,6 +56,8 @@ extern unsigned int LEGO_LOCAL_NID;
 
 /* Processor to Storage directly */
 #define P2S_OPEN	((__u32)__NR_open)	/* open() goes to storage directly */
+#define P2S_STAT	((__u32)__NR_stat)
+#define P2S_ACCESS	((__u32)__NR_access)
 
 /* Memory to Storage */
 #define M2S_READ	P2M_READ		/* Reuse the same nr */
@@ -323,5 +325,15 @@ struct p2m_flush_payload {
 	char		pcacheline[PCACHE_LINE_SIZE];
 };
 int handle_p2m_flush_one(struct p2m_flush_payload *, u64, struct common_header *);
+
+struct p2s_access_struct {
+	char filename[MAX_FILENAME_LENGTH];
+	int mode;
+};
+
+struct p2s_stat_struct {
+	char filename[MAX_FILENAME_LENGTH];
+	bool is_lstat;
+};
 
 #endif /* _LEGO_COMP_COMMON_H_ */

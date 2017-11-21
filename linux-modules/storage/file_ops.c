@@ -4,6 +4,12 @@
 #include <linux/dcache.h>
 #include <linux/mutex.h>
 #include <linux/mm.h>
+#include <linux/cred.h>
+#include <linux/namei.h>
+#include <linux/securebits.h>
+#include <linux/mount.h>
+#include <linux/fs_struct.h>
+#include <linux/sched.h>
 
 /* ------------------------------------------
  * local_file_open
@@ -95,4 +101,89 @@ ssize_t local_file_read(struct file *file, const char __user *buf, ssize_t len, 
  */
 int local_fsync(struct file *file){
 	return vfs_fsync(file, 0);
+}
+
+/* local handler function for access and faccess */
+int faccessat_root(const char __user * filename, int mode)
+{
+	const struct cred *old_cred;
+	struct cred *override_cred;
+	struct path path;
+	struct inode *inode;
+	int res;
+	unsigned int lookup_flags = LOOKUP_FOLLOW;
+
+	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
+		return -EINVAL;
+
+	override_cred = prepare_creds();
+	if (!override_cred)
+		return -ENOMEM;
+
+	override_cred->fsuid = override_cred->uid;
+	override_cred->fsgid = override_cred->gid;
+
+
+	old_cred = override_creds(override_cred);
+retry:
+	//set_fs_pwd(current->fs, &current->fs->root);
+	res = user_path_at(AT_FDCWD, filename, lookup_flags, &path);
+	if (res)
+		goto out;
+
+	inode = path.dentry->d_inode;
+
+	if ((mode & MAY_EXEC) && S_ISREG(inode->i_mode)) {
+		/*
+		 * MAY_EXEC on regular files is denied if the fs is mounted
+		 * with the "noexec" flag.
+		 */
+		res = -EACCES;
+		if (path.mnt->mnt_flags & MNT_NOEXEC)
+			goto out_path_release;
+	}
+
+	res = inode_permission(inode, mode | MAY_ACCESS);
+	/* SuS v2 requires we report a read only fs too */
+	if (res || !(mode & S_IWOTH) || special_file(inode->i_mode))
+		goto out_path_release;
+	/*
+	 * This is a rare case where using __mnt_is_readonly()
+	 * is OK without a mnt_want/drop_write() pair.  Since
+	 * no actual write to the fs is performed here, we do
+	 * not need to telegraph to that to anyone.
+	 *
+	 * By doing this, we accept that this access is
+	 * inherently racy and know that the fs may change
+	 * state before we even see this result.
+	 */
+	if (__mnt_is_readonly(path.mnt))
+		res = -EROFS;
+
+out_path_release:
+	path_put(&path);
+	if (retry_estale(res, lookup_flags)) {
+		lookup_flags |= LOOKUP_REVAL;
+		goto retry;
+	}
+out:
+	revert_creds(old_cred);
+	put_cred(override_cred);
+	return res;
+}
+
+int kernel_fs_stat(const char *name, bool is_lstat, struct kstat *stat)
+{
+	mm_segment_t old_fs;
+	int err;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	if (is_lstat) {
+		err = vfs_lstat(name, stat);
+	} else {
+		err = vfs_stat(name, stat);
+	}
+	set_fs(old_fs);
+	return err;
 }

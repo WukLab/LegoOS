@@ -1,6 +1,7 @@
 #include <linux/fs.h>
 #include <linux/mutex.h>
 #include <asm/uaccess.h>
+#include <linux/stat.h>
 
 #define OP_SUCCESS		1
 #define OP_FAILURE		0
@@ -56,8 +57,12 @@ int local_file_close(struct file *);
 ssize_t local_file_write(struct file *, const char __user *, ssize_t, loff_t *);
 ssize_t local_file_read(struct file *, const char __user *, ssize_t, loff_t *);
 int local_fsync(struct file *);
+int kernel_fs_stat(const char *, bool, struct kstat *);
+int faccessat_root(const char __user *, int);
 
 /* handler.c */
 int handle_open_request(void *, uintptr_t);
 ssize_t handle_write_request(void *, uintptr_t);
 ssize_t handle_read_request(void *, uintptr_t);
+int handle_stat_request(void *, uintptr_t);
+int handle_access_request(void *, uintptr_t);
