@@ -21,7 +21,8 @@
 
 #include <processor/include/pcache.h>
 
-int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table, unsigned long address)
+int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
+		    unsigned long address)
 {
 	struct pcache_rmap *rmap, *pos;
 	struct pcache_set *pset;
@@ -52,8 +53,17 @@ add:
 	return 0;
 }
 
-static inline void pcache_paronoid_unmap_check(pte_t pte, struct pcache_meta *pcm,
-					       struct pcache_rmap *rmap)
+static __always_inline pte_t *
+rmap_get_checked_pte(struct pcache_meta *pcm, struct pcache_rmap *rmap)
+{
+	/* TODO: Safety check if the @mm truly has this pte
+	 * and if the pfn in pte and this page_table matches */
+	return rmap->page_table;
+}
+
+static inline void
+pcache_paronoid_unmap_check(pte_t pte, struct pcache_meta *pcm,
+			    struct pcache_rmap *rmap)
 {
 	unsigned long pcm_pfn, pgtable_pfn;
 
@@ -77,6 +87,39 @@ static void __unmap_dump(struct pcache_rmap *rmap)
 		FUNC, owner->pid, va, pte_pfn(pte), pte_dirty(pte)? 1:0);
 }
 
+static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
+				   struct pcache_rmap *rmap, void *arg)
+{
+	int ret = PCACHE_RMAP_AGAIN;
+	pte_t *pte;
+	pte_t pteval;
+
+	pte = rmap_get_checked_pte(pcm, rmap);
+	if (!pte)
+		goto out;
+	__unmap_dump(rmap);
+
+	pteval = ptep_get_and_clear(0, pte);
+	pcache_paronoid_unmap_check(pteval, pcm, rmap);
+
+	if (pte_present(pteval))
+		flush_tlb_mm_range(rmap->owner->mm,
+				   rmap->address,
+				   rmap->address + PAGE_SIZE -1);
+
+	list_del(&rmap->next);
+	kfree(rmap);
+	atomic_dec(&pcm->mapcount);
+
+out:
+	return ret;
+}
+
+static int pcache_mapcount_is_zero(struct pcache_meta *pcm)
+{
+	return !pcache_mapcount(pcm);
+}
+
 /**
  * pcache_try_to_unmap
  * @pcm: the pcache to get unmapped
@@ -88,37 +131,40 @@ static void __unmap_dump(struct pcache_rmap *rmap)
  *	PCACHE_RMAP_SUCCEED	- we succeeded in removing all mappings
  *	PCACHE_RMAP_AGAIN	- we missed a mapping, try again later
  */
-enum pcache_rmap_status pcache_try_to_unmap(struct pcache_meta *pcm)
+int pcache_try_to_unmap(struct pcache_meta *pcm)
 {
-	struct pcache_rmap *rmap;
+	int ret;
+
+	struct rmap_walk_control rwc = {
+		.rmap_one = pcache_try_to_unmap_one,
+		.done = pcache_mapcount_is_zero,
+	};
+
+	ret = rmap_walk(pcm, &rwc);
+	if (!pcache_mapcount(pcm))
+		ret = PCACHE_RMAP_SUCCEED;
+	return ret;
+}
+
+int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc)
+{
+	struct pcache_rmap *rmap, *keeper;
 	struct pcache_set *pset;
-	struct list_head *head;
-	pte_t *page_table;
-	pte_t pteval;
+	int ret = PCACHE_RMAP_AGAIN;
 
 	pset = pcache_meta_to_pcache_set(pcm);
+
+	/* rmap addition is protected by the pset lock */
 	spin_lock(&pset->lock);
-	head = &pcm->rmap;
-	while (!list_empty(head)) {
-		rmap = list_first_entry(head, struct pcache_rmap, next);
-		page_table = rmap->page_table;
-		BUG_ON(!page_table);
+	list_for_each_entry_safe(rmap, keeper, &pcm->rmap, next) {
+		ret = rwc->rmap_one(pcm, rmap, rwc->arg);
+		if (ret != PCACHE_RMAP_AGAIN)
+			break;
 
-		__unmap_dump(rmap);
-
-		pteval = ptep_get_and_clear(0, page_table);
-		atomic_dec(&pcm->mapcount);
-		pcache_paronoid_unmap_check(pteval, pcm, rmap);
-
-		if (pte_present(pteval))
-			flush_tlb_mm_range(rmap->owner->mm,
-					   rmap->address,
-					   rmap->address + PAGE_SIZE -1);
-
-		list_del(&rmap->next);
-		kfree(rmap);
+		if (rwc->done && rwc->done(pcm))
+			break;
 	}
 	spin_unlock(&pset->lock);
 
-	return PCACHE_RMAP_SUCCEED;
+	return ret;
 }

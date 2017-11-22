@@ -209,6 +209,16 @@ static inline void lock_pcache(struct pcache_meta *pcm)
 		__lock_pcache(pcm);
 }
 
+static inline int pcache_mapcount(struct pcache_meta *pcm)
+{
+	return atomic_read(&pcm->mapcount);
+}
+
+static inline void pcache_mapcount_reset(struct pcache_meta *pcm)
+{
+	atomic_set(&pcm->mapcount, 0);
+}
+
 /* physical address is one of pcache data lines? */
 static inline bool pa_is_pcache(unsigned long address)
 {
@@ -443,12 +453,26 @@ struct pcache_meta *pcache_alloc(unsigned long address);
 void pcache_free(struct pcache_meta *);
 
 /* rmap */
+/*
+ * rmap_walk_control: To control rmap traversing for specific needs
+ *
+ * arg: passed to rmap_one()
+ * rmap_one: executed on each rmap where pcache line is mapped
+ * done: for checking traversing termination condition
+ */
+struct rmap_walk_control {
+	void *arg;
+	int (*rmap_one)(struct pcache_meta *, struct pcache_rmap *, void *);
+	int (*done)(struct pcache_meta *);
+};
+
 enum pcache_rmap_status {
 	PCACHE_RMAP_SUCCEED,
 	PCACHE_RMAP_AGAIN,
 };
 
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table, unsigned long address);
-enum pcache_rmap_status pcache_try_to_unmap(struct pcache_meta *pcm);
+int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
+int pcache_try_to_unmap(struct pcache_meta *pcm);
 
 #endif /* _COMPONENT_PROCESSOR_PCACHE_H_ */
