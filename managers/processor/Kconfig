@@ -42,6 +42,7 @@ config DEBUG_PCACHE
 	bool "Debug L4-cache"
 	default n
 	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
 	help
 	  Enable to have a detailed dump log of L4 cache subsystem.
 	  Mostly, it tells you the missing address and how it was handled
@@ -49,10 +50,19 @@ config DEBUG_PCACHE
 
 	  If unsure, say N
 
+config DEBUG_PCACHE_PARANOID
+	bool "Be paranoid, enable checking code"
+	default n
+	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
+	help
+	  Enable to add more checking code to pcache.
+
 config DEBUG_FILE
 	bool "Debug open/read/close calls"
 	default n
 	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
 	help
 	  Enable to debug file related calls
 
@@ -62,6 +72,7 @@ config DEBUG_SYSCALL
 	bool "Debug all SYSCALL enter/exit"
 	default n
 	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
 	help
 	  Enable to have a detailed dump log of syscall entering and exit.
 	  Only used for testing purpose.
@@ -72,6 +83,7 @@ config DEBUG_MMAP
 	bool "Debug mmap related syscalls"
 	default n
 	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
 	help
 	  Enable to debug mmap(), brk(), munmap(), mremap() syscalls
 	  in processor side. Mostly, it tells you what is returned.
@@ -82,6 +94,7 @@ config DEBUG_PROC_SYS
 	bool "Debug /proc and /sys output"
 	default n
 	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
 	help
 	  Some user-program will open /proc and /sys files to get information
 	  about lego-kernel. We are having these two interfaces to maintain
@@ -96,6 +109,7 @@ config DEBUG_EMULATED_PGTABLE
 	bool "Debug emulated pgtable release (may have tons of messages)"
 	default n
 	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
 	help
 	  Enable to trace the emulated pgtable release function, which is
 	  normally invoked by munmap() and mremap().
@@ -105,6 +119,7 @@ config DEBUG_EMULATED_PGTABLE
 config DEBUG_CHECKPOINT
 	bool "Enable to show checkpoint debug messages"
 	default n
+	depends on DEBUG_KERNEL
 	---help---
 	  Say Y if you want to have more info about what is going on about checkpoint.
 

@@ -219,6 +219,13 @@ static inline void pcache_mapcount_reset(struct pcache_meta *pcm)
 	atomic_set(&pcm->mapcount, 0);
 }
 
+static inline bool pcache_mapped(struct pcache_meta *pcm)
+{
+	if (atomic_read(&pcm->mapcount) > 0)
+		return true;
+	return false;
+}
+
 /* physical address is one of pcache data lines? */
 static inline bool pa_is_pcache(unsigned long address)
 {
@@ -474,5 +481,6 @@ enum pcache_rmap_status {
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table, unsigned long address);
 int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
 int pcache_try_to_unmap(struct pcache_meta *pcm);
+int pcache_wrprotect(struct pcache_meta *pcm);
 
 #endif /* _COMPONENT_PROCESSOR_PCACHE_H_ */

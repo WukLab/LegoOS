@@ -53,12 +53,65 @@ add:
 	return 0;
 }
 
-static __always_inline pte_t *
-rmap_get_checked_pte(struct pcache_meta *pcm, struct pcache_rmap *rmap)
+/*
+ * We are traversing the reverse mapping, which means
+ * upper level mappings must exist and present. If not, BUG.
+ */
+static inline pmd_t *
+rmap_get_pmd(struct mm_struct *mm, unsigned long address)
 {
-	/* TODO: Safety check if the @mm truly has this pte
-	 * and if the pfn in pte and this page_table matches */
-	return rmap->page_table;
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+
+	pgd = pgd_offset(mm, address);
+	BUG_ON(!pgd && !pgd_present(*pgd));
+
+	pud = pud_offset(pgd, address);
+	BUG_ON(!pud && !pud_present(*pud));
+
+	pmd = pmd_offset(pud, address);
+	BUG_ON(!pmd && !pmd_present(*pmd));
+
+	return pmd;
+}
+
+/*
+ * To make it simple, it just return rmap->page_table.
+ * But for safety reasons, we add several checkings here.
+ *
+ * Upon return, pte is locked. Because normally callers will
+ * modify or even invalidate the PTEs. Those operations have
+ * to be serialized with PTE establishment.
+ */
+static __always_inline pte_t *
+rmap_get_checked_pte(struct pcache_meta *pcm, struct pcache_rmap *rmap,
+		     spinlock_t **ptlp)	__acquires(*ptlp)
+{
+	pte_t *ptep;
+	pmd_t *pmd;
+	spinlock_t *ptl;
+	struct mm_struct *mm = rmap->owner->mm;
+	unsigned long address = rmap->address;
+
+	pmd = rmap_get_pmd(mm, address);
+	ptep = pte_offset(pmd, address);
+
+#ifdef CONFIG_DEBUG_PCACHE_PARANOID
+	if (unlikely(ptep != rmap->page_table)) {
+		BUG();
+	}
+
+	if (unlikely(pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
+		BUG();
+	}
+#endif
+
+	ptl = pte_lockptr(mm, pmd);
+	spin_lock(ptl);
+	*ptlp = ptl;
+
+	return ptep;
 }
 
 static inline void
@@ -91,12 +144,13 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 				   struct pcache_rmap *rmap, void *arg)
 {
 	int ret = PCACHE_RMAP_AGAIN;
+	spinlock_t *ptl = NULL;
 	pte_t *pte;
 	pte_t pteval;
 
-	pte = rmap_get_checked_pte(pcm, rmap);
-	if (!pte)
-		goto out;
+	/* Get locked pte */
+	pte = rmap_get_checked_pte(pcm, rmap, &ptl);
+
 	__unmap_dump(rmap);
 
 	pteval = ptep_get_and_clear(0, pte);
@@ -111,7 +165,7 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 	kfree(rmap);
 	atomic_dec(&pcm->mapcount);
 
-out:
+	spin_unlock(ptl);
 	return ret;
 }
 
@@ -144,6 +198,63 @@ int pcache_try_to_unmap(struct pcache_meta *pcm)
 	if (!pcache_mapcount(pcm))
 		ret = PCACHE_RMAP_SUCCEED;
 	return ret;
+}
+
+static int pcache_wrprotect_one(struct pcache_meta *pcm,
+				struct pcache_rmap *rmap, void *arg)
+{
+	int *protected = arg;
+	int ret = PCACHE_RMAP_AGAIN;
+	spinlock_t *ptl = NULL;
+	pte_t *pte;
+	pte_t entry;
+
+	/* Get locked pte */
+	pte = rmap_get_checked_pte(pcm, rmap, &ptl);
+
+	if (!pte_write(*pte))
+		goto out;
+
+	entry = ptep_get_and_clear(0, pte);
+	entry = pte_wrprotect(entry);
+	entry = pte_mkclean(entry);
+	pte_set(pte, entry);
+
+	if (pte_present(entry))
+		flush_tlb_mm_range(rmap->owner->mm,
+				   rmap->address,
+				   rmap->address + PAGE_SIZE -1);
+
+	(*protected)++;
+
+out:
+	spin_unlock(ptl);
+	return ret;
+}
+
+/**
+ * pcache_wrprotect
+ * @pcm: pcache line to protect
+ *
+ * This function will write-protect PTEs mapped to @pcm.
+ * Return the number of PTEs that have been marked read-only.
+ */
+int pcache_wrprotect(struct pcache_meta *pcm)
+{
+	int protected = 0;
+	struct rmap_walk_control rwc = {
+		.arg = &protected,
+		.rmap_one = pcache_wrprotect_one,
+	};
+
+	BUG_ON(!PcacheLocked(pcm));
+
+	if (!pcache_mapped(pcm))
+		return 0;
+
+	rmap_walk(pcm, &rwc);
+
+	return protected;
 }
 
 int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc)
