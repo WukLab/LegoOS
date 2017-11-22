@@ -154,6 +154,7 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 	__unmap_dump(rmap);
 
 	pteval = ptep_get_and_clear(0, pte);
+
 	pcache_paronoid_unmap_check(pteval, pcm, rmap);
 
 	if (pte_present(pteval))
@@ -215,6 +216,18 @@ static int pcache_wrprotect_one(struct pcache_meta *pcm,
 	if (!pte_write(*pte))
 		goto out;
 
+	/*
+	 * Note: These operations are protected by the pte lock.
+	 * If other core has a pgfault after we clear the PTE,
+	 * the pgfault will end up with pcache_fill_page(). This is
+	 * okay because we still hold the pte lock. Inside pgfault
+	 * function, it will check pte again after acquires the pte lock,
+	 * the case where PTE is already set back by us.
+	 *
+	 * Or, if other core has a pgfault after we set the pte to
+	 * read-only, the pgfault will end up with pcache_do_wp_page().
+	 * Then it will wait until pcache flush finishes.
+	 */
 	entry = ptep_get_and_clear(0, pte);
 	entry = pte_wrprotect(entry);
 	entry = pte_mkclean(entry);
