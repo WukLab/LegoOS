@@ -5,3 +5,4 @@ obj-y += numa.o
 obj-y += pgtable.o
 obj-y += tlb.o
 obj-y += extable.o
+obj-y += debug.o

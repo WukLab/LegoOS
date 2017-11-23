@@ -700,10 +700,20 @@ char *flags_string(char *buf, char *end, void *flags_ptr, const char *fmt)
 		flags &= (1UL << NR_PAGEFLAGS) - 1;
 		names = pageflag_names;
 		break;
-/*
- * Only memory-manager has vma
- */
+
+	/* Lego specific */
+	case 'e':
+		flags = *(unsigned long *)flags_ptr;
+		/* Remove PFN */
+		flags &= ~PHYSICAL_PAGE_MASK;
+		names = pteflag_names;
+		break;
+
 #ifdef CONFIG_COMP_MEMORY
+	/*
+	 * Lego specific:
+	 * and only memory-manager has vma
+	 */
 	case 'v':
 		flags = *(unsigned long *)flags_ptr;
 		names = vmaflag_names;

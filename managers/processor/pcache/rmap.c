@@ -129,15 +129,14 @@ pcache_paronoid_unmap_check(pte_t pte, struct pcache_meta *pcm,
 	}
 }
 
-static void __unmap_dump(struct pcache_rmap *rmap)
+static void dump_pcache_rmap(struct pcache_rmap *rmap)
 {
 	unsigned long va = rmap->address;
 	struct task_struct *owner = rmap->owner;
-	pte_t pte, *ptep = rmap->page_table;
+	pte_t *ptep = rmap->page_table;
 
-	pte = *ptep;
-	pr_info("%s() owner: %u, va: %#lx pfn: %#lx dirty: %d\n",
-		FUNC, owner->pid, va, pte_pfn(pte), pte_dirty(pte)? 1:0);
+	pr_info("%s() owner:%u va:%#lx\n", FUNC, owner->pid, va);
+	dump_pte(ptep, NULL);
 }
 
 static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
@@ -151,7 +150,7 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 	/* Get locked pte */
 	pte = rmap_get_checked_pte(pcm, rmap, &ptl);
 
-	__unmap_dump(rmap);
+	dump_pcache_rmap(rmap);
 
 	pteval = ptep_get_and_clear(0, pte);
 
@@ -212,6 +211,7 @@ static int pcache_wrprotect_one(struct pcache_meta *pcm,
 
 	/* Get locked pte */
 	pte = rmap_get_checked_pte(pcm, rmap, &ptl);
+	dump_pcache_rmap(rmap);
 
 	if (!pte_write(*pte))
 		goto out;
