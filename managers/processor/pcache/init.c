@@ -16,7 +16,7 @@
 #include <lego/comp_processor.h>
 #include <asm/io.h>
 
-#include <processor/include/pcache.h>
+#include <processor/pcache.h>
 
 u64 pcache_registered_start;
 u64 pcache_registered_size;

@@ -20,7 +20,7 @@
 
 #include <asm/io.h>
 
-#include <processor/include/pcache.h>
+#include <processor/pcache.h>
 
 #define WAIT_TABLE_BITS 8
 #define WAIT_TABLE_SIZE (1 << WAIT_TABLE_BITS)

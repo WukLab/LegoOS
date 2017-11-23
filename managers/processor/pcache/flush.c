@@ -16,7 +16,7 @@
 #include <lego/comp_processor.h>
 #include <asm/io.h>
 
-#include <processor/include/pcache.h>
+#include <processor/pcache.h>
 
 
 int pcache_flush_cacheline_va_user(unsigned long __user vaddr)

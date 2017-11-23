@@ -14,7 +14,7 @@
 
 #include <memory/include/vm.h>
 #include <memory/include/pid.h>
-#include <processor/include/pcache.h>
+#include <processor/pcache.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_PCACHE
 static DEFINE_RATELIMIT_STATE(pcache_debug_rs,

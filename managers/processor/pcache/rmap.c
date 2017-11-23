@@ -15,11 +15,10 @@
 #include <lego/syscalls.h>
 #include <lego/ratelimit.h>
 #include <lego/comp_processor.h>
+#include <processor/pcache.h>
 
 #include <asm/io.h>
 #include <asm/tlbflush.h>
-
-#include <processor/include/pcache.h>
 
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 		    unsigned long address)
@@ -194,6 +193,7 @@ int pcache_try_to_unmap(struct pcache_meta *pcm)
 		.done = pcache_mapcount_is_zero,
 	};
 
+	dump_pcache_meta(pcm, NULL);
 	ret = rmap_walk(pcm, &rwc);
 	if (!pcache_mapcount(pcm))
 		ret = PCACHE_RMAP_SUCCEED;
@@ -266,6 +266,7 @@ int pcache_wrprotect(struct pcache_meta *pcm)
 	if (!pcache_mapped(pcm))
 		return 0;
 
+	dump_pcache_meta(pcm, NULL);
 	rmap_walk(pcm, &rwc);
 
 	return protected;
