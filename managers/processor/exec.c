@@ -206,7 +206,7 @@ static int p2m_execve(struct p2m_execve_struct *payload,
 			return -(reply->status);
 		}
 	}
-	return -EIO;
+	return ret;
 }
 
 int do_execve(const char *filename,

@@ -459,6 +459,9 @@ pcache_meta_next_way(struct pcache_meta *pcm)
 struct pcache_meta *pcache_alloc(unsigned long address);
 void pcache_free(struct pcache_meta *);
 
+/* clflush */
+int pcache_flush_one(struct pcache_meta *pcm);
+
 /* rmap */
 /*
  * rmap_walk_control: To control rmap traversing for specific needs
