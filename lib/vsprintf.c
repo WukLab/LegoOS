@@ -711,11 +711,13 @@ char *flags_string(char *buf, char *end, void *flags_ptr, const char *fmt)
 		break;
 
 	/* Lego specific: pcache_meta bits */
+#ifdef CONFIG_COMP_PROCESSOR
 	case 'c':
 		flags = *(unsigned long *)flags_ptr;
 		flags &= (1UL << __NR_PCLBITS) - 1;
 		names = pcacheflag_names;
 		break;
+#endif
 
 	/* In Lego, only memory-manager has vma */
 #ifdef CONFIG_COMP_MEMORY
