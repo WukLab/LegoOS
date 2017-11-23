@@ -145,18 +145,8 @@ static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 	BUG_ON(!PcacheLocked(pcm));
 	ClearPcacheValid(pcm);
 
-	/*
-	 * 1) make all ptes read-only
-	 */
 	pcache_wrprotect(pcm);
-
-	/*
-	 * 2) flush back the cache line
-	 */
-
-	/*
-	 * 3) invalidate all ptes
-	 */
+	pcache_flush_one(pcm);
 	pcache_try_to_unmap(pcm);
 
 	ret = 0;

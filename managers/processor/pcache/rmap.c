@@ -82,7 +82,7 @@ rmap_get_pmd(struct mm_struct *mm, unsigned long address)
  *
  * Upon return, pte is locked. Because normally callers will
  * modify or even invalidate the PTEs. Those operations have
- * to be serialized with PTE establishment.
+ * to be serialized with pgfault routines.
  */
 static __always_inline pte_t *
 rmap_get_checked_pte(struct pcache_meta *pcm, struct pcache_rmap *rmap,
@@ -225,8 +225,9 @@ static int pcache_wrprotect_one(struct pcache_meta *pcm,
 	 * the case where PTE is already set back by us.
 	 *
 	 * Or, if other core has a pgfault after we set the pte to
-	 * read-only, the pgfault will end up with pcache_do_wp_page().
-	 * Then it will wait until pcache flush finishes.
+	 * read-only, it will also wait until we release the pte lock.
+	 * After that it will also check the pte upon pgfault and the
+	 * pte upon getting the lock. Just check pcache_handle_pte_fault().
 	 */
 	entry = ptep_get_and_clear(0, pte);
 	entry = pte_wrprotect(entry);
