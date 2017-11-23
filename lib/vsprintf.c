@@ -14,8 +14,8 @@
 #include <lego/kernel.h>
 #include <lego/kallsyms.h>
 #include <lego/tracepoint.h>
-
 #include <lego/comp_memory.h>
+#include <processor/pcache.h>
 
 static __noinline_for_stack
 int skip_atoi(const char **s)
@@ -694,15 +694,30 @@ char *flags_string(char *buf, char *end, void *flags_ptr, const char *fmt)
 	const struct trace_print_flags *names;
 
 	switch (fmt[1]) {
+	/* struct page flags */
 	case 'p':
 		flags = *(unsigned long *)flags_ptr;
 		/* Remove zone id */
 		flags &= (1UL << NR_PAGEFLAGS) - 1;
 		names = pageflag_names;
 		break;
-/*
- * Only memory-manager has vma
- */
+
+	/* Lego specific: pte flags */
+	case 'e':
+		flags = *(unsigned long *)flags_ptr;
+		/* Remove PFN */
+		flags &= ~PHYSICAL_PAGE_MASK;
+		names = pteflag_names;
+		break;
+
+	/* Lego specific: pcache_meta bits */
+	case 'c':
+		flags = *(unsigned long *)flags_ptr;
+		flags &= (1UL << __NR_PCLBITS) - 1;
+		names = pcacheflag_names;
+		break;
+
+	/* In Lego, only memory-manager has vma */
 #ifdef CONFIG_COMP_MEMORY
 	case 'v':
 		flags = *(unsigned long *)flags_ptr;

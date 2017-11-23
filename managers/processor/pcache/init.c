@@ -16,7 +16,7 @@
 #include <lego/comp_processor.h>
 #include <asm/io.h>
 
-#include <processor/include/pcache.h>
+#include <processor/pcache.h>
 
 u64 pcache_registered_start;
 u64 pcache_registered_size;
@@ -112,7 +112,7 @@ static void init_pcache_meta_map(void)
 		memset(pcm, 0, sizeof(*pcm));
 
 		INIT_LIST_HEAD(&pcm->rmap);
-		atomic_set(&pcm->mapcount, 0);
+		pcache_mapcount_reset(pcm);
 	}
 }
 

@@ -17,7 +17,7 @@
 #include <lego/comp_processor.h>
 #include <asm/io.h>
 
-#include <processor/include/pcache.h>
+#include <processor/pcache.h>
 
 #ifdef CONFIG_DEBUG_PCACHE
 /* 4 msg/sec at most? */

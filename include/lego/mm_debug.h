@@ -16,6 +16,9 @@
 void dump_page(struct page *, const char *);
 extern const struct trace_print_flags pageflag_names[];
 
+void dump_pte(pte_t *, const char *);
+extern const struct trace_print_flags pteflag_names[];
+
 /*
  * MM Debug Related
  */

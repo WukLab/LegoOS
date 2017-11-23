@@ -20,6 +20,19 @@
 
 #include <asm/io.h>
 
-#include <processor/include/pcache.h>
+#include <processor/pcache.h>
 
 
+/**
+ * pcache_flush_one
+ * @pcm: pcache line to flush
+ *
+ * This function will flush one pcache line back
+ * to backing memory components. We only do the real
+ * flush work here. Other protection issues need to
+ * be taken care of before calling this function!
+ */
+int pcache_flush_one(struct pcache_meta *pcm)
+{
+	return 0;
+}

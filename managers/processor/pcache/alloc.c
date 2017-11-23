@@ -20,7 +20,7 @@
 
 #include <asm/io.h>
 
-#include <processor/include/pcache.h>
+#include <processor/pcache.h>
 
 #define WAIT_TABLE_BITS 8
 #define WAIT_TABLE_SIZE (1 << WAIT_TABLE_BITS)
@@ -145,23 +145,9 @@ static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 	BUG_ON(!PcacheLocked(pcm));
 	ClearPcacheValid(pcm);
 
+	pcache_wrprotect(pcm);
+	pcache_flush_one(pcm);
 	pcache_try_to_unmap(pcm);
-
-	/*
-	 * 1) make all ptes read-only
-	 */
-
-	/*
-	 * 2) flush back the cache line
-	 */
-
-	/*
-	 * 4) invalidate
-	 */
-
-	/*
-	 * 3) invalidate all ptes
-	 */
 
 	ret = 0;
 

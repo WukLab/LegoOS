@@ -298,8 +298,10 @@ bitmap and its derivatives such as cpumask and nodemask:
 
 	Passed by reference.
 
-Flags bitfields such as page flags, gfp_flags:
+Flags bitfields such as page flags, gfp_flags, pte flags, pcache flags:
 
+	%pGc	locked|allocated|valid|dirty
+	%pGe	present|writable|user
 	%pGp	referenced|uptodate|lru|active|private
 	%pGg	GFP_USER|GFP_DMA32|GFP_NOWARN
 	%pGv	read|exec|mayread|maywrite|mayexec|denywrite
