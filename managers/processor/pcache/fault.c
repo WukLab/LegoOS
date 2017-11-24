@@ -19,7 +19,7 @@
 
 #include <processor/pcache.h>
 
-#ifdef CONFIG_DEBUG_PCACHE
+#ifdef CONFIG_DEBUG_PCACHE_FILL
 /* 4 msg/sec at most? */
 static DEFINE_RATELIMIT_STATE(pcache_debug_rs, 1, 4);
 

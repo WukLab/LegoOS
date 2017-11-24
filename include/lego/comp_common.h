@@ -14,6 +14,8 @@
 #ifndef _LEGO_COMP_COMMON_H_
 #define _LEGO_COMP_COMMON_H_
 
+#include <processor/pcache.h>
+
 #define DEF_MEM_HOMENODE	CONFIG_DEFAULT_MEM_NODE
 #define STORAGE_NODE		CONFIG_DEFAULT_STORAGE_NODE
 
@@ -314,12 +316,12 @@ struct m2s_read_write_payload{
 	loff_t	offset;
 };
 
+/* P2M_LLC_FLUSH */
 struct p2m_flush_payload {
-	__u32 pid;
-	u32 llc_cacheline_size;
-	unsigned long __user flush_vaddr;
+	u32		pid;
+	unsigned long	user_va;
+	char		pcacheline[PCACHE_LINE_SIZE];
 };
-
-int handle_p2m_flush_single(void *, u64, struct common_header *);
+int handle_p2m_flush_one(struct p2m_flush_payload *, u64, struct common_header *);
 
 #endif /* _LEGO_COMP_COMMON_H_ */

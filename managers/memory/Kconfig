@@ -8,11 +8,12 @@ config COMP_MEMORY
 	  controller of Lego OS.
 
 if COMP_MEMORY
-
 menu "Memory DEBUG Options"
 config DEBUG_MEMORY_CORE
 	bool "Debug core.c"
 	default n
+	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
 	help
 	  Enable if you want to debug memory/core.c. Basically, to hava
 	  a detailed log about imcoming requests.
@@ -20,9 +21,10 @@ config DEBUG_MEMORY_CORE
 	  If unsure, say N.
 
 config DEBUG_HANDLE_PCACHE
-	bool "Debug handle L4-cache"
+	bool "Debug pcache handling"
 	default n
 	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
 	help
 	  Enable to have a detailed dump log of L4 cache subsystem.
 	  Mostly, it tells you the missing address and how it was handled
@@ -34,6 +36,7 @@ config DEBUG_VM_RB
 	bool "Debug VM red-black trees"
 	default n
 	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
 	help
 	  Enable VM red-black tree debugging information and extra validations.
 
@@ -43,6 +46,7 @@ config DEBUG_HANDLE_FORK
 	bool "Debug handle_fork.c"
 	default n
 	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
 	help
 	  Enable to have a detailed log of what memory-manager's fork handler has did.
 	  
@@ -52,6 +56,7 @@ config DEBUG_HANDLE_EXECVE
 	bool "Debug handle_execve.c"
 	default n
 	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
 	help
 	  Enable to have a detailed dump of mmap after execve() call.
 	  
@@ -61,6 +66,7 @@ config DEBUG_HANDLE_MMAP
 	bool "Debug handle_mmap.c"
 	default n
 	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
 	help
 	  Enable to debug mmap(), munmap(), brk() related syscalls.
 
@@ -70,6 +76,7 @@ config DEBUG_HANDLE_FILE
 	bool "Debug handle_file.c"
 	default n
 	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
 	help
 	  Enable to debug handle_file.c
 	  Handlers for read(), write() syscalls.
@@ -80,6 +87,7 @@ config DEBUG_M2S_READ_WRITE
 	bool "Debug m2s_read_write.c"
 	default n
 	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
 	help
 	  Enable to debug all interactions between memory and storage
 	  components. Mostly, m2s_read_write.c

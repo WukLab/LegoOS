@@ -17,22 +17,69 @@
 #include <lego/syscalls.h>
 #include <lego/jiffies.h>
 #include <lego/comp_processor.h>
-
-#include <asm/io.h>
-
 #include <processor/pcache.h>
 
+static int __pcache_flush_one(struct pcache_meta *pcm,
+			      struct pcache_rmap *rmap, void *arg)
+{
+	int *nr_flushed = arg;
+	int ret_len, reply;
+	struct task_struct *tsk = rmap->owner;
+	unsigned long user_va = rmap->address;
+	void *pcache_kva;
+	struct p2m_flush_payload *payload;
+
+	payload = kmalloc(sizeof(*payload), GFP_KERNEL);
+	if (!payload)
+		return PCACHE_RMAP_FAILED;
+
+	payload->pid = tsk->tgid;
+	payload->user_va = user_va;
+
+	pcache_kva = pcache_meta_to_kva(pcm);
+	memcpy(payload->pcacheline, pcache_kva, PCACHE_LINE_SIZE);
+
+	ret_len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_FLUSH,
+			payload, sizeof(*payload), &reply, sizeof(reply),
+			false, DEF_NET_TIMEOUT);
+
+	kfree(payload);
+
+	if (unlikely(ret_len < sizeof(reply)))
+		return PCACHE_RMAP_FAILED;
+
+	if (unlikely(reply != RET_OKAY)) {
+		pr_err("%s(): %s\n", FUNC, ret_to_string(reply));
+		return PCACHE_RMAP_FAILED;
+	}
+
+	(*nr_flushed)++;
+	return PCACHE_RMAP_AGAIN;
+}
 
 /**
  * pcache_flush_one
  * @pcm: pcache line to flush
  *
- * This function will flush one pcache line back
- * to backing memory components. We only do the real
- * flush work here. Other protection issues need to
- * be taken care of before calling this function!
+ * This function will flush one pcache line back to backing memory components.
+ * During flush, @pcm is locked and marked as Writeback. If flush involes
+ * multiple memory components, we need to take care of.
+ * @pcm must be locked on entry.
  */
 int pcache_flush_one(struct pcache_meta *pcm)
 {
+	int nr_flushed;
+	struct rmap_walk_control rwc = {
+		.arg = &nr_flushed,
+		.rmap_one = __pcache_flush_one,
+	};
+
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
+	PCACHE_BUG_ON_PCM(!PcacheWriteback(pcm), pcm);
+
+	SetPcacheWriteback(pcm);
+	rmap_walk(pcm, &rwc);
+	ClearPcacheWriteback(pcm);
+
 	return 0;
 }

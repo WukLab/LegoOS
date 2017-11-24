@@ -20,25 +20,34 @@
 #include <asm/io.h>
 #include <asm/tlbflush.h>
 
+/**
+ * pcache_add_rmap
+ * @pcm: pcache line in question
+ * @page_table: the pointer to pte
+ * @address: user virtual address mapped to this pcm
+ *
+ * This function add a reverse mapping to @pcm.
+ * @pcm must NOT be locked on entry.
+ */
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 		    unsigned long address)
 {
 	struct pcache_rmap *rmap, *pos;
-	struct pcache_set *pset;
+	int ret;
+
+	PCACHE_BUG_ON_PCM(PcacheLocked(pcm), pcm);
+
+	lock_pcache(pcm);
 
 	rmap = kmalloc(sizeof(*rmap), GFP_KERNEL);
-	if (!rmap)
-		return -ENOMEM;
+	if (!rmap) {
+		ret = -ENOMEM;
+		goto out;
+	}
 	rmap->page_table = page_table;
 	rmap->address = address;
 	rmap->owner = current;
 
-	/*
-	 * Use the lock of pcache set to protect
-	 * all ways rmap operations:
-	 */
-	pset = pcache_meta_to_pcache_set(pcm);
-	spin_lock(&pset->lock);
 	if (likely(list_empty(&pcm->rmap)))
 		goto add;
 
@@ -46,10 +55,12 @@ int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 		BUG_ON(pos->page_table == page_table);
 
 add:
+	ret = 0;
 	list_add(&rmap->next, &pcm->rmap);
 	atomic_inc(&pcm->mapcount);
-	spin_unlock(&pset->lock);
-	return 0;
+out:
+	unlock_pcache(pcm);
+	return ret;
 }
 
 /*
@@ -113,21 +124,6 @@ rmap_get_checked_pte(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 	return ptep;
 }
 
-static inline void
-pcache_paronoid_unmap_check(pte_t pte, struct pcache_meta *pcm,
-			    struct pcache_rmap *rmap)
-{
-	unsigned long pcm_pfn, pgtable_pfn;
-
-	pcm_pfn = pcache_meta_to_pfn(pcm);
-	pgtable_pfn = pte_pfn(pte);
-	if (unlikely(pcm_pfn != pgtable_pfn)) {
-		pr_err("owner: %u pcm_pfn: %#lx, pte_pfn: %#lx\n",
-			rmap->owner->pid, pcm_pfn, pgtable_pfn);
-		BUG();
-	}
-}
-
 static void dump_pcache_rmap(struct pcache_rmap *rmap)
 {
 	unsigned long va = rmap->address;
@@ -152,9 +148,6 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 	dump_pcache_rmap(rmap);
 
 	pteval = ptep_get_and_clear(0, pte);
-
-	pcache_paronoid_unmap_check(pteval, pcm, rmap);
-
 	if (pte_present(pteval))
 		flush_tlb_mm_range(rmap->owner->mm,
 				   rmap->address,
@@ -177,8 +170,9 @@ static int pcache_mapcount_is_zero(struct pcache_meta *pcm)
  * pcache_try_to_unmap
  * @pcm: the pcache to get unmapped
  *
- * Tries to remove all the page table entries which are mapping this
- * pcache, used in the pageout path.
+ * Tries to remove all the page table entries which
+ * are mapping this pcache, used in the pageout path.
+ * @pcm must be locked on entry.
  *
  * Return:
  *	PCACHE_RMAP_SUCCEED	- we succeeded in removing all mappings
@@ -187,11 +181,12 @@ static int pcache_mapcount_is_zero(struct pcache_meta *pcm)
 int pcache_try_to_unmap(struct pcache_meta *pcm)
 {
 	int ret;
-
 	struct rmap_walk_control rwc = {
 		.rmap_one = pcache_try_to_unmap_one,
 		.done = pcache_mapcount_is_zero,
 	};
+
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 
 	dump_pcache_meta(pcm, NULL);
 	ret = rmap_walk(pcm, &rwc);
@@ -252,6 +247,7 @@ out:
  *
  * This function will write-protect PTEs mapped to @pcm.
  * Return the number of PTEs that have been marked read-only.
+ * @pcm must be locked on entry.
  */
 int pcache_wrprotect(struct pcache_meta *pcm)
 {
@@ -261,7 +257,7 @@ int pcache_wrprotect(struct pcache_meta *pcm)
 		.rmap_one = pcache_wrprotect_one,
 	};
 
-	BUG_ON(!PcacheLocked(pcm));
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 
 	if (!pcache_mapped(pcm))
 		return 0;
@@ -272,16 +268,17 @@ int pcache_wrprotect(struct pcache_meta *pcm)
 	return protected;
 }
 
+/*
+ * Walk through pcache line's reverse mapping.
+ * @pcm must be locked on entry.
+ */
 int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc)
 {
 	struct pcache_rmap *rmap, *keeper;
-	struct pcache_set *pset;
 	int ret = PCACHE_RMAP_AGAIN;
 
-	pset = pcache_meta_to_pcache_set(pcm);
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 
-	/* rmap addition is protected by the pset lock */
-	spin_lock(&pset->lock);
 	list_for_each_entry_safe(rmap, keeper, &pcm->rmap, next) {
 		ret = rwc->rmap_one(pcm, rmap, rwc->arg);
 		if (ret != PCACHE_RMAP_AGAIN)
@@ -290,7 +287,6 @@ int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc)
 		if (rwc->done && rwc->done(pcm))
 			break;
 	}
-	spin_unlock(&pset->lock);
 
 	return ret;
 }

@@ -15,6 +15,7 @@
 #include <lego/spinlock.h>
 
 #include <processor/pcache_types.h>
+#include <processor/pcache_debug.h>
 
 extern u64 pcache_registered_start;
 extern u64 pcache_registered_size;
@@ -340,15 +341,12 @@ struct rmap_walk_control {
 enum pcache_rmap_status {
 	PCACHE_RMAP_SUCCEED,
 	PCACHE_RMAP_AGAIN,
+	PCACHE_RMAP_FAILED,
 };
 
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table, unsigned long address);
 int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
 int pcache_try_to_unmap(struct pcache_meta *pcm);
 int pcache_wrprotect(struct pcache_meta *pcm);
-
-/* debug */
-void dump_pcache_meta(struct pcache_meta *pcm, const char *reason);
-extern const struct trace_print_flags pcacheflag_names[];
 
 #endif /* _PROCESSOR_PCACHE_H_ */

@@ -17,10 +17,9 @@
 #include <lego/syscalls.h>
 #include <lego/jiffies.h>
 #include <lego/comp_processor.h>
+#include <processor/pcache.h>
 
 #include <asm/io.h>
-
-#include <processor/pcache.h>
 
 #define WAIT_TABLE_BITS 8
 #define WAIT_TABLE_SIZE (1 << WAIT_TABLE_BITS)
@@ -87,7 +86,13 @@ void __lock_pcache(struct pcache_meta *pcm)
 			TASK_UNINTERRUPTIBLE);
 }
 
-/* Pcache is locked upon return */
+/**
+ * pcache_evict_find_line
+ * @pset: the pcache set in question
+ *
+ * This function will find a line to evict within a set.
+ * The returned pcache line must be locked.
+ */
 static struct pcache_meta *
 pcache_evict_find_line(struct pcache_set *pset)
 {
@@ -111,7 +116,6 @@ pcache_evict_find_line(struct pcache_set *pset)
 	}
 	spin_unlock(&pset->lock);
 
-	pr_info("%s(): %p %p\n", FUNC, pcm, pcache_meta_to_pa(pcm));
 	if (unlikely(way == PCACHE_ASSOCIATIVITY))
 		pcm = NULL;
 	return pcm;
@@ -142,8 +146,7 @@ static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 {
 	int ret;
 
-	BUG_ON(!PcacheLocked(pcm));
-	ClearPcacheValid(pcm);
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 
 	pcache_wrprotect(pcm);
 	pcache_flush_one(pcm);
@@ -151,6 +154,7 @@ static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 
 	ret = 0;
 
+	ClearPcacheValid(pcm);
 	unlock_pcache(pcm);
 	pcache_free(pcm);
 	return ret;
