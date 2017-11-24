@@ -53,8 +53,8 @@ static int __pcache_flush_one(struct pcache_meta *pcm,
 			payload, sizeof(*payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
 
-	clflush_debug("O tgid:%u user_va:%#lx pcache_kva:%p reply:%d",
-		payload->pid, payload->user_va, pcache_kva, reply);
+	clflush_debug("O tgid:%u user_va:%#lx pcache_kva:%p reply:%d %s",
+		payload->pid, payload->user_va, pcache_kva, reply, perror(reply));
 
 	kfree(payload);
 

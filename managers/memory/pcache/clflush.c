@@ -62,7 +62,11 @@ int handle_p2m_flush_one(struct p2m_flush_payload *payload, u64 desc,
 	}
 
 	reply = 0;
+
 out_reply:
+	clflush_debug("O nid:%u tgid:%u user_va:%p reply: %d %s",
+		hdr->src_nid, pid, user_va, reply, perror(reply));
+
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 	return 0;
 }
