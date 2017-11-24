@@ -22,6 +22,20 @@
 
 #include "internal.h"
 
+#ifdef CONFIG_DEBUG_HANDLE_PCACHE_FILL
+static DEFINE_RATELIMIT_STATE(pcache_debug_rs,
+	DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
+
+#define pcache_debug(fmt, ...)						\
+({									\
+	if (__ratelimit(&pcache_debug_rs))				\
+		pr_debug("%s() cpu%2d " fmt "\n",			\
+			__func__, smp_processor_id(), __VA_ARGS__);	\
+})
+#else
+static inline void pcache_debug(const char *fmt, ...) { }
+#endif
+
 /*
  * Processor manager rely on the length of replied
  * message to know if us succeed or failed.

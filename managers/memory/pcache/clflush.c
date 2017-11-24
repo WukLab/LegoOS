@@ -22,6 +22,14 @@
 
 #include "internal.h"
 
+#ifdef CONFIG_DEBUG_HANDLE_PCACHE_FLUSH
+#define clflush_debug(fmt, ...)					\
+	pr_debug("%s() cpu%2d " fmt "\n",			\
+		__func__, smp_processor_id(), __VA_ARGS__);
+#else
+static inline void clflush_debug(const char *fmt, ...) { }
+#endif
+
 int handle_p2m_flush_one(struct p2m_flush_payload *payload, u64 desc,
 			 struct common_header *hdr)
 {
@@ -33,7 +41,7 @@ int handle_p2m_flush_one(struct p2m_flush_payload *payload, u64 desc,
 	pid = payload->pid;
 	user_va = payload->user_va;
 
-	pcache_debug("I nid:%u tgid:%u user_va:%#lx",
+	clflush_debug("I nid:%u tgid:%u user_va:%#lx",
 		hdr->src_nid, pid, user_va);
 
 	tsk = find_lego_task_by_pid(hdr->src_nid, pid);

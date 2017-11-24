@@ -19,6 +19,13 @@
 #include <lego/comp_processor.h>
 #include <processor/pcache.h>
 
+#ifdef CONFIG_DEBUG_PCACHE_FILL
+#define clflush_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void clflush_debug(const char *fmt, ...) { }
+#endif
+
 static int __pcache_flush_one(struct pcache_meta *pcm,
 			      struct pcache_rmap *rmap, void *arg)
 {
@@ -39,9 +46,15 @@ static int __pcache_flush_one(struct pcache_meta *pcm,
 	pcache_kva = pcache_meta_to_kva(pcm);
 	memcpy(payload->pcacheline, pcache_kva, PCACHE_LINE_SIZE);
 
+	clflush_debug("I tgid:%u user_va:%#lx pcache_kva:%p",
+		payload->pid, payload->user_va, pcache_kva);
+
 	ret_len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_FLUSH,
 			payload, sizeof(*payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
+
+	clflush_debug("O tgid:%u user_va:%#lx pcache_kva:%p reply:%d",
+		payload->pid, payload->user_va, pcache_kva, reply);
 
 	kfree(payload);
 
@@ -75,7 +88,7 @@ int pcache_flush_one(struct pcache_meta *pcm)
 	};
 
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
-	PCACHE_BUG_ON_PCM(!PcacheWriteback(pcm), pcm);
+	PCACHE_BUG_ON_PCM(PcacheWriteback(pcm), pcm);
 
 	SetPcacheWriteback(pcm);
 	rmap_walk(pcm, &rwc);

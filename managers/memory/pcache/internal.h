@@ -14,20 +14,6 @@
 #ifndef _MEMORY_PCACHE_INTERNAL_H_
 #define _MEMORY_PCACHE_INTERNAL_H_
 
-#ifdef CONFIG_DEBUG_HANDLE_PCACHE
-static DEFINE_RATELIMIT_STATE(pcache_debug_rs,
-	DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
-
-#define pcache_debug(fmt, ...)						\
-({									\
-	if (__ratelimit(&pcache_debug_rs))				\
-		pr_debug("%s() cpu%2d " fmt "\n",			\
-			__func__, smp_processor_id(), __VA_ARGS__);	\
-})
-#else
-static inline void pcache_debug(const char *fmt, ...) { }
-#endif
-
 void do_mmap_prefetch(struct lego_task_struct *p, u64 vaddr,
 		      u32 flags, u32 nr_pages);
 
