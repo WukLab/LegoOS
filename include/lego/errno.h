@@ -161,4 +161,25 @@
 
 #define MAX_ERRNO	4095
 
+#ifndef __ASSEMBLY__
+static inline char *perror(int errno)
+{
+	switch (errno) {
+	case 0:			return "OKAY";
+	case -ENOENT:		return "ENOENT:No such file or directory";
+	case -ESRCH:		return "ESRCH:No such process";
+	case -EINTR:		return "EINTR:Interrupted system call";
+	case -EPERM:		return "EPERM:Operation not permitted";
+	case -EAGAIN:		return "EAGAIN:Try again";
+	case -ENOMEM:		return "ENOMEM:Out of memory";
+	case -EFAULT:		return "EFAULT:bad address";
+	case -EBUSY:		return "EBUSY:resource busy";
+	case -EEXIST:		return "EEXIST:already exist";
+	case -EINVAL:		return "EINVAL:Invalid argument";
+	case -ENOSYS:		return "ENOSYS:invalid system call number";
+	}
+	return "Undefined errno (check and add)";
+}
+#endif
+
 #endif /* _LEGO_ERRNO_H_ */

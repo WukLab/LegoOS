@@ -61,8 +61,8 @@ static int __pcache_flush_one(struct pcache_meta *pcm,
 	if (unlikely(ret_len < sizeof(reply)))
 		return PCACHE_RMAP_FAILED;
 
-	if (unlikely(reply != RET_OKAY)) {
-		pr_err("%s(): %s\n", FUNC, ret_to_string(reply));
+	if (unlikely(reply)) {
+		pr_err("%s(): %s\n", FUNC, perror(reply));
 		return PCACHE_RMAP_FAILED;
 	}
 

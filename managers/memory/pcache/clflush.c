@@ -35,22 +35,33 @@ int handle_p2m_flush_one(struct p2m_flush_payload *payload, u64 desc,
 {
 	int reply;
 	pid_t pid;
-	unsigned long user_va;
+	void *user_va;
 	struct lego_task_struct *tsk;
 
 	pid = payload->pid;
-	user_va = payload->user_va;
+	user_va = (void *)payload->user_va;
 
-	clflush_debug("I nid:%u tgid:%u user_va:%#lx",
+	clflush_debug("I nid:%u tgid:%u user_va:%p",
 		hdr->src_nid, pid, user_va);
 
+	if (offset_in_page(user_va)) {
+		reply = -EINVAL;
+		goto out_reply;
+	}
+
 	tsk = find_lego_task_by_pid(hdr->src_nid, pid);
-	if (unlikely(!tsk)) {
+	if (!tsk) {
 		reply = -ESRCH;
 		goto out_reply;
 	}
 
-	reply = RET_OKAY;
+	if (!lego_copy_to_user(tsk, user_va, payload->pcacheline,
+				PCACHE_LINE_SIZE)) {
+		reply = -EFAULT;
+		goto out_reply;
+	}
+
+	reply = 0;
 out_reply:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 	return 0;
