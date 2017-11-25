@@ -10,10 +10,12 @@
 #ifndef _PROCESSOR_PCACHE_DEBUG_H_
 #define _PROCESSOR_PCACHE_DEBUG_H_
 
+#include <lego/types.h>
 #include <processor/pcache_types.h>
 
-/* debug */
+__wsum pcache_line_csum(struct pcache_meta *pcm);
 void dump_pcache_meta(struct pcache_meta *pcm, const char *reason);
+void dump_pcache_line(struct pcache_meta *pcm, const char *reason);
 extern const struct trace_print_flags pcacheflag_names[];
 
 #ifdef CONFIG_DEBUG_PCACHE

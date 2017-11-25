@@ -41,11 +41,12 @@ static int __pcache_flush_one(struct pcache_meta *pcm,
 		return PCACHE_RMAP_FAILED;
 
 	payload->pid = tsk->tgid;
-	payload->user_va = user_va;
+	payload->user_va = user_va & PCACHE_LINE_MASK;
 
 	pcache_kva = pcache_meta_to_kva(pcm);
 	memcpy(payload->pcacheline, pcache_kva, PCACHE_LINE_SIZE);
 
+	dump_pcache_line(pcm, NULL);
 	clflush_debug("I tgid:%u user_va:%#lx pcache_kva:%p",
 		payload->pid, payload->user_va, pcache_kva);
 

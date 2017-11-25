@@ -9,6 +9,7 @@
 
 #include <lego/mm.h>
 #include <lego/kernel.h>
+#include <lego/checksum.h>
 #include <lego/tracepoint.h>
 #include <processor/pcache.h>
 
@@ -24,10 +25,56 @@ const struct trace_print_flags pcacheflag_names[] = {
 	{0, NULL}
 };
 
+/**
+ * dump_pcache_meta
+ * @pcm: pcache line in question
+ * @reason: why you dump
+ *
+ * Dump current state of a pcache line, including mapcount, status.
+ */
 void dump_pcache_meta(struct pcache_meta *pcm, const char *reason)
 {
 	pr_debug("pcache:%p mapcount:%d flags:(%pGc)\n",
 		pcm, atomic_read(&pcm->mapcount), &pcm->bits);
 	if (reason)
 		pr_debug("pcache dumped because: %s\n", reason);
+}
+
+/**
+ * pcache_line_csum
+ * @pcm: pcache line in question
+ *
+ * Get a 32-bit checksum of the cache line.
+ */
+__wsum pcache_line_csum(struct pcache_meta *pcm)
+{
+	void *pcacheline;
+
+	pcacheline = pcache_meta_to_kva(pcm);
+	return csum_partial(pcacheline, PCACHE_LINE_SIZE, 0);
+}
+
+/**
+ * dump_pcache_line
+ * @pcm: pcache line in question
+ * @reason: why you dump
+ *
+ * Dump @pcm's stata and all its cache line content. Checksum of
+ * this cache line is also printed as prefix.
+ *
+ * Be careful when you use this function. It will print a lot
+ * useless messages. If you just want to know the integrity of the
+ * cache line, compare checsum might be a better idea.
+ */
+void dump_pcache_line(struct pcache_meta *pcm, const char *reason)
+{
+	__wsum csum;
+	char csum_s[16];
+
+	csum = pcache_line_csum(pcm);
+	sprintf(csum_s, "csum(%#x)-", csum);
+
+	dump_pcache_meta(pcm, reason);
+	print_hex_dump_bytes(csum_s, DUMP_PREFIX_OFFSET,
+		pcache_meta_to_kva(pcm), PCACHE_LINE_SIZE);
 }
