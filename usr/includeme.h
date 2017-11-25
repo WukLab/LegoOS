@@ -12,6 +12,9 @@
 #include <string.h>
 #include <stdarg.h>
 #include <linux/unistd.h>
+#include <assert.h>
+
+#define BUG_ON(cond)	assert(!(cond))
 
 #define PAGE_SIZE 4096
 #define PAGE_MASK (~(PAGE_SIZE - 1))

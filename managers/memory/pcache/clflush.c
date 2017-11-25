@@ -16,6 +16,7 @@
 #include <lego/ratelimit.h>
 #include <lego/comp_memory.h>
 #include <lego/comp_storage.h>
+#include <lego/checksum.h>
 #include <memory/include/vm.h>
 #include <memory/include/pid.h>
 #include <processor/pcache.h>
@@ -29,6 +30,24 @@
 #else
 static inline void clflush_debug(const char *fmt, ...) { }
 #endif
+
+static void verify_checksum(struct lego_task_struct *tsk, void *user_va)
+{
+	void *buf;
+	__wsum csum;
+
+	buf = kmalloc(PCACHE_LINE_SIZE, GFP_KERNEL);
+	if (!buf)
+		return;
+
+	if (!lego_copy_from_user(tsk, buf, user_va, PCACHE_LINE_SIZE))
+		return;
+
+	csum = csum_partial(buf, PCACHE_LINE_SIZE, 0);
+	clflush_debug("  csum of updated vm page: (%#x)", csum);
+
+	kfree(buf);
+}
 
 int handle_p2m_flush_one(struct p2m_flush_payload *payload, u64 desc,
 			 struct common_header *hdr)
@@ -61,6 +80,7 @@ int handle_p2m_flush_one(struct p2m_flush_payload *payload, u64 desc,
 		goto out_reply;
 	}
 
+	verify_checksum(tsk, user_va);
 	reply = 0;
 
 out_reply:
