@@ -15,19 +15,14 @@
 #include <lego/kernel.h>
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
+#include <lego/random.h>
 #include <lego/jiffies.h>
 #include <lego/comp_processor.h>
 #include <processor/pcache.h>
 
-/**
- * pcache_evict_find_line
- * @pset: the pcache set in question
- *
- * This function will find a line to evict within a set.
- * The returned pcache line MUST be locked.
- */
+#ifdef CONFIG_PCACHE_EVICT_RANDOM
 static struct pcache_meta *
-pcache_evict_find_line(struct pcache_set *pset)
+pcache_evict_find_line_random(struct pcache_set *pset)
 {
 	struct pcache_meta *pcm;
 	int way;
@@ -52,6 +47,42 @@ pcache_evict_find_line(struct pcache_set *pset)
 	if (unlikely(way == PCACHE_ASSOCIATIVITY))
 		pcm = NULL;
 	return pcm;
+}
+#endif
+
+#ifdef CONFIG_PCACHE_EVICT_FIFO
+static struct pcache_meta *
+pcache_evict_find_line_fifo(struct pcache_set *pset)
+{
+	BUG();
+}
+#endif
+
+#ifdef CONFIG_PCACHE_EVICT_LRU
+static struct pcache_meta *
+pcache_evict_find_line_lru(struct pcache_set *pset)
+{
+	BUG();
+}
+#endif
+
+/**
+ * pcache_evict_find_line
+ * @pset: the pcache set in question
+ *
+ * This function will find a line to evict within a set.
+ * The returned pcache line MUST be locked.
+ */
+static inline struct pcache_meta *
+pcache_evict_find_line(struct pcache_set *pset)
+{
+#ifdef CONFIG_PCACHE_EVICT_RANDOM
+	return pcache_evict_find_line_random(pset);
+#elif defined(CONFIG_PCACHE_EVICT_FIFO)
+	return pcache_evict_find_line_fifo(pset);
+#elif defined(CONFIG_PCACHE_EVICT_LRU)
+	return pcache_evict_find_line_lru(pset);
+#endif
 }
 
 /*
