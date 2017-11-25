@@ -7,3 +7,4 @@ obj-y += rwsem.o
 obj-y += memset_64.o
 obj-y += memcpy_64.o
 obj-y += memmove_64.o
+obj-y += csum-partial_64.o

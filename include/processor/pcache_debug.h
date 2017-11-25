@@ -34,7 +34,7 @@ do {									\
 #define PCACHE_BUG_ON(cond)		do { } while (0)
 #define PCACHE_WARN_ON(cond)		do { } while (0)
 #define PCACHE_WARN(cond, format...)	do { } while (0)
-#define PCACHE_BUG_ON_PCM(cond)		do { } while (0)
+#define PCACHE_BUG_ON_PCM(cond, pcm)	do { } while (0)
 #endif /* CONFIG_DEBUG_PCACHE */
 
 #endif /* _PROCESSOR_PCACHE_DEBUG_H_ */
