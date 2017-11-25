@@ -174,7 +174,6 @@ int pcache_try_to_unmap(struct pcache_meta *pcm)
 
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 
-	dump_pcache_meta(pcm, NULL);
 	ret = rmap_walk(pcm, &rwc);
 	if (!pcache_mapcount(pcm))
 		ret = PCACHE_RMAP_SUCCEED;

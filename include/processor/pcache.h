@@ -210,6 +210,18 @@ static inline struct pcache_meta *pa_to_pcache_meta(unsigned long address)
 	return NULL;
 }
 
+static inline struct pcache_meta *pfn_to_pcache_meta(unsigned long pfn)
+{
+	unsigned long pa = pfn << PAGE_SHIFT;
+	return pa_to_pcache_meta(pa);
+}
+
+static inline struct pcache_meta *pte_to_pcache_meta(pte_t pte)
+{
+	unsigned long pa = pte_val(pte) & PTE_PFN_MASK;
+	return pa_to_pcache_meta(pa);
+}
+
 /**
  * kva_to_pcache_meta
  * @address: kernel virtual address of the pcache data line
