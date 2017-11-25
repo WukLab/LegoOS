@@ -8,3 +8,4 @@ obj-y += alloc.o
 obj-y += clflush.o
 obj-y += rmap.o
 obj-y += debug.o
+obj-y += evict.o

@@ -19,7 +19,7 @@
 #include <lego/comp_processor.h>
 #include <processor/pcache.h>
 
-#ifdef CONFIG_DEBUG_PCACHE_FILL
+#ifdef CONFIG_DEBUG_PCACHE_FLUSH
 #define clflush_debug(fmt, ...)	\
 	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
 #else
@@ -46,7 +46,6 @@ static int __pcache_flush_one(struct pcache_meta *pcm,
 	pcache_kva = pcache_meta_to_kva(pcm);
 	memcpy(payload->pcacheline, pcache_kva, PCACHE_LINE_SIZE);
 
-	dump_pcache_line(pcm, NULL);
 	clflush_debug("I tgid:%u user_va:%#lx pcache_kva:%p",
 		payload->pid, payload->user_va, pcache_kva);
 

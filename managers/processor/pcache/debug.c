@@ -8,6 +8,7 @@
  */
 
 #include <lego/mm.h>
+#include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/checksum.h>
 #include <lego/tracepoint.h>
@@ -69,12 +70,27 @@ __wsum pcache_line_csum(struct pcache_meta *pcm)
 void dump_pcache_line(struct pcache_meta *pcm, const char *reason)
 {
 	__wsum csum;
-	char csum_s[16];
+	char csum_s[64];
 
 	csum = pcache_line_csum(pcm);
-	sprintf(csum_s, "csum(%#x)-", csum);
+	sprintf(csum_s, "csum(%#x)--", csum);
 
 	dump_pcache_meta(pcm, reason);
 	print_hex_dump_bytes(csum_s, DUMP_PREFIX_OFFSET,
 		pcache_meta_to_kva(pcm), PCACHE_LINE_SIZE);
+}
+
+/**
+ * dump_pcache_rmap
+ * @rmap: the reverse map in question
+ *
+ * Dump a pcache_rmap, including its owner, user va and pte.
+ */
+void dump_pcache_rmap(struct pcache_rmap *rmap)
+{
+	pte_t *ptep = rmap->page_table;
+
+	pr_debug("rmap:%p owner-pid:%u user_va:%#lx ptep:%p\n",
+		rmap, rmap->owner->pid, rmap->address, ptep);
+	dump_pte(ptep, NULL);
 }

@@ -325,6 +325,9 @@ void pcache_free(struct pcache_meta *);
 /* clflush */
 int pcache_flush_one(struct pcache_meta *pcm);
 
+/* eviction */
+int pcache_evict_line(struct pcache_set *pset, unsigned long address);
+
 /*
  * rmap_walk_control: To control rmap traversing for specific needs
  *

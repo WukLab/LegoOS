@@ -19,7 +19,12 @@
 #include <lego/comp_processor.h>
 #include <processor/pcache.h>
 
-#include <asm/io.h>
+/**
+ * sysctl_pcache_alloc_timeout_sec
+ *
+ * The maximum time a pcache_alloc can take due to slowpath eviction.
+ */
+unsigned long sysctl_pcache_alloc_timeout_sec __read_mostly = 10;
 
 #define WAIT_TABLE_BITS 8
 #define WAIT_TABLE_SIZE (1 << WAIT_TABLE_BITS)
@@ -86,106 +91,15 @@ void __lock_pcache(struct pcache_meta *pcm)
 			TASK_UNINTERRUPTIBLE);
 }
 
-/**
- * pcache_evict_find_line
- * @pset: the pcache set in question
- *
- * This function will find a line to evict within a set.
- * The returned pcache line must be locked.
- */
-static struct pcache_meta *
-pcache_evict_find_line(struct pcache_set *pset)
-{
-	struct pcache_meta *pcm;
-	int way;
-
-	spin_lock(&pset->lock);
-	for_each_way_set(pcm, pset, way) {
-		/*
-		 * Must be lines that have these bits set:
-		 *	Allocated && Valid
-		 * Also it should not be locked or during Writeback
-		 */
-		if (PcacheAllocated(pcm) && PcacheValid(pcm) &&
-		    !PcacheWriteback(pcm)) {
-			if (!trylock_pcache(pcm))
-				continue;
-			else
-				break;
-		}
-	}
-	spin_unlock(&pset->lock);
-
-	if (unlikely(way == PCACHE_ASSOCIATIVITY))
-		pcm = NULL;
-	return pcm;
-}
-
-/*
- * @pcm must be locked when called.
- * Only dirty cachelines need to be flushed back to memory component.
- * Return 0 on success, otherwise return negative error values.
- *
- * Note while developing:
- * 1) need to invalidate pte and flush dirty page back to memory
- * 2) If we invalidate pte first, other threads may try to read/write at the same time,
- *    which means a pgfault will happen right after invalidation. The other thread will
- *    find its pte empty, and try to allocate a new cacheline and then fetch from remote.
- *    Meanwhile, this function may still has NOT finished flushing back the dirty page.
- *    Then this is not doable.
- * 3) If we flush first, and do not change the PTE. Then other thread may write to this page
- *    concurrently, then the page flushed back is broken.
- *    What if we a) make pte read-only, b) flush, c) invalidate?
- *    Then if a thread write to the page while we are in the middle of b) flush, then that thread
- *    will have a page fault. It will be able to find the pte, and corresponding pa/pcm. Then
- *    it can do lock_pcache(), it will be put to sleep. We wake them (may have N threads) after
- *    we finish c) invalidate.
- *    Sounds doable.
- */
-static int __pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
-{
-	int ret;
-
-	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
-
-	pcache_wrprotect(pcm);
-	pcache_flush_one(pcm);
-	pcache_try_to_unmap(pcm);
-
-	ret = 0;
-
-	ClearPcacheValid(pcm);
-	unlock_pcache(pcm);
-	pcache_free(pcm);
-	return ret;
-}
-
-/* Return 0 if a line has been evicted, otherwise -1 */
-static int pcache_evict_line(struct pcache_set *pset, unsigned long address)
-{
-	struct pcache_meta *pcm;
-	int ret;
-
-	pr_info("%s:%d, address: %#lx\n", FUNC, LINE, address);
-	pcm = pcache_evict_find_line(pset);
-	if (unlikely(!pcm))
-		return -1;
-
-	ret = __pcache_evict_line(pset, pcm);
-	if (unlikely(ret))
-		return -1;
-	return 0;
-}
-
 static inline struct pcache_meta *
-__pcache_alloc_from_set(struct pcache_set *pset)
+pcache_alloc_fastpath(struct pcache_set *pset)
 {
 	int way;
 	struct pcache_meta *pcm;
 
 	spin_lock(&pset->lock);
 	for_each_way_set(pcm, pset, way) {
-		if (!TestSetPcacheAllocated(pcm)) {
+		if (likely(!TestSetPcacheAllocated(pcm))) {
 			spin_unlock(&pset->lock);
 			return pcm;
 		}
@@ -194,19 +108,13 @@ __pcache_alloc_from_set(struct pcache_set *pset)
 	return NULL;
 }
 
-/**
- * sysctl_pcache_alloc_timeout_sec
- *
- * The maximum time a pcache_alloc can take due to slowpath eviction.
- */
-unsigned long sysctl_pcache_alloc_timeout_sec __read_mostly = 10;
-
 /*
  * Slowpath: find line to evict and initalize the eviction process,
- * if eviction succeed, return the just available line.
+ * if eviction succeed, try fastpath again. We do have a time limit
+ * on this function to avoid livelock.
  */
 static struct pcache_meta *
-__pcache_alloc_slowpath(struct pcache_set *pset, unsigned long address)
+pcache_alloc_slowpath(struct pcache_set *pset, unsigned long address)
 {
 	struct pcache_meta *pcm;
 	int ret;
@@ -217,13 +125,15 @@ retry:
 	if (unlikely(ret))
 		return NULL;
 
-	if (time_after(jiffies, alloc_start + sysctl_pcache_alloc_timeout_sec * HZ)) {
+	/* Do we still have time? */
+	if (time_after(jiffies,
+		       alloc_start + sysctl_pcache_alloc_timeout_sec * HZ)) {
 		WARN(1, "Abort pcache alloc (%ums) pid:%u, addr:%#lx",
 			jiffies_to_msecs(jiffies - alloc_start), current->pid, address);
 		return NULL;
 	}
 
-	pcm = __pcache_alloc_from_set(pset);
+	pcm = pcache_alloc_fastpath(pset);
 	if (unlikely(!pcm))
 		goto retry;
 	return pcm;
@@ -243,11 +153,14 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 	struct pcache_meta *pcm;
 
 	pset = user_vaddr_to_pcache_set(address);
-	pcm = __pcache_alloc_from_set(pset);
+
+	/* Fastpath: try to allocate one directly */
+	pcm = pcache_alloc_fastpath(pset);
 	if (likely(pcm))
 		goto out;
 
-	pcm = __pcache_alloc_slowpath(pset, address);
+	/* Slowpath: fallback and try to evict one */
+	pcm = pcache_alloc_slowpath(pset, address);
 	if (likely(pcm))
 		goto out;
 	return NULL;
