@@ -2,6 +2,8 @@
 
 #include <uapi/processor/pcache.h>
 
+struct pcache_stat pstat;
+
 /* Fill page with random number and return checksum */
 static unsigned int page_fill_random(int *ptr)
 {
@@ -54,8 +56,19 @@ static int test_set_conflict(void)
 	}
 }
 
+void print_pstat(struct pcache_stat *pstat)
+{
+	printf("%lu-way nr_cachelines: %lu nr_cachesets: %lu "
+		"stride: %#lx line_size: %#lx\n",
+		pstat->associativity,
+		pstat->nr_cachelines, pstat->nr_cachesets,
+		pstat->way_stride, pstat->cacheline_size);
+}
+
 int main(void)
 {
 	srand(time(NULL));
+	pcache_stat(&pstat);
+	print_pstat(&pstat);
 	test_set_conflict();
 }

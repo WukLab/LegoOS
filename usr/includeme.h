@@ -14,6 +14,8 @@
 #include <linux/unistd.h>
 #include <assert.h>
 
+#include <uapi/processor/pcache.h>
+
 #define BUG_ON(cond)	assert(!(cond))
 
 #define PAGE_SIZE 4096
@@ -89,6 +91,17 @@ static inline void checkpoint_process(pid_t pid)
 	ret = syscall(__NR_CHECKPOINT, pid);
 	if (ret < 0)
 		perror("checkpoint");
+}
+
+static inline void pcache_stat(struct pcache_stat *buf)
+{
+	long ret;
+
+	ret = syscall(__NR_pcache_stat, buf);
+	if (ret < 0) {
+		perror("pcache_stat");
+		die("Not a Lego Kernel?");
+	}
 }
 
 static inline unsigned short from32to16(unsigned int x)

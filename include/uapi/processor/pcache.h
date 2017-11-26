@@ -11,6 +11,10 @@
 #define _LEGO_UAPI_PROCESSOR_H_
 
 struct pcache_stat {
+	/*
+	 * nr_cachelines = nr_cachesets * associativity;
+	 * way_stride = nr_cachesets * cacheline_size;
+	 */
 	unsigned long	nr_cachelines;
 	unsigned long	nr_cachesets;
 	unsigned long	associativity;
