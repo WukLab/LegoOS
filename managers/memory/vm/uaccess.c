@@ -22,6 +22,7 @@
 #include <memory/vm.h>
 
 /**
+ * lego_copy_to_user
  * @to: virtual address of user process
  * @from: virtual address of kernel
  * @n: number of bytes to copy
@@ -43,7 +44,7 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 	}
 
 	first_page = (unsigned long)to & PAGE_MASK;
-	last_page = ((unsigned long)to + n) & PAGE_MASK;
+	last_page = ((unsigned long)to + n - 1) & PAGE_MASK;
 	nr_pages = ((last_page - first_page) >> PAGE_SHIFT) + 1;
 
 	/* this should be the normal case */
@@ -100,6 +101,7 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 }
 
 /**
+ * lego_copy_from_user
  * @to: virtual address of kernel
  * @from: virtual address of user process
  * @n: number of bytes to copy
@@ -121,7 +123,7 @@ unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
 	}
 
 	first_page = (unsigned long)from & PAGE_MASK;
-	last_page = ((unsigned long)from + n) & PAGE_MASK;
+	last_page = ((unsigned long)from + n - 1) & PAGE_MASK;
 	nr_pages = ((last_page - first_page) >> PAGE_SHIFT) + 1;
 
 	if (likely(nr_pages == 1)) {
