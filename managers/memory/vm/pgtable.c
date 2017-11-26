@@ -10,8 +10,8 @@
 #include <lego/mm.h>
 #include <lego/comp_memory.h>
 
-#include <memory/include/vm.h>
-#include <memory/include/vm-pgtable.h>
+#include <memory/vm.h>
+#include <memory/vm-pgtable.h>
 
 #define PGALLOC_GFP	(GFP_KERNEL | __GFP_ZERO)
 

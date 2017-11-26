@@ -22,9 +22,9 @@
 #include <lego/comp_memory.h>
 #include <lego/fit_ibapi.h>
 
-#include <memory/include/vm.h>
-#include <memory/include/pid.h>
-#include <memory/include/vm-pgtable.h>
+#include <memory/vm.h>
+#include <memory/pid.h>
+#include <memory/vm-pgtable.h>
 
 static unsigned long
 arch_get_unmapped_area(struct lego_task_struct *p, struct lego_file *filp,

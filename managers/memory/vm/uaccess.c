@@ -19,7 +19,7 @@
 
 #include <lego/slab.h>
 #include <lego/kernel.h>
-#include <memory/include/vm.h>
+#include <memory/vm.h>
 
 /**
  * @to: virtual address of user process

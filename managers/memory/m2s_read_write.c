@@ -16,8 +16,8 @@
 #include <lego/comp_common.h>
 #include <lego/comp_storage.h>
 
-#include <memory/include/pid.h>
-#include <memory/include/vm.h>
+#include <memory/pid.h>
+#include <memory/vm.h>
 
 #ifdef CONFIG_DEBUG_M2S_READ_WRITE
 #define m2s_debug(fmt, ...)					\

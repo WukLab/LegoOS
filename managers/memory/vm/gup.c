@@ -10,7 +10,7 @@
 #include <lego/mm.h>
 #include <lego/rwsem.h>
 #include <lego/kernel.h>
-#include <memory/include/vm.h>
+#include <memory/vm.h>
 
 int faultin_page(struct vm_area_struct *vma, unsigned long start,
 		 unsigned long flags, unsigned long *kvaddr)

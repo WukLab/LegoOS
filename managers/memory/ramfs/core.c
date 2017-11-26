@@ -10,8 +10,8 @@
 #include <lego/kernel.h>
 #include <lego/comp_memory.h>
 #include <lego/comp_storage.h>
-#include <memory/include/vm.h>
-#include <memory/include/file_ops.h>
+#include <memory/vm.h>
+#include <memory/file_ops.h>
 #include <lego/fit_ibapi.h>
 
 extern char __ramfs_start[], __ramfs_end[];

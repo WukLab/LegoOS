@@ -11,8 +11,8 @@
 #include <lego/fit_ibapi.h>
 #include <lego/comp_memory.h>
 
-#include <memory/include/vm.h>
-#include <memory/include/pid.h>
+#include <memory/vm.h>
+#include <memory/pid.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_FORK
 #define fork_debug(fmt, ...)	\

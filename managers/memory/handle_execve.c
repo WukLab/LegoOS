@@ -13,9 +13,9 @@
 #include <lego/fit_ibapi.h>
 #include <lego/comp_memory.h>
 
-#include <memory/include/vm.h>
-#include <memory/include/pid.h>
-#include <memory/include/loader.h>
+#include <memory/vm.h>
+#include <memory/pid.h>
+#include <memory/loader.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_EXECVE
 #define execve_debug(fmt, ...)	\
