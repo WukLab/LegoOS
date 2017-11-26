@@ -7,7 +7,7 @@ struct pcache_stat pstat;
 /* Fill page with random number and return checksum */
 static unsigned int page_fill_random(int *ptr)
 {
-	int foo, i, *base = ptr;
+	int i, *foo = ptr;
 	unsigned int csum;
 
 	if ((unsigned long)ptr & ~PAGE_MASK) {
@@ -17,28 +17,49 @@ static unsigned int page_fill_random(int *ptr)
 
 	for (i = 0; i < (PAGE_SIZE / sizeof(int)); i++) {
 		*ptr = rand();
+		ptr++;
 	}
 
-	return csum_partial(base, PAGE_SIZE, 0);
+	return csum_partial(foo, PAGE_SIZE, 0);
+}
+
+void *base;
+int nr_lines = 10;
+
+/* write to the first cacheline to test eviction */
+static void *thread_func(void *arg)
+{
+	int *wl;
+
+	wl = (int *)base;
+	while (1) {
+		int i = 0;
+
+		while (i < 100000) i++;
+		*wl = 100;
+	}
 }
 
 static int test_set_conflict(void)
 {
-	void *foo;
-	int i, j;
+	int i, j, ret;
 	unsigned long stride;
+	pthread_t tid;
 
-	foo = malloc((long)1024*1024*1024*20);
-	if (!foo)
-		die("fail to alloc");
+	base = malloc((long)1024*1024*1024*20);
+	BUG_ON(!base);
 
 	/* Should get this from syscall or /proc file */
 	stride = 0x10000000;
 
-	foo = (void *)round_up((unsigned long)foo, PAGE_SIZE);
+	base = (void *)round_up((unsigned long)base, PAGE_SIZE);
 
-	for (i = 0; i < 20; i++) {
-		void *ptr = foo + i * stride;
+	ret = pthread_create(&tid, NULL, thread_func, NULL);
+	if (ret)
+		die("fail to create new thread");
+
+	for (i = 0; i < nr_lines; i++) {
+		void *ptr = base + i * stride;
 		unsigned int csum;
 
 		csum = page_fill_random(ptr);
@@ -46,14 +67,15 @@ static int test_set_conflict(void)
 			i, ptr, csum);
 	}
 
-	for (i = 0; i < 20; i++) {
-		void *ptr = foo + i * stride;
+	for (i = 0; i < nr_lines; i++) {
+		void *ptr = base + i * stride;
 		unsigned int csum;
 
 		csum = csum_partial(ptr, PAGE_SIZE, 0);
 		printf("(Verify) %d address: (%p) csum: (%#lx)\n",
 			i, ptr, csum);
 	}
+	pthread_join(tid, NULL);
 }
 
 void print_pstat(struct pcache_stat *pstat)
