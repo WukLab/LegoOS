@@ -14,7 +14,7 @@ obj-y += missing_syscalls.o
 obj-y += m2s_read_write.o
 
 # Pcache
-obj-y += pcache/
+obj-y += handle_pcache/
 
 # Virtual Memory Subsystem
 obj-y += vm/
