@@ -18,8 +18,7 @@
 #include <lego/seq_file.h>
 #include <lego/timer.h>
 #include <lego/fit_ibapi.h>
-
-#include <processor/include/fs.h>
+#include <processor/fs.h>
 
 #ifdef CONFIG_DEBUG_FILE
 #define file_debug(fmt, ...)	\

@@ -14,8 +14,7 @@
 #include <lego/syscalls.h>
 #include <lego/spinlock.h>
 #include <lego/comp_processor.h>
-
-#include <processor/include/fs.h>
+#include <processor/fs.h>
 
 SYSCALL_DEFINE3(fcntl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 {	

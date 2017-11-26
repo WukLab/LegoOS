@@ -10,7 +10,7 @@
 #include <lego/files.h>
 #include <lego/kernel.h>
 #include <lego/sched.h>
-#include <processor/include/fs.h>
+#include <processor/fs.h>
 
 static int stdio_file_open(struct file *f)
 {

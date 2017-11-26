@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#ifndef _PROCESSOR_INCLUDE_FS_H_
-#define _PROCESSOR_INCLUDE_FS_H_
+#ifndef _LEGO_PROCESSOR_FS_H_
+#define _LEGO_PROCESSOR_FS_H_
 
 #include <lego/bug.h>
 #include <lego/files.h>
@@ -52,4 +52,4 @@ static inline int normal_file_open(struct file *f, char *f_name)
 	return 0;
 }
 
-#endif /* _PROCESSOR_INCLUDE_FS_H_ */
+#endif /* _LEGO_PROCESSOR_FS_H_ */

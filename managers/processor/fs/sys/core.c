@@ -14,8 +14,7 @@
 #include <lego/syscalls.h>
 #include <lego/spinlock.h>
 #include <lego/comp_processor.h>
-
-#include <processor/include/fs.h>
+#include <processor/fs.h>
 
 extern struct file_operations sys_devices_system_cpu_online_ops;
 

@@ -16,11 +16,10 @@
 #include <lego/spinlock.h>
 #include <lego/completion.h>
 #include <lego/checkpoint.h>
+#include <processor/fs.h>
 
 #include <asm/prctl.h>
 #include <asm/fpu/internal.h>
-
-#include <processor/include/fs.h>
 
 #include "internal.h"
 

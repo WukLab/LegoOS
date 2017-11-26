@@ -18,13 +18,12 @@
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
+#include <processor/pgtable.h>
 
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/pgalloc.h>
 #include <asm/tlbflush.h>
-
-#include <processor/include/pgtable.h>
 
 #ifdef CONFIG_DEBUG_EMULATED_PGTABLE
 #define pgtable_debug(fmt, ...)	\
