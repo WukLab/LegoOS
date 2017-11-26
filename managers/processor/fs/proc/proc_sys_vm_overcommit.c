@@ -13,8 +13,7 @@
 #include <lego/uaccess.h>
 #include <lego/spinlock.h>
 #include <lego/seq_file.h>
-
-#include <processor/include/fs.h>
+#include <processor/fs.h>
 
 #define OVERCOMMIT_GUESS	0
 #define OVERCOMMIT_ALWAYS	1

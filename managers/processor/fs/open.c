@@ -14,8 +14,7 @@
 #include <lego/syscalls.h>
 #include <lego/spinlock.h>
 #include <lego/comp_processor.h>
-
-#include <processor/include/fs.h>
+#include <processor/fs.h>
 
 /*
  * Find @file by @fd

@@ -18,9 +18,8 @@
 #include <lego/mm.h>
 #include <lego/syscalls.h>
 #include <lego/comp_processor.h>
-
-#include <processor/include/fs.h>
-#include <processor/include/pgtable.h>
+#include <processor/fs.h>
+#include <processor/pgtable.h>
 
 #ifdef CONFIG_DEBUG_MMAP
 #define mmap_debug(fmt, ...)	\

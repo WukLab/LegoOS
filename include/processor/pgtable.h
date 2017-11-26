@@ -8,11 +8,13 @@
  */
 
 /*
- * Your friends to play with pgtables
+ * Your friends to play with user pgtables.
+ * These operations are only needed by processor manager.
+ * Basic pgtable operations in core kernel can satisfy memory manager.
  */
 
-#ifndef _PROCESSOR_MANAGER_PGTABLE_H_
-#define _PROCESSOR_MANAGER_PGTABLE_H_
+#ifndef _LEGO_PROCESSOR_PGTABLE_H_
+#define _LEGO_PROCESSOR_PGTABLE_H_
 
 #include <lego/mm.h>
 #include <lego/comp_common.h>
@@ -37,4 +39,4 @@ unsigned long move_page_tables(struct task_struct *tsk,
 			       unsigned long __user old_addr,
 			       unsigned long __user new_addr, unsigned long len);
 
-#endif /* _PROCESSOR_MANAGER_PGTABLE_H_ */
+#endif /* _LEGO_PROCESSOR_PGTABLE_H_ */
