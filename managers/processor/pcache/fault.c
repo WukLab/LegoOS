@@ -20,6 +20,10 @@
 #include <processor/pcache.h>
 
 #ifdef CONFIG_DEBUG_PCACHE_FILL
+#ifdef CONFIG_DEBUG_PCACHE_FILL_UNLIMITED
+#define pcache_debug(fmt, ...)						\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__);
+#else
 /* 4 msg/sec at most? */
 static DEFINE_RATELIMIT_STATE(pcache_debug_rs, 1, 4);
 
@@ -28,6 +32,7 @@ static DEFINE_RATELIMIT_STATE(pcache_debug_rs, 1, 4);
 	if (__ratelimit(&pcache_debug_rs))				\
 		pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__);	\
 })
+#endif
 #else
 static inline void pcache_debug(const char *fmt, ...) { }
 #endif
