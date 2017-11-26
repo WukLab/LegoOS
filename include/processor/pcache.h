@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#ifndef _PROCESSOR_PCACHE_H_
-#define _PROCESSOR_PCACHE_H_
+#ifndef _LEGO_PROCESSOR_PCACHE_H_
+#define _LEGO_PROCESSOR_PCACHE_H_
 
 #include <lego/const.h>
 #include <lego/bitops.h>
@@ -16,6 +16,7 @@
 
 #include <processor/pcache_types.h>
 #include <processor/pcache_debug.h>
+#include <uapi/processor/pcache.h>
 
 extern u64 pcache_registered_start;
 extern u64 pcache_registered_size;
@@ -364,4 +365,4 @@ int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
 int pcache_try_to_unmap(struct pcache_meta *pcm);
 int pcache_wrprotect(struct pcache_meta *pcm);
 
-#endif /* _PROCESSOR_PCACHE_H_ */
+#endif /* _LEGO_PROCESSOR_PCACHE_H_ */

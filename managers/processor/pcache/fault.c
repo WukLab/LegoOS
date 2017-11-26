@@ -144,9 +144,8 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 
 	pcm = pte_to_pcache_meta(orig_pte);
 	BUG_ON(!pcm);
+	dump_pcache_meta(pcm, FUNC);
 
-	dump_pcache_meta(pcm, NULL);
-	BUG();
 	/*
 	 * Pcache line might be locked by eviction routine.
 	 * But we can NOT sleep here because we are holding pte lock.
@@ -159,6 +158,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 		goto unlock_pte;
 	}
 
+	panic("COW is not implemented now!");
 	unlock_pcache(pcm);
 
 unlock_pte:

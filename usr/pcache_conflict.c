@@ -1,5 +1,7 @@
 #include "includeme.h"
 
+#include <uapi/processor/pcache.h>
+
 /* Fill page with random number and return checksum */
 static unsigned int page_fill_random(int *ptr)
 {

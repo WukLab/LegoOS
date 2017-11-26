@@ -12,6 +12,7 @@
 #include <lego/sched.h>
 #include <lego/utsname.h>
 #include <lego/syscalls.h>
+#include <processor/pcache.h>
 
 /* Non-implemented system calls get redirected here. */
 asmlinkage long sys_ni_syscall(void)
@@ -348,7 +349,7 @@ SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 	BUG();
 }
 
-SYSCALL_DEFINE1(pcache_flush, void __user *, vaddr)
+SYSCALL_DEFINE1(pcache_stat, struct pcache_stat __user *, statbuf)
 {
 	BUG();
 }

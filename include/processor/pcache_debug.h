@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#ifndef _PROCESSOR_PCACHE_DEBUG_H_
-#define _PROCESSOR_PCACHE_DEBUG_H_
+#ifndef _LEGO_PROCESSOR_PCACHE_DEBUG_H_
+#define _LEGO_PROCESSOR_PCACHE_DEBUG_H_
 
 #include <lego/types.h>
 #include <processor/pcache_types.h>
@@ -40,4 +40,4 @@ do {									\
 #define PCACHE_BUG_ON_PCM(cond, pcm)	do { } while (0)
 #endif /* CONFIG_DEBUG_PCACHE */
 
-#endif /* _PROCESSOR_PCACHE_DEBUG_H_ */
+#endif /* _LEGO_PROCESSOR_PCACHE_DEBUG_H_ */

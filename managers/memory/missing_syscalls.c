@@ -17,6 +17,7 @@
 #include <lego/files.h>
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
+#include <processor/pcache.h>
 
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
@@ -140,7 +141,7 @@ SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 	BUG();
 }
 
-SYSCALL_DEFINE1(pcache_flush, void __user *, vaddr)
+SYSCALL_DEFINE1(pcache_stat, struct pcache_stat __user *, statbuf)
 {
 	BUG();
 }

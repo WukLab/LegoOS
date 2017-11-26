@@ -253,3 +253,8 @@ int __init pcache_range_register(u64 start, u64 size)
 
 	return 0;
 }
+
+SYSCALL_DEFINE1(pcache_stat, struct pcache_stat __user *, statbuf)
+{
+	return 0;
+}
