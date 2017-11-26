@@ -1,108 +1,14 @@
-#include <sys/utsname.h>
-#include <math.h>
-#include <sys/time.h>
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <sys/resource.h>
-#include <sys/types.h>
-#include <sys/syscall.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <signal.h>
-#include <string.h>
-#include <stdarg.h>
-#include <linux/unistd.h>
-#include <assert.h>
-
-#include <uapi/processor/pcache.h>
-
-#define BUG_ON(cond)	assert(!(cond))
-
-#define PAGE_SIZE 4096
-#define PAGE_MASK (~(PAGE_SIZE - 1))
-
 /*
- * This looks more complex than it should be. But we need to
- * get the type for the ~ right in round_down (it needs to be
- * as wide as the result!), and we want to evaluate the macro
- * arguments just once each.
+ * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
-#define __round_mask(x, y)	((__typeof__(x))((y)-1))
-#define round_up(x, y)		((((x)-1) | __round_mask(x, y))+1)
-#define round_down(x, y)	((x) & ~__round_mask(x, y))
 
-#define DIV_ROUND_UP(n,d)	(((n) + (d) - 1) / (d))
-
-#define __ALIGN_MASK(x, mask)	(((x) + (mask)) & ~(mask))
-#define ALIGN(x, a)		__ALIGN_MASK(x, (typeof(x))(a) - 1)
-#define PTR_ALIGN(p, a)		((typeof(p))ALIGN((unsigned long)(p), (a)))
-#define IS_ALIGNED(x, a)	(((x) & ((typeof(x))(a) - 1)) == 0)
-
-#define ARRAY_SIZE(x)		(sizeof(x) / sizeof((x)[0]))
-#define __NR_CHECKPOINT	666
-
-static inline void die(const char * str, ...)
-{
-	va_list args;
-	va_start(args, str);
-	vfprintf(stderr, str, args);
-	fputc('\n', stderr);
-	exit(1);
-}
-
-/*
- * result: diff
- * x: end time
- * y: start time
- */
-static inline timeval_sub(struct timeval *result, struct timeval *x,
-			  struct timeval *y)
-{
-  /* Perform the carry for the later subtraction by updating y. */
-  if (x->tv_usec < y->tv_usec) {
-    int nsec = (y->tv_usec - x->tv_usec) / 1000000 + 1;
-    y->tv_usec -= 1000000 * nsec;
-    y->tv_sec += nsec;
-  }
-  if (x->tv_usec - y->tv_usec > 1000000) {
-    int nsec = (x->tv_usec - y->tv_usec) / 1000000;
-    y->tv_usec += 1000000 * nsec;
-    y->tv_sec -= nsec;
-  }
-
-  /* Compute the time remaining to wait.
-     tv_usec is certainly positive. */
-  result->tv_sec = x->tv_sec - y->tv_sec;
-  result->tv_usec = x->tv_usec - y->tv_usec;
-
-  /* Return 1 if result is negative. */
-  return x->tv_sec < y->tv_sec;
-}
-
-static inline pid_t gettid(void)
-{
-	syscall(SYS_gettid);
-}
-
-static inline void checkpoint_process(pid_t pid)
-{
-	long ret;
-
-	ret = syscall(__NR_CHECKPOINT, pid);
-	if (ret < 0)
-		perror("checkpoint");
-}
-
-static inline void pcache_stat(struct pcache_stat *buf)
-{
-	long ret;
-
-	ret = syscall(__NR_pcache_stat, buf);
-	if (ret < 0) {
-		perror("pcache_stat");
-		die("Not a Lego Kernel?");
-	}
-}
+#include <lego/kernel.h>
+#include <asm/checksum.h>
 
 static inline unsigned short from32to16(unsigned a) 
 {
@@ -112,15 +18,6 @@ static inline unsigned short from32to16(unsigned a)
 	    : "=r" (b)
 	    : "0" (b), "r" (a));
 	return b;
-}
-
-static inline unsigned int add32_with_carry(unsigned a, unsigned b)
-{
-	asm("addl %2,%0\n\t"
-	    "adcl $0,%0"
-	    : "=r" (a)
-	    : "0" (a), "rm" (b));
-	return a;
 }
 
 /*
@@ -140,10 +37,10 @@ static unsigned do_csum(const unsigned char *buff, unsigned len)
 	unsigned odd, count;
 	unsigned long result = 0;
 
-	if (len == 0)
+	if (unlikely(len == 0))
 		return result; 
 	odd = 1 & (unsigned long) buff;
-	if (odd) {
+	if (unlikely(odd)) {
 		result = *buff << 8;
 		len--;
 		buff++;
@@ -215,7 +112,7 @@ static unsigned do_csum(const unsigned char *buff, unsigned len)
 	if (len & 1)
 		result += *buff;
 	result = add32_with_carry(result>>32, result & 0xffffffff); 
-	if (odd) { 
+	if (unlikely(odd)) { 
 		result = from32to16(result);
 		result = ((result >> 8) & 0xff) | ((result & 0xff) << 8);
 	}
@@ -238,7 +135,8 @@ static unsigned do_csum(const unsigned char *buff, unsigned len)
  * Returns a 32-bit number suitable for feeding into itself
  * or csum_tcpudp_magic
  */
-unsigned int csum_partial(const void *buff, int len, unsigned int sum)
+__wsum csum_partial(const void *buff, int len, __wsum sum)
 {
-	return add32_with_carry(do_csum(buff, len), sum);
+	return (__force __wsum)add32_with_carry(do_csum(buff, len),
+						(__force u32)sum);
 }

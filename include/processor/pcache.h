@@ -7,14 +7,16 @@
  * (at your option) any later version.
  */
 
-#ifndef _PROCESSOR_PCACHE_H_
-#define _PROCESSOR_PCACHE_H_
+#ifndef _LEGO_PROCESSOR_PCACHE_H_
+#define _LEGO_PROCESSOR_PCACHE_H_
 
 #include <lego/const.h>
 #include <lego/bitops.h>
 #include <lego/spinlock.h>
 
 #include <processor/pcache_types.h>
+#include <processor/pcache_debug.h>
+#include <uapi/processor/pcache.h>
 
 extern u64 pcache_registered_start;
 extern u64 pcache_registered_size;
@@ -209,6 +211,18 @@ static inline struct pcache_meta *pa_to_pcache_meta(unsigned long address)
 	return NULL;
 }
 
+static inline struct pcache_meta *pfn_to_pcache_meta(unsigned long pfn)
+{
+	unsigned long pa = pfn << PAGE_SHIFT;
+	return pa_to_pcache_meta(pa);
+}
+
+static inline struct pcache_meta *pte_to_pcache_meta(pte_t pte)
+{
+	unsigned long pa = pte_val(pte) & PTE_PFN_MASK;
+	return pa_to_pcache_meta(pa);
+}
+
 /**
  * kva_to_pcache_meta
  * @address: kernel virtual address of the pcache data line
@@ -324,6 +338,9 @@ void pcache_free(struct pcache_meta *);
 /* clflush */
 int pcache_flush_one(struct pcache_meta *pcm);
 
+/* eviction */
+int pcache_evict_line(struct pcache_set *pset, unsigned long address);
+
 /*
  * rmap_walk_control: To control rmap traversing for specific needs
  *
@@ -340,6 +357,7 @@ struct rmap_walk_control {
 enum pcache_rmap_status {
 	PCACHE_RMAP_SUCCEED,
 	PCACHE_RMAP_AGAIN,
+	PCACHE_RMAP_FAILED,
 };
 
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table, unsigned long address);
@@ -347,8 +365,4 @@ int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
 int pcache_try_to_unmap(struct pcache_meta *pcm);
 int pcache_wrprotect(struct pcache_meta *pcm);
 
-/* debug */
-void dump_pcache_meta(struct pcache_meta *pcm, const char *reason);
-extern const struct trace_print_flags pcacheflag_names[];
-
-#endif /* _PROCESSOR_PCACHE_H_ */
+#endif /* _LEGO_PROCESSOR_PCACHE_H_ */

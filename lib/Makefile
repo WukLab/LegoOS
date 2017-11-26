@@ -21,3 +21,4 @@ obj-y += plist.o
 obj-y += dump_task_struct.o
 obj-y += ratelimit.o
 obj-y += kstrtox.o
+obj-y += random.o

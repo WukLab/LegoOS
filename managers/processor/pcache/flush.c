@@ -50,7 +50,6 @@ int pcache_flush_cacheline_va_user(unsigned long __user vaddr)
 	  
 	payload->flush_vaddr = vaddr;
 	payload->pid = current->pid;
-	payload->llc_cacheline_size = PCACHE_LINE_SIZE; 
 
 #ifdef DEBUG_CACHE_TEST
 	pr_info("pcache_flush_single : vaddr : %#lx\nround_down_vaddr: %#lx\n",

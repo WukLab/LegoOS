@@ -37,26 +37,78 @@ config LEGO_SPECIAL_MEMMAP
 
 	  If unsure, leave it alone.
 
+choice
+	prompt "Pcache Eviction Algorithm"
+	default PCACHE_EVICT_RANDOM
+	help
+	  Allows the selection of pcache evction algorithm.
+	  Eviction happens when pcache allocation made into a full set.
+
+	config PCACHE_EVICT_RANDOM
+		bool "Use Random Algorithm"
+		---help---
+		  Enable this option to use random algorithm while doing eviction.
+
+	config PCACHE_EVICT_FIFO
+		bool "Use FIFO Algorithm"
+		---help---
+		  Enable this option to use FIFO algorithm while doing eviction.
+
+	config PCACHE_EVICT_LRU
+		bool "Use LRU Algorithm"
+		---help---
+		  Enable this option to use LRU algorithm while doing eviction.
+endchoice
+
 menu "Processor DEBUG Options"
 config DEBUG_PCACHE
-	bool "Debug L4-cache"
+	bool "Debug pcache"
 	default n
 	depends on COMP_PROCESSOR
 	depends on DEBUG_KERNEL
 	help
-	  Enable to have a detailed dump log of L4 cache subsystem.
-	  Mostly, it tells you the missing address and how it was handled
-	  on both processor and memory side.
+	  This will enable PCACHE_BUG_ON macro etc. Enable this if you
+	  are developing pcache subsystem.
+
+	  If unsure, say N.
+
+config DEBUG_PCACHE_FILL
+	bool "Debug pcache fill"
+	default n
+	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
+	depends on DEBUG_PCACHE
+	help
+	  Enable to have a detailed dump log of pcache llc miss activities.
+	  It basically tells you what lines are fetched from remote. This
+	  option may produce *a lot* messages.
+
+	  If unsure, say N
+
+config DEBUG_PCACHE_FLUSH
+	bool "Debug pcache flush"
+	default n
+	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
+	depends on DEBUG_PCACHE
+	help
+	  Enable to have a detailed dump log of pcache flush activities.
+	  It basically tells you what lines are flushed, and where they
+	  flushed to.
 
 	  If unsure, say N
 
 config DEBUG_PCACHE_PARANOID
-	bool "Be paranoid, enable checking code"
+	bool "Be paranoid, enable more checking code"
 	default n
 	depends on COMP_PROCESSOR
 	depends on DEBUG_KERNEL
+	depends on DEBUG_PCACHE
 	help
-	  Enable to add more checking code to pcache.
+	  Enable to add more checking code to pcachem, which should
+	  hurt performance.
+
+	  If unsure, say N.
 
 config DEBUG_FILE
 	bool "Debug open/read/close calls"

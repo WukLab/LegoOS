@@ -19,7 +19,7 @@
 
 #include <processor/pcache.h>
 
-#ifdef CONFIG_DEBUG_PCACHE
+#ifdef CONFIG_DEBUG_PCACHE_FILL
 /* 4 msg/sec at most? */
 static DEFINE_RATELIMIT_STATE(pcache_debug_rs, 1, 4);
 
@@ -137,15 +137,32 @@ out:
  */
 static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 			     pte_t *page_table, pmd_t *pmd, spinlock_t *ptl,
-			     pte_t orig_pte)
-			__releases(ptl)
+			     pte_t orig_pte) __releases(ptl)
 {
+	struct pcache_meta *pcm;
+	int ret;
+
+	pcm = pte_to_pcache_meta(orig_pte);
+	BUG_ON(!pcm);
+	dump_pcache_meta(pcm, FUNC);
+
 	/*
-	 * Use cases
-	 * 1) Used for cache flush. Wait until flush finishes
-	 * 2) Used to implement COW for fork()
+	 * Pcache line might be locked by eviction routine.
+	 * But we can NOT sleep here because we are holding pte lock.
+	 *
+	 * XXX: Just return might not be the *best* solution. But it
+	 * can keep things right and moving.
 	 */
-	panic("TODO");
+	if (!trylock_pcache(pcm)) {
+		ret = 0;
+		goto unlock_pte;
+	}
+
+	panic("COW is not implemented now!");
+	unlock_pcache(pcm);
+
+unlock_pte:
+	spin_unlock(ptl);
 	return 0;
 }
 
@@ -163,9 +180,10 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 	spin_lock(ptl);
 	if (unlikely(!pte_same(*pte, entry))) {
 		/*
-		 * PTE changed before we aquire the lock.
-		 * Permission maybe upgraded from RO to RW
-		 * by others in the middle (maybe pcache flush routine).
+		 * PTE changed before we aquire the lock, can be:
+		 * 1) PTE be invalidated, 2) PTE upgrade from RO to RW.
+		 * Return here, so another pgfault can handle 1), and
+		 * case 2) will just go through.
 		 */
 		goto unlock;
 	}

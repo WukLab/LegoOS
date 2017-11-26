@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#ifndef _PROCESSOR_PCACHE_TYPES_H_
-#define _PROCESSOR_PCACHE_TYPES_H_
+#ifndef _LEGO_PROCESSOR_PCACHE_TYPES_H_
+#define _LEGO_PROCESSOR_PCACHE_TYPES_H_
 
 #include <lego/const.h>
 #include <lego/bitops.h>
@@ -155,4 +155,4 @@ PCACHE_META_BITS(Valid, valid)
 PCACHE_META_BITS(Dirty, dirty)
 PCACHE_META_BITS(Writeback, writeback)
 
-#endif /* _PROCESSOR_PCACHE_TYPES_H_ */
+#endif /* _LEGO_PROCESSOR_PCACHE_TYPES_H_ */

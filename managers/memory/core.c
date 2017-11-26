@@ -165,6 +165,10 @@ static int mc_dispatcher(void *passed)
 	case P2M_LLC_MISS:
 		handle_p2m_llc_miss(payload, desc, hdr);
 		break;
+	case P2M_LLC_FLUSH:
+		handle_p2m_flush_one(payload, desc, hdr);
+		break;
+
 /* SYSCALL */
 	case P2M_READ:
 		handle_p2m_read(payload, desc, hdr);
@@ -217,10 +221,6 @@ static int mc_dispatcher(void *passed)
 /* TEST */
 	case P2M_TEST:
 		handle_p2m_test(payload, desc, hdr);
-		break;
-
-	case P2M_LLC_FLUSH:
-		handle_p2m_flush_single(payload, desc, hdr);
 		break;
 
 	default:

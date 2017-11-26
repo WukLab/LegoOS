@@ -102,6 +102,7 @@ void panic(const char *fmt, ...)
 	va_end(args);
 
 	pr_emerg("Kernel Panic - not syncing: %s\n", buf);
+	show_general_task_info(current);
 	show_stack_content(current, NULL, NULL);
 	show_call_trace(current, NULL, NULL);
 	smp_send_stop();
