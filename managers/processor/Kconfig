@@ -81,9 +81,20 @@ config DEBUG_PCACHE_FILL
 	help
 	  Enable to have a detailed dump log of pcache llc miss activities.
 	  It basically tells you what lines are fetched from remote. This
-	  option may produce *a lot* messages.
+	  option may produce *a lot* messages, hence by default it is
+	  ratelimited.
 
 	  If unsure, say N
+
+config DEBUG_PCACHE_FILL_UNLIMITED
+	bool "Debug pcache fill, print message un-ratelimited"
+	default n
+	depends on DEBUG_PCACHE_FILL
+	help
+	  Enable to have un-ratelimited pcache_debug in cache fill path.
+	  This indeed will produce a lot messages.
+
+	  If ununsure, say N please.
 
 config DEBUG_PCACHE_FLUSH
 	bool "Debug pcache flush"
