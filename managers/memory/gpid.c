@@ -13,8 +13,8 @@
 #include <lego/spinlock.h>
 #include <lego/comp_memory.h>
 
-#include <memory/include/vm.h>
-#include <memory/include/pid.h>
+#include <memory/vm.h>
+#include <memory/pid.h>
 
 #define PID_ARRAY_HASH_BITS	10
 

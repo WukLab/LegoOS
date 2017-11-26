@@ -11,8 +11,8 @@
 #include <lego/ratelimit.h>
 #include <lego/comp_memory.h>
 #include <lego/comp_storage.h>
-#include <memory/include/vm.h>
-#include <memory/include/pid.h>
+#include <memory/vm.h>
+#include <memory/pid.h>
 #include <processor/pcache.h>
 
 #ifdef CONFIG_MEM_PREFETCH

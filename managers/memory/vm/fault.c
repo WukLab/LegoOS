@@ -14,9 +14,9 @@
 
 #include <lego/comp_storage.h>
 
-#include <memory/include/vm.h>
-#include <memory/include/file_ops.h>
-#include <memory/include/vm-pgtable.h>
+#include <memory/vm.h>
+#include <memory/file_ops.h>
+#include <memory/vm-pgtable.h>
 
 static int do_swap_page(struct vm_area_struct *vma, unsigned long address,
 			unsigned int flags, pte_t *ptep, pmd_t *pmd,

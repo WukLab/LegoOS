@@ -14,7 +14,7 @@
 #include <lego/mmap.h>
 #include <lego/pgfault.h>
 #include <lego/comp_memory.h>
-#include <memory/include/vm-pgtable.h>
+#include <memory/vm-pgtable.h>
 
 /*
  * Optimisation macro.  It is equivalent to:

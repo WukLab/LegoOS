@@ -21,10 +21,10 @@
 #include <lego/jiffies.h>
 #include <lego/comp_memory.h>
 
-#include <memory/include/vm.h>
-#include <memory/include/elf.h>
-#include <memory/include/loader.h>
-#include <memory/include/file_ops.h>
+#include <memory/vm.h>
+#include <memory/elf.h>
+#include <memory/loader.h>
+#include <memory/file_ops.h>
 
 #define ELF_MIN_ALIGN		PAGE_SIZE
 #define ELF_CORE_EFLAGS		0

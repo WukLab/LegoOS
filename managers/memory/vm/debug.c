@@ -10,7 +10,7 @@
 #include <lego/mm.h>
 #include <lego/kernel.h>
 #include <lego/tracepoint.h>
-#include <memory/include/vm.h>
+#include <memory/vm.h>
 
 #define __def_vmaflag_names						\
 	{VM_READ,			"read"		},		\
