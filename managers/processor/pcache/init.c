@@ -96,8 +96,12 @@ static void init_pcache_set_map(void)
 		panic("Unable to allocate pcache set array!");
 
 	for (i = 0; i < nr_cachesets; i++) {
+		int j;
+
 		pset = pcache_set_map + i;
 		spin_lock_init(&pset->lock);
+		for (j = 0; j < NR_PCACHE_SET_STAT_ITEMS; j++)
+			atomic_set(&pset->stat[j], 0);
 	}
 }
 

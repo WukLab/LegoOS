@@ -24,6 +24,12 @@ struct pcache_meta;
 #define PCACHE_ASSOCIATIVITY		(_AC(1,UL) << PCACHE_ASSOCIATIVITY_SHIFT)
 #define PCACHE_META_SIZE		(sizeof(struct pcache_meta))
 
+enum pcache_set_stat_item {
+	NR_FILL,
+	NR_EVICTIONS,
+	NR_PCACHE_SET_STAT_ITEMS
+};
+
 /**
  * struct pcache_set	- Metadata for each cache set
  * @lock: protect (de-)allocation of all ways within this set
@@ -35,6 +41,7 @@ struct pcache_meta;
  */
 struct pcache_set {
 	spinlock_t		lock;
+	atomic_t		stat[NR_PCACHE_SET_STAT_ITEMS];
 };
 
 /**
