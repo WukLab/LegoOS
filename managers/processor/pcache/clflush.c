@@ -62,6 +62,7 @@ static int __pcache_flush_one(struct pcache_meta *pcm,
 		return PCACHE_RMAP_FAILED;
 
 	if (unlikely(reply)) {
+		dump_pcache_meta(pcm, FUNC);
 		pr_err("%s(): %s\n", FUNC, perror(reply));
 		return PCACHE_RMAP_FAILED;
 	}

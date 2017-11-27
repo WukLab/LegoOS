@@ -100,7 +100,7 @@ static void init_pcache_set_map(void)
 
 		pset = pcache_set_map + i;
 		spin_lock_init(&pset->lock);
-		for (j = 0; j < NR_PCACHE_SET_STAT_ITEMS; j++)
+		for (j = 0; j < NR_PSET_STAT_ITEMS; j++)
 			atomic_set(&pset->stat[j], 0);
 	}
 }

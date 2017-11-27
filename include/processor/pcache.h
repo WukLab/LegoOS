@@ -15,6 +15,7 @@
 #include <lego/spinlock.h>
 
 #include <processor/pcache_types.h>
+#include <processor/pcache_stat.h>
 #include <processor/pcache_debug.h>
 #include <uapi/processor/pcache.h>
 

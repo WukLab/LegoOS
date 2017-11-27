@@ -42,6 +42,7 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags,
 {
 	int ret, len;
 	struct p2m_llc_miss_struct payload;
+	struct pcache_set *pset;
 	void *pa_cache = pcache_meta_to_pa(pcm);
 
 	payload.pid = current->pid;
@@ -77,6 +78,10 @@ static int do_pcache_fill_page(unsigned long address, unsigned long flags,
 			goto out;
 		}
 	}
+
+	/* Update counting here to exclude concurrent faults */
+	pset = pcache_meta_to_pcache_set(pcm);
+	inc_pset_fill(pset);
 
 	ret = 0;
 out:
@@ -126,8 +131,8 @@ static int pcache_fill_page(struct mm_struct *mm, unsigned long address,
 	SetPcacheValid(pcm);
 
 	pte_set(page_table, entry);
-
 	spin_unlock(ptl);
+
 	return 0;
 
 out:

@@ -138,6 +138,8 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int ret;
 
+	inc_pset_eviction(pset);
+
 	pcm = pcache_evict_find_line(pset);
 	if (unlikely(!pcm))
 		return -1;
