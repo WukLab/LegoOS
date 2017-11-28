@@ -157,13 +157,15 @@ void flush_tlb_mm_range(struct mm_struct *mm,
 
 void profile_tlb_shootdown(void)
 {
+	static int nr_profile_tlb_shootdown = 0;
 	struct cpumask mask;
 	u64 start, end;
 	int cpu, i;
 
-	pr_info("Profile TLB Shootdown at CPU%d ...\n", smp_processor_id());
+	pr_info("Profile (#%d) TLB Shootdown at CPU%d ...\n",
+		nr_profile_tlb_shootdown++, smp_processor_id());
 
-	pr_info(" TLB Shootdown (FLUSH_ALL) #nr_cpus\n");
+	pr_info(" FLUSH_ALL #nr_cpus\n");
 	cpumask_copy(&mask, cpu_online_mask);
 	for_each_online_cpu(cpu) {
 		cpumask_clear_cpu(cpu, &mask);
@@ -180,8 +182,8 @@ void profile_tlb_shootdown(void)
 	cpumask_clear(&mask);
 	cpumask_set_cpu(cpu, &mask);
 
-	pr_info(" TLB Shootdown (CPU%d shootdown CPU%d) #nr_pages\n",
-		smp_processor_id(), cpu);
+	pr_info(" CPU%d -> CPU%d #ceiling=%lu #nr_pages\n",
+		smp_processor_id(), cpu, tlb_single_page_flush_ceiling);
 	for (i = 1; i <= tlb_single_page_flush_ceiling + 8; i++) {
 		/* 0x000000 - 0x100000 is known to be mapped as 4KB */
 		start = sched_clock();

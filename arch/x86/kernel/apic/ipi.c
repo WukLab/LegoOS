@@ -7,6 +7,23 @@
  * (at your option) any later version.
  */
 
+/*
+ * YS: 11/28/17
+ * APIC supports 3 different shortcuts to broadcast IPI to cores.
+ * They are self, all including self, all excluding self. This is
+ * described by __default_send_IPI_shortcut() function.
+ *
+ * APIC also let us to specify the destination CPU's APICID, thus
+ * send IPI to one specific CPU. This is described by the following
+ * __default_send_IPI_dest_field() function.
+ *
+ * However, there is no way to send to a set of CPUs at the same time.
+ * It means APIC by itself can not handle a cpumask. What Lego or Linux
+ * doing here is to send IPI one by one.
+ *
+ * Probabaly cluster mode APIC can handle this, but who is using that?
+ */
+
 #include <asm/ipi.h>
 #include <asm/apic.h>
 
