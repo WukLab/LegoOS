@@ -44,8 +44,50 @@ struct flush_tlb_info {
 void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			struct task_struct *tsk)
 {
-	if (likely(prev != next))
+	unsigned int cpu = smp_processor_id();
+
+	if (likely(prev != next)) {
+		cpumask_set_cpu(cpu, mm_cpumask(next));
+
+		/*
+		 * Re-load page tables.
+		 *
+		 * This logic has an ordering constraint:
+		 *
+		 *  CPU 0: Write to a PTE for 'next'
+		 *  CPU 0: load bit 1 in mm_cpumask.  if nonzero, send IPI.
+		 *  CPU 1: set bit 1 in next's mm_cpumask
+		 *  CPU 1: load from the PTE that CPU 0 writes (implicit)
+		 *
+		 * We need to prevent an outcome in which CPU 1 observes
+		 * the new PTE value and CPU 0 observes bit 1 clear in
+		 * mm_cpumask.  (If that occurs, then the IPI will never
+		 * be sent, and CPU 1's TLB will contain a stale entry.)
+		 *
+		 * The bad outcome can occur if either CPU's load is
+		 * reordered before that CPU's store, so both CPUs must
+		 * execute full barriers to prevent this from happening.
+		 *
+		 * Thus, switch_mm needs a full barrier between the
+		 * store to mm_cpumask and any operation that could load
+		 * from next->pgd.  TLB fills are special and can happen
+		 * due to instruction fetches or for no reason at all,
+		 * and neither LOCK nor MFENCE orders them.
+		 * Fortunately, load_cr3() is serializing and gives the
+		 * ordering guarantee we need.
+		 *
+		 * And this is why we re-load cr3 after setting mm_cpumask.
+		 */
 		load_cr3(next->pgd);
+
+		/* Stop flush IPIs for the previous mm */
+		cpumask_clear_cpu(cpu, mm_cpumask(prev));
+	} else {
+		if (unlikely(!cpumask_test_cpu(cpu, mm_cpumask(next)))) {
+			cpumask_set_cpu(cpu, mm_cpumask(next));
+			load_cr3(next->pgd);
+		}
+	}
 }
 
 void switch_mm(struct mm_struct *prev, struct mm_struct *next,
@@ -65,6 +107,9 @@ void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 static void flush_tlb_func(void *info)
 {
 	struct flush_tlb_info *f = info;
+
+	if (f->flush_mm != current->mm)
+		return;
 
 	if (f->flush_end == TLB_FLUSH_ALL) {
 		local_flush_tlb();
