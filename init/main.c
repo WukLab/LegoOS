@@ -29,6 +29,7 @@
 #include <lego/string.h>
 #include <lego/atomic.h>
 #include <lego/kernel.h>
+#include <lego/profile.h>
 #include <lego/extable.h>
 #include <lego/jiffies.h>
 #include <lego/kthread.h>
@@ -311,6 +312,10 @@ asmlinkage void __init start_kernel(void)
 	 * until smp is initialized.
 	 */
 	system_state = SYSTEM_RUNNING;
+
+#ifdef CONFIG_PROFILING_BOOT
+	boot_time_profile();
+#endif
 
 	/* STOP! WE ARE ALIVE NOW */
 	rest_init();

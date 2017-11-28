@@ -236,4 +236,26 @@ config DEBUG_FORCE_ZERO_ALLOCATION
 
 endmenu # Basic Kernel Debug and Trace Options
 
+menu "Lego Kernel Profiling"
+config PROFILING
+	bool "Kernel Profiling"
+	default n
+	help
+	  Say Y enable kernel profiling facility.
+
+config PROFILING_BOOT
+	bool "Boot Time Profiling"
+	default n
+	depends on PROFILING
+	help
+	  Enable this if you want to have a predefined boot-time profiling.
+	  It gives you a basic sence how some kernel functions perfom on
+	  your hardware platform.
+
+	  It is a one-time profiling process, hence won't hurt runtime performance.
+
+	  If unsure, say N.
+
+endmenu #Lego Kernel Profiling
+
 endmenu

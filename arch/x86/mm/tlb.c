@@ -154,3 +154,43 @@ void flush_tlb_mm_range(struct mm_struct *mm,
 
 	preempt_enable();
 }
+
+void profile_tlb_shootdown(void)
+{
+	struct cpumask mask;
+	u64 start, end;
+	int cpu, i;
+
+	pr_info("Profile TLB Shootdown at CPU%d ...\n", smp_processor_id());
+
+	pr_info(" TLB Shootdown (FLUSH_ALL) #nr_cpus\n");
+	cpumask_copy(&mask, cpu_online_mask);
+	for_each_online_cpu(cpu) {
+		cpumask_clear_cpu(cpu, &mask);
+		start = sched_clock();
+		flush_tlb_others(&mask, current->mm, 0, TLB_FLUSH_ALL);
+		end = sched_clock();
+
+		pr_info(" ... nr_cpus: %3d latency: %9llu ns\n",
+			cpumask_weight(&mask), end - start);
+	}
+
+	cpumask_copy(&mask, cpu_online_mask);
+	cpu = cpumask_next(smp_processor_id(), &mask);
+	cpumask_clear(&mask);
+	cpumask_set_cpu(cpu, &mask);
+
+	pr_info(" TLB Shootdown (CPU%d shootdown CPU%d) #nr_pages\n",
+		smp_processor_id(), cpu);
+	for (i = 1; i <= tlb_single_page_flush_ceiling + 8; i++) {
+		/* 0x000000 - 0x100000 is known to be mapped as 4KB */
+		start = sched_clock();
+		flush_tlb_others(&mask, current->mm, 0, PAGE_SIZE * i);
+		end = sched_clock();
+
+		pr_info(" ... nr_pages: %3d latency: %9llu ns\n",
+			i, end - start);
+	}
+
+	pr_info("Profile TLB Shootdown at CPU%d ... done\n", smp_processor_id());
+}

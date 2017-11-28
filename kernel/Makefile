@@ -27,3 +27,4 @@ obj-$(CONFIG_FUTEX) += futex.o
 obj-y += madvise.o
 obj-y += stop_machine.o
 obj-y += smpboot.o
+obj-y += profile.o
