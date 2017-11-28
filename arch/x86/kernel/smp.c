@@ -16,7 +16,7 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 
-#ifdef CONFIG_TRACE_SMP_IPI
+#ifdef CONFIG_DEBUG_SMP_IPI
 #define smp_debug()						\
 	pr_debug("SMP IPI: %s() CPU(%d) PID(%u)\n",		\
 		__func__, smp_processor_id(), current->pid)

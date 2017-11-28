@@ -203,6 +203,7 @@ config DEBUG_KERNEL
 config TRACE_SYSCALL
 	bool "Kernel-version strace"
 	default n
+	depends on DEBUG_KERNEL
 	help
 	  This option will help us debug syscall. Currently it is whole
 	  feature is to detect possible pt_regs corruption during syscall
@@ -210,20 +211,26 @@ config TRACE_SYSCALL
 
 	  If unsure, say N.
 
-config TRACE_SMP_IPI
-	bool "TRACE SMP IPI Handler"
+config DEBUG_SMP_IPI
+	bool "Debug all SMP IPI Handlers"
 	default n
+	depends on DEBUG_KERNEL
 	help
 	  Enable to print some message in every IPI handler.
+	  Only used during development of IPI handlers.
 
 	  If unsure, say N.
 
 config DEBUG_FORCE_ZERO_ALLOCATION
-	bool "Pass __GFP_ZERO to every page allocation"
+	bool "Pass __GFP_ZERO to every page allocation (Catch uninitliazed bug)"
 	default n
+	depends on DEBUG_KERNEL
 	help
-	  Enable to always allocate clean pages.
-	  Hurt performance a lot. Do not enable me.
+	  This option is used to catch uninitliazed bug. If this option is on,
+	  then all pages allocated by buddy allocator will be cleared upon return.
+
+	  If anything went wrong without this option AND went alright wirh this option,
+	  that means you have uninitialized buffer.
 
 	  If unsure, say N.
 
