@@ -7,6 +7,12 @@
  * (at your option) any later version.
  */
 
+/*
+ * This file describes flat APIC mode, including logical and physical.
+ * Lego currently does not support cluster mode or any other special chips.
+ * Those things are really fun to play with.	YS. 11/27/17
+ */
+
 #include <asm/asm.h>
 #include <asm/ipi.h>
 #include <asm/apic.h>
@@ -17,6 +23,12 @@
 #include <lego/smp.h>
 #include <lego/kernel.h>
 #include <lego/bitops.h>
+
+static struct apic apic_physflat;
+static struct apic apic_flat;
+
+/* By default, use the LogicalFlat model */
+struct apic *apic __read_mostly = &apic_flat;
 
 /* Same for both flat and physical. */
 static void default_apic_send_IPI_self(int vector)
@@ -191,13 +203,22 @@ default_cpu_mask_to_apicid_and(const struct cpumask *cpumask,
 	return -EINVAL;
 }
 
+/*
+ * YS:
+ * According to Intel SDM vol3, sec 10.6.2.2 Logical Destination Mode,
+ * flat mode (logical) can only support up to 8 local APICs, which means
+ * at most 8 CPUs.
+ *
+ * This flat mode is better named as:
+ * 	LogicalFlat
+ */
 static struct apic apic_flat = {
-	.name				= "flat",
+	.name				= "logical flat",
 	.probe				= flat_probe,
 	.apic_id_valid			= default_apic_id_valid,
 
 	.irq_delivery_mode		= dest_LowestPrio,
-	.irq_dest_mode			= 1, /* Logical */
+	.irq_dest_mode			= 1, /* Logical Mode */
 
 	.target_cpus			= online_target_cpus,
 
@@ -237,23 +258,27 @@ static void physflat_send_IPI_all(int vector)
 	default_send_IPI_mask_sequence_phys(cpu_online_mask, vector);
 }
 
-static int physflat_probe(void)
-{
-	return 1;
-}
-
 /*
  * Physflat mode is used when there are more than 8 CPUs on a system.
  * We cannot use logical delivery in this case because the mask
  * overflows, so use physical mode.
+ *
+ * (See my comment above apic_flat)
  */
+static int physflat_probe(void)
+{
+	if (apic == &apic_physflat || num_possible_cpus() > 8)
+		return 1;
+	return 0;
+}
+
 static struct apic apic_physflat = {
 	.name				= "physical flat",
 	.probe				= physflat_probe,
 	.apic_id_valid			= default_apic_id_valid,
 
 	.irq_delivery_mode		= dest_Fixed,
-	.irq_dest_mode			= 0, /* Logical */
+	.irq_dest_mode			= 0, /* Physical Mode */
 
 	.dest_logical			= 0,
 
@@ -283,8 +308,6 @@ static struct apic apic_physflat = {
 	.wait_icr_idle			= native_apic_wait_icr_idle,
 	.safe_wait_icr_idle		= native_safe_apic_wait_icr_idle,
 };
-
-struct apic *apic __read_mostly = &apic_flat;
 
 /*
  * We need to check for physflat first,

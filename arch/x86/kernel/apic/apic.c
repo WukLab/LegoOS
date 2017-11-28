@@ -110,6 +110,7 @@ void __init setup_apic_driver(void)
 {
 	struct apic **drv;
 
+	pr_info("Original APIC routing is %s\n", apic->name);
 	for (drv = __apicdrivers; drv < __apicdrivers_end; drv++) {
 		if ((*drv)->probe && (*drv)->probe()) {
 			if (apic != *drv) {

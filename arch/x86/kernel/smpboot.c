@@ -292,6 +292,7 @@ void __init smp_prepare_cpus(unsigned int maxcpus)
 		/* Or can we switch back to PIC here? */
 	}
 
+	setup_apic_driver();
 	cpu0_logical_apicid = apic_bsp_setup();
 
 	/* Adjust delay, see comment above */

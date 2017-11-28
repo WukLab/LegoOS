@@ -241,7 +241,6 @@ void __init setup_arch(void)
 	 * set default APIC driver first
 	 */
 	check_x2apic();
-	setup_apic_driver();
 
 	/*
 	 * Map all ACPI tables
