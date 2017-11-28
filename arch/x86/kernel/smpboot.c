@@ -225,16 +225,67 @@ static void start_secondary_cpu(void)
 	cpu_idle();
 }
 
+void smp_announce(void)
+{
+	int num_nodes = num_online_nodes();
+
+	pr_cont("\n");
+	printk(KERN_INFO "x86: Booted up %d node%s, %d CPUs\n",
+	       num_nodes, (num_nodes > 1 ? "s" : ""), num_online_cpus());
+}
+
+/*
+ * Count the digits of @val including a possible sign.
+ *
+ * (Typed on and submitted from hpa's mobile phone.)
+ */
+static int num_digits(int val)
+{
+	int m = 10;
+	int d = 1;
+
+	if (val < 0) {
+		d++;
+		val = -val;
+	}
+
+	while (val >= m) {
+		m *= 10;
+		d++;
+	}
+	return d;
+}
+
 /* reduce the number of lines printed when booting a large cpu count system */
 static void announce_cpu(int cpu, int apicid)
 {
+	static int current_node = -1;
 	int node = cpu_to_node(cpu);
+	static int width, node_width;
+
+	if (!width)
+		width = num_digits(num_possible_cpus()) + 1; /* + '#' sign */
+
+	if (!node_width)
+		node_width = num_digits(num_possible_nodes()) + 1; /* + '#' */
 
 	if (cpu == 1)
 		printk(KERN_INFO "x86: Booting SMP configuration:\n");
 
-	pr_info("Booting Node %d Processor %d APIC 0x%x\n",
-		node, cpu, apicid);
+	if (node != current_node) {
+		if (current_node > (-1))
+			pr_cont("\n");
+		current_node = node;
+
+		printk(KERN_INFO ".... node %*s#%d, CPUs:  ",
+		       node_width - num_digits(node), " ", node);
+	}
+
+	/* Add padding for the BSP */
+	if (cpu == 1)
+		pr_cont("%*s", width + 1, " ");
+
+	pr_cont("%*s#%d", width - num_digits(cpu), " ", cpu);
 }
 
 static int do_cpu_up(int apicid, int cpu, struct task_struct *idle)

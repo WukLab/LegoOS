@@ -62,6 +62,7 @@ void __init smp_init(void)
 		if (!cpu_online(cpu))
 			cpu_up(cpu, per_cpu(idle_threads, cpu));
 	}
+	smp_announce();
 }
 
 enum {

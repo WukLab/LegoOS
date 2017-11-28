@@ -19,6 +19,7 @@ extern unsigned int nr_cpus;
 
 void cpu_up(int cpu, struct task_struct *tidle);
 
+void smp_announce(void);
 void __init smp_prepare_cpus(unsigned int maxcpus);
 void __init smp_init(void);
 void __init call_function_init(void);

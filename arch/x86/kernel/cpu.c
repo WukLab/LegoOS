@@ -346,7 +346,9 @@ void cpu_init(void)
 	struct tss_struct *tss;
 	int i;
 
+#if 0
 	pr_debug("Initializing CPU#%d\n", cpu);
+#endif
 
 	/*
 	 * Initialize the CR4 shadow before doing anything that could
