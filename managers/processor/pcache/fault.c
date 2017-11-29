@@ -106,9 +106,10 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		}
 	}
 
-	/* Update counting here to exclude concurrent faults */
+	/* Update counting */
 	pset = pcache_meta_to_pcache_set(pcm);
 	inc_pset_fill(pset);
+	inc_pcache_event(PCACHE_FILL);
 
 	ret = 0;
 out:
@@ -137,6 +138,7 @@ static int pcache_do_fill_page(struct mm_struct *mm, unsigned long address,
 	/* TODO: Need right permission bits */
 	entry = pcache_meta_mk_pte(pcm, PAGE_SHARED_EXEC);
 
+	/* Concurrent faults are serialized by this lock */
 	page_table = pte_offset_lock(mm, pmd, address, &ptl);
 	if (unlikely(!pte_none(*page_table))) {
 		ret = 0;
@@ -195,15 +197,18 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 	 */
 	if (likely(!trylock_pcache(pcm))) {
 		ret = 0;
+		inc_pcache_event(PCACHE_WP_EVICTION);
 		goto out;
 	}
 
 	panic("COW is not implemented now!");
 	unlock_pcache(pcm);
+	inc_pcache_event(PCACHE_WP_COW);
 
 	ret = 0;
 out:
 	spin_unlock(ptl);
+	inc_pcache_event(PCACHE_WP);
 	return ret;
 }
 
@@ -281,5 +286,6 @@ int pcache_handle_fault(struct mm_struct *mm,
 	if (!pte)
 		return VM_FAULT_OOM;
 
+	inc_pcache_event(PCACHE_FAULT);
 	return pcache_handle_pte_fault(mm, address, pte, pmd, flags);
 }
