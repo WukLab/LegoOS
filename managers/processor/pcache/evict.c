@@ -108,19 +108,20 @@ pcache_evict_find_line(struct pcache_set *pset)
  */
 static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 {
-	int ret;
+	int ret = 0;
 
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 
 	pcache_wrprotect(pcm);
+
+	/* Safely flush back */
 	pcache_flush_one(pcm);
 	pcache_try_to_unmap(pcm);
-
-	ret = 0;
 
 	ClearPcacheValid(pcm);
 	unlock_pcache(pcm);
 	pcache_free(pcm);
+
 	return ret;
 }
 

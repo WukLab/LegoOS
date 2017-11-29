@@ -74,17 +74,17 @@ struct mm_struct {
 	spinlock_t page_table_lock;		/* Protects page tables and some counters */
 	struct list_head mmlist;		/* list of all mm_structs */
 
-	unsigned long total_vm;		/* Total pages mapped */
-	unsigned long pinned_vm;	/* Refcount permanently increased */
-	unsigned long data_vm;		/* VM_WRITE & ~VM_SHARED & ~VM_STACK */
-	unsigned long exec_vm;		/* VM_EXEC & ~VM_WRITE & ~VM_STACK */
-	unsigned long stack_vm;		/* VM_STACK */
+	unsigned long total_vm;			/* Total pages mapped */
+	unsigned long pinned_vm;		/* Refcount permanently increased */
+	unsigned long data_vm;			/* VM_WRITE & ~VM_SHARED & ~VM_STACK */
+	unsigned long exec_vm;			/* VM_EXEC & ~VM_WRITE & ~VM_STACK */
+	unsigned long stack_vm;			/* VM_STACK */
 	unsigned long def_flags;
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack;
 	unsigned long arg_start, arg_end, env_start, env_end;
 
-	unsigned long flags; /* Must use atomic bitops to access the bits */
+	unsigned long flags;			/* Must use atomic bitops to access the bits */
 
 	unsigned long mmap_base;                /* base of mmap area */
 	unsigned long cached_hole_size;         /* if non-zero, the largest hole below free_area_cache */

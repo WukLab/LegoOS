@@ -200,7 +200,8 @@ static inline void *pcache_meta_to_kva(struct pcache_meta *pcm)
  * Given a physical address, find its pcache meta.
  * If @address is not valid, return NULL
  */
-static inline struct pcache_meta *pa_to_pcache_meta(unsigned long address)
+static inline struct pcache_meta *
+pa_to_pcache_meta(unsigned long address)
 {
 	if (likely(pa_is_pcache(address))) {
 		unsigned long offset;
@@ -212,13 +213,15 @@ static inline struct pcache_meta *pa_to_pcache_meta(unsigned long address)
 	return NULL;
 }
 
-static inline struct pcache_meta *pfn_to_pcache_meta(unsigned long pfn)
+static inline __must_check struct pcache_meta *
+pfn_to_pcache_meta(unsigned long pfn)
 {
 	unsigned long pa = pfn << PAGE_SHIFT;
 	return pa_to_pcache_meta(pa);
 }
 
-static inline struct pcache_meta *pte_to_pcache_meta(pte_t pte)
+static inline __must_check struct pcache_meta *
+pte_to_pcache_meta(pte_t pte)
 {
 	unsigned long pa = pte_val(pte) & PTE_PFN_MASK;
 	return pa_to_pcache_meta(pa);

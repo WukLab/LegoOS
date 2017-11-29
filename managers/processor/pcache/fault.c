@@ -7,6 +7,17 @@
  * (at your option) any later version.
  */
 
+/*
+ * Locking ordering:
+ * 	pcache_lock	(may sleep)
+ * 	pte_lock
+ *
+ * Rmap operations will lock in this order. Pgfault code below
+ * will probably acquire pte_lock first, then it must NOT call
+ * lock_pcache() anymore, which may sleep. The only safe way here
+ * is to call trylock_pcache() after pte_lock is acquired.
+ */
+
 #include <lego/mm.h>
 #include <lego/slab.h>
 #include <lego/log2.h>
@@ -37,8 +48,24 @@ static DEFINE_RATELIMIT_STATE(pcache_debug_rs, 1, 4);
 static inline void pcache_debug(const char *fmt, ...) { }
 #endif
 
-static int do_pcache_fill_page(unsigned long address, unsigned long flags,
-			       struct pcache_meta *pcm)
+static void print_bad_pte(struct mm_struct *mm, unsigned long addr, pte_t pte,
+			  struct pcache_meta *pcm)
+{
+	pgd_t *pgd = pgd_offset(mm, addr);
+	pud_t *pud = pud_offset(pgd, addr);
+	pmd_t *pmd = pmd_offset(pud, addr);
+
+	pr_err("BUG: Bad page map in process %s pte:%08llx pmd:%08llx\n",
+		current->comm, (long long)pte_val(pte), (long long)pmd_val(*pmd));
+
+	if (pcm)
+		dump_pcache_meta(pcm, "bad pte");
+	dump_stack();
+}
+
+static int
+__pcache_do_fill_page(unsigned long address, unsigned long flags,
+		      struct pcache_meta *pcm)
 {
 	int ret, len;
 	struct p2m_llc_miss_struct payload;
@@ -91,11 +118,12 @@ out:
 }
 
 /*
- * This function handles missing cache lines.
+ * This function handles normal cache line misses.
  * We enter with pte unlocked, we return with pte unlocked.
  */
-static int pcache_fill_page(struct mm_struct *mm, unsigned long address,
-			    pte_t *page_table, pmd_t *pmd, unsigned long flags)
+static int pcache_do_fill_page(struct mm_struct *mm, unsigned long address,
+			       pte_t *page_table, pmd_t *pmd,
+			       unsigned long flags)
 {
 	struct pcache_meta *pcm;
 	spinlock_t *ptl;
@@ -115,8 +143,7 @@ static int pcache_fill_page(struct mm_struct *mm, unsigned long address,
 		goto out;
 	}
 
-	/* Fetch page from remote memory */
-	ret = do_pcache_fill_page(address, flags, pcm);
+	ret = __pcache_do_fill_page(address, flags, pcm);
 	if (ret) {
 		ret = VM_FAULT_SIGSEGV;
 		goto out;
@@ -143,7 +170,8 @@ out:
 
 /*
  * This function handles present write-protected cache lines.
- * We enter wirh pte locked, we return with pte unlocked.
+ *
+ * We enter wirh pte *locked*, we return with pte *unlocked*.
  */
 static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 			     pte_t *page_table, pmd_t *pmd, spinlock_t *ptl,
@@ -153,27 +181,30 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 	int ret;
 
 	pcm = pte_to_pcache_meta(orig_pte);
-	BUG_ON(!pcm);
-	dump_pcache_meta(pcm, FUNC);
+	if (!pcm) {
+		print_bad_pte(mm, address, orig_pte, NULL);
+		ret = VM_FAULT_SIGBUS;
+		goto out;
+	}
 
 	/*
 	 * Pcache line might be locked by eviction routine.
-	 * But we can NOT sleep here because we are holding pte lock.
-	 *
-	 * XXX: Just return might not be the *best* solution. But it
-	 * can keep things right and moving.
+	 * But we must NOT sleep here because we are holding pte lock.
+	 * Just return to release the pte lock, so others can proceeed
+	 * and finish what they are doing.
 	 */
-	if (!trylock_pcache(pcm)) {
+	if (likely(!trylock_pcache(pcm))) {
 		ret = 0;
-		goto unlock_pte;
+		goto out;
 	}
 
 	panic("COW is not implemented now!");
 	unlock_pcache(pcm);
 
-unlock_pte:
+	ret = 0;
+out:
 	spin_unlock(ptl);
-	return 0;
+	return ret;
 }
 
 static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
@@ -183,22 +214,22 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 	spinlock_t *ptl;
 
 	entry = *pte;
-	if (!pte_present(entry))
-		return pcache_fill_page(mm, address, pte, pmd, flags);
+	if (likely(!pte_present(entry))) {
+		if (likely(pte_none(entry)))
+			return pcache_do_fill_page(mm, address, pte, pmd, flags);
+
+		/* Lego does not fill any extra info into PTE */
+		print_bad_pte(mm, address, entry, NULL);
+		BUG();
+	}
 
 	ptl = pte_lockptr(mm, pmd);
 	spin_lock(ptl);
-	if (unlikely(!pte_same(*pte, entry))) {
-		/*
-		 * PTE changed before we aquire the lock, can be:
-		 * 1) PTE be invalidated, 2) PTE upgrade from RO to RW.
-		 * Return here, so another pgfault can handle 1), and
-		 * case 2) will just go through.
-		 */
+	if (unlikely(!pte_same(*pte, entry)))
 		goto unlock;
-	}
+
 	if (flags & FAULT_FLAG_WRITE) {
-		if (!pte_write(entry))
+		if (likely(!pte_write(entry)))
 			return pcache_do_wp_page(mm, address, pte, pmd, ptl, entry);
 		entry = pte_mkdirty(entry);
 	}
@@ -207,7 +238,7 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 	 * If we are here, it means the PTE is both present and writable.
 	 * Then why pgfault happens at all? The case is: two or more CPUs
 	 * fault into the same address concurrently. One established the
-	 * mapping even before other CPUs do "entry = *pte".
+	 * mapping even before other CPUs do "entry = *pte" in first line.
 	 */
 	entry = pte_mkyoung(entry);
 	if (!pte_same(*pte, entry) && (flags & FAULT_FLAG_WRITE))
