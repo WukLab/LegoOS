@@ -31,6 +31,13 @@ enum pcache_set_stat_item {
 	NR_PSET_STAT_ITEMS
 };
 
+struct pset_eviction_entry {
+	unsigned long		address;	/* page aligned */
+	struct task_struct	*owner;
+	struct pcache_meta	*pcm;		/* associated pcm */
+	struct list_head	next;
+};
+
 /**
  * struct pcache_set	- Metadata for each cache set
  * @lock: protect (de-)allocation of all ways within this set
@@ -70,7 +77,7 @@ struct pcache_meta {
 struct pcache_rmap {
 	pte_t			*page_table;
 	struct task_struct	*owner;
-	unsigned long		address;
+	unsigned long		address;	/* not page aligned */
 	struct list_head	next;
 };
 

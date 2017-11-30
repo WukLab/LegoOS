@@ -55,7 +55,7 @@ extern struct pcache_meta *pcache_meta_map;
 extern unsigned long *pcache_set_eviction_bitmap;
 
 /* Given an user virtual address, return its set index number */
-static inline unsigned long __vaddr2set(unsigned long address)
+static inline unsigned long __uvaddr2set(unsigned long address)
 {
 	return (address & pcache_set_mask) >> nr_bits_cacheline;
 }
@@ -118,7 +118,7 @@ static inline bool kva_is_pcache(unsigned long address)
  */
 static inline struct pcache_meta *__addr2meta(unsigned long address)
 {
-	return pcache_meta_map + __vaddr2set(address);
+	return pcache_meta_map + __uvaddr2set(address);
 }
 
 static inline unsigned long __addr2line_va(unsigned long address)
@@ -148,6 +148,16 @@ pcache_meta_to_pcache_set(struct pcache_meta *pcm)
 	offset = offset % nr_cachesets;
 
 	return pcache_set_map + offset;
+}
+
+static inline unsigned long
+pcache_set_to_set_index(struct pcache_set *pset)
+{
+	unsigned long offset;
+
+	offset = pset - pcache_set_map;
+	BUG_ON(offset >= nr_cachesets);
+	return offset;
 }
 
 /**
@@ -283,16 +293,25 @@ static inline struct pcache_set *kva_to_pcache_set(unsigned long address)
 
 /**
  * user_vaddr_to_pcache_set
- * @address: user virtual address in question
+ * @uvaddr: user virtual address in question
  *
  * Given an user virtual address, find its corresponding set.
  * Return struct pcache_set for this set, which is unique for every set.
  */
 static inline struct pcache_set *
-user_vaddr_to_pcache_set(unsigned long address)
+user_vaddr_to_pcache_set(unsigned long uvaddr)
 {
-	return pcache_set_map + __vaddr2set(address);
+	return pcache_set_map + __uvaddr2set(uvaddr);
 }
+
+#ifdef CONFIG_PCACHE_EVICTION_LIST
+static inline bool
+pset_has_eviction(unsigned long uvaddr)
+{
+	return test_bit(__uvaddr2set(uvaddr), pcache_set_eviction_bitmap);
+}
+bool pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk);
+#endif
 
 static inline unsigned long pcache_meta_to_pfn(struct pcache_meta *pcm)
 {

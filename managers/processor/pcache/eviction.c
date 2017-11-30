@@ -85,6 +85,89 @@ pcache_evict_find_line(struct pcache_set *pset)
 #endif
 }
 
+#ifdef CONFIG_PCACHE_EVICTION_LIST
+bool pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk)
+{
+	struct pcache_set *pset;
+	struct pset_eviction_entry *pos;
+	bool found = false;
+
+	if (!pset_has_eviction(uvaddr))
+		return false;
+
+	pset = user_vaddr_to_pcache_set(uvaddr);
+	uvaddr &= PAGE_MASK;
+
+	spin_lock(&pset->lock);
+	list_for_each_entry(pos, &pset->eviction_list, next) {
+		if (uvaddr == pos->address &&
+		   tsk->group_leader == pos->owner->group_leader) {
+			found = true;
+			break;
+		}
+	}
+	spin_unlock(&pset->lock);
+
+	return found;
+}
+
+static int pset_add_eviction_one(struct pcache_meta *pcm,
+				 struct pcache_rmap *rmap, void *arg)
+{
+	int *nr_added = arg;
+	struct pcache_set *pset = pcache_meta_to_pcache_set(pcm);
+	struct pset_eviction_entry *new;
+
+	new = kmalloc(sizeof(*new), GFP_KERNEL);
+	if (!new)
+		return PCACHE_RMAP_FAILED;
+
+	new->address = rmap->address & PAGE_MASK;
+	new->owner = rmap->owner;
+	new->pcm = pcm;
+
+	spin_lock(&pset->lock);
+	list_add(&new->next, &pset->eviction_list);
+	__set_bit(pcache_set_to_set_index(pset), pcache_set_eviction_bitmap);
+	spin_unlock(&pset->lock);
+
+	(*nr_added)++;
+	return PCACHE_RMAP_AGAIN;
+}
+
+int pset_add_eviction(struct pcache_set *pset, struct pcache_meta *pcm)
+{
+	int nr_added;
+	struct rmap_walk_control rwc = {
+		.arg = &nr_added,
+		.rmap_one = pset_add_eviction_one,
+	};
+
+	if (!pcache_mapped(pcm))
+		return 0;
+	rmap_walk(pcm, &rwc);
+	return nr_added;
+}
+
+void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pcm)
+{
+	struct pset_eviction_entry *pos, *keeper;
+
+	spin_lock(&pset->lock);
+	list_for_each_entry_safe(pos, keeper, &pset->eviction_list, next) {
+		if (pos->pcm == pcm) {
+			list_del(&pos->next);
+			kfree(pos);
+		}
+	}
+
+	if (list_empty(&pset->eviction_list))
+		clear_bit(pcache_set_to_set_index(pset),
+			  pcache_set_eviction_bitmap);
+	spin_unlock(&pset->lock);
+}
+#endif
+
 /*
  * @pcm must be locked when called.
  * Only dirty cachelines need to be flushed back to memory component.
@@ -110,13 +193,26 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 {
 	int ret = 0;
 
-	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
-
+#ifndef CONFIG_PCACHE_EVICT_LIST
+	/* 1) write-protect from all threads */
 	pcache_wrprotect(pcm);
 
-	/* Safely flush back */
+	/* 2) Safely flush back */
 	pcache_flush_one(pcm);
+
+	/* 3) unmap all PTEs */
 	pcache_try_to_unmap(pcm);
+#else
+	/* 1) add entries to per set list */
+	pset_add_eviction(pset, pcm);
+
+	/* 2) entried added, safe to unmap and flush */
+	pcache_try_to_unmap(pcm);
+	pcache_flush_one(pcm);
+
+	/* 3) remove entries */
+	pset_remove_eviction(pset, pcm);
+#endif
 
 	ClearPcacheValid(pcm);
 	unlock_pcache(pcm);
@@ -149,6 +245,7 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	if (!pcm)
 		return -ENOMEM;
 
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 	ret = do_pcache_evict_line(pset, pcm);
 	if (ret)
 		return -ENOMEM;

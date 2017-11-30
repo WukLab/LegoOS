@@ -189,6 +189,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 		goto out;
 	}
 
+#ifndef CONFIG_PCACHE_EVICTION_LIST
 	/*
 	 * Pcache line might be locked by eviction routine.
 	 * But we must NOT sleep here because we are holding pte lock.
@@ -200,6 +201,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 		inc_pcache_event(PCACHE_WP_EVICTION);
 		goto out;
 	}
+#endif
 
 	panic("COW is not implemented now!");
 	unlock_pcache(pcm);
@@ -220,8 +222,13 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 
 	entry = *pte;
 	if (likely(!pte_present(entry))) {
-		if (likely(pte_none(entry)))
+		if (likely(pte_none(entry))) {
+#ifdef CONFIG_PCACHE_EVICTION_LIST
+			while (pset_find_eviction(address, current))
+				cpu_relax();
+#endif
 			return pcache_do_fill_page(mm, address, pte, pmd, flags);
+		}
 
 		/* Lego does not fill any extra info into PTE */
 		print_bad_pte(mm, address, entry, NULL);

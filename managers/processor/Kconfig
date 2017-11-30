@@ -60,6 +60,12 @@ choice
 		  Enable this option to use LRU algorithm while doing eviction.
 endchoice
 
+config PCACHE_EVICTION_LIST
+	bool "Use list with pcache eviction"
+	default n
+	help
+	  asd
+
 menu "Processor DEBUG Options"
 config DEBUG_PCACHE
 	bool "Debug pcache"
