@@ -74,12 +74,44 @@ struct pcache_meta {
 	atomic_t		mapcount;
 } ____cacheline_aligned;
 
+enum pcache_rmap_flags {
+	PCACHE_RMAP_reserved,
+
+	NR_PCACHE_RMAP_FLAGS
+};
+
 struct pcache_rmap {
 	pte_t			*page_table;
+	unsigned long		flags;
 	struct task_struct	*owner;
 	unsigned long		address;	/* not page aligned */
 	struct list_head	next;
 };
+
+#define TEST_RMAP_FLAGS(uname, lname)				\
+static inline int Rmap##uname(const struct pcache_rmap *p)	\
+{								\
+	return test_bit(PCACHE_RMAP_##lname, &p->flags);	\
+}
+
+#define SET_RMAP_FLAGS(uname, lname)				\
+static inline void SetRmap##uname(struct pcache_rmap *p)	\
+{								\
+	set_bit(PCACHE_RMAP_##lname, &p->flags);		\
+}
+
+#define CLEAR_RMAP_FLAGS(uname, lname)				\
+static inline void ClearRmap##uname(struct pcache_rmap *p)	\
+{								\
+	clear_bit(PCACHE_RMAP_##lname, &p->flags);		\
+}
+
+#define RMAP_FLAGS(uname, lname)				\
+	TEST_RMAP_FLAGS(uname, lname)				\
+	SET_RMAP_FLAGS(uname, lname)				\
+	CLEAR_RMAP_FLAGS(uname, lname)
+
+RMAP_FLAGS(Reserved, reserved)
 
 /*
  * pcacheline->bits

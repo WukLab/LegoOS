@@ -203,9 +203,10 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 	/* 1) add entries to per set list */
 	pset_add_eviction(pset, pcm);
 
-	/* 2) entried added, safe to unmap and flush */
-	pcache_try_to_unmap(pcm);
+	/* 2) Remove unmap, but don't free rmap */
+	pcache_try_to_unmap_reserve(pcm);
 	pcache_flush_one(pcm);
+	pcache_free_reserved_rmap(pcm);
 
 	/* 3) remove entries */
 	pset_remove_eviction(pset, pcm);

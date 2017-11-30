@@ -398,4 +398,7 @@ int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
 int pcache_try_to_unmap(struct pcache_meta *pcm);
 int pcache_wrprotect(struct pcache_meta *pcm);
 
+int pcache_try_to_unmap_reserve(struct pcache_meta *pcm);
+int pcache_free_reserved_rmap(struct pcache_meta *pcm);
+
 #endif /* _LEGO_PROCESSOR_PCACHE_H_ */

@@ -20,6 +20,24 @@
 #include <asm/io.h>
 #include <asm/tlbflush.h>
 
+static struct pcache_rmap *alloc_pcache_rmap(void)
+{
+	struct pcache_rmap *rmap;
+
+	rmap = kmalloc(sizeof(*rmap), GFP_KERNEL);
+	if (rmap) {
+		INIT_LIST_HEAD(&rmap->next);
+		rmap->flags = 0;
+	}
+	return rmap;
+}
+
+static void free_pcache_rmap(struct pcache_rmap *rmap)
+{
+	BUG_ON(RmapReserved(rmap));
+	kfree(rmap);
+}
+
 /**
  * pcache_add_rmap
  * @pcm: pcache line in question
@@ -39,7 +57,7 @@ int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 
 	lock_pcache(pcm);
 
-	rmap = kmalloc(sizeof(*rmap), GFP_KERNEL);
+	rmap = alloc_pcache_rmap();
 	if (!rmap) {
 		ret = -ENOMEM;
 		goto out;
@@ -131,6 +149,8 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 	pte_t *pte;
 	pte_t pteval;
 
+	BUG_ON(RmapReserved(rmap));
+
 	pte = rmap_get_locked_pte(pcm, rmap, &ptl);
 	pteval = ptep_get_and_clear(0, pte);
 
@@ -140,7 +160,33 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 				   rmap->address + PAGE_SIZE -1);
 
 	list_del(&rmap->next);
-	kfree(rmap);
+	free_pcache_rmap(rmap);
+	atomic_dec(&pcm->mapcount);
+
+	spin_unlock(ptl);
+	return ret;
+}
+
+/* Clear PTE, but keep rmap in the list with Reserved flag set */
+static int pcache_try_to_unmap_reserve_one(struct pcache_meta *pcm,
+					   struct pcache_rmap *rmap, void *arg)
+{
+	int ret = PCACHE_RMAP_AGAIN;
+	spinlock_t *ptl = NULL;
+	pte_t *pte;
+	pte_t pteval;
+
+	BUG_ON(RmapReserved(rmap));
+
+	pte = rmap_get_locked_pte(pcm, rmap, &ptl);
+	pteval = ptep_get_and_clear(0, pte);
+
+	if (pte_present(pteval))
+		flush_tlb_mm_range(rmap->owner->mm,
+				   rmap->address,
+				   rmap->address + PAGE_SIZE -1);
+
+	SetRmapReserved(rmap);
 	atomic_dec(&pcm->mapcount);
 
 	spin_unlock(ptl);
@@ -156,9 +202,12 @@ static int pcache_mapcount_is_zero(struct pcache_meta *pcm)
  * pcache_try_to_unmap
  * @pcm: the pcache to get unmapped
  *
- * Tries to remove all the page table entries which
- * are mapping this pcache, used in the pageout path.
- * @pcm must be locked on entry.
+ * Tries to remove all the page table entries which are mapping this pcache,
+ * used in the pageout path. @pcm must be locked on entry.
+ *
+ * FAT NOTE:
+ * All rmap data structures associcated with @pcm will be freed.
+ * Any rmap_walk involved functions after this won't have any effect.
  *
  * Return:
  *	PCACHE_RMAP_SUCCEED	- we succeeded in removing all mappings
@@ -178,6 +227,52 @@ int pcache_try_to_unmap(struct pcache_meta *pcm)
 	if (!pcache_mapcount(pcm))
 		ret = PCACHE_RMAP_SUCCEED;
 	return ret;
+}
+
+/**
+ * pcache_try_to_unmap_reserve
+ * @pcm: the pcache to get unmapped
+ *
+ * The only difference with pcache_try_to_unmap is:
+ * 	All rmaps associcated with @pcm will NOT be freed.
+ * Must be paired with pcache_free_reserved_rmap() at last.
+ */
+int pcache_try_to_unmap_reserve(struct pcache_meta *pcm)
+{
+	struct rmap_walk_control rwc = {
+		.rmap_one = pcache_try_to_unmap_reserve_one,
+		.done = pcache_mapcount_is_zero,
+	};
+
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
+
+	rmap_walk(pcm, &rwc);
+	return PCACHE_RMAP_SUCCEED;
+}
+
+static int pcache_free_reserved_rmap_one(struct pcache_meta *pcm,
+					 struct pcache_rmap *rmap, void *arg)
+{
+	/* Must be paired with unmap_reserve */
+	BUG_ON(!RmapReserved(rmap));
+	ClearRmapReserved(rmap);
+
+	list_del(&rmap->next);
+	free_pcache_rmap(rmap);
+
+	return PCACHE_RMAP_AGAIN;
+}
+
+int pcache_free_reserved_rmap(struct pcache_meta *pcm)
+{
+	struct rmap_walk_control rwc = {
+		.rmap_one = pcache_free_reserved_rmap_one,
+	};
+
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
+
+	rmap_walk(pcm, &rwc);
+	return PCACHE_RMAP_SUCCEED;
 }
 
 static int pcache_wrprotect_one(struct pcache_meta *pcm,
