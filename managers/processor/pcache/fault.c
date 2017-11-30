@@ -25,10 +25,10 @@
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
 #include <lego/ratelimit.h>
-#include <lego/comp_processor.h>
 #include <asm/io.h>
 
 #include <processor/pcache.h>
+#include <processor/processor.h>
 
 #ifdef CONFIG_DEBUG_PCACHE_FILL
 #ifdef CONFIG_DEBUG_PCACHE_FILL_UNLIMITED

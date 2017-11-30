@@ -13,8 +13,8 @@
 #include <lego/uaccess.h>
 #include <lego/files.h>
 #include <lego/syscalls.h>
-#include <lego/comp_processor.h>
 #include <processor/fs.h>
+#include <processor/processor.h>
 
 static void dummy_fillstat(struct kstat *stat)
 {

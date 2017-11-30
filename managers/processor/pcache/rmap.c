@@ -14,8 +14,8 @@
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
 #include <lego/ratelimit.h>
-#include <lego/comp_processor.h>
 #include <processor/pcache.h>
+#include <processor/processor.h>
 
 #include <asm/io.h>
 #include <asm/tlbflush.h>

@@ -8,7 +8,7 @@
  */
 
 #include <lego/sched.h>
-#include <lego/comp_processor.h>
+#include <processor/processor.h>
 
 /* Return 0 on success, other on failure */
 int p2m_fork(struct task_struct *p, unsigned long clone_flags)

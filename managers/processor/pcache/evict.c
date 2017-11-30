@@ -17,8 +17,8 @@
 #include <lego/syscalls.h>
 #include <lego/random.h>
 #include <lego/jiffies.h>
-#include <lego/comp_processor.h>
 #include <processor/pcache.h>
+#include <processor/processor.h>
 
 #ifdef CONFIG_PCACHE_EVICT_RANDOM
 static struct pcache_meta *
@@ -132,6 +132,9 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
  *
  * This function will try to evict one cache line from @pset.
  * If succeed, the cache line will be flushed back to its backing memory.
+ * This function can be called concurrently: the selection of cache line
+ * is serialized by pset lock, the real eviction procedure can be overlapped.
+ *
  * Return 0 on success, otherwise on failures.
  */
 int pcache_evict_line(struct pcache_set *pset, unsigned long address)
@@ -140,13 +143,14 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	int ret;
 
 	inc_pset_eviction(pset);
+	inc_pcache_event(PCACHE_EVICTION);
 
 	pcm = pcache_evict_find_line(pset);
-	if (unlikely(!pcm))
-		return -1;
+	if (!pcm)
+		return -ENOMEM;
 
 	ret = do_pcache_evict_line(pset, pcm);
-	if (unlikely(ret))
-		return -1;
+	if (ret)
+		return -ENOMEM;
 	return 0;
 }

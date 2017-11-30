@@ -12,8 +12,8 @@
 #include <lego/uaccess.h>
 #include <lego/files.h>
 #include <lego/syscalls.h>
-#include <lego/comp_processor.h>
 #include <processor/fs.h>
+#include <processor/processor.h>
 
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {

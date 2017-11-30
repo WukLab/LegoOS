@@ -13,8 +13,8 @@
 #include <lego/files.h>
 #include <lego/syscalls.h>
 #include <lego/spinlock.h>
-#include <lego/comp_processor.h>
 #include <processor/fs.h>
+#include <processor/processor.h>
 
 /*
  * Find @file by @fd

@@ -19,7 +19,7 @@
 #include <lego/spinlock.h>
 #include <lego/syscalls.h>
 #include <lego/uaccess.h>
-#include <lego/comp_processor.h>
+#include <processor/processor.h>
 
 /*
  * This function makes sure the current process has its own signal table,

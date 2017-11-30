@@ -14,8 +14,7 @@
 #include <lego/kernel.h>
 #include <lego/kthread.h>
 #include <lego/syscalls.h>
-#include <lego/comp_processor.h>
-#include <lego/syscalls.h>
+#include <processor/processor.h>
 
 #include "processor.h"
 
@@ -56,18 +55,19 @@ static inline void checkpoint_init(void) { }
 #endif
 
 /**
- * processor_component_init
+ * processor_manager_init
  *
- * Initiliaze all processor component contained subsystems.
+ * Initiliaze all processor manager contained subsystems.
  * System will just panic if any of them failed.
  */
-void __init processor_component_init(void)
+void __init processor_manager_init(void)
 {
-	pcache_init();
+	pcache_print_info();
 
 #ifndef CONFIG_FIT
 	pr_info("Network is not compiled. Halt.");
-	while (1) hlt();
+	while (1)
+		hlt();
 #endif
 
 	/* Create checkpointing restore thread */
@@ -79,6 +79,15 @@ void __init processor_component_init(void)
 	run_global_thread();
 
 	pr_info("Processor manager is running.\n");
+}
+
+/*
+ * Early init before buddy allocator is up,
+ * so we are free to use memblock.
+ */
+void __init processor_manager_early_init(void)
+{
+	pcache_init();
 }
 
 #ifndef CONFIG_CHECKPOINT

@@ -16,8 +16,8 @@
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
 #include <lego/jiffies.h>
-#include <lego/comp_processor.h>
 #include <processor/pcache.h>
+#include <processor/processor.h>
 
 /**
  * sysctl_pcache_alloc_timeout_sec
@@ -122,7 +122,7 @@ pcache_alloc_slowpath(struct pcache_set *pset, unsigned long address)
 
 retry:
 	ret = pcache_evict_line(pset, address);
-	if (unlikely(ret))
+	if (ret)
 		return NULL;
 
 	/* Do we still have time? */
@@ -134,7 +134,7 @@ retry:
 	}
 
 	pcm = pcache_alloc_fastpath(pset);
-	if (unlikely(!pcm))
+	if (!pcm)
 		goto retry;
 	return pcm;
 }

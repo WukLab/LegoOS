@@ -24,7 +24,7 @@
 #include <lego/uaccess.h>
 #include <lego/extable.h>
 #include <lego/pgfault.h>
-#include <lego/comp_processor.h>
+#include <processor/processor.h>
 
 /*
  * Page fault error code bits:

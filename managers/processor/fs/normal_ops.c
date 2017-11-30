@@ -12,13 +12,13 @@
 #include <lego/uaccess.h>
 #include <lego/files.h>
 #include <lego/syscalls.h>
-#include <lego/comp_processor.h>
 #include <lego/comp_common.h>
 #include <lego/comp_storage.h>
 #include <lego/seq_file.h>
 #include <lego/timer.h>
 #include <lego/fit_ibapi.h>
 #include <processor/fs.h>
+#include <processor/processor.h>
 
 #ifdef CONFIG_DEBUG_FILE
 #define file_debug(fmt, ...)	\

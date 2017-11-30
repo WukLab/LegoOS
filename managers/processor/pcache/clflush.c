@@ -16,8 +16,8 @@
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
 #include <lego/jiffies.h>
-#include <lego/comp_processor.h>
 #include <processor/pcache.h>
+#include <processor/processor.h>
 
 #ifdef CONFIG_DEBUG_PCACHE_FLUSH
 #define clflush_debug(fmt, ...)	\

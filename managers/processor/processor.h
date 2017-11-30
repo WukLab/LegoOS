@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 
-/* Internal header file */
+/* Processor manager internal header file */
 
 #ifndef _PROCESSOR_COMPONENT_PROCESSOR_H_
 #define _PROCESSOR_COMPONENT_PROCESSOR_H_
@@ -15,5 +15,6 @@
 #include <lego/compiler.h>
 
 void __init pcache_init(void);
+void pcache_print_info(void);
 
 #endif /* _PROCESSOR_COMPONENT_PROCESSOR_H_ */

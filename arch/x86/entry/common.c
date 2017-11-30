@@ -11,7 +11,7 @@
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
 #include <lego/syscalls.h>
-#include <lego/comp_processor.h>
+#include <processor/processor.h>
 #include <generated/asm-offsets.h>
 
 /*

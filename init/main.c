@@ -43,7 +43,7 @@
 #include <lego/stop_machine.h>
 
 #include <lego/comp_memory.h>
-#include <lego/comp_processor.h>
+#include <processor/processor.h>
 
 #include <asm/io.h>
 #include <asm/asm.h>
@@ -139,7 +139,7 @@ static int kernel_init(void *unused)
 	dump_cpumasks();
 	/* Final step towards a running component.. */
 #ifdef CONFIG_COMP_PROCESSOR
-	processor_component_init();
+	processor_manager_init();
 #elif defined(CONFIG_COMP_MEMORY)
 	memory_component_init();
 #endif
@@ -239,6 +239,9 @@ asmlinkage void __init start_kernel(void)
 	pid_init();
 	fork_init();
 	futex_init();
+
+	/* Processor need large contiguous memory */
+	processor_manager_early_init();
 
 	/*
 	 * JUST A NOTE:

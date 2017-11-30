@@ -19,7 +19,7 @@
 #include <lego/syscalls.h>
 #include <lego/socket.h>
 #include <lego/atomic.h>
-#include <lego/comp_processor.h>
+#include <processor/processor.h>
 
 atomic_t global_sockfd;
 

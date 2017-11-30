@@ -20,8 +20,8 @@
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
 #include <lego/jiffies.h>
-#include <lego/comp_processor.h>
 #include <processor/pcache.h>
+#include <processor/processor.h>
 
 DEFINE_PER_CPU(struct pcache_event_stat, pcache_event_stats) = {{0}};
 

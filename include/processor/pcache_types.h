@@ -25,8 +25,9 @@ struct pcache_meta;
 #define PCACHE_META_SIZE		(sizeof(struct pcache_meta))
 
 enum pcache_set_stat_item {
-	NR_PSET_FILL,
-	NR_PSET_EVICTIONS,
+	PSET_FILL,
+	PSET_EVICTIONS,
+
 	NR_PSET_STAT_ITEMS
 };
 
@@ -41,6 +42,7 @@ enum pcache_set_stat_item {
  */
 struct pcache_set {
 	spinlock_t		lock;
+	struct list_head	eviction_list;
 	atomic_t		stat[NR_PSET_STAT_ITEMS];
 };
 

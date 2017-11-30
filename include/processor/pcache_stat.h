@@ -37,22 +37,12 @@ static inline void dec_pset_stat(struct pcache_set *pset,
 
 static inline void inc_pset_fill(struct pcache_set *pset)
 {
-	inc_pset_stat(pset, NR_PSET_FILL);
-}
-
-static inline void dec_pset_fill(struct pcache_set *pset)
-{
-	dec_pset_stat(pset, NR_PSET_FILL);
+	inc_pset_stat(pset, PSET_FILL);
 }
 
 static inline void inc_pset_eviction(struct pcache_set *pset)
 {
-	inc_pset_stat(pset, NR_PSET_EVICTIONS);
-}
-
-static inline void dec_pset_eviction(struct pcache_set *pset)
-{
-	dec_pset_stat(pset, NR_PSET_EVICTIONS);
+	inc_pset_stat(pset, PSET_EVICTIONS);
 }
 
 /*
@@ -68,6 +58,7 @@ enum pcache_event_item {
 	PCACHE_WP,		/* nr of write-protected faults */
 	PCACHE_WP_COW,		/* nr of copy-on-right faults */
 	PCACHE_WP_EVICTION,	/* nr of faults due to concurrent eviction */
+	PCACHE_EVICTION,	/* nr of evictions */
 
 	NR_PCACHE_EVENT_ITEMS,
 };

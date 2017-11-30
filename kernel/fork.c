@@ -18,7 +18,7 @@
 #include <lego/syscalls.h>
 #include <lego/fit_ibapi.h>
 #include <lego/timekeeping.h>
-#include <lego/comp_processor.h>
+#include <processor/processor.h>
 
 #include <asm/pgalloc.h>
 #include <asm/fpu/internal.h>

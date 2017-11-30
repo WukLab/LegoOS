@@ -16,7 +16,7 @@
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
-#include <lego/comp_processor.h>
+#include <processor/processor.h>
 
 static void __init e820_add_region(u64 start, u64 size, int type);
 u64 __init e820_remove_range(u64 start, u64 size, unsigned old_type,

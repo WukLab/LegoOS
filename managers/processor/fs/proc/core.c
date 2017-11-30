@@ -12,7 +12,7 @@
 #include <lego/uaccess.h>
 #include <lego/files.h>
 #include <lego/spinlock.h>
-#include <lego/comp_processor.h>
+#include <processor/processor.h>
 #include <processor/fs.h>
 
 extern struct file_operations proc_stat_ops;

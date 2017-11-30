@@ -288,5 +288,5 @@ void __init setup_arch(void)
 	arch_init_ideal_nops();
 	alternative_instructions();
 
-	pr_info("x86/setup_arch done\n");
+	pr_info("x86: setup_arch done\n");
 }

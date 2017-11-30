@@ -13,10 +13,10 @@
 #include <lego/kernel.h>
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
-#include <lego/comp_processor.h>
-#include <asm/io.h>
+#include <lego/memblock.h>
 
 #include <processor/pcache.h>
+#include <processor/processor.h>
 
 u64 pcache_registered_start;
 u64 pcache_registered_size;
@@ -60,28 +60,6 @@ u64 nr_bits_tag;
 /* Offset between neighbouring ways within a set */
 u64 pcache_way_cache_stride __read_mostly;
 
-/*
- * We are using special memmap semantic.
- * Pcache pages are marked as *reserved* in memblock, so all
- * pages should have been marked as PageReserve by reserve_bootmem_region().
- */
-static void pcache_sanity_check(void)
-{
-	int i;
-	struct page *page;
-	unsigned long nr_pages = pcache_registered_size / PAGE_SIZE;
-	unsigned long va = virt_start_cacheline;
-
-	for (i = 0; i < nr_pages; i++, va += PAGE_SIZE) {
-		page = virt_to_page(va);
-
-		if (unlikely(!PageReserved(page))) {
-			dump_page(page, NULL);
-			panic("Bug indeed");
-		}
-	}
-}
-
 /* Allocate and init pcache_set array */
 static void init_pcache_set_map(void)
 {
@@ -91,7 +69,7 @@ static void init_pcache_set_map(void)
 
 	size = nr_cachesets * sizeof(struct pcache_set);
 
-	pcache_set_map = kmalloc(size, GFP_KERNEL);
+	pcache_set_map = memblock_virt_alloc(size, PAGE_SIZE);
 	if (!pcache_set_map)
 		panic("Unable to allocate pcache set array!");
 
@@ -130,6 +108,7 @@ void __init pcache_init(void)
 	if (pcache_registered_start == 0 || pcache_registered_size == 0)
 		panic("Processor cache not registered, memmap $ needed!");
 
+	/* Legacy: not used */
 	if (!IS_ENABLED(CONFIG_LEGO_SPECIAL_MEMMAP))
 		panic("Require special memmap $ semantic!");
 
@@ -141,8 +120,6 @@ void __init pcache_init(void)
 	 * Not sure about physical machine.
 	 */
 	memset((void *)virt_start_cacheline, 0, pcache_registered_size);
-
-	pcache_sanity_check();
 
 	nr_cachelines_per_page = PAGE_SIZE / PCACHE_META_SIZE;
 	unit_size = nr_cachelines_per_page * PCACHE_LINE_SIZE;
@@ -174,10 +151,23 @@ void __init pcache_init(void)
 	init_pcache_set_map();
 	init_pcache_meta_map();
 
+	/* Now the bits mask */
 	nr_bits_cacheline = ilog2(PCACHE_LINE_SIZE);
 	nr_bits_set = ilog2(nr_cachesets);
 	nr_bits_tag = 64 - nr_bits_cacheline - nr_bits_set;
 
+	pcache_cacheline_mask = (1ULL << nr_bits_cacheline) - 1;
+	pcache_set_mask = ((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1) & ~pcache_cacheline_mask;
+	pcache_tag_mask = ~((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1);
+
+	pcache_way_cache_stride = nr_cachesets * PCACHE_LINE_SIZE;
+
+	/* wq for pcache lock */
+	pcache_init_waitqueue();
+}
+
+void pcache_print_info(void)
+{
 	pr_info("Processor LLC Configurations:\n");
 	pr_info("    PhysStart:         %#llx\n",	pcache_registered_start);
 	pr_info("    VirtStart:         %#llx\n",	virt_start_cacheline);
@@ -188,10 +178,6 @@ void __init pcache_init(void)
 	pr_info("    NR Sets:           %llu\n",	nr_cachesets);
 	pr_info("    Cacheline size:    %lu B\n",	PCACHE_LINE_SIZE);
 	pr_info("    Metadata size:     %lu B\n",	PCACHE_META_SIZE);
-
-	pcache_cacheline_mask = (1ULL << nr_bits_cacheline) - 1;
-	pcache_set_mask = ((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1) & ~pcache_cacheline_mask;
-	pcache_tag_mask = ~((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1);
 
 	pr_info("    NR cacheline bits: %2llu [%2llu - %2llu] %#018llx\n",
 		nr_bits_cacheline,
@@ -220,11 +206,11 @@ void __init pcache_init(void)
 		virt_start_cacheline, (unsigned long)pcache_meta_map - 1);
 	pr_info("    Metadata (va) range:    [%18p - %#18lx]\n",
 		pcache_meta_map, (unsigned long)(pcache_meta_map + nr_cachelines) - 1);
+	pr_info("    pcache_set_map(%3lub):   [%18p - %#18lx]\n",
+		sizeof(struct pcache_set), pcache_set_map,
+		(unsigned long)(pcache_set_map + nr_cachesets) - 1);
 
-	pcache_way_cache_stride = nr_cachesets * PCACHE_LINE_SIZE;
 	pr_info("    Way cache stride:  %#llx\n", pcache_way_cache_stride);
-
-	pcache_init_waitqueue();
 }
 
 /**
