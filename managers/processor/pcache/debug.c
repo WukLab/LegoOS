@@ -42,6 +42,24 @@ void dump_pcache_meta(struct pcache_meta *pcm, const char *reason)
 }
 
 /**
+ * dump_pcache_rmap
+ * @rmap: the reverse map in question
+ *
+ * Dump a pcache_rmap, including its owner, flags, user va and pte.
+ */
+void dump_pcache_rmap(struct pcache_rmap *rmap, const char *reason)
+{
+	pte_t *ptep = rmap->page_table;
+
+	pr_debug("rmap:%p flags:%#lx owner-pid:%u user_va:%#lx ptep:%p\n",
+		rmap, rmap->flags, rmap->owner->pid, rmap->address, ptep);
+	dump_pte(ptep, NULL);
+
+	if (reason)
+		pr_debug("pcache_rmap dumped because: %s\n", reason);
+}
+
+/**
  * pcache_line_csum
  * @pcm: pcache line in question
  *
@@ -78,19 +96,4 @@ void dump_pcache_line(struct pcache_meta *pcm, const char *reason)
 	dump_pcache_meta(pcm, reason);
 	print_hex_dump_bytes(csum_s, DUMP_PREFIX_OFFSET,
 		pcache_meta_to_kva(pcm), PCACHE_LINE_SIZE);
-}
-
-/**
- * dump_pcache_rmap
- * @rmap: the reverse map in question
- *
- * Dump a pcache_rmap, including its owner, user va and pte.
- */
-void dump_pcache_rmap(struct pcache_rmap *rmap)
-{
-	pte_t *ptep = rmap->page_table;
-
-	pr_debug("rmap:%p owner-pid:%u user_va:%#lx ptep:%p\n",
-		rmap, rmap->owner->pid, rmap->address, ptep);
-	dump_pte(ptep, NULL);
 }

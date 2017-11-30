@@ -109,7 +109,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	/* Update counting */
 	pset = pcache_meta_to_pcache_set(pcm);
 	inc_pset_fill(pset);
-	inc_pcache_event(PCACHE_FILL);
+	inc_pcache_event(PCACHE_FAULT_FILL);
 
 	ret = 0;
 out:
@@ -198,19 +198,19 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 	 */
 	if (likely(!trylock_pcache(pcm))) {
 		ret = 0;
-		inc_pcache_event(PCACHE_WP_EVICTION);
+		inc_pcache_event(PCACHE_FAULT_EVICTION);
 		goto out;
 	}
 #endif
 
 	panic("COW is not implemented now!");
 	unlock_pcache(pcm);
-	inc_pcache_event(PCACHE_WP_COW);
+	inc_pcache_event(PCACHE_FAULT_WP_COW);
 
 	ret = 0;
 out:
 	spin_unlock(ptl);
-	inc_pcache_event(PCACHE_WP);
+	inc_pcache_event(PCACHE_FAULT_WP);
 	return ret;
 }
 
@@ -224,8 +224,14 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 	if (likely(!pte_present(entry))) {
 		if (likely(pte_none(entry))) {
 #ifdef CONFIG_PCACHE_EVICTION_LIST
-			while (pset_find_eviction(address, current))
+			bool counted = false;
+			while (pset_find_eviction(address, current)) {
 				cpu_relax();
+				if (!counted) {
+					counted = true;
+					inc_pcache_event(PCACHE_FAULT_EVICTION);
+				}
+			}
 #endif
 			return pcache_do_fill_page(mm, address, pte, pmd, flags);
 		}

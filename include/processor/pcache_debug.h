@@ -16,7 +16,7 @@
 __wsum pcache_line_csum(struct pcache_meta *pcm);
 void dump_pcache_meta(struct pcache_meta *pcm, const char *reason);
 void dump_pcache_line(struct pcache_meta *pcm, const char *reason);
-void dump_pcache_rmap(struct pcache_rmap *);
+void dump_pcache_rmap(struct pcache_rmap *rmap, const char *reason);
 extern const struct trace_print_flags pcacheflag_names[];
 
 #ifdef CONFIG_DEBUG_PCACHE
@@ -33,11 +33,21 @@ do {									\
 	}								\
 } while (0)
 
+#define PCACHE_BUG_ON_RMAP(cond, rmap)					\
+do {									\
+	if (unlikely(cond)) {						\
+		dump_pcache_rmap(rmap,					\
+			"PCACHE_BUG_ON_RMAP("__stringify(cond)")");	\
+		BUG();							\
+	}								\
+} while (0)
+
 #else
 #define PCACHE_BUG_ON(cond)		do { } while (0)
 #define PCACHE_WARN_ON(cond)		do { } while (0)
 #define PCACHE_WARN(cond, format...)	do { } while (0)
 #define PCACHE_BUG_ON_PCM(cond, pcm)	do { } while (0)
+#define PCACHE_BUG_ON_RMAP(cond, rmap)	do { } while (0)
 #endif /* CONFIG_DEBUG_PCACHE */
 
 #endif /* _LEGO_PROCESSOR_PCACHE_DEBUG_H_ */

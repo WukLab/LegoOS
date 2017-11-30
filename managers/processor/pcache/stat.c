@@ -7,10 +7,6 @@
  * (at your option) any later version.
  */
 
-/*
- * /proc/pcache
- */
-
 #include <lego/mm.h>
 #include <lego/wait.h>
 #include <lego/slab.h>
@@ -25,6 +21,15 @@
 
 DEFINE_PER_CPU(struct pcache_event_stat, pcache_event_stats) = {{0}};
 
+static const char *const pcache_event_text[] = {
+	"nr_pgfault",
+	"nr_wp_pgfault",
+	"nr_wp_cow_pgfault",
+	"nr_concurrent_eviction",
+	"nr_cache_fill",
+	"nr_evictions",
+};
+
 void sum_pcache_events(struct pcache_event_stat *buf)
 {
 	int cpu, i;
@@ -36,5 +41,18 @@ void sum_pcache_events(struct pcache_event_stat *buf)
 		this = &per_cpu(pcache_event_stats, cpu);
 		for (i = 0; i < NR_PCACHE_EVENT_ITEMS; i++)
 			buf->event[i] += this->event[i];
+	}
+}
+
+void print_pcache_events(void)
+{
+	struct pcache_event_stat stat;
+	int i;
+
+	BUILD_BUG_ON(NR_PCACHE_EVENT_ITEMS > ARRAY_SIZE(pcache_event_text));
+
+	sum_pcache_events(&stat);
+	for (i = 0; i < NR_PCACHE_EVENT_ITEMS; i++) {
+		pr_info("%s: %lu\n", pcache_event_text[i], stat.event[i]);
 	}
 }

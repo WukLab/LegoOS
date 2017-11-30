@@ -54,10 +54,10 @@ static inline void inc_pset_eviction(struct pcache_set *pset)
 
 enum pcache_event_item {
 	PCACHE_FAULT,		/* nr of page fault occurred */
-	PCACHE_FILL,		/* nr of cache fill from memory */
-	PCACHE_WP,		/* nr of write-protected faults */
-	PCACHE_WP_COW,		/* nr of copy-on-right faults */
-	PCACHE_WP_EVICTION,	/* nr of faults due to concurrent eviction */
+	PCACHE_FAULT_WP,	/* nr of write-protected faults */
+	PCACHE_FAULT_WP_COW,	/* nr of copy-on-right faults */
+	PCACHE_FAULT_EVICTION,	/* nr of faults due to concurrent eviction */
+	PCACHE_FAULT_FILL,	/* nr of cache fill from memory */
 	PCACHE_EVICTION,	/* nr of evictions */
 
 	NR_PCACHE_EVENT_ITEMS,
@@ -80,5 +80,6 @@ static inline void __inc_pcache_event(enum pcache_event_item item)
 }
 
 void sum_pcache_events(struct pcache_event_stat *buf);
+void print_pcache_events(void);
 
 #endif /* _LEGO_PROCESSOR_PCACHE_STAT_H_ */

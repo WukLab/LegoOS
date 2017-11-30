@@ -190,7 +190,7 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 {
 	int ret = 0;
 
-#ifndef CONFIG_PCACHE_EVICT_LIST
+#ifndef CONFIG_PCACHE_EVICTION_LIST
 	/* 1) write-protect from all threads */
 	pcache_wrprotect(pcm);
 

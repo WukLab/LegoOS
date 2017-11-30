@@ -34,7 +34,7 @@ static struct pcache_rmap *alloc_pcache_rmap(void)
 
 static void free_pcache_rmap(struct pcache_rmap *rmap)
 {
-	BUG_ON(RmapReserved(rmap));
+	PCACHE_BUG_ON_RMAP(RmapReserved(rmap), rmap);
 	kfree(rmap);
 }
 
@@ -129,8 +129,8 @@ rmap_get_locked_pte(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 
 	if (unlikely(ptep != rmap->page_table ||
 		     pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
-		dump_pcache_rmap(rmap);
-		dump_pcache_meta(pcm, "Corrupted memory");
+		dump_pcache_rmap(rmap, "Corrupted RMAP");
+		dump_pcache_meta(pcm, "Corrupted RMAP");
 		BUG();
 	}
 
@@ -149,7 +149,7 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 	pte_t *pte;
 	pte_t pteval;
 
-	BUG_ON(RmapReserved(rmap));
+	PCACHE_BUG_ON_RMAP(RmapReserved(rmap), rmap);
 
 	pte = rmap_get_locked_pte(pcm, rmap, &ptl);
 	pteval = ptep_get_and_clear(0, pte);
@@ -176,7 +176,7 @@ static int pcache_try_to_unmap_reserve_one(struct pcache_meta *pcm,
 	pte_t *pte;
 	pte_t pteval;
 
-	BUG_ON(RmapReserved(rmap));
+	PCACHE_BUG_ON_RMAP(RmapReserved(rmap), rmap);
 
 	pte = rmap_get_locked_pte(pcm, rmap, &ptl);
 	pteval = ptep_get_and_clear(0, pte);
@@ -254,7 +254,7 @@ static int pcache_free_reserved_rmap_one(struct pcache_meta *pcm,
 					 struct pcache_rmap *rmap, void *arg)
 {
 	/* Must be paired with unmap_reserve */
-	BUG_ON(!RmapReserved(rmap));
+	PCACHE_BUG_ON_RMAP(!RmapReserved(rmap), rmap);
 	ClearRmapReserved(rmap);
 
 	list_del(&rmap->next);
