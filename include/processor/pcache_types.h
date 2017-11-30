@@ -44,7 +44,7 @@ struct pcache_set {
 	spinlock_t		lock;
 	struct list_head	eviction_list;
 	atomic_t		stat[NR_PSET_STAT_ITEMS];
-};
+} ____cacheline_aligned;
 
 /**
  * struct pcache_meta	- Metadata about one pcache line

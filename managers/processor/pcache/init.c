@@ -43,6 +43,9 @@ struct pcache_meta *pcache_meta_map __read_mostly;
 
 struct pcache_set *pcache_set_map __read_mostly;
 
+/* per set eviction status: for fast lookup */
+unsigned long *pcache_set_eviction_bitmap __read_mostly;
+
 /*
  * Bits to mask virtual address:
  * |MSB ..     |    ...   |      ...      LSB|
@@ -65,19 +68,28 @@ static void init_pcache_set_map(void)
 {
 	u64 size;
 	int i;
-	struct pcache_set *pset;
 
+	/* the eviction bitmap */
+	size = nr_cachesets / BITS_PER_BYTE;
+	pcache_set_eviction_bitmap = memblock_virt_alloc(size, PAGE_SIZE);
+	if (!pcache_set_eviction_bitmap)
+		panic("Unable to allocate pcache set bitmap!");
+	memset(pcache_set_eviction_bitmap, 0, size);
+
+	/* the pset array */
 	size = nr_cachesets * sizeof(struct pcache_set);
-
 	pcache_set_map = memblock_virt_alloc(size, PAGE_SIZE);
 	if (!pcache_set_map)
 		panic("Unable to allocate pcache set array!");
 
 	for (i = 0; i < nr_cachesets; i++) {
+		struct pcache_set *pset;
 		int j;
 
 		pset = pcache_set_map + i;
 		spin_lock_init(&pset->lock);
+		INIT_LIST_HEAD(&pset->eviction_list);
+
 		for (j = 0; j < NR_PSET_STAT_ITEMS; j++)
 			atomic_set(&pset->stat[j], 0);
 	}
@@ -206,7 +218,7 @@ void pcache_print_info(void)
 		virt_start_cacheline, (unsigned long)pcache_meta_map - 1);
 	pr_info("    Metadata (va) range:    [%18p - %#18lx]\n",
 		pcache_meta_map, (unsigned long)(pcache_meta_map + nr_cachelines) - 1);
-	pr_info("    pcache_set_map(%3lub):   [%18p - %#18lx]\n",
+	pr_info("    pcache_set_map(%03luB):   [%18p - %#18lx]\n",
 		sizeof(struct pcache_set), pcache_set_map,
 		(unsigned long)(pcache_set_map + nr_cachesets) - 1);
 
