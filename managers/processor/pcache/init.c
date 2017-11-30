@@ -255,18 +255,3 @@ int __init pcache_range_register(u64 start, u64 size)
 
 	return 0;
 }
-
-SYSCALL_DEFINE1(pcache_stat, struct pcache_stat __user *, statbuf)
-{
-	struct pcache_stat kstat;
-
-	kstat.nr_cachelines = nr_cachelines;
-	kstat.nr_cachesets = nr_cachesets;
-	kstat.associativity = PCACHE_ASSOCIATIVITY;
-	kstat.cacheline_size = PCACHE_LINE_SIZE;
-	kstat.way_stride = pcache_way_cache_stride;
-
-	if (copy_to_user(statbuf, &kstat, sizeof(kstat)))
-		return -EFAULT;
-	return 0;
-}
