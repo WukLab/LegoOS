@@ -86,14 +86,11 @@ pcache_evict_find_line(struct pcache_set *pset)
 }
 
 #ifdef CONFIG_PCACHE_EVICTION_LIST
-bool pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk)
+bool __pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk)
 {
 	struct pcache_set *pset;
 	struct pset_eviction_entry *pos;
 	bool found = false;
-
-	if (!pset_has_eviction(uvaddr))
-		return false;
 
 	pset = user_vaddr_to_pcache_set(uvaddr);
 	uvaddr &= PAGE_MASK;

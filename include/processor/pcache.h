@@ -310,7 +310,16 @@ pset_has_eviction(unsigned long uvaddr)
 {
 	return test_bit(__uvaddr2set(uvaddr), pcache_set_eviction_bitmap);
 }
-bool pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk);
+
+bool __pset_find_eviction(unsigned long, struct task_struct *);
+
+static inline bool
+pset_find_eviction(unsigned long uvaddr, struct task_struct *p)
+{
+	if (likely(!pset_has_eviction(uvaddr)))
+		return false;
+	return __pset_find_eviction(uvaddr, p);
+}
 #endif
 
 static inline unsigned long pcache_meta_to_pfn(struct pcache_meta *pcm)
