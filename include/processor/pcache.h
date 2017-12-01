@@ -356,9 +356,7 @@ int pcache_flush_one(struct pcache_meta *pcm);
 /* eviction */
 int pcache_evict_line(struct pcache_set *pset, unsigned long address);
 
-/* victim cache */
-void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pcm);
-int pset_add_eviction(struct pcache_set *pset, struct pcache_meta *pcm);
+#ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
 bool __pset_find_eviction(unsigned long, struct task_struct *);
 static inline bool
 pset_has_eviction(unsigned long uvaddr)
@@ -372,6 +370,9 @@ pset_find_eviction(unsigned long uvaddr, struct task_struct *p)
 		return false;
 	return __pset_find_eviction(uvaddr, p);
 }
+#endif
+
+/* victim cache */
 
 /*
  * rmap_walk_control: To control rmap traversing for specific needs

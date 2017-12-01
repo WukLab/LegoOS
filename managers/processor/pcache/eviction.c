@@ -85,6 +85,89 @@ pcache_evict_find_line(struct pcache_set *pset)
 #endif
 }
 
+#ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
+/* per set eviction status: for fast lookup */
+unsigned long *pcache_set_eviction_bitmap __read_mostly;
+
+bool __pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk)
+{
+	struct pcache_set *pset;
+	struct pset_eviction_entry *pos;
+	bool found = false;
+
+	pset = user_vaddr_to_pcache_set(uvaddr);
+	uvaddr &= PAGE_MASK;
+
+	spin_lock(&pset->lock);
+	list_for_each_entry(pos, &pset->eviction_list, next) {
+		if (uvaddr == pos->address &&
+		   tsk->group_leader == pos->owner->group_leader) {
+			found = true;
+			break;
+		}
+	}
+	spin_unlock(&pset->lock);
+
+	return found;
+}
+
+static int pset_add_eviction_one(struct pcache_meta *pcm,
+				 struct pcache_rmap *rmap, void *arg)
+{
+	int *nr_added = arg;
+	struct pcache_set *pset = pcache_meta_to_pcache_set(pcm);
+	struct pset_eviction_entry *new;
+
+	new = kmalloc(sizeof(*new), GFP_KERNEL);
+	if (!new)
+		return PCACHE_RMAP_FAILED;
+
+	new->address = rmap->address & PAGE_MASK;
+	new->owner = rmap->owner;
+	new->pcm = pcm;
+
+	spin_lock(&pset->lock);
+	list_add(&new->next, &pset->eviction_list);
+	__set_bit(pcache_set_to_set_index(pset), pcache_set_eviction_bitmap);
+	spin_unlock(&pset->lock);
+
+	(*nr_added)++;
+	return PCACHE_RMAP_AGAIN;
+}
+
+static int pset_add_eviction(struct pcache_set *pset, struct pcache_meta *pcm)
+{
+	int nr_added;
+	struct rmap_walk_control rwc = {
+		.arg = &nr_added,
+		.rmap_one = pset_add_eviction_one,
+	};
+
+	if (!pcache_mapped(pcm))
+		return 0;
+	rmap_walk(pcm, &rwc);
+	return nr_added;
+}
+
+static void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pcm)
+{
+	struct pset_eviction_entry *pos, *keeper;
+
+	spin_lock(&pset->lock);
+	list_for_each_entry_safe(pos, keeper, &pset->eviction_list, next) {
+		if (pos->pcm == pcm) {
+			list_del(&pos->next);
+			kfree(pos);
+		}
+	}
+
+	if (list_empty(&pset->eviction_list))
+		clear_bit(pcache_set_to_set_index(pset),
+			  pcache_set_eviction_bitmap);
+	spin_unlock(&pset->lock);
+}
+#endif /* CONFIG_PCACHE_EVICTION_PERSET_LIST */
+
 /*
  * @pcm must be locked when called.
  * Only dirty cachelines need to be flushed back to memory component.
@@ -114,7 +197,8 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 {
 	int ret = 0;
 
-#ifndef CONFIG_PCACHE_VICTIM
+#ifdef CONFIG_PCACHE_EVICTION_WRITE_PROTECT
+
 	/* 1) write-protect from all threads */
 	pcache_wrprotect(pcm);
 
@@ -123,7 +207,13 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 
 	/* 3) unmap all PTEs */
 	pcache_try_to_unmap(pcm);
-#else
+
+	ClearPcacheValid(pcm);
+	unlock_pcache(pcm);
+	pcache_free(pcm);
+
+#elif defined(CONFIG_PCACHE_EVICTION_PERSET_LIST)
+
 	/* 1) add entries to per set list */
 	pset_add_eviction(pset, pcm);
 
@@ -134,11 +224,14 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 
 	/* 3) remove entries */
 	pset_remove_eviction(pset, pcm);
-#endif
 
 	ClearPcacheValid(pcm);
 	unlock_pcache(pcm);
 	pcache_free(pcm);
+
+#elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
+
+#endif
 
 	return ret;
 }

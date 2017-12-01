@@ -31,15 +31,22 @@ enum pcache_set_stat_item {
 	NR_PSET_STAT_ITEMS
 };
 
+#ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
 struct pset_eviction_entry {
 	unsigned long		address;	/* page aligned */
 	struct task_struct	*owner;
 	struct pcache_meta	*pcm;		/* associated pcm */
 	struct list_head	next;
 };
+#endif
 
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
 struct pcache_victim_meta {
+	unsigned long		address;	/* page aligned user va */
+	pid_t			pid;		/* thread_group id */
+	struct pcache_meta	*pcm;		/* associated pcm */
 };
+#endif
 
 /**
  * struct pcache_set	- Metadata for each cache set
@@ -52,8 +59,10 @@ struct pcache_victim_meta {
  */
 struct pcache_set {
 	spinlock_t		lock;
-	struct list_head	eviction_list;
 	atomic_t		stat[NR_PSET_STAT_ITEMS];
+#ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
+	struct list_head	eviction_list;
+#endif
 } ____cacheline_aligned;
 
 /**
