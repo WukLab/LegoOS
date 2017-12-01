@@ -11,3 +11,5 @@ obj-y += debug.o
 obj-y += eviction.o
 obj-y += stat.o
 obj-y += syscall.o
+obj-y += victim.o
+obj-y += prefetch.o
