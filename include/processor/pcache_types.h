@@ -38,6 +38,9 @@ struct pset_eviction_entry {
 	struct list_head	next;
 };
 
+struct pcache_victim_meta {
+};
+
 /**
  * struct pcache_set	- Metadata for each cache set
  * @lock: protect (de-)allocation of all ways within this set

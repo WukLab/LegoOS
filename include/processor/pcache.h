@@ -304,24 +304,6 @@ user_vaddr_to_pcache_set(unsigned long uvaddr)
 	return pcache_set_map + __uvaddr2set(uvaddr);
 }
 
-#ifdef CONFIG_PCACHE_VICTIM
-static inline bool
-pset_has_eviction(unsigned long uvaddr)
-{
-	return test_bit(__uvaddr2set(uvaddr), pcache_set_eviction_bitmap);
-}
-
-bool __pset_find_eviction(unsigned long, struct task_struct *);
-
-static inline bool
-pset_find_eviction(unsigned long uvaddr, struct task_struct *p)
-{
-	if (likely(!pset_has_eviction(uvaddr)))
-		return false;
-	return __pset_find_eviction(uvaddr, p);
-}
-#endif
-
 static inline unsigned long pcache_meta_to_pfn(struct pcache_meta *pcm)
 {
 	return ((unsigned long)pcache_meta_to_pa(pcm)) >> PCACHE_LINE_SIZE_SHIFT;
@@ -373,6 +355,23 @@ int pcache_flush_one(struct pcache_meta *pcm);
 
 /* eviction */
 int pcache_evict_line(struct pcache_set *pset, unsigned long address);
+
+/* victim cache */
+void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pcm);
+int pset_add_eviction(struct pcache_set *pset, struct pcache_meta *pcm);
+bool __pset_find_eviction(unsigned long, struct task_struct *);
+static inline bool
+pset_has_eviction(unsigned long uvaddr)
+{
+	return test_bit(__uvaddr2set(uvaddr), pcache_set_eviction_bitmap);
+}
+static inline bool
+pset_find_eviction(unsigned long uvaddr, struct task_struct *p)
+{
+	if (likely(!pset_has_eviction(uvaddr)))
+		return false;
+	return __pset_find_eviction(uvaddr, p);
+}
 
 /*
  * rmap_walk_control: To control rmap traversing for specific needs
