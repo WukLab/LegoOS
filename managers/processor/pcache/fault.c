@@ -189,7 +189,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 		goto out;
 	}
 
-#ifndef CONFIG_PCACHE_EVICTION_LIST
+#ifndef CONFIG_PCACHE_VICTIM
 	/*
 	 * Pcache line might be locked by eviction routine.
 	 * But we must NOT sleep here because we are holding pte lock.
@@ -223,7 +223,7 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 	entry = *pte;
 	if (likely(!pte_present(entry))) {
 		if (likely(pte_none(entry))) {
-#ifdef CONFIG_PCACHE_EVICTION_LIST
+#ifdef CONFIG_PCACHE_VICTIM
 			bool counted = false;
 			while (pset_find_eviction(address, current)) {
 				cpu_relax();

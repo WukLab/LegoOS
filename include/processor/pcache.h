@@ -304,7 +304,7 @@ user_vaddr_to_pcache_set(unsigned long uvaddr)
 	return pcache_set_map + __uvaddr2set(uvaddr);
 }
 
-#ifdef CONFIG_PCACHE_EVICTION_LIST
+#ifdef CONFIG_PCACHE_VICTIM
 static inline bool
 pset_has_eviction(unsigned long uvaddr)
 {

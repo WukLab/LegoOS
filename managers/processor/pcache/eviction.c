@@ -85,7 +85,7 @@ pcache_evict_find_line(struct pcache_set *pset)
 #endif
 }
 
-#ifdef CONFIG_PCACHE_EVICTION_LIST
+#ifdef CONFIG_PCACHE_VICTIM
 bool __pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk)
 {
 	struct pcache_set *pset;
@@ -190,7 +190,7 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 {
 	int ret = 0;
 
-#ifndef CONFIG_PCACHE_EVICTION_LIST
+#ifndef CONFIG_PCACHE_VICTIM
 	/* 1) write-protect from all threads */
 	pcache_wrprotect(pcm);
 

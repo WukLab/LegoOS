@@ -1,0 +1,43 @@
+choice
+	prompt "Pcache: Eviction Algorithm"
+	default PCACHE_EVICT_RANDOM
+	help
+	  Allows the selection of pcache evction algorithm.
+	  Eviction happens when pcache allocation made into a full set.
+
+	config PCACHE_EVICT_RANDOM
+		bool "Use Random Algorithm"
+		---help---
+		  Enable this option to use random algorithm while doing eviction.
+
+	config PCACHE_EVICT_FIFO
+		bool "Use FIFO Algorithm"
+		---help---
+		  Enable this option to use FIFO algorithm while doing eviction.
+
+	config PCACHE_EVICT_LRU
+		bool "Use LRU Algorithm"
+		---help---
+		  Enable this option to use LRU algorithm while doing eviction.
+endchoice
+
+config PCACHE_VICTIM
+	bool "Pcache: Victim Cache"
+	default n
+	help
+	  Say Y if you want a small victim cache between pcache and memory.
+	  Victim cache is fully-associated, and it is loaded only when lines
+	  are evicted from pcache.
+
+	  In the case of a miss in pcache that hits in the victim cache, the
+	  contents can be copied to pcache directly, without any network delay.
+
+	  If unsure, say N.
+
+config PCACHE_VICTIM_NR_ENTRIES
+	int "Pcache: Number of Victim Cache Entries"
+	default 8
+	range 1 32
+	depends on PCACHE_VICTIM
+	help
+	  This value determines how many entries the victim cache will have.

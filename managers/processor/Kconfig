@@ -37,34 +37,9 @@ config LEGO_SPECIAL_MEMMAP
 
 	  If unsure, leave it alone.
 
-choice
-	prompt "Pcache Eviction Algorithm"
-	default PCACHE_EVICT_RANDOM
-	help
-	  Allows the selection of pcache evction algorithm.
-	  Eviction happens when pcache allocation made into a full set.
-
-	config PCACHE_EVICT_RANDOM
-		bool "Use Random Algorithm"
-		---help---
-		  Enable this option to use random algorithm while doing eviction.
-
-	config PCACHE_EVICT_FIFO
-		bool "Use FIFO Algorithm"
-		---help---
-		  Enable this option to use FIFO algorithm while doing eviction.
-
-	config PCACHE_EVICT_LRU
-		bool "Use LRU Algorithm"
-		---help---
-		  Enable this option to use LRU algorithm while doing eviction.
-endchoice
-
-config PCACHE_EVICTION_LIST
-	bool "Use list with pcache eviction"
-	default n
-	help
-	  asd
+source "managers/processor/pcache/Kconfig"
+source "managers/processor/fs/Kconfig"
+source "managers/processor/checkpoint/Kconfig"
 
 menu "Processor DEBUG Options"
 config DEBUG_PCACHE
@@ -184,6 +159,6 @@ config DEBUG_CHECKPOINT
 
 endmenu # "Debug Option"
 
-endif
+endif	# if COMP_PROCESSOR
 
-endmenu
+endmenu # Processor component
