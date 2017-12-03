@@ -32,3 +32,8 @@ void add_victim_data(struct pcache_meta *pcm)
 {
 
 }
+
+void __init pcache_init_victim_cache(void)
+{
+
+}

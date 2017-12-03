@@ -224,6 +224,9 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 	if (likely(!pte_present(entry))) {
 		if (likely(pte_none(entry))) {
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
+			/*
+			 * Check per-set's current eviction list
+			 */
 			bool counted = false;
 			while (pset_find_eviction(address, current)) {
 				cpu_relax();
@@ -233,7 +236,19 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 				}
 			}
 #elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
+			/*
+			 * Check victim cache
+			 */
+			panic("todo");
 #endif
+
+			/*
+			 * write-protect
+			 * per-set eviction list
+			 * victim cache
+			 *
+			 * All of them merge into this:
+			 */
 			return pcache_do_fill_page(mm, address, pte, pmd, flags);
 		}
 

@@ -178,6 +178,11 @@ void __init pcache_init(void)
 
 	/* wq for pcache lock */
 	pcache_init_waitqueue();
+
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
+	/* victim_cache */
+	pcache_init_victim_cache();
+#endif
 }
 
 void pcache_print_info(void)

@@ -372,7 +372,9 @@ pset_find_eviction(unsigned long uvaddr, struct task_struct *p)
 }
 #endif
 
-/* victim cache */
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
+void __init pcache_init_victim_cache(void);
+#endif
 
 /*
  * rmap_walk_control: To control rmap traversing for specific needs

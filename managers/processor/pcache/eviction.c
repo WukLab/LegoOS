@@ -230,7 +230,7 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 	pcache_free(pcm);
 
 #elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
-
+	panic("toto");
 #endif
 
 	return ret;
