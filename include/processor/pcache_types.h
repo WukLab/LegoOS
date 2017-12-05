@@ -40,14 +40,6 @@ struct pset_eviction_entry {
 };
 #endif
 
-#ifdef CONFIG_PCACHE_EVICTION_VICTIM
-struct pcache_victim_meta {
-	unsigned long		address;	/* page aligned user va */
-	pid_t			pid;		/* thread_group id */
-	struct pcache_meta	*pcm;		/* associated pcm */
-};
-#endif
-
 /**
  * struct pcache_set	- Metadata for each cache set
  * @lock: protect (de-)allocation of all ways within this set
@@ -133,6 +125,8 @@ RMAP_FLAGS(Reserved, reserved)
  * PC_valid:		Pcacheline has a valid mapping and content.
  * PC_dirty:		Pcacheline is dirty
  * PC_writeback:	Pcacheline is being writtern back to memory
+ *
+ * Hack: remember to update the pcacheflag_names array in debug file.
  */
 enum pcache_meta_bits {
 	PC_locked,

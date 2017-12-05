@@ -81,6 +81,12 @@ config PCACHE_EVICTION_VICTIM_NR_ENTRIES
 	int "Pcache: Number of Victim Cache Entries"
 	default 8
 	range 1 32
-	depends on PCACHE_VICTIM
+	depends on PCACHE_EVICTION_VICTIM
 	help
 	  This value determines how many entries the victim cache will have.
+
+config PCACHE_PREFETCH
+	bool "Pcache: prefetch"
+	default y
+	help
+	  Say Y if you want prefetch feature.

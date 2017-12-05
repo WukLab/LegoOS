@@ -114,6 +114,11 @@ static void init_pcache_meta_map(void)
 
 void __init pcache_init_waitqueue(void);
 
+/*
+ * pcache is initialized in early boot, when buddy allocator is not
+ * up yet. We can only use memblock to allocate memory at this point.
+ * We do so because we may want more than 4MB contiguous physical memory.
+ */
 void __init pcache_init(void)
 {
 	u64 nr_cachelines_per_page, nr_units;
@@ -165,6 +170,11 @@ void __init pcache_init(void)
 	init_pcache_set_map();
 	init_pcache_meta_map();
 
+	/* victim_cache */
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
+	pcache_init_victim_cache();
+#endif
+
 	/* Now the bits mask */
 	nr_bits_cacheline = ilog2(PCACHE_LINE_SIZE);
 	nr_bits_set = ilog2(nr_cachesets);
@@ -178,11 +188,6 @@ void __init pcache_init(void)
 
 	/* wq for pcache lock */
 	pcache_init_waitqueue();
-
-#ifdef CONFIG_PCACHE_EVICTION_VICTIM
-	/* victim_cache */
-	pcache_init_victim_cache();
-#endif
 }
 
 void pcache_print_info(void)
@@ -230,6 +235,10 @@ void pcache_print_info(void)
 		(unsigned long)(pcache_set_map + nr_cachesets) - 1);
 
 	pr_info("    Way cache stride:  %#llx\n", pcache_way_cache_stride);
+
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
+	pr_info("    NR victim $ entries:     %u\n", VICTIM_NR_ENTRIES);
+#endif
 }
 
 /**

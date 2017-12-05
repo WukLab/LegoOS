@@ -17,6 +17,7 @@
 #include <processor/pcache_types.h>
 #include <processor/pcache_stat.h>
 #include <processor/pcache_debug.h>
+#include <processor/pcache_victim.h>
 #include <uapi/processor/pcache.h>
 
 extern u64 pcache_registered_start;
@@ -370,10 +371,6 @@ pset_find_eviction(unsigned long uvaddr, struct task_struct *p)
 		return false;
 	return __pset_find_eviction(uvaddr, p);
 }
-#endif
-
-#ifdef CONFIG_PCACHE_EVICTION_VICTIM
-void __init pcache_init_victim_cache(void);
 #endif
 
 /*

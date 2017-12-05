@@ -208,10 +208,6 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 	/* 3) unmap all PTEs */
 	pcache_try_to_unmap(pcm);
 
-	ClearPcacheValid(pcm);
-	unlock_pcache(pcm);
-	pcache_free(pcm);
-
 #elif defined(CONFIG_PCACHE_EVICTION_PERSET_LIST)
 
 	/* 1) add entries to per set list */
@@ -225,13 +221,17 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 	/* 3) remove entries */
 	pset_remove_eviction(pset, pcm);
 
+#elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
+
+	victim_prepare_insert(pset, pcm);
+	pcache_try_to_unmap(pcm);
+	victim_finish_insert(pcm);
+
+#endif
+
 	ClearPcacheValid(pcm);
 	unlock_pcache(pcm);
 	pcache_free(pcm);
-
-#elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
-	panic("toto");
-#endif
 
 	return ret;
 }
