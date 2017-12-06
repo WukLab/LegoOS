@@ -166,7 +166,7 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 	return NULL;
 
 out:
-	/* May need further initilization in the future */
+	/* May need further initilization if needed */
 	return pcm;
 }
 

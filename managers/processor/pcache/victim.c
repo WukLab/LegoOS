@@ -32,9 +32,50 @@ void dump_pcache_victim(struct pcache_victim_meta *pvm, const char *reason)
 
 }
 
-static struct pcache_victim_meta *victim_alloc_one(void)
+static inline struct pcache_victim_meta *
+victim_alloc_fastpath(void)
+{
+	int index;
+	struct pcache_victim_meta *v;
+
+	for_each_victim(v, index) {
+		if (likely(!TestSetVictimAllocated(v))) {
+			return v;
+		}
+	}
+	return NULL;
+}
+
+static struct pcache_victim_meta *
+victim_alloc_slowpath(void)
 {
 	return NULL;
+}
+
+static struct pcache_victim_meta *victim_alloc(void)
+{
+	struct pcache_victim_meta *v;
+
+	v = victim_alloc_fastpath();
+	if (likely(v))
+		goto out;
+
+	v = victim_alloc_slowpath();
+	if (likely(v))
+		goto out;
+	return NULL;
+
+out:
+	/* May need further initilization if needed */
+	return v;
+}
+
+static void victim_free(struct pcache_victim_meta *v)
+{
+	PCACHE_BUG_ON_VICTIM(!VictimAllocated(v) || VictimLocked(v) ||
+			      VictimWriteback(v), v);
+
+	ClearVictimAllocated(v);
 }
 
 void victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
@@ -67,8 +108,10 @@ void __init pcache_init_victim_cache(void)
 		panic("Unable to allocate victim meta map!");
 
 	for (i = 0; i < VICTIM_NR_ENTRIES; i++) {
-		struct pcache_victim_meta *pvm;
+		struct pcache_victim_meta *v;
 
-		pvm = pcache_victim_meta_map + i;
+		v = pcache_victim_meta_map + i;
+		v->flags = 0;
+		v->pcm = NULL;
 	}
 }

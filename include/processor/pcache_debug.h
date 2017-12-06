@@ -20,6 +20,19 @@ void dump_pcache_rmap(struct pcache_rmap *rmap, const char *reason);
 extern const struct trace_print_flags pcacheflag_names[];
 
 #ifdef CONFIG_DEBUG_PCACHE
+
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
+void dump_pcache_victim(struct pcache_victim_meta *pvm, const char *reason);
+#define PCACHE_BUG_ON_VICTIM(cond, victim)				\
+do {									\
+	if (unlikely(cond)) {						\
+		dump_pcache_victim(victim,				\
+			"PCACHE_BUG_ON_VICTIM("__stringify(cond)")");	\
+		BUG();							\
+	}								\
+} while (0)
+#endif /* VICTIM */
+
 #define PCACHE_BUG_ON(cond)		BUG_ON(cond)
 #define PCACHE_WARN_ON(cond)		WARN_ON(cond)
 #define PCACHE_WARN(cond, format...)	WARN(cond, format)
@@ -28,7 +41,7 @@ extern const struct trace_print_flags pcacheflag_names[];
 do {									\
 	if (unlikely(cond)) {						\
 		dump_pcache_meta(pcm,					\
-			"PCACHE_BUG_ON_PCM(" __stringify(cond)")");	\
+			"PCACHE_BUG_ON_PCM("__stringify(cond)")");	\
 		BUG();							\
 	}								\
 } while (0)
@@ -43,11 +56,12 @@ do {									\
 } while (0)
 
 #else
-#define PCACHE_BUG_ON(cond)		do { } while (0)
-#define PCACHE_WARN_ON(cond)		do { } while (0)
-#define PCACHE_WARN(cond, format...)	do { } while (0)
-#define PCACHE_BUG_ON_PCM(cond, pcm)	do { } while (0)
-#define PCACHE_BUG_ON_RMAP(cond, rmap)	do { } while (0)
-#endif /* CONFIG_DEBUG_PCACHE */
+#define PCACHE_BUG_ON(cond)			do { } while (0)
+#define PCACHE_WARN_ON(cond)			do { } while (0)
+#define PCACHE_WARN(cond, format...)		do { } while (0)
+#define PCACHE_BUG_ON_PCM(cond, pcm)		do { } while (0)
+#define PCACHE_BUG_ON_RMAP(cond, rmap)		do { } while (0)
+#define PCACHE_BUG_ON_VICTIM(cond, victim)	do { } while (0)
+#endif /* DEBUG_PCACHE */
 
 #endif /* _LEGO_PROCESSOR_PCACHE_DEBUG_H_ */

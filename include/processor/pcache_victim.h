@@ -24,6 +24,14 @@ struct pcache_victim_meta {
 	struct pcache_meta	*pcm;		/* associated pcm */
 };
 
+extern struct pcache_victim_meta *pcache_victim_meta_map;
+extern void *pcache_victim_data_map;
+
+#define for_each_victim(victim, index)				\
+	for (index = 0, victim = pcache_victim_meta_map;	\
+	     index < VICTIM_NR_ENTRIES;				\
+	     index++, victim++)
+
 /*
  * victim_meta->flags
  *
