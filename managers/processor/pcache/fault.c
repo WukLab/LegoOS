@@ -225,7 +225,9 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 		if (likely(pte_none(entry))) {
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
 			/*
-			 * Check per-set's current eviction list
+			 * Check per-set's current eviction list.
+			 * Wait until cache line is fully flushed
+			 * back to memory.
 			 */
 			bool counted = false;
 			while (pset_find_eviction(address, current)) {
@@ -239,13 +241,14 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 			/*
 			 * Check victim cache
 			 */
-			panic("todo");
+			if (fill_from_victim(address))
+				return;
 #endif
 
 			/*
 			 * write-protect
-			 * per-set eviction list
-			 * victim cache
+			 * per-set eviction list (flush finished)
+			 * victim cache (miss)
 			 *
 			 * All of them merge into this:
 			 */

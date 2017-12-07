@@ -16,7 +16,6 @@
 
 #include <processor/pcache_types.h>
 #include <processor/pcache_stat.h>
-#include <processor/pcache_victim.h>
 #include <processor/pcache_debug.h>
 #include <uapi/processor/pcache.h>
 
@@ -401,5 +400,7 @@ int pcache_wrprotect(struct pcache_meta *pcm);
 
 int pcache_try_to_unmap_reserve(struct pcache_meta *pcm);
 int pcache_free_reserved_rmap(struct pcache_meta *pcm);
+
+#include <processor/pcache_victim.h>
 
 #endif /* _LEGO_PROCESSOR_PCACHE_H_ */

@@ -100,7 +100,7 @@ victim_alloc_fastpath(void)
 static struct pcache_victim_meta *
 victim_alloc_slowpath(void)
 {
-	panic("todo");
+	panic("victim cache eviction needed!");
 	return NULL;
 }
 
@@ -142,8 +142,8 @@ alloc_victim_hit_entry(void)
 	return entry;
 }
 
-static int victim_insert_rmap_one(struct pcache_meta *pcm,
-				  struct pcache_rmap *rmap, void *arg)
+static int victim_insert_hit_entry(struct pcache_meta *pcm,
+				   struct pcache_rmap *rmap, void *arg)
 {
 	struct pcache_victim_meta *victim = arg;
 	struct pcache_victim_hit_entry *hit;
@@ -163,11 +163,11 @@ static int victim_insert_rmap_one(struct pcache_meta *pcm,
 }
 
 static inline int
-victim_insert_rmap(struct pcache_victim_meta *victim, struct pcache_meta *pcm)
+victim_insert_hit_entries(struct pcache_victim_meta *victim, struct pcache_meta *pcm)
 {
 	struct rmap_walk_control rwc = {
 		.arg = victim,
-		.rmap_one = victim_insert_rmap_one,
+		.rmap_one = victim_insert_hit_entry,
 	};
 
 	rmap_walk(pcm, &rwc);
@@ -178,8 +178,8 @@ victim_insert_rmap(struct pcache_victim_meta *victim, struct pcache_meta *pcm)
 struct pcache_victim_meta *
 victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
 {
-	struct pcache_victim_meta *victim;
 	int ret;
+	struct pcache_victim_meta *victim;
 
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 
@@ -190,9 +190,21 @@ victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
 	/* For two-step insertion */
 	victim->pcm = pcm;
 
-	ret = victim_insert_rmap(victim, pcm);
+	/*
+	 * Save the rmap info into victim cache's own
+	 * hit entries:
+	 */
+	ret = victim_insert_hit_entries(victim, pcm);
 	if (ret)
 		return ERR_PTR(-ENOMEM);
+
+	/*
+	 * Make sure all updates can be seen by other CPUs
+	 * before counter is updated. Others rely on the
+	 * quick counter checking.
+	 */
+	smp_wmb();
+	pcache_set_victim_inc(pset);
 
 	return victim;
 }
@@ -337,6 +349,15 @@ static int victim_flush_func(void *unused)
 		}
 		spin_unlock(&victim_flush_lock);
 	}
+	return 0;
+}
+
+/*
+ * Return 0 if not filled
+ * Return 1 if filled
+ */
+int __fill_from_victim(unsigned long address)
+{
 	return 0;
 }
 

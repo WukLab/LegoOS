@@ -52,6 +52,15 @@ struct pset_eviction_entry {
 struct pcache_set {
 	spinlock_t		lock;
 	atomic_t		stat[NR_PSET_STAT_ITEMS];
+
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
+	/*
+	 * Number of pcache lines in this set are living in victim cache.
+	 * Used by pgfault to have a quick check.
+	 */
+	atomic_t		nr_victims;
+#endif
+
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
 	struct list_head	eviction_list;
 #endif

@@ -92,6 +92,10 @@ static void init_pcache_set_map(void)
 		INIT_LIST_HEAD(&pset->eviction_list);
 #endif
 
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
+		atomic_set(&pset->nr_victims, 0);
+#endif
+
 		for (j = 0; j < NR_PSET_STAT_ITEMS; j++)
 			atomic_set(&pset->stat[j], 0);
 	}

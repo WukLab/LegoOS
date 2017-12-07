@@ -132,16 +132,51 @@ static inline void *pcache_victim_to_kva(struct pcache_victim_meta *victim)
 
 int victim_submit_flush(struct pcache_victim_meta *victim, bool wait);
 
+/* Submit a flush job to flush thread, return immediately */
 static inline int 
 victim_submit_flush_nowait(struct pcache_victim_meta *victim)
 {
 	return victim_submit_flush(victim, false);
 }
 
+/* Submit a flush job to flush thread, wait until flushed back */
 static inline int
 victim_submit_flush_wait(struct pcache_victim_meta *victim)
 {
 	return victim_submit_flush(victim, true);
+}
+
+static inline void pcache_set_victim_inc(struct pcache_set *pset)
+{
+	atomic_inc(&pset->nr_victims);
+}
+
+static inline void pcache_set_victim_dec(struct pcache_set *pset)
+{
+	atomic_dec(&pset->nr_victims);
+}
+
+static inline bool pcache_set_has_victims(struct pcache_set *pset)
+{
+	if (atomic_read(&pset->nr_victims) > 0)
+		return true;
+	return false;
+}
+
+int __fill_from_victim(unsigned long);
+
+/*
+ * Return 0 if not filled
+ * Return 1 if filled
+ */
+static __always_inline int fill_from_victim(unsigned long address)
+{
+	struct pcache_set *pset;
+
+	pset = user_vaddr_to_pcache_set(address);
+	if (pcache_set_has_victims(pset))
+		return __fill_from_victim(address);
+	return 0;
 }
 
 #endif /* CONFIG_PCACHE_EVICTION_VICTIM */
