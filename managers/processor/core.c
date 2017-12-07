@@ -62,7 +62,7 @@ static inline void checkpoint_init(void) { }
  */
 void __init processor_manager_init(void)
 {
-	pcache_print_info();
+	pcache_post_init();
 
 #ifndef CONFIG_FIT
 	pr_info("Network is not compiled. Halt.");

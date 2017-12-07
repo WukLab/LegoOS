@@ -88,7 +88,13 @@ struct pcache_rmap {
 	pte_t			*page_table;
 	unsigned long		flags;
 	struct task_struct	*owner;
-	unsigned long		address;	/* not page aligned */
+
+	/*
+	 * Hack:
+	 * This is NOT page aligned.
+	 * AND PAGE_MASK if needed by others.
+	 */
+	unsigned long		address;
 	struct list_head	next;
 };
 

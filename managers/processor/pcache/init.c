@@ -172,7 +172,7 @@ void __init pcache_init(void)
 
 	/* victim_cache */
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
-	pcache_init_victim_cache();
+	victim_cache_init();
 #endif
 
 	/* Now the bits mask */
@@ -190,7 +190,7 @@ void __init pcache_init(void)
 	pcache_init_waitqueue();
 }
 
-void pcache_print_info(void)
+void __init pcache_print_info(void)
 {
 	pr_info("Processor LLC Configurations:\n");
 	pr_info("    PhysStart:         %#llx\n",	pcache_registered_start);
@@ -239,6 +239,12 @@ void pcache_print_info(void)
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 	pr_info("    NR victim $ entries:     %u\n", VICTIM_NR_ENTRIES);
 #endif
+}
+
+void __init pcache_post_init(void)
+{
+	pcache_print_info();
+	victim_cache_post_init();
 }
 
 /**

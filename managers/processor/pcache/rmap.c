@@ -347,6 +347,9 @@ int pcache_wrprotect(struct pcache_meta *pcm)
 /*
  * Walk through pcache line's reverse mapping.
  * @pcm must be locked on entry.
+ *
+ * Be careful while using locks inside your rmap walk function.
+ * Do not introduce deadlock here.
  */
 int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc)
 {

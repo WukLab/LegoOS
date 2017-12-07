@@ -22,7 +22,7 @@
 
 #ifdef CONFIG_PCACHE_EVICT_RANDOM
 static struct pcache_meta *
-pcache_evict_find_line_random(struct pcache_set *pset)
+find_line_random(struct pcache_set *pset)
 {
 	struct pcache_meta *pcm;
 	int way;
@@ -52,7 +52,7 @@ pcache_evict_find_line_random(struct pcache_set *pset)
 
 #ifdef CONFIG_PCACHE_EVICT_FIFO
 static struct pcache_meta *
-pcache_evict_find_line_fifo(struct pcache_set *pset)
+find_line_fifo(struct pcache_set *pset)
 {
 	BUG();
 }
@@ -60,28 +60,28 @@ pcache_evict_find_line_fifo(struct pcache_set *pset)
 
 #ifdef CONFIG_PCACHE_EVICT_LRU
 static struct pcache_meta *
-pcache_evict_find_line_lru(struct pcache_set *pset)
+find_line_lru(struct pcache_set *pset)
 {
 	BUG();
 }
 #endif
 
 /**
- * pcache_evict_find_line
+ * find_line
  * @pset: the pcache set in question
  *
  * This function will find a line to evict within a set.
  * The returned pcache line MUST be locked.
  */
 static inline struct pcache_meta *
-pcache_evict_find_line(struct pcache_set *pset)
+find_line(struct pcache_set *pset)
 {
 #ifdef CONFIG_PCACHE_EVICT_RANDOM
-	return pcache_evict_find_line_random(pset);
+	return find_line_random(pset);
 #elif defined(CONFIG_PCACHE_EVICT_FIFO)
-	return pcache_evict_find_line_fifo(pset);
+	return find_line_fifo(pset);
 #elif defined(CONFIG_PCACHE_EVICT_LRU)
-	return pcache_evict_find_line_lru(pset);
+	return find_line_lru(pset);
 #endif
 }
 
@@ -111,6 +111,18 @@ bool __pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk)
 	return found;
 }
 
+static inline struct pset_eviction_entry *
+alloc_pset_eviction_entry(void)
+{
+	struct pset_eviction_entry *entry;
+
+	entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+	if (entry) {
+		INIT_LIST_HEAD(&entry->next);
+	}
+	return entry;
+}
+
 static int pset_add_eviction_one(struct pcache_meta *pcm,
 				 struct pcache_rmap *rmap, void *arg)
 {
@@ -118,7 +130,7 @@ static int pset_add_eviction_one(struct pcache_meta *pcm,
 	struct pcache_set *pset = pcache_meta_to_pcache_set(pcm);
 	struct pset_eviction_entry *new;
 
-	new = kmalloc(sizeof(*new), GFP_KERNEL);
+	new = alloc_pset_eviction_entry();
 	if (!new)
 		return PCACHE_RMAP_FAILED;
 
@@ -166,39 +178,53 @@ static void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pc
 			  pcache_set_eviction_bitmap);
 	spin_unlock(&pset->lock);
 }
+
+static inline int
+evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm)
+{
+	/* 1) add entries to per set list */
+	pset_add_eviction(pset, pcm);
+
+	/* 2.1) Remove unmap, but don't free rmap */
+	pcache_try_to_unmap_reserve(pcm);
+	pcache_flush_one(pcm);
+	/* 2.2) free reserved rmap */
+	pcache_free_reserved_rmap(pcm);
+
+	/* 3) remove entries */
+	pset_remove_eviction(pset, pcm);
+
+	return 0;
+}
 #endif /* CONFIG_PCACHE_EVICTION_PERSET_LIST */
 
-/*
- * @pcm must be locked when called.
- * Only dirty cachelines need to be flushed back to memory component.
- * Return 0 on success, otherwise return negative error values.
- *
- * Note while developing:
- * 1) need to invalidate pte and flush dirty page back to memory
- * 2) If we invalidate pte first, other threads may try to read/write at the same time,
- *    which means a pgfault will happen right after invalidation. The other thread will
- *    find its pte empty, and try to allocate a new cacheline and then fetch from remote.
- *    Meanwhile, this function may still has NOT finished flushing back the dirty page.
- *    Then this is not doable.
- * 3) If we flush first, and do not change the PTE. Then other thread may write to this page
- *    concurrently, then the page flushed back is broken.
- *    What if we a) make pte read-only, b) flush, c) invalidate?
- *    Then if a thread write to the page while we are in the middle of b) flush, then that thread
- *    will have a page fault. It will be able to find the pte, and corresponding pa/pcm. Then
- *    it can do lock_pcache(), it will be put to sleep. We wake them (may have N threads) after
- *    we finish c) invalidate.
- *    Sounds doable.
- *
- * 4) 12/01/17
- *    Things keep moving, we decided to have victim cache.
- *    But the rule of "don't copy broken page" still applys.
- */
-static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
+static inline int
+evict_line_victim(struct pcache_set *pset, struct pcache_meta *pcm)
 {
-	int ret = 0;
+	struct pcache_victim_meta *victim;
+
+	victim = victim_prepare_insert(pset, pcm);
+	if (IS_ERR(victim))
+		return PTR_ERR(victim);
+
+	/*
+	 * Make sure other cpus can see the above
+	 * updates before we do the unmap operations.
+	 */
+	smp_wmb();
+	pcache_try_to_unmap(pcm);
+
+	victim_finish_insert(victim);
+
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_PCACHE_EVICTION_WRITE_PROTECT
-
+static inline int
+evict_line_wrprotect(struct pcache_set *pset, struct pcache_meta *pcm)
+{
 	/* 1) write-protect from all threads */
 	pcache_wrprotect(pcm);
 
@@ -208,32 +234,20 @@ static int do_pcache_evict_line(struct pcache_set *pset, struct pcache_meta *pcm
 	/* 3) unmap all PTEs */
 	pcache_try_to_unmap(pcm);
 
-#elif defined(CONFIG_PCACHE_EVICTION_PERSET_LIST)
-
-	/* 1) add entries to per set list */
-	pset_add_eviction(pset, pcm);
-
-	/* 2) Remove unmap, but don't free rmap */
-	pcache_try_to_unmap_reserve(pcm);
-	pcache_flush_one(pcm);
-	pcache_free_reserved_rmap(pcm);
-
-	/* 3) remove entries */
-	pset_remove_eviction(pset, pcm);
-
-#elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
-
-	victim_prepare_insert(pset, pcm);
-	pcache_try_to_unmap(pcm);
-	victim_finish_insert(pcm);
-
+	return 0;
+}
 #endif
 
-	ClearPcacheValid(pcm);
-	unlock_pcache(pcm);
-	pcache_free(pcm);
-
-	return ret;
+static inline int
+evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
+{
+#ifdef CONFIG_PCACHE_EVICTION_WRITE_PROTECT
+	return evict_line_wrprotect(pset, pcm);
+#elif defined(CONFIG_PCACHE_EVICTION_PERSET_LIST)
+	return evict_line_perset_list(pset, pcm);
+#elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
+	return evict_line_victim(pset, pcm);
+#endif
 }
 
 /**
@@ -256,13 +270,19 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	inc_pset_eviction(pset);
 	inc_pcache_event(PCACHE_EVICTION);
 
-	pcm = pcache_evict_find_line(pset);
+	pcm = find_line(pset);
 	if (!pcm)
-		return -ENOMEM;
-
+		return -EAGAIN;
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
-	ret = do_pcache_evict_line(pset, pcm);
+
+	ret = evict_line(pset, pcm);
 	if (ret)
-		return -ENOMEM;
+		return ret;
+
+	/* cleanup this line */
+	ClearPcacheValid(pcm);
+	unlock_pcache(pcm);
+	pcache_free(pcm);
+
 	return 0;
 }
