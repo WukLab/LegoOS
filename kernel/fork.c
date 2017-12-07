@@ -607,8 +607,6 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	p->real_start_time = ktime_get_boot_ns();
 	p->pagefault_disabled = 0;
 
-	p->home_node = current->home_node;
-
 	/*
 	 * Now do the dirty work.
 	 */
@@ -661,6 +659,10 @@ struct task_struct *copy_process(unsigned long clone_flags,
 
 #ifdef CONFIG_TRACE_SYSCALL
 	p->strace = NULL;
+#endif
+
+#ifdef CONFIG_COMP_PROCESSOR
+	p->home_node = current->home_node;
 #endif
 
 	/*
