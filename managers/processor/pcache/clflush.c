@@ -26,44 +26,73 @@
 static inline void clflush_debug(const char *fmt, ...) { }
 #endif
 
+static int __clflush_one(struct task_struct *tsk, unsigned long user_va,
+			 void *cache_addr, void *caller)
+{
+	struct p2m_flush_payload *payload;
+	int ret_len, reply;
+	int retval;
+
+	payload = kmalloc(sizeof(*payload), GFP_KERNEL);
+	if (!payload)
+		return -ENOMEM;
+
+	payload->pid = tsk->tgid;
+	payload->user_va = user_va & PCACHE_LINE_MASK;
+	memcpy(payload->pcacheline, cache_addr, PCACHE_LINE_SIZE);
+
+	clflush_debug("I tgid:%u user_va:%#lx cache_kva:%p caller: %pS",
+		payload->pid, payload->user_va, cache_addr, caller);
+
+	ret_len = net_send_reply_timeout(tsk->home_node, P2M_LLC_FLUSH,
+			payload, sizeof(*payload), &reply, sizeof(reply),
+			false, DEF_NET_TIMEOUT);
+
+	clflush_debug("O tgid:%u user_va:%#lx cache_kva:%p reply:%d %s",
+		payload->pid, payload->user_va, cache_addr, reply, perror(reply));
+
+	if (unlikely(ret_len < sizeof(reply))) {
+		retval = -EFAULT;
+		goto out;
+	}
+
+	if (unlikely(reply)) {
+		pr_err("%s(): %s\n", FUNC, perror(reply));
+		retval = reply;
+		goto out;
+	}
+
+	retval = 0;
+out:
+	kfree(payload);
+	return retval;
+}
+
+/*
+ * @tsk: the task this cache line belongs to
+ * @user_va: the user virtual address associated with this line
+ * @cache_addr: the kernel virtual address of the cache line
+ *              that is going to be flushed.
+ *
+ * Return 0 on success, otherwise on failures.
+ */
+int clflush_one(struct task_struct *tsk, unsigned long user_va,
+		void *cache_addr)
+{
+	return __clflush_one(tsk, user_va, cache_addr,
+			__builtin_return_address(0));
+}
+
 static int __pcache_flush_one(struct pcache_meta *pcm,
 			      struct pcache_rmap *rmap, void *arg)
 {
 	int *nr_flushed = arg;
-	int ret_len, reply;
-	struct task_struct *tsk = rmap->owner;
-	unsigned long user_va = rmap->address;
-	void *pcache_kva;
-	struct p2m_flush_payload *payload;
+	int ret;
 
-	payload = kmalloc(sizeof(*payload), GFP_KERNEL);
-	if (!payload)
-		return PCACHE_RMAP_FAILED;
-
-	payload->pid = tsk->tgid;
-	payload->user_va = user_va & PCACHE_LINE_MASK;
-
-	pcache_kva = pcache_meta_to_kva(pcm);
-	memcpy(payload->pcacheline, pcache_kva, PCACHE_LINE_SIZE);
-
-	clflush_debug("I tgid:%u user_va:%#lx pcache_kva:%p",
-		payload->pid, payload->user_va, pcache_kva);
-
-	ret_len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_FLUSH,
-			payload, sizeof(*payload), &reply, sizeof(reply),
-			false, DEF_NET_TIMEOUT);
-
-	clflush_debug("O tgid:%u user_va:%#lx pcache_kva:%p reply:%d %s",
-		payload->pid, payload->user_va, pcache_kva, reply, perror(reply));
-
-	kfree(payload);
-
-	if (unlikely(ret_len < sizeof(reply)))
-		return PCACHE_RMAP_FAILED;
-
-	if (unlikely(reply)) {
+	ret = clflush_one(rmap->owner, rmap->address, pcache_meta_to_kva(pcm));
+	if (ret) {
 		dump_pcache_meta(pcm, FUNC);
-		pr_err("%s(): %s\n", FUNC, perror(reply));
+		dump_pcache_rmap(rmap, FUNC);
 		return PCACHE_RMAP_FAILED;
 	}
 

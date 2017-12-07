@@ -466,8 +466,11 @@ struct task_struct {
 
 	int pagefault_disabled;
 
+#ifdef CONFIG_COMP_PROCESSOR
+	int home_node;
 #ifdef CONFIG_CHECKPOINT
 	atomic_t process_barrier;
+#endif
 #endif
 
 #ifdef CONFIG_TRACE_SYSCALL

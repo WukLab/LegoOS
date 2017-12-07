@@ -607,6 +607,8 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	p->real_start_time = ktime_get_boot_ns();
 	p->pagefault_disabled = 0;
 
+	p->home_node = current->home_node;
+
 	/*
 	 * Now do the dirty work.
 	 */
@@ -768,6 +770,7 @@ pid_t do_fork(unsigned long clone_flags,
 	if (clone_flags & CLONE_GLOBAL_THREAD) {
 		int ret;
 
+		p->home_node = DEF_MEM_HOMENODE;
 		ret = p2m_fork(p, clone_flags);
 		if (ret) {
 			/* TODO: free task_struct */

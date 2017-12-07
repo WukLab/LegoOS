@@ -24,7 +24,7 @@ int p2m_fork(struct task_struct *p, unsigned long clone_flags)
 	payload.clone_flags = clone_flags;
 	memcpy(payload.comm, p->comm, TASK_COMM_LEN);
 
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_FORK, &payload,
+	ret = net_send_reply_timeout(p->home_node, P2M_FORK, &payload,
 				sizeof(payload), &retbuf, sizeof(retbuf), false,
 				DEF_NET_TIMEOUT);
 

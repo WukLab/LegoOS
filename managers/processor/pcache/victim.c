@@ -269,6 +269,33 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait)
 	return 0;
 }
 
+static int victim_flush_one(struct pcache_victim_meta *victim)
+{
+	void *cache_kva;
+	int nr_flushed = 0;
+
+	cache_kva = pcache_victim_to_kva(victim);
+	spin_lock(&victim->lock);
+	while (!list_empty(&victim->hits)) {
+		struct pcache_victim_hit_entry *hit;
+		int ret;
+
+		hit = list_entry(victim->hits.next,
+				struct pcache_victim_hit_entry, next);
+		list_del_init(&hit->next);
+		spin_unlock(&victim->lock);
+
+		ret = clflush_one(hit->owner, hit->address, cache_kva);
+		if (likely(!ret))
+			nr_flushed++;
+
+		spin_lock(&victim->lock);
+	}
+	spin_unlock(&victim->lock);
+
+	return nr_flushed;
+}
+
 static void __victim_flush_func(struct victim_flush_info *info)
 {
 	bool wait = info->wait;
@@ -276,6 +303,7 @@ static void __victim_flush_func(struct victim_flush_info *info)
 	struct pcache_victim_meta *victim = info->victim;
 
 	SetVictimWriteback(victim);
+	victim_flush_one(victim);
 	ClearVictimWriteback(victim);
 
 	if (unlikely(wait))

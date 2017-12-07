@@ -352,6 +352,8 @@ struct pcache_meta *pcache_alloc(unsigned long address);
 void pcache_free(struct pcache_meta *);
 
 /* clflush */
+int clflush_one(struct task_struct *tsk, unsigned long user_va,
+		void *cache_addr);
 int pcache_flush_one(struct pcache_meta *pcm);
 
 /* eviction */
