@@ -87,7 +87,8 @@ void __noreturn do_exit(long code)
 	exit_files(tsk);
 	exit_thread(tsk);
 
-	print_pcache_events();
+	if (thread_group_leader(tsk))
+		print_pcache_events();
 	preempt_disable();
 	do_task_dead();
 }

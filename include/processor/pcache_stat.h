@@ -49,8 +49,8 @@ enum pcache_event_item {
 	PCACHE_FAULT_EVICTION,		/* nr of faults due to concurrent eviction */
 	PCACHE_FAULT_FILL_MEMORY,	/* nr of pcache fill from remote memory */
 	PCACHE_FAULT_FILL_VICTIM,	/* nr of pcache fill from victim cache */
-	PCACHE_EVICTION,		/* nr of evictions triggered */
-	PCACHE_VICTIM_HIT,
+	PCACHE_EVICTION,		/* nr of evictions happened */
+	PCACHE_VICTIM_EVICTION,		/* nr of victim cache eviction happened */
 
 	NR_PCACHE_EVENT_ITEMS,
 };

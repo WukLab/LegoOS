@@ -237,6 +237,7 @@ static int victim_evict_line(void)
 	if (!victim)
 		return -EAGAIN;
 
+	inc_pcache_event(PCACHE_VICTIM_EVICTION);
 	return do_victim_eviction(victim);
 }
 
@@ -492,7 +493,7 @@ void victim_finish_insert(struct pcache_victim_meta *victim)
 	struct pcache_meta *pcm = victim->pcm;
 
 	BUG_ON(!pcm);
-	BUG_ON(!pcache_mapped(pcm));
+	BUG_ON(pcache_mapped(pcm));
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 	PCACHE_BUG_ON_VICTIM(!VictimAllocated(victim) ||
 			      VictimHasdata(victim) ||
@@ -603,11 +604,9 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 		case VICTIM_CHECK_HIT:
 			ret = victim_fill_pcache(mm, address, page_table,
 						 pmd, flags, victim);
-			/*
-			 * Filling to pcache is done, so this victim
-			 * is again safe to be evicted.
-			 */
-			dec_victim_filling(victim);
+			if (dec_and_test_victim_filling(victim) && !ret) {
+				;	
+			}
 			break;
 		default:
 			BUG();

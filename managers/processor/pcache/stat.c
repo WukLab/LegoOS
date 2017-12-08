@@ -25,11 +25,11 @@ static const char *const pcache_event_text[] = {
 	"nr_pgfault",
 	"nr_wp_pgfault",
 	"nr_wp_cow_pgfault",
-	"nr_concurrent_eviction",
+	"nr_pgfault_due_to_concurrent_eviction",	/* perset list specific */
 	"nr_pcache_fill_from_memory",
-	"nr_pcache_fill_from_victim",
-	"nr_eviction",
-	"nr_victim_hit",
+	"nr_pcache_fill_from_victim",			/* victim cache specific */
+	"nr_pcache_eviction",
+	"nr_victim_eviction",
 };
 
 void sum_pcache_events(struct pcache_event_stat *buf)

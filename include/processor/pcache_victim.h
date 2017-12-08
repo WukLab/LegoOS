@@ -212,6 +212,13 @@ static inline void dec_victim_filling(struct pcache_victim_meta *victim)
 	atomic_dec(&victim->nr_fill_pcache);
 }
 
+/* Return true if the result after dec is 0 */
+static inline int
+dec_and_test_victim_filling(struct pcache_victim_meta *victim)
+{
+	return atomic_dec_and_test(&victim->nr_fill_pcache);
+}
+
 static inline bool victim_is_filling(struct pcache_victim_meta *victim)
 {
 	if (atomic_read(&victim->nr_fill_pcache) > 0)
