@@ -172,6 +172,8 @@ out:
 
 void pcache_free(struct pcache_meta *p)
 {
-	BUG_ON(!PcacheAllocated(p) || PcacheValid(p) || PcacheLocked(p));
+	PCACHE_BUG_ON_PCM(!PcacheAllocated(p) || PcacheValid(p) ||
+			   PcacheLocked(p) || PcacheWriteback(p), p);
+
 	ClearPcacheAllocated(p);
 }

@@ -96,8 +96,8 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 	}
 
 	/*
-	 * Fill the cache line from
-	 * 1) remote memory
+	 * Callback to specific fill function, which can be
+	 * 1) remote memory, or
 	 * 2) victim cache
 	 */
 	ret = fill_func(address, flags, pcm, arg);
@@ -125,6 +125,10 @@ out:
 	return ret;
 }
 
+/*
+ * Callback for common fill code
+ * Fill the pcache line from remote memory.
+ */
 static int
 __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		      struct pcache_meta *pcm, void *unused)
@@ -142,7 +146,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	pcache_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
 
-	len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_LLC_MISS,
+	len = net_send_reply_timeout(current->home_node, P2M_LLC_MISS,
 			&payload, sizeof(payload),
 			pa_cache, PCACHE_LINE_SIZE, true, DEF_NET_TIMEOUT);
 
@@ -170,8 +174,8 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 
 	/* Update counting */
 	pset = pcache_meta_to_pcache_set(pcm);
-	inc_pset_fill(pset);
-	inc_pcache_event(PCACHE_FAULT_FILL);
+	inc_pset_event(pset, PSET_FILL_MEMORY);
+	inc_pcache_event(PCACHE_FAULT_FILL_MEMORY);
 
 	ret = 0;
 out:

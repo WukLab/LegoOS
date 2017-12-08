@@ -25,8 +25,9 @@ struct pcache_meta;
 #define PCACHE_META_SIZE		(sizeof(struct pcache_meta))
 
 enum pcache_set_stat_item {
-	PSET_FILL,
-	PSET_EVICTIONS,
+	PSET_FILL_MEMORY,
+	PSET_FILL_VICTIM,
+	PSET_EVICTION,
 
 	NR_PSET_STAT_ITEMS
 };

@@ -267,7 +267,7 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int ret;
 
-	inc_pset_eviction(pset);
+	inc_pset_event(pset, PSET_EVICTION);
 	inc_pcache_event(PCACHE_EVICTION);
 
 	pcm = find_line(pset);

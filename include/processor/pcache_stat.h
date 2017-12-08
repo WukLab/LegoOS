@@ -17,32 +17,22 @@
  * Per set counters
  */
 
-static inline void mod_pset_stat(int i, struct pcache_set *pset,
-				 enum pcache_set_stat_item item)
+static inline void mod_pset_event(int i, struct pcache_set *pset,
+				  enum pcache_set_stat_item item)
 {
 	atomic_add(i, &pset->stat[item]);
 }
 
-static inline void inc_pset_stat(struct pcache_set *pset,
-				 enum pcache_set_stat_item item)
+static inline void inc_pset_event(struct pcache_set *pset,
+				  enum pcache_set_stat_item item)
 {
 	atomic_inc(&pset->stat[item]);
 }
 
-static inline void dec_pset_stat(struct pcache_set *pset,
+static inline void dec_pset_event(struct pcache_set *pset,
 				 enum pcache_set_stat_item item)
 {
 	atomic_dec(&pset->stat[item]);
-}
-
-static inline void inc_pset_fill(struct pcache_set *pset)
-{
-	inc_pset_stat(pset, PSET_FILL);
-}
-
-static inline void inc_pset_eviction(struct pcache_set *pset)
-{
-	inc_pset_stat(pset, PSET_EVICTIONS);
 }
 
 /*
@@ -53,12 +43,13 @@ static inline void inc_pset_eviction(struct pcache_set *pset)
  */
 
 enum pcache_event_item {
-	PCACHE_FAULT,		/* nr of page fault occurred */
-	PCACHE_FAULT_WP,	/* nr of write-protected faults */
-	PCACHE_FAULT_WP_COW,	/* nr of copy-on-right faults */
-	PCACHE_FAULT_EVICTION,	/* nr of faults due to concurrent eviction */
-	PCACHE_FAULT_FILL,	/* nr of cache fill from memory */
-	PCACHE_EVICTION,	/* nr of evictions */
+	PCACHE_FAULT,			/* nr of page fault occurred */
+	PCACHE_FAULT_WP,		/* nr of write-protected faults */
+	PCACHE_FAULT_WP_COW,		/* nr of copy-on-right faults */
+	PCACHE_FAULT_EVICTION,		/* nr of faults due to concurrent eviction */
+	PCACHE_FAULT_FILL_MEMORY,	/* nr of pcache fill from remote memory */
+	PCACHE_FAULT_FILL_VICTIM,	/* nr of pcache fill from victim cache */
+	PCACHE_EVICTION,		/* nr of evictions triggered */
 	PCACHE_VICTIM_HIT,
 
 	NR_PCACHE_EVENT_ITEMS,

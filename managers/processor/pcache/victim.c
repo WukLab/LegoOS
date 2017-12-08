@@ -212,6 +212,15 @@ victim_insert_hit_entries(struct pcache_victim_meta *victim, struct pcache_meta 
 	return 0;
 }
 
+/*
+ * First step of victim insertion.
+ *
+ * @pcm was selected to be evicted from pcache, it must already be locked by
+ * caller. This function will walk through @pcm rmap list, and add those info
+ * into victim cache meta. Afterwards, this victim cache is visible to lookup,
+ * but those who do lookup have to wait until the second step of insertion,
+ * which is synchronized by Hasdata flag.
+ */
 struct pcache_victim_meta *
 victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
 {
@@ -246,20 +255,28 @@ victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
 	return victim;
 }
 
+/*
+ * Second step of victim insertion
+ *
+ * This function is called after fisrt step of insertion and unmap.
+ * The sole purpose of func is to copy data from pcache and mark Hasdata.
+ */
 void victim_finish_insert(struct pcache_victim_meta *victim)
 {
 	void *src, *dst;
 	struct pcache_meta *pcm = victim->pcm;
 
+	BUG_ON(!pcm);
+	BUG_ON(!pcache_mapped(pcm));
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 	PCACHE_BUG_ON_VICTIM(!VictimAllocated(victim) ||
 			      VictimHasdata(victim) ||
 			      VictimWriteback(victim), victim);
 
 	/*
-	 * Copy the pcache line to victim cache
-	 * The pcache line was unmapped and no changes
-	 * would be made during memcpy.
+	 * Safely copy the pcache line to victim cache
+	 * The pcache line was already unmapped and no changes
+	 * would be made during memcpy:
 	 */
 	src = pcache_meta_to_kva(pcm);
 	dst = pcache_victim_to_kva(victim);
@@ -276,20 +293,22 @@ void victim_finish_insert(struct pcache_victim_meta *victim)
 	victim_submit_flush_nowait(victim);
 }
 
+/* Wait for second step of insertion */
 static inline void wait_victim_has_data(struct pcache_victim_meta *victim)
 {
 	unsigned long wait_start = jiffies;
 
-	smp_rmb();
 	while (unlikely(!VictimHasdata(victim))) {
 		cpu_relax();
-
-		/* Panic if it happens */
 		if (unlikely(time_after(jiffies, wait_start + 5 * HZ)))
 			panic("where is the victim finish insertion?");
 	}
 }
 
+/*
+ * Callback for common fill code
+ * Fill the pcache line from victim cache
+ */
 static int
 __victim_fill_pcache(unsigned long address, unsigned long flags,
 		     struct pcache_meta *pcm, void *_victim)
@@ -298,12 +317,17 @@ __victim_fill_pcache(unsigned long address, unsigned long flags,
 	struct pcache_set *pset;
 	void *victim_cache, *pcache;
 
-	pset = pcache_meta_to_pcache_set(pcm);
 	victim_cache = pcache_victim_to_kva(victim);
 	pcache = pcache_meta_to_kva(pcm);
 
 	wait_victim_has_data(victim);
+	smp_rmb();
 	memcpy(pcache, victim_cache, PCACHE_LINE_SIZE);
+
+	/* Update counting */
+	pset = pcache_meta_to_pcache_set(pcm);
+	inc_pset_event(pset, PSET_FILL_VICTIM);
+	inc_pcache_event(PCACHE_FAULT_FILL_VICTIM);
 
 	return 0;
 }

@@ -26,8 +26,9 @@ static const char *const pcache_event_text[] = {
 	"nr_wp_pgfault",
 	"nr_wp_cow_pgfault",
 	"nr_concurrent_eviction",
-	"nr_cache_fill",
-	"nr_evictions",
+	"nr_pcache_fill_from_memory",
+	"nr_pcache_fill_from_victim",
+	"nr_eviction",
 	"nr_victim_hit",
 };
 
