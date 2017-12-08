@@ -37,6 +37,10 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait)
 {
 	struct victim_flush_info *info;
 
+	PCACHE_BUG_ON_VICTIM(VictimFlushed(victim) || VictimWriteback(victim) ||
+			    !VictimHasdata(victim) || !VictimAllocated(victim),
+			    victim);
+
 	info = kmalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
@@ -89,9 +93,19 @@ static void __victim_flush_func(struct victim_flush_info *info)
 	struct completion *done = &info->done;
 	struct pcache_victim_meta *victim = info->victim;
 
+	PCACHE_BUG_ON_VICTIM(VictimFlushed(victim) || VictimWriteback(victim)
+			    !VictimHasdata(victim) || !VictimAllocated(victim),
+			    victim);
+
 	SetVictimWriteback(victim);
 	victim_flush_one(victim);
 	ClearVictimWriteback(victim);
+
+	/*
+	 * Once this flag is set,
+	 * this victim can be an eviction candidate.
+	 */
+	SetVictimFlushed(victim);
 
 	if (unlikely(wait))
 		complete(done);

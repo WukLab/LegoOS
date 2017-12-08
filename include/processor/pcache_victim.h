@@ -24,6 +24,14 @@ struct pcache_victim_meta {
 	spinlock_t		lock;		/* protect list operations */
 
 	/*
+	 * Number of concurrent fill to pcache line.
+	 * Shared lines may have multiple concurrent fill activities
+	 * at the same time. One bit is not enough. This is used
+	 * to sync with eviction routine.
+	 */
+	atomic_t		nr_fill_pcache;
+
+	/*
 	 * Natually victim cache line does not map to any
 	 * specific pcache lines. The short existence of pcm
 	 * is just used to do two-step insertion.
@@ -63,6 +71,8 @@ enum pcache_victim_flags {
 	PCACHE_VICTIM_allocated,
 	PCACHE_VICTIM_hasdata,
 	PCACHE_VICTIM_writeback,
+	PCACHE_VICTIM_flushed,
+	PCACHE_VICTIM_evicting,
 
 	NR_PCACHE_VICTIM_FLAGS
 };
@@ -108,6 +118,8 @@ VICTIM_FLAGS(Locked, locked)
 VICTIM_FLAGS(Allocated, allocated)
 VICTIM_FLAGS(Hasdata, hasdata)
 VICTIM_FLAGS(Writeback, writeback)
+VICTIM_FLAGS(Flushed, flushed)
+VICTIM_FLAGS(Evicting, evicting)
 
 static inline void lock_victim(struct pcache_victim_meta *victim)
 {
@@ -188,6 +200,23 @@ static inline bool victim_may_hit(unsigned long address)
 int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			   pte_t *page_table, pmd_t *pmd,
 			   unsigned long flags);
+
+static inline void inc_victim_filling(struct pcache_victim_meta *victim)
+{
+	atomic_inc(&victim->nr_fill_pcache);
+}
+
+static inline void dec_victim_filling(struct pcache_victim_meta *victim)
+{
+	atomic_dec(&victim->nr_fill_pcache);
+}
+
+static inline bool victim_is_filling(struct pcache_victim_meta *victim)
+{
+	if (atomic_read(&victim->nr_fill_pcache) > 0)
+		return true;
+	return false;
+}
 
 #endif /* CONFIG_PCACHE_EVICTION_VICTIM */
 
