@@ -80,7 +80,11 @@ static inline void __inc_pcache_event(enum pcache_event_item item)
 	__this_cpu_inc(pcache_event_stats.event[item]);
 }
 
+#ifdef CONFIG_COMP_PROCESSOR
 void sum_pcache_events(struct pcache_event_stat *buf);
 void print_pcache_events(void);
+#else
+static inline void print_pcache_events(void) { }
+#endif
 
 #endif /* _LEGO_PROCESSOR_PCACHE_STAT_H_ */

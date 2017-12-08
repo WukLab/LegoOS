@@ -248,7 +248,9 @@ void __init pcache_print_info(void)
 void __init pcache_post_init(void)
 {
 	pcache_print_info();
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
 	victim_cache_post_init();
+#endif
 }
 
 /**

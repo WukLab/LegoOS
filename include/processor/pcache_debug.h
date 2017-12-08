@@ -24,7 +24,8 @@ extern const struct trace_print_flags pcacheflag_names[];
 #ifdef CONFIG_DEBUG_PCACHE
 
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
-void dump_pcache_victim(struct pcache_victim_meta *pvm, const char *reason);
+extern const struct trace_print_flags victimflag_names[];
+void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason);
 #define PCACHE_BUG_ON_VICTIM(cond, victim)				\
 do {									\
 	if (unlikely(cond)) {						\

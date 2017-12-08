@@ -717,6 +717,15 @@ char *flags_string(char *buf, char *end, void *flags_ptr, const char *fmt)
 		flags &= (1UL << __NR_PCLBITS) - 1;
 		names = pcacheflag_names;
 		break;
+
+#if defined(CONFIG_PCACHE_EVICTION_VICTIM) && defined(CONFIG_DEBUG_PCACHE)
+	case 'V':
+		flags = *(unsigned long *)flags_ptr;
+		flags &= (1UL << NR_PCACHE_VICTIM_FLAGS) - 1;
+		names = victimflag_names;
+		break;
+#endif
+
 #endif
 
 	/* In Lego, only memory-manager has vma */

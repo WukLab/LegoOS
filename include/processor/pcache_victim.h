@@ -109,6 +109,18 @@ VICTIM_FLAGS(Allocated, allocated)
 VICTIM_FLAGS(Hasdata, hasdata)
 VICTIM_FLAGS(Writeback, writeback)
 
+static inline void lock_victim(struct pcache_victim_meta *victim)
+{
+	while (TestSetVictimLocked(victim))
+		cpu_relax();
+}
+
+static inline void unlock_victim(struct pcache_victim_meta *victim)
+{
+	BUG_ON(!VictimLocked(victim));
+	ClearVictimLocked(victim);
+}
+
 void __init victim_cache_init(void);
 void __init victim_cache_post_init(void);
 

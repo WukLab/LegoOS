@@ -74,9 +74,22 @@
 struct pcache_victim_meta *pcache_victim_meta_map __read_mostly;
 void *pcache_victim_data_map __read_mostly;
 
-void dump_pcache_victim(struct pcache_victim_meta *pvm, const char *reason)
-{
+#define __def_victimflag_names						\
+	{1UL << PCACHE_VICTIM_locked,		"locked"	},	\
+	{1UL << PCACHE_VICTIM_allocated,	"allocated"	},	\
+	{1UL << PCACHE_VICTIM_hasdata,		"hasdata"	},	\
+	{1UL << PCACHE_VICTIM_writeback,	"writeback"	},
 
+const struct trace_print_flags victimflag_names[] = {
+	__def_victimflag_names
+	{0, NULL}
+};
+
+void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason)
+{
+	pr_debug("victim:%p flags:(%pGV)\n", victim, &victim->flags);
+	if (reason)
+		pr_debug("victim dumped because: %s\n", reason);
 }
 
 static inline struct pcache_victim_meta *
