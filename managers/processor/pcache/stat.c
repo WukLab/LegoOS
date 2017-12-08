@@ -28,6 +28,7 @@ static const char *const pcache_event_text[] = {
 	"nr_concurrent_eviction",
 	"nr_cache_fill",
 	"nr_evictions",
+	"nr_victim_hit",
 };
 
 void sum_pcache_events(struct pcache_event_stat *buf)

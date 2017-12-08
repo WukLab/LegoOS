@@ -101,7 +101,7 @@ bool __pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk)
 	spin_lock(&pset->lock);
 	list_for_each_entry(pos, &pset->eviction_list, next) {
 		if (uvaddr == pos->address &&
-		   tsk->group_leader == pos->owner->group_leader) {
+		   same_thread_group(tsk, pos->owner)) {
 			found = true;
 			break;
 		}

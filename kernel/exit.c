@@ -12,6 +12,7 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
+#include <processor/pcache.h>
 
 static void exit_mm(struct task_struct *tsk)
 {
@@ -86,6 +87,7 @@ void __noreturn do_exit(long code)
 	exit_files(tsk);
 	exit_thread(tsk);
 
+	print_pcache_events();
 	preempt_disable();
 	do_task_dead();
 }

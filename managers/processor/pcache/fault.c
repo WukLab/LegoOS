@@ -63,9 +63,71 @@ static void print_bad_pte(struct mm_struct *mm, unsigned long addr, pte_t pte,
 	dump_stack();
 }
 
+/*
+ * This is a shared common function to setup PTE.
+ * The pcache line allocation and post-setup are standard.
+ * But the specific fill_func may differ:
+ *   1) fill from remote memory
+ *   2) fill from victim cache
+ *
+ * Return 0 on success, otherwise VM_FAULT_XXX on failures.
+ */
+int common_do_fill_page(struct mm_struct *mm, unsigned long address,
+			pte_t *page_table, pmd_t *pmd,
+			unsigned long flags, fill_func_t fill_func, void *arg)
+{
+	struct pcache_meta *pcm;
+	spinlock_t *ptl;
+	pte_t entry;
+	int ret;
+
+	pcm = pcache_alloc(address);
+	if (!pcm)
+		return VM_FAULT_OOM;
+
+	/* TODO: Need right permission bits */
+	entry = pcache_meta_mk_pte(pcm, PAGE_SHARED_EXEC);
+
+	/* Concurrent faults are serialized by this lock */
+	page_table = pte_offset_lock(mm, pmd, address, &ptl);
+	if (unlikely(!pte_none(*page_table))) {
+		ret = 0;
+		goto out;
+	}
+
+	/*
+	 * Fill the cache line from
+	 * 1) remote memory
+	 * 2) victim cache
+	 */
+	ret = fill_func(address, flags, pcm, arg);
+	if (ret) {
+		ret = VM_FAULT_SIGSEGV;
+		goto out;
+	}
+
+	ret = pcache_add_rmap(pcm, page_table, address);
+	if (ret) {
+		ret = VM_FAULT_OOM;
+		goto out;
+	}
+
+	SetPcacheValid(pcm);
+
+	pte_set(page_table, entry);
+	spin_unlock(ptl);
+
+	return 0;
+
+out:
+	pcache_free(pcm);
+	spin_unlock(ptl);
+	return ret;
+}
+
 static int
 __pcache_do_fill_page(unsigned long address, unsigned long flags,
-		      struct pcache_meta *pcm)
+		      struct pcache_meta *pcm, void *unused)
 {
 	int ret, len;
 	struct p2m_llc_miss_struct payload;
@@ -122,52 +184,12 @@ out:
  * This function handles normal cache line misses.
  * We enter with pte unlocked, we return with pte unlocked.
  */
-static int pcache_do_fill_page(struct mm_struct *mm, unsigned long address,
-			       pte_t *page_table, pmd_t *pmd,
-			       unsigned long flags)
+static inline int
+pcache_do_fill_page(struct mm_struct *mm, unsigned long address,
+		    pte_t *page_table, pmd_t *pmd, unsigned long flags)
 {
-	struct pcache_meta *pcm;
-	spinlock_t *ptl;
-	pte_t entry;
-	int ret;
-
-	pcm = pcache_alloc(address);
-	if (!pcm)
-		return VM_FAULT_OOM;
-
-	/* TODO: Need right permission bits */
-	entry = pcache_meta_mk_pte(pcm, PAGE_SHARED_EXEC);
-
-	/* Concurrent faults are serialized by this lock */
-	page_table = pte_offset_lock(mm, pmd, address, &ptl);
-	if (unlikely(!pte_none(*page_table))) {
-		ret = 0;
-		goto out;
-	}
-
-	ret = __pcache_do_fill_page(address, flags, pcm);
-	if (ret) {
-		ret = VM_FAULT_SIGSEGV;
-		goto out;
-	}
-
-	ret = pcache_add_rmap(pcm, page_table, address);
-	if (ret) {
-		ret = VM_FAULT_OOM;
-		goto out;
-	}
-
-	SetPcacheValid(pcm);
-
-	pte_set(page_table, entry);
-	spin_unlock(ptl);
-
-	return 0;
-
-out:
-	pcache_free(pcm);
-	spin_unlock(ptl);
-	return ret;
+	return common_do_fill_page(mm, address, page_table, pmd, flags,
+			__pcache_do_fill_page, NULL);
 }
 
 /*
@@ -241,16 +263,17 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 			/*
 			 * Check victim cache
 			 */
-			if (fill_from_victim(address))
-				return;
+			if (victim_may_hit(address)) {
+				if (!victim_try_fill_pcache(mm, address, pte, pmd, flags))
+					return 0;
+			}
 #endif
-
 			/*
 			 * write-protect
 			 * per-set eviction list (flush finished)
 			 * victim cache (miss)
 			 *
-			 * All of them merge into this:
+			 * All of them fall-back and merge into this:
 			 */
 			return pcache_do_fill_page(mm, address, pte, pmd, flags);
 		}

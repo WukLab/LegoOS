@@ -163,21 +163,19 @@ static inline bool pcache_set_has_victims(struct pcache_set *pset)
 	return false;
 }
 
-int __fill_from_victim(unsigned long);
-
-/*
- * Return 0 if not filled
- * Return 1 if filled
- */
-static __always_inline int fill_from_victim(unsigned long address)
+static inline bool victim_may_hit(unsigned long address)
 {
 	struct pcache_set *pset;
 
 	pset = user_vaddr_to_pcache_set(address);
 	if (pcache_set_has_victims(pset))
-		return __fill_from_victim(address);
-	return 0;
+		return true;
+	return false;
 }
+
+int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
+			   pte_t *page_table, pmd_t *pmd,
+			   unsigned long flags);
 
 #endif /* CONFIG_PCACHE_EVICTION_VICTIM */
 

@@ -13,6 +13,8 @@
 #include <lego/types.h>
 #include <processor/pcache_types.h>
 
+struct pcache_victim_meta;
+
 __wsum pcache_line_csum(struct pcache_meta *pcm);
 void dump_pcache_meta(struct pcache_meta *pcm, const char *reason);
 void dump_pcache_line(struct pcache_meta *pcm, const char *reason);
