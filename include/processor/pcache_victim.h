@@ -39,6 +39,7 @@ struct pcache_victim_meta {
 	 * It will be reset to NULL after insertion finished.
 	 */
 	struct pcache_meta	*pcm;
+	struct pcache_set	*pset;		/* pset this victim belongs to */
 	struct list_head	hits;		/* history pid+addr users */
 };
 

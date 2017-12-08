@@ -200,7 +200,13 @@ static struct pcache_victim_meta *find_victim_to_evict(void)
 		if (!VictimFlushed(victim))
 			continue;
 
-		spin_lock(&victim->lock);
+		/*
+		 * If we contend on this lock then we skip
+		 * this one:
+		 */
+		if (!spin_trylock(&victim->lock))
+			continue;
+
 		if (unlikely(victim_is_filling(victim)))
 			PCACHE_BUG_ON_VICTIM(VictimEvicting(victim), victim);
 		else {
@@ -300,6 +306,7 @@ static struct pcache_victim_meta *victim_alloc(void)
 out:
 	atomic_set(&v->nr_fill_pcache, 0);
 	v->pcm = NULL;
+	v->pset = NULL;
 	return v;
 }
 
@@ -324,6 +331,13 @@ static inline void free_victim_hit_entry(struct pcache_victim_hit_entry *entry)
 static void victim_free_hit_entries(struct pcache_victim_meta *victim)
 {
 	struct pcache_victim_hit_entry *entry;
+	struct pcache_set *pset = victim->pset;
+
+	/*
+	 * Update hint counting
+	 * to avoid un-necessary lookup
+	 */
+	pcache_set_victim_dec(pset);
 
 	spin_lock(&victim->lock);
 	while (!list_empty(&victim->hits)) {
@@ -442,6 +456,7 @@ victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
 	victim = victim_alloc();
 	if (!victim)
 		return ERR_PTR(-ENOMEM);
+	victim->pset = pset;
 
 	/* For two-step insertion */
 	victim->pcm = pcm;
@@ -613,6 +628,7 @@ static void __init pcache_init_victim_cache_meta_map(void)
 
 		v->flags = 0;
 		v->pcm = NULL;
+		v->pset = NULL;
 		spin_lock_init(&v->lock);
 		INIT_LIST_HEAD(&v->hits);
 		atomic_set(&v->nr_fill_pcache, 0);

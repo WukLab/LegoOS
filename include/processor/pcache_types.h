@@ -56,7 +56,9 @@ struct pcache_set {
 
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 	/*
-	 * Number of pcache lines in this set are living in victim cache.
+	 * Number of pcache lines in this set that are currently
+	 * living in the victim cache. Updated by victim code.
+	 *
 	 * Used by pgfault to have a quick check.
 	 */
 	atomic_t		nr_victims;
