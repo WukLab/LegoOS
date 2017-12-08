@@ -93,7 +93,7 @@ static void __victim_flush_func(struct victim_flush_info *info)
 	struct completion *done = &info->done;
 	struct pcache_victim_meta *victim = info->victim;
 
-	PCACHE_BUG_ON_VICTIM(VictimFlushed(victim) || VictimWriteback(victim)
+	PCACHE_BUG_ON_VICTIM(VictimFlushed(victim) || VictimWriteback(victim) ||
 			    !VictimHasdata(victim) || !VictimAllocated(victim),
 			    victim);
 
