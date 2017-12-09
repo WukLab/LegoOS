@@ -41,6 +41,13 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait)
 			    !VictimHasdata(victim) || !VictimAllocated(victim),
 			    victim);
 
+	/*
+	 * Make sure this victim will not go away during flush.
+	 * Eviction won't touch it cause Flushed bit is not.
+	 * But victim fill pcache path will put it once hit finished.
+	 */
+	get_victim(victim);
+
 	info = kmalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
@@ -102,6 +109,9 @@ static void __victim_flush_func(struct victim_flush_info *info)
 	 * this victim can be an eviction candidate.
 	 */
 	SetVictimFlushed(victim);
+
+	/* Paired when job submitted */
+	put_victim(victim);
 
 	if (unlikely(wait))
 		complete(done);

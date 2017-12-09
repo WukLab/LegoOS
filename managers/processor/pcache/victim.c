@@ -168,6 +168,11 @@ static void victim_free(struct pcache_victim_meta *v)
 	smp_wmb();
 }
 
+void __put_victim(struct pcache_victim_meta *victim)
+{
+
+}
+
 static inline int do_victim_eviction(struct pcache_victim_meta *victim)
 {
 	victim_free(victim);
@@ -241,6 +246,14 @@ static int victim_evict_line(void)
 	return do_victim_eviction(victim);
 }
 
+static void prep_new_victim(struct pcache_victim_meta *victim)
+{
+	victim_ref_count_set(victim, 1);
+	atomic_set(&victim->nr_fill_pcache, 0);
+	victim->pcm = NULL;
+	victim->pset = NULL;
+}
+
 static inline struct pcache_victim_meta *
 victim_alloc_fastpath(void)
 {
@@ -253,6 +266,7 @@ victim_alloc_fastpath(void)
 	 */
 	for_each_victim(v, index) {
 		if (likely(!TestSetVictimAllocated(v))) {
+			prep_new_victim(v);
 			return v;
 		}
 	}
@@ -297,18 +311,12 @@ static struct pcache_victim_meta *victim_alloc(void)
 
 	v = victim_alloc_fastpath();
 	if (likely(v))
-		goto out;
+		return v;
 
 	v = victim_alloc_slowpath();
 	if (likely(v))
-		goto out;
+		return v;
 	return NULL;
-
-out:
-	atomic_set(&v->nr_fill_pcache, 0);
-	v->pcm = NULL;
-	v->pset = NULL;
-	return v;
 }
 
 /* We might consider kmemcache here */
@@ -348,60 +356,6 @@ static void victim_free_hit_entries(struct pcache_victim_meta *victim)
 		free_victim_hit_entry(entry);
 	}
 	spin_unlock(&victim->lock);
-}
-
-enum victim_check_status {
-	VICTIM_CHECK_HIT,
-	VICTIM_CHECK_MISS,
-	VICTIM_CHECK_EVICTED
-};
-
-/*
- * Check if @victim belongs to @address+@tsk
- * Return TRUE if hit, FALSE on miss.
- */
-static enum victim_check_status
-victim_check_hit_entry(struct pcache_victim_meta *victim,
-		       unsigned long address, struct task_struct *tsk)
-{
-	struct pcache_victim_hit_entry *entry;
-	enum victim_check_status result;
-
-	result = VICTIM_CHECK_MISS;
-	address &= PAGE_MASK;
-
-	spin_lock(&victim->lock);
-	list_for_each_entry(entry, &victim->hits, next) {
-		if (entry->address == address &&
-		    same_thread_group(entry->owner, tsk)) {
-
-			/*
-			 * This line was elected to be evicted, which implies
-			 * it must have been flushed back already. We don't race
-			 * with eviction, safely return and tell caller to fetch
-			 * from remote memory directly.
-			 */
-			if (unlikely(VictimEvicting(victim))) {
-				PCACHE_BUG_ON_VICTIM(!VictimFlushed(victim) ||
-						      victim_is_filling(victim),
-						      victim);
-				result = VICTIM_CHECK_EVICTED;
-				goto unlock;
-			}
-
-			/*
-			 * Mark it so eviction routine will
-			 * skip this victim.
-			 */
-			inc_victim_filling(victim);
-			result = VICTIM_CHECK_HIT;
-			break;
-		}
-	}
-
-unlock:
-	spin_unlock(&victim->lock);
-	return result;
 }
 
 static int victim_insert_hit_entry(struct pcache_meta *pcm,
@@ -573,6 +527,60 @@ victim_fill_pcache(struct mm_struct *mm, unsigned long address,
 			__victim_fill_pcache, victim);
 }
 
+enum victim_check_status {
+	VICTIM_CHECK_HIT,
+	VICTIM_CHECK_MISS,
+	VICTIM_CHECK_EVICTED
+};
+
+/*
+ * Check if @victim belongs to @address+@tsk
+ * Return TRUE if hit, FALSE on miss.
+ */
+static enum victim_check_status
+victim_check_hit_entry(struct pcache_victim_meta *victim,
+		       unsigned long address, struct task_struct *tsk)
+{
+	struct pcache_victim_hit_entry *entry;
+	enum victim_check_status result;
+
+	result = VICTIM_CHECK_MISS;
+	address &= PAGE_MASK;
+
+	spin_lock(&victim->lock);
+	list_for_each_entry(entry, &victim->hits, next) {
+		if (entry->address == address &&
+		    same_thread_group(entry->owner, tsk)) {
+
+			/*
+			 * This line was elected to be evicted, which implies
+			 * it must have been flushed back already. We don't race
+			 * with eviction, safely return and tell caller to fetch
+			 * from remote memory directly.
+			 */
+			if (unlikely(VictimEvicting(victim))) {
+				PCACHE_BUG_ON_VICTIM(!VictimFlushed(victim) ||
+						      victim_is_filling(victim),
+						      victim);
+				result = VICTIM_CHECK_EVICTED;
+				goto unlock;
+			}
+
+			/*
+			 * Mark it so eviction routine will
+			 * skip this victim.
+			 */
+			inc_victim_filling(victim);
+			result = VICTIM_CHECK_HIT;
+			break;
+		}
+	}
+
+unlock:
+	spin_unlock(&victim->lock);
+	return result;
+}
+
 /* Return 0 on success, otherwise on failures */
 int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			   pte_t *page_table, pmd_t *pmd,
@@ -604,9 +612,13 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 		case VICTIM_CHECK_HIT:
 			ret = victim_fill_pcache(mm, address, page_table,
 						 pmd, flags, victim);
-			if (dec_and_test_victim_filling(victim) && !ret) {
-				;	
-			}
+			/*
+			 * Follow the traditional design
+			 * Drop the victim once hit by pcache
+			 * (flush may hold another ref meanwhile)
+			 */
+			if (dec_and_test_victim_filling(victim) && !ret)
+				put_victim(victim);
 			break;
 		default:
 			BUG();
@@ -631,6 +643,7 @@ static void __init pcache_init_victim_cache_meta_map(void)
 		spin_lock_init(&v->lock);
 		INIT_LIST_HEAD(&v->hits);
 		atomic_set(&v->nr_fill_pcache, 0);
+		victim_ref_count_set(v, 0);
 	}
 }
 

@@ -31,6 +31,8 @@ struct pcache_victim_meta {
 	 */
 	atomic_t		nr_fill_pcache;
 
+	atomic_t		_refcount;
+
 	/*
 	 * Natually victim cache line does not map to any
 	 * specific pcache lines. The short existence of pcm
@@ -48,6 +50,46 @@ struct pcache_victim_hit_entry {
 	struct task_struct	*owner;
 	struct list_head	next;
 };
+
+static inline int victim_ref_count(struct pcache_victim_meta *v)
+{
+	return atomic_read(&v->_refcount);
+}
+
+static inline void victim_ref_count_set(struct pcache_victim_meta *v, int value)
+{
+	atomic_set(&v->_refcount, value);
+}
+
+static inline void victim_ref_count_inc(struct pcache_victim_meta *v)
+{
+	atomic_inc(&v->_refcount);
+}
+
+static inline void victim_ref_count_dec(struct pcache_victim_meta *v)
+{
+	atomic_dec(&v->_refcount);
+}
+
+/* Drop a ref, return true if ref drops to zero (no users) */
+static inline int victim_ref_count_dec_and_test(struct pcache_victim_meta *v)
+{
+	PCACHE_BUG_ON_VICTIM(victim_ref_count(v) == 0, v);
+	return atomic_dec_and_test(&v->_refcount);
+}
+
+static inline void get_victim(struct pcache_victim_meta *v)
+{
+	victim_ref_count_inc(v);
+}
+
+void __put_victim(struct pcache_victim_meta *v);
+
+static inline void put_victim(struct pcache_victim_meta *v)
+{
+	if (victim_ref_count_dec_and_test(v))
+		__put_victim(v);
+}
 
 extern struct pcache_victim_meta *pcache_victim_meta_map;
 extern void *pcache_victim_data_map;
