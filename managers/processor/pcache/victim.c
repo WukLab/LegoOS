@@ -131,6 +131,11 @@
 struct pcache_victim_meta *pcache_victim_meta_map __read_mostly;
 void *pcache_victim_data_map __read_mostly;
 
+/*
+ * Lock ordering:
+ *  allocated_victims_lock
+ *   .. victim->lock
+ */
 static atomic_t nr_allocated_victims = ATOMIC_INIT(0);
 static LIST_HEAD(allocated_victims);
 static DEFINE_SPINLOCK(allocated_victims_lock);
@@ -623,44 +628,47 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			   pte_t *page_table, pmd_t *pmd,
 			   unsigned long flags)
 {
-	struct pcache_victim_meta *victim;
-	int index, ret = 1;
+	struct pcache_victim_meta *v;
+	int ret = 1;
 
-	for_each_victim(victim, index) {
-		/*
-		 * The following case may happen:
-		 * Even victim_may_hit() returns true, but another CPU
-		 * may evict the corresponding victim cache line right before
-		 * we do the following Allocated checking. This means we will
-		 * miss the victim hit chance. But logically this is correct.
-		 */
-		if (!VictimAllocated(victim))
-			continue;
+	spin_lock(&allocated_victims_lock);
+	list_for_each_entry(v, &allocated_victims, next) {
+		enum victim_check_status stat;
 
-		switch (victim_check_hit_entry(victim, address, current)) {
-		case VICTIM_CHECK_MISS:
-			continue;
-		case VICTIM_CHECK_EVICTED:
-			/*
-			 * It is actually a hit, but unfortunately it is
-			 * being evicted at the same time. Return early.
-			 */
-			return 1;
+		PCACHE_BUG_ON_VICTIM(!VictimAllocated(v), v);
+
+		get_victim(v);
+		stat = victim_check_hit_entry(v, address, current);
+		put_victim(v);
+
+		switch (stat) {
 		case VICTIM_CHECK_HIT:
 			ret = victim_fill_pcache(mm, address, page_table,
-						 pmd, flags, victim);
+						 pmd, flags, v);
 			/*
 			 * Follow the traditional design
 			 * Drop the victim once hit by pcache
 			 * (flush may hold another ref meanwhile)
 			 */
-			if (dec_and_test_victim_filling(victim) && !ret)
-				put_victim(victim);
+			if (dec_and_test_victim_filling(v) && !ret)
+				put_victim(v);
 			break;
+		case VICTIM_CHECK_EVICTED:
+			/*
+			 * It is actually a hit, but unfortunately it is
+			 * being evicted at the same time. Return early.
+			 */
+			ret = 1;
+			goto unlock;
+		case VICTIM_CHECK_MISS:
+			continue;
 		default:
 			BUG();
 		}
 	}
+unlock:
+	spin_unlock(&allocated_victims_lock);
+
 	return ret;
 }
 

@@ -110,6 +110,10 @@ static inline void put_victim(struct pcache_victim_meta *v)
 extern struct pcache_victim_meta *pcache_victim_meta_map;
 extern void *pcache_victim_data_map;
 
+/*
+ * Only allocation routine can use this macro.
+ * Others have to use allocated victim list.
+ */
 #define for_each_victim(victim, index)				\
 	for (index = 0, victim = pcache_victim_meta_map;	\
 	     index < VICTIM_NR_ENTRIES;				\
