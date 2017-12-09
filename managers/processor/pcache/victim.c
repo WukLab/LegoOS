@@ -131,6 +131,26 @@
 struct pcache_victim_meta *pcache_victim_meta_map __read_mostly;
 void *pcache_victim_data_map __read_mostly;
 
+static atomic_t nr_allocated_victims = ATOMIC_INIT(0);
+static LIST_HEAD(allocated_victims);
+static DEFINE_SPINLOCK(allocated_victims_lock);
+
+static inline void enqueue_allocated_victim(struct pcache_victim_meta *v)
+{
+	spin_lock(&allocated_victims_lock);
+	list_add_tail(&v->next, &allocated_victims);
+	atomic_inc(&nr_allocated_victims);
+	spin_unlock(&allocated_victims_lock);
+}
+
+static inline void dequeue_allocated_victim(struct pcache_victim_meta *v)
+{
+	spin_lock(&allocated_victims_lock);
+	list_del_init(&v->next);
+	atomic_dec(&nr_allocated_victims);
+	spin_unlock(&allocated_victims_lock);
+}
+
 #define __def_victimflag_names						\
 	{1UL << PCACHE_VICTIM_locked,		"locked"	},	\
 	{1UL << PCACHE_VICTIM_allocated,	"allocated"	},	\
@@ -156,8 +176,6 @@ static void victim_free_hit_entries(struct pcache_victim_meta *victim);
 
 static void victim_free(struct pcache_victim_meta *v)
 {
-	/* Only eviction can free */
-	PCACHE_BUG_ON_VICTIM(!VictimEvicting(v), v);
 	PCACHE_BUG_ON_VICTIM(!VictimAllocated(v) || !VictimFlushed(v) ||
 			      VictimWriteback(v) || VictimLocked(v), v);
 
@@ -168,15 +186,10 @@ static void victim_free(struct pcache_victim_meta *v)
 	smp_wmb();
 }
 
-void __put_victim(struct pcache_victim_meta *victim)
+void __put_victim(struct pcache_victim_meta *v)
 {
-
-}
-
-static inline int do_victim_eviction(struct pcache_victim_meta *victim)
-{
-	victim_free(victim);
-	return 0;
+	dequeue_allocated_victim(v);
+	victim_free(v);
 }
 
 /*
@@ -184,48 +197,74 @@ static inline int do_victim_eviction(struct pcache_victim_meta *victim)
  * We can NOT evict lines that are currently filling pcache.
  * That is all.
  */
-static struct pcache_victim_meta *find_victim_to_evict(void)
+static struct pcache_victim_meta *
+find_victim_to_evict(void)
 {
-	int index;
 	bool found = false;
-	struct pcache_victim_meta *victim;
+	struct pcache_victim_meta *v;
 
-	for_each_victim(victim, index) {
+	if (atomic_read(&nr_allocated_victims) < VICTIM_NR_ENTRIES)
+		return NULL;
+
+	spin_lock(&allocated_victims_lock);
+	list_for_each_entry(v, &allocated_victims, next) {
+		PCACHE_BUG_ON_VICTIM(!VictimAllocated(v), v);
+
 		/*
-		 * Someone freed in the middle
-		 * Let caller retry
+		 * Someone has freed this victim
+		 * Definitely worth a retry
 		 */
-		if (!VictimAllocated(victim))
+		if (unlikely(!get_victim_unless_zero(v))) {
+			spin_unlock(&allocated_victims_lock);
 			return NULL;
+		}
 
 		/*
 		 * Skip lines have not been flushed
 		 * Normally they will be flushed back soon
 		 */
-		if (!VictimFlushed(victim))
-			continue;
+		if (!VictimFlushed(v))
+			goto put_cont;
 
-		/*
-		 * If we contend on this lock then we skip
-		 * this one:
-		 */
-		if (!spin_trylock(&victim->lock))
-			continue;
+		/* Lock contention? */
+		if (!spin_trylock(&v->lock))
+			goto put_cont;
 
-		if (unlikely(victim_is_filling(victim)))
-			PCACHE_BUG_ON_VICTIM(VictimEvicting(victim), victim);
-		else {
-			SetVictimEvicting(victim);
+		/* Victim is filling pcache? */
+		if (likely(!victim_is_filling(v))) {
+			/* Selected by another eviction thread? */
+			if (TestSetVictimEvicting(v)) {
+				spin_unlock(&v->lock);
+				goto put_cont;
+			}
+
 			found = true;
-			spin_unlock(&victim->lock);
+			spin_unlock(&v->lock);
 			break;
+		} else {
+			PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
+			spin_unlock(&v->lock);
+			goto put_cont;
 		}
-		spin_unlock(&victim->lock);
+put_cont:
+		put_victim(v);
 	}
+	spin_unlock(&allocated_victims_lock);
 
-	if (!found)
-		victim = NULL;
-	return victim;
+	if (likely(found))
+		return v;
+	return NULL;
+}
+
+static inline int do_victim_eviction(struct pcache_victim_meta *v)
+{
+	/*
+	 * We grabed a ref during searching.
+	 * Currently, if we are here, the ref must be 1.
+	 * The following put will free this victim.
+	 */
+	put_victim(v);
+	return 0;
 }
 
 /*
@@ -237,7 +276,6 @@ static int victim_evict_line(void)
 {
 	struct pcache_victim_meta *victim;
 
-	/* Caller should retry */
 	victim = find_victim_to_evict();
 	if (!victim)
 		return -EAGAIN;
@@ -246,30 +284,29 @@ static int victim_evict_line(void)
 	return do_victim_eviction(victim);
 }
 
-static void prep_new_victim(struct pcache_victim_meta *victim)
+static inline void prep_new_victim(struct pcache_victim_meta *victim)
 {
-	victim_ref_count_set(victim, 1);
-	atomic_set(&victim->nr_fill_pcache, 0);
 	victim->pcm = NULL;
 	victim->pset = NULL;
+	victim_ref_count_set(victim, 1);
+	atomic_set(&victim->nr_fill_pcache, 0);
+	INIT_LIST_HEAD(&victim->next);
 }
 
-static inline struct pcache_victim_meta *
+static struct pcache_victim_meta *
 victim_alloc_fastpath(void)
 {
 	int index;
 	struct pcache_victim_meta *v;
 
-	/*
-	 * TestSet is atomic Read-Modify-Write instruction,
-	 * so no need to use another lock to protect this loop.
-	 */
 	for_each_victim(v, index) {
 		if (likely(!TestSetVictimAllocated(v))) {
 			prep_new_victim(v);
+			enqueue_allocated_victim(v);
 			return v;
 		}
 	}
+
 	return NULL;
 }
 
@@ -642,6 +679,7 @@ static void __init pcache_init_victim_cache_meta_map(void)
 		v->pset = NULL;
 		spin_lock_init(&v->lock);
 		INIT_LIST_HEAD(&v->hits);
+		INIT_LIST_HEAD(&v->next);
 		atomic_set(&v->nr_fill_pcache, 0);
 		victim_ref_count_set(v, 0);
 	}

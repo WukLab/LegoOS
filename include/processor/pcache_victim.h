@@ -43,6 +43,7 @@ struct pcache_victim_meta {
 	struct pcache_meta	*pcm;
 	struct pcache_set	*pset;		/* pset this victim belongs to */
 	struct list_head	hits;		/* history pid+addr users */
+	struct list_head	next;		/* next victim in the list */
 };
 
 struct pcache_victim_hit_entry {
@@ -71,11 +72,26 @@ static inline void victim_ref_count_dec(struct pcache_victim_meta *v)
 	atomic_dec(&v->_refcount);
 }
 
+static inline int
+victim_ref_add_unless(struct pcache_victim_meta *v, int nr, int u)
+{
+	return atomic_add_unless(&v->_refcount, nr, u);
+}
+
 /* Drop a ref, return true if ref drops to zero (no users) */
 static inline int victim_ref_count_dec_and_test(struct pcache_victim_meta *v)
 {
 	PCACHE_BUG_ON_VICTIM(victim_ref_count(v) == 0, v);
 	return atomic_dec_and_test(&v->_refcount);
+}
+
+/*
+ * Try to grab a ref unless the victim has a refcount of zero,
+ * return false if that is the case. Return true if ref increased.
+ */
+static inline int get_victim_unless_zero(struct pcache_victim_meta *v)
+{
+	return victim_ref_add_unless(v, 1, 0);
 }
 
 static inline void get_victim(struct pcache_victim_meta *v)
