@@ -109,8 +109,13 @@
  * Victim eviction safe means a victim can be evicted.
  *  - Marked by Flushed
  *
+ * D)
  * If a victim is both pcache hit safe and victim eviction safe, we need to
- * make sure eviction and fill do not happen at the same time.
+ * make sure eviction and fill do not happen at the same time. What we are
+ * doing here is to use Evicting flag and a filling counter. Both parties
+ * need to first acquire victim->lock and do checking/updating. This ensures
+ * up filling to pcache and victim evictim won't conflict.
+ * (victim_check_hit_entry() and find_victim_to_evict())
  */
 
 #include <lego/mm.h>
@@ -135,6 +140,42 @@ void *pcache_victim_data_map __read_mostly;
  * Lock ordering:
  *  allocated_victims_lock
  *   .. victim->lock
+ *
+ * Note for myself:
+ * This list is for lookup and eviction search. Why do we need such a list
+ * instead of just searching victim array map? At first glance, Allocated
+ * bit seems enough: lookup and eviction can just check the bit and skip
+ * the one has not been allocated. This is okay if only eviction can free
+ * a victim. But now lookup also need to free. So there is an issue: image
+ * there are 2 CPUs, one is doing eviction, one is doing lookup. The lookup
+ * one freed the victim right after eviction checking the Allocated bit.
+ * This means eviction is now manipulating a freed victim, which is wrong.
+ *
+ * The whole issue is raised because eviction and lookup they are looking into
+ * data structures that they should not have permission to look into. They
+ * should only look into victims that have been allocated, instead of walking
+ * through the whole victim array map.
+ *
+ * This issue is very very similar to LRU page reclaim. Without LRU, there
+ * is only one party can free page. With LRU, there are now two parties
+ * can free page. One party can not free page while another one is using it.
+ * Also more importanly, LRU only have permissions to look into pages that
+ * are explicitly added to lru lists. That is the key similarity here.
+ *
+ * Of course, the above issue concerned multiple parties can be easily solved
+ * by adding a reference count, and each party do paired get/put_xxx functions.
+ * We also have this, because lookup may free the victim while the flush thread
+ * is using it.
+ *
+ * This whole victim cache development is a valuable lesson for my self.
+ * Whenever developing this kind of subsystem, keep few things in mind:
+ * 1) Think broader. Don't assume too much things in the beginning (e.g. only
+ *    eviction will do free).
+ * 2) Reference counter. If a data structure is used by multiple parties,
+ *    rememeber to protect it using get/put functions. Always.
+ * 3) Permission. Don't give functions permissions to data structures that
+ *    they should not have permissions to manipulate. This will break other
+ *    parties who are using this data structure.
  */
 static atomic_t nr_allocated_victims = ATOMIC_INIT(0);
 static LIST_HEAD(allocated_victims);
@@ -206,23 +247,22 @@ static struct pcache_victim_meta *
 find_victim_to_evict(void)
 {
 	bool found = false;
-	struct pcache_victim_meta *v;
+	struct pcache_victim_meta *v, *saver;
 
 	if (atomic_read(&nr_allocated_victims) < VICTIM_NR_ENTRIES)
 		return NULL;
 
 	spin_lock(&allocated_victims_lock);
-	list_for_each_entry(v, &allocated_victims, next) {
+	list_for_each_entry_safe(v, saver, &allocated_victims, next) {
 		PCACHE_BUG_ON_VICTIM(!VictimAllocated(v), v);
 
 		/*
 		 * Someone has freed this victim
 		 * Definitely worth a retry
 		 */
-		if (unlikely(!get_victim_unless_zero(v))) {
-			spin_unlock(&allocated_victims_lock);
-			return NULL;
-		}
+		if (unlikely(!get_victim_unless_zero(v)))
+			goto unlock_out;
+		spin_unlock(&allocated_victims_lock);
 
 		/*
 		 * Skip lines have not been flushed
@@ -245,7 +285,7 @@ find_victim_to_evict(void)
 
 			found = true;
 			spin_unlock(&v->lock);
-			break;
+			goto out;
 		} else {
 			PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
 			spin_unlock(&v->lock);
@@ -253,9 +293,11 @@ find_victim_to_evict(void)
 		}
 put_cont:
 		put_victim(v);
+		spin_lock(&allocated_victims_lock);
 	}
+unlock_out:
 	spin_unlock(&allocated_victims_lock);
-
+out:
 	if (likely(found))
 		return v;
 	return NULL;
@@ -628,16 +670,21 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			   pte_t *page_table, pmd_t *pmd,
 			   unsigned long flags)
 {
-	struct pcache_victim_meta *v;
+	struct pcache_victim_meta *v, *saver;
+	enum victim_check_status stat;
 	int ret = 1;
 
 	spin_lock(&allocated_victims_lock);
-	list_for_each_entry(v, &allocated_victims, next) {
-		enum victim_check_status stat;
-
+	list_for_each_entry_safe(v, saver, &allocated_victims, next) {
 		PCACHE_BUG_ON_VICTIM(!VictimAllocated(v), v);
-
 		get_victim(v);
+
+		/*
+		 * Don't hold it:
+		 * put_victim inside switch may free it.
+		 */
+		spin_unlock(&allocated_victims_lock);
+
 		stat = victim_check_hit_entry(v, address, current);
 		put_victim(v);
 
@@ -652,23 +699,23 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			 */
 			if (dec_and_test_victim_filling(v) && !ret)
 				put_victim(v);
-			break;
+			goto out;
 		case VICTIM_CHECK_EVICTED:
 			/*
 			 * It is actually a hit, but unfortunately it is
 			 * being evicted at the same time. Return early.
 			 */
-			ret = 1;
-			goto unlock;
+			goto out;
 		case VICTIM_CHECK_MISS:
-			continue;
+			break;
 		default:
 			BUG();
 		}
+		spin_lock(&allocated_victims_lock);
 	}
-unlock:
 	spin_unlock(&allocated_victims_lock);
 
+out:
 	return ret;
 }
 
