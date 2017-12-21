@@ -12,6 +12,7 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
+#include <lego/debug_locks.h>
 #include <processor/pcache.h>
 
 static void exit_mm(struct task_struct *tsk)
@@ -53,6 +54,15 @@ void __noreturn do_exit(long code)
 	}
 
 	/*
+	 * If do_exit is called because this processes oopsed, it's possible
+	 * that get_fs() was left as KERNEL_DS, so reset it to USER_DS before
+	 * continuing. Amongst other possible reasons, this is to prevent
+	 * mm_release()->clear_child_tid() from writing to a user-controlled
+	 * kernel address.
+	 */
+	set_fs(USER_DS);
+
+	/*
 	 * We're taking recursive faults here in do_exit. Safest is to just
 	 * leave this task alone and wait for reboot.
 	 */
@@ -79,16 +89,36 @@ void __noreturn do_exit(long code)
 	 */
 	smp_mb();
 
+	if (unlikely(in_atomic())) {
+		pr_info("note: %s[%d] exited with preempt_count %d\n",
+			current->comm, current->pid,
+			preempt_count());
+		preempt_count_set(0);
+	}
+
 	group_dead = atomic_dec_and_test(&tsk->signal->live);
+	if (group_dead) {
+		/* Cancel timers etc. */
+	}
 
 	tsk->exit_code = code;
 
 	exit_mm(tsk);
 	exit_files(tsk);
+
+	/* Free per-thread data */
 	exit_thread(tsk);
 
+	/* Make sure we are holding no locks */
+	debug_check_no_locks_held();
+
+#ifdef CONFIG_COMP_PROCESSOR
+	/* Print pcache stats */
 	if (thread_group_leader(tsk))
 		print_pcache_events();
+#endif
+
+	/* Now, time to say goodbye. */
 	preempt_disable();
 	do_task_dead();
 }
