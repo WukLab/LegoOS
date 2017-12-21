@@ -90,6 +90,17 @@ config DEBUG_PCACHE_FLUSH
 
 	  If unsure, say N
 
+config DEBUG_PCACHE_VICTIM
+	bool "Debug victim cache"
+	default n
+	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
+	depends on DEBUG_PCACHE
+	depends on PCACHE_EVICTION_VICTIM
+	help
+	  Enable this option to have some runtime debug info about victim
+	  cache. If unsure, say N.
+
 config DEBUG_FILE
 	bool "Debug open/read/close calls"
 	default n

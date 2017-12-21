@@ -288,6 +288,13 @@ static inline bool victim_is_filling(struct pcache_victim_meta *victim)
 	return false;
 }
 
+#ifdef CONFIG_DEBUG_PCACHE_VICTIM
+#define victim_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void victim_debug(const char *fmt, ...) { }
+#endif
+
 #endif /* CONFIG_PCACHE_EVICTION_VICTIM */
 
 #endif /* _LEGO_PROCESSOR_PCACHE_VICTIM_H_ */
