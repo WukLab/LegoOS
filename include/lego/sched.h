@@ -10,14 +10,6 @@
 #ifndef _LEGO_SCHED_H_
 #define _LEGO_SCHED_H_
 
-#include <asm/page.h>
-#include <asm/ptrace.h>
-#include <asm/current.h>
-#include <asm/ucontext.h>
-#include <asm/processor.h>
-#include <asm/switch_to.h>
-#include <asm/thread_info.h>
-
 #include <lego/mm.h>
 #include <lego/cred.h>
 #include <lego/files.h>
@@ -28,6 +20,15 @@
 #include <lego/strace.h>
 #include <lego/preempt.h>
 #include <lego/sched_prio.h>
+
+#include <asm/tsc.h>
+#include <asm/page.h>
+#include <asm/ptrace.h>
+#include <asm/current.h>
+#include <asm/ucontext.h>
+#include <asm/processor.h>
+#include <asm/switch_to.h>
+#include <asm/thread_info.h>
 
 /*
  * Scheduling policies
@@ -92,7 +93,10 @@
 #define TASK_CHECKPOINTING	4096
 #define TASK_STATE_MAX		8192
 
-#define TASK_STATE_TO_CHAR_STR		"RSDTtXZxKWPNn"
+#define TASK_STATE_TO_CHAR_STR		"RSDTtXZxKWPNnC"
+
+extern char ___assert_task_state[1 - 2*!!(
+		sizeof(TASK_STATE_TO_CHAR_STR)-1 != ilog2(TASK_STATE_MAX)+1)];
 
 /* Convenience macros for the sake of set_current_state: */
 #define TASK_KILLABLE			(TASK_WAKEKILL | TASK_UNINTERRUPTIBLE)
@@ -1089,5 +1093,15 @@ static inline void ___might_sleep(const char *file, int line,
 /* lib/dump_task_struct.c */
 #define DUMP_TASK_STRUCT_SIGNAL	0x1
 void dump_task_struct(struct task_struct *p, int dump_flags);
+
+/*
+ * Only dump TASK_* tasks. (0 for all tasks)
+ */
+void show_state_filter(unsigned long state_filter);
+
+static inline void show_state(void)
+{
+	show_state_filter(0);
+}
 
 #endif /* _LEGO_SCHED_H_ */
