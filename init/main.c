@@ -145,13 +145,11 @@ static int kernel_init(void *unused)
 #endif
 
 	/*
-	 * For memory component, there is no need to run user-program,
-	 * kernel_init can just exit.
-	 * For processor component, it has to create a new global
-	 * thread, so kernel is useless too.
+	 * We don't need pid 1 anymore.
+	 *  - ys
 	 */
 	do_exit(0);
-
+	BUG();
 	return 0;
 }
 
