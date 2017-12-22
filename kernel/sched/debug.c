@@ -114,14 +114,46 @@ static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu)
 	}
 }
 
+void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
+{
+	SEQ_printf(m, "cfs_rq[%d]:\n", cpu);
+	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "exec_clock",
+			SPLIT_NS(cfs_rq->exec_clock));
+
+	SEQ_printf(m, "  .%-30s: %d\n", "nr_running", cfs_rq->nr_running);
+	SEQ_printf(m, "  .%-30s: %ld\n", "load", cfs_rq->load.weight);
+}
+
 void print_cfs_stats(struct seq_file *m, int cpu)
 {
+	struct cfs_rq *cfs_rq = &cpu_rq(cpu)->cfs;
 
+	print_cfs_rq(m, cpu, cfs_rq);
+}
+
+void print_rt_rq(struct seq_file *m, int cpu, struct rt_rq *rt_rq)
+{
+	SEQ_printf(m, "rt_rq[%d]:\n", cpu);
+
+#define P(x) \
+	SEQ_printf(m, "  .%-30s: %Ld\n", #x, (long long)(rt_rq->x))
+#define PN(x) \
+	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", #x, SPLIT_NS(rt_rq->x))
+
+	P(rt_nr_running);
+	P(rt_throttled);
+	PN(rt_time);
+	PN(rt_runtime);
+
+#undef PN
+#undef P
 }
 
 void print_rt_stats(struct seq_file *m, int cpu)
 {
+	struct rt_rq *rt_rq = &cpu_rq(cpu)->rt;
 
+	print_rt_rq(m, cpu, rt_rq);
 }
 
 void print_dl_stats(struct seq_file *m, int cpu)
