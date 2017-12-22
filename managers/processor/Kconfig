@@ -101,6 +101,16 @@ config DEBUG_PCACHE_VICTIM
 	  Enable this option to have some runtime debug info about victim
 	  cache. If unsure, say N.
 
+config DEBUG_FORK
+	bool "Debug processor-to-memory fork()"
+	default n
+	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
+	help
+	  Enable to debug fork syscall.
+
+	  If unsure, say N.
+
 config DEBUG_FILE
 	bool "Debug open/read/close calls"
 	default n

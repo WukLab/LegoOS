@@ -22,8 +22,9 @@
 #include <processor/processor.h>
 
 #ifdef CONFIG_DEBUG_MMAP
-#define mmap_debug(fmt, ...)	\
-	pr_debug("%s: " fmt "\n", __func__, __VA_ARGS__)
+#define mmap_debug(fmt, ...)						\
+	pr_debug("%s(cpu%d): " fmt "\n", __func__, smp_processor_id(),	\
+		__VA_ARGS__)
 #else
 static inline void mmap_debug(const char *fmt, ...) { }
 #endif

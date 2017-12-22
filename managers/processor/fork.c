@@ -10,6 +10,14 @@
 #include <lego/sched.h>
 #include <processor/processor.h>
 
+#ifdef CONFIG_DEBUG_FORK
+#define fork_debug(fmt, ...)						\
+	pr_debug("%s(cpu%d): " fmt "\n", __func__, smp_processor_id(),	\
+		__VA_ARGS__)
+#else
+static inline void fork_debug(const char *fmt, ...) { }
+#endif
+
 /* Return 0 on success, other on failure */
 int p2m_fork(struct task_struct *p, unsigned long clone_flags)
 {
@@ -17,6 +25,9 @@ int p2m_fork(struct task_struct *p, unsigned long clone_flags)
 	int ret, retbuf;
 
 	BUG_ON(!p);
+
+	fork_debug("comm:%s, pid:%d, tgid:%d",
+		p->comm, p->pid, p->tgid);
 
 	payload.pid = p->pid;
 	payload.tgid = p->tgid;
