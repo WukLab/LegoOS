@@ -26,6 +26,7 @@
 
 static DEFINE_SPINLOCK(sched_debug_lock);
 
+#ifdef CONFIG_COMP_PROCESSOR
 /*
  * This allows printing both to /proc/sched_debug and
  * to the console
@@ -45,6 +46,11 @@ static DEFINE_SPINLOCK(sched_debug_lock);
 	else					\
 		pr_cont(x);			\
  } while (0)
+#else
+/* Memory Component does not have seq_file */
+#define SEQ_printf(m, x...)		printk(x)
+#define SEQ_printf_cont(m, x...)	pr_cont(x)
+#endif
 
 /*
  * Ease the printing of nsec fields:

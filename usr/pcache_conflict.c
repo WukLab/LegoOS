@@ -30,7 +30,7 @@ static unsigned int page_fill_random(int *ptr)
 }
 
 void *base;
-int nr_lines = 12;
+int nr_lines = 10;
 unsigned int *csums;
 
 /*
@@ -59,10 +59,6 @@ static int test_set_conflict(void)
 	stride = pstat.way_stride;
 
 	base = (void *)round_up((unsigned long)base, PAGE_SIZE);
-
-	ret = pthread_create(&tid, NULL, thread_func, NULL);
-	if (ret)
-		die("fail to create new thread");
 
 	/*
 	 * Flow:
@@ -117,7 +113,6 @@ static int test_set_conflict(void)
 				i, ptr, csums[i], csum);
 		}
 	}
-	pthread_join(tid, NULL);
 }
 
 void print_pstat(struct pcache_stat *pstat)
