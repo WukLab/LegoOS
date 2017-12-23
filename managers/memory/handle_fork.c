@@ -152,7 +152,6 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	unsigned int parent_tgid = payload->parent_tgid;
 	struct lego_task_struct *tsk, *parent;
 	u32 retbuf;
-	int ret;
 
 	fork_debug("nid:%u,pid:%u,tgid:%u,parent_tgid:%u",
 		nid, payload->pid, tgid, parent_tgid);
@@ -163,7 +162,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 
 	tsk = kmalloc(sizeof(*tsk), GFP_KERNEL);
 	if (unlikely(!tsk)) {
-		retbuf = RET_ENOMEM;
+		retbuf = -ENOMEM;
 		goto reply;
 	}
 
@@ -182,30 +181,27 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	lego_set_task_comm(tsk, payload->comm);
 
 	/* Duplicate the mmap from parent */
-	ret = dup_lego_mm(tsk, parent);
-	if (ret) {
+	retbuf = dup_lego_mm(tsk, parent);
+	if (retbuf) {
 		kfree(tsk);
-		retbuf = ERR_TO_LEGO_RET(ret);
 		goto reply;
 	}
 
 	/* All done, insert into hashtable */
-	ret = ht_insert_lego_task(tsk);
-	if (unlikely(ret)) {
+	retbuf = ht_insert_lego_task(tsk);
+	if (retbuf) {
 		lego_mmput(tsk->mm);
 		kfree(tsk);
 
 		/* Same process? */
-		if (likely(ret == -EEXIST))
-			retbuf = RET_OKAY;
-		else
-			retbuf = ERR_TO_LEGO_RET(ret);
+		if (likely(retbuf == -EEXIST))
+			retbuf = 0;
 		goto reply;
 	}
 
-	retbuf = RET_OKAY;
+	retbuf = 0;
 reply:
-	fork_debug("retbuf: %s", ret_to_string(retbuf));
+	fork_debug("reply: %d:%s", retbuf, perror(retbuf));
 	ibapi_reply_message(&retbuf, 4, desc);
 	return 0;
 }
