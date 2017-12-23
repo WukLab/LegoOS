@@ -20,6 +20,7 @@
 #include <lego/spinlock.h>
 #include <lego/syscalls.h>
 #include <lego/stop_machine.h>
+#include <asm/numa.h>
 
 #include "sched.h"
 
@@ -1331,8 +1332,39 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
 
 static int select_fallback_rq(int cpu, struct task_struct *p)
 {
-	WARN_ONCE(1, "cpu%d,pid%d/%s", cpu, p->pid, p->comm);
-	return cpu;
+	int nid = cpu_to_node(cpu);
+	int dest_cpu;
+	const struct cpumask *nodemask = NULL;
+
+	/*
+	 * If the node that the cpu is on has been offlined, cpu_to_node()
+	 * will return -1. There is no cpu on the node, and we should
+	 * select the cpu on the other node.
+	 */
+	if (nid != -1) {
+		nodemask = cpumask_of_node(nid);
+
+		/* Look for allowed, online CPU in same node. */
+		for_each_cpu(dest_cpu, nodemask) {
+			if (!cpu_active(dest_cpu))
+				continue;
+			if (cpumask_test_cpu(dest_cpu, &p->cpus_allowed))
+				return dest_cpu;
+		}
+	}
+
+	for (;;) {
+		/* Any allowed, online CPU? */
+		for_each_cpu(dest_cpu, &p->cpus_allowed) {
+			if (!(p->flags & PF_KTHREAD) && !cpu_active(dest_cpu))
+				continue;
+			if (!cpu_online(dest_cpu))
+				continue;
+			goto out;
+		}
+	}
+out:
+	return dest_cpu;
 }
 
 static inline
