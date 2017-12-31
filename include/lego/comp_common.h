@@ -19,7 +19,7 @@
 #define DEF_MEM_HOMENODE	CONFIG_DEFAULT_MEM_NODE
 #define STORAGE_NODE		CONFIG_DEFAULT_STORAGE_NODE
 
-#define DEF_NET_TIMEOUT	 10	/* second */
+#define DEF_NET_TIMEOUT	 30	/* second */
 
 extern unsigned int LEGO_LOCAL_NID;
 

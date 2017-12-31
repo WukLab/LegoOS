@@ -42,14 +42,14 @@ int p2m_fork(struct task_struct *p, unsigned long clone_flags)
 				sizeof(payload), &reply, sizeof(reply), false,
 				DEF_NET_TIMEOUT);
 
-	if (retlen < sizeof(reply)) {
+	if (retlen != sizeof(reply)) {
 		pr_warn("%s():. net %d:%s cur:%d-%s new:%d\n",
 			FUNC, retlen, perror(retlen),
 			current->pid, current->comm, p->pid);
 		goto out;
 	}
 
-	if (unlikely(reply != 0)) {
+	if (reply != 0) {
 		pr_warn("%s(): reply %d:%s. cur:%d-%s new:%d\n",
 			FUNC, reply, perror(reply),
 			current->pid, current->comm, p->pid);
