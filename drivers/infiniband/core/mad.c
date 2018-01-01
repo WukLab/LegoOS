@@ -40,6 +40,7 @@
 #include <lego/kernel.h>
 #include <lego/net.h>
 #include <lego/workqueue.h>
+#include <lego/kthread.h>
 #include <rdma/ib_cache.h>
 
 #include "mad_priv.h"
@@ -2304,39 +2305,42 @@ static void ib_mad_completion_handler(struct ib_mad_port_private *port_priv)
 //	ib_req_notify_cq(port_priv->cq, IB_CQ_NEXT_COMP);
 
 	mad_got_one = 0;
-while (1) {
-again:
-	while (ib_poll_cq(port_priv->cq, 1, &wc) == 1) {
-		//pr_info("%s got cq\n", __func__);
-		if (wc.status == IB_WC_SUCCESS) {
-			switch (wc.opcode) {
-			case IB_WC_SEND:
-				//pr_info("%s got successful send cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
-				ib_mad_send_done_handler(port_priv, &wc);
-				break;
-			case IB_WC_RECV:
-				mad_got_one++;
-				//pr_info("%s got successful recv cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
-				ib_mad_recv_done_handler(port_priv, &wc);
-				break;
-			default:
-				BUG_ON(1);
-				break;
-			}
-		} else
-			mad_error_handler(port_priv, &wc);
-		//f (mad_got_one >= 12) 
-			schedule();
-		//else
-		//	cpu_relax();
-	}
-	//pr_info("%s calling sched\n", __func__);
-	//if (mad_got_one < 12)
-	//	goto again;
-	//if (mad_got_one >= 12) 
-		schedule();
-}
 
+	while (1) {
+again:
+		while (ib_poll_cq(port_priv->cq, 1, &wc) == 1) {
+			//pr_info("%s got cq\n", __func__);
+			if (wc.status == IB_WC_SUCCESS) {
+				switch (wc.opcode) {
+				case IB_WC_SEND:
+					//pr_info("%s got successful send cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
+					ib_mad_send_done_handler(port_priv, &wc);
+					break;
+				case IB_WC_RECV:
+					mad_got_one++;
+					//pr_info("%s got successful recv cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
+					ib_mad_recv_done_handler(port_priv, &wc);
+					break;
+				default:
+					BUG_ON(1);
+					break;
+				}
+			} else
+				mad_error_handler(port_priv, &wc);
+
+			//f (mad_got_one >= 12) 
+				schedule();
+			//else
+			//	cpu_relax();
+		}
+
+		//pr_info("%s calling sched\n", __func__);
+		//if (mad_got_one < 12)
+		//	goto again;
+		//if (mad_got_one >= 12) 
+
+		schedule();
+	}
 }
 
 static void cancel_mads(struct ib_mad_agent_private *mad_agent_priv)
@@ -2921,7 +2925,7 @@ static int ib_mad_port_open(struct ib_device *device,
 				     NULL,
 				     NULL, port_priv, cq_size, 0);
 	if (port_num == 1)
-		kernel_thread(ib_mad_completion_handler, port_priv, 0);
+		kthread_run(ib_mad_completion_handler, port_priv, "ib_mad_completion_handler");
 	//port_priv->cq = ib_create_cq(port_priv->device,
 	//			     ib_mad_thread_completion_handler,
 	//			     NULL, port_priv, cq_size, 0);
