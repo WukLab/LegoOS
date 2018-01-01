@@ -257,7 +257,6 @@ void sysrq_sched_debug_show(void)
 {
 	int cpu;
 
-	sched_debug_header(NULL);
 	for_each_online_cpu(cpu)
 		print_cpu(NULL, cpu);
 
@@ -285,6 +284,8 @@ void sched_show_task(struct task_struct *p)
 void show_state_filter(unsigned long state_filter)
 {
 	struct task_struct *g, *p;
+
+	sched_debug_header(NULL);
 
 #if BITS_PER_LONG == 32
 	printk(KERN_INFO

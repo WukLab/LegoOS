@@ -682,6 +682,8 @@ static unsigned long __init init_range_memory_mapping(
 		can_use_brk_pgt = true;
 	}
 
+	pr_info("max_pfn_mapped: %#lx -> 0x%p\n", max_pfn_mapped,
+		__va(max_pfn_mapped<<PAGE_SHIFT));
 	return mapped_ram_size;
 }
 
