@@ -1099,7 +1099,7 @@ void dump_task_struct(struct task_struct *p, int dump_flags);
  */
 void show_state_filter(unsigned long state_filter);
 
-static inline void show_state(void)
+static inline void show_sched_state(void)
 {
 	show_state_filter(0);
 }

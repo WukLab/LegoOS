@@ -89,8 +89,10 @@ void panic(const char *fmt, ...)
 
 	local_irq_disable();
 
-	/* Only one CPU is allowed to execute panic(). The 1st CPU will
-	 * print the message and send halt to other CPUs. */
+	/*
+	 * Only one CPU is allowed to execute panic().
+	 * The 1st CPU will print the message and send halt to other CPUs.
+	 */
 	this_cpu = smp_processor_id();
 	old_cpu = atomic_cmpxchg(&panic_cpu, PANIC_CPU_INVALID, this_cpu);
 
@@ -105,8 +107,13 @@ void panic(const char *fmt, ...)
 	show_general_task_info(current);
 	show_stack_content(current, NULL, NULL);
 	show_call_trace(current, NULL, NULL);
+
+	/* Print all rq and task states, might be optional */
+	show_sched_state();
+
 	smp_send_stop();
 	pr_emerg("---[ end Kernel panic - not syncing: %s\n", buf);
 
-	hlt();
+	for (;;)
+		hlt();
 }
