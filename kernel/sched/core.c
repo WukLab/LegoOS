@@ -1005,6 +1005,8 @@ static void __sched __schedule(bool preempt)
 			if (prev->in_iowait)
 				atomic_inc(&rq->nr_iowait);
 		}
+
+		/* voluntary context switch */
 		switch_count = &prev->nvcsw;
 	}
 

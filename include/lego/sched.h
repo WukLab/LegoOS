@@ -419,7 +419,7 @@ struct task_struct {
 	cputime_t utime, stime, utimescaled, stimescaled;
 	cputime_t gtime;
 
-	unsigned long nvcsw, nivcsw;		/* context switch counts */
+	unsigned long nvcsw, nivcsw;		/* voluntary/involuntary context switch counts */
 	u64 start_time;				/* monotonic time in nsec */
 	u64 real_start_time;			/* boot based time in nsec */
 

@@ -19,8 +19,11 @@
 #include <lego/cpumask.h>
 #include <lego/spinlock.h>
 #include <lego/syscalls.h>
-#include <lego/stop_machine.h>
+#include <lego/ktime.h>
+#include <lego/utsname.h>
 #include <lego/seq_file.h>
+#include <generated/compile.h>
+#include <generated/utsrelease.h>
 
 #include "sched.h"
 
@@ -85,10 +88,11 @@ print_task(struct seq_file *m, struct rq *rq, struct task_struct *p)
 	else
 		SEQ_printf(m, " ");
 
-	SEQ_printf_cont(m, "%15s %5d %9Ld.%06ld %9Ld %5d ",
+	SEQ_printf_cont(m, "%15s %5d %9Ld.%06ld %9Ld %6Ld %7Ld %5d ",
 		p->comm, p->pid,
 		SPLIT_NS(p->se.vruntime),
 		(long long)(p->nvcsw + p->nivcsw),
+		(long long)p->nvcsw, (long long)p->nivcsw,
 		p->prio);
 
 	SEQ_printf_cont(m, "%9Ld.%06ld %9Ld.%06ld %9Ld.%06ld\n",
@@ -105,12 +109,12 @@ static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu)
 	"runnable tasks:\n");
 
 	SEQ_printf(m,
-	"            task   PID         tree-key  switches  prio"
-	"     wait-time             sum-exec        sum-sleep\n");
+	"            task   PID         tree-key  switches  nvcsw  nivcsw  prio"
+	"        wait-time         sum-exec        sum-sleep\n");
 
 	SEQ_printf(m,
-	"------------------------------------------------------"
-	"----------------------------------------------------\n");
+	"-----------------------------------------------------------"
+	"--------------------------------------------------------------\n");
 
 	for_each_process_thread(g, p) {
 		if (task_cpu(p) != rq_cpu)
@@ -209,10 +213,51 @@ do {									\
 	SEQ_printf(m, "\n");
 }
 
+static void sched_debug_header(struct seq_file *m)
+{
+	u64 ktime, sched_clk;
+	unsigned long flags;
+
+	local_irq_save(flags);
+	ktime = ktime_to_ns(ktime_get());
+	sched_clk = sched_clock();
+	local_irq_restore(flags);
+
+	SEQ_printf(m, "Sched Debug Version: v0.11, %s %s\n",
+		UTS_RELEASE, UTS_VERSION);
+
+#define P(x) \
+	SEQ_printf(m, "%-40s: %Ld\n", #x, (long long)(x))
+#define PN(x) \
+	SEQ_printf(m, "%-40s: %Ld.%06ld\n", #x, SPLIT_NS(x))
+	PN(ktime);
+	PN(sched_clk);
+	P(jiffies);
+#undef PN
+#undef P
+
+	SEQ_printf(m, "\n");
+	SEQ_printf(m, "sysctl_sched\n");
+
+#define P(x) \
+	SEQ_printf(m, "  .%-40s: %Ld\n", #x, (long long)(x))
+#define PN(x) \
+	SEQ_printf(m, "  .%-40s: %Ld.%06ld\n", #x, SPLIT_NS(x))
+	PN(sysctl_sched_latency);
+	PN(sysctl_sched_min_granularity);
+	PN(sysctl_sched_wakeup_granularity);
+	P(sysctl_sched_child_runs_first);
+	P(sysctl_sched_rr_timeslice);
+#undef PN
+#undef P
+	SEQ_printf(m, "\n");
+}
+
 void sysrq_sched_debug_show(void)
 {
 	int cpu;
 
+	sched_debug_header(NULL);
 	for_each_online_cpu(cpu)
 		print_cpu(NULL, cpu);
 
