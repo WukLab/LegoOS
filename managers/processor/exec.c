@@ -209,36 +209,9 @@ static int p2m_execve(struct p2m_execve_struct *payload,
 	return ret;
 }
 
-int do_execve(const char *filename,
-	      const char * const *argv,
-	      const char * const *envp)
+static int flush_old_exec(void)
 {
 	int ret;
-	__u32 payload_size, reply_size;
-	unsigned long new_ip, new_sp;
-	struct pt_regs *regs = current_pt_regs();
-	void *payload, *reply;
-
-	payload = prepare_exec_payload(filename, argv, envp, &payload_size);
-	if (IS_ERR(payload))
-		return PTR_ERR(payload);
-
-	reply = prepare_exec_reply(&reply_size);
-	if (!reply) {
-		kfree(payload);
-		return -ENOMEM;
-	}
-
-	ret = p2m_execve(payload, reply, payload_size, reply_size,
-			 &new_ip, &new_sp);
-	if (ret)
-		goto out;
-
-	/*
-	 * Now remote memory-manager has successfully
-	 * loaded the image to memory. We processor still
-	 * has some dirty work to do:
-	 */
 
 	/*
 	 * Make sure we have a private signal table and that
@@ -265,11 +238,57 @@ int do_execve(const char *filename,
 	current->flags &= ~(PF_KTHREAD | PF_NO_SETAFFINITY);
 	flush_thread();
 
+	ret = 0;
+out:
+	return ret;
+}
+
+static void setup_new_exec(void)
+{
+	/* This is the point of no return */
+	current->sas_ss_sp = current->sas_ss_size = 0;
+
+	set_task_comm(current, kbasename(filename));
+
 	/*
 	 * An exec changes our domain.
 	 * We are no longer part of the thread group:
 	 */
 	flush_signal_handlers(current, 0);
+
+}
+
+
+int do_execve(const char *filename,
+	      const char * const *argv,
+	      const char * const *envp)
+{
+	int ret;
+	__u32 payload_size, reply_size;
+	unsigned long new_ip, new_sp;
+	struct pt_regs *regs = current_pt_regs();
+	void *payload, *reply;
+
+	payload = prepare_exec_payload(filename, argv, envp, &payload_size);
+	if (IS_ERR(payload))
+		return PTR_ERR(payload);
+
+	reply = prepare_exec_reply(&reply_size);
+	if (!reply) {
+		kfree(payload);
+		return -ENOMEM;
+	}
+
+	ret = p2m_execve(payload, reply, payload_size, reply_size,
+			 &new_ip, &new_sp);
+	if (ret)
+		goto out;
+
+	ret = flush_old_exec();
+	if (ret)
+		goto out;
+
+	setup_new_exec();
 
 #ifdef ELF_PLAT_INIT
 	/*
@@ -284,8 +303,6 @@ int do_execve(const char *filename,
 	 */
 	ELF_PLAT_INIT(regs);
 #endif
-
-	set_task_comm(current, kbasename(filename));
 
 	/* core-kernel: change the task iret frame */
 	start_thread(regs, new_ip, new_sp);
