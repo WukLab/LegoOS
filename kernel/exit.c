@@ -39,6 +39,11 @@ void exit_files(struct task_struct *tsk)
 	/* TODO */
 }
 
+static void exit_notify(struct task_struct *tsk, int group_dead)
+{
+
+}
+
 void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;
@@ -99,23 +104,24 @@ void __noreturn do_exit(long code)
 	group_dead = atomic_dec_and_test(&tsk->signal->live);
 	if (group_dead) {
 		/* Cancel timers etc. */
+		exit_itimers(tsk->signal);
 	}
 
 	tsk->exit_code = code;
-
 	exit_mm(tsk);
 	exit_files(tsk);
-
-	/* Free per-thread data */
 	exit_thread(tsk);
+
+	exit_notify(tsk, group_dead);
 
 	/* Make sure we are holding no locks */
 	debug_check_no_locks_held();
 
 #ifdef CONFIG_COMP_PROCESSOR
 	/* Print pcache stats */
-	if (thread_group_leader(tsk))
+	if (thread_group_leader(tsk)) {
 		print_pcache_events();
+	}
 #endif
 
 	/* Now, time to say goodbye. */
@@ -131,7 +137,8 @@ void do_group_exit(int exit_code)
 {
 	struct signal_struct *sig = current->signal;
 
-	pr_info("%s():pid:%u,tgid:%u\n", FUNC, current->pid, current->tgid);
+	pr_debug("%s() pid:%u,tgid:%u exit_code:%#x\n",
+		FUNC, current->pid, current->tgid, exit_code);
 
 	BUG_ON(exit_code & 0x80); /* core dumps don't get here */
 
@@ -203,7 +210,7 @@ SYSCALL_DEFINE1(exit, int, error_code)
 {
 	syscall_enter("error_code: %d\n", error_code);
 
-	do_exit((error_code&0xff)<<8);
+	do_exit((error_code & 0xff) << 8);
 
 	/* NOTREACHED */
 	BUG();

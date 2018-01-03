@@ -51,6 +51,11 @@
 			Enable to print early_ioremap() debug information.
 			This may generate a mount of messages, you are warned.
 
+	early_alternative_debug
+			[X86]
+			Enable to print alternative asssembly patching info.
+			This is used to debug ALTERNATIVE() macro.
+
 	smpboot_verbosity=debug
 			[KNL, X86]
 			Enable to print info from arch/x86/kernel/smpboot.c

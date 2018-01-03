@@ -25,14 +25,14 @@ extern struct alt_instr __alt_instructions[], __alt_instructions_end[];
 int __read_mostly alternatives_patched;
 
 /* Kernel parameters */
-static int __initdata debug_alternative = 1;
+static int __initdata debug_alternative;
 
 static int __init debug_alt(char *str)
 {
 	debug_alternative = 1;
 	return 1;
 }
-__setup("debug-alternative", debug_alt);
+__setup("early_alternative_debug", debug_alt);
 
 #define DPRINTK(fmt, args...)						\
 do {									\
