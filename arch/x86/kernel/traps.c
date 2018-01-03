@@ -178,7 +178,6 @@ DO_ERROR_TRAP("invalid TSS",		     invalid_TSS,		  X86_TRAP_TS,	   SIGSEGV )
 DO_ERROR_TRAP("segment not present",	     segment_not_present,	  X86_TRAP_NP,	   SIGBUS  )
 DO_ERROR_TRAP("stack segment",		     stack_segment,		  X86_TRAP_SS,	   SIGBUS  )
 DO_ERROR_TRAP("alignment check",	     alignment_check,		  X86_TRAP_AC,	   SIGBUS  )
-DO_ERROR_TRAP("simd exception",		     simd_exception,		  X86_TRAP_XF,	   SIGSEGV )
 DO_ERROR_TRAP("coprocessor segment overrun", coprocessor_segment_overrun, X86_TRAP_OLD_MF, SIGFPE  )
 
 dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
@@ -206,71 +205,112 @@ dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 	force_sig_info(SIGSEGV, SEND_SIG_PRIV, tsk);
 }
 
-dotraplinkage void do_nmi(struct pt_regs *regs, long error_code)
-{
-	pr_crit("NMI in CPU%d, error_code: %ld\n",
-		smp_processor_id(), error_code);
-	show_regs(regs);
-	hlt();
-}
+#define print_this_event()				\
+	pr_crit("%s in CPU%d, error_code: %ld\n",	\
+		__func__, smp_processor_id(), error_code)
 
 dotraplinkage void do_device_not_available(struct pt_regs *regs, long error_code)
 {
-	pr_crit("%s() in CPU%d, error_code: %ld\n",
-		__func__, smp_processor_id(), error_code);
-
+	print_this_event();
 	fpu__restore(&current->thread.fpu); /* interrupts still off */
-}
-
-dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code)
-{
-	pr_crit("%s in CPU%d, error_code: %ld\n",
-		__func__, smp_processor_id(), error_code);
-	show_regs(regs);
-	hlt();
 }
 
 dotraplinkage void do_spurious_interrupt_bug(struct pt_regs *regs, long error_code)
 {
-	pr_crit("%s in CPU%d, error_code: %ld\n",
-		__func__, smp_processor_id(), error_code);
+	print_this_event();
 	cond_local_irq_enable(regs);
+}
+
+/*
+ * Note that we play around with the 'TS' bit in an attempt to get
+ * the correct behaviour even in the presence of the asynchronous
+ * IRQ13 behaviour
+ */
+static void math_error(struct pt_regs *regs, int error_code, int trapnr)
+{
+	struct task_struct *task = current;
+	struct fpu *fpu = &task->thread.fpu;
+	siginfo_t info;
+	char *str = (trapnr == X86_TRAP_MF) ? "fpu exception" : "simd exception";
+
+	cond_local_irq_enable(regs);
+
+	if (!user_mode(regs)) {
+		if (!fixup_exception(regs, trapnr)) {
+			task->thread.error_code = error_code;
+			task->thread.trap_nr = trapnr;
+			die(str, regs, error_code);
+		}
+		return;
+	}
+
+	/*
+	 * Save the info for the exception handler and clear the error.
+	 */
+	fpu__save(fpu);
+
+	task->thread.trap_nr	= trapnr;
+	task->thread.error_code = error_code;
+	info.si_signo		= SIGFPE;
+	info.si_errno		= 0;
+	info.si_addr		= (void __user *)GET_IP(regs);
+
+	info.si_code = fpu__exception_code(fpu, trapnr);
+
+	/* Retry when we get spurious exceptions: */
+	if (!info.si_code)
+		return;
+
+	force_sig_info(SIGFPE, &info, task);
+}
+
+dotraplinkage void
+do_simd_exception(struct pt_regs *regs, long error_code)
+{
+	print_this_event();
+	math_error(regs, error_code, X86_TRAP_XF);
 }
 
 dotraplinkage void do_coprocessor_error(struct pt_regs *regs, long error_code)
 {
+	print_this_event();
+	math_error(regs, error_code, X86_TRAP_MF);
+}
+
+dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code)
+{
+	pr_emerg("PANIC: double fault, error_code: 0x%lx\n", error_code);
 	show_regs(regs);
-	printk("X87 Coprocessor Error");
-	pr_crit("%s in CPU%d, error_code: %ld\n",
-		__func__, smp_processor_id(), error_code);
-	show_regs(regs);
-	hlt();
+	panic("Machine halted.");
 }
 
 dotraplinkage void do_machine_check(struct pt_regs *regs, long error_code)
 {
+	pr_emerg("PANIC: machine check, error_code: 0x%lx\n", error_code);
 	show_regs(regs);
-	printk("Machine Check");
-	pr_crit("%s in CPU%d, error_code: %ld\n",
-		__func__, smp_processor_id(), error_code);
-	show_regs(regs);
-	hlt();
+	panic("Machine halted.");
 }
 
 dotraplinkage void do_virtualization_exception(struct pt_regs *regs, long error_code)
 {
-	pr_crit("%s in CPU%d, error_code: %ld\n",
-		__func__, smp_processor_id(), error_code);
+	pr_emerg("PANIC: virtualization exception, error_code: 0x%lx\n", error_code);
 	show_regs(regs);
-	hlt();
+	panic("Machine halted.");
 }
 
 dotraplinkage void do_reserved(struct pt_regs *regs, long error_code)
 {
-	pr_crit("%s in CPU%d, error_code: %ld\n",
-		__func__, smp_processor_id(), error_code);
+	pr_emerg("PANIC: reserved exception, error_code: 0x%lx\n", error_code);
 	show_regs(regs);
-	hlt();
+	panic("Machine halted.");
+}
+
+/* TODO */
+dotraplinkage void do_nmi(struct pt_regs *regs, long error_code)
+{
+	print_this_event();
+	for(;;)
+		hlt();
 }
 
 void __init trap_init(void)

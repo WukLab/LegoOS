@@ -7,13 +7,14 @@
  * (at your option) any later version.
  */
 
-#include <asm/asm.h>
-#include <asm/processor.h>
-#include <asm/fpu/internal.h>
-
 #include <lego/sched.h>
 #include <lego/percpu.h>
 #include <lego/kernel.h>
+
+#include <asm/asm.h>
+#include <asm/traps.h>
+#include <asm/processor.h>
+#include <asm/fpu/internal.h>
 
 /*
  * Represents the initial FPU state. It's mostly (but not completely) zeroes,
@@ -420,4 +421,73 @@ void fpu__clear(struct fpu *fpu)
 		user_fpu_begin();
 		copy_init_fpstate_to_fpregs();
 	}
+}
+
+/*
+ * x87 math exception handling:
+ */
+
+int fpu__exception_code(struct fpu *fpu, int trap_nr)
+{
+	int err;
+
+	if (trap_nr == X86_TRAP_MF) {
+		unsigned short cwd, swd;
+		/*
+		 * (~cwd & swd) will mask out exceptions that are not set to unmasked
+		 * status.  0x3f is the exception bits in these regs, 0x200 is the
+		 * C1 reg you need in case of a stack fault, 0x040 is the stack
+		 * fault bit.  We should only be taking one exception at a time,
+		 * so if this combination doesn't produce any single exception,
+		 * then we have a bad program that isn't synchronizing its FPU usage
+		 * and it will suffer the consequences since we won't be able to
+		 * fully reproduce the context of the exception.
+		 */
+		if (cpu_has(X86_FEATURE_FXSR)) {
+			cwd = fpu->state.fxsave.cwd;
+			swd = fpu->state.fxsave.swd;
+		} else {
+			cwd = (unsigned short)fpu->state.fsave.cwd;
+			swd = (unsigned short)fpu->state.fsave.swd;
+		}
+
+		err = swd & ~cwd;
+	} else {
+		/*
+		 * The SIMD FPU exceptions are handled a little differently, as there
+		 * is only a single status/control register.  Thus, to determine which
+		 * unmasked exception was caught we must mask the exception mask bits
+		 * at 0x1f80, and then use these to mask the exception bits at 0x3f.
+		 */
+		unsigned short mxcsr = MXCSR_DEFAULT;
+
+		if (cpu_has(X86_FEATURE_XMM))
+			mxcsr = fpu->state.fxsave.mxcsr;
+
+		err = ~(mxcsr >> 7) & mxcsr;
+	}
+
+	if (err & 0x001) {	/* Invalid op */
+		/*
+		 * swd & 0x240 == 0x040: Stack Underflow
+		 * swd & 0x240 == 0x240: Stack Overflow
+		 * User must clear the SF bit (0x40) if set
+		 */
+		return FPE_FLTINV;
+	} else if (err & 0x004) { /* Divide by Zero */
+		return FPE_FLTDIV;
+	} else if (err & 0x008) { /* Overflow */
+		return FPE_FLTOVF;
+	} else if (err & 0x012) { /* Denormal, Underflow */
+		return FPE_FLTUND;
+	} else if (err & 0x020) { /* Precision */
+		return FPE_FLTRES;
+	}
+
+	/*
+	 * If we're using IRQ 13, or supposedly even some trap
+	 * X86_TRAP_MF implementations, it's possible
+	 * we get a spurious trap, which is not an error.
+	 */
+	return 0;
 }
