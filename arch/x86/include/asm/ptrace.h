@@ -74,6 +74,15 @@ static inline int user_mode(struct pt_regs *regs)
 	return !!(regs->cs & 3);
 }
 
+static inline bool user_64bit_mode(struct pt_regs *regs)
+{
+	/*
+	 * On non-paravirt systems, this is the only long mode CPL 3
+	 * selector.  We do not allow long mode selectors in the LDT.
+	 */
+	return regs->cs == __USER_CS;
+}
+
 #define GET_IP(regs) ((regs)->ip)
 #define GET_FP(regs) ((regs)->bp)
 #define GET_USP(regs) ((regs)->sp)

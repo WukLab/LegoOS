@@ -152,10 +152,8 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 
 	if (unlikely(len < (int)PCACHE_LINE_SIZE)) {
 		if (likely(len == sizeof(int))) {
-			int *va_cache = pcache_meta_to_kva(pcm);
-
 			/* remote reported error */
-			ret = -(*va_cache);
+			ret = -EPERM;
 			goto out;
 		} else if (len < 0) {
 			/*
@@ -166,7 +164,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 			ret = len;
 			goto out;
 		} else {
-			WARN(1, "Invalid size: %d\n", len);
+			WARN(1, "Invalid reply length: %d\n", len);
 			ret = -EFAULT;
 			goto out;
 		}
@@ -179,8 +177,8 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 
 	ret = 0;
 out:
-	pcache_debug("O pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p ret:%d",
-		current->pid, current->tgid, address, flags, pa_cache, ret);
+	pcache_debug("O pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p ret:%d(%s)",
+		current->pid, current->tgid, address, flags, pa_cache, ret, perror(ret));
 	return ret;
 }
 

@@ -36,15 +36,6 @@
 	regs->seg = GET_SEG(seg) | 3;			\
 } while (0)
 
-static inline bool user_64bit_mode(struct pt_regs *regs)
-{
-	/*
-	 * On non-paravirt systems, this is the only long mode CPL 3
-	 * selector.  We do not allow long mode selectors in the LDT.
-	 */
-	return regs->cs == __USER_CS;
-}
-
 /*
  * If regs->ss will cause an IRET fault, change it.  Otherwise leave it
  * alone.  Using this generally makes no sense unless

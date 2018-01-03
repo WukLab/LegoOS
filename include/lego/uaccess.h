@@ -71,5 +71,40 @@ static inline void pagefault_enable(void)
  */
 #define faulthandler_disabled()		(pagefault_disabled())
 
+/*
+ * probe_kernel_read(): safely attempt to read from a location
+ * @dst: pointer to the buffer that shall take the data
+ * @src: address to read from
+ * @size: size of the data chunk
+ *
+ * Safely read from address @src to the buffer at @dst.  If a kernel fault
+ * happens, handle that and return -EFAULT.
+ */
+long probe_kernel_read(void *dst, const void *src, size_t size);
+long __probe_kernel_read(void *dst, const void *src, size_t size);
+
+/*
+ * probe_kernel_write(): safely attempt to write to a location
+ * @dst: address to write to
+ * @src: pointer to the data that shall be written
+ * @size: size of the data chunk
+ *
+ * Safely write to address @dst from the buffer at @src.  If a kernel fault
+ * happens, handle that and return -EFAULT.
+ */
+long probe_kernel_write(void *dst, const void *src, size_t size);
+long __probe_kernel_write(void *dst, const void *src, size_t size);
+
+long strncpy_from_unsafe(char *dst, const void *unsafe_addr, long count);
+
+/**
+ * probe_kernel_address(): safely attempt to read from a location
+ * @addr: address to read from
+ * @retval: read into this variable
+ *
+ * Returns 0 on success, or -EFAULT.
+ */
+#define probe_kernel_address(addr, retval)		\
+	probe_kernel_read(&retval, addr, sizeof(retval))
 
 #endif /* _LEGO_UACCESS_H_ */

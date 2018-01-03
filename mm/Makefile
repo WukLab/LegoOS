@@ -12,6 +12,7 @@ obj-y += memblock.o
 obj-y += page_alloc.o
 obj-y += early_ioremap.o
 obj-y += percpu.o
+obj-y += maccess.o
 
 obj-$(CONFIG_SPARSEMEM) += sparse.o
 obj-$(CONFIG_SPARSEMEM_VMEMMAP) += sparse-vmemmap.o

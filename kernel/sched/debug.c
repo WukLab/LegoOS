@@ -22,8 +22,6 @@
 #include <lego/ktime.h>
 #include <lego/utsname.h>
 #include <lego/seq_file.h>
-#include <generated/compile.h>
-#include <generated/utsrelease.h>
 
 #include "sched.h"
 
@@ -223,8 +221,7 @@ static void sched_debug_header(struct seq_file *m)
 	sched_clk = sched_clock();
 	local_irq_restore(flags);
 
-	SEQ_printf(m, "Sched Debug Version: v0.11, %s %s\n",
-		UTS_RELEASE, UTS_VERSION);
+	SEQ_printf(m, "Sched Debug Version: v0.11");
 
 #define P(x) \
 	SEQ_printf(m, "%-40s: %Ld\n", #x, (long long)(x))

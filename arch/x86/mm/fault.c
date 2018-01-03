@@ -7,13 +7,6 @@
  * (at your option) any later version.
  */
 
-#include <asm/asm.h>
-#include <asm/page.h>
-#include <asm/traps.h>
-#include <asm/pgtable.h>
-#include <asm/current.h>
-#include <asm/kdebug.h>
-
 #include <lego/mm.h>
 #include <lego/slab.h>
 #include <lego/sched.h>
@@ -25,6 +18,13 @@
 #include <lego/extable.h>
 #include <lego/pgfault.h>
 #include <processor/processor.h>
+
+#include <asm/asm.h>
+#include <asm/page.h>
+#include <asm/traps.h>
+#include <asm/pgtable.h>
+#include <asm/kdebug.h>
+#include <asm/vsyscall.h>
 
 /*
  * Page fault error code bits:
@@ -48,6 +48,108 @@ enum x86_pf_error_code {
 static int fault_in_kernel_space(unsigned long address)
 {
 	return address >= TASK_SIZE_MAX;
+}
+
+/*
+ * Prefetch quirks:
+ *
+ * 32-bit mode:
+ *
+ *   Sometimes AMD Athlon/Opteron CPUs report invalid exceptions on prefetch.
+ *   Check that here and ignore it.
+ *
+ * 64-bit mode:
+ *
+ *   Sometimes the CPU reports invalid exceptions on prefetch.
+ *   Check that here and ignore it.
+ *
+ * Opcode checker based on code by Richard Brunner.
+ */
+static inline int
+check_prefetch_opcode(struct pt_regs *regs, unsigned char *instr,
+		      unsigned char opcode, int *prefetch)
+{
+	unsigned char instr_hi = opcode & 0xf0;
+	unsigned char instr_lo = opcode & 0x0f;
+
+	switch (instr_hi) {
+	case 0x20:
+	case 0x30:
+		/*
+		 * Values 0x26,0x2E,0x36,0x3E are valid x86 prefixes.
+		 * In X86_64 long mode, the CPU will signal invalid
+		 * opcode if some of these prefixes are present so
+		 * X86_64 will never get here anyway
+		 */
+		return ((instr_lo & 7) == 0x6);
+#ifdef CONFIG_X86_64
+	case 0x40:
+		/*
+		 * In AMD64 long mode 0x40..0x4F are valid REX prefixes
+		 * Need to figure out under what instruction mode the
+		 * instruction was issued. Could check the LDT for lm,
+		 * but for now it's good enough to assume that long
+		 * mode only uses well known segments or kernel.
+		 */
+		return (!user_mode(regs) || user_64bit_mode(regs));
+#endif
+	case 0x60:
+		/* 0x64 thru 0x67 are valid prefixes in all modes. */
+		return (instr_lo & 0xC) == 0x4;
+	case 0xF0:
+		/* 0xF0, 0xF2, 0xF3 are valid prefixes in all modes. */
+		return !instr_lo || (instr_lo>>1) == 1;
+	case 0x00:
+		/* Prefetch instruction is 0x0F0D or 0x0F18 */
+		if (probe_kernel_address(instr, opcode))
+			return 0;
+
+		*prefetch = (instr_lo == 0xF) &&
+			(opcode == 0x0D || opcode == 0x18);
+		return 0;
+	default:
+		return 0;
+	}
+}
+
+static inline unsigned long
+convert_ip_to_linear(struct task_struct *child, struct pt_regs *regs)
+{
+	return regs->ip;
+}
+
+static int
+is_prefetch(struct pt_regs *regs, unsigned long error_code, unsigned long addr)
+{
+	unsigned char *max_instr;
+	unsigned char *instr;
+	int prefetch = 0;
+
+	/*
+	 * If it was a exec (instruction fetch) fault on NX page, then
+	 * do not ignore the fault:
+	 */
+	if (error_code & PF_INSTR)
+		return 0;
+
+	instr = (void *)convert_ip_to_linear(current, regs);
+	max_instr = instr + 15;
+
+	if (user_mode(regs) && instr >= (unsigned char *)TASK_SIZE_MAX)
+		return 0;
+
+	while (instr < max_instr) {
+		unsigned char opcode;
+
+		if (probe_kernel_address(instr, opcode))
+			break;
+
+		instr++;
+
+		if (!check_prefetch_opcode(regs, instr, opcode, &prefetch))
+			break;
+	}
+	return prefetch;
 }
 
 static void dump_pagetable(unsigned long address)
@@ -277,6 +379,20 @@ no_context(struct pt_regs *regs, unsigned long error_code,
 		return;
 
 	/*
+	 * 32-bit:
+	 *
+	 *   Valid to do another page fault here, because if this fault
+	 *   had been triggered by is_prefetch fixup_exception would have
+	 *   handled it.
+	 *
+	 * 64-bit:
+	 *
+	 *   Hall of shame of CPU/BIOS bugs.
+	 */
+	if (is_prefetch(regs, error_code, address))
+		return;
+
+	/*
 	 * Well, kernel bugs!
 	 */
 
@@ -342,6 +458,24 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 		local_irq_enable();
 
 		/*
+		 * Valid to do another page fault here because this one came
+		 * from user space:
+		 */
+		if (is_prefetch(regs, error_code, address))
+			return;
+
+#ifdef CONFIG_X86_64
+		/*
+		 * Instruction fetch faults in the vsyscall page might need
+		 * emulation.
+		 */
+		if (unlikely((error_code & PF_INSTR) &&
+			     ((address & ~0xfff) == VSYSCALL_ADDR))) {
+			panic("We need vsyscall emulation.");
+		}
+#endif
+
+		/*
 		 * To avoid leaking information about the kernel page table
 		 * layout, pretend that user-mode accesses to kernel addresses
 		 * are always protection faults.
@@ -360,11 +494,6 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 		return;
 	}
 
-	/*
-	 * If it comes from kernel space, then there is
-	 * user context attached:
-	 */
-	force_sig_info_fault(SIGSEGV, si_code, address, tsk, 0);
 	no_context(regs, error_code, address, SIGSEGV);
 }
 
@@ -454,8 +583,21 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 {
 	int fault;
 	unsigned long address = read_cr2();
-	unsigned long flags = FAULT_FLAG_KILLABLE | FAULT_FLAG_USER;
+	unsigned long flags = FAULT_FLAG_KILLABLE;
 
+	/*
+	 * We fault-in kernel-space virtual memory on-demand. The
+	 * 'reference' page table is init_mm.pgd.
+	 *
+	 * NOTE! We MUST NOT take any locks for this case. We may
+	 * be in an interrupt or a critical region, and should
+	 * only copy the information from the master page table,
+	 * nothing more.
+	 *
+	 * This verifies that the fault happens in kernel space
+	 * (error_code & 4) == 0, and that the fault was not a
+	 * protection error (error_code & 9) == 0.
+	 */
 	if (unlikely(fault_in_kernel_space(address))) {
 		if (!(error_code & (PF_RSVD | PF_USER | PF_PROT))) {
 			if (vmalloc_fault(address) >= 0)
@@ -467,6 +609,8 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 			return;
 
 		bad_area_nosemaphore(regs, error_code, address);
+
+		return;
 	}
 
 	if (unlikely(error_code & PF_RSVD))
@@ -485,6 +629,13 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 		return;
 	}
 
+	/*
+	 * It's safe to allow irq's after cr2 has been saved and the
+	 * vmalloc fault has been handled.
+	 *
+	 * User-mode registers count as a user access even for any
+	 * potential system fault or CPU buglet:
+	 */
 	if (user_mode(regs)) {
 		local_irq_enable();
 		error_code |= PF_USER;

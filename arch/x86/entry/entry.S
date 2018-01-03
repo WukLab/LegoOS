@@ -16,6 +16,7 @@
 #include <asm/ptrace.h>
 #include <asm/percpu.h>
 #include <asm/segment.h>
+#include <asm/extable.h>
 #include <asm/irq_vectors.h>
 #include <asm/thread_info.h>
 #include <asm/processor-flags.h>
