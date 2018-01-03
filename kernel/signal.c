@@ -36,6 +36,23 @@ static void print_fatal_signal(int signr)
 	preempt_enable();
 }
 
+/* Flush all handlers for a task. */
+void flush_signal_handlers(struct task_struct *t, int force_default)
+{
+	int i;
+	struct k_sigaction *ka = &t->sighand->action[0];
+	for (i = _NSIG ; i != 0 ; i--) {
+		if (force_default || ka->sa.sa_handler != SIG_IGN)
+			ka->sa.sa_handler = SIG_DFL;
+		ka->sa.sa_flags = 0;
+#ifdef __ARCH_HAS_SA_RESTORER
+		ka->sa.sa_restorer = NULL;
+#endif
+		sigemptyset(&ka->sa.sa_mask);
+		ka++;
+	}
+}
+
 /**
  * task_set_jobctl_pending - set jobctl pending bits
  * @task: target task
@@ -1270,7 +1287,7 @@ int zap_other_threads(struct task_struct *p)
 	int count = 0;
 
 	p->signal->group_stop_count = 0;
-	
+
 	spin_lock(&tasklist_lock);
 	while_each_thread(p, t) {
 		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
@@ -1414,6 +1431,40 @@ out:
 		do_notify_parent_cldstop(tsk, false, group_stop);
 		spin_unlock(&tasklist_lock);
 	}
+}
+
+static void __flush_itimer_signals(struct sigpending *pending)
+{
+	sigset_t signal, retain;
+	struct sigqueue *q, *n;
+
+	signal = pending->signal;
+	sigemptyset(&retain);
+
+	list_for_each_entry_safe(q, n, &pending->list, list) {
+		int sig = q->info.si_signo;
+
+		if (likely(q->info.si_code != SI_TIMER)) {
+			sigaddset(&retain, sig);
+		} else {
+			sigdelset(&signal, sig);
+			list_del_init(&q->list);
+			__sigqueue_free(q);
+		}
+	}
+
+	sigorsets(&pending->signal, &signal, &retain);
+}
+
+void flush_itimer_signals(void)
+{
+	struct task_struct *tsk = current;
+	unsigned long flags;
+
+	spin_lock_irqsave(&tsk->sighand->siglock, flags);
+	__flush_itimer_signals(&tsk->pending);
+	__flush_itimer_signals(&tsk->signal->shared_pending);
+	spin_unlock_irqrestore(&tsk->sighand->siglock, flags);
 }
 
 /* System-call Part */

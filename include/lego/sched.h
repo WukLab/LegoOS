@@ -945,6 +945,9 @@ void task_clear_jobctl_pending(struct task_struct *task, unsigned long mask);
 void __init fork_init(void);
 extern int arch_task_struct_size __read_mostly;
 
+void exit_itimers(struct signal_struct *);
+void flush_itimer_signals(void);
+
 void set_current_blocked(sigset_t *);
 void __set_current_blocked(const sigset_t *);
 

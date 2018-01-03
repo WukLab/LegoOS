@@ -21,27 +21,6 @@
 #include <lego/uaccess.h>
 #include <processor/processor.h>
 
-/*
- * This function makes sure the current process has its own signal table,
- * so that flush_signal_handlers can later reset the handlers without
- * disturbing other processes.  (Other processes might share the signal
- * table via the CLONE_SIGHAND option to clone().)
- */
-static int de_thread(struct task_struct *tsk)
-{
-	/* TODO */
-	return 0;
-}
-
-/*
- * Flush all handlers for a task.
- */
-
-void flush_signal_handlers(struct task_struct *t, int force_default)
-{
-	/* TODO */
-}
-
 static int exec_mmap(void)
 {
 	struct mm_struct *new_mm;
@@ -209,6 +188,68 @@ static int p2m_execve(struct p2m_execve_struct *payload,
 	return ret;
 }
 
+/*
+ * This function makes sure the current process has its own signal table,
+ * so that flush_signal_handlers can later reset the handlers without
+ * disturbing other processes.  (Other processes might share the signal
+ * table via the CLONE_SIGHAND option to clone().)
+ */
+static int de_thread(struct task_struct *tsk)
+{
+	struct signal_struct *sig = tsk->signal;
+	struct sighand_struct *oldsighand = tsk->sighand;
+	spinlock_t *lock = &oldsighand->siglock;
+
+	if (thread_group_empty(tsk))
+		goto no_thread_group;
+
+	WARN(1, "Need to patch this function for multithread process");
+
+	/* Kill all other threads in the thread group */
+	spin_lock_irq(lock);
+	if (signal_group_exit(sig)) {
+		/*
+		 * Another group action in progress, just
+		 * return so that the signal is processed.
+		 */
+		spin_unlock_irq(lock);
+		return -EAGAIN;
+	}
+
+no_thread_group:
+	/* we have changed execution domain */
+	tsk->exit_signal = SIGCHLD;
+
+	exit_itimers(sig);
+	flush_itimer_signals();
+
+	if (atomic_read(&oldsighand->count) != 1) {
+		struct sighand_struct *newsighand;
+		/*
+		 * This ->sighand is shared with the CLONE_SIGHAND
+		 * but not CLONE_THREAD task, switch to the new one.
+		 */
+		newsighand = kmalloc(sizeof(*newsighand), GFP_KERNEL);
+		if (!newsighand)
+			return -ENOMEM;
+
+		atomic_set(&newsighand->count, 1);
+		memcpy(newsighand->action, oldsighand->action,
+		       sizeof(newsighand->action));
+
+		spin_lock_irq(&tasklist_lock);
+		spin_lock(&oldsighand->siglock);
+		tsk->sighand = newsighand;
+		spin_unlock(&oldsighand->siglock);
+		spin_unlock_irq(&tasklist_lock);
+
+		__cleanup_sighand(oldsighand);
+	}
+
+	BUG_ON(!thread_group_leader(tsk));
+	return 0;
+}
+
 static int flush_old_exec(void)
 {
 	int ret;
@@ -243,7 +284,7 @@ out:
 	return ret;
 }
 
-static void setup_new_exec(void)
+static void setup_new_exec(const char *filename)
 {
 	/* This is the point of no return */
 	current->sas_ss_sp = current->sas_ss_size = 0;
@@ -255,9 +296,7 @@ static void setup_new_exec(void)
 	 * We are no longer part of the thread group:
 	 */
 	flush_signal_handlers(current, 0);
-
 }
-
 
 int do_execve(const char *filename,
 	      const char * const *argv,
@@ -288,7 +327,7 @@ int do_execve(const char *filename,
 	if (ret)
 		goto out;
 
-	setup_new_exec();
+	setup_new_exec(filename);
 
 #ifdef ELF_PLAT_INIT
 	/*
@@ -324,9 +363,10 @@ out:
 }
 
 SYSCALL_DEFINE3(execve,
-		const char __user*, filename,
+		const char __user *, filename,
 		const char __user *const __user *, argv,
 		const char __user *const __user *, envp)
 {
+	__syscall_enter();
 	return do_execve(filename, argv, envp);
 }

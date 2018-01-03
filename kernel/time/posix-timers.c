@@ -28,3 +28,12 @@
 void do_schedule_next_timer(struct siginfo *info)
 {
 }
+
+/*
+ * This is called by do_exit or de_thread, only when there are no more
+ * references to the shared signal_struct.
+ */
+void exit_itimers(struct signal_struct *sig)
+{
+}
+

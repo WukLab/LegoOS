@@ -17,6 +17,7 @@
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
 #include <lego/fit_ibapi.h>
+#include <lego/signalfd.h>
 #include <lego/timekeeping.h>
 #include <processor/processor.h>
 
@@ -512,8 +513,10 @@ static int copy_sighand(unsigned long clone_flags, struct task_struct *tsk)
 
 void __cleanup_sighand(struct sighand_struct *sighand)
 {
-	if (atomic_dec_and_test(&sighand->count))
+	if (atomic_dec_and_test(&sighand->count)) {
+		signalfd_cleanup(sighand);
 		kfree(sighand);
+	}
 }
 
 static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
