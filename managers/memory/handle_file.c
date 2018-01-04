@@ -141,7 +141,7 @@ int handle_p2m_write(struct p2m_read_write_payload *payload, u64 desc,
 	struct lego_task_struct *tsk;
 	ssize_t retval;
 
-	file_debug("pid: %u tgid: %u buf: %#lx len: %zu, f_name: %s",
+	file_debug("pid: %u tgid: %u buf: %p len: %zu, f_name: %s",
 		payload->pid, payload->tgid, payload->buf, payload->len,
 		payload->filename);
 

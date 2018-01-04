@@ -584,8 +584,13 @@ component_failure_check(struct pt_regs *regs, unsigned long error_code,
 			unsigned long address)
 {
 #ifndef CONFIG_COMP_PROCESSOR
-	bad_area_nosemaphore(regs, error_code, address);
-	BUG();
+	/*
+	 * Memory component does not have any user context attached currently.
+	 */
+	show_fault_oops(regs, error_code, address);
+	__die("Oops", regs, error_code);
+	printk(KERN_DEFAULT "CR2: %016lx\n", address);
+	panic("Fatal exception");
 #endif
 }
 
@@ -636,9 +641,6 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	if (unlikely(error_code & PF_RSVD))
 		pgtable_bad(regs, error_code, address);
 
-	/* Only processor component can proceed */
-	component_failure_check(regs, error_code, address);
-
 	/*
 	 * If we're in a region with pagefaults disabled,
 	 * then we must not take the fault, go straight to the fixup:
@@ -661,6 +663,9 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 		bad_area_nosemaphore(regs, error_code, address);
 		return;
 	}
+
+	/* Only processor component can proceed */
+	component_failure_check(regs, error_code, address);
 
 	/*
 	 * It's safe to allow irq's after cr2 has been saved and the

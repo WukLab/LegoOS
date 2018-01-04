@@ -31,7 +31,7 @@
 static inline void clflush_debug(const char *fmt, ...) { }
 #endif
 
-static void verify_checksum(struct lego_task_struct *tsk, void *user_va)
+void verify_checksum(struct lego_task_struct *tsk, void *user_va)
 {
 	void *buf;
 	__wsum csum;
@@ -80,7 +80,6 @@ int handle_p2m_flush_one(struct p2m_flush_payload *payload, u64 desc,
 		goto out_reply;
 	}
 
-	verify_checksum(tsk, user_va);
 	reply = 0;
 
 out_reply:
