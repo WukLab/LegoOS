@@ -25,7 +25,9 @@
 
 #ifndef __ASSEMBLY__
 struct exception_table_entry {
-	int insn, fixup, handler;
+	int	insn;		/* An instruction that is allowed to fault */
+	int	fixup;		/* target where program should continue */
+	int	handler;	/* handler to deal with the fault cause by @insn */
 };
 
 #define ARCH_HAS_RELATIVE_EXTABLE
@@ -41,7 +43,8 @@ struct exception_table_entry {
 struct pt_regs;
 int fixup_exception(struct pt_regs *regs, int trapnr);
 bool ex_has_fault_handler(unsigned long ip);
-#endif /* __ASSEMBLY__ */
+void early_fixup_exception(struct pt_regs *regs, int trapnr);
+#endif
 
 /* Exception table entry */
 #ifdef __ASSEMBLY__
@@ -62,27 +65,6 @@ bool ex_has_fault_handler(unsigned long ip);
 # define _ASM_EXTABLE_EX(from, to)				\
 	_ASM_EXTABLE_HANDLE(from, to, ex_handler_ext)
 
-#else /* __ASSEMBLY__ */
-# define _EXPAND_EXTABLE_HANDLE(x) #x
-# define _ASM_EXTABLE_HANDLE(from, to, handler)			\
-	" .pushsection \"__ex_table\",\"a\"\n"			\
-	" .balign 4\n"						\
-	" .long (" #from ") - .\n"				\
-	" .long (" #to ") - .\n"				\
-	" .long (" _EXPAND_EXTABLE_HANDLE(handler) ") - .\n"	\
-	" .popsection\n"
-
-# define _ASM_EXTABLE(from, to)					\
-	_ASM_EXTABLE_HANDLE(from, to, ex_handler_default)
-
-# define _ASM_EXTABLE_FAULT(from, to)				\
-	_ASM_EXTABLE_HANDLE(from, to, ex_handler_fault)
-
-# define _ASM_EXTABLE_EX(from, to)				\
-	_ASM_EXTABLE_HANDLE(from, to, ex_handler_ext)
-#endif /* __ASSEMBLY__ */
-
-#ifdef __ASSEMBLY__
 .macro ALIGN_DESTINATION
 	/* check for bad alignment of destination */
 	movl %edi,%ecx
@@ -106,6 +88,24 @@ bool ex_has_fault_handler(unsigned long ip);
 	_ASM_EXTABLE(100b,103b)
 	_ASM_EXTABLE(101b,103b)
 .endm
-#endif
+#else /* !__ASSEMBLY__ */
+# define _EXPAND_EXTABLE_HANDLE(x) #x
+# define _ASM_EXTABLE_HANDLE(from, to, handler)			\
+	" .pushsection \"__ex_table\",\"a\"\n"			\
+	" .balign 4\n"						\
+	" .long (" #from ") - .\n"				\
+	" .long (" #to ") - .\n"				\
+	" .long (" _EXPAND_EXTABLE_HANDLE(handler) ") - .\n"	\
+	" .popsection\n"
+
+# define _ASM_EXTABLE(from, to)					\
+	_ASM_EXTABLE_HANDLE(from, to, ex_handler_default)
+
+# define _ASM_EXTABLE_FAULT(from, to)				\
+	_ASM_EXTABLE_HANDLE(from, to, ex_handler_fault)
+
+# define _ASM_EXTABLE_EX(from, to)				\
+	_ASM_EXTABLE_HANDLE(from, to, ex_handler_ext)
+#endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_EXTABLE_H_ */

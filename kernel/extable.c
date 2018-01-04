@@ -77,6 +77,7 @@ void __init sort_main_extable(void)
 	}
 }
 
+#ifndef ARCH_HAS_SEARCH_EXTABLE
 /*
  * Search one exception table for an entry corresponding to the
  * given instruction address, and return the address of the entry,
@@ -106,6 +107,7 @@ search_extable(const struct exception_table_entry *first,
 	}
 	return NULL;
 }
+#endif
 
 /* Given an address, look for it in the exception tables. */
 const struct exception_table_entry *search_exception_tables(unsigned long addr)

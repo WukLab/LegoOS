@@ -302,6 +302,8 @@ early_idt_handler_common:
 	 */
 	cld
 
+	incl	early_recursion_flag(%rip)
+
 	/* The vector number is currently in the pt_regs->di slot. */
 	pushq	%rsi				/* pt_regs->si */
 	movq	8(%rsp), %rsi			/* RSI = vector number */
@@ -320,44 +322,25 @@ early_idt_handler_common:
 	pushq	%r14				/* pt_regs->r14 */
 	pushq	%r15				/* pt_regs->r15 */
 
-	cmpq	$14, %rsi		/* Page fault? */
-	jnz	1f
+	cmpq	$14, %rsi			/* Page fault? */
+	jnz	10f
 	movq	%cr2, %rdi
 	call	early_make_pgtable
 	andl	%eax,%eax
-	jz	2f			/* All good */
+	jz	20f				/* All good */
 
-1:
-	movq %rsp,%rdi			/* RDI = pt_regs; RSI is already trapnr */
-	/*
-	 * All other traps are not allowed or should not be triggered
-	 * at this time. This handler is solely for page fault.
-	 * Hence comment this out and do nothing.
-	 *
-	 * call early_fixup_exception
-	 */
+10:
+	movq	%rsp,%rdi			/* RDI = pt_regs; RSI is already trapnr */
+	call	early_fixup_exception
 
-2:
-	/* Restore all */
-	popq	%r15
-	popq	%r14
-	popq	%r13
-	popq	%r12
-	popq	%rbp
-	popq	%rbx
-	popq	%r11
-	popq	%r10
-	popq	%r9
-	popq	%r8
-	popq	%rax
-	popq	%rcx
-	popq	%rdx
-	popq	%rsi
-	popq	%rdi
-	addq	$8, %rsp
-
-	iretq
+20:
+	decl	early_recursion_flag(%rip)
+	jmp	restore_regs_and_iret
 ENDPROC(early_idt_handler_common)
+
+	.balign 4
+GLOBAL(early_recursion_flag)
+	.long 0
 
 #define NEXT_PAGE(name) \
 	.balign	PAGE_SIZE; \
