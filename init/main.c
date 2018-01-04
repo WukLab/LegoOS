@@ -236,6 +236,9 @@ asmlinkage void __init start_kernel(void)
 	/* Allocate pid mapping array */
 	pid_init();
 	fork_init();
+
+	sort_main_extable();
+
 	futex_init();
 
 	/* Processor need large contiguous memory */
@@ -254,8 +257,6 @@ asmlinkage void __init start_kernel(void)
 	 * buddy allocator is avaiable afterwards:
 	 */
 	memory_init();
-
-	sort_main_extable();
 
 	irq_init();
 

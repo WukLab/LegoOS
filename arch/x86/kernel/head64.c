@@ -34,6 +34,7 @@ static void __init reset_early_page_tables(void)
 	write_cr3(__pa(early_level4_pgt));
 }
 
+/* Create a new PMD entry */
 int __init early_make_pgtable(unsigned long address)
 {
 	unsigned long physaddr = address - __PAGE_OFFSET;
@@ -126,26 +127,39 @@ static void __init copy_screen_info(void)
 extern const char
 early_idt_handler_array[NUM_EXCEPTION_VECTORS][EARLY_IDT_HANDLER_SIZE];
 
+static void __init load_early_idt_handlers(void)
+{
+	int i;
+
+	for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
+		set_intr_gate(i, (void *)early_idt_handler_array[i]);
+	load_idt((const struct desc_ptr *)&idt_desc);
+}
+
 /*
  * This is called from the assembly head code
  * Do some architecture setup and then jump to generic start kernel
  */
 asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data)
 {
-	int i;
+	BUILD_BUG_ON((__START_KERNEL_map & ~PMD_MASK) != 0);
 
 	cr4_init_shadow();
 
+	/* Clear its low-address identity-mapping */
 	reset_early_page_tables();
 
 	clear_bss();
 
-	/* set init_level4_pgt kernel high mapping */
+	/*
+	 * Clear the low-address identity-mapping,
+	 * which is staticlly assigned in head_64.S for the [0-4G).
+	 * Then, set the init_level4_pgt's kernel high mapping.
+	 */
+	clear_page(init_level4_pgt);
 	init_level4_pgt[511] = early_level4_pgt[511];
 
-	for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
-		set_intr_gate(i, (void *)early_idt_handler_array[i]);
-	load_idt((const struct desc_ptr *)&idt_desc);
+	load_early_idt_handlers();
 
 	copy_bootdata(__va(real_mode_data));
 	copy_screen_info();

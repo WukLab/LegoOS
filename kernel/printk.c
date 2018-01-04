@@ -15,7 +15,7 @@
 #include <lego/spinlock.h>
 #include <lego/ratelimit.h>
 
-#define LOG_LINE_MAX	1024
+#define LOG_LINE_MAX	2048
 
 static inline int printk_get_level(const char *buffer)
 {
@@ -60,6 +60,7 @@ int printk(const char *fmt, ...)
 	unsigned long flags;
 
 	spin_lock_irqsave(&printk_lock, flags);
+	memset(text, 0, LOG_LINE_MAX);
 
 	time_len = print_time(text, sched_clock());
 	text += time_len;

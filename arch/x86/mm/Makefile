@@ -6,3 +6,4 @@ obj-y += pgtable.o
 obj-y += tlb.o
 obj-y += extable.o
 obj-y += debug.o
+obj-y += dumppgtable.o

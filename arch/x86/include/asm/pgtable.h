@@ -619,5 +619,7 @@ static inline pte_t ptep_get_and_clear_full(pte_t *ptep)
 	return native_local_ptep_get_and_clear(ptep);
 }
 
+void ptdump_walk_pgd_level(pgd_t *pgd);
+
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_X86_PGTABLE_H_ */
