@@ -1056,6 +1056,28 @@ static int create_and_start_worker(struct worker_pool *pool)
 	return p->pid;
 }
 
+void free_workqueue_attrs(struct workqueue_attrs *attrs)
+{
+	if (attrs) {
+		kfree(attrs);
+	}
+}
+
+struct workqueue_attrs *alloc_workqueue_attrs(gfp_t gfp_mask)
+{
+	struct workqueue_attrs *attrs;
+
+	attrs = kzalloc(sizeof(*attrs), gfp_mask);
+	if (!attrs)
+		goto fail;
+
+	cpumask_copy(attrs->cpumask, cpu_possible_mask);
+	return attrs;
+fail:
+	free_workqueue_attrs(attrs);
+	return NULL;
+}
+
 /**
  * init_worker_pool - initialize a newly zalloc'd worker_pool
  * @pool: worker_pool to initialize
@@ -1083,6 +1105,9 @@ static int init_worker_pool(struct worker_pool *pool)
 
 	pool->refcnt = 1;
 
+	pool->attrs = alloc_workqueue_attrs(GFP_KERNEL);
+	if (!pool->attrs)
+		return -ENOMEM;
 	return 0;
 }
 
@@ -1091,7 +1116,6 @@ int init_workqueues(void)
 	int std_nice[NR_STD_WORKER_POOLS] = { 0, HIGHPRI_NICE_LEVEL };
 	int i, cpu, mycpu;
 
-	//pr_info("%s\n", __func__);
 	/* initialize CPU pools */
 	for_each_possible_cpu(cpu) {
 		struct worker_pool *pool;
