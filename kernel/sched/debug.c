@@ -221,7 +221,7 @@ static void sched_debug_header(struct seq_file *m)
 	sched_clk = sched_clock();
 	local_irq_restore(flags);
 
-	SEQ_printf(m, "Sched Debug Version: v0.11");
+	SEQ_printf(m, "Sched Debug Version: v0.11\n");
 
 #define P(x) \
 	SEQ_printf(m, "%-40s: %Ld\n", #x, (long long)(x))

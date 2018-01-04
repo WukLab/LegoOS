@@ -355,7 +355,7 @@ static void show_fault_oops(struct pt_regs *regs, unsigned long error_code,
 		printk(KERN_CONT "paging request");
 
 	printk(KERN_CONT   " at %p\n", (void *)address);
-	printk(KERN_ALERT "IP: [<%p>] %pS\n", (void *)address, (void *)address);
+	printk(KERN_ALERT "IP: [<%p>] %pS\n", (void *)regs->ip, (void *)regs->ip);
 
 	dump_pagetable(address);
 }
@@ -364,19 +364,22 @@ static void show_fault_oops(struct pt_regs *regs, unsigned long error_code,
 		(*(end_of_stack(task)) != STACK_END_MAGIC)
 
 /*
- * A pgfault from kernel threads, either
- * 1) predefined exception
- * 2) kernel bug
+ * No user context attached.
+ * There are only two possibilities:
+ * 	fixup exception
+ * 	kernel bug
  */
 static noinline void
 no_context(struct pt_regs *regs, unsigned long error_code,
-	   unsigned long address, int signal)
+	   unsigned long address, int signal, int si_code)
 {
 	struct task_struct *tsk = current;
 
 	/* Are we prepared to handle this kernel fault? */
-	if (fixup_exception(regs, X86_TRAP_PF))
+	if (fixup_exception(regs, X86_TRAP_PF)) {
+		/* Barring that, we can do the fixup and be happy. */
 		return;
+	}
 
 	/*
 	 * 32-bit:
@@ -494,7 +497,7 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 		return;
 	}
 
-	no_context(regs, error_code, address, SIGSEGV);
+	no_context(regs, error_code, address, SIGSEGV, si_code);
 }
 
 static noinline void
@@ -513,9 +516,13 @@ do_sigbus(struct pt_regs *regs, unsigned long error_code,
 
 	/* Kernel mode? Handle exceptions or die: */
 	if (!(error_code & PF_USER)) {
-		no_context(regs, error_code, address, SIGBUS);
+		no_context(regs, error_code, address, SIGBUS, BUS_ADRERR);
 		return;
 	}
+
+	/* User-space => ok to do another page fault: */
+	if (is_prefetch(regs, error_code, address))
+		return;
 
 	tsk->thread.cr2		= address;
 	tsk->thread.error_code	= error_code;
@@ -524,24 +531,33 @@ do_sigbus(struct pt_regs *regs, unsigned long error_code,
 	force_sig_info_fault(SIGBUS, code, address, tsk, fault);
 }
 
+/*
+ * pcache failed to handle this pgfault for some reasons.
+ * Kill this user process or let fixup handle this.
+ */
 static noinline void
 mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 	       unsigned long address, unsigned int fault)
 {
 	if (fatal_signal_pending(current) && !(error_code & PF_USER)) {
-		no_context(regs, error_code, address, 0);
+		no_context(regs, error_code, address, 0, 0);
 		return;
 	}
 
 	if (fault & VM_FAULT_OOM) {
-		bad_area_nosemaphore(regs, error_code, address);
-		return;
+		/* Kernel mode? Handle exceptions or die: */
+		if (!(error_code & PF_USER)) {
+			no_context(regs, error_code, address, SIGSEGV, SEGV_MAPERR);
+			return;
+		}
+
+		panic("Out-of-memory: need to explicitly free memory!");
 	} else {
-		if (fault & VM_FAULT_SIGBUS)
+		if (fault & VM_FAULT_SIGBUS) {
 			do_sigbus(regs, error_code, address, fault);
-		else if (fault & VM_FAULT_SIGSEGV)
+		} else if (fault & VM_FAULT_SIGSEGV) {
 			bad_area_nosemaphore(regs, error_code, address);
-		else
+		} else
 			BUG();
 	}
 }
@@ -563,13 +579,12 @@ static void pgtable_bad(struct pt_regs *regs, unsigned long error_code,
 	panic("Fatal exception");
 }
 
-static void component_failure_check(struct pt_regs *regs,
-				    unsigned long error_code,
-				    unsigned long address)
+static inline void
+component_failure_check(struct pt_regs *regs, unsigned long error_code,
+			unsigned long address)
 {
 #ifndef CONFIG_COMP_PROCESSOR
 	bad_area_nosemaphore(regs, error_code, address);
-	/* unreachable - just to make it safer */
 	BUG();
 #endif
 }
@@ -584,6 +599,11 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	int fault;
 	unsigned long address = read_cr2();
 	unsigned long flags = FAULT_FLAG_KILLABLE;
+
+#if 0
+	pr_info("%s %d ip: %#lx(%pS) fault addr: %#lx error_code:%#lx\n",
+		FUNC, LINE, regs->ip, (void *)regs->ip, address, error_code);
+#endif
 
 	/*
 	 * We fault-in kernel-space virtual memory on-demand. The
@@ -620,11 +640,24 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	component_failure_check(regs, error_code, address);
 
 	/*
-	 * If we're in a region with pagefaults disabled
-	 * then we must not take the fault, go straight to
-	 * the fixup (normally it is introduced by uaccess):
+	 * If we're in a region with pagefaults disabled,
+	 * then we must not take the fault, go straight to the fixup:
 	 */
 	if (unlikely(faulthandler_disabled())) {
+		bad_area_nosemaphore(regs, error_code, address);
+		return;
+	}
+
+	/*
+	 * When running in the kernel, pgfault should only occur to
+	 * IP addresses listed in the exception table. The following
+	 * branch can catch normal kernel bugs.
+	 *
+	 * After this test, we are confirmed that the pgfault either came from
+	 * user mode, or kernel mode but with predefined fixup functions.
+	 */
+	if (unlikely((error_code & PF_USER) == 0 &&
+		     !search_exception_tables(regs->ip))) {
 		bad_area_nosemaphore(regs, error_code, address);
 		return;
 	}
@@ -651,12 +684,16 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 		flags |= FAULT_FLAG_INSTRUCTION;
 
 	/*
-	 * If for any reason at all we couldn't handle the fault,
-	 * make sure we exit gracefully rather than endlessly redo
-	 * the fault.
+	 * We've ruled out predefined kernel exceptions and kernel bugs.
+	 * Forward this pgfault to pcache, which will in turn ask remote memory
+	 * for further VM handling:
 	 */
 	fault = pcache_handle_fault(current->mm, address, flags);
 	if (unlikely(fault & VM_FAULT_ERROR)) {
+		/*
+		 * If for any reason at all we couldn't handle the fault,
+		 * make sure we exit gracefully rather than endlessly redo the fault.
+		 */
 		mm_fault_error(regs, error_code, address, fault);
 		return;
 	}

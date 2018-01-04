@@ -13,7 +13,7 @@
 
 #ifdef CONFIG_DEBUG_FIXUP_EXCEPTION
 #define fixup_debug(fmt, ...)					\
-	pr_debug("current(%d) cpu(%d) " fmt "\n",		\
+	pr_debug("fixup_exception pid(%d) cpu(%d) " fmt "\n",	\
 		current->pid, smp_processor_id(), __VA_ARGS__)
 #else
 #define fixup_debug(fmt, ...)	do { } while(0)
@@ -79,11 +79,10 @@ int fixup_exception(struct pt_regs *regs, int trapnr)
 	if (!e)
 		return 0;
 
-	fixup_debug("ip:%#lx-%pF [insn:%#lx-%pF fixup:%#lx-%pF handler:%#lx-%pF]",
-		regs->ip, (void *)regs->ip,
+	fixup_debug("insn:%#lx(%pF) fixup:%#lx(%pF) handler:%pF",
 		ex_fixup_insn(e), (void *)ex_fixup_insn(e),
 		ex_fixup_addr(e), (void *)ex_fixup_addr(e),
-		(unsigned long)ex_fixup_handler(e), (void *)ex_fixup_handler(e));
+		(void *)ex_fixup_handler(e));
 
 	handler = ex_fixup_handler(e);
 	return handler(e, regs, trapnr);
