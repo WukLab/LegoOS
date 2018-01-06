@@ -995,8 +995,9 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 
 		for(i=0;i<ne;++i)
 		{
-			//printk(KERN_CRIT "%s got one recv cq status %d opcode %d\n",
-			//		__func__, wc[i].status, wc[i].opcode);
+			connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);	
+			printk(KERN_CRIT "%s conn %d got one recv cq status %d opcode %d\n",
+					__func__, connection_id, wc[i].status, wc[i].opcode);
 			if(wc[i].status != IB_WC_SUCCESS)
 			{
 				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
@@ -1007,10 +1008,12 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				struct ibapi_post_receive_intermediate_struct *p_r_i_struct = (struct ibapi_post_receive_intermediate_struct*)wc[i].wr_id;
 				struct ibapi_header temp_header;
 
+				printk(KERN_CRIT "%s received wr_id %lx type %d header %p\n", 
+						__func__, wc[i].wr_id, type, 
+						(void *)p_r_i_struct->header);
 				memcpy(&temp_header, (void *)p_r_i_struct->header, sizeof(struct ibapi_header));
 				addr = (char *)p_r_i_struct->msg;
 				type = temp_header.type;
-				printk(KERN_CRIT "%s received wr_id %lx type %d\n", __func__, wc[i].wr_id, type);
 
 				if (type == MSG_SEND_RDMA_RING_MR) {
 					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id], addr, sizeof(struct client_ibv_mr));
