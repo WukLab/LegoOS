@@ -7,13 +7,6 @@
  * (at your option) any later version.
  */
 
-/*
- * TODO:
- * Make use of mm_cpumask. Need to set and unset it properly.
- * Currently I'm using cpu_active_mask instead of it.
- * Check mm_cpumask() function.
- */
-
 #include <lego/mm.h>
 #include <lego/smp.h>
 #include <lego/sched.h>
@@ -80,8 +73,12 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 */
 		load_cr3(next->pgd);
 
-		/* Stop flush IPIs for the previous mm */
-		cpumask_clear_cpu(cpu, mm_cpumask(prev));
+		/*
+		 * Stop flush IPIs for the previous mm
+		 * Only do so if previous task is still alive
+		 */
+		if (likely(prev))
+			cpumask_clear_cpu(cpu, mm_cpumask(prev));
 	} else {
 		if (unlikely(!cpumask_test_cpu(cpu, mm_cpumask(next)))) {
 			cpumask_set_cpu(cpu, mm_cpumask(next));

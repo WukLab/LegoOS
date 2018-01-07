@@ -909,6 +909,12 @@ context_switch(struct rq *rq, struct task_struct *prev, struct task_struct *next
 	next->on_cpu = 1;
 #endif
 
+	/*
+	 * @prev might already call do_task_dead()
+	 * which means @prev->mm can be NULL
+	 * proceed with caution
+	 *	- ys
+	 */
 	switch_mm_irqs_off(prev->mm, next->mm, next);
 
 	/* Here we switch the register state and the stack: */
