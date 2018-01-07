@@ -347,11 +347,11 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 
 	ret = (struct client_ibv_mr *)kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
 	
-	#ifdef PHYSICAL_ALLOCATION
+#ifdef PHYSICAL_ALLOCATION
 	ret->addr = (void *)client_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
-	#else
+#else
 	ret->addr = (void *)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
-	#endif
+#endif
 	
 	ret->length = length;
 	ret->lkey = proc->lkey;
@@ -368,12 +368,11 @@ inline uintptr_t client_ib_reg_mr_addr_phys(ppc *ctx, void *addr, size_t length)
 
 inline uintptr_t client_ib_reg_mr_addr(ppc *ctx, void *addr, size_t length)
 {
-	#ifdef PHYSICAL_ALLOCATION
+#ifdef PHYSICAL_ALLOCATION
 	return client_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
-	#endif
-	#ifndef PHYSICAL_ALLOCATION
+#else
 	return (uintptr_t)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
-	#endif
+#endif
 }
 
 void client_ib_dereg_mr_addr(ppc *ctx, void *addr, size_t length)
@@ -413,7 +412,6 @@ int client_post_receives_message(ppc *ctx, int connection_id, int depth)
 	return depth;
 }
 
-	struct page *pp;
 int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int depth)
 {
 	int i;
@@ -423,20 +421,18 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 	uintptr_t addr;
 	int size = sizeof(struct client_ibv_mr);
 	int ret;
-        pp = alloc_pages(GFP_KERNEL, 2);
 
 	printk(KERN_CRIT "%s conn %d post %d buffers\n", __func__, connection_id, depth);
-	for(i=0;i<depth;i++)
-	{
+	for (i = 0; i < depth; i++) {
 		struct ib_sge sge[2];
 
-        	//buf = (char *)page_address(pp);
-		//memset(buf, 0x7b, size);
 		buf = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
 		addr = client_ib_reg_mr_addr(ctx, buf, size);
+
 		header = kmalloc(sizeof(struct ibapi_header), GFP_KERNEL);
 		header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct ibapi_header));
-		p_r_i_struct = (struct ibapi_post_receive_intermediate_struct *)kmalloc(sizeof(struct ibapi_post_receive_intermediate_struct), GFP_KERNEL);
+
+		p_r_i_struct = kmalloc(sizeof(struct ibapi_post_receive_intermediate_struct), GFP_KERNEL);
 		p_r_i_struct->header = (uintptr_t)header_addr;
 		p_r_i_struct->msg = (uintptr_t)addr;
 
@@ -533,8 +529,8 @@ void init_global_lid_qpn(void)
 	BUILD_BUG_ON(1);
 #endif
 
-	global_lid[0] = 17;
-	global_lid[1] = 21;
+	global_lid[0] = 15;
+	global_lid[1] = 16;
 }
 
 void print_gloabl_lid(void)
@@ -860,9 +856,13 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 
 	if(ack_flag)
 	{	
-		struct send_and_reply_format *pass = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL);
-		//pass = kmem_cache_alloc(s_r_cache, GFP_KERNEL);
-		pass->msg = (char*)node_id; //(char*)current_hash_ptr;
+		struct send_and_reply_format *pass;
+
+		pass = kmalloc(sizeof(*pass), GFP_KERNEL);
+		if (!pass)
+			return -ENOMEM;
+
+		pass->msg = (void *)(long)node_id;
 		pass->length = offset;
 		pass->type = MSG_DO_ACK_INTERNAL;
 
@@ -993,26 +993,23 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 			//msleep(1);
 		} while(ne < 1);
 
-		for(i=0;i<ne;++i)
-		{
-			connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);	
-			printk(KERN_CRIT "%s conn %d got one recv cq status %d opcode %d\n",
-					__func__, connection_id, wc[i].status, wc[i].opcode);
-			if(wc[i].status != IB_WC_SUCCESS)
-			{
-				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
-			}
+		for (i = 0; i < ne; i++) {
+			connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
+			fit_debug("conn %d got one recv cq status %d opcode %d",
+				connection_id, wc[i].status, wc[i].opcode);
 
-			if((int) wc[i].opcode == IB_WC_RECV)
-			{
-				struct ibapi_post_receive_intermediate_struct *p_r_i_struct = (struct ibapi_post_receive_intermediate_struct*)wc[i].wr_id;
+			if (wc[i].status != IB_WC_SUCCESS)
+				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
+
+			if ((int) wc[i].opcode == IB_WC_RECV) {
+				struct ibapi_post_receive_intermediate_struct *p_r_i_struct = (void *)wc[i].wr_id;
 				struct ibapi_header temp_header;
 
-				printk(KERN_CRIT "%s received wr_id %lx type %d header %p\n", 
-						__func__, wc[i].wr_id, type, 
-						(void *)p_r_i_struct->header);
-				memcpy(&temp_header, (void *)p_r_i_struct->header, sizeof(struct ibapi_header));
-				addr = (char *)p_r_i_struct->msg;
+				fit_debug("received wr_id %lx type %d header %p",
+					wc[i].wr_id, type, (void *)p_r_i_struct->header);
+
+				memcpy(&temp_header, phys_to_virt(p_r_i_struct->header), sizeof(struct ibapi_header));
+				addr = phys_to_virt(p_r_i_struct->msg);
 				type = temp_header.type;
 
 				if (type == MSG_SEND_RDMA_RING_MR) {
@@ -1022,9 +1019,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
 							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
 				}
-			}
-			else if((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM)
-			{
+			} else if ((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM) {
 				node_id = GET_NODE_ID_FROM_POST_RECEIVE_ID(wc[i].wr_id);
 				//printk(KERN_CRIT "%s got imm from node %d immdata %x\n", __func__, node_id, wc[i].ex.imm_data);
 				if(wc[i].wc_flags&&IB_WC_WITH_IMM)
@@ -1060,7 +1055,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 
 						recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
 						recv->src_id = node_id;
-						recv->msg = (char *)offset;
+						recv->msg = (char *)(long)offset;
 						recv->type = MSG_DO_ACK_REMOTE;
 
 						spin_lock(&wq_lock);
@@ -1166,7 +1161,7 @@ int waiting_queue_handler(void *in)
 					//First do check again
 					int offset = new_request->length;
 					//struct app_reg_port *ptr = (struct app_reg_port *)new_request->msg;
-					int target_node = (int) new_request->msg; //ptr->node;
+					int target_node = (int)(long)new_request->msg; //ptr->node;
 					//int target_port = ptr->port;
 					//printk(KERN_CRIT "%s: [generate ACK node-%d port-%d offset-%d]\n", __func__, target_node, target_port, offset);
 #if 0					
@@ -1186,7 +1181,7 @@ int waiting_queue_handler(void *in)
 				}
 			case MSG_DO_ACK_REMOTE:
 				{
-					last_ack = (int)new_request->msg; 
+					last_ack = (int)(long)new_request->msg;
 					//printk(KERN_CRIT "%s: [receive ACK node-%d offset-%d]\n", __func__, new_request->src_id, last_ack);
 					ctx->remote_last_ack_index[new_request->src_id] = last_ack;
 					break;
