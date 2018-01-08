@@ -246,6 +246,17 @@ config DEBUG_FIXUP_EXCEPTION
 
 	  If unsure, say N.
 
+config DEBUG_EXIT
+	bool "Debug all thread exit activities"
+	default n
+	depends on DEBUG_KERNEL
+	help
+	  Enable if you want to know what threads have exited during runtime.
+	  This is useful when you are debugging multi-thread applications or
+	  building threads/processes related syscalls, e.g. wait(), kill().
+
+	  If unsure, say N.
+
 endmenu # Basic Kernel Debug and Trace Options
 
 menu "Lego Kernel Profiling"

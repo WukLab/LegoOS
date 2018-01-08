@@ -11,6 +11,7 @@
 #define _LEGO_PROCESSOR_PCACHE_STAT_H_
 
 #include <lego/percpu.h>
+#include <lego/sched.h>
 #include <processor/pcache_types.h>
 
 /*
@@ -74,8 +75,17 @@ static inline void __inc_pcache_event(enum pcache_event_item item)
 #ifdef CONFIG_COMP_PROCESSOR
 void sum_pcache_events(struct pcache_event_stat *buf);
 void print_pcache_events(void);
+
+static inline void exit_dump_pcache_events(struct task_struct *tsk)
+{
+	if (unlikely(thread_group_leader(tsk))) {
+		print_pcache_events();
+	}
+}
+
 #else
 static inline void print_pcache_events(void) { }
+static inline void exit_dump_pcache_events(struct task_struct *tsk) { }
 #endif
 
 #endif /* _LEGO_PROCESSOR_PCACHE_STAT_H_ */

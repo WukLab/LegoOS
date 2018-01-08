@@ -15,6 +15,13 @@
 #include <lego/debug_locks.h>
 #include <processor/pcache.h>
 
+#ifdef CONFIG_DEBUG_EXIT
+#define debug_exit(fmt, ...)	\
+	pr_debug("%s() " fmt "\n", __func__, __VA_ARGS__)
+#else
+#define debug_exit(fmt, ...)	do { } while (0)
+#endif
+
 static void exit_mm(struct task_struct *tsk)
 {
 	struct mm_struct *mm = tsk->mm;
@@ -48,6 +55,9 @@ void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;
 	int group_dead;
+
+	debug_exit("pid:%u,tgid:%u code:%#lx",
+		current->pid, current->tgid, code);
 
 	if (unlikely(!tsk->pid))
 		panic("Attempted to kill the idle task!");
@@ -117,12 +127,7 @@ void __noreturn do_exit(long code)
 	/* Make sure we are holding no locks */
 	debug_check_no_locks_held();
 
-#ifdef CONFIG_COMP_PROCESSOR
-	/* Print pcache stats */
-	if (thread_group_leader(tsk)) {
-		print_pcache_events();
-	}
-#endif
+	exit_dump_pcache_events(tsk);
 
 	/* Now, time to say goodbye. */
 	preempt_disable();
@@ -137,8 +142,8 @@ void do_group_exit(int exit_code)
 {
 	struct signal_struct *sig = current->signal;
 
-	pr_debug("%s() pid:%u,tgid:%u exit_code:%#x\n",
-		FUNC, current->pid, current->tgid, exit_code);
+	debug_exit("pid:%u,tgid:%u exit_code:%#x",
+		current->pid, current->tgid, exit_code);
 
 	BUG_ON(exit_code & 0x80); /* core dumps don't get here */
 
