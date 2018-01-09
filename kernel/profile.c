@@ -11,6 +11,7 @@
 #include <lego/kernel.h>
 #include <lego/profile.h>
 
+#ifdef CONFIG_PROFILING_BOOT
 void boot_time_profile(void)
 {
 	/* smp must be initalized first */
@@ -18,3 +19,4 @@ void boot_time_profile(void)
 
 	profile_tlb_shootdown();
 }
+#endif

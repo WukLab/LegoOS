@@ -315,9 +315,7 @@ asmlinkage void __init start_kernel(void)
 	 */
 	system_state = SYSTEM_RUNNING;
 
-#ifdef CONFIG_PROFILING_BOOT
 	boot_time_profile();
-#endif
 
 	/* STOP! WE ARE ALIVE NOW */
 	rest_init();

@@ -272,10 +272,10 @@ config PROFILING_BOOT
 	depends on PROFILING
 	help
 	  Enable this if you want to have a predefined boot-time profiling.
-	  It gives you a basic sence how some kernel functions perfom on
+	  It gives you a basic sense how some kernel functions perfom on
 	  your hardware platform.
 
-	  It is a one-time profiling process, hence won't hurt runtime performance.
+	  It is a one-time profiling process, thus won't hurt runtime performance.
 
 	  If unsure, say N.
 
