@@ -92,11 +92,6 @@ u64 sched_clock_cpu(int cpu)
 	return sched_clock();
 }
 
-void user_thread_bug_now(void)
-{
-	panic("%s: not implemented now\n", __func__);
-}
-
 static inline void update_rq_clock_task(struct rq *rq, s64 delta)
 {
 	rq->clock_task += delta;
