@@ -8,14 +8,18 @@
  */
 
 /*
+ * This file describes pcache callbacks for low-level architecture page faults.
+ * Our responsibility here is to fill the PTE and pcache line, or report error
+ * gracefully back to caller.
+ *
  * Locking ordering:
  * 	pcache_lock	(may sleep)
  * 	pte_lock
  *
- * Rmap operations will lock in this order. Pgfault code below
- * will probably acquire pte_lock first, then it must NOT call
- * lock_pcache() anymore, which may sleep. The only safe way here
- * is to call trylock_pcache() after pte_lock is acquired.
+ * RMAP operations will lock in this order. Pgfault code below will probably
+ * acquire pte_lock first, then it must NOT call lock_pcache() anymore, which
+ * may sleep. The only safe way here is to call trylock_pcache() after pte_lock
+ * is acquired.
  */
 
 #include <lego/mm.h>
@@ -173,7 +177,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	/* Update counting */
 	pset = pcache_meta_to_pcache_set(pcm);
 	inc_pset_event(pset, PSET_FILL_MEMORY);
-	inc_pcache_event(PCACHE_FAULT_FILL_MEMORY);
+	inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY);
 
 	ret = 0;
 out:
@@ -222,7 +226,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 	 */
 	if (likely(!trylock_pcache(pcm))) {
 		ret = 0;
-		inc_pcache_event(PCACHE_FAULT_EVICTION);
+		inc_pcache_event(PCACHE_FAULT_CONCUR_EVICTION)
 		goto out;
 	}
 #endif
@@ -258,7 +262,7 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 				cpu_relax();
 				if (!counted) {
 					counted = true;
-					inc_pcache_event(PCACHE_FAULT_EVICTION);
+					inc_pcache_event(PCACHE_FAULT_CONCUR_EVICTION);
 				}
 			}
 #elif defined(CONFIG_PCACHE_EVICTION_VICTIM)

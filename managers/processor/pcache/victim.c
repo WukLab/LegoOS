@@ -591,7 +591,7 @@ __victim_fill_pcache(unsigned long address, unsigned long flags,
 	/* Update counting */
 	pset = pcache_meta_to_pcache_set(pcm);
 	inc_pset_event(pset, PSET_FILL_VICTIM);
-	inc_pcache_event(PCACHE_FAULT_FILL_VICTIM);
+	inc_pcache_event(PCACHE_FAULT_FILL_FROM_VICTIM);
 
 	return 0;
 }

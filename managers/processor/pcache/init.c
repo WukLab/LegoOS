@@ -131,10 +131,6 @@ void __init pcache_init(void)
 	if (pcache_registered_start == 0 || pcache_registered_size == 0)
 		panic("Processor cache not registered, memmap $ needed!");
 
-	/* Legacy: not used */
-	if (!IS_ENABLED(CONFIG_LEGO_SPECIAL_MEMMAP))
-		panic("Require special memmap $ semantic!");
-
 	virt_start_cacheline = (unsigned long)phys_to_virt(pcache_registered_start);
 
 	/*
@@ -265,7 +261,8 @@ void __init pcache_post_init(void)
  *
  * If CONFIG_LEGO_SPECIAL_MEMMAP is ON, this range will not be bailed out
  * from e820 table, it is marked as reserved in memblock. So pages within
- * this range still have `struct page`, yeah!
+ * this range still have `struct page'. Otherwise, pcache memory range will not
+ * have any associated `struct page'.
  */
 int __init pcache_range_register(u64 start, u64 size)
 {

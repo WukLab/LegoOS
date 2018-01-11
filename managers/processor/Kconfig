@@ -20,8 +20,8 @@ config CHECKPOINT
 	  If unsure, say N.
 
 config LEGO_SPECIAL_MEMMAP
-	bool "Enable Lego's special memmap $ parsing semantic" if EXPERT
-	default y
+	bool "Reseve memmap $ marked memory to memblock, to have struct page"
+	default n
 	---help---
 	  By default, memmap $ option reserves a range of physical memory.
 	  This reserved memory will be marked reserved in e820 table, which
@@ -30,12 +30,15 @@ config LEGO_SPECIAL_MEMMAP
 	  `struct page` with it (both memblock.memory and memblock.reserver
 	  will have).
 
-	  However, for pcache code and pgfault handling code we really need
-	  the `struct page` to work with pcache. So we change the semantic
-	  to: any memory marked by using memmap=NG$NG will be reserved by memblock,
-	  instead of bailing out from e820.
+	  We change the semantic to: any memory marked by using memmap=NG$NG will
+	  be reserved by memblock, instead of being bailed out from e820.
 
-	  If unsure, leave it alone.
+	  [Updated in Jan 11, 2018]
+	  This option is not used anymore. Now pcache has its own struct pcache_meta.
+	  But I leave it here for future references: there is a simple way to reserve
+	  the struct page for memmap reserved areas.
+
+	  If unsure, say N.
 
 source "managers/processor/pcache/Kconfig"
 source "managers/processor/fs/Kconfig"
