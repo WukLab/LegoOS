@@ -26,12 +26,13 @@ choice
 		bool "LRU"
 		---help---
 		  Enable this option to use LRU algorithm while doing eviction.
-		  It also enables PCACHE_EVICT_COMMON_SWEEP, which will create
+		  It also enables PCACHE_EVICT_GENERIC_SWEEP, which will create
 		  background sweep threads.
 endchoice
 
-config PCACHE_EVICT_COMMON_SWEEP
+config PCACHE_EVICT_GENERIC_SWEEP
 	def_bool PCACHE_EVICT_LRU
+	depends on PCACHE_EVICT_LRU
 	prompt "Pcache: sweep threads for certain eviction algorithms"
 	help
 	  Certain eviction algorithms requires sweep threads, for example LRU.

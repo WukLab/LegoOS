@@ -16,7 +16,7 @@
  * Common sweep threads for certain eviction algorithms:
  * 	LRU: Least-Recently Used
  */
-#ifdef CONFIG_PCACHE_EVICT_COMMON_SWEEP
+#ifdef CONFIG_PCACHE_EVICT_GENERIC_SWEEP
 int __init evict_sweep_init(void);
 #else
 static inline int evict_sweep_init(void) { return 0; }

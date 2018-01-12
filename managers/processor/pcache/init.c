@@ -87,6 +87,7 @@ static void init_pcache_set_map(void)
 
 		pset = pcache_set_map + i;
 		spin_lock_init(&pset->lock);
+		INIT_LIST_HEAD(&pset->lru);
 
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
 		INIT_LIST_HEAD(&pset->eviction_list);
@@ -112,7 +113,9 @@ static void init_pcache_meta_map(void)
 		memset(pcm, 0, sizeof(*pcm));
 
 		INIT_LIST_HEAD(&pcm->rmap);
+		INIT_LIST_HEAD(&pcm->lru);
 		pcache_mapcount_reset(pcm);
+		pcache_ref_count_set(pcm, 0);
 	}
 }
 

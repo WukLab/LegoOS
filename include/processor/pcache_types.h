@@ -53,6 +53,7 @@ struct pset_eviction_entry {
 struct pcache_set {
 	spinlock_t		lock;
 	atomic_t		stat[NR_PSET_STAT_ITEMS];
+	struct list_head	lru;
 
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 	/*
@@ -87,7 +88,9 @@ struct pcache_set {
 struct pcache_meta {
 	u8			bits;
 	struct list_head	rmap;
+	struct list_head	lru;
 	atomic_t		mapcount;
+	atomic_t		_refcount;
 } ____cacheline_aligned;
 
 enum pcache_rmap_flags {

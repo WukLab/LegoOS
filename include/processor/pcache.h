@@ -76,6 +76,78 @@ static inline void lock_pcache(struct pcache_meta *pcm)
 		__lock_pcache(pcm);
 }
 
+/* refcount helpers */
+static inline int pcache_ref_count(struct pcache_meta *p)
+{
+	return atomic_read(&p->_refcount);
+}
+
+static inline void pcache_ref_count_set(struct pcache_meta *p, int v)
+{
+	atomic_set(&p->_refcount, v);
+}
+
+static inline void init_pcache_ref_count(struct pcache_meta *p)
+{
+	pcache_ref_count_set(p, 1);
+}
+
+static inline void pcache_ref_count_inc(struct pcache_meta *p)
+{
+	atomic_inc(&p->_refcount);
+}
+
+static inline void pcache_ref_count_dec(struct pcache_meta *p)
+{
+	atomic_dec(&p->_refcount);
+}
+
+static inline int pcache_ref_count_dec_and_test(struct pcache_meta *p)
+{
+	return atomic_dec_and_test(&p->_refcount);
+}
+
+static inline int pcache_ref_count_add_unless(struct pcache_meta *p, int nr, int u)
+{
+	return atomic_add_unless(&p->_refcount, nr, u);
+}
+
+/* Grab a ref */
+static inline void get_pcache(struct pcache_meta *p)
+{
+	/*
+	 * Getting a normal pcache requires to already have
+	 * an elevated pcache->_refcount, which is set by allocator.
+	 */
+	PCACHE_BUG_ON_PCM(pcache_ref_count(p) <= 0, p);
+	pcache_ref_count_inc(p);
+}
+
+/*
+ * Try to grab a ref unless the pcache line has a refcount of zero,
+ * return false if that is the case.
+ */
+static inline int get_pcache_unless_zero(struct pcache_meta *p)
+{
+	return pcache_ref_count_add_unless(p, 1, 0);
+}
+
+/* Drop a ref, return true if refcount fell to 0 (the pcache has no users) */
+static inline int put_pcache_testzero(struct pcache_meta *p)
+{
+	PCACHE_BUG_ON_PCM(pcache_ref_count(p) == 0, p);
+	return pcache_ref_count_dec_and_test(p);
+}
+
+void __put_pcache(struct pcache_meta *p);
+
+static inline void put_pcache(struct pcache_meta *p)
+{
+	if (put_pcache_testzero(p))
+		__put_pcache(p);
+}
+
+/* mapcount helpers */
 static inline int pcache_mapcount(struct pcache_meta *pcm)
 {
 	return atomic_read(&pcm->mapcount);
