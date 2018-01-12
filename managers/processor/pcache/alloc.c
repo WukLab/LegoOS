@@ -91,6 +91,16 @@ void __lock_pcache(struct pcache_meta *pcm)
 			TASK_UNINTERRUPTIBLE);
 }
 
+static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
+{
+	pcache_mapcount_reset(pcm);
+	INIT_LIST_HEAD(&pcm->rmap);
+}
+
+/*
+ * Fastpath: try to allocate a pcache line from @pset.
+ * If succeed, the line is initialized upon return.
+ */
 static inline struct pcache_meta *
 pcache_alloc_fastpath(struct pcache_set *pset)
 {
@@ -100,6 +110,7 @@ pcache_alloc_fastpath(struct pcache_set *pset)
 	spin_lock(&pset->lock);
 	for_each_way_set(pcm, pset, way) {
 		if (likely(!TestSetPcacheAllocated(pcm))) {
+			prep_new_pcache_meta(pcm);
 			spin_unlock(&pset->lock);
 			return pcm;
 		}
@@ -139,12 +150,6 @@ retry:
 	return pcm;
 }
 
-static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
-{
-	pcache_mapcount_reset(pcm);
-	INIT_LIST_HEAD(&pcm->rmap);
-}
-
 /**
  * pcache_alloc
  * @address: user virtual address
@@ -163,25 +168,23 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 	/* Fastpath: try to allocate one directly */
 	pcm = pcache_alloc_fastpath(pset);
 	if (likely(pcm))
-		goto out;
+		return pcm;
 
 	/* Slowpath: fallback and try to evict one */
-	pcm = pcache_alloc_slowpath(pset, address);
-	if (likely(pcm))
-		goto out;
-	return NULL;
-
-out:
-	prep_new_pcache_meta(pcm);
-	return pcm;
+	return pcache_alloc_slowpath(pset, address);
 }
 
 void pcache_free(struct pcache_meta *p)
 {
-	/* Sanity check */
+	/* Flag sanity check */
 	PCACHE_BUG_ON_PCM(!PcacheAllocated(p) || PcacheValid(p) ||
 			   PcacheLocked(p) || PcacheWriteback(p), p);
 
+	/*
+	 * Should not be mapped at this point
+	 * which implies p->rmap list is empty
+	 */
+	PCACHE_BUG_ON_PCM(pcache_mapped(p), p);
 
 	/* Clear all flags */
 	smp_wmb();
