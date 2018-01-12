@@ -283,7 +283,7 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	ClearPcacheValid(pcm);
 	unlock_pcache(pcm);
 
-	pcache_free(pcm);
+	put_pcache(pcm);
 
 	return 0;
 }

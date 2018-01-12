@@ -419,9 +419,8 @@ pcache_meta_next_way(struct pcache_meta *pcm)
 	     way < PCACHE_ASSOCIATIVITY;				\
 	     pcm = __pcache_meta_next_way(pcm), way++)
 
-/* Public APIs: allocate/free cachelines based on address pointed set */
+/* Allocate one pcache line from the pset @address maps to */
 struct pcache_meta *pcache_alloc(unsigned long address);
-void pcache_free(struct pcache_meta *);
 
 /* clflush */
 int clflush_one(struct task_struct *tsk, unsigned long user_va,

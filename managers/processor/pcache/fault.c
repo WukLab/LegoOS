@@ -124,7 +124,7 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 	return 0;
 
 out:
-	pcache_free(pcm);
+	put_pcache(pcm);
 	spin_unlock(ptl);
 	return ret;
 }

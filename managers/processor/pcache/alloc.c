@@ -93,8 +93,15 @@ void __lock_pcache(struct pcache_meta *pcm)
 
 static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
 {
+	/*
+	 * _refcount = 1  for the caller
+	 * _mapcount = 0
+	 */
+	init_pcache_ref_count(pcm);
 	pcache_mapcount_reset(pcm);
+
 	INIT_LIST_HEAD(&pcm->rmap);
+	INIT_LIST_HEAD(&pcm->lru);
 }
 
 /*
@@ -154,9 +161,9 @@ retry:
  * pcache_alloc
  * @address: user virtual address
  *
- * This function will try to allocate a cacheline from the set
- * that @address belongs to. On success, the returned @pcm has
- * its PcaheAllocated bit set ONLY.
+ * This function will try to allocate a cacheline from the set that @address
+ * belongs to. On success, the returned @pcm has PcaheAllocated set, refcount 1,
+ * and mapcount 0.
  */
 struct pcache_meta *pcache_alloc(unsigned long address)
 {
@@ -174,7 +181,7 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 	return pcache_alloc_slowpath(pset, address);
 }
 
-void pcache_free(struct pcache_meta *p)
+static inline void pcache_free(struct pcache_meta *p)
 {
 	/* Flag sanity check */
 	PCACHE_BUG_ON_PCM(!PcacheAllocated(p) || PcacheValid(p) ||
@@ -189,4 +196,9 @@ void pcache_free(struct pcache_meta *p)
 	/* Clear all flags */
 	smp_wmb();
 	p->bits = 0;
+}
+
+void __put_pcache(struct pcache_meta *p)
+{
+	pcache_free(p);
 }
