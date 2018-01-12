@@ -241,12 +241,25 @@ void __init pcache_print_info(void)
 #endif
 }
 
+/*
+ * Post init include things to be done after all
+ * kernel subsystems are intialized, e.g. kthread.
+ */
 void __init pcache_post_init(void)
 {
-	pcache_print_info();
+	int ret;
+
+	/* Victim cache */
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 	victim_cache_post_init();
 #endif
+
+	/* Background sweep threads */
+	ret = evict_sweep_init();
+	if (ret)
+		panic("Pcache: fail to create evict sweep threads!");
+
+	pcache_print_info();
 }
 
 /**

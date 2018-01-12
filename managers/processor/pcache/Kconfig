@@ -2,9 +2,12 @@
 # Pcache Kconfig Options
 #
 
+#
+# Eviction Algorithm
+#
 choice
 	prompt "Pcache: Eviction Algorithm"
-	default PCACHE_EVICT_RANDOM
+	default PCACHE_EVICT_LRU
 	help
 	  Allows the selection of pcache eviction algorithm.
 	  Eviction happens when pcache allocation made into a full set.
@@ -23,8 +26,22 @@ choice
 		bool "LRU"
 		---help---
 		  Enable this option to use LRU algorithm while doing eviction.
+		  It also enables PCACHE_EVICT_COMMON_SWEEP, which will create
+		  background sweep threads.
 endchoice
 
+config PCACHE_EVICT_COMMON_SWEEP
+	def_bool PCACHE_EVICT_LRU
+	prompt "Pcache: sweep threads for certain eviction algorithms"
+	help
+	  Certain eviction algorithms requires sweep threads, for example LRU.
+	  This option will be enabled if those algorithms are enabled.
+
+	  If unsure, say N.
+
+#
+# Eviction Mechanism
+#
 choice
 	prompt "Pcache: Atomic Eviction Mechanism"
 	default PCACHE_EVICTION_VICTIM

@@ -228,8 +228,8 @@ static void victim_free(struct pcache_victim_meta *v)
 	victim_free_hit_entries(v);
 
 	/* Clear all flags */
-	v->flags = 0;
 	smp_wmb();
+	v->flags = 0;
 }
 
 void __put_victim(struct pcache_victim_meta *v)
@@ -483,6 +483,9 @@ victim_insert_hit_entries(struct pcache_victim_meta *victim, struct pcache_meta 
  * into victim cache meta. Afterwards, this victim cache is visible to lookup,
  * but those who do lookup have to wait until the second step of insertion,
  * which is synchronized by Hasdata flag.
+ *
+ * Another note: since we will free the victim cache line once it filled
+ * back to pcache, therefore, there is no need to check duplication here.
  */
 struct pcache_victim_meta *
 victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)

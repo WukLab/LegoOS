@@ -139,6 +139,12 @@ retry:
 	return pcm;
 }
 
+static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
+{
+	pcache_mapcount_reset(pcm);
+	INIT_LIST_HEAD(&pcm->rmap);
+}
+
 /**
  * pcache_alloc
  * @address: user virtual address
@@ -166,14 +172,18 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 	return NULL;
 
 out:
-	/* May need further initilization if needed */
+	prep_new_pcache_meta(pcm);
 	return pcm;
 }
 
 void pcache_free(struct pcache_meta *p)
 {
+	/* Sanity check */
 	PCACHE_BUG_ON_PCM(!PcacheAllocated(p) || PcacheValid(p) ||
 			   PcacheLocked(p) || PcacheWriteback(p), p);
 
-	ClearPcacheAllocated(p);
+
+	/* Clear all flags */
+	smp_wmb();
+	p->bits = 0;
 }

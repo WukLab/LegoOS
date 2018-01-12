@@ -267,8 +267,6 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int ret;
 
-	pr_info("%s(): pid:%d address:%#lx\n", FUNC, current->pid, address);
-
 	pcm = find_line(pset);
 	if (!pcm)
 		return -EAGAIN;

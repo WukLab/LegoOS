@@ -150,7 +150,7 @@ static int victim_flush_func(void *unused)
 /* Has to be called after kthreadd is running */
 void __init victim_cache_post_init(void)
 {
-	victim_flush_thread = kthread_run(victim_flush_func, NULL, "victimd");
+	victim_flush_thread = kthread_run(victim_flush_func, NULL, "kvictimd");
 	if (IS_ERR(victim_flush_thread))
 		panic("Fail to create victim flush thread!");
 }

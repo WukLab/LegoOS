@@ -17,6 +17,7 @@
 #include <processor/pcache_types.h>
 #include <processor/pcache_stat.h>
 #include <processor/pcache_debug.h>
+#include <processor/pcache_evict.h>
 #include <uapi/processor/pcache.h>
 
 extern u64 pcache_registered_start;
