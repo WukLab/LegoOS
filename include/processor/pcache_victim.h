@@ -196,8 +196,13 @@ static inline void unlock_victim(struct pcache_victim_meta *victim)
 	ClearVictimLocked(victim);
 }
 
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
 void __init victim_cache_init(void);
 void __init victim_cache_post_init(void);
+#else
+static inline void victim_cache_init(void) { }
+static inline void victim_cache_post_init(void) { }
+#endif
 
 struct pcache_victim_meta *
 victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm);

@@ -50,10 +50,10 @@ static int __init parse_memmap_one(char *p)
 /* Check managers/processor/Kconfig for detail */
 #ifdef CONFIG_LEGO_SPECIAL_MEMMAP
 		memblock_reserve(start_at, mem_size);
-		pcache_range_register(start_at, mem_size);
 #else
 		e820_add_region(start_at, mem_size, E820_RESERVED);
 #endif
+		pcache_range_register(start_at, mem_size);
 	} else if (*p == '!') {
 		start_at = memparse(p+1, &p);
 		e820_add_region(start_at, mem_size, E820_PRAM);

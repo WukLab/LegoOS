@@ -21,24 +21,29 @@ config CHECKPOINT
 
 config LEGO_SPECIAL_MEMMAP
 	bool "Reseve memmap $ marked memory to memblock, to have struct page"
-	default n
+	default y
 	---help---
 	  By default, memmap $ option reserves a range of physical memory.
 	  This reserved memory will be marked reserved in e820 table, which
-	  means this range will not even be registered into memblock.
+	  means this range will not be registered into memblock.
+
 	  Only memory that has been registered into memblock will be assigned
-	  `struct page` with it (both memblock.memory and memblock.reserver
-	  will have).
+	  `struct page' with it (both memblock.memory and memblock.reserver will have).
+	  Do note that this part of memory can be mapped as 1GB page (depends on boot time).
 
-	  We change the semantic to: any memory marked by using memmap=NG$NG will
-	  be reserved by memblock, instead of being bailed out from e820.
+	  In other words, by default (the linux semantic), users need to ioremap
+	  the memmap $ reserved physical memory, and use the returned kernel virtual address.
+	  Do note that the ioremap() currently in Lego only support 4KB mapping.
 
-	  [Updated in Jan 11, 2018]
-	  This option is not used anymore. Now pcache has its own struct pcache_meta.
-	  But I leave it here for future references: there is a simple way to reserve
-	  the struct page for memmap reserved areas.
+	  If this option is enabled, the memory marked by memmap $ will NOT be marked
+	  reserved in e820 table, instead, it will be pushed into memblock, which means
+	  it is mapped into kernel direct mapping and has `struct page'.
 
-	  If unsure, say N.
+	  So, why we are having this?
+	  Because I think the direct 1GB mapping may have better performance.
+	  However, the real performance number is unknown.
+
+	  If unsure, say y.
 
 source "managers/processor/pcache/Kconfig"
 source "managers/processor/fs/Kconfig"

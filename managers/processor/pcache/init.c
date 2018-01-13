@@ -134,7 +134,15 @@ void __init pcache_init(void)
 	if (pcache_registered_start == 0 || pcache_registered_size == 0)
 		panic("Processor cache not registered, memmap $ needed!");
 
+#ifdef CONFIG_LEGO_SPECIAL_MEMMAP
 	virt_start_cacheline = (unsigned long)phys_to_virt(pcache_registered_start);
+#else
+	virt_start_cacheline = (unsigned long)ioremap_cache(pcache_registered_start,
+							    pcache_registered_size);
+	if (!virt_start_cacheline)
+		panic("Fail to ioremap: [%#llx - %#llx]\n", pcache_registered_start,
+			pcache_registered_start + pcache_registered_size);
+#endif
 
 	/*
 	 * Clear any stale value
@@ -174,9 +182,7 @@ void __init pcache_init(void)
 	init_pcache_meta_map();
 
 	/* victim_cache */
-#ifdef CONFIG_PCACHE_EVICTION_VICTIM
 	victim_cache_init();
-#endif
 
 	/* Now the bits mask */
 	nr_bits_cacheline = ilog2(PCACHE_LINE_SIZE);
@@ -253,9 +259,7 @@ void __init pcache_post_init(void)
 	int ret;
 
 	/* Victim cache */
-#ifdef CONFIG_PCACHE_EVICTION_VICTIM
 	victim_cache_post_init();
-#endif
 
 	/* Background sweep threads */
 	ret = evict_sweep_init();
