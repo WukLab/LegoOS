@@ -18,6 +18,8 @@
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
+#include <asm/io.h>
+
 u64 pcache_registered_start;
 u64 pcache_registered_size;
 
@@ -60,11 +62,9 @@ u64 nr_bits_tag;
 /* Offset between neighbouring ways within a set */
 u64 pcache_way_cache_stride __read_mostly;
 
-/* Allocate and init pcache_set array */
-static void init_pcache_set_map(void)
+static void __init alloc_pcache_set_map(void)
 {
 	u64 size;
-	int i;
 
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
 	/* the eviction bitmap */
@@ -72,7 +72,6 @@ static void init_pcache_set_map(void)
 	pcache_set_eviction_bitmap = memblock_virt_alloc(size, PAGE_SIZE);
 	if (!pcache_set_eviction_bitmap)
 		panic("Unable to allocate pcache set bitmap!");
-	memset(pcache_set_eviction_bitmap, 0, size);
 #endif
 
 	/* the pset array */
@@ -80,6 +79,80 @@ static void init_pcache_set_map(void)
 	pcache_set_map = memblock_virt_alloc(size, PAGE_SIZE);
 	if (!pcache_set_map)
 		panic("Unable to allocate pcache set array!");
+}
+
+/*
+ * Early init is called before buddy allocator initialization.
+ * Some part of pcache init need allocation larger than 4MB, thus we will use
+ * memblock here. Since the system is not fully initialized, we only do the
+ * necessary calculation and memblock allocation here, leave further init
+ * for pcache_post_init().
+ */
+void __init pcache_early_init(void)
+{
+	u64 nr_cachelines_per_page, nr_units;
+	u64 unit_size;
+
+	if (pcache_registered_start == 0 || pcache_registered_size == 0)
+		panic("Processor cache not registered, memmap $ needed!");
+
+	nr_cachelines_per_page = PAGE_SIZE / PCACHE_META_SIZE;
+	unit_size = nr_cachelines_per_page * PCACHE_LINE_SIZE;
+	unit_size += PAGE_SIZE;
+
+	/*
+	 * nr_cachelines_per_page must already be a power of 2.
+	 * We must make nr_units a power of 2, then the total
+	 * number of cache lines can be a power of 2, too.
+	 */
+	nr_units = pcache_registered_size / unit_size;
+	nr_units = rounddown_pow_of_two(nr_units);
+
+	/* final valid used size */
+	llc_cache_size = nr_units * unit_size;
+
+	/*
+	 * Hot read mostly variables:
+	 * 	number of cache lines
+	 * 	number of cache sets
+	 */
+	nr_cachelines = nr_units * nr_cachelines_per_page;
+	nr_cachesets = nr_cachelines / PCACHE_ASSOCIATIVITY;
+
+	/* How many 4K pages are used for cache line? */
+	nr_pages_cacheline = nr_cachelines * PCACHE_LINE_NR_PAGES;
+	nr_pages_metadata = nr_units;
+
+	/* Save physical/virtual starting address */
+	phys_start_cacheline = pcache_registered_start;
+	phys_start_metadata = phys_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
+
+	/*
+	 * Calculate masks used to index pcache
+	 * Masks are also hot read mostly variables
+	 */
+	nr_bits_cacheline = ilog2(PCACHE_LINE_SIZE);
+	nr_bits_set = ilog2(nr_cachesets);
+	nr_bits_tag = 64 - nr_bits_cacheline - nr_bits_set;
+
+	pcache_cacheline_mask = (1ULL << nr_bits_cacheline) - 1;
+	pcache_set_mask = ((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1) & ~pcache_cacheline_mask;
+	pcache_tag_mask = ~((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1);
+
+	/* The distance between neighbouring ways within a set */
+	pcache_way_cache_stride = nr_cachesets * PCACHE_LINE_SIZE;
+
+	/* Early allocation that needs memblock */
+	alloc_pcache_set_map();
+	victim_cache_early_init();
+}
+
+void __init pcache_init_waitqueue(void);
+
+/* Init pcache_set array */
+static void init_pcache_set_map(void)
+{
+	int i;
 
 	for (i = 0; i < nr_cachesets; i++) {
 		struct pcache_set *pset;
@@ -119,22 +192,20 @@ static void init_pcache_meta_map(void)
 	}
 }
 
-void __init pcache_init_waitqueue(void);
-
 /*
- * pcache is initialized in early boot, when buddy allocator is not
- * up yet. We can only use memblock to allocate memory at this point.
- * We do so because we may want more than 4MB contiguous physical memory.
+ * Post init is called after system has fully initialized.
+ * We do array init and threads creation here.
  */
-void __init pcache_init(void)
+void __init pcache_post_init(void)
 {
-	u64 nr_cachelines_per_page, nr_units;
-	u64 unit_size;
+	int ret;
 
-	if (pcache_registered_start == 0 || pcache_registered_size == 0)
-		panic("Processor cache not registered, memmap $ needed!");
-
-#ifdef CONFIG_LEGO_SPECIAL_MEMMAP
+	/*
+	 * This must be done after memory_init(), because phys_to_virt() needs vmemmap,
+	 * and ioremap() needs buddy allocator. Check Kconfig comments for why we have
+	 * these two configurations.
+	 */
+#ifdef CONFIG_MEMMAP_MEMBLOCK_RESERVED
 	virt_start_cacheline = (unsigned long)phys_to_virt(pcache_registered_start);
 #else
 	virt_start_cacheline = (unsigned long)ioremap_cache(pcache_registered_start,
@@ -145,58 +216,29 @@ void __init pcache_init(void)
 #endif
 
 	/*
-	 * Clear any stale value
+	 * Clear any stale value.
 	 * This may happen if running on QEMU.
 	 * Not sure about physical machine.
 	 */
 	memset((void *)virt_start_cacheline, 0, pcache_registered_size);
 
-	nr_cachelines_per_page = PAGE_SIZE / PCACHE_META_SIZE;
-	unit_size = nr_cachelines_per_page * PCACHE_LINE_SIZE;
-	unit_size += PAGE_SIZE;
-
-	/*
-	 * nr_cachelines_per_page must already be a power of 2.
-	 * We must make nr_units a power of 2, then the total
-	 * number of cache lines can be a power of 2, too.
-	 */
-	nr_units = pcache_registered_size / unit_size;
-	nr_units = rounddown_pow_of_two(nr_units);
-
-	/* final valid used size */
-	llc_cache_size = nr_units * unit_size;
-
-	nr_cachelines = nr_units * nr_cachelines_per_page;
-	nr_cachesets = nr_cachelines / PCACHE_ASSOCIATIVITY;
-
-	nr_pages_cacheline = nr_cachelines;
-	nr_pages_metadata = nr_units;
-
-	/* Save physical/virtual starting address */
-	phys_start_cacheline = pcache_registered_start;
-	phys_start_metadata = phys_start_cacheline + nr_pages_cacheline * PAGE_SIZE;
 	pcache_meta_map = (struct pcache_meta *)(virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE);
-
-	/* Now the pcache_set and pcache_meta array */
-	init_pcache_set_map();
 	init_pcache_meta_map();
 
-	/* victim_cache */
-	victim_cache_init();
+	init_pcache_set_map();
 
-	/* Now the bits mask */
-	nr_bits_cacheline = ilog2(PCACHE_LINE_SIZE);
-	nr_bits_set = ilog2(nr_cachesets);
-	nr_bits_tag = 64 - nr_bits_cacheline - nr_bits_set;
-
-	pcache_cacheline_mask = (1ULL << nr_bits_cacheline) - 1;
-	pcache_set_mask = ((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1) & ~pcache_cacheline_mask;
-	pcache_tag_mask = ~((1ULL << (nr_bits_cacheline + nr_bits_set)) - 1);
-
-	pcache_way_cache_stride = nr_cachesets * PCACHE_LINE_SIZE;
-
-	/* wq for pcache lock */
+	/* waitqueue for pcache_lock */
 	pcache_init_waitqueue();
+
+	/* Create victim_flush thread if configured */
+	victim_cache_post_init();
+
+	/* Create sweep threads if configured */
+	ret = evict_sweep_init();
+	if (ret)
+		panic("Pcache: fail to create evict sweep threads!");
+
+	pcache_print_info();
 }
 
 void __init pcache_print_info(void)
@@ -245,28 +287,11 @@ void __init pcache_print_info(void)
 
 	pr_info("    Way cache stride:  %#llx\n", pcache_way_cache_stride);
 
+	pr_info("    Memmap $ semantic:       %s\n",
+		IS_ENABLED(CONFIG_MEMMAP_MEMBLOCK_RESERVED) ? "memblock reserved" : "e820 reserved");
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 	pr_info("    NR victim $ entries:     %u\n", VICTIM_NR_ENTRIES);
 #endif
-}
-
-/*
- * Post init include things to be done after all
- * kernel subsystems are intialized, e.g. kthread.
- */
-void __init pcache_post_init(void)
-{
-	int ret;
-
-	/* Victim cache */
-	victim_cache_post_init();
-
-	/* Background sweep threads */
-	ret = evict_sweep_init();
-	if (ret)
-		panic("Pcache: fail to create evict sweep threads!");
-
-	pcache_print_info();
 }
 
 /**
@@ -279,7 +304,7 @@ void __init pcache_post_init(void)
  * memory is initialized. For x86, this is registered during the parsing of
  * memmap=N$N command line option.
  *
- * If CONFIG_LEGO_SPECIAL_MEMMAP is ON, this range will not be bailed out
+ * If CONFIG_MEMMAP_MEMBLOCK_RESERVED is ON, this range will not be bailed out
  * from e820 table, it is marked as reserved in memblock. So pages within
  * this range still have `struct page'. Otherwise, pcache memory range will not
  * have any associated `struct page'.

@@ -19,10 +19,10 @@ config CHECKPOINT
 
 	  If unsure, say N.
 
-config LEGO_SPECIAL_MEMMAP
-	bool "Reseve memmap $ marked memory to memblock, to have struct page"
+config MEMMAP_MEMBLOCK_RESERVED
+	bool "Reseve memmap $ marked memory to memblock"
 	default y
-	---help---
+	help
 	  By default, memmap $ option reserves a range of physical memory.
 	  This reserved memory will be marked reserved in e820 table, which
 	  means this range will not be registered into memblock.

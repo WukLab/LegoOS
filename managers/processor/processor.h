@@ -14,7 +14,7 @@
 
 #include <lego/compiler.h>
 
-void __init pcache_init(void);
+void __init pcache_early_init(void);
 void __init pcache_post_init(void);
 
 #endif /* _PROCESSOR_COMPONENT_PROCESSOR_H_ */

@@ -24,6 +24,8 @@ struct pcache_meta;
 #define PCACHE_ASSOCIATIVITY		(_AC(1,UL) << PCACHE_ASSOCIATIVITY_SHIFT)
 #define PCACHE_META_SIZE		(sizeof(struct pcache_meta))
 
+#define PCACHE_LINE_NR_PAGES		(PCACHE_LINE_SIZE / PAGE_SIZE)
+
 enum pcache_set_stat_item {
 	PSET_FILL_MEMORY,
 	PSET_FILL_VICTIM,

@@ -481,4 +481,7 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 			pte_t *page_table, pmd_t *pmd,
 			unsigned long flags, fill_func_t fill_func, void *arg);
 
+void __init pcache_print_info(void);
+
+
 #endif /* _LEGO_PROCESSOR_PCACHE_H_ */

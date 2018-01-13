@@ -95,7 +95,7 @@ void __init processor_manager_init(void)
  */
 void __init processor_manager_early_init(void)
 {
-	pcache_init();
+	pcache_early_init();
 }
 
 #ifndef CONFIG_CHECKPOINT

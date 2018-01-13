@@ -722,7 +722,7 @@ out:
 	return ret;
 }
 
-static void __init pcache_init_victim_cache_meta_map(void)
+static void __init victim_cache_init_meta_map(void)
 {
 	int i;
 
@@ -748,7 +748,7 @@ static void __init pcache_init_victim_cache_meta_map(void)
  * This function is called during early boot, both buddy allocator
  * and slab are not avaiable. Use memblock instead.
  */
-void __init victim_cache_init(void)
+void __init victim_cache_early_init(void)
 {
 	u64 size;
 
@@ -765,5 +765,5 @@ void __init victim_cache_init(void)
 	if (!pcache_victim_meta_map)
 		panic("Unable to allocate victim meta map!");
 
-	pcache_init_victim_cache_meta_map();
+	victim_cache_init_meta_map();
 }

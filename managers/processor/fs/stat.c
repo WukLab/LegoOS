@@ -211,6 +211,7 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 		stat.ino = 3;
 	} else {
 		stat.mode |= S_IFCHR;
+		stat.size = 1*1024;
 #ifndef CONFIG_USE_RAMFS
 		ret = get_kstat_from_storage(f->f_name, false, &stat);
 		if (ret)
