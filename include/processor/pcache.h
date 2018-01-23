@@ -414,7 +414,19 @@ pcache_meta_next_way(struct pcache_meta *pcm)
 	return __pcache_meta_next_way(pcm);
 }
 
-#define for_each_way_set(pcm, pset, way)				\
+/*
+ * Walk through all sets of pcache
+ * Use with caution
+ */
+#define pcache_for_each_set(pset, nr)					\
+	for (nr = 0, pset = pcache_set_map; nr < nr_cachesets;		\
+	     nr++, pset++)
+
+/*
+ * Walk though all ways within a set.
+ * You MUST hold pset->lock before you take a walk.
+ */
+#define pcache_for_each_way_set(pcm, pset, way)				\
 	for (pcm = pcache_set_to_first_pcache_meta(pset), way = 0;	\
 	     way < PCACHE_ASSOCIATIVITY;				\
 	     pcm = __pcache_meta_next_way(pcm), way++)

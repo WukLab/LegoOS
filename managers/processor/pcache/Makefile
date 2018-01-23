@@ -14,5 +14,7 @@ obj-y += syscall.o
 obj-$(CONFIG_PCACHE_PREFETCH) += prefetch.o
 obj-$(CONFIG_PCACHE_EVICTION_VICTIM) += victim.o victim_flush.o
 
+obj-$(CONFIG_PCACHE_EVICT_LRU) += evict_lru.o
+
 # Sweep threads for certain eviction algorithms
 obj-$(CONFIG_PCACHE_EVICT_GENERIC_SWEEP) += evict_sweep.o

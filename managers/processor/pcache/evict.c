@@ -28,7 +28,7 @@ find_line_random(struct pcache_set *pset)
 	int way;
 
 	spin_lock(&pset->lock);
-	for_each_way_set(pcm, pset, way) {
+	pcache_for_each_way_set(pcm, pset, way) {
 		/*
 		 * Must be lines that have these bits set:
 		 *	Allocated && Valid

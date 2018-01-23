@@ -43,7 +43,9 @@ struct pcache_victim_meta {
 	struct pcache_meta	*pcm;
 	struct pcache_set	*pset;		/* pset this victim belongs to */
 	struct list_head	hits;		/* history pid+addr users */
-	struct list_head	next;		/* next victim in the list */
+
+	/* Link to next allocated victim cache */
+	struct list_head	next;
 };
 
 struct pcache_victim_hit_entry {

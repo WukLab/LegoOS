@@ -333,9 +333,13 @@ static int victim_evict_line(void)
 
 static inline void prep_new_victim(struct pcache_victim_meta *victim)
 {
+	/*
+	 * ref count = 1 for the caller
+	 */
+	victim_ref_count_set(victim, 1);
+
 	victim->pcm = NULL;
 	victim->pset = NULL;
-	victim_ref_count_set(victim, 1);
 	atomic_set(&victim->nr_fill_pcache, 0);
 	INIT_LIST_HEAD(&victim->next);
 }
@@ -549,8 +553,8 @@ void victim_finish_insert(struct pcache_victim_meta *victim)
 	dst = pcache_victim_to_kva(victim);
 	memcpy(dst, src, PCACHE_LINE_SIZE);
 
-	smp_wmb();
 	victim->pcm = NULL;
+	smp_wmb();
 	SetVictimHasdata(victim);
 
 	/*

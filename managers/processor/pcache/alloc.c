@@ -115,7 +115,7 @@ pcache_alloc_fastpath(struct pcache_set *pset)
 	struct pcache_meta *pcm;
 
 	spin_lock(&pset->lock);
-	for_each_way_set(pcm, pset, way) {
+	pcache_for_each_way_set(pcm, pset, way) {
 		if (likely(!TestSetPcacheAllocated(pcm))) {
 			prep_new_pcache_meta(pcm);
 			spin_unlock(&pset->lock);
@@ -193,7 +193,11 @@ static inline void pcache_free(struct pcache_meta *p)
 	 */
 	PCACHE_BUG_ON_PCM(pcache_mapped(p), p);
 
-	/* Clear all flags */
+	/*
+	 * Once the Allocated bit is 0, this pcache line is returned
+	 * to free pool. prep_new_pcache_meta() will initialize the
+	 * pcm properly at next allocation time.
+	 */
 	smp_wmb();
 	p->bits = 0;
 }

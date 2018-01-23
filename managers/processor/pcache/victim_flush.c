@@ -7,6 +7,10 @@
  * (at your option) any later version.
  */
 
+/*
+ * Victim cache's background flush daemon thread
+ */
+
 #include <lego/mm.h>
 #include <lego/wait.h>
 #include <lego/slab.h>
@@ -150,7 +154,7 @@ static int victim_flush_func(void *unused)
 /* Has to be called after kthreadd is running */
 void __init victim_cache_post_init(void)
 {
-	victim_flush_thread = kthread_run(victim_flush_func, NULL, "kvictimd");
+	victim_flush_thread = kthread_run(victim_flush_func, NULL, "kvictim_flushd");
 	if (IS_ERR(victim_flush_thread))
 		panic("Fail to create victim flush thread!");
 }
