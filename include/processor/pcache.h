@@ -423,6 +423,14 @@ pcache_meta_next_way(struct pcache_meta *pcm)
 	     nr++, pset++)
 
 /*
+ * Walk through all cache lines of pcache
+ * Use with caution
+ */
+#define pcache_for_each_way(pcm, nr)					\
+	for (nr = 0, pcm = pcache_meta_map; nr < nr_cachelines;		\
+	     nr++, pcm++)
+
+/*
  * Walk though all ways within a set.
  * You MUST hold pset->lock before you take a walk.
  */

@@ -152,22 +152,28 @@ void __init pcache_init_waitqueue(void);
 /* Init pcache_set array */
 static void init_pcache_set_map(void)
 {
-	int i;
+	struct pcache_set *pset;
+	int setidx, j;
 
-	for (i = 0; i < nr_cachesets; i++) {
-		struct pcache_set *pset;
-		int j;
-
-		pset = pcache_set_map + i;
+	pcache_for_each_set(pset, setidx) {
 		spin_lock_init(&pset->lock);
-		INIT_LIST_HEAD(&pset->lru);
 
-#ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
-		INIT_LIST_HEAD(&pset->eviction_list);
+		/*
+		 * Eviction Algorithm Specific
+		 */
+#ifdef CONFIG_PCACHE_EVICT_LRU
+		spin_lock_init(&pset->lru_lock);
+		INIT_LIST_HEAD(&pset->lru);
 #endif
 
+		/*
+		 * Eviction Mechanism Specific
+		 */
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 		atomic_set(&pset->nr_victims, 0);
+#endif
+#ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
+		INIT_LIST_HEAD(&pset->eviction_list);
 #endif
 
 		for (j = 0; j < NR_PSET_STAT_ITEMS; j++)
@@ -179,12 +185,10 @@ static void init_pcache_set_map(void)
 static void init_pcache_meta_map(void)
 {
 	struct pcache_meta *pcm;
-	int i;
+	int nr;
 
-	for (i = 0; i < nr_cachelines; i++) {
-		pcm = pcache_meta_map + i;
-		memset(pcm, 0, sizeof(*pcm));
-
+	pcache_for_each_way(pcm, nr) {
+		pcm->bits = 0;
 		INIT_LIST_HEAD(&pcm->rmap);
 		INIT_LIST_HEAD(&pcm->lru);
 		pcache_mapcount_reset(pcm);

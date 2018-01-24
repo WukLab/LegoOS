@@ -55,7 +55,19 @@ struct pset_eviction_entry {
 struct pcache_set {
 	spinlock_t		lock;
 	atomic_t		stat[NR_PSET_STAT_ITEMS];
+
+	/*
+	 * Eviction Algorithms Specific
+	 */
+
+#ifdef CONFIG_PCACHE_EVICT_LRU
+	spinlock_t		lru_lock;
 	struct list_head	lru;
+#endif
+
+	/*
+	 * Eviction Mechanism Specific
+	 */
 
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 	/*
@@ -65,9 +77,8 @@ struct pcache_set {
 	 * Used by pgfault to have a quick check.
 	 */
 	atomic_t		nr_victims;
-#endif
 
-#ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
+#elif defined (CONFIG_PCACHE_EVICTION_PERSET_LIST)
 	struct list_head	eviction_list;
 #endif
 } ____cacheline_aligned;
