@@ -114,15 +114,12 @@ pcache_alloc_fastpath(struct pcache_set *pset)
 	int way;
 	struct pcache_meta *pcm;
 
-	spin_lock(&pset->lock);
 	pcache_for_each_way_set(pcm, pset, way) {
 		if (likely(!TestSetPcacheAllocated(pcm))) {
 			prep_new_pcache_meta(pcm);
-			spin_unlock(&pset->lock);
 			return pcm;
 		}
 	}
-	spin_unlock(&pset->lock);
 	return NULL;
 }
 

@@ -53,7 +53,6 @@ struct pset_eviction_entry {
  * new field needs to be initialized in init_pcache_set_map().
  */
 struct pcache_set {
-	spinlock_t		lock;
 	atomic_t		stat[NR_PSET_STAT_ITEMS];
 
 	/*
@@ -80,6 +79,7 @@ struct pcache_set {
 
 #elif defined (CONFIG_PCACHE_EVICTION_PERSET_LIST)
 	struct list_head	eviction_list;
+	spinlock_t		eviction_list_lock;
 #endif
 } ____cacheline_aligned;
 

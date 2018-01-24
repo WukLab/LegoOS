@@ -431,8 +431,8 @@ pcache_meta_next_way(struct pcache_meta *pcm)
 	     nr++, pcm++)
 
 /*
- * Walk though all ways within a set.
- * You MUST hold pset->lock before you take a walk.
+ * Walk though all ways within a set
+ * The maximum is PCACHE_ASSOCIATIVITY
  */
 #define pcache_for_each_way_set(pcm, pset, way)				\
 	for (pcm = pcache_set_to_first_pcache_meta(pset), way = 0;	\

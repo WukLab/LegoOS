@@ -27,7 +27,6 @@ find_line_random(struct pcache_set *pset)
 	struct pcache_meta *pcm;
 	int way;
 
-	spin_lock(&pset->lock);
 	pcache_for_each_way_set(pcm, pset, way) {
 		/*
 		 * Must be lines that have these bits set:
@@ -42,7 +41,6 @@ find_line_random(struct pcache_set *pset)
 				break;
 		}
 	}
-	spin_unlock(&pset->lock);
 
 	if (unlikely(way == PCACHE_ASSOCIATIVITY))
 		pcm = NULL;
@@ -98,7 +96,7 @@ bool __pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk)
 	pset = user_vaddr_to_pcache_set(uvaddr);
 	uvaddr &= PAGE_MASK;
 
-	spin_lock(&pset->lock);
+	spin_lock(&pset->eviction_list_lock);
 	list_for_each_entry(pos, &pset->eviction_list, next) {
 		if (uvaddr == pos->address &&
 		   same_thread_group(tsk, pos->owner)) {
@@ -106,7 +104,7 @@ bool __pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk)
 			break;
 		}
 	}
-	spin_unlock(&pset->lock);
+	spin_unlock(&pset->eviction_list_lock);
 
 	return found;
 }
@@ -138,10 +136,10 @@ static int pset_add_eviction_one(struct pcache_meta *pcm,
 	new->owner = rmap->owner;
 	new->pcm = pcm;
 
-	spin_lock(&pset->lock);
+	spin_lock(&pset->eviction_list_lock);
 	list_add(&new->next, &pset->eviction_list);
 	__set_bit(pcache_set_to_set_index(pset), pcache_set_eviction_bitmap);
-	spin_unlock(&pset->lock);
+	spin_unlock(&pset->eviction_list_lock);
 
 	(*nr_added)++;
 	return PCACHE_RMAP_AGAIN;
@@ -165,7 +163,7 @@ static void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pc
 {
 	struct pset_eviction_entry *pos, *keeper;
 
-	spin_lock(&pset->lock);
+	spin_lock(&pset->eviction_list_lock);
 	list_for_each_entry_safe(pos, keeper, &pset->eviction_list, next) {
 		if (pos->pcm == pcm) {
 			list_del(&pos->next);
@@ -176,7 +174,7 @@ static void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pc
 	if (list_empty(&pset->eviction_list))
 		clear_bit(pcache_set_to_set_index(pset),
 			  pcache_set_eviction_bitmap);
-	spin_unlock(&pset->lock);
+	spin_unlock(&pset->eviction_list_lock);
 }
 
 static inline int

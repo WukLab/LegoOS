@@ -156,14 +156,12 @@ static void init_pcache_set_map(void)
 	int setidx, j;
 
 	pcache_for_each_set(pset, setidx) {
-		spin_lock_init(&pset->lock);
-
 		/*
 		 * Eviction Algorithm Specific
 		 */
 #ifdef CONFIG_PCACHE_EVICT_LRU
-		spin_lock_init(&pset->lru_lock);
 		INIT_LIST_HEAD(&pset->lru);
+		spin_lock_init(&pset->lru_lock);
 #endif
 
 		/*
@@ -174,6 +172,7 @@ static void init_pcache_set_map(void)
 #endif
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
 		INIT_LIST_HEAD(&pset->eviction_list);
+		spin_lock_init(&pset->eviction_list_lock);
 #endif
 
 		for (j = 0; j < NR_PSET_STAT_ITEMS; j++)
