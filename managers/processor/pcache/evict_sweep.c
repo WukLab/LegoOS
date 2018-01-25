@@ -9,6 +9,7 @@
 
 /*
  * Background sweep threads for eviction selection
+ * Dirty work is done by the algorithm-specific callback.
  */
 
 #include <lego/mm.h>
@@ -25,37 +26,16 @@
 
 static struct task_struct *sweep_thread;
 
-static int
-__pcache_evict_sweep_one(struct pcache_meta *pcm,
-			 struct pcache_rmap *rmap, void *arg)
-{
-	return PCACHE_RMAP_AGAIN;
-}
-
-static inline void __sweep(void)
-{
-	int setidx, way;
-	struct pcache_set *pset;
-	struct pcache_meta *pcm;
-	struct rmap_walk_control rwc = {
-		.rmap_one = __pcache_evict_sweep_one,
-	};
-
-	pcache_for_each_set(pset, setidx) {
-		pcache_for_each_way_set(pcm, pset, way) {
-			if (!pcache_mapped(pcm))
-				continue;
-			rmap_walk(pcm, &rwc);
-		}
-	}
-}
-
 static void sweep(void)
 {
 	u64 start, end;
+	int setidx;
+	struct pcache_set *pset;
 
 	start = profile_clock();
-	__sweep();
+	pcache_for_each_set(pset, setidx) {
+		sweep_pset_lru(pset);
+	}
 	end = profile_clock();
 	pr_info("%s(): %llu ns\n", __func__, end-start);
 }

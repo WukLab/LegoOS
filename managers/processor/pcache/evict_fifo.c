@@ -8,27 +8,13 @@
  */
 
 #include <lego/mm.h>
-#include <lego/wait.h>
 #include <lego/slab.h>
-#include <lego/log2.h>
-#include <lego/hash.h>
 #include <lego/kernel.h>
-#include <lego/pgfault.h>
-#include <lego/syscalls.h>
-#include <lego/random.h>
-#include <lego/jiffies.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
-struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
+struct pcache_meta *evict_find_line_fifo(struct pcache_set *pset)
 {
+	panic("pcache/eviction: FIFO not implemented!");
 	return NULL;
-}
-
-/*
- * Callback function for the sweep thread
- */
-void sweep_pset_lru(struct pcache_set *pset)
-{
-
 }

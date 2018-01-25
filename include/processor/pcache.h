@@ -10,6 +10,7 @@
 #ifndef _LEGO_PROCESSOR_PCACHE_H_
 #define _LEGO_PROCESSOR_PCACHE_H_
 
+#include <lego/list.h>
 #include <lego/const.h>
 #include <lego/bitops.h>
 #include <lego/spinlock.h>
@@ -17,7 +18,6 @@
 #include <processor/pcache_types.h>
 #include <processor/pcache_stat.h>
 #include <processor/pcache_debug.h>
-#include <processor/pcache_evict.h>
 #include <uapi/processor/pcache.h>
 
 extern u64 pcache_registered_start;
@@ -506,8 +506,6 @@ int pcache_wrprotect(struct pcache_meta *pcm);
 int pcache_try_to_unmap_reserve(struct pcache_meta *pcm);
 int pcache_free_reserved_rmap(struct pcache_meta *pcm);
 
-#include <processor/pcache_victim.h>
-
 typedef int (*fill_func_t)(unsigned long, unsigned long, struct pcache_meta *, void *);
 
 int common_do_fill_page(struct mm_struct *mm, unsigned long address,
@@ -516,5 +514,7 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 
 void __init pcache_print_info(void);
 
+#include <processor/pcache_victim.h>
+#include <processor/pcache_evict.h>
 
 #endif /* _LEGO_PROCESSOR_PCACHE_H_ */

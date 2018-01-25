@@ -8,27 +8,34 @@
  */
 
 #include <lego/mm.h>
-#include <lego/wait.h>
 #include <lego/slab.h>
-#include <lego/log2.h>
-#include <lego/hash.h>
 #include <lego/kernel.h>
-#include <lego/pgfault.h>
-#include <lego/syscalls.h>
 #include <lego/random.h>
 #include <lego/jiffies.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
-struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
+struct pcache_meta *evict_find_line_random(struct pcache_set *pset)
 {
-	return NULL;
-}
+	struct pcache_meta *pcm;
+	int way;
 
-/*
- * Callback function for the sweep thread
- */
-void sweep_pset_lru(struct pcache_set *pset)
-{
+	pcache_for_each_way_set(pcm, pset, way) {
+		/*
+		 * Must be lines that have these bits set:
+		 *	Usable && Valid
+		 * Also it should not be locked or during Writeback
+		 */
+		if (PcacheUsable(pcm) && PcacheValid(pcm) &&
+		    !PcacheWriteback(pcm)) {
+			if (!trylock_pcache(pcm))
+				continue;
+			else
+				break;
+		}
+	}
 
+	if (unlikely(way == PCACHE_ASSOCIATIVITY))
+		pcm = NULL;
+	return pcm;
 }

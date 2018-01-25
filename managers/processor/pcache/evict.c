@@ -20,66 +20,22 @@
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
-#ifdef CONFIG_PCACHE_EVICT_RANDOM
-static struct pcache_meta *
-find_line_random(struct pcache_set *pset)
-{
-	struct pcache_meta *pcm;
-	int way;
-
-	pcache_for_each_way_set(pcm, pset, way) {
-		/*
-		 * Must be lines that have these bits set:
-		 *	Usable && Valid
-		 * Also it should not be locked or during Writeback
-		 */
-		if (PcacheUsable(pcm) && PcacheValid(pcm) &&
-		    !PcacheWriteback(pcm)) {
-			if (!trylock_pcache(pcm))
-				continue;
-			else
-				break;
-		}
-	}
-
-	if (unlikely(way == PCACHE_ASSOCIATIVITY))
-		pcm = NULL;
-	return pcm;
-}
-#endif
-
-#ifdef CONFIG_PCACHE_EVICT_FIFO
-static struct pcache_meta *
-find_line_fifo(struct pcache_set *pset)
-{
-	BUG();
-}
-#endif
-
-#ifdef CONFIG_PCACHE_EVICT_LRU
-static struct pcache_meta *
-find_line_lru(struct pcache_set *pset)
-{
-	BUG();
-}
-#endif
-
 /**
- * find_line
+ * evict_find_line
  * @pset: the pcache set in question
  *
  * This function will find a line to evict within a set.
  * The returned pcache line MUST be locked.
  */
 static inline struct pcache_meta *
-find_line(struct pcache_set *pset)
+evict_find_line(struct pcache_set *pset)
 {
 #ifdef CONFIG_PCACHE_EVICT_RANDOM
-	return find_line_random(pset);
+	return evict_find_line_random(pset);
 #elif defined(CONFIG_PCACHE_EVICT_FIFO)
-	return find_line_fifo(pset);
+	return evict_find_line_fifo(pset);
 #elif defined(CONFIG_PCACHE_EVICT_LRU)
-	return find_line_lru(pset);
+	return evict_find_line_lru(pset);
 #endif
 }
 
@@ -265,7 +221,7 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int ret;
 
-	pcm = find_line(pset);
+	pcm = evict_find_line(pset);
 	if (!pcm)
 		return -EAGAIN;
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
