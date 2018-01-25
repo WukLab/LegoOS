@@ -55,6 +55,14 @@ del_from_lru_list(struct pcache_meta *pcm, struct pcache_set *pset)
 	spin_unlock(&pset->lru_lock);
 }
 
+static inline void detach_from_lru(struct pcache_meta *pcm)
+{
+	struct pcache_set *pset;
+
+	pset = pcache_meta_to_pcache_set(pcm);
+	del_from_lru_list(pcm, pset);
+}
+
 static inline void init_pcache_lru(struct pcache_meta *pcm)
 {
 	INIT_LIST_HEAD(&pcm->lru);
@@ -65,6 +73,7 @@ static inline void
 add_to_lru_list(struct pcache_meta *pcm, struct pcache_set *pset) { }
 static inline void
 del_from_lru_list(struct pcache_meta *pcm, struct pcache_set *pset) { }
+static inline void detach_from_lru(struct pcache_meta *pcm) { }
 
 static inline void init_pcache_lru(struct pcache_meta *pcm) { }
 

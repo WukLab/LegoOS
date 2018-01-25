@@ -187,7 +187,7 @@ static void init_pcache_meta_map(void)
 	int nr;
 
 	pcache_for_each_way(pcm, nr) {
-		pcm->bits = 0;
+		pcache_reset_flags(pcm);
 		INIT_LIST_HEAD(&pcm->rmap);
 		pcache_mapcount_reset(pcm);
 		pcache_ref_count_set(pcm, 0);

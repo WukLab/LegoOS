@@ -91,17 +91,6 @@ void __lock_pcache(struct pcache_meta *pcm)
 			TASK_UNINTERRUPTIBLE);
 }
 
-static inline void pcache_free(struct pcache_meta *p)
-{
-	/*
-	 * Once the Allocated bit is 0, this pcache line is returned
-	 * to free pool. prep_new_pcache_meta() will initialize the
-	 * pcm properly at next allocation time.
-	 */
-	smp_wmb();
-	p->bits = 0;
-}
-
 static void bad_pcache(struct pcache_meta *pcm,
 		       const char *reason, unsigned long bad_flags)
 {
@@ -174,7 +163,10 @@ static inline void pcache_free_check(struct pcache_meta *pcm)
 void __put_pcache(struct pcache_meta *pcm)
 {
 	pcache_free_check(pcm);
-	pcache_free(pcm);
+
+	detach_from_lru(pcm);
+
+	pcache_reset_flags(pcm);
 }
 
 static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
