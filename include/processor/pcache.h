@@ -61,6 +61,19 @@ static inline unsigned long __uvaddr2set(unsigned long address)
 	return (address & pcache_set_mask) >> nr_bits_cacheline;
 }
 
+static inline void set_pcache_usable(struct pcache_meta *pcm)
+{
+#ifdef CONFIG_DEBUG_PCACHE
+	/* Paranoid being hacker's nice virtue */
+	if (TestSetPcacheUsable(pcm)) {
+		dump_pcache_meta(pcm, "Memory Corruption in Pcache");
+		BUG();
+	}
+#else
+	SetPcacheUsable(pcm);
+#endif
+}
+
 void unlock_pcache(struct pcache_meta *pcm);
 void __lock_pcache(struct pcache_meta *pcm);
 

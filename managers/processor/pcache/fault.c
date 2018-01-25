@@ -116,9 +116,10 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 		goto out;
 	}
 
+	pte_set(page_table, entry);
+
 	SetPcacheValid(pcm);
 
-	pte_set(page_table, entry);
 	spin_unlock(ptl);
 
 	return 0;

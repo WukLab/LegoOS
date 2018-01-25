@@ -30,10 +30,10 @@ find_line_random(struct pcache_set *pset)
 	pcache_for_each_way_set(pcm, pset, way) {
 		/*
 		 * Must be lines that have these bits set:
-		 *	Allocated && Valid
+		 *	Usable && Valid
 		 * Also it should not be locked or during Writeback
 		 */
-		if (PcacheAllocated(pcm) && PcacheValid(pcm) &&
+		if (PcacheUsable(pcm) && PcacheValid(pcm) &&
 		    !PcacheWriteback(pcm)) {
 			if (!trylock_pcache(pcm))
 				continue;

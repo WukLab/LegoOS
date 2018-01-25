@@ -22,4 +22,52 @@ int __init evict_sweep_init(void);
 static inline int evict_sweep_init(void) { return 0; }
 #endif
 
+/*
+ * Eviction Algorithm: LRU
+ */
+#ifdef CONFIG_PCACHE_EVICT_LRU
+
+static inline void
+__add_to_lru_list(struct pcache_meta *pcm, struct pcache_set *pset)
+{
+	list_add(&pcm->lru, pset->lru_list);
+}
+
+static inline void
+add_to_lru_list(struct pcache_meta *pcm, struct pcache_set *pset)
+{
+	spin_lock(&pset->lru_lock);
+	__add_to_lru_list(pcm, pset);
+	spin_unlock(&pset->lru_lock);
+}
+
+static inline void
+__del_from_lru_list(struct pcache_meta *pcm, struct pcache_set *pset)
+{
+	list_del(&pcm->lru);
+}
+
+static inline void
+del_from_lru_list(struct pcache_meta *pcm, struct pcache_set *pset)
+{
+	spin_lock(&pset->lru_lock);
+	__del_from_lru_list(pcm, pset);
+	spin_unlock(&pset->lru_lock);
+}
+
+static inline void init_pcache_lru(struct pcache_meta *pcm)
+{
+	INIT_LIST_HEAD(&pcm->lru);
+}
+
+#else
+static inline void
+add_to_lru_list(struct pcache_meta *pcm, struct pcache_set *pset) { }
+static inline void
+del_from_lru_list(struct pcache_meta *pcm, struct pcache_set *pset) { }
+
+static inline void init_pcache_lru(struct pcache_meta *pcm) { }
+
+#endif /* EVICT_LRU */
+
 #endif /* _LEGO_PROCESSOR_PCACHE_SWEEP_H_ */

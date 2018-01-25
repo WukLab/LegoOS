@@ -160,7 +160,7 @@ static void init_pcache_set_map(void)
 		 * Eviction Algorithm Specific
 		 */
 #ifdef CONFIG_PCACHE_EVICT_LRU
-		INIT_LIST_HEAD(&pset->lru);
+		INIT_LIST_HEAD(&pset->lru_list);
 		spin_lock_init(&pset->lru_lock);
 #endif
 
@@ -189,9 +189,9 @@ static void init_pcache_meta_map(void)
 	pcache_for_each_way(pcm, nr) {
 		pcm->bits = 0;
 		INIT_LIST_HEAD(&pcm->rmap);
-		INIT_LIST_HEAD(&pcm->lru);
 		pcache_mapcount_reset(pcm);
 		pcache_ref_count_set(pcm, 0);
+		init_pcache_lru(pcm);
 	}
 }
 

@@ -17,6 +17,7 @@
 #define __def_pcacheflag_names					\
 	{1UL << PC_locked,		"locked"	},	\
 	{1UL << PC_allocated,		"allocated"	},	\
+	{1UL << PC_allocated,		"usable"	},	\
 	{1UL << PC_valid,		"valid"		},	\
 	{1UL << PC_dirty,		"dirty"		},	\
 	{1UL << PC_writeback,		"writeback"	}
@@ -35,8 +36,9 @@ const struct trace_print_flags pcacheflag_names[] = {
  */
 void dump_pcache_meta(struct pcache_meta *pcm, const char *reason)
 {
-	pr_debug("pcache:%p mapcount:%d flags:(%pGc)\n",
-		pcm, atomic_read(&pcm->mapcount), &pcm->bits);
+	pr_debug("pcache:%p mapcount:%d refcount:%d flags:(%pGc)\n",
+		pcm, atomic_read(&pcm->mapcount),
+		atomic_read(&pcm->_refcount), &pcm->bits);
 	if (reason)
 		pr_debug("pcache dumped because: %s\n", reason);
 }

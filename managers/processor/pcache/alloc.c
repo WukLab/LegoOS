@@ -91,6 +91,92 @@ void __lock_pcache(struct pcache_meta *pcm)
 			TASK_UNINTERRUPTIBLE);
 }
 
+static inline void pcache_free(struct pcache_meta *p)
+{
+	/*
+	 * Once the Allocated bit is 0, this pcache line is returned
+	 * to free pool. prep_new_pcache_meta() will initialize the
+	 * pcm properly at next allocation time.
+	 */
+	smp_wmb();
+	p->bits = 0;
+}
+
+static void bad_pcache(struct pcache_meta *pcm,
+		       const char *reason, unsigned long bad_flags)
+{
+	pr_alert("BUG: Bad pcache state in process %s\n", current->comm);
+
+	dump_pcache_meta(pcm, reason);
+
+	bad_flags &= pcm->bits;
+	if (bad_flags)
+		pr_alert("bad because of flags: %#lx(%pGc)\n",\
+			 bad_flags, &bad_flags);
+	/* Leave bad fields for debug */
+}
+
+static void pcache_free_check_bad(struct pcache_meta *pcm)
+{
+	const char *bad_reason;
+	unsigned long bad_flags;
+
+	bad_reason = NULL;
+	bad_flags = 0;
+
+	/* This is more critical bug */
+	if (unlikely(!PcacheAllocated(pcm) || !PcacheUsable(pcm))) {
+		bad_reason = "double free";
+		bad_pcache(pcm, bad_reason, bad_flags);
+		return;
+	}
+
+	if (unlikely(atomic_read(&pcm->mapcount) != 0))
+		bad_reason = "nonzero mapcount";
+	if (unlikely(pcache_ref_count(pcm) != 0))
+		bad_reason = "nonzero _refcount";
+	if (unlikely(pcm->bits & PCACHE_FLAGS_CHECK_AT_FREE)) {
+		bad_reason = "PCACHE_FLAGS_CHECK_AT_FREE flag(s) set";
+		bad_flags = PCACHE_FLAGS_CHECK_AT_FREE;
+	}
+	bad_pcache(pcm, bad_reason, bad_flags);
+}
+
+static inline bool pcache_expected_state(struct pcache_meta *pcm,
+					 unsigned long check_flags)
+{
+	/* Flags MUST be set */
+	if (unlikely(!PcacheAllocated(pcm) || !PcacheUsable(pcm)))
+		return false;
+
+	/* which implies p->rmap list is empty */
+	if (unlikely(atomic_read(&pcm->mapcount) != 0))
+		return false;
+
+	if (unlikely(pcache_ref_count(pcm)))
+		return false;
+
+	/* Flags should not be set */
+	if (unlikely(pcm->bits & check_flags))
+		return false;
+
+	return true;
+}
+
+static inline void pcache_free_check(struct pcache_meta *pcm)
+{
+	if (likely(pcache_expected_state(pcm, PCACHE_FLAGS_CHECK_AT_FREE)))
+		return;
+	pcache_free_check_bad(pcm);
+}
+
+/* Free a pcache line, return it back to free pool within a set */
+void __put_pcache(struct pcache_meta *pcm)
+{
+	pcache_free_check(pcm);
+	pcache_free(pcm);
+}
+
 static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
 {
 	/*
@@ -101,7 +187,7 @@ static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
 	pcache_mapcount_reset(pcm);
 
 	INIT_LIST_HEAD(&pcm->rmap);
-	INIT_LIST_HEAD(&pcm->lru);
+	init_pcache_lru(pcm);
 }
 
 /*
@@ -117,6 +203,13 @@ pcache_alloc_fastpath(struct pcache_set *pset)
 	pcache_for_each_way_set(pcm, pset, way) {
 		if (likely(!TestSetPcacheAllocated(pcm))) {
 			prep_new_pcache_meta(pcm);
+			add_to_lru_list(pcm, pset);
+
+			/*
+			 * Make the pcache line visible to other
+			 * pcache subsystems:
+			 */
+			set_pcache_usable(pcm);
 			return pcm;
 		}
 	}
@@ -176,30 +269,4 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 
 	/* Slowpath: fallback and try to evict one */
 	return pcache_alloc_slowpath(pset, address);
-}
-
-static inline void pcache_free(struct pcache_meta *p)
-{
-	/* Flag sanity check */
-	PCACHE_BUG_ON_PCM(!PcacheAllocated(p) || PcacheValid(p) ||
-			   PcacheLocked(p) || PcacheWriteback(p), p);
-
-	/*
-	 * Should not be mapped at this point
-	 * which implies p->rmap list is empty
-	 */
-	PCACHE_BUG_ON_PCM(pcache_mapped(p), p);
-
-	/*
-	 * Once the Allocated bit is 0, this pcache line is returned
-	 * to free pool. prep_new_pcache_meta() will initialize the
-	 * pcm properly at next allocation time.
-	 */
-	smp_wmb();
-	p->bits = 0;
-}
-
-void __put_pcache(struct pcache_meta *p)
-{
-	pcache_free(p);
 }

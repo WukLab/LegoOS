@@ -37,17 +37,19 @@ The cache line that has Allocated bit set but under setup is a typical case.
 
 As an example, the physical page allocator, page reclaim, page cache in Linux are implemented with
 the second solution. Pages freshly allocated will be added a LRU list or page cache own list.
-And page reclaim code will only look into pages within the LRU list, it won't go through all
+And page reclaim code will only look into pages within the LRU list, it will not go through all
 physical pages to do so. The reason for Linux to do so is simple: kernel can not scan the whole
 physical pages to find out pages to operate.
 
-`Pcache:` When it comes to pcache, the second solution also seems a better choice. Because in our envision,
-pcache will have high-associativity such as 64 or 128. It will have bad performance if our eviction
-algorithm or sweep thread need to go through every cache lines within a set to find out candidates,
-while there might be only 1 or 2 allocated lines.
+`Pcache:` When it comes to pcache, we use both.
+In our envision, pcache will have high-associativity such as 64 or 128.
+It will have very bad performance if our eviction algorithm or sweep thread need to go through every
+cache lines within a set to find out candidates, while there might be only 1 or 2 allocated lines.
+However, additional `Usable` bit is added for debug purpose.
 
-`Victim Cache:` When it comes to victim cache, the first solution seems a better choice. Because victim cache only
-a few cache lines, e.g., 8 or 16. This means a whole victim cache line walk is fast. While the list
-deletion and addtion seem may introduce some unnecessary overhead. It is all about trade-off.
+`Victim Cache:` When it comes to victim cache, the first solution seems a better choice.
+Because victim cache only a few cache lines, e.g., 8 or 16. This means a whole victim cache line
+walk is fast. While the list deletion and addtion seem may introduce some unnecessary overhead.
+It is all about trade-off.
 
 These choices affect the usage of pcache and victim cache, mostly the eviction code.
