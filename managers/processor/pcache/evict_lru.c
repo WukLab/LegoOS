@@ -10,15 +10,16 @@
 #include <lego/mm.h>
 #include <lego/wait.h>
 #include <lego/slab.h>
-#include <lego/log2.h>
-#include <lego/hash.h>
 #include <lego/kernel.h>
-#include <lego/pgfault.h>
-#include <lego/syscalls.h>
-#include <lego/random.h>
 #include <lego/jiffies.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
+
+/*
+ * pcache in the lru_list have refcount 1
+ * this means it can be freed while we walk through the list
+ * recall linux's free/lru code
+ */
 
 struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
 {

@@ -20,6 +20,10 @@
 #include <asm/io.h>
 #include <asm/tlbflush.h>
 
+/*
+ * rmap operations are carried out with pcache locked
+ */
+
 static struct pcache_rmap *alloc_pcache_rmap(void)
 {
 	struct pcache_rmap *rmap;
@@ -106,7 +110,9 @@ rmap_get_pmd(struct mm_struct *mm, unsigned long address)
 }
 
 /*
- * To make it simple, it actually returns rmap->page_table.
+ * Check that @pcm is mapped at @rmap->address
+ *
+ * To that end, this function actually returns @rmap->page_table.
  * But for safety reasons, we add several checkings here.
  * Safety means we have to make sure the pte reallly exist.
  *
@@ -342,6 +348,61 @@ int pcache_wrprotect(struct pcache_meta *pcm)
 	rmap_walk(pcm, &rwc);
 
 	return protected;
+}
+
+struct pcache_referenced_control {
+	int referenced;
+	int mapcount;
+};
+
+static int pcache_referenced_one(struct pcache_meta *pcm,
+				 struct pcache_rmap *rmap, void *arg)
+{
+	struct pcache_referenced_control *prc = arg;
+	spinlock_t *ptl = NULL;
+	pte_t *pte;
+
+	pte = rmap_get_locked_pte(pcm, rmap, &ptl);
+	if (ptep_clear_flush_young(pte))
+		prc->referenced++;
+	spin_unlock(ptl);
+
+	/*
+	 * We are locking pcache, there will not be
+	 * any rmap added during the walk anyway.
+	 */
+	prc->mapcount--;
+	if (!prc->mapcount)
+		return PCACHE_RMAP_SUCCEED;
+	return PCACHE_RMAP_AGAIN;
+}
+
+/**
+ * pcache_referenced
+ * @pcm: pcache line to count references
+ *
+ * Quick test_and_clear_referenced() for all mappings to a page,
+ * returns the number of ptes which referenced the page.
+ */
+int pcache_referenced(struct pcache_meta *pcm)
+{
+	struct pcache_referenced_control prc = {
+		.mapcount = pcache_mapcount(pcm),
+		.referenced = 0,
+	};
+	struct rmap_walk_control rwc = {
+		.arg = (void *)&prc,
+		.rmap_one = pcache_referenced_one,
+	};
+
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
+
+	if (!pcache_mapped(pcm))
+		return 0;
+
+	rmap_walk(pcm, &rwc);
+
+	return prc.referenced;
 }
 
 /*

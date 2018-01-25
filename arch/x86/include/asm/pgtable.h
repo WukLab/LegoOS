@@ -619,6 +619,34 @@ static inline pte_t ptep_get_and_clear_full(pte_t *ptep)
 	return native_local_ptep_get_and_clear(ptep);
 }
 
+static inline int ptep_test_and_clear_young(pte_t *ptep)
+{
+	int ret = 0;
+
+	if (pte_young(*ptep))
+		ret = test_and_clear_bit(_PAGE_BIT_ACCESSED,
+					 (unsigned long *)&ptep->pte);
+	return ret;
+}
+
+static inline int ptep_clear_flush_young(pte_t *ptep)
+{
+	/*
+	 * On x86 CPUs, clearing the accessed bit without a TLB flush
+	 * doesn't cause data corruption. [ It could cause incorrect
+	 * page aging and the (mistaken) reclaim of hot pages, but the
+	 * chance of that should be relatively low. ]
+	 *
+	 * So as a performance optimization don't flush the TLB when
+	 * clearing the accessed bit, it will eventually be flushed by
+	 * a context switch or a VM operation anyway. [ In the rare
+	 * event of it not getting flushed for a long time the delay
+	 * shouldn't really matter because there's no real memory
+	 * pressure for swapout to react to. ]
+	 */
+	return ptep_test_and_clear_young(ptep);
+}
+
 void ptdump_walk_pgd_level(pgd_t *pgd);
 int __init pt_dump_init(void);
 
