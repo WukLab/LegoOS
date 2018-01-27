@@ -162,6 +162,7 @@ static void init_pcache_set_map(void)
 #ifdef CONFIG_PCACHE_EVICT_LRU
 		INIT_LIST_HEAD(&pset->lru_list);
 		spin_lock_init(&pset->lru_lock);
+		atomic_set(&pset->nr_lru, 0);
 #endif
 
 		/*

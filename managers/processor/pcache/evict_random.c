@@ -21,21 +21,58 @@ struct pcache_meta *evict_find_line_random(struct pcache_set *pset)
 	int way;
 
 	pcache_for_each_way_set(pcm, pset, way) {
+		/* Someone else freed before this checking */
+		if (!PcacheUsable(pcm)) {
+			pcm = ERR_PTR(-EAGAIN);
+			goto out;
+		}
+
+		/* Someone else freed after above checking */
+		if (!get_pcache_unless_zero(pcm)) {
+			pcm = ERR_PTR(-EAGAIN);
+			goto out;
+		}
+
+		if (!trylock_pcache(pcm))
+			goto put;
+
+		if (PcacheWriteback(pcm))
+			goto unlock;
+
 		/*
-		 * Must be lines that have these bits set:
-		 *	Usable && Valid
-		 * Also it should not be locked or during Writeback
+		 * 1 for original allocation
+		 * 1 for get_pcache_unless_zero above
+		 * Otherwise, it is used by others.
 		 */
-		if (PcacheUsable(pcm) && PcacheValid(pcm) &&
-		    !PcacheWriteback(pcm)) {
-			if (!trylock_pcache(pcm))
-				continue;
-			else
-				break;
+		if (unlikely(pcache_ref_count(pcm) > 2))
+			goto unlock;
+		else
+			goto got_one;
+
+got_one:
+		/*
+		 * Now, we have a candidate that is:
+		 * 1) locked by us
+		 * 2) not under writeback
+		 * 3) not used by others
+		 */
+		SetPcacheReclaim(pcm);
+		goto out;
+
+unlock:
+		unlock_pcache(pcm);
+put:
+		/* Someone else freed in the middle */
+		if (put_pcache_testzero(pcm)) {
+			__put_pcache(pcm);
+			pcm = ERR_PTR(-EAGAIN);
+			goto out;
 		}
 	}
 
+	/* Failed to find one??? */
 	if (unlikely(way == PCACHE_ASSOCIATIVITY))
 		pcm = NULL;
+out:
 	return pcm;
 }

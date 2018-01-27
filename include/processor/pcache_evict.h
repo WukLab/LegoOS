@@ -13,6 +13,17 @@
 #include <processor/pcache_types.h>
 
 /*
+ * SUCCESS_ONE: We evicted one pcache line successfully
+ * SUCCESS_NOACTION: There are free pcache lines showed up during eviction
+ * SUCCESS_FAILED: Eviction code failed somehow
+ */
+enum evict_status {
+	PCACHE_EVICT_SUCCESS_ONE,
+	PCACHE_EVICT_SUCCESS_NOACTION,
+	PCACHE_EVICT_FAILED
+};
+
+/*
  * Common sweep threads for certain eviction algorithms:
  * 	LRU: Least-Recently Used
  */
@@ -23,14 +34,30 @@ static inline int evict_sweep_init(void) { return 0; }
 #endif
 
 /*
- * Eviction Algorithm: LRU
+ * Eviction Algorithm
+ * 	Least Recently Used
  */
 #ifdef CONFIG_PCACHE_EVICT_LRU
+static inline void dec_pset_nr_lru(struct pcache_set *pset)
+{
+	atomic_dec(&pset->nr_lru);
+}
+
+static inline void inc_pset_nr_lru(struct pcache_set *pset)
+{
+	atomic_inc(&pset->nr_lru);
+}
+
+static inline int pset_nr_lru(struct pcache_set *pset)
+{
+	return atomic_read(&pset->nr_lru);
+}
 
 static inline void
 __add_to_lru_list(struct pcache_meta *pcm, struct pcache_set *pset)
 {
 	list_add(&pcm->lru, &pset->lru_list);
+	inc_pset_nr_lru(pset);
 }
 
 static inline void
@@ -45,6 +72,7 @@ static inline void
 __del_from_lru_list(struct pcache_meta *pcm, struct pcache_set *pset)
 {
 	list_del(&pcm->lru);
+	dec_pset_nr_lru(pset);
 }
 
 static inline void
@@ -107,7 +135,8 @@ static inline void sweep_pset_lru(struct pcache_set *pset)
 #endif /* EVICT_LRU */
 
 /*
- * Eviction Algorithm: FIFO
+ * Eviction Algorithm
+ * 	First-In-First-Out (FIFO)
  */
 #ifdef CONFIG_PCACHE_EVICT_FIFO
 struct pcache_meta *evict_find_line_fifo(struct pcache_set *pset);
@@ -117,7 +146,8 @@ evict_find_line_fifo(struct pcache_set *pset) { BUG(); }
 #endif /* EVICT_FIFO */
 
 /*
- * Eviction Algorithm: RANDOM
+ * Eviction Algorithm
+ * 	Random
  */
 #ifdef CONFIG_PCACHE_EVICT_RANDOM
 struct pcache_meta *evict_find_line_random(struct pcache_set *pset);

@@ -221,23 +221,53 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int ret;
 
+	/* Part I: algorithm hook */
 	pcm = evict_find_line(pset);
-	if (!pcm)
-		return -EAGAIN;
-	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
+	if (IS_ERR_OR_NULL(pcm)) {
+		if (likely(PTR_ERR(pcm) == -EAGAIN))
+			/*
+			 * Some pcache line become avaiable,
+			 * tell caller to have a quick retry.
+			 */
+			return PCACHE_EVICT_SUCCESS_NOACTION;
+		else
+			return PCACHE_EVICT_FAILED;
+	}
 
+	/* And we are also holding another ref in case it went away */
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
+	PCACHE_BUG_ON_PCM(!PcacheReclaim(pcm), pcm);
+
+	/* Part II: mechanism hook */
 	ret = evict_line(pset, pcm);
-	if (ret)
-		return ret;
+	if (ret) {
+		ret = PCACHE_EVICT_FAILED;
+		goto unlock;
+	}
+	ClearPcacheReclaim(pcm);
+	ClearPcacheValid(pcm);
 
 	inc_pset_event(pset, PSET_EVICTION);
 	inc_pcache_event(PCACHE_EVICTION);
 
-	/* cleanup this line */
-	ClearPcacheValid(pcm);
+	ret = PCACHE_EVICT_SUCCESS_ONE;
+
+unlock:
 	unlock_pcache(pcm);
 
-	put_pcache(pcm);
-
-	return 0;
+	/*
+	 * evict_find_line() has inc'ed ref 1 for us
+	 * plus the original allocation ref 1, we *should* have
+	 * at most ref=2 here. If that is not the case, bug, and
+	 * we need to check the users of pcache again.
+	 */
+	if (unlikely(pcache_ref_count(pcm) > 2)) {
+		dump_pcache_meta(pcm, "evict/ref bug");
+		BUG();
+	} else {
+		/* kind of dangerous, right? */
+		pcache_ref_count_set(pcm, 0);
+		__put_pcache_nolru(pcm);
+	}
+	return ret;
 }

@@ -62,6 +62,7 @@ struct pcache_set {
 #ifdef CONFIG_PCACHE_EVICT_LRU
 	spinlock_t		lru_lock;
 	struct list_head	lru_list;
+	atomic_t		nr_lru;
 #endif
 
 	/*
@@ -162,6 +163,7 @@ RMAP_FLAGS(Reserved, reserved)
  * PC_usable:		Pcacheline is usable, for all users (public)
  * PC_valid:		Pcacheline has a valid mapping and content.
  * PC_dirty:		Pcacheline is dirty
+ * PC_reclaim:		Pcacheline was selected to be evicted
  * PC_writeback:	Pcacheline is being writtern back to memory
  *
  * Hack: remember to update the pcacheflag_names array in debug file.
@@ -197,6 +199,7 @@ enum pcache_meta_bits {
 	PC_usable,
 	PC_valid,
 	PC_dirty,
+	PC_reclaim,
 	PC_writeback,
 
 	__NR_PCLBITS,
@@ -272,6 +275,7 @@ PCACHE_META_BITS(Allocated, allocated)
 PCACHE_META_BITS(Usable, usable)
 PCACHE_META_BITS(Valid, valid)
 PCACHE_META_BITS(Dirty, dirty)
+PCACHE_META_BITS(Reclaim, reclaim)
 PCACHE_META_BITS(Writeback, writeback)
 
 static inline void pcache_reset_flags(struct pcache_meta *pcm)
@@ -289,9 +293,10 @@ static inline void pcache_reset_flags(struct pcache_meta *pcm)
  * Flags checked when a pcache is freed.
  * Pcache lines being freed should not have these flags set.
  * It they are, there is a problem.
+ * Basically, everything except Allocated & Usable
  */
 #define PCACHE_FLAGS_CHECK_AT_FREE				\
 	(1UL << PC_locked | 1UL << PC_valid | 1UL << PC_dirty |	\
-	 1UL << PC_writeback )
+	 1UL << PC_reclaim | 1UL << PC_writeback )
 
 #endif /* _LEGO_PROCESSOR_PCACHE_TYPES_H_ */

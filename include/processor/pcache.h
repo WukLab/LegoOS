@@ -152,7 +152,8 @@ static inline int put_pcache_testzero(struct pcache_meta *p)
 	return pcache_ref_count_dec_and_test(p);
 }
 
-void __put_pcache(struct pcache_meta *p);
+void __put_pcache_nolru(struct pcache_meta *pcm);
+void __put_pcache(struct pcache_meta *pcm);
 
 static inline void put_pcache(struct pcache_meta *p)
 {

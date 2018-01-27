@@ -159,14 +159,23 @@ static inline void pcache_free_check(struct pcache_meta *pcm)
 	pcache_free_check_bad(pcm);
 }
 
-/* Free a pcache line, return it back to free pool within a set */
-void __put_pcache(struct pcache_meta *pcm)
+/* Called by sweep function that has lru removed already */
+void __put_pcache_nolru(struct pcache_meta *pcm)
 {
 	pcache_free_check(pcm);
 
-	detach_from_lru(pcm);
-
+	/* pcache line is actually freed once flags are reset to 0 */
 	pcache_reset_flags(pcm);
+}
+
+/*
+ * Called when refcount drops to 0, which means @pcm has no users anymore.
+ * Free it, return it back to the free pool within the set @pcm belongs to.
+ */
+void __put_pcache(struct pcache_meta *pcm)
+{
+	detach_from_lru(pcm);
+	__put_pcache_nolru(pcm);
 }
 
 static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
@@ -217,12 +226,12 @@ static struct pcache_meta *
 pcache_alloc_slowpath(struct pcache_set *pset, unsigned long address)
 {
 	struct pcache_meta *pcm;
-	int ret;
 	unsigned long alloc_start = jiffies;
+	enum evict_status ret;
 
 retry:
 	ret = pcache_evict_line(pset, address);
-	if (ret)
+	if (unlikely(ret == PCACHE_EVICT_FAILED))
 		return NULL;
 
 	/* Do we still have time? */

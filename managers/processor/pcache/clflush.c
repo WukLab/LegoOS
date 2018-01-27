@@ -120,6 +120,15 @@ int pcache_flush_one(struct pcache_meta *pcm)
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 	PCACHE_BUG_ON_PCM(PcacheWriteback(pcm), pcm);
 
+	/*
+	 * XXX:
+	 * Currently only the eviction will call flush, later we may
+	 * add other things such as process exit, chkpoint etc.
+	 * 
+	 * So, for now add this check to catch bugs.
+	 */
+	PCACHE_BUG_ON_PCM(!PcacheReclaim(pcm), pcm);
+
 	SetPcacheWriteback(pcm);
 	rmap_walk(pcm, &rwc);
 	ClearPcacheWriteback(pcm);
