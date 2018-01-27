@@ -78,6 +78,8 @@ struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
 	}
 
 	list_for_each_entry_reverse(pcm, &pset->lru_list, lru) {
+		PCACHE_BUG_ON_PCM(PcacheReclaim(pcm), pcm);
+
 		/*
 		 * Someone else freed at the same time
 		 * Counter is updated within lru_lock, but we are holding it.
@@ -87,6 +89,14 @@ struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
 			pcm = ERR_PTR(-EAGAIN);
 			goto unlock_lru;
 		}
+
+		/*
+		 * This means pcache is within common_do_fill_page(),
+		 * before pte and rmap are both setup.
+		 * Do not race with normal pgfault code
+		 */
+		if (unlikely(!PcacheValid(pcm)))
+			goto put_pcache;
 
 		if (!trylock_pcache(pcm))
 			goto put_pcache;
@@ -101,16 +111,17 @@ struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
 		 */
 		if (unlikely(pcache_ref_count(pcm) > 2))
 			goto unlock_pcache;
-		else
-			goto got_one;
 
-got_one:
 		/*
-		 * Now, we have a candidate that is:
+		 * Yeah! We have a candidate that is:
+		 * 0) Valid, mapped to user pgtable
 		 * 1) locked by us
 		 * 2) not under writeback
 		 * 3) not used by others
+		 *
+		 * Remove it from LRU list, and set Reclaim
 		 */
+		__del_from_lru_list(pcm, pset);
 		SetPcacheReclaim(pcm);
 		goto unlock_lru;
 
@@ -157,8 +168,18 @@ void sweep_pset_lru(struct pcache_set *pset)
 	nr_to_sweep = get_sweep_count(pset);
 
 	list_for_each_entry_safe(pcm, n, &pset->lru_list, lru) {
+		PCACHE_BUG_ON_PCM(PcacheReclaim(pcm), pcm);
+
 		if (unlikely(lru_get_pcache(pcm)))
 			goto check_next;
+
+		/*
+		 * This means pcache is within common_do_fill_page(),
+		 * before pte and rmap are both setup.
+		 * Do not race with normal pgfault code
+		 */
+		if (unlikely(!PcacheValid(pcm)))
+			goto put_pcache;
 
 		/* locked? leave it alone */
 		if (!trylock_pcache(pcm))

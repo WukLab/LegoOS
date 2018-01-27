@@ -180,15 +180,15 @@ void __put_pcache(struct pcache_meta *pcm)
 
 static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
 {
-	/*
-	 * _refcount = 1  for the caller
-	 * _mapcount = 0
-	 */
-	init_pcache_ref_count(pcm);
-	pcache_mapcount_reset(pcm);
-
 	INIT_LIST_HEAD(&pcm->rmap);
 	init_pcache_lru(pcm);
+
+	/*
+	 * _mapcount = 0
+	 * _refcount = 1  for the caller
+	 */
+	pcache_mapcount_reset(pcm);
+	init_pcache_ref_count(pcm);
 }
 
 /*

@@ -118,6 +118,10 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 
 	pte_set(page_table, entry);
 
+	/*
+	 * Also informs eviction code that we could be
+	 * selected as the eviction candidate.
+	 */
 	SetPcacheValid(pcm);
 
 	spin_unlock(ptl);

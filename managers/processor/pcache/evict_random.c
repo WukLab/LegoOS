@@ -21,16 +21,46 @@ struct pcache_meta *evict_find_line_random(struct pcache_set *pset)
 	int way;
 
 	pcache_for_each_way_set(pcm, pset, way) {
-		/* Someone else freed before this checking */
+		/*
+		 * Still under alloc setup, or
+		 * freed by someone else before this checking
+		 */
 		if (!PcacheUsable(pcm)) {
 			pcm = ERR_PTR(-EAGAIN);
 			goto out;
 		}
 
-		/* Someone else freed after above checking */
+		/*
+		 * Someone else freed after above checking
+		 * This is conceptually correct. Worst case:
+		 *
+		 *  	CPU0			CPU1
+		 * t0	PcacheUsable (above)
+		 * t1				__put_pcache (free pool)   ref=0
+		 * t2	<interrupt>
+		 * t3	..			pcache_alloc
+		 * t4				    init_pcache_ref_count  ref=1
+		 * t5				    <interrupt>
+		 * t6	get_pcache_unless_zero      ..			   ref=2
+		 * t7				    ..
+		 * t8				    ..
+		 * t9				    [SetPcacheUsable]
+		 * t10				common_do_fill_page()
+		 * t11				    rmap ops etc need lock_pcache
+		 * t12				    [SetPcacheValid]
+		 * t13	trylock_pcache
+		 */
 		if (!get_pcache_unless_zero(pcm)) {
 			pcm = ERR_PTR(-EAGAIN);
 			goto out;
+		} else {
+			/* within timeframe t7-t9 above */
+			if (unlikely(!PcacheUsable(pcm)))
+				goto put;
+
+			/* within timeframe t10-t12 above */
+			if (unlikely(!PcacheValid(pcm)))
+				goto put;
 		}
 
 		if (!trylock_pcache(pcm))
@@ -46,10 +76,7 @@ struct pcache_meta *evict_find_line_random(struct pcache_set *pset)
 		 */
 		if (unlikely(pcache_ref_count(pcm) > 2))
 			goto unlock;
-		else
-			goto got_one;
 
-got_one:
 		/*
 		 * Now, we have a candidate that is:
 		 * 1) locked by us
@@ -62,7 +89,7 @@ got_one:
 unlock:
 		unlock_pcache(pcm);
 put:
-		/* Someone else freed in the middle */
+		/* Someone else put_pcache() in the middle */
 		if (put_pcache_testzero(pcm)) {
 			__put_pcache(pcm);
 			pcm = ERR_PTR(-EAGAIN);

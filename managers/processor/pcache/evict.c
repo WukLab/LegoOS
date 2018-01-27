@@ -237,6 +237,7 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	/* And we are also holding another ref in case it went away */
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 	PCACHE_BUG_ON_PCM(!PcacheReclaim(pcm), pcm);
+	PCACHE_BUG_ON_PCM(pcache_ref_count(pcm) > 2, pcm);
 
 	/* Part II: mechanism hook */
 	ret = evict_line(pset, pcm);
