@@ -1,10 +1,10 @@
-# General
+# Pcache and Victim Cache Organization
 Our pcache and victim cache are allocated and arranged as a big array. As for
 pcache we look at it in a *cache set view*, which means consecutive pcache lines
 are not relevant in natual. As for victim cache, we simply treat it as a big array
 and walk through it one by one.
 
-# Cache Allocation
+# Allocation/Eviction SMP Consideration
 The alloc/free of both pcache and victim cache are simple: each pcache line or
 victim cache line has a `Allocated` bit to indicate if this line is free or not.
 The `Allocated` bit is manipulated by atomic bit operations, thus SMP safe. This
@@ -49,7 +49,27 @@ However, additional `Usable` bit is added for debug purpose.
 
 `Victim Cache:` When it comes to victim cache, the first solution seems a better choice.
 Because victim cache only a few cache lines, e.g., 8 or 16. This means a whole victim cache line
-walk is fast. While the list deletion and addtion seem may introduce some unnecessary overhead.
+walk is fast. While the list deletion and addition seem may introduce some unnecessary overhead.
 It is all about trade-off.
 
 These choices affect the usage of pcache and victim cache, mostly the eviction code.
+
+# More on above two solutions
+The first solution is used if evict_random is configured. The second solution is used when
+evict_lru is configured.
+
+I do not have any doubt about second solution, it works, though with a lot SMP pain in ass.
+But I do have more to say about the first solution, which is adding another usable bit.
+The `Usable` bit *only* ensures other threads will not use unmature pcache, but it can not
+prevent other threads seeing a going-to-be-freed pcache.
+
+What is this going-to-be-freed asshole? Let us consider this case: CPU0 is doing eviction
+and checked the `Usable` bit, which is set. Then CPU0 thought this cache line is all set,
+ready to be torqued. Before doing all the dirty work, CPU0 will `get_pcache_unless_zero()`
+first to make sure the pcache will not go away in the middle. However, meanwhile, CPU1 did
+a `put_pcache()` *and* a consecutive `pcache_alloc()` right before CPU0 did called
+`get_pcache_unless_zero()`. Bang! CPU0 may use an mature pcache line, cause CPU1's `pcache_init_ref_count()`
+may come before CPU1's `get_pcache_unless_zero()`! How to solve this? CPU0 need to add
+additional checking after `get_pcache_unless_zero()`.
+
+For more details, please check the code in `pcache/evcit_random.c`, which has more pretty explanation.
