@@ -27,7 +27,17 @@
  *
  * Be careful against pcache eviction
  */
-void exit_pcache_mmap(struct mm_struct *mm)
+void pcache_process_exit(struct mm_struct *mm)
 {
 	print_pcache_events();
+}
+
+/*
+ * Called when a thread within a process exit.
+ * This function will wait any pending pcache activities related to this thread
+ * to finish. Pcache leftover cleanup is done by pcache_process_exit().
+ */
+void pcache_thread_exit(struct task_struct *tsk)
+{
+
 }

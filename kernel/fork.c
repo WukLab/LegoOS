@@ -188,10 +188,8 @@ static inline void __mmput(struct mm_struct *mm)
 	BUG_ON(atomic_read(&mm->mm_users));
 	BUG_ON(mm == &init_mm);
 
-	/*
-	 * Cleanup pcache lines
-	 */
-	exit_pcache_mmap(mm);
+	/* Remove leftover of this process in pcache */
+	pcache_process_exit(mm);
 
 	/* dec mm->mm_count */
 	mmdrop(mm);

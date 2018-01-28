@@ -13,7 +13,9 @@
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
 #include <lego/debug_locks.h>
+
 #include <processor/pcache.h>
+#include <processor/processor.h>
 
 #ifdef CONFIG_DEBUG_EXIT
 #define debug_exit(fmt, ...)	\
@@ -28,6 +30,9 @@ static void exit_mm(struct task_struct *tsk)
 
 	mm_release(tsk, mm);
 	barrier();
+
+	/* Wait for any pending pcache activities */
+	pcache_thread_exit(tsk);
 
 	task_lock(tsk);
 	tsk->mm = NULL;
