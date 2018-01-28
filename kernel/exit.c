@@ -127,8 +127,6 @@ void __noreturn do_exit(long code)
 	/* Make sure we are holding no locks */
 	debug_check_no_locks_held();
 
-	exit_dump_pcache_events(tsk);
-
 	/* Now, time to say goodbye. */
 	preempt_disable();
 	do_task_dead();

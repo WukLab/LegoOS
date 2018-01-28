@@ -29,5 +29,5 @@
  */
 void exit_pcache_mmap(struct mm_struct *mm)
 {
-
+	print_pcache_events();
 }
