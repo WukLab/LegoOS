@@ -152,25 +152,49 @@ static inline void mm_free_pgd(struct mm_struct *mm)
 	pgd_free(mm, mm->pgd);
 }
 
-static inline void __mmput(struct mm_struct *mm)
+static void check_mm(struct mm_struct *mm)
 {
-	BUG_ON(atomic_read(&mm->mm_users));
-	BUG_ON(mm == &init_mm);
-
-	mm_free_pgd(mm);
-	kfree(mm);
+	/* TODO: check nr_ptes */
 }
 
 /*
- * Called when the last reference to the mm
- * is dropped: either by a lazy thread or by
- * mmput. Free the page directory and the mm.
+ * Called when the last reference to the mm is dropped:
+ * either by a lazy thread or by mmput (mm_users=0, mm_count=0).
+ * Free the page directory and the mm.
  */
 void __mmdrop(struct mm_struct *mm)
 {
 	BUG_ON(mm == &init_mm);
 	mm_free_pgd(mm);
+	check_mm(mm);
 	kfree(mm);
+}
+
+/*
+ * One process holds 1 mm_count.
+ * Each thread within a process holds 1 mm_users.
+ *
+ * Call when the final thread of a process exit, thus mm_users=0
+ *
+ * However, this @mm may still have other users such as other kernel
+ * process. So the final free of @mm itself is made possible by mmdrop(),
+ * which decrement the mm_users.
+ *
+ * Although Lego does not share user mm with kernel process,
+ * also there is no active_mm in Lego. But we follow the old code flow.
+ */
+static inline void __mmput(struct mm_struct *mm)
+{
+	BUG_ON(atomic_read(&mm->mm_users));
+	BUG_ON(mm == &init_mm);
+
+	/*
+	 * Cleanup pcache lines
+	 */
+	exit_pcache_mmap(mm);
+
+	/* dec mm->mm_count */
+	mmdrop(mm);
 }
 
 /*

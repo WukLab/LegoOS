@@ -11,6 +11,7 @@ obj-y += debug.o
 obj-y += evict.o
 obj-y += stat.o
 obj-y += syscall.o
+obj-y += mmap.o
 obj-$(CONFIG_PCACHE_PREFETCH) += prefetch.o
 obj-$(CONFIG_PCACHE_EVICTION_VICTIM) += victim.o victim_flush.o
 
