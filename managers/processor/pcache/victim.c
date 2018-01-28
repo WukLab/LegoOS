@@ -181,19 +181,29 @@ static atomic_t nr_allocated_victims = ATOMIC_INIT(0);
 static LIST_HEAD(allocated_victims);
 static DEFINE_SPINLOCK(allocated_victims_lock);
 
+static inline void __enqueue_allocated_victim(struct pcache_victim_meta *v)
+{
+	list_add_tail(&v->next, &allocated_victims);
+	atomic_inc(&nr_allocated_victims);
+}
+
 static inline void enqueue_allocated_victim(struct pcache_victim_meta *v)
 {
 	spin_lock(&allocated_victims_lock);
-	list_add_tail(&v->next, &allocated_victims);
-	atomic_inc(&nr_allocated_victims);
+	__enqueue_allocated_victim(v);
 	spin_unlock(&allocated_victims_lock);
+}
+
+static inline void __dequeue_allocated_victim(struct pcache_victim_meta *v)
+{
+	list_del_init(&v->next);
+	atomic_dec(&nr_allocated_victims);
 }
 
 static inline void dequeue_allocated_victim(struct pcache_victim_meta *v)
 {
 	spin_lock(&allocated_victims_lock);
-	list_del_init(&v->next);
-	atomic_dec(&nr_allocated_victims);
+	__dequeue_allocated_victim(v);
 	spin_unlock(&allocated_victims_lock);
 }
 
@@ -212,16 +222,20 @@ const struct trace_print_flags victimflag_names[] = {
 
 void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason)
 {
-	pr_debug("victim:%p nr_fill:%d flags:(%pGV)\n",
-		victim, atomic_read(&victim->nr_fill_pcache), &victim->flags);
+	pr_debug("victim:%p refcount:%d nr_fill:%d locked:%d flags:(%pGV)\n",
+		victim, atomic_read(&victim->_refcount),
+		atomic_read(&victim->nr_fill_pcache), spin_is_locked(&victim->lock),
+		&victim->flags);
 	if (reason)
 		pr_debug("victim dumped because: %s\n", reason);
 }
 
 static void victim_free_hit_entries(struct pcache_victim_meta *victim);
 
-static void victim_free(struct pcache_victim_meta *v)
+static void __put_victim_nolist(struct pcache_victim_meta *v)
 {
+	PCACHE_BUG_ON_VICTIM(victim_ref_count(v), v);
+
 	PCACHE_BUG_ON_VICTIM(!VictimAllocated(v) || !VictimFlushed(v) ||
 			      VictimWriteback(v) || VictimLocked(v), v);
 
@@ -232,15 +246,16 @@ static void victim_free(struct pcache_victim_meta *v)
 	v->flags = 0;
 }
 
+/* Called when refcount drops to 0 */
 void __put_victim(struct pcache_victim_meta *v)
 {
 	dequeue_allocated_victim(v);
-	victim_free(v);
+	__put_victim_nolist(v);
 }
 
 /*
  * We can ONLY evict line if it has been written back to memory (Flushed).
- * We can NOT evict lines that are currently filling pcache.
+ * We can NOT evict lines that are currently filling back to pcache.
  * That is all.
  */
 static struct pcache_victim_meta *
@@ -255,63 +270,89 @@ find_victim_to_evict(void)
 	spin_lock(&allocated_victims_lock);
 	list_for_each_entry_safe(v, saver, &allocated_victims, next) {
 		PCACHE_BUG_ON_VICTIM(!VictimAllocated(v), v);
+		PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
 
 		/*
-		 * Someone has freed this victim
-		 * Definitely worth a retry
+		 * Grab a ref first in case it goes away,
+		 * Check if someone else freed one before us.
 		 */
 		if (unlikely(!get_victim_unless_zero(v)))
-			goto unlock_out;
-		spin_unlock(&allocated_victims_lock);
+			goto out_unlock_list;
 
 		/*
-		 * Skip lines have not been flushed
-		 * Normally they will be flushed back soon
+		 * Skip victim that has not been flushed back,
+		 * kvictim_flushd will flush it soon.
 		 */
 		if (!VictimFlushed(v))
-			goto put_cont;
+			goto loop_put;
+
+		/* Flushed also implies it must have data */
+		PCACHE_BUG_ON_VICTIM(!VictimHasdata(v), v);
 
 		/* Lock contention? */
 		if (!spin_trylock(&v->lock))
-			goto put_cont;
+			goto loop_put;
 
-		/* Victim is filling pcache? */
-		if (likely(!victim_is_filling(v))) {
-			/* Selected by another eviction thread? */
-			if (TestSetVictimEvicting(v)) {
-				spin_unlock(&v->lock);
-				goto put_cont;
-			}
+		/*
+		 * Skip victim that is filling back to pcache
+		 * Synchronize with victim_try_fill_pcache()
+		 */
+		if (unlikely(victim_is_filling(v)))
+			goto loop_unlock_victim;
 
-			found = true;
-			spin_unlock(&v->lock);
-			goto out;
-		} else {
-			PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
-			spin_unlock(&v->lock);
-			goto put_cont;
+		/*
+		 * 1 for original allocation
+		 * 1 for get_victim above
+		 * Otherwise it is used by others
+		 *
+		 * XXX
+		 * Currently only eviction, filling, flush routines
+		 * those are syned by different things. And this simple
+		 * refcount check should work. Be careful if we add more.
+		 */
+		if (unlikely(victim_ref_count(v) > 2))
+			goto loop_unlock_victim;
+
+		/*
+		 * Yeah! We have a victim candidate that is:
+		 * 1) Flushed
+		 * 2) locked by us
+		 * 3) not filling pcache
+		 *
+		 * Now set the Evicting flag, unlock the victim,
+		 * and remove it from allocated_victims_list.
+		 * But we still hold 1 more ref here.
+		 */
+		if (unlikely(TestSetVictimEvicting(v))) {
+			dump_pcache_victim(v, NULL);
+			BUG();
 		}
-put_cont:
-		put_victim(v);
-		spin_lock(&allocated_victims_lock);
+		spin_unlock(&v->lock);
+		__dequeue_allocated_victim(v);
+
+		found = true;
+		goto out_unlock_list;
+
+loop_unlock_victim:
+		spin_unlock(&v->lock);
+loop_put:
+		/*
+		 * Someone else freed a victim, jump out and retry.
+		 * We are still holding the list lock, be careful.
+		 */
+		if (unlikely(put_victim_testzero(v))) {
+			__dequeue_allocated_victim(v);
+			__put_victim_nolist(v);
+			goto out_unlock_list;
+		}
 	}
-unlock_out:
+
+out_unlock_list:
 	spin_unlock(&allocated_victims_lock);
-out:
+
 	if (likely(found))
 		return v;
 	return NULL;
-}
-
-static inline int do_victim_eviction(struct pcache_victim_meta *v)
-{
-	/*
-	 * We grabed a ref during searching.
-	 * Currently, if we are here, the ref must be 1.
-	 * The following put will free this victim.
-	 */
-	put_victim(v);
-	return 0;
 }
 
 /*
@@ -323,12 +364,32 @@ static int victim_evict_line(void)
 {
 	struct pcache_victim_meta *victim;
 
+	/*
+	 * If a victim is selected to be evicted, it is removed
+	 * from the allocated_victim list, and has Evicting flag set.
+	 * Also it has ref=1 or ref=2.
+	 */
 	victim = find_victim_to_evict();
 	if (!victim)
 		return -EAGAIN;
 
+	PCACHE_BUG_ON_VICTIM(!VictimEvicting(victim), victim);
+	if (unlikely(victim_ref_count(victim) > 2)) {
+		dump_pcache_victim(victim, "victim/ref bug");
+		BUG();
+	}
+
+	/*
+	 * This victim is out of allocated list now, thus it is impossible
+	 * for others to see it. We are currently the *only* user can see,
+	 * and use this victim. Therefore, it is safe to manually set its
+	 * refcount to 0, and then free.
+	 */
+	victim_ref_count_set(victim, 0);
+	__put_victim_nolist(victim);
+
 	inc_pcache_event(PCACHE_VICTIM_EVICTION);
-	return do_victim_eviction(victim);
+	return 0;
 }
 
 static inline void prep_new_victim(struct pcache_victim_meta *victim)
@@ -621,7 +682,6 @@ victim_fill_pcache(struct mm_struct *mm, unsigned long address,
 enum victim_check_status {
 	VICTIM_CHECK_HIT,
 	VICTIM_CHECK_MISS,
-	VICTIM_CHECK_EVICTED
 };
 
 /*
@@ -642,21 +702,6 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
 	list_for_each_entry(entry, &victim->hits, next) {
 		if (entry->address == address &&
 		    same_thread_group(entry->owner, tsk)) {
-
-			/*
-			 * This line was elected to be evicted, which implies
-			 * it must have been flushed back already. We don't race
-			 * with eviction, safely return and tell caller to fetch
-			 * from remote memory directly.
-			 */
-			if (unlikely(VictimEvicting(victim))) {
-				PCACHE_BUG_ON_VICTIM(!VictimFlushed(victim) ||
-						      victim_is_filling(victim),
-						      victim);
-				result = VICTIM_CHECK_EVICTED;
-				goto unlock;
-			}
-
 			/*
 			 * Mark it so eviction routine will
 			 * skip this victim.
@@ -666,63 +711,64 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
 			break;
 		}
 	}
-
-unlock:
 	spin_unlock(&victim->lock);
 	return result;
 }
 
-/* Return 0 on success, otherwise on failures */
+/*
+ * Try to find if victim contains cache line maps to @address and current.
+ * We walk through all allocated victim cache lines and check one by one.
+ *
+ * Return 0 on success, otherwise on failures
+ */
 int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			   pte_t *page_table, pmd_t *pmd,
 			   unsigned long flags)
 {
 	struct pcache_victim_meta *v, *saver;
-	enum victim_check_status stat;
+	enum victim_check_status result;
 	int ret = 1;
 
 	spin_lock(&allocated_victims_lock);
 	list_for_each_entry_safe(v, saver, &allocated_victims, next) {
+		/* Evicting victim is removed from list now */
+		PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
 		PCACHE_BUG_ON_VICTIM(!VictimAllocated(v), v);
-		get_victim(v);
 
-		/*
-		 * Don't hold it:
-		 * put_victim inside switch may free it.
-		 */
-		spin_unlock(&allocated_victims_lock);
-
-		stat = victim_check_hit_entry(v, address, current);
-		put_victim(v);
-
-		switch (stat) {
+		result = victim_check_hit_entry(v, address, current);
+		switch (result) {
 		case VICTIM_CHECK_HIT:
 			ret = victim_fill_pcache(mm, address, page_table,
 						 pmd, flags, v);
+
+			victim_debug("hit: address: %#lx victim: %p", address, v);
+
 			/*
-			 * Follow the traditional design
 			 * Drop the victim once hit by pcache
 			 * (flush may hold another ref meanwhile)
 			 */
-			if (dec_and_test_victim_filling(v) && !ret)
-				put_victim(v);
-			goto out;
-		case VICTIM_CHECK_EVICTED:
-			/*
-			 * It is actually a hit, but unfortunately it is
-			 * being evicted at the same time. Return early.
-			 */
+			if (dec_and_test_victim_filling(v) && !ret) {
+				if (likely(put_victim_testzero(v))) {
+					__dequeue_allocated_victim(v);
+					__put_victim_nolist(v);
+				}
+			}
 			goto out;
 		case VICTIM_CHECK_MISS:
 			break;
+
+			/*
+			 * Another case is victim is being evicted. This implies
+			 * that victim has *already* be flushed back to memory,
+			 * otherwise it will not be selected to be evicted.
+			 */
 		default:
 			BUG();
 		}
-		spin_lock(&allocated_victims_lock);
-	}
-	spin_unlock(&allocated_victims_lock);
 
+	}
 out:
+	spin_unlock(&allocated_victims_lock);
 	return ret;
 }
 

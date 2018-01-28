@@ -100,7 +100,7 @@ struct pcache_set {
  * new field needs to be initialized in init_pcache_meta_map().
  */
 struct pcache_meta {
-	u8			bits;
+	unsigned long		bits;
 	struct list_head	rmap;
 	atomic_t		mapcount;
 	atomic_t		_refcount;

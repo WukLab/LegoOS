@@ -16,6 +16,13 @@
 
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 
+#ifdef CONFIG_DEBUG_PCACHE_VICTIM
+#define victim_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void victim_debug(const char *fmt, ...) { }
+#endif
+
 #define VICTIM_NR_ENTRIES \
 	((unsigned int)CONFIG_PCACHE_EVICTION_VICTIM_NR_ENTRIES)
 
@@ -83,7 +90,6 @@ victim_ref_add_unless(struct pcache_victim_meta *v, int nr, int u)
 /* Drop a ref, return true if ref drops to zero (no users) */
 static inline int victim_ref_count_dec_and_test(struct pcache_victim_meta *v)
 {
-	PCACHE_BUG_ON_VICTIM(victim_ref_count(v) == 0, v);
 	return atomic_dec_and_test(&v->_refcount);
 }
 
@@ -103,9 +109,16 @@ static inline void get_victim(struct pcache_victim_meta *v)
 
 void __put_victim(struct pcache_victim_meta *v);
 
+/* Drop a ref, return true if refcount fell to 0 (the victim has no users) */
+static inline int put_victim_testzero(struct pcache_victim_meta *v)
+{
+	PCACHE_BUG_ON_VICTIM(victim_ref_count(v) == 0, v);
+	return victim_ref_count_dec_and_test(v);
+}
+
 static inline void put_victim(struct pcache_victim_meta *v)
 {
-	if (victim_ref_count_dec_and_test(v))
+	if (put_victim_testzero(v))
 		__put_victim(v);
 }
 
@@ -294,13 +307,6 @@ static inline bool victim_is_filling(struct pcache_victim_meta *victim)
 		return true;
 	return false;
 }
-
-#ifdef CONFIG_DEBUG_PCACHE_VICTIM
-#define victim_debug(fmt, ...)	\
-	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
-#else
-static inline void victim_debug(const char *fmt, ...) { }
-#endif
 
 #endif /* CONFIG_PCACHE_EVICTION_VICTIM */
 

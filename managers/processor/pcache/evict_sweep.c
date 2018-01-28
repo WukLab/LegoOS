@@ -37,7 +37,6 @@ static void sweep(void)
 		sweep_pset_lru(pset);
 	}
 	end = profile_clock();
-	pr_info("%s(): %llu ns\n", __func__, end-start);
 }
 
 static int kevict_sweepd(void *unused)
