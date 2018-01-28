@@ -73,6 +73,13 @@ struct pcache_meta *evict_find_line_random(struct pcache_set *pset)
 		 * 1 for original allocation
 		 * 1 for get_pcache_unless_zero above
 		 * Otherwise, it is used by others.
+		 *
+		 * XXX:
+		 * This part need more attention.
+		 * Currently we only have pcache_alloc/put, and eviction running.
+		 * If later on, we add code such as exit_mmap(), chkpoint_flush(),
+		 * those code has to be written with caution, esp. the op sequence
+		 * of lock, get/put, flag_set etc.
 		 */
 		if (unlikely(pcache_ref_count(pcm) > 2))
 			goto unlock;
