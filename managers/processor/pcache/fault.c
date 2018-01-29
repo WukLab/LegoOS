@@ -155,7 +155,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	pcache_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
 
-	len = net_send_reply_timeout(current->home_node, P2M_LLC_MISS,
+	len = net_send_reply_timeout(get_memory_home_node(current), P2M_LLC_MISS,
 			&payload, sizeof(payload),
 			pa_cache, PCACHE_LINE_SIZE, true, DEF_NET_TIMEOUT);
 

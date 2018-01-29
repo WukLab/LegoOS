@@ -172,7 +172,7 @@ static int p2m_execve(struct p2m_execve_struct *payload,
 {
 	int ret;
 
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_EXECVE, payload,
+	ret = net_send_reply_timeout(current_memory_home_node(), P2M_EXECVE, payload,
 			payload_size, reply, reply_size, false, DEF_NET_TIMEOUT);
 
 	if (likely(ret > 0)) {

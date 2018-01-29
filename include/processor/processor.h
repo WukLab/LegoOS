@@ -15,7 +15,10 @@
 #include <generated/unistd_64.h>
 #include <lego/comp_common.h>	/* must come at last */
 
+#include <processor/processor_types.h>
+
 #ifdef CONFIG_COMP_PROCESSOR
+
 void __init processor_manager_early_init(void);
 void __init processor_manager_init(void);
 int __init pcache_range_register(u64 start, u64 size);
@@ -70,6 +73,7 @@ static inline int do_execve(const char *filename, const char * const *argv,
 {
 	BUG();
 }
+
 #endif /* CONFIG_COMP_PROCESSOR */
 
 #endif /* _LEGO_PROCESSOR_PROCESSOR_H_ */

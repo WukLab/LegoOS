@@ -105,7 +105,7 @@ static ssize_t normal_p2m_read(struct file *f, char __user *buf,
 	payload->len = count;
 	payload->offset = *off;
 
-	retlen = ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg,
+	retlen = ibapi_send_reply_imm(current_memory_home_node(), msg, len_msg,
 				      retbuf, len_retbuf, false);
 	if (unlikely(retlen == sizeof(ssize_t))) {
 		retval = *(ssize_t *)retbuf;
@@ -184,7 +184,7 @@ static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
 	}
 
 	/* Send to memory home node */
-	retlen = ibapi_send_reply_imm(DEF_MEM_HOMENODE, msg, len_msg,
+	retlen = ibapi_send_reply_imm(current_memory_home_node(), msg, len_msg,
 			&retval, sizeof(retval), false);
 	if (unlikely(retlen != sizeof(retval))) {
 		WARN_ON(1);

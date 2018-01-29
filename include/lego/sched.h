@@ -30,6 +30,8 @@
 #include <asm/switch_to.h>
 #include <asm/thread_info.h>
 
+#include <processor/processor_types.h>
+
 /*
  * Scheduling policies
  */
@@ -464,17 +466,14 @@ struct task_struct {
 	spinlock_t alloc_lock;
 
 #ifdef CONFIG_FUTEX
-/* futex */
 	struct robust_list_head __user *robust_list;
 #endif
 
 	int pagefault_disabled;
 
 #ifdef CONFIG_COMP_PROCESSOR
-	int home_node;
-#ifdef CONFIG_CHECKPOINT
-	atomic_t process_barrier;
-#endif
+/* Processor Manager Specific Data */
+	struct processor_manager pm_data;
 #endif
 
 #ifdef CONFIG_TRACE_SYSCALL

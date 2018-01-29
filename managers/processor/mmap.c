@@ -39,7 +39,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	payload.pid = current->tgid;
 	payload.brk = brk;
 
-	ret_len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_BRK,
+	ret_len = net_send_reply_timeout(current_memory_home_node(), P2M_BRK,
 			&payload, sizeof(payload), &ret_brk, sizeof(ret_brk),
 			false, DEF_NET_TIMEOUT);
 
@@ -91,7 +91,7 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	payload.flags = flags;
 	payload.pgoff = off >> PAGE_SHIFT;
 
-	ret_len = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MMAP,
+	ret_len = net_send_reply_timeout(current_memory_home_node(), P2M_MMAP,
 			&payload, sizeof(payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
 
@@ -128,7 +128,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	payload.addr = addr;
 	payload.len = len;
 
-	retlen = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MUNMAP,
+	retlen = net_send_reply_timeout(current_memory_home_node(), P2M_MUNMAP,
 			&payload, sizeof(payload), &retbuf, sizeof(retbuf),
 			false, DEF_NET_TIMEOUT);
 
@@ -195,7 +195,7 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 	payload.flags = flags;
 	payload.new_addr = new_addr;
 
-	retlen = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MREMAP,
+	retlen = net_send_reply_timeout(current_memory_home_node(), P2M_MREMAP,
 			&payload, sizeof(payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
 
@@ -287,7 +287,7 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 	payload.len = len;
 	payload.flags = flags;
 
-	ret = net_send_reply_timeout(DEF_MEM_HOMENODE, P2M_MSYNC,
+	ret = net_send_reply_timeout(current_memory_home_node(), P2M_MSYNC,
 			&payload, sizeof(payload), &retbuf, sizeof(retbuf),
 			false, DEF_NET_TIMEOUT);
 

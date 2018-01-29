@@ -125,7 +125,7 @@ static struct task_struct *dup_task_struct(struct task_struct *old, int node)
 	new->wake_q.next = NULL;
 
 #ifdef CONFIG_CHECKPOINT
-	atomic_set(&new->process_barrier, 0);
+	atomic_set(&new->pm_data.process_barrier, 0);
 #endif
 
 	return new;
@@ -687,7 +687,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 #endif
 
 #ifdef CONFIG_COMP_PROCESSOR
-	p->home_node = current->home_node;
+	set_memory_home_node(p, current_memory_home_node());
 #endif
 
 	/*
@@ -797,7 +797,7 @@ pid_t do_fork(unsigned long clone_flags,
 	if (clone_flags & CLONE_GLOBAL_THREAD) {
 		int ret;
 
-		p->home_node = DEF_MEM_HOMENODE;
+		set_memory_home_node(p, DEF_MEM_HOMENODE);
 		ret = p2m_fork(p, clone_flags);
 		if (ret) {
 			/* TODO: free task_struct */

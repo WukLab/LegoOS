@@ -226,7 +226,7 @@ int checkpoint_thread(struct task_struct *p)
 	BUG_ON(!test_tsk_need_checkpoint(p));
 
 	leader = p->group_leader;
-	atomic_inc(&leader->process_barrier);
+	atomic_inc(&leader->pm_data.process_barrier);
 
 	if (p != leader) {
 		set_current_state(TASK_CHECKPOINTING);
@@ -241,7 +241,7 @@ int checkpoint_thread(struct task_struct *p)
 		start = ktime_get_boottime();
 		timeout = jiffies + msecs_to_jiffies(checkpoint_barrier_timeout_msec);
 
-		while (atomic_read(&p->process_barrier) != p->signal->nr_threads) {
+		while (atomic_read(&p->pm_data.process_barrier) != p->signal->nr_threads) {
 			/*
 			 * Abort whole checkpointing, and
 			 * wake all threads:
@@ -265,7 +265,7 @@ int checkpoint_thread(struct task_struct *p)
 
 after_timeout:
 		/* Reset barrier info for next run: */
-		atomic_set(&p->process_barrier, 0);
+		atomic_set(&p->pm_data.process_barrier, 0);
 	}
 
 	clear_tsk_thread_flag(p, TIF_NEED_CHECKPOINT);
