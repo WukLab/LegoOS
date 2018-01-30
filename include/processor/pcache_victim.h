@@ -293,6 +293,10 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			   pte_t *page_table, pmd_t *pmd,
 			   unsigned long flags);
 
+/*
+ * nr_fill_pcache helpers:
+ */
+
 static inline void inc_victim_filling(struct pcache_victim_meta *victim)
 {
 	atomic_inc(&victim->nr_fill_pcache);
@@ -307,6 +311,7 @@ static inline void dec_victim_filling(struct pcache_victim_meta *victim)
 static inline int
 dec_and_test_victim_filling(struct pcache_victim_meta *victim)
 {
+	PCACHE_BUG_ON_VICTIM(atomic_read(&victim->nr_fill_pcache) == 0, victim);
 	return atomic_dec_and_test(&victim->nr_fill_pcache);
 }
 
