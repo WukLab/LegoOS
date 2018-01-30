@@ -23,17 +23,17 @@
 #include "internal.h"
 
 #ifdef CONFIG_DEBUG_HANDLE_PCACHE_FILL
-static DEFINE_RATELIMIT_STATE(pcache_debug_rs,
+static DEFINE_RATELIMIT_STATE(handle_pcache_debug_rs,
 	DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
 
-#define pcache_debug(fmt, ...)						\
+#define handle_pcache_debug(fmt, ...)						\
 ({									\
-	if (__ratelimit(&pcache_debug_rs))				\
+	if (__ratelimit(&handle_pcache_debug_rs))				\
 		pr_debug("%s() cpu%2d " fmt "\n",			\
 			__func__, smp_processor_id(), __VA_ARGS__);	\
 })
 #else
-static inline void pcache_debug(const char *fmt, ...) { }
+static inline void handle_pcache_debug(const char *fmt, ...) { }
 #endif
 
 /*
@@ -125,7 +125,7 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 	flags  = payload->flags;
 	vaddr  = payload->missing_vaddr;
 
-	pcache_debug("I nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
+	handle_pcache_debug("I nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
 		nid, pid, tgid, flags, vaddr);
 
 	p = find_lego_task_by_pid(hdr->src_nid, tgid);
@@ -142,7 +142,7 @@ int handle_p2m_llc_miss(struct p2m_llc_miss_struct *payload, u64 desc,
 	do_handle_p2m_llc_miss(p, vaddr, flags, desc);
 	do_mmap_prefetch(p, vaddr, flags, 1 << PREFETCH_ORDER);
 
-	pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
+	handle_pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
 		nid, pid, tgid, flags, vaddr);
 	return 0;
 }
