@@ -210,6 +210,7 @@ static inline void dequeue_allocated_victim(struct pcache_victim_meta *v)
 #define __def_victimflag_names						\
 	{1UL << PCACHE_VICTIM_locked,		"locked"	},	\
 	{1UL << PCACHE_VICTIM_allocated,	"allocated"	},	\
+	{1UL << PCACHE_VICTIM_usable,		"usable"	},	\
 	{1UL << PCACHE_VICTIM_hasdata,		"hasdata"	},	\
 	{1UL << PCACHE_VICTIM_writeback,	"writeback"	},	\
 	{1UL << PCACHE_VICTIM_flushed,		"flushed"	},	\
@@ -235,9 +236,9 @@ static void victim_free_hit_entries(struct pcache_victim_meta *victim);
 static void __put_victim_nolist(struct pcache_victim_meta *v)
 {
 	PCACHE_BUG_ON_VICTIM(victim_ref_count(v), v);
-
-	PCACHE_BUG_ON_VICTIM(!VictimAllocated(v) || !VictimFlushed(v) ||
-			      VictimWriteback(v) || VictimLocked(v), v);
+	PCACHE_BUG_ON_VICTIM(!VictimAllocated(v) || !VictimUsable(v) ||
+			     !VictimFlushed(v) || VictimWriteback(v) ||
+			     VictimLocked(v), v);
 
 	victim_free_hit_entries(v);
 
@@ -272,7 +273,7 @@ find_victim_to_evict(void)
 
 	spin_lock(&allocated_victims_lock);
 	list_for_each_entry_safe(v, saver, &allocated_victims, next) {
-		PCACHE_BUG_ON_VICTIM(!VictimAllocated(v), v);
+		PCACHE_BUG_ON_VICTIM(!VictimUsable(v), v);
 		PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
 
 		/*
@@ -285,11 +286,10 @@ find_victim_to_evict(void)
 		/*
 		 * Skip victim that has not been flushed back,
 		 * kvictim_flushd will flush it soon.
+		 * Flushed also implies it must have data
 		 */
 		if (!VictimFlushed(v))
 			goto loop_put;
-
-		/* Flushed also implies it must have data */
 		PCACHE_BUG_ON_VICTIM(!VictimHasdata(v), v);
 
 		/* Lock contention? */
@@ -340,8 +340,8 @@ loop_unlock_victim:
 		spin_unlock(&v->lock);
 loop_put:
 		/*
-		 * Someone else freed a victim, jump out and retry.
-		 * We are still holding the list lock, be careful.
+		 * Someone else may have freed a victim, if that is case,
+		 * jump out and let caller retry:
 		 */
 		if (unlikely(put_victim_testzero(v))) {
 			__dequeue_allocated_victim(v);
@@ -418,6 +418,12 @@ victim_alloc_fastpath(void)
 		if (likely(!TestSetVictimAllocated(v))) {
 			prep_new_victim(v);
 			enqueue_allocated_victim(v);
+
+			/*
+			 * Make the victim line visible to other
+			 * victim code such as pgfault fill path:
+			 */
+			set_victim_usable(v);
 			return v;
 		}
 	}
@@ -688,8 +694,8 @@ victim_fill_pcache(struct mm_struct *mm, unsigned long address,
 }
 
 enum victim_check_status {
-	VICTIM_CHECK_MISS,
-	VICTIM_CHECK_HIT,
+	VICTIM_MISS,
+	VICTIM_HIT,
 };
 
 /*
@@ -703,7 +709,7 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
 	struct pcache_victim_hit_entry *entry;
 	enum victim_check_status result;
 
-	result = VICTIM_CHECK_MISS;
+	result = VICTIM_MISS;
 	address &= PAGE_MASK;
 
 	spin_lock(&victim->lock);
@@ -715,7 +721,7 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
 			 * skip this victim.
 			 */
 			inc_victim_filling(victim);
-			result = VICTIM_CHECK_HIT;
+			result = VICTIM_HIT;
 			break;
 		}
 	}
@@ -733,25 +739,78 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			   pte_t *page_table, pmd_t *pmd,
 			   unsigned long flags)
 {
-	struct pcache_victim_meta *v, *saver;
+	struct pcache_victim_meta *v;
 	enum victim_check_status result;
-	int ret = 1;
+	int index, ret = 1;
 
 	victim_debug("for uva: %#lx", address);
 
 	spin_lock(&allocated_victims_lock);
-	list_for_each_entry_safe(v, saver, &allocated_victims, next) {
-		PCACHE_BUG_ON_VICTIM(!VictimAllocated(v), v);
+	for_each_victim(v, index) {
+		/*
+		 * There is a small time frame after eviction release
+		 * the lock and before frees it. If we happen to see this,
+		 * we skip this line. If victim is _not_ Evicting, it is either
+		 * Usable or simply free. Futher, this victim will _not_ be marked
+		 * as Evicting after this check, since we are holding the lock above.
+		 *
+		 * Worst case:
+		 * 		CPU0			CPU1
+		 * t0	find_victim_to_evict
+		 * t1	  spin_lock
+		 * t2	    SetVictimEvicting
+		 * t3	    dequeue
+		 * t4	  spin_unlock
+		 * t5   ..				spin_lock
+		 * t6	..
+		 * t7   ..
+		 * t8	__put_victim_nolist
+		 * t9					 VictimEvicting (1, continue)
+		 * t9     v->flags = 0;
+		 * t10					 VictimEvicting (0)
+		 * t11					 <interrupt>
+		 * t12   victim_alloc
+		 * t13   ..				 VictimUsable   (0)
+		 * t14     SetVictimUsable
+		 * t15					 VictimUsable   (1)
+		 *
+		 * VictimEvicting test can avoid the t5-t9 race. If CPU1 get an
+		 * interrupt after t10 testing, the victim got allocated agagin
+		 * by CPU0. Worst case, CPU1 does the VictimUsable test at t14.
+		 * Although semantically this victim is not the same thing.
+		 * But this is OKAY: what we want here, is just to grab
+		 * a victim that is Usable, and not being evicted, and of course,
+		 * will not be evicted if there will be a victim hit later.
+		 *
+		 * In all, these two checkings ensure us a victim that is Usable,
+		 * within the allocated victim list, and not being evicted.
+		 */
+		if (unlikely(VictimEvicting(v)))
+			continue;
+		if (unlikely(!VictimUsable(v)))
+			continue;
 
-		/* Evicting victim is removed from list */
-		PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
-
+		/*
+		 * If there is a victim cache hit, we mark the victim
+		 * as filling back to pcache state, it will not be
+		 * selected to be evicted under this state:
+		 */
 		result = victim_check_hit_entry(v, address, current);
+
 		victim_debug("hit: %d address: %#lx victim: %p",
 			result, address, v);
 
-		switch (result) {
-		case VICTIM_CHECK_HIT:
+		if (result == VICTIM_HIT) {
+			/*
+			 * victim_fill_pcache will call back to pcache fill code,
+			 * which will further try to allocate a pcache line.
+			 * If pcache is already full, it will evict one to victim.
+			 * If victim is also full, victim needs to evict one, too.
+			 * This eventually goes to find_victim_to_evict().
+			 * So, _don't_ hold the same lock:
+			 */
+			spin_unlock(&allocated_victims_lock);
+
 			ret = victim_fill_pcache(mm, address, page_table,
 						 pmd, flags, v);
 
@@ -759,28 +818,21 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			 * Drop the victim once hit by pcache
 			 * (flush may hold another ref meanwhile)
 			 */
-			if (dec_and_test_victim_filling(v) && !ret) {
-				if (likely(put_victim_testzero(v))) {
-					__dequeue_allocated_victim(v);
-					__put_victim_nolist(v);
-				}
-			}
+			if (likely(!ret && dec_and_test_victim_filling(v)))
+				put_victim(v);
 			goto out;
-		case VICTIM_CHECK_MISS:
-			break;
-
+		} else if (result == VICTIM_MISS) {
+			continue;
+		} else
 			/*
 			 * Another case is victim is being evicted. This implies
 			 * that victim has *already* be flushed back to memory,
 			 * otherwise it will not be selected to be evicted.
 			 */
-		default:
 			BUG();
-		}
-
 	}
-out:
 	spin_unlock(&allocated_victims_lock);
+out:
 	return ret;
 }
 

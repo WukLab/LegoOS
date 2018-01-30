@@ -138,7 +138,8 @@ extern void *pcache_victim_data_map;
  * victim_meta->flags
  *
  * PCACHE_VICTIM_locked:	victim cache locked. DO NOT TOUCH.
- * PCACHE_VICTIM_allocated:	victim cache allocated.
+ * PCACHE_VICTIM_allocated:	victim cache is allocated
+ * PCACHE_VICTIM_usable:	victim cache is usable for all users
  * PCACHE_VICTIM_hasdata:	victim cache has real data in its line
  * PCACHE_VICTIM_writeback:	victim cache is being written to memory.
  *
@@ -147,6 +148,7 @@ extern void *pcache_victim_data_map;
 enum pcache_victim_flags {
 	PCACHE_VICTIM_locked,
 	PCACHE_VICTIM_allocated,
+	PCACHE_VICTIM_usable,
 	PCACHE_VICTIM_hasdata,
 	PCACHE_VICTIM_writeback,
 	PCACHE_VICTIM_flushed,
@@ -194,6 +196,7 @@ static inline int TestClearVictim##uname(struct pcache_victim_meta *p)	\
 
 VICTIM_FLAGS(Locked, locked)
 VICTIM_FLAGS(Allocated, allocated)
+VICTIM_FLAGS(Usable, usable)
 VICTIM_FLAGS(Hasdata, hasdata)
 VICTIM_FLAGS(Writeback, writeback)
 VICTIM_FLAGS(Flushed, flushed)
@@ -209,6 +212,12 @@ static inline void unlock_victim(struct pcache_victim_meta *victim)
 {
 	BUG_ON(!VictimLocked(victim));
 	ClearVictimLocked(victim);
+}
+
+static inline void set_victim_usable(struct pcache_victim_meta *victim)
+{
+	SetVictimUsable(victim);
+	barrier();
 }
 
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM

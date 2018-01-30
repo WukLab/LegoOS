@@ -71,6 +71,7 @@ static inline void set_pcache_usable(struct pcache_meta *pcm)
 	}
 #else
 	SetPcacheUsable(pcm);
+	barrier();
 #endif
 }
 
