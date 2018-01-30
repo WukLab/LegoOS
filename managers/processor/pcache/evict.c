@@ -221,6 +221,8 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int ret;
 
+	pcache_debug("pset: %p, for uva: %#lx", pset, address);
+
 	/* Part I: algorithm hook */
 	pcm = evict_find_line(pset);
 	if (IS_ERR_OR_NULL(pcm)) {

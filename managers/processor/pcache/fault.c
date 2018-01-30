@@ -36,20 +36,20 @@
 
 #ifdef CONFIG_DEBUG_PCACHE_FILL
 #ifdef CONFIG_DEBUG_PCACHE_FILL_UNLIMITED
-#define pcache_debug(fmt, ...)						\
+#define pcache_fill_debug(fmt, ...)						\
 	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
 #else
 /* 4 msg/sec at most? */
-static DEFINE_RATELIMIT_STATE(pcache_debug_rs, 1, 4);
+static DEFINE_RATELIMIT_STATE(pcache_fill_debug_rs, 1, 4);
 
-#define pcache_debug(fmt, ...)						\
+#define pcache_fill_debug(fmt, ...)						\
 ({									\
-	if (__ratelimit(&pcache_debug_rs))				\
+	if (__ratelimit(&pcache_fill_debug_rs))				\
 		pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__);	\
 })
 #endif
 #else
-static inline void pcache_debug(const char *fmt, ...) { }
+static inline void pcache_fill_debug(const char *fmt, ...) { }
 #endif
 
 static void print_bad_pte(struct mm_struct *mm, unsigned long addr, pte_t pte,
@@ -152,7 +152,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	payload.flags = flags;
 	payload.missing_vaddr = address;
 
-	pcache_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
+	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
 
 	len = net_send_reply_timeout(get_memory_home_node(current), P2M_LLC_MISS,
@@ -186,7 +186,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 
 	ret = 0;
 out:
-	pcache_debug("O pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p ret:%d(%s)",
+	pcache_fill_debug("O pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p ret:%d(%s)",
 		current->pid, current->tgid, address, flags, pa_cache, ret, perror(ret));
 	return ret;
 }

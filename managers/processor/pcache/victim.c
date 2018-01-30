@@ -267,6 +267,9 @@ find_victim_to_evict(void)
 	if (atomic_read(&nr_allocated_victims) < VICTIM_NR_ENTRIES)
 		return NULL;
 
+	victim_debug("begin selection. nr_allocated: %d",
+		atomic_read(&nr_allocated_victims));
+
 	spin_lock(&allocated_victims_lock);
 	list_for_each_entry_safe(v, saver, &allocated_victims, next) {
 		PCACHE_BUG_ON_VICTIM(!VictimAllocated(v), v);
@@ -513,6 +516,9 @@ static int victim_insert_hit_entry(struct pcache_meta *pcm,
 	struct pcache_victim_meta *victim = arg;
 	struct pcache_victim_hit_entry *hit;
 
+	victim_debug("pcm: %p, uva: %#lx, owner_pid: %d",
+		pcm, rmap->address & PAGE_MASK, rmap->owner->pid);
+
 	hit = alloc_victim_hit_entry();
 	if (!hit)
 		return PCACHE_RMAP_FAILED;
@@ -598,8 +604,10 @@ void victim_finish_insert(struct pcache_victim_meta *victim)
 	void *src, *dst;
 	struct pcache_meta *pcm = victim->pcm;
 
+	victim_debug("pcm: %p victim: %p", pcm, victim);
+
 	BUG_ON(!pcm);
-	BUG_ON(pcache_mapped(pcm));
+	PCACHE_BUG_ON_PCM(pcache_mapped(pcm), pcm);
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 	PCACHE_BUG_ON_VICTIM(!VictimAllocated(victim) ||
 			      VictimHasdata(victim) ||
@@ -680,8 +688,8 @@ victim_fill_pcache(struct mm_struct *mm, unsigned long address,
 }
 
 enum victim_check_status {
-	VICTIM_CHECK_HIT,
 	VICTIM_CHECK_MISS,
+	VICTIM_CHECK_HIT,
 };
 
 /*
@@ -729,19 +737,23 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 	enum victim_check_status result;
 	int ret = 1;
 
+	victim_debug("for uva: %#lx", address);
+
 	spin_lock(&allocated_victims_lock);
 	list_for_each_entry_safe(v, saver, &allocated_victims, next) {
-		/* Evicting victim is removed from list now */
-		PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
 		PCACHE_BUG_ON_VICTIM(!VictimAllocated(v), v);
 
+		/* Evicting victim is removed from list */
+		PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
+
 		result = victim_check_hit_entry(v, address, current);
+		victim_debug("hit: %d address: %#lx victim: %p",
+			result, address, v);
+
 		switch (result) {
 		case VICTIM_CHECK_HIT:
 			ret = victim_fill_pcache(mm, address, page_table,
 						 pmd, flags, v);
-
-			victim_debug("hit: address: %#lx victim: %p", address, v);
 
 			/*
 			 * Drop the victim once hit by pcache

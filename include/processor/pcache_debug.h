@@ -23,6 +23,9 @@ extern const struct trace_print_flags pcacheflag_names[];
 
 #ifdef CONFIG_DEBUG_PCACHE
 
+#define pcache_debug(fmt, ...)						\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 extern const struct trace_print_flags victimflag_names[];
 void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason);
@@ -59,6 +62,7 @@ do {									\
 } while (0)
 
 #else
+#define pcache_debug(fmt, ...)			do { } while (0)
 #define PCACHE_BUG_ON(cond)			do { } while (0)
 #define PCACHE_WARN_ON(cond)			do { } while (0)
 #define PCACHE_WARN(cond, format...)		do { } while (0)
