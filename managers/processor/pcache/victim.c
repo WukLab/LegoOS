@@ -149,6 +149,7 @@ static atomic_t nr_usable_victims = ATOMIC_INIT(0);
 static LIST_HEAD(usable_victims);
 static DEFINE_SPINLOCK(usable_victims_lock);
 
+/* FIFO: Add to tail, while eviction search from head */
 static inline void __enqueue_usable_victim(struct pcache_victim_meta *v)
 {
 	list_add_tail(&v->next, &usable_victims);
@@ -191,8 +192,8 @@ const struct trace_print_flags victimflag_names[] = {
 
 void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason)
 {
-	pr_debug("victim:%p refcount:%d nr_fill:%d locked:%d flags:(%pGV)\n",
-		victim, atomic_read(&victim->_refcount),
+	pr_debug("victim:%p index:%d refcount:%d nr_fill:%d locked:%d flags:(%pGV)\n",
+		victim, victim_index(victim), atomic_read(&victim->_refcount),
 		atomic_read(&victim->nr_fill_pcache), spin_is_locked(&victim->lock),
 		&victim->flags);
 	if (reason)
@@ -225,7 +226,9 @@ void __put_victim(struct pcache_victim_meta *v)
 /*
  * We can ONLY evict line if it has been written back to memory (Flushed).
  * We can NOT evict lines that are currently filling back to pcache.
- * That is all.
+ * And we only check usable lines.
+ *
+ * Search based on FIFO order.
  */
 static struct pcache_victim_meta *
 find_victim_to_evict(void)
@@ -243,6 +246,8 @@ find_victim_to_evict(void)
 	list_for_each_entry_safe(v, saver, &usable_victims, next) {
 		PCACHE_BUG_ON_VICTIM(!VictimUsable(v), v);
 		PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
+
+		victim_debug("    checking v%u", victim_index(v));
 
 		/*
 		 * Grab a ref first in case it goes away,
@@ -321,8 +326,10 @@ loop_put:
 out_unlock_list:
 	spin_unlock(&usable_victims_lock);
 
-	if (likely(found))
+	if (likely(found)) {
+		victim_debug("finish selection, evict v%u", victim_index(v));
 		return v;
+	}
 	return NULL;
 }
 
@@ -580,7 +587,7 @@ void victim_finish_insert(struct pcache_victim_meta *victim)
 	void *src, *dst;
 	struct pcache_meta *pcm = victim->pcm;
 
-	victim_debug("pcm: %p victim: %p", pcm, victim);
+	victim_debug("pcm: %p v%u", pcm, victim_index(victim));
 
 	BUG_ON(!pcm);
 	PCACHE_BUG_ON_PCM(pcache_mapped(pcm), pcm);
@@ -685,6 +692,10 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
 
 	spin_lock(&victim->lock);
 	list_for_each_entry(entry, &victim->hits, next) {
+		victim_debug("    v%d[%#lx %d] u[%#lx %d]",
+			victim_index(victim), entry->address, entry->owner->tgid,
+			address, tsk->tgid);
+
 		if (entry->address == address &&
 		    same_thread_group(entry->owner, tsk)) {
 			/*
@@ -714,7 +725,7 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 	enum victim_check_status result;
 	int index, ret = 1;
 
-	victim_debug("for uva: %#lx", address);
+	victim_debug("checking uva: %#lx tgid: %d", address, current->tgid);
 
 	spin_lock(&usable_victims_lock);
 	for_each_victim(v, index) {
@@ -803,8 +814,9 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 		 */
 		result = victim_check_hit_entry(v, address, current);
 
-		victim_debug("hit: %d address: %#lx victim: %p",
-			result, address, v);
+		victim_debug("v%u: %s for uva:%#lx. nr_usable: %d",
+			victim_index(v), result ? "hit" : "miss",
+			address, atomic_read(&nr_usable_victims));
 
 		if (result == VICTIM_HIT) {
 			/*

@@ -232,6 +232,14 @@ struct pcache_victim_meta *
 victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm);
 void victim_finish_insert(struct pcache_victim_meta *victim);
 
+static inline unsigned int victim_index(struct pcache_victim_meta *victim)
+{
+	unsigned int index = victim - pcache_victim_meta_map;
+
+	BUG_ON(index >= VICTIM_NR_ENTRIES);
+	return index;
+}
+
 /**
  * pcache_victim_to_kva
  * @victim: victim cache line in question
@@ -240,9 +248,9 @@ void victim_finish_insert(struct pcache_victim_meta *victim);
  */
 static inline void *pcache_victim_to_kva(struct pcache_victim_meta *victim)
 {
-	unsigned long index = victim - pcache_victim_meta_map;
+	unsigned int index;
 
-	BUG_ON(index >= VICTIM_NR_ENTRIES);
+	index = victim_index(victim);
 	return (void *) (pcache_victim_data_map + index * PCACHE_LINE_SIZE);
 }
 
