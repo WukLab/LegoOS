@@ -314,7 +314,7 @@ retry:
 		goto retry;
 	}
 	else
-		printk(KERN_CRIT "got local LID %d\n", ctx->portinfo.lid);
+		fit_debug("got local LID %d\n", ctx->portinfo.lid);
 
 	//test_printk(KERN_ALERT "I am here before return client_init_interface\n");
 	return ctx;
@@ -517,6 +517,35 @@ int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, i
 int global_lid[CONFIG_FIT_NR_NODES];
 static int first_qpn = 72;
 
+#define set_global_lid(nid, lid)				\
+	do {							\
+		BUILD_BUG_ON(nid >= CONFIG_FIT_NR_NODES);	\
+		BUG_ON(nid >= CONFIG_FIT_NR_NODES);		\
+		global_lid[nid] = lid;				\
+	} while (0)
+
+static inline void check_global_lid_array(void)
+{
+	bool bug = false;
+	int i;
+
+	for (i = 0; i < CONFIG_FIT_NR_NODES; i++) {
+		if (!global_lid[i]) {
+			bug = true;
+			pr_info(" global_lid[%d] not assigned\n", i);
+		}
+	}
+	if (bug)
+		panic("global_lid array not initialized properly");
+}
+
+static inline void set_global_lid_array(void)
+{
+	set_global_lid(0, 15);
+	set_global_lid(1, 17);
+	set_global_lid(2, 19);
+}
+
 /*
  * Statically setting LIDs and QPNs now
  * since we don't have socket working
@@ -529,9 +558,8 @@ void init_global_lid_qpn(void)
 	BUILD_BUG_ON(1);
 #endif
 
-	global_lid[0] = 15;
-	global_lid[1] = 17;
-	global_lid[2] = 19;
+	set_global_lid_array();
+	check_global_lid_array();
 }
 
 void print_gloabl_lid(void)
@@ -599,8 +627,7 @@ retry:
 		init_global_connt++;
 	}
 
-	pr_info("%s(): *** Successfully connected to node %d!\n",
-		__func__, rem_node_id);
+	pr_info("***  Successfully connected to node %d\n", rem_node_id);
 
 	return 0;
 }
@@ -970,8 +997,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	struct imm_header_from_cq_to_port *tmp;
 	//set_current_state(TASK_INTERRUPTIBLE);
 
-	pr_info("NOTICE: %s(): IB polling on CPU%d, remove it from active cpumask!\n",
-		__func__, smp_processor_id());
+	pr_info("***  recvpollcq runs on CPU%d\n", smp_processor_id());
 
 	set_cpu_active(smp_processor_id(), false);
 
@@ -1677,8 +1703,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
                 return 0;
         }
 
-	pr_info("%s(): *** Start establish connection to node %d ...\n",
-		__func__, mynodeid);
+	pr_info("***  Start establish connection (mynodeid: %d)\n", mynodeid);
 
 	ctx = client_init_interface(ib_port, ib_dev, mynodeid);
 	if(!ctx)
