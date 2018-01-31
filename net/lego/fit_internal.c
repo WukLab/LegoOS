@@ -129,7 +129,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	ctx->send_state = (enum s_state *)kmalloc(num_connections * sizeof(enum s_state), GFP_KERNEL);	
 	ctx->recv_state = (enum r_state *)kmalloc(num_connections * sizeof(enum r_state), GFP_KERNEL);
 
-	printk(KERN_CRIT "%s proc lkey %d rkey %d\n", __func__, ctx->proc->lkey, ctx->proc->rkey);
+	fit_debug("proc lkey %d rkey %d\n", ctx->proc->lkey, ctx->proc->rkey);
 
 	//Customized part
 	ctx->num_alive_connection = (atomic_t *)kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
@@ -180,7 +180,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	atomic_set(&ctx->dist_barrier_counter, 0);
 #endif
 
-	printk(KERN_CRIT "%s before create qps numconnections %d\n", __func__, num_connections);
+	fit_debug("before create qps numconnections %d\n", num_connections);
 	ctx->qp = (struct ib_qp **)kmalloc(num_connections * sizeof(struct ib_qp *), GFP_KERNEL);
 	if(!ctx->qp)
 	{
@@ -191,7 +191,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	//ctx->send_cq[0] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
 	for(i=0;i<num_connections;i++)
 	{
-		printk(KERN_CRIT "%s mynodeid %d i %d %d\n", __func__, ctx->node_id, i, i/NUM_PARALLEL_CONNECTION);
+		fit_debug("mynodeid %d i %d %d\n", ctx->node_id, i, i/NUM_PARALLEL_CONNECTION);
 		if (i/NUM_PARALLEL_CONNECTION == ctx->node_id)
 			continue;
 		ctx->send_state[i] = SS_INIT;
@@ -250,7 +250,7 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 			ib_destroy_qp(ctx->qp[i]);
 			return NULL;
 		}
-		printk(KERN_CRIT "%s created qp %d\n", __func__, i);
+		fit_debug("created qp %d\n", i);
 	}
 
 	//Do IMM local ring setup (imm-send-reply)
@@ -422,7 +422,7 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 	int size = sizeof(struct client_ibv_mr);
 	int ret;
 
-	printk(KERN_CRIT "%s conn %d post %d buffers\n", __func__, connection_id, depth);
+	fit_debug("conn %d post %d buffers\n", connection_id, depth);
 	for (i = 0; i < depth; i++) {
 		struct ib_sge sge[2];
 
@@ -453,8 +453,8 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 			printk(KERN_CRIT "ERROR: %s post recv error %d conn %d i %d\n", 
 				__func__, ret, connection_id, i);
 		}
-		printk(KERN_CRIT "%s header %p header_addr %p buf %p addr %p lkey %d\n", 
-				__func__, header, header_addr, buf, addr, ctx->proc->lkey);
+		fit_debug("header %p header_addr %p buf %p addr %p lkey %d\n", 
+			header, header_addr, buf, addr, ctx->proc->lkey);
 	}
 
 	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, FIT_STAT_CLEAR));
@@ -510,7 +510,7 @@ int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, i
 		return 2;
 	}
 
-	printk(KERN_CRIT "%s connected conn %d destqpn %d\n", __func__, connection_id, destqpn);
+	fit_debug("connected conn %d destqpn %d\n", connection_id, destqpn);
 	return 0;
 }
 
@@ -530,7 +530,8 @@ void init_global_lid_qpn(void)
 #endif
 
 	global_lid[0] = 15;
-	global_lid[1] = 16;
+	global_lid[1] = 17;
+	global_lid[2] = 19;
 }
 
 void print_gloabl_lid(void)
@@ -570,8 +571,8 @@ int client_add_newnode(ppc *ctx, int rem_node_id, int mynodeid)
 	for (i = 0; i < NUM_PARALLEL_CONNECTION; i++) {
 		cur_connection = (rem_node_id*ctx->num_parallel_connection)+atomic_read(&ctx->num_alive_connection[rem_node_id]);
 		global_qpn = get_global_qpn(ctx->node_id, rem_node_id, i);
-		printk(KERN_ALERT "%s: cur connection %d mynode %d remnode %d remotelid %d remoteqpn %d\n", 
-				__func__, cur_connection, ctx->node_id, rem_node_id, global_lid[rem_node_id], global_qpn);
+		fit_debug("cur connection %d mynode %d remnode %d remotelid %d remoteqpn %d\n", 
+			cur_connection, ctx->node_id, rem_node_id, global_lid[rem_node_id], global_qpn);
 retry:
 		ret = client_connect_ctx(ctx, cur_connection, ib_port, mtu, sl, global_lid[rem_node_id], global_qpn);
 		if(ret)
@@ -598,7 +599,9 @@ retry:
 		init_global_connt++;
 	}
 
-	printk(KERN_ALERT "successfully connect to node %d\n", rem_node_id);
+	pr_info("%s(): *** Successfully connected to node %d!\n",
+		__func__, rem_node_id);
+
 	return 0;
 }
 
@@ -1674,7 +1677,8 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
                 return 0;
         }
 
-	printk(KERN_CRIT "Start establish connection node %d\n", mynodeid);
+	pr_info("%s(): *** Start establish connection to node %d ...\n",
+		__func__, mynodeid);
 
 	ctx = client_init_interface(ib_port, ib_dev, mynodeid);
 	if(!ctx)
@@ -1701,10 +1705,8 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	thread_pass_poll_cq.target_cq = ctx->cq[0];
 	kthread_run(client_poll_cq_pass, &thread_pass_poll_cq, "recvpollcq");
 	//wake_up_process(thread);
-	printk(KERN_CRIT "%s created poll cq thread\n", __func__);
-	
+
 	kthread_run(waiting_queue_handler, ctx, "wq_handler");
-	printk(KERN_CRIT "%s created wait queue thread\n", __func__);
 
 #ifdef SEPARATE_SEND_POLL_THREAD
 	thread = kthread_create((void *)client_send_cq_poller, ctx, "separate_poll_send");
@@ -1742,7 +1744,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		spin_lock_init(&ctx->local_last_ack_index_lock[i]);
 	}
 
-	printk(KERN_CRIT "%s allocated local rdma buffers, about to connect qps\n", __func__);
+	fit_debug("node: %d allocated local rdma buffers, about to connect qps\n", mynodeid);
 	ctx->node_id = mynodeid;
 	for (i = 0; i < mynodeid; i++) {
 		client_add_newnode(ctx, i, mynodeid);
@@ -1755,7 +1757,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 			num_connected_nodes ++;
 		}
 	//}
-	printk(KERN_CRIT "%s all connections completed\n", __func__);
+	fit_debug("node: %d all connections completed\n", mynodeid);
 	//schedule();
 
 #ifdef CONFIG_FIT_INITIAL_SLEEP_TIMEOUT
@@ -1769,12 +1771,12 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	}
 #endif
 
-	printk(KERN_CRIT "now sending mr info\n");
+	fit_debug("node: %d now sending mr info\n", mynodeid);
 	//if (ctx->node_id == 0)
 		send_rdma_ring_mr_to_other_nodes(ctx);
 	//else
 	//	client_poll_cq_pass(&thread_pass_poll_cq);
-	printk(KERN_CRIT "%s sent rdma ring mrs\n", __func__);
+	fit_debug("node: %d sent rdma ring mrs\n", mynodeid);
 
 	//schedule();
 
@@ -1782,7 +1784,8 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		//cpu_relax();
 		schedule();
 
-	printk(KERN_ALERT "%s: return before establish connection with NODE_ID: %d\n", __func__, ctx->node_id);
+	fit_debug("node: %d return before establish connection with NODE_ID: %d\n",
+		mynodeid, ctx->node_id);
 
 	return ctx;
 }
