@@ -514,13 +514,15 @@ int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, i
 	return 0;
 }
 
-int global_lid[CONFIG_FIT_NR_NODES];
+static int global_lid[CONFIG_FIT_NR_NODES];
 static int first_qpn = 72;
 
 #define set_global_lid(nid, lid)				\
 	do {							\
 		BUILD_BUG_ON(nid >= CONFIG_FIT_NR_NODES);	\
 		BUG_ON(nid >= CONFIG_FIT_NR_NODES);		\
+		if (global_lid[nid])				\
+			panic("nid: %d double assign", nid);	\
 		global_lid[nid] = lid;				\
 	} while (0)
 
@@ -549,7 +551,7 @@ static inline void set_global_lid_array(void)
 {
 	set_global_lid(0, 15);
 	set_global_lid(1, 17);
-	//set_global_lid(2, 19);
+	set_global_lid(2, 19);
 }
 
 /*
@@ -577,9 +579,9 @@ void print_gloabl_lid(void)
 	pr_debug("***  FIT_local_id:            %d\n", CONFIG_FIT_LOCAL_ID);
 	for (i = 0; i < CONFIG_FIT_NR_NODES; i++) {
 		if (i == CONFIG_FIT_LOCAL_ID)
-			pr_debug("***    global_lid[%d]=%d   <---\n", i, global_lid[i]);
+			pr_debug("***    global_lid[%d]=%2d <---\n", i, global_lid[i]);
 		else
-			pr_debug("***    global_lid[%d]=%d\n", i, global_lid[i]);
+			pr_debug("***    global_lid[%d]=%2d\n", i, global_lid[i]);
 	}
 }
 
@@ -635,7 +637,7 @@ retry:
 		init_global_connt++;
 	}
 
-	pr_info("***  Successfully connected to LID %2d node %2d\n",
+	pr_info("***  Successfully built QP for LID %2d node %2d\n",
 		get_global_lid(rem_node_id), rem_node_id);
 
 	return 0;
