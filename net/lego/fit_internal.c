@@ -524,6 +524,12 @@ static int first_qpn = 72;
 		global_lid[nid] = lid;				\
 	} while (0)
 
+static inline int get_global_lid(unsigned int nid)
+{
+	BUG_ON(nid >= CONFIG_FIT_NR_NODES);
+	return global_lid[nid];
+}
+
 static inline void check_global_lid_array(void)
 {
 	bool bug = false;
@@ -543,7 +549,7 @@ static inline void set_global_lid_array(void)
 {
 	set_global_lid(0, 15);
 	set_global_lid(1, 17);
-	set_global_lid(2, 19);
+	//set_global_lid(2, 19);
 }
 
 /*
@@ -566,12 +572,14 @@ void print_gloabl_lid(void)
 {
 	int i;
 
-	pr_debug("--------- cut here ---------\n");
-	pr_debug("FIT_timeout:      %d\n", CONFIG_FIT_INITIAL_SLEEP_TIMEOUT);
-	pr_debug("FIT_first_qpn:    %d\n", first_qpn);
-	pr_debug("FIT_local_id:     %d\n", CONFIG_FIT_LOCAL_ID);
+	pr_debug("***  FIT_initial_timeout_s:   %d\n", CONFIG_FIT_INITIAL_SLEEP_TIMEOUT);
+	pr_debug("***  FIT_first_qpn:           %d\n", first_qpn);
+	pr_debug("***  FIT_local_id:            %d\n", CONFIG_FIT_LOCAL_ID);
 	for (i = 0; i < CONFIG_FIT_NR_NODES; i++) {
-		pr_debug("  global_lid[%d]=%d\n", i, global_lid[i]);
+		if (i == CONFIG_FIT_LOCAL_ID)
+			pr_debug("***    global_lid[%d]=%d   <---\n", i, global_lid[i]);
+		else
+			pr_debug("***    global_lid[%d]=%d\n", i, global_lid[i]);
 	}
 }
 
@@ -627,7 +635,8 @@ retry:
 		init_global_connt++;
 	}
 
-	pr_info("***  Successfully connected to node %d\n", rem_node_id);
+	pr_info("***  Successfully connected to LID %2d node %2d\n",
+		get_global_lid(rem_node_id), rem_node_id);
 
 	return 0;
 }
@@ -1044,7 +1053,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				if (type == MSG_SEND_RDMA_RING_MR) {
 					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id], addr, sizeof(struct client_ibv_mr));
 					num_recvd_rdma_ring_mrs++;
-					printk(KERN_CRIT "node %d remote addr %p remote rkey %d num_recvd_rdma_ring_mrs %d\n", 
+					fit_debug("node %d remote addr %p remote rkey %d num_recvd_rdma_ring_mrs %d\n", 
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
 							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
 				}
@@ -1607,7 +1616,7 @@ int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, i
 	struct ibapi_header output_header;
 	void *output_header_addr;
 
-	printk(KERN_CRIT "%s conn %d addr %p size %d sendcq %p type %d\n", __func__, connection_id, addr, size, ctx->send_cq[connection_id], type);
+	fit_debug("conn %d addr %p size %d sendcq %p type %d\n", connection_id, addr, size, ctx->send_cq[connection_id], type);
 	spin_lock(&connection_lock[connection_id]);
 
 	memset(&wr, 0, sizeof(wr));
@@ -1629,8 +1638,8 @@ int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, i
 	sge[1].lkey = ctx->proc->lkey;
 
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
-	printk(KERN_CRIT "%s headeraddr %p %p bufaddr %p %p lkey %d\n",
-		__func__, &output_header, output_header_addr, addr, sge[1].addr, ctx->proc->lkey);
+	fit_debug("headeraddr %p %p bufaddr %p %p lkey %d\n",
+		&output_header, output_header_addr, addr, sge[1].addr, ctx->proc->lkey);
 	if(ret==0)
 	{
 		do{
@@ -1673,8 +1682,8 @@ int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
 			continue;
 		memcpy(msg, &ctx->local_rdma_ring_mrs[i], sizeof(struct client_ibv_mr)); 
 		connection_id = NUM_PARALLEL_CONNECTION * i;
-		printk(KERN_CRIT "%s send ringmr addr %p lkey %lx rkey %lx conn %d node %d\n",
-				__func__, ctx->local_rdma_ring_mrs[i].addr,
+		fit_debug("send ringmr addr %p lkey %lx rkey %lx conn %d node %d\n",
+				ctx->local_rdma_ring_mrs[i].addr,
 				ctx->local_rdma_ring_mrs[i].lkey, 
 				ctx->local_rdma_ring_mrs[i].rkey, connection_id, i);
 		//ret = client_send_test(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);

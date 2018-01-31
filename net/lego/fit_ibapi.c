@@ -234,7 +234,7 @@ int ibapi_establish_conn(int ib_port, int mynodeid)
 
 	FIT_ctx = ctx;
 
-	printk(KERN_CRIT "FIT layer done with all initialization on node %d. Ready to go!\n", ctx->node_id);
+	pr_info("***  FIT layer ready to go!\n");
 
 	return ctx->node_id;
 }
@@ -284,7 +284,7 @@ int lego_ib_init(void *unused)
 
 	fit_internal_init();
 
-	pr_debug("%s() ...\n", __func__);
+	pr_debug("***\n");
 
 	/* Statically assigned info... */
 	init_global_lid_qpn();
@@ -307,7 +307,7 @@ int lego_ib_init(void *unused)
 
 	/* notify init that ib has done initialization */
 	complete(&ib_init_done);
-	pr_debug("%s() ... OK\n", __func__);
+	pr_debug("***\n");
 
 	return 0;
 }
