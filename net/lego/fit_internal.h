@@ -54,7 +54,9 @@ int fit_internal_cleanup(void);
 /* fit_machine.c */
 void init_global_lid_qpn(void);
 void print_gloabl_lid(void);
-unsigned int get_global_lid(unsigned int nid);
+
+unsigned int get_node_global_lid(unsigned int nid);
+unsigned int get_node_first_qpn(unsigned int nid);
 
 /*
  * FIT Machine Management
@@ -67,6 +69,6 @@ struct fit_machine_info {
 };
 
 extern unsigned int global_lid[];
-extern unsigned int first_qpn;
+extern unsigned int first_qpn[];
 
 #endif /* _INCLUDE_FIT_INTERNAL_H */

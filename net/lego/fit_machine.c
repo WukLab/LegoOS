@@ -33,8 +33,9 @@
  * lead to an early panic.
  */
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	= 	"wuklabXX",
-	[1]	= 	"wuklabXX",
+	[0]	= 	"wuklab00",
+	[1]	= 	"wuklab15",
+	[2]	= 	"wuklab16",
 };
 
 /* Built based on node id */
@@ -66,17 +67,24 @@ static struct fit_machine_info WUKLAB_CLUSTER[] = {
 /* Indicate machines that are used by lego */
 static DECLARE_BITMAP(cluster_used_machines, 32);
 
+/* Exposed array used by FIT code */
 unsigned int global_lid[CONFIG_FIT_NR_NODES];
-unsigned int first_qpn;
+unsigned int first_qpn[CONFIG_FIT_NR_NODES];
 
-unsigned int get_global_lid(unsigned int nid)
+unsigned int get_node_global_lid(unsigned int nid)
 {
 	BUG_ON(nid >= CONFIG_FIT_NR_NODES);
 	return global_lid[nid];
 }
 
+unsigned int get_node_first_qpn(unsigned int nid)
+{
+	BUG_ON(nid >= CONFIG_FIT_NR_NODES);
+	return first_qpn[nid];
+}
+
 /*
- * Fill the lego_cluster and global_lid array based on nid.
+ * Fill the lego_cluster, global_lid, first_qpn array.
  * Return 0 on success, return 1 if duplicates
  */
 static int assign_fit_machine(unsigned int nid, struct fit_machine_info *machine)
@@ -86,10 +94,19 @@ static int assign_fit_machine(unsigned int nid, struct fit_machine_info *machine
 	machine_index = machine - WUKLAB_CLUSTER;
 	if (test_and_set_bit(machine_index, cluster_used_machines))
 		return 1;
-	BUG_ON(global_lid[nid]);
+
+	/* Sanity Check */
+	if (machine->first_qpn == 0) {
+		pr_info("******\n");
+		pr_info("******      WARNING: %s first_qpn not finalized, "
+			"default to use 72\n", machine->hostname);
+		pr_info("******\n");
+		machine->first_qpn = 72;
+	}
 
 	lego_cluster[nid] = machine;
 	global_lid[nid] = lego_cluster[nid]->lid;
+	first_qpn[nid] = lego_cluster[nid]->first_qpn;
 
 	return 0;
 }
@@ -106,19 +123,6 @@ static struct fit_machine_info *find_fit_machine(const char *hostname)
 			return machine;
 	}
 	return NULL;
-}
-
-static void assign_current_first_qpn(void)
-{
-	struct fit_machine_info *self;
-
-	self = lego_cluster[CONFIG_FIT_LOCAL_ID];
-	if (self->first_qpn == 0) {
-		pr_debug("***   WARNING: %s first_qpn not finalized, "
-			"default to use 72", self->hostname);
-		self->first_qpn = 72;
-	}
-	first_qpn = self->first_qpn;
 }
 
 /*
@@ -145,45 +149,47 @@ void init_global_lid_qpn(void)
 		const char *hostname = lego_cluster_hostnames[nid];
 
 		if (!hostname) {
-			pr_debug("    Empty hostname on node %d\n", nid);
+			pr_info("    Empty hostname on node %d\n", nid);
 			bug = true;
 			continue;
 		}
 
 		machine = find_fit_machine(hostname);
 		if (!machine) {
-			pr_debug("    Wrong hostname %s on node %d\n",
+			pr_info("    Wrong hostname %s on node %d\n",
 				hostname, nid);
 			bug = true;
 			continue;
 		}
 
 		if (assign_fit_machine(nid, machine)) {
-			pr_debug("    Duplicated hostname %s on node %d\n",
+			pr_info("    Duplicated hostname %s on node %d\n",
 				hostname, nid);
 			bug = true;
 		}
 	}
 	if (bug)
 		panic("Please check your network config!");
-
-	assign_current_first_qpn();
 }
 
 void print_gloabl_lid(void)
 {
 	int nid;
 
-	pr_debug("***  FIT_initial_timeout_s:   %d\n", CONFIG_FIT_INITIAL_SLEEP_TIMEOUT);
-	pr_debug("***  FIT_first_qpn:           %d\n", first_qpn);
-	pr_debug("***  FIT_local_id:            %d\n", CONFIG_FIT_LOCAL_ID);
+	pr_info("***  FIT_initial_timeout_s:   %d\n", CONFIG_FIT_INITIAL_SLEEP_TIMEOUT);
+	pr_info("***  FIT_local_id:            %d\n", CONFIG_FIT_LOCAL_ID);
+	pr_info("***\n");
+	pr_info("***    NodeID    Hostname    LID    QPN\n");
 	for (nid = 0; nid < CONFIG_FIT_NR_NODES; nid++) {
-		pr_debug("***    [%d] %s lid=%2d",
-			nid, lego_cluster[nid]->hostname, global_lid[nid]);
+		pr_info("***    %6d    %s    %3d    %3d",
+			nid, lego_cluster[nid]->hostname,
+			get_node_global_lid(nid),
+			get_node_first_qpn(nid));
 
 		if (nid == CONFIG_FIT_LOCAL_ID)
 			pr_cont(" <---\n");
 		else
 			pr_cont("\n");
 	}
+	pr_info("***\n");
 }
