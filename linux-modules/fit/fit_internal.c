@@ -222,8 +222,6 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 		}
 
 		printk(KERN_CRIT "created qp %d qpn %d\n", i, ctx->qp[i]->qp_num);
-		first_qpn = ctx->qp[0]->qp_num;
-		pr_info("Assign first_qpn: %d\n", ctx->qp[0]->qp_num);
 
 		struct ib_qp_attr attr1 = {
 			.qp_state = IB_QPS_INIT,
@@ -246,6 +244,12 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 		}
 		printk(KERN_CRIT "%s created qp %d\n", __func__, i);
 	}
+
+	/*
+	 * In case the QPN differs from the wuklab_cluster table
+	 * May happen in VM environment.
+	 */
+	check_current_first_qpn(ctx->qp[0]->qp_num);
 
 	//Do IMM local ring setup (imm-send-reply)
 	ctx->imm_inbox_semaphore = (void **)kmalloc(sizeof(void*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
@@ -507,13 +511,17 @@ int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, i
 int get_global_qpn(int mynodeid, int remnodeid, int conn)
 {
 	int ret;
+	int remote_first_qpn;
+
+	remote_first_qpn = get_node_first_qpn(remnodeid);
+	BUG_ON(!remote_first_qpn);
 
 	if (remnodeid > mynodeid)
 		ret = mynodeid * NUM_PARALLEL_CONNECTION + conn;
 	else
 		ret = (mynodeid - 1) * NUM_PARALLEL_CONNECTION + conn;
 
-	return ret + first_qpn;
+	return ret + remote_first_qpn;
 }
 
 int init_global_connt = 0;
@@ -556,8 +564,9 @@ retry:
 		init_global_connt++;
 	}
 
-	pr_info("***  Successfully built QP for LID %2d node %2d\n",
-		get_global_lid(rem_node_id), rem_node_id);
+	pr_info("***  Successfully built QP for node %2d [LID: %d QPN: %d]\n",
+		rem_node_id, get_node_global_lid(rem_node_id),
+		get_node_first_qpn(rem_node_id));
 
 	return 0;
 }
@@ -1592,6 +1601,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
         }
 	
 	pr_info("***  Start establish connection (mynodeid: %d)\n", mynodeid);
+
 	init_global_lid_qpn();
 	print_gloabl_lid();
 
