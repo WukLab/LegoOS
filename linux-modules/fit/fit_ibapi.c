@@ -235,7 +235,7 @@ static void lego_ib_test(void)
 	char *buf = kmalloc(4096, GFP_KERNEL);
 	char *retb = kmalloc(4096, GFP_KERNEL);
 	uintptr_t desc;
-	if (MY_NODE_ID == 0) {
+	if (CONFIG_FIT_LOCAL_ID == 0) {
 		for (i = 0; i < 10; i++) {
 			ret = ibapi_receive_message(0, buf, 4096, &desc);
 			pr_info("received message ret %d msg [%s]\n", ret, buf);
@@ -276,7 +276,7 @@ static int __init lego_ib_init(void)
 
 	atomic_set(&global_reqid, 0);
 
-	ret = ibapi_establish_conn(1, MY_NODE_ID);
+	ret = ibapi_establish_conn(1, CONFIG_FIT_LOCAL_ID);
 
 	if (ret == 0)
 		lego_ib_test();

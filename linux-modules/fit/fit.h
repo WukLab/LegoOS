@@ -12,11 +12,11 @@
 
 #include <linux/spinlock.h>
 #include <linux/atomic.h>
-//#include <linux/wait.h>
-//#include <net/arch/cc.h>
 
-#define MY_NODE_ID 0
-#define DEBUG_SHINYEH
+/* Lego cluster config */
+#define CONFIG_FIT_LOCAL_ID	2
+#define CONFIG_FIT_NR_NODES	3
+#define MAX_NODE		CONFIG_FIT_NR_NODES
 
 #define MAX_FIT_NUM 4
 #define MESSAGE_SIZE 4096
@@ -27,9 +27,6 @@
 #define FIT_LINUX_PAGE_SIZE 4096
 
 #define CIRCULAR_BUFFER_LENGTH 256
-
-#define MAX_NODE 3
-#define MAX_NODE_BIT 5
 
 #define LISTEN_PORT 18500
 
@@ -506,4 +503,4 @@ struct thread_pass_struct{
 	struct send_and_reply_format *sr_request;
 };
 
-#endif
+#endif /* HAVE_CLIENT_H */

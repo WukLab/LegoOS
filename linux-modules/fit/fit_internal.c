@@ -501,26 +501,8 @@ int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, i
 	return 0;
 }
 
-int *global_lid;
-
-/* 
- * Statically setting LIDs and QPNs now
- * since we don't have socket working
- */
-void init_global_lid_qpn(void)
-{
-	global_lid = (int *)kmalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
-	global_lid[0] = 7;
-	global_lid[1] = 3;
-
-#if (MAX_NODE == 3)
-	global_lid[2] = 5;
-#endif
-}
-
 int get_global_qpn(int mynodeid, int remnodeid, int conn)
 {
-	int first_qpn = 72;
 	int ret;
 
 	if (remnodeid > mynodeid)
@@ -571,7 +553,9 @@ retry:
 		init_global_connt++;
 	}
 
-	printk(KERN_ALERT "successfully connect to node %d\n", rem_node_id);
+	pr_info("***  Successfully built QP for LID %2d node %2d\n",
+		get_global_lid(rem_node_id), rem_node_id);
+
 	return 0;
 }
 
@@ -1604,8 +1588,9 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
                 return 0;
         }
 	
-	printk(KERN_CRIT "Start establish connection node %d\n", mynodeid);
+	pr_info("***  Start establish connection (mynodeid: %d)\n", mynodeid);
 	init_global_lid_qpn();
+	print_gloabl_lid();
 
 	ctx = client_init_interface(ib_port, ib_dev, mynodeid);
 	if(!ctx)
