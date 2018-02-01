@@ -108,8 +108,8 @@ void panic(const char *fmt, ...)
 	show_stack_content(current, NULL, NULL);
 	show_call_trace(current, NULL, NULL);
 
-	/* Print all rq and task states, might be optional */
-	show_sched_state();
+	/* Print short info on all tasks */
+	show_state_filter(0, false);
 
 	smp_send_stop();
 	pr_emerg("---[ end Kernel panic - not syncing: %s\n", buf);

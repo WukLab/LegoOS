@@ -50,4 +50,23 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 
 int fit_internal_init(void);
 int fit_internal_cleanup(void);
-#endif
+
+/* fit_machine.c */
+void init_global_lid_qpn(void);
+void print_gloabl_lid(void);
+unsigned int get_global_lid(unsigned int nid);
+
+/*
+ * FIT Machine Management
+ */
+#define FIT_NAME_MAX	16
+struct fit_machine_info {
+	const char	hostname[FIT_NAME_MAX];
+	unsigned long	lid;
+	unsigned int	first_qpn;
+};
+
+extern unsigned int global_lid[];
+extern unsigned int first_qpn;
+
+#endif /* _INCLUDE_FIT_INTERNAL_H */

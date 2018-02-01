@@ -278,7 +278,7 @@ void sched_show_task(struct task_struct *p)
 		(unsigned long)task_thread_info(p)->flags);
 }
 
-void show_state_filter(unsigned long state_filter)
+void show_state_filter(unsigned long state_filter, bool print_rq)
 {
 	struct task_struct *g, *p;
 
@@ -296,7 +296,7 @@ void show_state_filter(unsigned long state_filter)
 		if (!state_filter || (p->state & state_filter))
 			sched_show_task(p);
 	}
-	if (!state_filter)
+	if (!state_filter && print_rq)
 		sysrq_sched_debug_show();
 	spin_unlock(&tasklist_lock);
 }

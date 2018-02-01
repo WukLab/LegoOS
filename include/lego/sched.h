@@ -1099,11 +1099,11 @@ void dump_task_struct(struct task_struct *p, int dump_flags);
 /*
  * Only dump TASK_* tasks. (0 for all tasks)
  */
-void show_state_filter(unsigned long state_filter);
+void show_state_filter(unsigned long state_filter, bool print_rq);
 
 static inline void show_sched_state(void)
 {
-	show_state_filter(0);
+	show_state_filter(0, true);
 }
 
 #endif /* _LEGO_SCHED_H_ */

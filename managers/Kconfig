@@ -51,3 +51,8 @@ config RAMFS_OBJECT_FILE
 	  Please give the full path
 
 endmenu
+
+#
+# Co-locate with net info to ease .config modification
+#
+source "net/Kconfig"

@@ -40,9 +40,6 @@ int ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_ad
 int ibapi_get_node_id(void);
 int ibapi_num_connected_nodes(void);
 
-void init_global_lid_qpn(void);
-void print_gloabl_lid(void);
-
 #else
 
 static inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
