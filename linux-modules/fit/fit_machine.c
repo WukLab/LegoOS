@@ -34,7 +34,7 @@
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
 	[0]	= 	"wuklab13",
 	[1]	= 	"wuklab15",
-	[2]	= 	"wuklab18",
+	[2]	= 	"wuklab16",
 };
 
 /* Built based on node id */
@@ -108,19 +108,6 @@ static struct fit_machine_info *find_fit_machine(const char *hostname)
 	return NULL;
 }
 
-static void assign_current_first_qpn(void)
-{
-	struct fit_machine_info *self;
-
-	self = lego_cluster[CONFIG_FIT_LOCAL_ID];
-	if (self->first_qpn == 0) {
-		pr_debug("***   WARNING: %s first_qpn not finalized, "
-			"default to use 72", self->hostname);
-		self->first_qpn = 72;
-	}
-	first_qpn = self->first_qpn;
-}
-
 /*
  * Statically setting LIDs and QPNs now
  * since we don't have socket working
@@ -163,17 +150,17 @@ void init_global_lid_qpn(void)
 	if (bug)
 		panic("Please check your network config!");
 
-	assign_current_first_qpn();
+	/* FIT module can get the first_qpn from linux */
 }
 
 void print_gloabl_lid(void)
 {
 	int nid;
 
-	pr_debug("***  FIT_first_qpn:           %d\n", first_qpn);
-	pr_debug("***  FIT_local_id:            %d\n", CONFIG_FIT_LOCAL_ID);
+	pr_info("***  FIT_first_qpn:           %d\n", first_qpn);
+	pr_info("***  FIT_local_id:            %d\n", CONFIG_FIT_LOCAL_ID);
 	for (nid = 0; nid < CONFIG_FIT_NR_NODES; nid++) {
-		pr_debug("***    [%d] %s lid=%2d",
+		pr_info("***    [%d] %s lid=%2d",
 			nid, lego_cluster[nid]->hostname, global_lid[nid]);
 
 		if (nid == CONFIG_FIT_LOCAL_ID)
@@ -181,4 +168,5 @@ void print_gloabl_lid(void)
 		else
 			pr_cont("\n");
 	}
+	pr_info("***\n");
 }

@@ -222,6 +222,9 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 		}
 
 		printk(KERN_CRIT "created qp %d qpn %d\n", i, ctx->qp[i]->qp_num);
+		first_qpn = ctx->qp[0]->qp_num;
+		pr_info("Assign first_qpn: %d\n", ctx->qp[0]->qp_num);
+
 		struct ib_qp_attr attr1 = {
 			.qp_state = IB_QPS_INIT,
 			.pkey_index = 0,
@@ -300,14 +303,14 @@ retry:
 	}
 	
    	if (!ctx->portinfo.lid || ctx->portinfo.state != 4) {
-		//printk(KERN_CRIT "Couldn't get local LID %d state %d\n", ctx->portinfo.lid, ctx->portinfo.state);
+		printk(KERN_CRIT "Couldn't get local LID %d state %d\n", ctx->portinfo.lid, ctx->portinfo.state);
 		schedule();
 		goto retry;
 	}
 	else
 		printk(KERN_CRIT "got local LID %d\n", ctx->portinfo.lid);
 
-	//test_printk(KERN_ALERT "I am here before return client_init_interface\n");
+	printk(KERN_ALERT "I am here before return client_init_interface\n");
 	return ctx;
 
 }
