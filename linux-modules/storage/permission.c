@@ -212,18 +212,6 @@ int yield_access(int metadata_entry, int user_entry){
 
 /* generate a request for test*/
 
-request constuct_request(int uid, char *fileName, fmode_t permission, ssize_t len, 
-		loff_t offset, int flags){
-	request rq;
-	rq.uid = uid;
-	strcpy(rq.fileName, fileName);
-	rq.permission = permission;
-	rq.len = len;
-	rq.offset = offset;
-	rq.flags = flags;
-	return rq;
-}
-
 /* set a metadata entry to a specific value for testing */
 
 static void set_metadata(int index, int *users, int noOfUsers, fmode_t permission,

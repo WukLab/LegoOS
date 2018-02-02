@@ -13,6 +13,18 @@
 #include <linux/mutex.h>
 #include <linux/mm.h>
 
+request constuct_request(int uid, char *fileName, fmode_t permission, ssize_t len, 
+		loff_t offset, int flags){
+	request rq;
+	rq.uid = uid;
+	strcpy(rq.fileName, fileName);
+	rq.permission = permission;
+	rq.len = len;
+	rq.offset = offset;
+	rq.flags = flags;
+	return rq;
+}
+
 ssize_t handle_read_request(void *payload, uintptr_t desc)
 {
 	struct m2s_read_write_payload *m2s_rq;
@@ -195,5 +207,4 @@ int handle_access_request(void *payload, uintptr_t desc)
 
 	pr_info("%s %s %d, %d\n", __func__, acc->filename, acc->mode, ret);
 	ibapi_reply_message(&ret, sizeof(int), desc);
-	
 }

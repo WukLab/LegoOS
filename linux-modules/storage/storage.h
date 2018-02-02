@@ -1,11 +1,22 @@
+/*
+ * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+
+#ifndef _LEGO_STORAGE_STORAGE_H_
+#define _LEGO_STORAGE_STORAGE_H_
+
 #include <linux/fs.h>
 #include <linux/mutex.h>
-#include <asm/uaccess.h>
 #include <linux/stat.h>
+#include <asm/uaccess.h>
 
 #define OP_SUCCESS		1
 #define OP_FAILURE		0
-
 
 #define MAX_USERS_ALLOWED 	2
 #define MAX_FILE_NAME		256
@@ -66,3 +77,5 @@ ssize_t handle_write_request(void *, uintptr_t);
 ssize_t handle_read_request(void *, uintptr_t);
 int handle_stat_request(void *, uintptr_t);
 int handle_access_request(void *, uintptr_t);
+
+#endif /* _LEGO_STORAGE_STORAGE_H_ */

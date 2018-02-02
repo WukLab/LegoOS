@@ -13,10 +13,6 @@
 
 //#include "../../include/lego/comp_common.h"
 
-#define LINUX_NODE	0
-#define LEGO_NODE	1
-
-//#define DEBUG_STORAGE
 #define BLK_SIZE 5*4096
 
 /* fit module */
