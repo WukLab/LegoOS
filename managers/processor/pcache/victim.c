@@ -499,15 +499,15 @@ static int victim_insert_hit_entry(struct pcache_meta *pcm,
 	struct pcache_victim_meta *victim = arg;
 	struct pcache_victim_hit_entry *hit;
 
-	victim_debug("pcm: %p, uva: %#lx, owner_pid: %d",
-		pcm, rmap->address & PAGE_MASK, rmap->owner->pid);
+	victim_debug("pcm: %p, uva: %#lx, owner_tgid: %d",
+		pcm, rmap->address & PAGE_MASK, rmap->owner_process->tgid);
 
 	hit = alloc_victim_hit_entry();
 	if (!hit)
 		return PCACHE_RMAP_FAILED;
 
 	hit->address = rmap->address & PAGE_MASK;
-	hit->owner = rmap->owner;
+	hit->owner = rmap->owner_process;
 
 	spin_lock(&victim->lock);
 	list_add(&hit->next, &victim->hits);

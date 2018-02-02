@@ -500,7 +500,10 @@ enum pcache_rmap_status {
 	PCACHE_RMAP_FAILED,
 };
 
-int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table, unsigned long address);
+int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
+		    unsigned long address, struct mm_struct *owner_mm,
+		    struct task_struct *owner_process);
+
 int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
 int pcache_try_to_unmap(struct pcache_meta *pcm);
 int pcache_wrprotect(struct pcache_meta *pcm);

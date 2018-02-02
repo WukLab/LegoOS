@@ -119,7 +119,8 @@ enum pcache_rmap_flags {
 struct pcache_rmap {
 	pte_t			*page_table;
 	unsigned long		flags;
-	struct task_struct	*owner;
+	struct mm_struct	*owner_mm;
+	struct task_struct	*owner_process;
 
 	/*
 	 * Hack:

@@ -110,7 +110,8 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 		goto out;
 	}
 
-	ret = pcache_add_rmap(pcm, page_table, address);
+	ret = pcache_add_rmap(pcm, page_table, address,
+			      mm, current->group_leader);
 	if (ret) {
 		ret = VM_FAULT_OOM;
 		goto out;

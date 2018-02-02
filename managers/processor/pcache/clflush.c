@@ -89,7 +89,8 @@ static int __pcache_flush_one(struct pcache_meta *pcm,
 	int *nr_flushed = arg;
 	int ret;
 
-	ret = clflush_one(rmap->owner, rmap->address, pcache_meta_to_kva(pcm));
+	ret = clflush_one(rmap->owner_process, rmap->address,
+			  pcache_meta_to_kva(pcm));
 	if (ret) {
 		dump_pcache_meta(pcm, FUNC);
 		dump_pcache_rmap(rmap, FUNC);

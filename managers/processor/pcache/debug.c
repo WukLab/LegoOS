@@ -54,8 +54,8 @@ void dump_pcache_rmap(struct pcache_rmap *rmap, const char *reason)
 {
 	pte_t *ptep = rmap->page_table;
 
-	pr_debug("rmap:%p flags:%#lx owner-pid:%u user_va:%#lx ptep:%p\n",
-		rmap, rmap->flags, rmap->owner->pid, rmap->address, ptep);
+	pr_debug("rmap:%p flags:%#lx owner-tgid:%u user_va:%#lx ptep:%p\n",
+		rmap, rmap->flags, rmap->owner_process->pid, rmap->address, ptep);
 	dump_pte(ptep, NULL);
 
 	if (reason)

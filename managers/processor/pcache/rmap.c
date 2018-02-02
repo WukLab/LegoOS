@@ -52,7 +52,8 @@ static void free_pcache_rmap(struct pcache_rmap *rmap)
  * @pcm must NOT be locked on entry.
  */
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
-		    unsigned long address)
+		    unsigned long address, struct mm_struct *owner_mm,
+		    struct task_struct *owner_process)
 {
 	struct pcache_rmap *rmap, *pos;
 	int ret;
@@ -68,7 +69,8 @@ int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 	}
 	rmap->page_table = page_table;
 	rmap->address = address;
-	rmap->owner = current;
+	rmap->owner_mm = owner_mm;
+	rmap->owner_process = owner_process;
 
 	if (likely(list_empty(&pcm->rmap)))
 		goto add;
@@ -127,7 +129,7 @@ rmap_get_locked_pte(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 	pte_t *ptep;
 	pmd_t *pmd;
 	spinlock_t *ptl;
-	struct mm_struct *mm = rmap->owner->mm;
+	struct mm_struct *mm = rmap->owner_mm;
 	unsigned long address = rmap->address;
 
 	pmd = rmap_get_pmd(mm, address);
@@ -137,9 +139,9 @@ rmap_get_locked_pte(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 		     pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
 		pr_err("\n"
 		       "****    ERROR: mismatched PTE and rmap\n"
-		       "****    rmap->owner: %d uva: %#lx ptep: %p, rmap->page_table: %p\n"
+		       "****    rmap->owner_process: %s uva: %#lx ptep: %p, rmap->page_table: %p\n"
 		       "****    pcache_pfn: %#lx, pte_pfn: %#lx\n\n",
-			rmap->owner->pid, address, ptep, rmap->page_table,
+			rmap->owner_process->comm, address, ptep, rmap->page_table,
 			pcache_meta_to_pfn(pcm), pte_pfn(*ptep));
 		dump_pcache_rmap(rmap, "Corrupted RMAP");
 		dump_pcache_meta(pcm, "Corrupted RMAP");
@@ -167,7 +169,7 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 	pteval = ptep_get_and_clear(0, pte);
 
 	if (pte_present(pteval))
-		flush_tlb_mm_range(rmap->owner->mm,
+		flush_tlb_mm_range(rmap->owner_mm,
 				   rmap->address,
 				   rmap->address + PAGE_SIZE -1);
 
@@ -194,7 +196,7 @@ static int pcache_try_to_unmap_reserve_one(struct pcache_meta *pcm,
 	pteval = ptep_get_and_clear(0, pte);
 
 	if (pte_present(pteval))
-		flush_tlb_mm_range(rmap->owner->mm,
+		flush_tlb_mm_range(rmap->owner_mm,
 				   rmap->address,
 				   rmap->address + PAGE_SIZE -1);
 
@@ -319,7 +321,7 @@ static int pcache_wrprotect_one(struct pcache_meta *pcm,
 	pte_set(pte, entry);
 
 	if (pte_present(entry))
-		flush_tlb_mm_range(rmap->owner->mm,
+		flush_tlb_mm_range(rmap->owner_mm,
 				   rmap->address,
 				   rmap->address + PAGE_SIZE -1);
 
