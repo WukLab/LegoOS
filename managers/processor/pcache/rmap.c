@@ -135,6 +135,12 @@ rmap_get_locked_pte(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 
 	if (unlikely(ptep != rmap->page_table ||
 		     pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
+		pr_err("\n"
+		       "****    ERROR: mismatched PTE and rmap\n"
+		       "****    rmap->owner: %d uva: %#lx ptep: %p, rmap->page_table: %p\n"
+		       "****    pcache_pfn: %#lx, pte_pfn: %#lx\n\n",
+			rmap->owner->pid, address, ptep, rmap->page_table,
+			pcache_meta_to_pfn(pcm), pte_pfn(*ptep));
 		dump_pcache_rmap(rmap, "Corrupted RMAP");
 		dump_pcache_meta(pcm, "Corrupted RMAP");
 		BUG();
