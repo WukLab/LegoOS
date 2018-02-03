@@ -122,11 +122,7 @@ struct pcache_rmap {
 	struct mm_struct	*owner_mm;
 	struct task_struct	*owner_process;
 
-	/*
-	 * Hack:
-	 * This is NOT page aligned.
-	 * AND PAGE_MASK if needed by others.
-	 */
+	/* page aligned */
 	unsigned long		address;
 	struct list_head	next;
 };

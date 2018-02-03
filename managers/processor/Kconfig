@@ -106,8 +106,18 @@ config DEBUG_PCACHE_VICTIM
 	depends on DEBUG_PCACHE
 	depends on PCACHE_EVICTION_VICTIM
 	help
-	  Enable this option to have some runtime debug info about victim
-	  cache. If unsure, say N.
+	  Enable this option to have some runtime debug info about victim cache.
+	  If unsure, say N.
+
+config DEBUG_PCACHE_RMAP
+	bool "Debug rmap operations"
+	default n
+	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
+	depends on DEBUG_PCACHE
+	help
+	  Enable this option to trace pcache reverse mapping operations.
+	  If unsure say N.
 
 config DEBUG_FORK
 	bool "Debug processor-to-memory fork()"

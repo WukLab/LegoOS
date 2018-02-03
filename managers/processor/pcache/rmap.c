@@ -20,8 +20,16 @@
 #include <asm/io.h>
 #include <asm/tlbflush.h>
 
+#ifdef CONFIG_DEBUG_PCACHE_RMAP
+#define rmap_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void rmap_debug(const char *fmt, ...) { }
+#endif
+
 /*
- * rmap operations are carried out with pcache locked
+ * Our rmap points to PTE directly,
+ * and rmap operations are carried out with pcache locked
  */
 
 static struct pcache_rmap *alloc_pcache_rmap(void)
@@ -40,6 +48,102 @@ static void free_pcache_rmap(struct pcache_rmap *rmap)
 {
 	PCACHE_BUG_ON_RMAP(RmapReserved(rmap), rmap);
 	kfree(rmap);
+}
+
+/*
+ * We are traversing the reverse mapping, which means
+ * upper level mappings must exist and present.
+ * If not, BUG indeed.
+ */
+static __always_inline pmd_t *
+rmap_get_pmd(struct mm_struct *mm, unsigned long address)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+
+	pgd = pgd_offset(mm, address);
+	BUG_ON(!pgd && !pgd_present(*pgd));
+
+	pud = pud_offset(pgd, address);
+	BUG_ON(!pud && !pud_present(*pud));
+
+	pmd = pmd_offset(pud, address);
+	BUG_ON(!pmd && !pmd_present(*pmd));
+
+	return pmd;
+}
+
+static void report_bad_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap,
+			    unsigned long address, pte_t *ptep)
+{
+	pr_err("\n"
+	       "****    ERROR: mismatched PTE and rmap\n"
+	       "****    rmap->owner_process: %s uva: %#lx ptep: %p, "
+	                                     "rmap->page_table: %p\n"
+	       "****    pcache_pfn: %#lx, pte_pfn: %#lx\n\n",
+		rmap->owner_process->comm, address, ptep, rmap->page_table,
+		pcache_meta_to_pfn(pcm), pte_pfn(*ptep));
+	dump_pcache_rmap(rmap, "Corrupted RMAP");
+	dump_pcache_meta(pcm, "Corrupted RMAP");
+}
+
+/*
+ * Check that @pcm is mapped at @rmap->address
+ *
+ * To that end, this function actually returns @rmap->page_table.
+ * But for safety reasons, we add several checkings here.
+ * Safety means we have to make sure the pte reallly exist.
+ * We may found already-being-cleared ptes.
+ *
+ * Upon return, if pte is not NULL, then it is locked. We do this
+ * because normally callers will modify or even invalidate the PTEs.
+ * Those operations have to be serialized with pgfault routines.
+ */
+static __always_inline pte_t *
+rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
+		    spinlock_t **ptlp)	__acquires(*ptlp)
+{
+	pte_t *ptep;
+	pmd_t *pmd;
+	spinlock_t *ptl;
+	struct mm_struct *mm = rmap->owner_mm;
+	unsigned long address = rmap->address;
+
+	pmd = rmap_get_pmd(mm, address);
+	ptep = pte_offset(pmd, address);
+
+	if (unlikely(ptep != rmap->page_table)) {
+		report_bad_rmap(pcm, rmap, address, ptep);
+		ptep = NULL;
+		goto out;
+	}
+
+	if (unlikely(pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
+
+		/*
+		 * This can happen in two cases:
+		 * 1) mremap: original pte is moved to new pte
+		 * 2) munmap: original pte is cleared.
+		 *
+		 * Both of them have a small time frame before rmap got
+		 * updated. We should not treat this as bug.
+		 *
+		 * XXX: How to distinguish it from real bug?
+		 */
+		if (unlikely(pte_pfn(*ptep) != 0))
+			report_bad_rmap(pcm, rmap, address, ptep);
+
+		ptep = NULL;
+		goto out;
+	}
+
+	ptl = pte_lockptr(mm, pmd);
+	spin_lock(ptl);
+	*ptlp = ptl;
+
+out:
+	return ptep;
 }
 
 /**
@@ -68,7 +172,7 @@ int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 		goto out;
 	}
 	rmap->page_table = page_table;
-	rmap->address = address;
+	rmap->address = address & PAGE_MASK;
 	rmap->owner_mm = owner_mm;
 	rmap->owner_process = owner_process;
 
@@ -87,72 +191,160 @@ out:
 	return ret;
 }
 
-/*
- * We are traversing the reverse mapping, which means
- * upper level mappings must exist and present.
- * If not, BUG indeed.
- */
-static __always_inline pmd_t *
-rmap_get_pmd(struct mm_struct *mm, unsigned long address)
+/* Internal function to remove one rmap from pcm */
+static inline void pcache_remove_rmap(struct pcache_meta *pcm,
+				      struct pcache_rmap *rmap)
 {
-	pgd_t *pgd;
-	pud_t *pud;
-	pmd_t *pmd;
+	list_del(&rmap->next);
+	free_pcache_rmap(rmap);
+	atomic_dec(&pcm->mapcount);
+}
 
-	pgd = pgd_offset(mm, address);
-	BUG_ON(!pgd && !pgd_present(*pgd));
+struct pcache_move_pte_control {
+	struct mm_struct *mm;
+	pte_t *old_pte;
+	pte_t *new_pte;
+	unsigned long old_addr;
+	unsigned long new_addr;
+	bool updated;
+};
 
-	pud = pud_offset(pgd, address);
-	BUG_ON(!pud && !pud_present(*pud));
+static inline bool matched_rmap_for_move(struct pcache_rmap *rmap,
+					 struct pcache_move_pte_control *mpc)
+{
+	if (rmap->page_table == mpc->old_pte &&
+	    rmap->owner_mm   == mpc->mm      &&
+	    rmap->address    == mpc->old_addr)
+		return true;
+	return false;
+}
 
-	pmd = pmd_offset(pud, address);
-	BUG_ON(!pmd && !pmd_present(*pmd));
+static int __pcache_move_pte(struct pcache_meta *pcm,
+			     struct pcache_rmap *rmap, void *arg)
+{
+	struct pcache_move_pte_control *mpc = arg;
 
-	return pmd;
+	if (likely(matched_rmap_for_move(rmap, mpc))) {
+		rmap_debug("tgid: %u [%#lx %p] -> [%#lx %p]",
+			rmap->owner_process->tgid, rmap->address,
+			rmap->page_table, mpc->new_addr, mpc->new_pte);
+
+		rmap->page_table = mpc->new_pte;
+		rmap->address = mpc->new_addr;
+		mpc->updated = true;
+
+		/* Break the rmap walk loop */
+		return PCACHE_RMAP_SUCCEED;
+	}
+	return PCACHE_RMAP_AGAIN;
 }
 
 /*
- * Check that @pcm is mapped at @rmap->address
+ * Update the rmap that currently points to @old_pte, to @new_pte, within
+ * address space @mm.
  *
- * To that end, this function actually returns @rmap->page_table.
- * But for safety reasons, we add several checkings here.
- * Safety means we have to make sure the pte reallly exist.
- *
- * Upon return, pte is locked. Because normally callers will
- * modify or even invalidate the PTEs. Those operations have
- * to be serialized with pgfault routines.
+ * Called from move_ptes(), when mremap() syscall is invoked. PTE content
+ * has already been moved: *old_pte is empty, while *new_pte is assigned.
+ * Both @old_pte and @new_pte are locked on entry.
  */
-static __always_inline pte_t *
-rmap_get_locked_pte(struct pcache_meta *pcm, struct pcache_rmap *rmap,
-		    spinlock_t **ptlp)	__acquires(*ptlp)
+void pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
+		     unsigned long old_addr, unsigned long new_addr)
 {
-	pte_t *ptep;
-	pmd_t *pmd;
-	spinlock_t *ptl;
-	struct mm_struct *mm = rmap->owner_mm;
-	unsigned long address = rmap->address;
+	struct pcache_meta *pcm;
+	struct pcache_move_pte_control mpc = {
+		.mm = mm,
+		.old_pte = old_pte,
+		.new_pte = new_pte,
+		.old_addr = old_addr & PAGE_MASK,
+		.new_addr = new_addr & PAGE_MASK,
+		.updated = false,
+	};
+	struct rmap_walk_control rwc = {
+		.arg = &mpc,
+		.rmap_one = __pcache_move_pte,
+	};
 
-	pmd = rmap_get_pmd(mm, address);
-	ptep = pte_offset(pmd, address);
+	pcm = pte_to_pcache_meta(*new_pte);
+	BUG_ON(!pcm);
 
-	if (unlikely(ptep != rmap->page_table ||
-		     pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
-		pr_err("\n"
-		       "****    ERROR: mismatched PTE and rmap\n"
-		       "****    rmap->owner_process: %s uva: %#lx ptep: %p, rmap->page_table: %p\n"
-		       "****    pcache_pfn: %#lx, pte_pfn: %#lx\n\n",
-			rmap->owner_process->comm, address, ptep, rmap->page_table,
-			pcache_meta_to_pfn(pcm), pte_pfn(*ptep));
-		dump_pcache_rmap(rmap, "Corrupted RMAP");
-		dump_pcache_meta(pcm, "Corrupted RMAP");
-		BUG();
+	lock_pcache(pcm);
+	rmap_walk(pcm, &rwc);
+	unlock_pcache(pcm);
+
+	/*
+	 * In theory, this should always succeed.
+	 * Failure is not an option.
+	 */
+	BUG_ON(!mpc.updated);
+}
+
+struct pcache_zap_pte_control {
+	struct mm_struct *mm;
+	unsigned long address;
+	pte_t *pte;
+	bool zapped;
+};
+
+static inline bool matched_rmap_for_zap(struct pcache_rmap *rmap,
+					struct pcache_zap_pte_control *zpc)
+{
+	if (rmap->page_table == zpc->pte &&
+	    rmap->owner_mm   == zpc->mm  &&
+	    rmap->address    == zpc->address)
+		return true;
+	return false;
+}
+
+static int __pcache_zap_pte(struct pcache_meta *pcm,
+			    struct pcache_rmap *rmap, void *arg)
+{
+	struct pcache_zap_pte_control *zpc = arg;
+
+	if (likely(matched_rmap_for_zap(rmap, zpc))) {
+		rmap_debug("tgid: %u [%#lx %p]",
+			rmap->owner_process->tgid, rmap->address,
+			rmap->page_table);
+
+		pcache_remove_rmap(pcm, rmap);
+		zpc->zapped = true;
+
+		/* Break the rmap walk loop */
+		return PCACHE_RMAP_SUCCEED;
 	}
+	return PCACHE_RMAP_AGAIN;
+}
 
-	ptl = pte_lockptr(mm, pmd);
-	spin_lock(ptl);
-	*ptlp = ptl;
+/*
+ * Remove the rmap that currently points to @pte within @mm.
+ *
+ * Called from zap_pte_range() when the emulated page table is cleared.
+ * When called, the pte is already cleared, thus @pte is already 0,
+ * while @ptent holds the previous pte content.
+ */
+void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
+		    pte_t ptent, pte_t *pte)
+{
+	struct pcache_meta *pcm;
+	struct pcache_zap_pte_control zpc = {
+		.mm = mm,
+		.address = address & PAGE_MASK,
+		.pte = pte,
+		.zapped = false,
+	};
+	struct rmap_walk_control rwc = {
+		.arg = &zpc,
+		.rmap_one = __pcache_zap_pte,
+	};
 
-	return ptep;
+	pcm = pte_to_pcache_meta(ptent);
+	BUG_ON(!pcm);
+
+	lock_pcache(pcm);
+	rmap_walk(pcm, &rwc);
+	unlock_pcache(pcm);
+
+	/* Failure is not an option. */
+	BUG_ON(!zpc.zapped);
 }
 
 static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
@@ -165,7 +357,10 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 
 	PCACHE_BUG_ON_RMAP(RmapReserved(rmap), rmap);
 
-	pte = rmap_get_locked_pte(pcm, rmap, &ptl);
+	pte = rmap_get_pte_locked(pcm, rmap, &ptl);
+	if (unlikely(!pte))
+		return ret;
+
 	pteval = ptep_get_and_clear(0, pte);
 
 	if (pte_present(pteval))
@@ -173,9 +368,7 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 				   rmap->address,
 				   rmap->address + PAGE_SIZE -1);
 
-	list_del(&rmap->next);
-	free_pcache_rmap(rmap);
-	atomic_dec(&pcm->mapcount);
+	pcache_remove_rmap(pcm, rmap);
 
 	spin_unlock(ptl);
 	return ret;
@@ -192,7 +385,10 @@ static int pcache_try_to_unmap_reserve_one(struct pcache_meta *pcm,
 
 	PCACHE_BUG_ON_RMAP(RmapReserved(rmap), rmap);
 
-	pte = rmap_get_locked_pte(pcm, rmap, &ptl);
+	pte = rmap_get_pte_locked(pcm, rmap, &ptl);
+	if (unlikely(!pte))
+		return ret;
+
 	pteval = ptep_get_and_clear(0, pte);
 
 	if (pte_present(pteval))
@@ -298,7 +494,10 @@ static int pcache_wrprotect_one(struct pcache_meta *pcm,
 	pte_t *pte;
 	pte_t entry;
 
-	pte = rmap_get_locked_pte(pcm, rmap, &ptl);
+	pte = rmap_get_pte_locked(pcm, rmap, &ptl);
+	if (unlikely(!pte))
+		return ret;
+
 	if (!pte_write(*pte))
 		goto out;
 
@@ -370,7 +569,10 @@ static int pcache_referenced_one(struct pcache_meta *pcm,
 	spinlock_t *ptl = NULL;
 	pte_t *pte;
 
-	pte = rmap_get_locked_pte(pcm, rmap, &ptl);
+	pte = rmap_get_pte_locked(pcm, rmap, &ptl);
+	if (unlikely(!pte))
+		return PCACHE_RMAP_AGAIN;
+
 	if (ptep_clear_flush_young(pte))
 		prc->referenced++;
 	spin_unlock(ptl);

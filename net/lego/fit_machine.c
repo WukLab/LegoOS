@@ -33,9 +33,8 @@
  * lead to an early panic.
  */
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	= 	"wuklab00",
+	[0]	= 	"wuklab13",
 	[1]	= 	"wuklab15",
-	[2]	= 	"wuklab16",
 };
 
 /* Built based on node id */
@@ -180,6 +179,7 @@ void print_gloabl_lid(void)
 	pr_info("***  FIT_local_id:            %d\n", CONFIG_FIT_LOCAL_ID);
 	pr_info("***\n");
 	pr_info("***    NodeID    Hostname    LID    QPN\n");
+	pr_info("***    -------------------------------------\n");
 	for (nid = 0; nid < CONFIG_FIT_NR_NODES; nid++) {
 		pr_info("***    %6d    %s    %3d    %3d",
 			nid, lego_cluster[nid]->hostname,

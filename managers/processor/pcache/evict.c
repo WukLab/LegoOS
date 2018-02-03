@@ -88,8 +88,8 @@ static int pset_add_eviction_one(struct pcache_meta *pcm,
 	if (!new)
 		return PCACHE_RMAP_FAILED;
 
-	new->address = rmap->address & PAGE_MASK;
-	new->owner = rmap->owner;
+	new->address = rmap->address;
+	new->owner = rmap->owner_process;
 	new->pcm = pcm;
 
 	spin_lock(&pset->eviction_list_lock);

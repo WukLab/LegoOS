@@ -500,6 +500,11 @@ enum pcache_rmap_status {
 	PCACHE_RMAP_FAILED,
 };
 
+void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
+		    pte_t ptent, pte_t *pte);
+void pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
+		     unsigned long old_addr, unsigned long new_addr);
+
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 		    unsigned long address, struct mm_struct *owner_mm,
 		    struct task_struct *owner_process);

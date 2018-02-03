@@ -117,10 +117,6 @@ void free_pgd_range(struct mm_struct *mm,
 }
 
 /*
- * TODO:
- * In Lego case, all pages come from pcache!
- * MUST call back to pcache code to cleanup cacheline metadata.
- *
  * TODO: Flush back dirty pages back to memory component!
  */
 static unsigned long
@@ -137,13 +133,26 @@ zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	do {
 		pte_t ptent = *pte;
 
-		pgtable_debug("  addr: %lx, pte: %#lx",
-			addr, ptent.pte);
-
 		if (pte_none(ptent))
 			continue;
 		if (pte_present(ptent)) {
+			/*
+			 * If we remove rmap first, there is a small
+			 * time frame where the pcm that pte maps to
+			 * does not have corresponding rmap points back.
+			 *
+			 * If we clear pte first, there is a small
+			 * time frame where the rmap that pcm has still 
+			 * points back to this pte, but this pte is 0.
+			 *
+			 * Both create in-consistent view.
+			 *
+			 * Probably the second one is better, thus we can keep
+			 * consistent with move_ptes(). Also, we can catch
+			 * this very confidently in rmap code.
+			 */
 			ptent = ptep_get_and_clear_full(pte);
+			pcache_zap_pte(mm, addr, ptent, pte);
 			continue;
 		}
 
@@ -458,13 +467,19 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 
 	for (; old_addr < old_end; old_pte++, old_addr += PAGE_SIZE,
 				   new_pte++, new_addr += PAGE_SIZE) {
-		pgtable_debug("  old_addr: %lx, new_addr: %lx, pte: %#lx",
-			old_addr, new_addr, (*old_pte).pte);
-
 		if (pte_none(*old_pte))
 			continue;
+
 		pte = ptep_get_and_clear(old_addr, old_pte);
 		pte_set(new_pte, pte);
+
+		/*
+		 * The identity change of PTEs and update of rmap are
+		 * divided into two steps. There exists a small time frame
+		 * where the rmap associted with the pcache points to
+		 * wrong pte. This case will be detected by rmap_get_pte_locked().
+		 */
+		pcache_move_pte(mm, old_pte, new_pte, old_addr, new_addr);
 	}
 
 	if (new_ptl != old_ptl)
