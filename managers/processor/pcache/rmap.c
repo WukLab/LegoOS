@@ -629,6 +629,13 @@ int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc)
 
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 
+	/*
+	 * In case someone called rmap without checking mapcount.
+	 * Otherwise we might end up looping forever below.
+	 */
+	if (unlikely(list_empty(&pcm->rmap)))
+		return ret;
+
 	list_for_each_entry_safe(rmap, keeper, &pcm->rmap, next) {
 		ret = rwc->rmap_one(pcm, rmap, rwc->arg);
 		if (ret != PCACHE_RMAP_AGAIN)

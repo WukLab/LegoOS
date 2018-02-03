@@ -188,9 +188,13 @@ void sweep_pset_lru(struct pcache_set *pset)
 		if (unlikely(!PcacheValid(pcm)))
 			goto put_pcache;
 
-		/* locked? leave it alone */
+		/* Do not race with other normal operations. */
 		if (!trylock_pcache(pcm))
 			goto put_pcache;
+
+		/* pcache can be unmaped just before we lock it */
+		if (!pcache_mapped(pcm))
+			goto unlock_pcache;
 
 		/*
 		 * Check PTEs
@@ -199,8 +203,9 @@ void sweep_pset_lru(struct pcache_set *pset)
 		 */
 		if (!pcache_referenced(pcm))
 			list_move_tail(&pcm->lru, &pset->lru_list);
-		unlock_pcache(pcm);
 
+unlock_pcache:
+		unlock_pcache(pcm);
 put_pcache:
 		lru_put_pcache(pcm, pset);
 check_next:
