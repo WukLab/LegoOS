@@ -21,6 +21,11 @@
 
 #define DEF_NET_TIMEOUT	 30	/* second */
 
+enum {
+	MANAGER_DOWN,
+	MANAGER_UP,
+};
+extern int manager_state;
 extern unsigned int LEGO_LOCAL_NID;
 
 /*

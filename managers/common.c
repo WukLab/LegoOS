@@ -14,6 +14,9 @@
 #include <lego/comp_memory.h>
 #include <processor/processor.h>
 
+/* Indicate if processor or memory manager is up or not. */
+int manager_state = MANAGER_DOWN;
+
 unsigned int LEGO_LOCAL_NID __read_mostly = MY_NODE_ID;
 
 /**

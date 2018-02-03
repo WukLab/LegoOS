@@ -43,6 +43,8 @@
 #include <lego/kthread.h>
 #include <rdma/ib_cache.h>
 
+#include <lego/comp_common.h>
+
 #include "mad_priv.h"
 #include "mad_rmpp.h"
 #include "smi.h"
@@ -2327,6 +2329,17 @@ again:
 				}
 			} else
 				mad_error_handler(port_priv, &wc);
+
+			/*
+			 * TODO:
+			 * This function is used to talk with subnet manager.
+			 * If we don't need to add new nodes after lego initialized,
+			 * then we don't this thread to keep running.
+			 *
+			 * Quit this thread is processor or memory manager is up running.
+			 */
+			if (manager_state == MANAGER_UP)
+				return;
 
 			//f (mad_got_one >= 12) 
 				schedule();

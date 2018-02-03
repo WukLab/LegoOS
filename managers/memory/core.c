@@ -292,5 +292,6 @@ void __init memory_component_init(void)
 	local_qemu_test();
 	pr_warn("require CONFIG_FIT to be set.\n");
 #endif
-}
 
+	manager_state = MANAGER_UP;
+}
