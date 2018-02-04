@@ -147,8 +147,6 @@ void __init pcache_early_init(void)
 	victim_cache_early_init();
 }
 
-void __init pcache_init_waitqueue(void);
-
 /* Init pcache_set array */
 static void init_pcache_set_map(void)
 {
@@ -230,9 +228,6 @@ void __init pcache_post_init(void)
 	init_pcache_meta_map();
 
 	init_pcache_set_map();
-
-	/* waitqueue for pcache_lock */
-	pcache_init_waitqueue();
 
 	/* Create victim_flush thread if configured */
 	victim_cache_post_init();

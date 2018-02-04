@@ -30,6 +30,11 @@ static inline void rmap_debug(const char *fmt, ...) { }
 /*
  * Our rmap points to PTE directly,
  * and rmap operations are carried out with pcache locked
+ *
+ * Thus the lock ordering is:
+ * 	lock pset (optional)
+ * 	lock pcache
+ * 	lock pte
  */
 
 static struct pcache_rmap *alloc_pcache_rmap(void)

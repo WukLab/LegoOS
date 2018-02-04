@@ -13,6 +13,7 @@
 #include <lego/list.h>
 #include <lego/const.h>
 #include <lego/bitops.h>
+#include <lego/jiffies.h>
 #include <lego/spinlock.h>
 
 #include <processor/pcache_types.h>
@@ -75,19 +76,54 @@ static inline void set_pcache_usable(struct pcache_meta *pcm)
 #endif
 }
 
-void unlock_pcache(struct pcache_meta *pcm);
-void __lock_pcache(struct pcache_meta *pcm);
-
 static inline int trylock_pcache(struct pcache_meta *pcm)
 {
-	return (likely(!test_and_set_bit(PC_locked, (void *)&pcm->bits)));
+#ifdef CONFIG_DEBUG_PCACHE
+	int ret;
+
+	ret = TestSetPcacheLocked(pcm);
+	if (!ret)
+		pcm->locker = current;
+	return !ret;
+#else
+	return (likely(!TestSetPcacheLocked(pcm)));
+#endif
 }
 
 static inline void lock_pcache(struct pcache_meta *pcm)
 {
-	might_sleep();
-	if (!trylock_pcache(pcm))
-		__lock_pcache(pcm);
+#ifdef CONFIG_DEBUG_PCACHE
+	unsigned long wait_start = jiffies;
+
+	while (unlikely(TestSetPcacheLocked(pcm))) {
+		cpu_relax();
+
+		/* Break out after 10 seconds */
+		if (unlikely(time_after(jiffies, wait_start + 10 * HZ))) {
+			dump_pcache_meta(pcm, "deadlock");
+			pr_info("Locked by %s %d\n",
+				pcm->locker->comm, pcm->locker->pid);
+			BUG();
+		}
+	}
+	pcm->locker = current;
+#else
+	while (unlikely(TestSetPcacheLocked(pcm)))
+		cpu_relax();
+#endif
+}
+
+static inline void unlock_pcache(struct pcache_meta *pcm)
+{
+#ifdef CONFIG_DEBUG_PCACHE
+	pcm->locker = NULL;
+	if (!TestClearPcacheLocked(pcm)) {
+		dump_pcache_meta(pcm, "unlock bug");
+		BUG();
+	}
+#else
+	ClearPcacheLocked(pcm);
+#endif
 }
 
 /* refcount helpers */

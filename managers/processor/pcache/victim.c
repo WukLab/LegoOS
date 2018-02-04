@@ -623,7 +623,9 @@ static inline void wait_victim_has_data(struct pcache_victim_meta *victim)
 
 	while (unlikely(!VictimHasdata(victim))) {
 		cpu_relax();
-		if (unlikely(time_after(jiffies, wait_start + 5 * HZ)))
+
+		/* Break out after 10 seconds */
+		if (unlikely(time_after(jiffies, wait_start + 10 * HZ)))
 			panic("where is the victim finish insertion?");
 	}
 }

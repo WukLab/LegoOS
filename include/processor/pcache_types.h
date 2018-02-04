@@ -105,6 +105,10 @@ struct pcache_meta {
 	atomic_t		mapcount;
 	atomic_t		_refcount;
 
+#ifdef CONFIG_DEBUG_PCACHE
+	struct task_struct	*locker;
+#endif
+
 #ifdef CONFIG_PCACHE_EVICT_LRU
 	struct list_head	lru;
 #endif

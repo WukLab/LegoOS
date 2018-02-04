@@ -152,7 +152,19 @@ zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 			 * this very confidently in rmap code.
 			 */
 			ptent = ptep_get_and_clear_full(pte);
+
+			/*
+			 * TODO:
+			 * Deadlock, temporary fix
+			 * Other rmap code do: lock pcache, lock pte
+			 * But here we do: lock pte, lock pcache.
+			 *
+			 * To avoid deadlock, release the pte lock (will not
+			 * impact correctness, but hurt performance.)
+			 */
+			spin_unlock(ptl);
 			pcache_zap_pte(mm, addr, ptent, pte);
+			spin_lock(ptl);
 			continue;
 		}
 
