@@ -521,7 +521,7 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 							   paddr_end,
 							   page_size_mask,
 							   prot);
-				__flush_tlb_all();
+				__flush_tlb();
 				continue;
 			}
 			/*
@@ -563,7 +563,7 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 		pud_populate(&init_mm, pud, pmd);
 		spin_unlock(&init_mm.page_table_lock);
 	}
-	__flush_tlb_all();
+	__flush_tlb();
 
 	update_page_count(PG_LEVEL_1G, pages);
 
@@ -612,7 +612,7 @@ kernel_physical_mapping_init(unsigned long paddr_start,
 		pgd_changed = true;
 	}
 
-	__flush_tlb_all();
+	__flush_tlb();
 
 	return paddr_last;
 }
@@ -778,7 +778,7 @@ void __init init_mem_mapping(void)
 	memory_map_top_down(ISA_END_ADDRESS, end);
 
 	load_cr3(swapper_pg_dir);
-	__flush_tlb_all();
+	__flush_tlb();
 }
 
 void __init arch_zone_init(void) {
