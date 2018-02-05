@@ -7,10 +7,6 @@
  * (at your option) any later version.
  */
 
-/*
- * Code to prepare and boot secondary cores on a SMP machine
- */
-
 #include <asm/ipi.h>
 #include <asm/numa.h>
 #include <asm/apic.h>
@@ -20,6 +16,7 @@
 #include <asm/bootparam.h>
 #include <asm/trampoline.h>
 
+#include <lego/smp.h>
 #include <lego/init.h>
 #include <lego/sched.h>
 #include <lego/delay.h>
@@ -29,6 +26,12 @@
 #include <lego/preempt.h>
 #include <lego/nodemask.h>
 #include <lego/early_ioremap.h>
+
+/*
+ * Code to prepare and boot secondary cores on a SMP machine
+ * Secondary starts from trampoline, then head_64.S, and then here.
+ * We do need to callback to several core kernel code during init.
+ */
 
 /*
  * Debugging macros
@@ -212,6 +215,12 @@ static void start_secondary_cpu(void)
 
 	/* Initialize the vectors on this cpu */
 	setup_vector_irq(smp_processor_id());
+
+	/*
+	 * Execute a set of callbacks registered
+	 * by various subsystems. This is a much simplified cpuhg hook.
+	 */
+	cpu_online_callback(smp_processor_id());
 
 	set_cpu_online(smp_processor_id(), true);
 	set_cpu_active(smp_processor_id(), true);
