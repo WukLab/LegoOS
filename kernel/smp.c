@@ -65,6 +65,15 @@ void __init smp_init(void)
 	smp_announce();
 }
 
+/*
+ * A set of callbacks that each cpu will execute *before* it comes online.
+ * It is similar to Linux's cpuhp subsystem, but much simplified.
+ */
+void cpu_online_callback(unsigned int cpu)
+{
+	smpcfd_prepare_cpu(cpu);
+}
+
 enum {
 	CSD_FLAG_LOCK		= 0x01,
 	CSD_FLAG_SYNCHRONOUS	= 0x02,
