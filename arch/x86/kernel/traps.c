@@ -202,6 +202,9 @@ dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 		tsk->comm, tsk->pid, regs->ip, regs->sp, error_code);
 	show_regs(regs);
 
+	/* Print short info about all tasks */
+	show_state_filter(0, false);
+
 	force_sig_info(SIGSEGV, SEND_SIG_PRIV, tsk);
 }
 

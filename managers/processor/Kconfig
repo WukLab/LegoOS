@@ -151,13 +151,33 @@ config DEBUG_SYSCALL
 	  If unsure, say N.
 
 config DEBUG_MMAP
-	bool "Debug mmap related syscalls"
+	bool "Debug mmap() and brk()"
 	default n
 	depends on COMP_PROCESSOR
 	depends on DEBUG_KERNEL
 	help
-	  Enable to debug mmap(), brk(), munmap(), mremap() syscalls
-	  in processor side. Mostly, it tells you what is returned.
+	  Enable to debug mmap(), brk() at processor side.
+	  Mostly, it tells you what is returned.
+
+	  If unsure, say N.
+
+config DEBUG_MUNMAP
+	bool "Debug munmap()"
+	default n
+	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
+	help
+	  Enable to debug munmap()
+
+	  If unsure, say N.
+
+config DEBUG_MREMAP
+	bool "Debug mremap()"
+	default n
+	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
+	help
+	  Enable to debug mremap()
 
 	  If unsure, say N.
 
@@ -177,13 +197,14 @@ config DEBUG_PROC_SYS
 	  If unsure, say N.
 
 config DEBUG_EMULATED_PGTABLE
-	bool "Debug emulated pgtable release (may have tons of messages)"
+	bool "Debug emulated pgtable operations (may have tons of messages)"
 	default n
 	depends on COMP_PROCESSOR
 	depends on DEBUG_KERNEL
 	help
 	  Enable to trace the emulated pgtable release function, which is
-	  normally invoked by munmap() and mremap().
+	  normally invoked by munmap() and mremap(), and combined with
+	  DEBUG_MREMAP, and DEBUG_MUNMAP.
 
 	  If unsure, say N.
 

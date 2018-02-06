@@ -29,6 +29,22 @@
 static inline void mmap_debug(const char *fmt, ...) { }
 #endif
 
+#ifdef CONFIG_DEBUG_MUNMAP
+#define munmap_debug(fmt, ...)						\
+	pr_debug("%s(cpu%d): " fmt "\n", __func__, smp_processor_id(),	\
+		__VA_ARGS__)
+#else
+static inline void munmap_debug(const char *fmt, ...) { }
+#endif
+
+#ifdef CONFIG_DEBUG_MREMAP
+#define mremap_debug(fmt, ...)						\
+	pr_debug("%s(cpu%d): " fmt "\n", __func__, smp_processor_id(),	\
+		__VA_ARGS__)
+#else
+static inline void mremap_debug(const char *fmt, ...) { }
+#endif
+
 SYSCALL_DEFINE1(brk, unsigned long, brk)
 {
 	struct p2m_brk_struct payload;
@@ -115,7 +131,7 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	struct p2m_munmap_struct payload;
 	long retlen, retbuf;
 
-	syscall_enter("addr:%#lx,len:%#lx\n", addr, len);
+	munmap_debug("release: [%#lx - %#lx]", addr, addr + len);
 
 	if (offset_in_page(addr) || addr > TASK_SIZE || len > TASK_SIZE - addr)
 		return -EINVAL;
@@ -141,10 +157,9 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 	if (likely(retbuf == 0))
 		release_pgtable(current, addr, addr + len);
 	else
-		pr_debug("munmap() fail: %s\n", ret_to_string(retbuf));
+		pr_err("munmap() fail: %s\n", ret_to_string(retbuf));
 
 out:
-	syscall_exit(retbuf);
 	return retbuf;
 }
 
@@ -164,11 +179,8 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 	unsigned long ret;
 	int retlen;
 
-	syscall_enter("old_addr: %#lx, old_len: %#lx, new_len: %#lx, flags: %#lx "
-			"new_addr: %#lx\n", old_addr, old_len, new_len, flags, new_addr);
-
-	mmap_debug("old_addr: %#lx, old_len: %#lx, new_len: %#lx, flags: %#lx "
-			"new_addr: %#lx", old_addr, old_len, new_len, flags, new_addr);
+	mremap_debug("old:[%#lx - %#lx], old_len:%#lx, new_len:%#lx, flags:%#lx",
+		old_addr, old_addr + old_len, old_len, new_len, flags);
 
 	/* Sanity checking */
 	ret = -EINVAL;
@@ -206,7 +218,7 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 
 	if (unlikely(reply.status != RET_OKAY)) {
 		ret = -ENOMEM;
-		pr_debug("mremap() fail: %s (line: %u)\n",
+		pr_err("WARNING: mremap() fail: %s (line: %u)\n",
 			ret_to_string(reply.status), reply.line);
 		goto out;
 	}
@@ -222,17 +234,25 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 	 * here. Just let following pgfault bring them in.
 	 */
 	if (old_len > new_len) {
+		mremap_debug("release: [%#lx - %#lx]",
+			old_addr + new_len, old_addr + old_len);
+
 		release_pgtable(current, old_addr + new_len,
 					 old_addr + old_len);
 		old_len = new_len;
 	}
-	if (reply.new_addr != old_addr) {
+
+	if (likely(reply.new_addr != old_addr)) {
 		unsigned long moved_len;
+
+		mremap_debug("move: [%#lx - %#lx] -> [%#Lx - %#Lx]",
+			old_addr, old_addr + old_len,
+			reply.new_addr, reply.new_addr + old_len);
 
 		moved_len = move_page_tables(current, old_addr,
 					     reply.new_addr, old_len);
 		if (unlikely(moved_len < old_len)) {
-			WARN(1, "May have issue here");
+			WARN(1, "len: %#lx, moved_len: %#lx", old_len, moved_len);
 			release_pgtable(current, old_addr,
 						 old_addr + old_len);
 			ret = -EFAULT;
@@ -240,8 +260,7 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 	}
 
 out:
-	mmap_debug("new_addr: %lx or (%ld)", ret, (long)ret);
-	syscall_exit(ret);
+	mremap_debug("new_addr: %lx or (%ld)", ret, (long)ret);
 	return ret;
 }
 
