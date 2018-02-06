@@ -27,7 +27,7 @@ struct file *local_file_open (request *rq) {
 
 	struct file *filp;
 
-	filp = filp_open(rq->fileName, rq->flags, 0755);
+	filp = filp_open(rq->fileName, rq->flags | O_LARGEFILE, 0755);
 	if(IS_ERR(filp)){
 		printk("local_file_open : Cannot open required file [%s].\n", rq->fileName);
 	}
