@@ -25,4 +25,9 @@ struct fit_machine_info {
 	enum lego_manager_type	type;
 };
 
+/*
+ * Maximum timeout for a ibapi_send_reply_timeout call
+ */
+#define FIT_MAX_TIMEOUT_SEC	3600
+
 #endif /* _LEGO_UAPI_FIT_H_ */

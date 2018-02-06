@@ -73,7 +73,7 @@ int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr,
 			 int max_ret_size, int if_use_ret_phys_addr)
 {
 	return __ibapi_send_reply_timeout(target_node, addr, size, ret_addr,
-			max_ret_size, if_use_ret_phys_addr, 0,
+			max_ret_size, if_use_ret_phys_addr, FIT_MAX_TIMEOUT_SEC,
 			__builtin_return_address(0));
 }
 

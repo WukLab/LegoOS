@@ -14,6 +14,8 @@
 #include <lego/errno.h>
 #include <net/arch/cc.h>
 
+#include <uapi/fit.h>
+
 #ifdef CONFIG_FIT_LOCAL_ID
 #define MY_NODE_ID	CONFIG_FIT_LOCAL_ID
 #else
