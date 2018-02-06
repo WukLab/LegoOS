@@ -121,7 +121,7 @@ static struct fit_machine_info *find_fit_machine(const char *hostname)
 	/* Linear search for a small cluster */
 	for (i = 0; i < ARRAY_SIZE(WUKLAB_CLUSTER); i++) {
 		machine = &WUKLAB_CLUSTER[i];
-		if (!strncmp(hostname, machine->hostname, FIT_NAME_MAX))
+		if (!strncmp(hostname, machine->hostname, FIT_HOSTNAME_MAX))
 			return machine;
 	}
 	return NULL;
