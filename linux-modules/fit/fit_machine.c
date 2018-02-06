@@ -23,6 +23,8 @@
 #include <linux/kernel.h>
 #include <rdma/ib_verbs.h>
 
+#include "../../include/uapi/fit.h"
+
 #include "fit_internal.h"
 
 /*
