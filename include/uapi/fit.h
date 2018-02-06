@@ -16,10 +16,10 @@ enum lego_manager_type{
 	LEGO_STORAGE,
 };
 
-#define FIT_NAME_MAX	16
+#define FIT_HOSTNAME_MAX	16
 
 struct fit_machine_info {
-	const char		hostname[FIT_NAME_MAX];
+	const char		hostname[FIT_HOSTNAME_MAX];
 	unsigned long		lid;
 	unsigned int		first_qpn;
 	enum lego_manager_type	type;
