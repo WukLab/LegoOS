@@ -54,16 +54,6 @@ unsigned int get_node_global_lid(unsigned int nid);
 unsigned int get_node_first_qpn(unsigned int nid);
 void check_current_first_qpn(unsigned int qpn);
 
-/*
- * FIT Machine Management
- */
-#define FIT_HOSTNAME_MAX	32
-struct fit_machine_info {
-	const char	hostname[FIT_HOSTNAME_MAX];
-	unsigned long	lid;
-	unsigned int	first_qpn;
-};
-
 extern unsigned int global_lid[];
 extern unsigned int first_qpn[];
 

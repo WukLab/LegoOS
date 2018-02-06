@@ -24,6 +24,8 @@
 #include <lego/kernel.h>
 #include <rdma/ib_verbs.h>
 
+#include <uapi/fit.h>
+
 #include "fit_internal.h"
 
 /*
@@ -35,6 +37,7 @@
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
 	[0]	= 	"wuklab13",
 	[1]	= 	"wuklab15",
+	[2]	= 	"wuklab16",
 };
 
 /* Built based on node id */

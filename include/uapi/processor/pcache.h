@@ -7,8 +7,8 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_UAPI_PROCESSOR_H_
-#define _LEGO_UAPI_PROCESSOR_H_
+#ifndef _LEGO_UAPI_PROCESSOR_PCACHE_H_
+#define _LEGO_UAPI_PROCESSOR_PCACHE_H_
 
 struct pcache_stat {
 	/*
@@ -22,4 +22,4 @@ struct pcache_stat {
 	unsigned long	way_stride;
 };
 
-#endif /* _LEGO_UAPI_PROCESSOR_H_ */
+#endif /* _LEGO_UAPI_PROCESSOR_PCACHE_H_ */
