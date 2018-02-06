@@ -22,6 +22,7 @@
 #include <lego/time.h>
 #include <lego/timer.h>
 #include <lego/kernel.h>
+#include <lego/fit_ibapi.h>
 #include <rdma/ib_verbs.h>
 
 #include "fit_internal.h"
@@ -1276,14 +1277,6 @@ inline int client_get_inbox_by_addr(ppc *ctx, void *addr)
 	return tar;
 }
 
-/**
- * sysctl_send_reply_max_timeout_sec
- *
- * The maximum time in seconds that ibapi_send_reply() can take.
- * Function should return ETIMEDOUT upon timeout.
- */
-unsigned long sysctl_send_reply_max_timeout_sec __read_mostly = 10;
-
 /*
  * Return:
  * Negative values on failues
@@ -1375,10 +1368,12 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 #endif
 
 #ifdef CPURELAX_MODEL
-	if (timeout_sec >= sysctl_send_reply_max_timeout_sec)
-		timeout_sec = sysctl_send_reply_max_timeout_sec;
+	/* Caller does not specify an timeout, use the maximum */
 	if (timeout_sec == 0)
-		timeout_sec = sysctl_send_reply_max_timeout_sec;
+		timeout_sec = FIT_MAX_TIMEOUT_SEC;
+
+	if (timeout_sec > FIT_MAX_TIMEOUT_SEC)
+		timeout_sec = FIT_MAX_TIMEOUT_SEC;
 
 	start_time = jiffies;
 	while (wait_send_reply_id == SEND_REPLY_WAIT) {

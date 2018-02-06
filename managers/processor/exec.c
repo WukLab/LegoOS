@@ -19,6 +19,7 @@
 #include <lego/spinlock.h>
 #include <lego/syscalls.h>
 #include <lego/uaccess.h>
+#include <lego/fit_ibapi.h>
 #include <processor/processor.h>
 
 static int exec_mmap(void)
@@ -173,7 +174,7 @@ static int p2m_execve(struct p2m_execve_struct *payload,
 	int ret;
 
 	ret = net_send_reply_timeout(current_memory_home_node(), P2M_EXECVE, payload,
-			payload_size, reply, reply_size, false, DEF_NET_TIMEOUT);
+			payload_size, reply, reply_size, false, FIT_MAX_TIMEOUT_SEC);
 
 	if (likely(ret > 0)) {
 		if (likely(reply->status == RET_OKAY)) {
