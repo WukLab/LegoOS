@@ -80,19 +80,36 @@ rmap_get_pmd(struct mm_struct *mm, unsigned long address)
 }
 
 static void report_bad_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap,
-			    unsigned long address, pte_t *ptep)
+			    unsigned long address, pte_t *ptep, void *caller)
 {
+	unsigned long pcache_pfn, _pte_pfn;
+
+	pcache_pfn = pcache_meta_to_pfn(pcm);
+	_pte_pfn = pte_pfn(*ptep);
+
 	pr_err("\n"
-	       "****    ERROR: mismatched PTE and rmap\n"
+	       "****    ERROR:\n"
+	       "***     current: %d:%s caller: %pS"
+	       "****    [pte %s rmap->page_table] && [pcache_pfn %s pte_pfn]\n"
 	       "****    rmap->owner_process: %s uva: %#lx ptep: %p, "
 	                                     "rmap->page_table: %p\n"
 	       "****    pcache_pfn: %#lx, pte_pfn: %#lx\n\n",
+	        current->pid, current->comm, caller,
+	        (ptep == rmap->page_table) ? "==":"!=",
+	        (pcache_pfn == _pte_pfn) ? "==":"!=",
 		rmap->owner_process->comm, address, ptep, rmap->page_table,
-		pcache_meta_to_pfn(pcm), pte_pfn(*ptep));
+		pcache_pfn, _pte_pfn);
+
 	dump_pcache_rmap(rmap, "Corrupted RMAP");
 	dump_pcache_meta(pcm, "Corrupted RMAP");
+	BUG();
 }
 
+/*
+ * We don't want to introduce the extra overhead of passing
+ * return address down if DEBUG_PCACHE is not enabled.
+ */
+#ifdef CONFIG_DEBUG_PCACHE
 /*
  * Check that @pcm is mapped at @rmap->address
  *
@@ -106,8 +123,8 @@ static void report_bad_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap,
  * Those operations have to be serialized with pgfault routines.
  */
 static __always_inline pte_t *
-rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
-		    spinlock_t **ptlp)	__acquires(*ptlp)
+__rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
+		      spinlock_t **ptlp, void *caller) __acquires(*ptlp)
 {
 	pte_t *ptep;
 	pmd_t *pmd;
@@ -119,7 +136,7 @@ rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 	ptep = pte_offset(pmd, address);
 
 	if (unlikely(ptep != rmap->page_table)) {
-		report_bad_rmap(pcm, rmap, address, ptep);
+		report_bad_rmap(pcm, rmap, address, ptep, caller);
 		ptep = NULL;
 		goto out;
 	}
@@ -137,7 +154,7 @@ rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 		 * XXX: How to distinguish it from real bug?
 		 */
 		if (unlikely(pte_pfn(*ptep) != 0))
-			report_bad_rmap(pcm, rmap, address, ptep);
+			report_bad_rmap(pcm, rmap, address, ptep, caller);
 
 		ptep = NULL;
 		goto out;
@@ -150,6 +167,118 @@ rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 out:
 	return ptep;
 }
+
+static __always_inline pte_t *
+rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
+		    spinlock_t **ptlp) __acquires(*ptlp)
+{
+	return __rmap_get_pte_locked(pcm, rmap, ptlp,
+				     __builtin_return_address(0));
+}
+
+static int __dump_pcache_rmaps(struct pcache_meta *pcm,
+			       struct pcache_rmap *rmap, void *arg)
+{
+	pte_t *ptep = rmap->page_table;
+
+	pr_debug("rmap:%p flags:%#lx owner-tgid:%u user_va:%#lx ptep:%p\n",
+		rmap, rmap->flags, rmap->owner_process->pid, rmap->address, ptep);
+	dump_pte(ptep, NULL);
+
+	return PCACHE_RMAP_AGAIN;
+}
+
+static void dump_pcache_rmaps(struct pcache_meta *pcm)
+{
+	struct rmap_walk_control rwc = {
+		.rmap_one = __dump_pcache_rmaps,
+	};
+
+	/* pcm is already locked */
+	rmap_walk(pcm, &rwc);
+}
+
+static void debug_mapcount_checking(struct pcache_meta *pcm)
+{
+	if (unlikely(atomic_read(&pcm->mapcount))) {
+		pr_warn("****\n"
+			"****    WARNING:\n"
+			"****    This is BUG if you are running _single-process_ application!\n"
+			"****    Remove this checking after we are confident about pcache!\n"
+			"****\n");
+		dump_pcache_meta(pcm, NULL);
+		dump_pcache_rmaps(pcm);
+		pr_warn("****\n"
+			"****    END WARNING\n"
+			"****\n");
+	}
+}
+
+#else
+/*
+ * Check that @pcm is mapped at @rmap->address
+ *
+ * To that end, this function actually returns @rmap->page_table.
+ * But for safety reasons, we add several checkings here.
+ * Safety means we have to make sure the pte reallly exist.
+ * We may found already-being-cleared ptes.
+ *
+ * Upon return, if pte is not NULL, then it is locked. We do this
+ * because normally callers will modify or even invalidate the PTEs.
+ * Those operations have to be serialized with pgfault routines.
+ */
+static __always_inline pte_t *
+rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
+		    spinlock_t **ptlp) __acquires(*ptlp)
+{
+	pte_t *ptep;
+	pmd_t *pmd;
+	spinlock_t *ptl;
+	struct mm_struct *mm = rmap->owner_mm;
+	unsigned long address = rmap->address;
+
+	pmd = rmap_get_pmd(mm, address);
+	ptep = pte_offset(pmd, address);
+
+	if (unlikely(ptep != rmap->page_table)) {
+		report_bad_rmap(pcm, rmap, address, ptep, NULL);
+		ptep = NULL;
+		goto out;
+	}
+
+	if (unlikely(pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
+
+		/*
+		 * This can happen in two cases:
+		 * 1) mremap: original pte is moved to new pte
+		 * 2) munmap: original pte is cleared.
+		 *
+		 * Both of them have a small time frame before rmap got
+		 * updated. We should not treat this as bug.
+		 *
+		 * XXX: How to distinguish it from real bug?
+		 */
+		if (unlikely(pte_pfn(*ptep) != 0))
+			report_bad_rmap(pcm, rmap, address, ptep, NULL);
+
+		ptep = NULL;
+		goto out;
+	}
+
+	ptl = pte_lockptr(mm, pmd);
+	spin_lock(ptl);
+	*ptlp = ptl;
+
+out:
+	return ptep;
+}
+
+static inline void debug_mapcount_checking(struct pcache_meta *pcm)
+{
+
+}
+
+#endif /* CONFIG_DEBUG_PCACHE */
 
 /**
  * pcache_add_rmap
@@ -191,12 +320,16 @@ add:
 	ret = 0;
 	list_add(&rmap->next, &pcm->rmap);
 	atomic_inc(&pcm->mapcount);
+	debug_mapcount_checking(pcm);
 out:
 	unlock_pcache(pcm);
 	return ret;
 }
 
-/* Internal function to remove one rmap from pcm */
+/*
+ * Internal function to remove one rmap from pcm
+ * @pcm is locked upon entry.
+ */
 static inline void pcache_remove_rmap(struct pcache_meta *pcm,
 				      struct pcache_rmap *rmap)
 {
