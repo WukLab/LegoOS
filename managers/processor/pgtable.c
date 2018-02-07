@@ -467,7 +467,7 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 		unsigned long old_addr, unsigned long old_end,
 		pmd_t *new_pmd, unsigned long new_addr)
 {
-	pte_t *old_pte, *new_pte, pte;
+	pte_t *old_pte, *new_pte;
 	spinlock_t *old_ptl, *new_ptl;
 	unsigned long len = old_end - old_addr;
 
@@ -482,15 +482,7 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 		if (pte_none(*old_pte))
 			continue;
 
-		pte = ptep_get_and_clear(old_addr, old_pte);
-		pte_set(new_pte, pte);
-
-		/*
-		 * The identity change of PTEs and update of rmap are
-		 * divided into two steps. There exists a small time frame
-		 * where the rmap associted with the pcache points to
-		 * wrong pte. This case will be detected by rmap_get_pte_locked().
-		 */
+		/* Let pcache take care of everything */
 		pcache_move_pte(mm, old_pte, new_pte, old_addr, new_addr);
 	}
 

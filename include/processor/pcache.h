@@ -56,8 +56,12 @@ extern struct pcache_set *pcache_set_map;
 extern struct pcache_meta *pcache_meta_map;
 extern unsigned long *pcache_set_eviction_bitmap;
 
-/* Given an user virtual address, return its set index number */
-static inline unsigned long __uvaddr2set(unsigned long address)
+/**
+ * user_vaddr_to_set_index
+ *
+ * Given an user virtual address, return its set index number
+ */
+static inline unsigned long user_vaddr_to_set_index(unsigned long address)
 {
 	return (address & pcache_set_mask) >> nr_bits_cacheline;
 }
@@ -242,7 +246,7 @@ static inline bool kva_is_pcache(unsigned long address)
  */
 static inline struct pcache_meta *__addr2meta(unsigned long address)
 {
-	return pcache_meta_map + __uvaddr2set(address);
+	return pcache_meta_map + user_vaddr_to_set_index(address);
 }
 
 static inline unsigned long __addr2line_va(unsigned long address)
@@ -425,7 +429,7 @@ static inline struct pcache_set *kva_to_pcache_set(unsigned long address)
 static inline struct pcache_set *
 user_vaddr_to_pcache_set(unsigned long uvaddr)
 {
-	return pcache_set_map + __uvaddr2set(uvaddr);
+	return pcache_set_map + user_vaddr_to_set_index(uvaddr);
 }
 
 static inline unsigned long pcache_meta_to_pfn(struct pcache_meta *pcm)
@@ -506,7 +510,7 @@ bool __pset_find_eviction(unsigned long, struct task_struct *);
 static inline bool
 pset_has_eviction(unsigned long uvaddr)
 {
-	return test_bit(__uvaddr2set(uvaddr), pcache_set_eviction_bitmap);
+	return test_bit(user_vaddr_to_set_index(uvaddr), pcache_set_eviction_bitmap);
 }
 static inline bool
 pset_find_eviction(unsigned long uvaddr, struct task_struct *p)

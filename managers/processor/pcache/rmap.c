@@ -89,10 +89,9 @@ static void report_bad_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 
 	pr_err("\n"
 	       "****    ERROR:\n"
-	       "***     current: %d:%s caller: %pS"
+	       "***     current: %d:%s caller: %pS\n"
 	       "****    [pte %s rmap->page_table] && [pcache_pfn %s pte_pfn]\n"
-	       "****    rmap->owner_process: %s uva: %#lx ptep: %p, "
-	                                     "rmap->page_table: %p\n"
+	       "****    rmap->owner_process: %s uva: %#lx ptep: %p, rmap->page_table: %p\n"
 	       "****    pcache_pfn: %#lx, pte_pfn: %#lx\n\n",
 	        current->pid, current->comm, caller,
 	        (ptep == rmap->page_table) ? "==":"!=",
@@ -200,7 +199,7 @@ static void dump_pcache_rmaps(struct pcache_meta *pcm)
 
 static void debug_mapcount_checking(struct pcache_meta *pcm)
 {
-	if (unlikely(atomic_read(&pcm->mapcount))) {
+	if (unlikely(atomic_read(&pcm->mapcount) > 1)) {
 		pr_warn("****\n"
 			"****    WARNING:\n"
 			"****    This is BUG if you are running _single-process_ application!\n"
@@ -338,38 +337,39 @@ static inline void pcache_remove_rmap(struct pcache_meta *pcm,
 	atomic_dec(&pcm->mapcount);
 }
 
-struct pcache_move_pte_control {
+struct pcache_move_pte_info {
 	struct mm_struct *mm;
 	pte_t *old_pte;
 	pte_t *new_pte;
 	unsigned long old_addr;
 	unsigned long new_addr;
+	struct pcache_meta *new_pcm;
 	bool updated;
 };
 
 static inline bool matched_rmap_for_move(struct pcache_rmap *rmap,
-					 struct pcache_move_pte_control *mpc)
+					 struct pcache_move_pte_info *mpi)
 {
-	if (rmap->page_table == mpc->old_pte &&
-	    rmap->owner_mm   == mpc->mm      &&
-	    rmap->address    == mpc->old_addr)
+	if (rmap->page_table == mpi->old_pte &&
+	    rmap->owner_mm   == mpi->mm      &&
+	    rmap->address    == mpi->old_addr)
 		return true;
 	return false;
 }
 
-static int __pcache_move_pte(struct pcache_meta *pcm,
-			     struct pcache_rmap *rmap, void *arg)
+static int __pcache_move_pte_fastpath(struct pcache_meta *pcm,
+				      struct pcache_rmap *rmap, void *arg)
 {
-	struct pcache_move_pte_control *mpc = arg;
+	struct pcache_move_pte_info *mpi = arg;
 
-	if (likely(matched_rmap_for_move(rmap, mpc))) {
+	if (likely(matched_rmap_for_move(rmap, mpi))) {
 		rmap_debug("tgid: %u [%#lx %p] -> [%#lx %p]",
 			rmap->owner_process->tgid, rmap->address,
-			rmap->page_table, mpc->new_addr, mpc->new_pte);
+			rmap->page_table, mpi->new_addr, mpi->new_pte);
 
-		rmap->page_table = mpc->new_pte;
-		rmap->address = mpc->new_addr;
-		mpc->updated = true;
+		rmap->page_table = mpi->new_pte;
+		rmap->address = mpi->new_addr;
+		mpi->updated = true;
 
 		/* Break the rmap walk loop */
 		return PCACHE_RMAP_SUCCEED;
@@ -377,19 +377,11 @@ static int __pcache_move_pte(struct pcache_meta *pcm,
 	return PCACHE_RMAP_AGAIN;
 }
 
-/*
- * Update the rmap that currently points to @old_pte, to @new_pte, within
- * address space @mm.
- *
- * Called from move_ptes(), when mremap() syscall is invoked. PTE content
- * has already been moved: *old_pte is empty, while *new_pte is assigned.
- * Both @old_pte and @new_pte are locked on entry.
- */
-void pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
-		     unsigned long old_addr, unsigned long new_addr)
+static void pcache_move_pte_fastpath(struct mm_struct *mm,
+				     pte_t *old_pte, pte_t *new_pte,
+				     unsigned long old_addr, unsigned long new_addr)
 {
-	struct pcache_meta *pcm;
-	struct pcache_move_pte_control mpc = {
+	struct pcache_move_pte_info mpi = {
 		.mm = mm,
 		.old_pte = old_pte,
 		.new_pte = new_pte,
@@ -398,11 +390,22 @@ void pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
 		.updated = false,
 	};
 	struct rmap_walk_control rwc = {
-		.arg = &mpc,
-		.rmap_one = __pcache_move_pte,
+		.arg = &mpi,
+		.rmap_one = __pcache_move_pte_fastpath,
 	};
+	struct pcache_meta *pcm;
+	pte_t pte;
 
-	pcm = pte_to_pcache_meta(*new_pte);
+	/*
+	 * The identity change of PTEs and update of rmap are
+	 * divided into two steps. There exists a small time frame
+	 * where the rmap associted with the pcache points to
+	 * wrong pte. This case will be detected by rmap_get_pte_locked().
+	 */
+	pte = ptep_get_and_clear(old_addr, old_pte);
+	pte_set(new_pte, pte);
+
+	pcm = pte_to_pcache_meta(pte);
 	BUG_ON(!pcm);
 
 	lock_pcache(pcm);
@@ -413,7 +416,73 @@ void pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
 	 * In theory, this should always succeed.
 	 * Failure is not an option.
 	 */
-	BUG_ON(!mpc.updated);
+	BUG_ON(!mpi.updated);
+}
+
+static int __pcache_move_pte_slowpath(struct pcache_meta *old_pcm,
+				      struct pcache_rmap *rmap, void *arg)
+{
+	struct pcache_move_pte_info *mpi = arg;
+
+	if (unlikely(!matched_rmap_for_move(rmap, mpi)))
+		return PCACHE_RMAP_AGAIN;
+
+	/* do the copy, set valid, free oldpcm etc */
+	return PCACHE_RMAP_SUCCEED;
+}
+
+/* Copy pcache line content from one set to another set */
+static void pcache_move_pte_slowpath(struct mm_struct *mm,
+				     pte_t *old_pte, pte_t *new_pte,
+				     unsigned long old_addr, unsigned long new_addr)
+{
+	struct pcache_move_pte_info mpi = {
+		.mm = mm,
+		.old_pte = old_pte,
+		.new_pte = new_pte,
+		.old_addr = old_addr & PAGE_MASK,
+		.new_addr = new_addr & PAGE_MASK,
+		.updated = false,
+	};
+	struct rmap_walk_control rwc = {
+		.arg = &mpi,
+		.rmap_one = __pcache_move_pte_slowpath,
+	};
+	struct pcache_meta *old_pcm, *new_pcm;
+	pte_t pte;
+
+	pte = ptep_get_and_clear(old_addr, old_pte);
+
+	old_pcm = pte_to_pcache_meta(pte);
+	BUG_ON(!old_pcm);
+
+	new_pcm = pcache_alloc(new_addr);
+	BUG_ON(!new_pcm);
+	mpi.new_pcm = new_pcm;
+
+	lock_pcache(old_pcm);
+	rmap_walk(old_pcm, &rwc);
+	unlock_pcache(old_pcm);
+
+	BUG_ON(!mpi.updated);
+}
+
+/*
+ * Callback for move_ptes().
+ * Both @old_pte and @new_pte are locked when called.
+ */
+void pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
+		     unsigned long old_addr, unsigned long new_addr)
+{
+	unsigned long old_index, new_index;
+
+	old_index = user_vaddr_to_set_index(old_addr);
+	new_index = user_vaddr_to_set_index(new_addr);
+
+	if (old_index == new_index)
+		pcache_move_pte_fastpath(mm, old_pte, new_pte, old_addr, new_addr);
+	else
+		pcache_move_pte_slowpath(mm, old_pte, new_pte, old_addr, new_addr);
 }
 
 struct pcache_zap_pte_control {
