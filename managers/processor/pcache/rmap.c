@@ -197,7 +197,7 @@ static void dump_pcache_rmaps(struct pcache_meta *pcm)
 	rmap_walk(pcm, &rwc);
 }
 
-static void debug_mapcount_checking(struct pcache_meta *pcm)
+static void validate_pcache_mapcount(struct pcache_meta *pcm)
 {
 	if (unlikely(atomic_read(&pcm->mapcount) > 1)) {
 		pr_warn("****\n"
@@ -213,11 +213,60 @@ static void debug_mapcount_checking(struct pcache_meta *pcm)
 	}
 }
 
-/* Check if everything matches */
+static inline pte_t *
+rmap_get_pte_unlocked(struct mm_struct *mm, unsigned long address)
+{
+	pgd_t *pgd;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	pgd = pgd_offset(mm, address);
+	if (!pgd && !pgd_present(*pgd))
+		return NULL;
+
+	pud = pud_offset(pgd, address);
+	if (!pud && !pud_present(*pud))
+		return NULL;
+
+	pmd = pmd_offset(pud, address);
+	if (!pmd && !pmd_present(*pmd));
+		return NULL;
+
+	pte = pte_offset(pmd, address);
+	if (!pte && !pte_present(*pte))
+		return NULL;
+	return pte;
+}
+
+/*
+ * Need to validate if:
+ * - pte indexed by uva+mm matches the saved on in rmap
+ * - pte really points this pcache line
+ */
 static inline void
 validate_pcache_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap)
 {
+	unsigned long pcache_pfn, _pte_pfn;
+	pte_t *pte;
 
+	pte = rmap_get_pte_unlocked(rmap->owner_mm, rmap->address);
+	if (!pte)
+		goto out;
+
+	if (pte != rmap->page_table)
+		goto out;
+
+	pcache_pfn = pcache_meta_to_pfn(pcm);
+	_pte_pfn = pte_pfn(*pte);
+	if (pcache_pfn != _pte_pfn)
+		goto out;
+	return;
+
+out:
+	dump_pcache_meta(pcm, NULL);
+	dump_pcache_rmap(rmap, NULL);
+	BUG();
 }
 
 #else
@@ -279,7 +328,7 @@ out:
 	return ptep;
 }
 
-static inline void debug_mapcount_checking(struct pcache_meta *pcm)
+static inline void validate_pcache_mapcount(struct pcache_meta *pcm)
 {
 
 }
@@ -332,7 +381,8 @@ add:
 	ret = 0;
 	list_add(&rmap->next, &pcm->rmap);
 	atomic_inc(&pcm->mapcount);
-	debug_mapcount_checking(pcm);
+
+	validate_pcache_mapcount(pcm);
 	validate_pcache_rmap(pcm, rmap);
 out:
 	unlock_pcache(pcm);
@@ -519,6 +569,7 @@ static void pcache_move_pte_slowpath(struct mm_struct *mm,
 /*
  * Callback for move_ptes().
  * Both @old_pte and @new_pte are locked when called.
+ * Batched TLB flush is performed by caller.
  */
 void pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
 		     unsigned long old_addr, unsigned long new_addr)
