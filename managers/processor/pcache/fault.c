@@ -105,19 +105,24 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 	 * 2) victim cache
 	 */
 	ret = fill_func(address, flags, pcm, arg);
-	if (ret) {
+	if (unlikely(ret)) {
 		ret = VM_FAULT_SIGSEGV;
 		goto out;
 	}
 
+	/*
+	 * Set pte before adding rmap,
+	 * cause rmap may need to validate pte.
+	 */
+	pte_set(page_table, entry);
+
 	ret = pcache_add_rmap(pcm, page_table, address,
 			      mm, current->group_leader);
-	if (ret) {
+	if (unlikely(ret)) {
+		pte_clear(page_table);
 		ret = VM_FAULT_OOM;
 		goto out;
 	}
-
-	pte_set(page_table, entry);
 
 	/*
 	 * Also informs eviction code that we could be
@@ -126,7 +131,6 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 	SetPcacheValid(pcm);
 
 	spin_unlock(ptl);
-
 	return 0;
 
 out:
