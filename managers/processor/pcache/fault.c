@@ -90,7 +90,7 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 		return VM_FAULT_OOM;
 
 	/* TODO: Need right permission bits */
-	entry = pcache_meta_mk_pte(pcm, PAGE_SHARED_EXEC);
+	entry = pcache_mk_pte(pcm, PAGE_SHARED_EXEC);
 
 	/* Concurrent faults are serialized by this lock */
 	page_table = pte_offset_lock(mm, pmd, address, &ptl);
@@ -116,6 +116,7 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 	 */
 	pte_set(page_table, entry);
 
+	/* which will also mark PcacheValid */
 	ret = pcache_add_rmap(pcm, page_table, address,
 			      mm, current->group_leader);
 	if (unlikely(ret)) {
@@ -123,12 +124,6 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 		ret = VM_FAULT_OOM;
 		goto out;
 	}
-
-	/*
-	 * Also informs eviction code that we could be
-	 * selected as the eviction candidate.
-	 */
-	SetPcacheValid(pcm);
 
 	spin_unlock(ptl);
 	return 0;

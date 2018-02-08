@@ -483,7 +483,8 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 			continue;
 
 		/* Let pcache take care of everything */
-		pcache_move_pte(mm, old_pte, new_pte, old_addr, new_addr);
+		if (pcache_move_pte(mm, old_pte, new_pte, old_addr, new_addr))
+			WARN_ON_ONCE(1);
 	}
 
 	if (new_ptl != old_ptl)
