@@ -213,6 +213,13 @@ static void debug_mapcount_checking(struct pcache_meta *pcm)
 	}
 }
 
+/* Check if everything matches */
+static inline void
+validate_pcache_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap)
+{
+
+}
+
 #else
 /*
  * Check that @pcm is mapped at @rmap->address
@@ -277,6 +284,12 @@ static inline void debug_mapcount_checking(struct pcache_meta *pcm)
 
 }
 
+static inline void
+validate_pcache_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap)
+{
+
+}
+
 #endif /* CONFIG_DEBUG_PCACHE */
 
 /**
@@ -320,6 +333,7 @@ add:
 	list_add(&rmap->next, &pcm->rmap);
 	atomic_inc(&pcm->mapcount);
 	debug_mapcount_checking(pcm);
+	validate_pcache_rmap(pcm, rmap);
 out:
 	unlock_pcache(pcm);
 	return ret;
@@ -371,6 +385,8 @@ static int __pcache_move_pte_fastpath(struct pcache_meta *pcm,
 		rmap->address = mpi->new_addr;
 		mpi->updated = true;
 
+		validate_pcache_rmap(pcm, rmap);
+
 		/* Break the rmap walk loop */
 		return PCACHE_RMAP_SUCCEED;
 	}
@@ -385,8 +401,8 @@ static void pcache_move_pte_fastpath(struct mm_struct *mm,
 		.mm = mm,
 		.old_pte = old_pte,
 		.new_pte = new_pte,
-		.old_addr = old_addr & PAGE_MASK,
-		.new_addr = new_addr & PAGE_MASK,
+		.old_addr = old_addr,
+		.new_addr = new_addr,
 		.updated = false,
 	};
 	struct rmap_walk_control rwc = {
@@ -403,7 +419,6 @@ static void pcache_move_pte_fastpath(struct mm_struct *mm,
 	 * wrong pte. This case will be detected by rmap_get_pte_locked().
 	 */
 	pte = ptep_get_and_clear(old_addr, old_pte);
-	pte_set(new_pte, pte);
 
 	pcm = pte_to_pcache_meta(pte);
 	BUG_ON(!pcm);
@@ -417,17 +432,36 @@ static void pcache_move_pte_fastpath(struct mm_struct *mm,
 	 * Failure is not an option.
 	 */
 	BUG_ON(!mpi.updated);
+
+	/* At last we update new_pte */
+	pte_set(new_pte, pte);
 }
 
 static int __pcache_move_pte_slowpath(struct pcache_meta *old_pcm,
 				      struct pcache_rmap *rmap, void *arg)
 {
 	struct pcache_move_pte_info *mpi = arg;
+	struct pcache_meta *new_pcm;
+	void *old_line, *new_line;
 
 	if (unlikely(!matched_rmap_for_move(rmap, mpi)))
 		return PCACHE_RMAP_AGAIN;
 
-	/* do the copy, set valid, free oldpcm etc */
+	/*
+	 * XXX:
+	 * Copy the content from old pcache to new pcache.
+	 * This is not write-protected from other concurrent threads.
+	 * But I think well-writtened applications should not write
+	 * to a going-to-be-remapped memory region.
+	 */
+	new_pcm = mpi->new_pcm;
+	old_line = pcache_meta_to_pa(old_pcm);
+	new_line = pcache_meta_to_pa(new_pcm);
+	memcpy(new_line, old_line, PCACHE_LINE_SIZE);
+
+	pcache_remove_rmap(old_pcm, rmap);
+
+	mpi->updated = true;
 	return PCACHE_RMAP_SUCCEED;
 }
 
@@ -440,8 +474,8 @@ static void pcache_move_pte_slowpath(struct mm_struct *mm,
 		.mm = mm,
 		.old_pte = old_pte,
 		.new_pte = new_pte,
-		.old_addr = old_addr & PAGE_MASK,
-		.new_addr = new_addr & PAGE_MASK,
+		.old_addr = old_addr,
+		.new_addr = new_addr,
 		.updated = false,
 	};
 	struct rmap_walk_control rwc = {
@@ -456,6 +490,7 @@ static void pcache_move_pte_slowpath(struct mm_struct *mm,
 	old_pcm = pte_to_pcache_meta(pte);
 	BUG_ON(!old_pcm);
 
+	/* Alloc a line in the new set */
 	new_pcm = pcache_alloc(new_addr);
 	BUG_ON(!new_pcm);
 	mpi.new_pcm = new_pcm;
@@ -464,7 +499,21 @@ static void pcache_move_pte_slowpath(struct mm_struct *mm,
 	rmap_walk(old_pcm, &rwc);
 	unlock_pcache(old_pcm);
 
+	/* Failure is not an option */
 	BUG_ON(!mpi.updated);
+
+	/*
+	 * TODO: racy
+	 * What if another thread just tried to lock
+	 * the pcache? If others always get_pcache first
+	 * then it is okay.
+	 */
+	if (!pcache_mapped(old_pcm))
+		put_pcache(old_pcm);
+
+	/* Update new pcache, and establish PTE */
+	pcache_add_rmap(new_pcm, new_pte, new_addr, mm, current->group_leader);
+	pte_set(new_pte, pte);
 }
 
 /*
