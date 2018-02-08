@@ -220,6 +220,15 @@ static inline bool pcache_mapped(struct pcache_meta *pcm)
 	return false;
 }
 
+/*
+ * Atomically decrements mapcount by 1 and
+ * returns true if the result is 0, or false for all other
+ */
+static inline bool pcache_mapcount_dec_and_test(struct pcache_meta *pcm)
+{
+	return atomic_dec_and_test(&pcm->mapcount);
+}
+
 /* physical address is one of pcache data lines? */
 static inline bool pa_is_pcache(unsigned long address)
 {
@@ -437,9 +446,20 @@ static inline unsigned long pcache_meta_to_pfn(struct pcache_meta *pcm)
 	return ((unsigned long)pcache_meta_to_pa(pcm)) >> PCACHE_LINE_SIZE_SHIFT;
 }
 
-static inline pte_t pcache_meta_mk_pte(struct pcache_meta *pcm, pgprot_t pgprot)
+static inline pte_t pcache_mk_pte(struct pcache_meta *pcm, pgprot_t pgprot)
 {
 	return pfn_pte(pcache_meta_to_pfn(pcm), pgprot);
+}
+
+/*
+ * Create and return a new pte,
+ * use the same pgprot attributes with @old_pte
+ */
+static inline pte_t pcache_dup_pte_pgprot(struct pcache_meta *pcm, pte_t old_pte)
+{
+	pgprot_t pgprot = pte_pgprot(old_pte);;
+
+	return pcache_mk_pte(pcm, pgprot);
 }
 
 static inline struct pcache_meta *
@@ -542,8 +562,8 @@ enum pcache_rmap_status {
 
 void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
 		    pte_t ptent, pte_t *pte);
-void pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
-		     unsigned long old_addr, unsigned long new_addr);
+int pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
+		    unsigned long old_addr, unsigned long new_addr);
 
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 		    unsigned long address, struct mm_struct *owner_mm,
