@@ -1153,12 +1153,10 @@ void resched_curr(struct rq *rq)
 
 	cpu = cpu_of(rq);
 
-	if (cpu == smp_processor_id()) {
-		set_tsk_need_resched(curr);
-		return;
-	}
-
 	set_tsk_need_resched(curr);
+
+	if (cpu != smp_processor_id())
+		smp_send_reschedule(cpu);
 }
 
 /*
@@ -1722,9 +1720,6 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	INIT_LIST_HEAD(&p->rt.run_list);
 	p->rt.timeout			= 0;
 	p->rt.time_slice		= sysctl_sched_rr_timeslice;
-
-	/* XXX: Always reset on fork, may violate linux promise */
-	set_cpus_allowed_common(p, cpu_active_mask);
 }
 
 /*
