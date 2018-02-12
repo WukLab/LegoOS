@@ -352,6 +352,10 @@ static struct smp_hotplug_thread cpu_stop_threads = {
 	.selfparking		= true,
 };
 
+/*
+ * Called after kthread is created
+ * smpboot will create a thread on each online cpu for us.
+ */
 void __init cpu_stop_init(void)
 {
 	unsigned int cpu;
@@ -366,10 +370,13 @@ void __init cpu_stop_init(void)
 	BUG_ON(smpboot_register_percpu_thread(&cpu_stop_threads));
 
 	/*
-	 * This function is called before smp_init
-	 * thus only the current cpu is online.
-	 * We unpark it by ourself (selfparking == true).
+	 * smpboot_create_threads use kthread_create_on_cpu() to
+	 * create new threads. And they are parked, too.
+	 * Since we call this function after smp_init(), all CPUs
+	 * are already online, thus we need to unpark them manually.
 	 */
-	stop_machine_unpark(smp_processor_id());
+	for_each_online_cpu(cpu)
+		stop_machine_unpark(cpu);
+
 	stop_machine_initialized = true;
 }

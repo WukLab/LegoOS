@@ -515,7 +515,12 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
 	dest_cpu = cpumask_any_and(cpu_active_mask, new_mask);
 	if (task_running(rq, p) || p->state == TASK_WAKING) {
 		struct migration_arg arg = { p, dest_cpu };
-		/* Need help from migration thread: drop lock and wait. */
+
+		/*
+		 * We can not move ourself to @dest_cpu,
+		 * need help from migration thread: drop lock and wait.
+		 * When stop_one_cpu() returns, we will be running on @dest_cpu.
+		 */
 		task_rq_unlock(rq, p, &flags);
 		stop_one_cpu(cpu_of(rq), migration_cpu_stop, &arg);
 		return 0;
