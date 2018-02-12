@@ -118,8 +118,6 @@ static int kernel_init(void *unused)
 	wait_for_completion(&kthreadd_done);
 	set_task_comm(current, "kernel_init");
 
-	/* Init stop-class threads: */
-	//cpu_stop_init();
 	init_workqueues();
 
 #if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
@@ -301,6 +299,12 @@ asmlinkage void __init start_kernel(void)
 	if (WARN(!irqs_disabled(),
 		 "Interrupts were enabled *very* early, fixing it\n"))
 		local_irq_disable();
+
+	/*
+	 * Create [migration/%d] threads (highest-priority stop class)
+	 * Called before SMP is initialized
+	 */
+	cpu_stop_init();
 
 	/*
 	 * Boot all possible CPUs

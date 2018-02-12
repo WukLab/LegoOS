@@ -10,9 +10,10 @@
 #define pr_fmt(fmt) "smp: " fmt
 
 #include <lego/smp.h>
+#include <lego/percpu.h>
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
-#include <lego/percpu.h>
+#include <lego/smpboot.h>
 
 #include <asm/numa.h>
 
@@ -72,6 +73,8 @@ void __init smp_init(void)
 void cpu_online_callback(unsigned int cpu)
 {
 	smpcfd_prepare_cpu(cpu);
+	smpboot_create_threads(cpu);
+	smpboot_unpark_threads(cpu);
 }
 
 enum {

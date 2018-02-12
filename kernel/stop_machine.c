@@ -38,6 +38,7 @@ struct cpu_stopper {
 };
 
 static DEFINE_PER_CPU(struct cpu_stopper, cpu_stopper);
+static bool stop_machine_initialized = false;
 
 /* static data for stop_cpus */
 static DEFINE_MUTEX(stop_cpus_mutex);
@@ -93,6 +94,12 @@ static bool cpu_stop_queue_work(unsigned int cpu, struct cpu_stop_work *work)
  * monopolizing it.  This function returns after the execution is
  * complete.
  *
+ * This function doesn't guarantee @cpu stays online till @fn
+ * completes.  If @cpu goes down in the middle, execution may happen
+ * partially or fully on different cpus.  @fn should either be ready
+ * for that or the caller should ensure that @cpu stays online until
+ * this function completes.
+ *
  * CONTEXT:
  * Might sleep.
  *
@@ -102,8 +109,6 @@ static bool cpu_stop_queue_work(unsigned int cpu, struct cpu_stop_work *work)
  */
 int stop_one_cpu(unsigned int cpu, cpu_stop_fn_t fn, void *arg)
 {
-/* TODO: stop class has issue */
-#if 0
 	struct cpu_stop_done done;
 	struct cpu_stop_work work = { .fn = fn, .arg = arg, .done = &done };
 
@@ -117,8 +122,6 @@ int stop_one_cpu(unsigned int cpu, cpu_stop_fn_t fn, void *arg)
 	cond_resched();
 	wait_for_completion(&done.completion);
 	return done.ret;
-#endif
-	return 0;
 }
 
 /**
@@ -226,6 +229,36 @@ int stop_cpus(const struct cpumask *cpumask, cpu_stop_fn_t fn, void *arg)
 	return ret;
 }
 
+/**
+ * try_stop_cpus - try to stop multiple cpus
+ * @cpumask: cpus to stop
+ * @fn: function to execute
+ * @arg: argument to @fn
+ *
+ * Identical to stop_cpus() except that it fails with -EAGAIN if
+ * someone else is already using the facility.
+ *
+ * CONTEXT:
+ * Might sleep.
+ *
+ * RETURNS:
+ * -EAGAIN if someone else is already stopping cpus, -ENOENT if
+ * @fn(@arg) was not executed at all because all cpus in @cpumask were
+ * offline; otherwise, 0 if all executions of @fn returned 0, any non
+ * zero return value if any returned non zero.
+ */
+int try_stop_cpus(const struct cpumask *cpumask, cpu_stop_fn_t fn, void *arg)
+{
+	int ret;
+
+	/* static works are used, process one request at a time */
+	if (!mutex_trylock(&stop_cpus_mutex))
+		return -EAGAIN;
+	ret = __stop_cpus(cpumask, fn, arg);
+	mutex_unlock(&stop_cpus_mutex);
+	return ret;
+}
+
 static int cpu_stop_should_run(unsigned int cpu)
 {
 	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
@@ -274,6 +307,7 @@ repeat:
 	}
 }
 
+/* Called when taking CPU offline. Not used now. */
 void stop_machine_park(int cpu)
 {
 	struct cpu_stopper *stopper = &per_cpu(cpu_stopper, cpu);
@@ -330,5 +364,12 @@ void __init cpu_stop_init(void)
 	}
 
 	BUG_ON(smpboot_register_percpu_thread(&cpu_stop_threads));
+
+	/*
+	 * This function is called before smp_init
+	 * thus only the current cpu is online.
+	 * We unpark it by ourself (selfparking == true).
+	 */
 	stop_machine_unpark(smp_processor_id());
+	stop_machine_initialized = true;
 }
