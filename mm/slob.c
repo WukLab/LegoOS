@@ -121,15 +121,19 @@ static int slob_last(slob_t *s)
 static void *slob_new_pages(gfp_t gfp, int order, int node)
 {
 	void *page;
+
 #ifdef CONFIG_NUMA
 	if (node != NUMA_NO_NODE)
 		page = __alloc_pages_node(node, gfp, order);
 	else
 #endif
 		page = alloc_pages(gfp, order);
+
 	if (!page)
 		return NULL;
-	set_page_private((struct page *)page, order);	//set page order
+
+	set_page_private((struct page *)page, order);
+
 	return page_address((struct page *)page);
 }
 
@@ -138,6 +142,9 @@ static void slob_free_pages(void *b, int order)
 	free_pages((unsigned long)b, order);
 }
 
+/*
+ * Allocate a slob block within a given slob_page sp.
+ */
 static void *slob_page_alloc(struct page *sp, size_t size, int align)
 {
 	slob_t *prev, *cur, *aligned = NULL;
@@ -353,6 +360,7 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 	unsigned int *m;
 	int align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
 	void *ret;
+
 	if (size < PAGE_SIZE - align) {
 		if (!size)
 			return ZERO_SIZE_PTR;
@@ -365,35 +373,39 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 		ret = (void *)m + align;
 	} else {
 		unsigned int order = get_order(size);
-		//if (likely(order))
-		//	gfp |= __GFP_COMP;
+
 		ret = slob_new_pages(gfp, order, node);
 
 	}
 	return ret;
 }
 
-#ifndef SAFE_SLOB
+void *__kmalloc(size_t size, gfp_t gfp)
+{
+	return __do_kmalloc_node(size, gfp, NUMA_NO_NODE, _RET_IP_);
+}
+
 void kfree(const void *block)
 {
 	struct page *sp;
 
-	if (unlikely(ZERO_OR_NULL_PTR(block))) {
-		WARN(1, "freeing a null pointer\n");
-		return;
-	}
+	BUG_ON(ZERO_OR_NULL_PTR(block));
 
 	sp = virt_to_page(block);
 	if (PageSlab(sp)) {
 		int align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
 		unsigned int *m = (unsigned int *)(block - align);
 		slob_free(m, *m + align);
-	} else {
+	} else
+		/*
+		 * XXX:
+		 * what if this private is wrong?
+		 * We have no way to detect it.
+		 * Mixed use of private with buddy allocator is not
+		 * a good design. We should use another field, compound page?
+		 */
 		__free_pages(sp, page_private(sp));
-		set_page_private(sp, 0);
-	}
 }
-#endif
 
 size_t ksize(const void *block)
 {
@@ -414,101 +426,9 @@ size_t ksize(const void *block)
 	return SLOB_UNITS(*m) * SLOB_UNIT;
 }
 
-//void kfree(const void *p)
-//{
-//#if 0
-//	panic("kfree() is not ready! Use kfree_tmp() instead!\n");
-//#endif
-//}
-
-void kfree_tmp(size_t size, const void *p)
+#ifdef CONFIG_NUMA
+void *__kmalloc_node(size_t size, gfp_t gfp, int node)
 {
-	unsigned int order = get_order(size);
-	free_pages((unsigned long)p, order);
-}
-
-/**
- * kmalloc - allocate memory
- * @size: how many bytes of memory are required.
- * @flags: the type of memory to allocate.
- *
- * kmalloc is the normal method of allocating memory
- * for objects smaller than page size in the kernel.
- *
- * The @flags argument may be one of:
- *
- * %GFP_KERNEL - Allocate normal kernel ram.  May sleep.
- *
- * %GFP_ATOMIC - Allocation will not sleep.  May use emergency pools.
- *   For example, use this inside interrupt handlers.
- *
- * %GFP_NOIO - Do not do any I/O at all while trying to get memory.
- *
- * %GFP_NOFS - Do not make any fs calls while trying to get memory.
- *
- * %GFP_NOWAIT - Allocation will not sleep.
- *
- * %__GFP_THISNODE - Allocate node-local memory only.
- *
- * %GFP_DMA - Allocation suitable for DMA.
- *   Should only be used for kmalloc() caches. Otherwise, use a
- *   slab created with SLAB_DMA.
- *
- * Also it is possible to set different flags by OR'ing
- * in one or more of the following additional @flags:
- *
- * %__GFP_COLD - Request cache-cold pages instead of
- *   trying to return cache-warm pages.
- *
- * %__GFP_HIGH - This allocation has high priority and may use emergency pools.
- *
- * %__GFP_NOFAIL - Indicate that this allocation is in no way allowed to fail
- *   (think twice before using).
- *
- * %__GFP_NORETRY - If memory is not immediately available,
- *   then give up at once.
- *
- * %__GFP_NOWARN - If allocation fails, don't issue any warnings.
- *
- * %__GFP_REPEAT - If allocation fails initially, try once more before failing.
- *
- * There are other flags available as well, but these are not intended
- * for general use, and so are not documented here. For a full list of
- * potential flags, always refer to linux/gfp.h.
- */
-#ifndef SAFE_SLOB
-void *kmalloc(size_t size, gfp_t flags)
-{
-	return __do_kmalloc_node(size, flags, NUMA_NO_NODE, _RET_IP_);
-//	unsigned int order = get_order(size);
-//
-//	if (unlikely((order >= MAX_ORDER))) {
-//		WARN_ON(1);
-//		return NULL;
-//	}
-//
-//	return (void *)__get_free_pages(GFP_KERNEL, order);
-}
-#else
-static DEFINE_SPINLOCK(s_lock);
-
-void *kmalloc(size_t size, gfp_t flags)
-{
-	void *p;
-
-	spin_lock(&s_lock);
-	p = __do_kmalloc_node(size, flags, NUMA_NO_NODE, _RET_IP_);
-	spin_unlock(&s_lock);
-	return p;
-}
-
-void kfree(const void *block)
-{
+	return __do_kmalloc_node(size, gfp, node, _RET_IP_);
 }
 #endif
-
-
-void *kmalloc_tmp(size_t size, gfp_t flags)
-{
-	return __do_kmalloc_node(size, flags, NUMA_NO_NODE, _RET_IP_);
-}
