@@ -1401,7 +1401,7 @@ err_cmd:
 	mlx4_cmd_cleanup(dev);
 
 err_free_dev:
-	kfree_tmp(sizeof(*priv), priv);
+	kfree(priv);
 
 err_release_regions:
 //	pci_release_regions(pdev);
@@ -1460,7 +1460,7 @@ void mlx4_remove_one(struct pci_dev *pdev)
 	priv->pci_dev_data = pci_dev_data;
 	priv->removed = 1;
 
-	kfree_tmp(sizeof(*priv), priv);
+	kfree(priv);
 }
 
 #if 0
