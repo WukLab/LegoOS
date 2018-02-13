@@ -94,7 +94,7 @@ static int __bprm_mm_init(struct lego_binprm *bprm)
 	struct vm_area_struct *vma = NULL;
 	struct lego_mm_struct *mm = bprm->mm;
 
-	bprm->vma = vma = kmalloc(sizeof(*vma), GFP_KERNEL);
+	bprm->vma = vma = kzalloc(sizeof(*vma), GFP_KERNEL);
 	if (!vma)
 		return -ENOMEM;
 

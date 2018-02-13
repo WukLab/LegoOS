@@ -160,7 +160,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	if (!parent && parent_tgid != 1)
 		WARN_ONCE(1, "From processor-daemon?");
 
-	tsk = kmalloc(sizeof(*tsk), GFP_KERNEL);
+	tsk = kzalloc(sizeof(*tsk), GFP_KERNEL);
 	if (unlikely(!tsk)) {
 		retbuf = -ENOMEM;
 		goto reply;

@@ -33,7 +33,7 @@ struct lego_file *file_open(struct lego_task_struct *tsk, const char *filename)
 {
 	struct lego_file *file;
 
-	file = kmalloc(sizeof(*file), GFP_KERNEL);
+	file = kzalloc(sizeof(*file), GFP_KERNEL);
 	if (!file)
 		return ERR_PTR(-ENOMEM);
 
