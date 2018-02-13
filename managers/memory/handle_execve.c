@@ -20,8 +20,28 @@
 #ifdef CONFIG_DEBUG_HANDLE_EXECVE
 #define execve_debug(fmt, ...)	\
 	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+
+static void
+debug_argv_envp_array(u32 argc, const char **argv, unsigned long *argv_len,
+		      u32 envc, const char **envp, unsigned long *envp_len)
+{
+	int i;
+
+	for (i = 0; i < argc; i++)
+		pr_debug("    argc[%u] (len:%3lu):  %s\n",
+			i, argv_len[i], argv[i]);
+
+	for (i = 0; i < envc; i++)
+		pr_debug("    envc[%u] (len:%3lu):  %s\n",
+			i, envp_len[i], envp[i]);
+}
+
 #else
 static inline void execve_debug(const char *fmt, ...) { }
+static inline void
+debug_argv_envp_array(u32 argc, const char **argv, unsigned long *argv_len,
+		      u32 envc, const char **envp, unsigned long *envp_len)
+{ }
 #endif
 
 int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
@@ -80,7 +100,12 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 	envp = &argv[argc];
 	envp_len = &argv_len[argc];
 
-	/* Invoke real loader */
+	debug_argv_envp_array(argc, argv, argv_len, envc, envp, envp_len);
+
+	/*
+	 * Callback to real loader
+	 * which will assign @new_ip and @new_sp
+	 */
 	ret = exec_loader(tsk, filename, argc, argv, argv_len,
 			  envc, envp, envp_len,
 			  &new_ip, &new_sp);
@@ -94,6 +119,7 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 	reply.new_sp = new_sp;
 
 #ifdef CONFIG_DEBUG_HANDLE_EXECVE
+	pr_info(" mmap:\n");
 	dump_all_vmas_simple(tsk->mm);
 #endif
 
