@@ -149,15 +149,6 @@ static inline void __init_work(struct work_struct *work) { }
 		(_work)->func = (_func);				\
 	} while (0)
 
-extern struct workqueue_struct *
-__alloc_workqueue(unsigned int flags, int max_active);
-
-
-#define create_workqueue(name)						\
-	__alloc_workqueue(0, 1)
-#define create_singlethread_workqueue(name)				\
-	__alloc_workqueue(0, 1)
-
 /*
  * Workqueue flags and constants.  For details, please refer to
  * Documentation/workqueue.txt.
@@ -210,12 +201,25 @@ enum {
 #define WQ_UNBOUND_MAX_ACTIVE	\
 	max_t(int, WQ_MAX_ACTIVE, num_possible_cpus() * WQ_MAX_UNBOUND_PER_CPU)
 
-extern bool queue_work_on(int cpu, struct workqueue_struct *wq,
-			struct work_struct *work);
-#if 0
-extern bool queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
-			struct delayed_work *work, unsigned long delay);
-#endif
+#ifdef CONFIG_WORK_QUEUE
+bool queue_work_on(int cpu, struct workqueue_struct *wq, struct work_struct *work);
+struct workqueue_struct * __alloc_workqueue(unsigned int flags, int max_active);
+int init_workqueues(void);
+#else
+static inline bool queue_work_on(int cpu, struct workqueue_struct *wq,
+				 struct work_struct *work)
+{
+	BUG();
+}
+
+static inline struct workqueue_struct *
+__alloc_workqueue(unsigned int flags, int max_active)
+{
+	BUG();
+}
+
+static inline int init_workqueues(void) { return 0; }
+#endif /* CONFIG_WORK_QUEUE */
 
 /**
  * queue_work - queue work on a workqueue
@@ -233,23 +237,9 @@ static inline bool queue_work(struct workqueue_struct *wq,
 	return queue_work_on(smp_processor_id(), wq, work);
 }
 
-#if 0
-/**
- * queue_delayed_work - queue work on a workqueue after delay
- * @wq: workqueue to use
- * @dwork: delayable work to queue
- * @delay: number of jiffies to wait before queueing
- *
- * Equivalent to queue_delayed_work_on() but tries to use the local CPU.
- */
-static inline bool queue_delayed_work(struct workqueue_struct *wq,
-				      struct delayed_work *dwork,
-				      unsigned long delay)
-{
-	return queue_delayed_work_on(WORK_CPU_UNBOUND, wq, dwork, delay);
-}
-#endif
-
-int init_workqueues(void);
+#define create_workqueue(name)						\
+	__alloc_workqueue(0, 1)
+#define create_singlethread_workqueue(name)				\
+	__alloc_workqueue(0, 1)
 
 #endif /* _LEGO_WORKQUEUE_H_ */

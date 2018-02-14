@@ -160,6 +160,15 @@ config FUTEX
 
 	  If unsure, just say Y.
 
+config WORK_QUEUE
+	bool "Work Queue"
+	default n
+	help
+	  Say Y if want to use workqueue in Lego kernel.
+	  Currently we don't have any users, so default to N.
+
+	  If unsure, say N.
+
 menu "Compile-time checks and compiler options"
 
 config DEBUG_INFO

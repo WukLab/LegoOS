@@ -312,8 +312,12 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 	 * mapping even before other CPUs do "entry = *pte" in first line.
 	 */
 	entry = pte_mkyoung(entry);
-	if (!pte_same(*pte, entry) && (flags & FAULT_FLAG_WRITE))
+	if (!pte_same(*pte, entry) && (flags & FAULT_FLAG_WRITE)) {
+		dump_pte(pte, NULL);
+		pr_info("%#lx\n", entry.pte);
+		WARN_ON(1);
 		*pte = entry;
+	}
 
 unlock:
 	spin_unlock(ptl);
