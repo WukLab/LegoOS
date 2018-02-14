@@ -3728,11 +3728,13 @@ int ib_cm_init(void)
 	//idr_pre_get(&cm.local_id_table, GFP_KERNEL);
 	INIT_LIST_HEAD(&cm.timewait_list);
 
+#ifdef CONFIG_WORK_QUEUE
 	cm.wq = create_workqueue("ib_cm");
 	if (!cm.wq) {
 		ret = -ENOMEM;
 		goto error1;
 	}
+#endif
 
 	ret = ib_register_client(&cm_client);
 	if (ret)
