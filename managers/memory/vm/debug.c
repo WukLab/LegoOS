@@ -92,7 +92,8 @@ void dump_vma_simple(const struct vm_area_struct *vma)
 
 void dump_vma(const struct vm_area_struct *vma)
 {
-	pr_emerg("vma %p start %p end %p\n"
+	pr_emerg("\n"
+		"vma %p start %p end %p\n"
 		"next %p prev %p mm %p\n"
 		"prot %lx anon_vma %p vm_ops %pS\n"
 		"pgoff %lx file %p f_op %pS\n"
@@ -131,7 +132,8 @@ void dump_all_vmas(struct lego_mm_struct *mm)
 
 void dump_lego_mm(const struct lego_mm_struct *mm)
 {
-	pr_emerg("mm %p mmap %p task_size %#lx\n"
+	pr_emerg("\n"
+		"mm %p mmap %p task_size %#lx\n"
 		"get_unmapped_area %p\n"
 		"mmap_base %#lx mmap_legacy_base %#lx highest_vm_end %#lx\n"
 		"pgd %p mm_users %d mm_count %d nr_ptes %lu map_count %d\n"

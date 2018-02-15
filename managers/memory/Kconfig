@@ -87,6 +87,18 @@ config DEBUG_HANDLE_EXECVE
 	  
 	  If unsure, say N.
 
+config DEBUG_LOADER
+	bool "Debug elf loader"
+	default n
+	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
+	depends on DEBUG_HANDLE_EXECVE
+	help
+	  Enable to debug our virtual loader and elf loader.
+	  It will print some important information about loading.
+
+	  If unsrue, say N.
+
 config DEBUG_HANDLE_MMAP
 	bool "Debug handle_mmap.c"
 	default n

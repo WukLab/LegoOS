@@ -125,11 +125,21 @@ static int dup_lego_mm(struct lego_task_struct *t,
 	t->mm = mm;
 
 	if (parent) {
+#ifdef CONFIG_DEBUG_HANDLE_FORK
+		pr_debug(" dup_mm from parent: %d\n", parent->pid);
+		dump_lego_mm(mm);
+		dump_all_vmas_simple(mm);
+#endif
+
 		oldmm = parent->mm;
 		err = dup_lego_mmap(mm, oldmm);
 		if (err)
 			goto out;
 	} else {
+#ifdef CONFIG_DEBUG_HANDLE_FORK
+		pr_debug(" brand new mm: %p\n", mm);
+		dump_lego_mm(mm);
+#endif
 		/*
 		 * The only possibility that parent is NULL
 		 * is that this is the first process here.

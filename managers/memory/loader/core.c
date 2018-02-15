@@ -117,6 +117,7 @@ static int __bprm_mm_init(struct lego_binprm *bprm)
 	if (err)
 		goto err;
 
+	/* Temporary stack vma */
 	mm->stack_vm = mm->total_vm = 1;
 
 	bprm->p = vma->vm_end - sizeof(void *);
@@ -150,6 +151,13 @@ static int bprm_mm_init(struct lego_task_struct *tsk, struct lego_binprm *bprm)
 	if (err)
 		goto err;
 
+#ifdef CONFIG_DEBUG_LOADER
+	pr_debug("--  Dump new mm and temporary stack vma:\n");
+	dump_all_vmas_simple(bprm->mm);
+	dump_lego_mm(bprm->mm);
+	pr_debug("--  Finish dump new mm\n");
+#endif
+
 	return 0;
 
 err:
@@ -180,7 +188,9 @@ static int get_arg_page(struct lego_binprm *bprm,
 }
 
 /*
- * Copy argument/environment strings to the temporary stack vma
+ * Copy argument/environment strings to the temporary stack vma.
+ * The source is kernel memory, the destination is user memory.
+ * Thus we need to call faultin_page() to manually setup user pages.
  */
 static int copy_strings(struct lego_task_struct *tsk, struct lego_binprm *bprm,
 			u32 argc, const char **argv)
@@ -271,6 +281,11 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 	if (retval)
 		goto out_free;
 
+	/* Top of stack is filename */
+	retval = copy_strings(tsk, bprm, 1, &filename);
+	if (retval)
+		goto out;
+
 	/* Copy argv/envp to new process's stack */
 	bprm->exec = bprm->p;
 	retval = copy_strings(tsk, bprm, envc, envp);
@@ -286,13 +301,23 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 	if (WARN_ON(retval < 0))
 		goto out;
 
-	/* go for it */
+	/*
+	 * They will install the new mm and release the old mm,
+	 * by calling flush_old_exec():
+	 */
 	retval = search_exec_binary_handler(tsk, bprm, new_ip, new_sp,
 					    argv_len, envp_len);
 	if (retval)
 		goto out;
 
 	kfree(bprm);
+
+#ifdef CONFIG_DEBUG_LOADER
+	pr_debug("--  Dump final mm after loading:\n");
+	dump_all_vmas_simple(tsk->mm);
+	dump_lego_mm(tsk->mm);
+	pr_debug("--  Finish dump final mm\n");
+#endif
 	return 0;
 
 out:

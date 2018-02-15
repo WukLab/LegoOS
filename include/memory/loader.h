@@ -12,6 +12,13 @@
 
 #include <lego/comp_memory.h>
 
+#ifdef CONFIG_DEBUG_LOADER
+#define loader_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void loader_debug(const char *fmt, ...) { }
+#endif
+
 /* sizeof(lego_binprm->buf) */
 #define BINPRM_BUF_SIZE		128
 

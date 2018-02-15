@@ -118,11 +118,6 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 	reply.new_ip = new_ip;
 	reply.new_sp = new_sp;
 
-#ifdef CONFIG_DEBUG_HANDLE_EXECVE
-	pr_info(" mmap:\n");
-	dump_all_vmas_simple(tsk->mm);
-#endif
-
 out:
 	kfree(argv);
 	kfree(argv_len);

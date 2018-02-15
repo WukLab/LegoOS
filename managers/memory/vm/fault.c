@@ -143,12 +143,19 @@ static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
 		return do_swap_page(vma, address, flags, pte, pmd, entry);
 	}
 
-	WARN_ON(1);
 	ptl = lego_pte_lockptr(mm, pmd);
 	spin_lock(ptl);
 	if (unlikely(!pte_same(*pte, entry)))
 		goto unlock;
 
+	/*
+	 * If someone use faultin_page against an already valid/mapped user
+	 * virtual address, then we will walk here. People should use
+	 * get_user_pages() instead of faultin_page() maybe?
+	 *
+	 * Or if the vma is already populated, then all uva are mapped.
+	 * in which case, all pcache misses will walk here. Shall we do this?
+	 */
 	if (flags & FAULT_FLAG_WRITE) {
 		if (!pte_write(entry))
 			return do_wp_page(vma, address, flags, pte, pmd, entry);
