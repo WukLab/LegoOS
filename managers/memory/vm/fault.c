@@ -39,7 +39,8 @@ static int do_wp_page(struct vm_area_struct *vma, unsigned long address,
  */
 static int __do_fault(struct lego_mm_struct *mm, struct vm_area_struct *vma,
 		unsigned long address, pmd_t *pmd,
-		pgoff_t pgoff, unsigned int flags, pte_t orig_pte)
+		pgoff_t pgoff, unsigned int flags, pte_t orig_pte,
+		unsigned long *mapping_flags)
 {
 	struct vm_fault vmf;
 	pte_t *page_table;
@@ -68,22 +69,24 @@ static int __do_fault(struct lego_mm_struct *mm, struct vm_area_struct *vma,
 	}
 
 	lego_pte_unlock(page_table, ptl);
-
+	if (mapping_flags)
+		*mapping_flags = PCACHE_MAPPING_FILE;
 	return 0;
 }
 
 static int do_linear_fault(struct vm_area_struct *vma, unsigned long address,
 			   unsigned int flags, pte_t *page_table, pmd_t *pmd,
-			   pte_t orig_pte)
+			   pte_t orig_pte, unsigned long *mapping_flags)
 {
 	pgoff_t pgoff = (((address & PAGE_MASK)
 			- vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
 
-	return __do_fault(vma->vm_mm, vma, address, pmd, pgoff, flags, orig_pte);
+	return __do_fault(vma->vm_mm, vma, address, pmd, pgoff, flags, orig_pte, mapping_flags);
 }
 
 static int do_anonymous_page(struct vm_area_struct *vma, unsigned long address,
-			     unsigned int flags, pte_t *page_table, pmd_t *pmd)
+			     unsigned int flags, pte_t *page_table, pmd_t *pmd,
+			     unsigned long *mapping_flags)
 {
 	pte_t entry;
 	spinlock_t *ptl;
@@ -114,11 +117,14 @@ static int do_anonymous_page(struct vm_area_struct *vma, unsigned long address,
 	pte_set(page_table, entry);
 unlock:
 	lego_pte_unlock(page_table, ptl);
+	if (mapping_flags)
+		*mapping_flags = PCACHE_MAPPING_ANON;
 	return 0;
 }
 
 static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
-			    unsigned int flags, pte_t *pte, pmd_t *pmd)
+			    unsigned int flags, pte_t *pte, pmd_t *pmd,
+			    unsigned long *mapping_flags)
 {
 	pte_t entry;
 	spinlock_t *ptl;
@@ -129,14 +135,15 @@ static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
 		if (pte_none(entry)) {
 			if (vma->vm_ops && vma->vm_ops->fault)
 				return do_linear_fault(vma, address, flags,
-						       pte, pmd, entry);
+						       pte, pmd, entry, mapping_flags);
 			else
 				return do_anonymous_page(vma, address, flags,
-							 pte, pmd);
+							 pte, pmd, mapping_flags);
 		}
 		return do_swap_page(vma, address, flags, pte, pmd, entry);
 	}
 
+	WARN_ON(1);
 	ptl = lego_pte_lockptr(mm, pmd);
 	spin_lock(ptl);
 	if (unlikely(!pte_same(*pte, entry)))
@@ -186,7 +193,7 @@ unlock:
  *	virtual address only.
  */
 int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
-			 unsigned int flags, unsigned long *ret_va)
+			 unsigned int flags, unsigned long *ret_va, unsigned long *mapping_flags)
 {
 	struct lego_mm_struct *mm = vma->vm_mm;
 	int ret;
@@ -206,7 +213,7 @@ int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	if (!pte)
 		return VM_FAULT_OOM;
 
-	ret = handle_pte_fault(vma, address, flags, pte, pmd);
+	ret = handle_pte_fault(vma, address, flags, pte, pmd, mapping_flags);
 	if (unlikely(ret))
 		return ret;
 

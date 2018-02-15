@@ -44,7 +44,7 @@ static int __clflush_one(struct task_struct *tsk, unsigned long user_va,
 	clflush_debug("I tgid:%u user_va:%#lx cache_kva:%p caller: %pS",
 		payload->pid, payload->user_va, cache_addr, caller);
 
-	ret_len = net_send_reply_timeout(get_memory_home_node(tsk), P2M_LLC_FLUSH,
+	ret_len = net_send_reply_timeout(get_memory_home_node(tsk), P2M_PCACHE_FLUSH,
 			payload, sizeof(*payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
 

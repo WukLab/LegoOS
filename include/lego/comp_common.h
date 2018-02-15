@@ -42,8 +42,8 @@ extern unsigned int LEGO_LOCAL_NID;
  */
 
 #define P2M_HEARTBEAT	((__u32)0x10000000)
-#define P2M_LLC_MISS	((__u32)0x20000000)
-#define P2M_LLC_FLUSH	((__u32)0x30000000)
+#define P2M_PCACHE_MISS	((__u32)0x20000000)
+#define P2M_PCACHE_FLUSH ((__u32)0x30000000)
 
 #define P2M_READ	((__u32)__NR_read)
 #define P2M_WRITE	((__u32)__NR_write)
@@ -141,15 +141,25 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 			   void *retbuf, u32 max_len_retbuf, bool retbuf_is_phys,
 			   u32 timeout);
 
-/* P2M_LLC_MISS */
+/* P2M_PCACHE_MISS */
 
-struct p2m_llc_miss_struct {
+struct p2m_pcache_miss_struct {
 	__u32	pid;
 	__u32	tgid;
 	__u32	flags;
 	__u64	missing_vaddr;
 };
-int handle_p2m_llc_miss(struct p2m_llc_miss_struct *, u64,
+
+#define PCACHE_MAPPING_ANON	0x1
+#define PCACHE_MAPPING_FILE	0x2
+
+struct p2m_pcache_miss_reply_struct {
+	__u32	mapping_flags;
+	__wsum	csum;
+	char	data[PCACHE_LINE_SIZE];
+};
+
+int handle_p2m_pcache_miss(struct p2m_pcache_miss_struct *, u64,
 			struct common_header *);
 
 #define MAX_FILENAME_LENGTH	128
@@ -323,7 +333,7 @@ struct m2s_read_write_payload{
 	loff_t	offset;
 };
 
-/* P2M_LLC_FLUSH */
+/* P2M_PCACHE_FLUSH */
 struct p2m_flush_payload {
 	u32		pid;
 	unsigned long	user_va;

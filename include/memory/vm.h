@@ -257,7 +257,7 @@ struct vm_fault {
 };
 
 int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
-			 unsigned int flags, unsigned long *ret_va);
+			 unsigned int flags, unsigned long *ret_va, unsigned long *mapping_flags);
 
 int handle_lego_mmap_faults(struct vm_area_struct *vma, unsigned long address,
 			unsigned int flags, u32 nr_pages);

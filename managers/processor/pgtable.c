@@ -40,10 +40,7 @@ static void free_pte_range(struct mm_struct *mm, pmd_t *pmd,
 
 	pte = pte_offset_lock(mm, pmd, addr, &ptl);
 	do {
-		pte_t ptent = *pte;
-
-		pgtable_debug("  addr: %lx, pte: %#lx",
-			addr, ptent.pte);
+		pgtable_debug("addr: %lx, pte: %p", addr, pte);
 
 		pte_clear(pte);
 	} while (pte++, addr += PAGE_SIZE, addr != end);
@@ -51,8 +48,7 @@ static void free_pte_range(struct mm_struct *mm, pmd_t *pmd,
 }
 
 static inline void free_pmd_range(struct mm_struct *mm, pud_t *pud,
-				unsigned long addr, unsigned long end,
-				unsigned long floor, unsigned long ceiling)
+				unsigned long addr, unsigned long end)
 {
 	pmd_t *pmd;
 	unsigned long next;
@@ -67,8 +63,7 @@ static inline void free_pmd_range(struct mm_struct *mm, pud_t *pud,
 }
 
 static inline void free_pud_range(struct mm_struct *mm, pgd_t *pgd,
-				unsigned long addr, unsigned long end,
-				unsigned long floor, unsigned long ceiling)
+				unsigned long addr, unsigned long end)
 {
 	pud_t *pud;
 	unsigned long next;
@@ -78,12 +73,12 @@ static inline void free_pud_range(struct mm_struct *mm, pgd_t *pgd,
 		next = pud_addr_end(addr, end);
 		if (pud_none_or_clear_bad(pud))
 			continue;
-		free_pmd_range(mm, pud, addr, next, floor, ceiling);
+		free_pmd_range(mm, pud, addr, next);
 	} while (pud++, addr = next, addr != end);
 }
 
 /*
- * Clear and free pgtable.
+ * Clear and free user-level pgtable.
  * Note: this doesn't free the actual pages themselves. That
  * has been handled earlier when unmapping all the memory regions,
  *
@@ -93,14 +88,12 @@ static inline void free_pud_range(struct mm_struct *mm, pgd_t *pgd,
  * Come back and fix this after deadline!
  */
 void free_pgd_range(struct mm_struct *mm,
-		    unsigned long __user addr, unsigned long __user end,
-		    unsigned long floor, unsigned long ceiling)
+		    unsigned long __user addr, unsigned long __user end)
 {
 	pgd_t *pgd;
 	unsigned long next, original_addr = addr;
 
-	pgtable_debug("[%#lx - %#lx], floor: %#lx, ceiling: %#lx",
-		addr, end, floor, ceiling);
+	pgtable_debug("[%#lx - %#lx]", addr, end);
 
 	if (addr > end - 1)
 		return;
@@ -110,14 +103,15 @@ void free_pgd_range(struct mm_struct *mm,
 		next = pgd_addr_end(addr, end);
 		if (pgd_none_or_clear_bad(pgd))
 			continue;
-		free_pud_range(mm, pgd, addr, next, floor, ceiling);
+		free_pud_range(mm, pgd, addr, next);
 	} while (pgd++, addr = next, addr != end);
 
 	flush_tlb_mm_range(mm, original_addr, end);
 }
 
 /*
- * TODO: Flush back dirty pages back to memory component!
+ * TODO:
+ * Flush *file-backed* dirty pages!
  */
 static unsigned long
 zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
@@ -151,7 +145,9 @@ zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 			 * consistent with move_ptes(). Also, we can catch
 			 * this very confidently in rmap code.
 			 */
-			ptent = ptep_get_and_clear_full(pte);
+			ptent = ptep_get_and_clear(addr, pte);
+
+			pgtable_debug("addr: %#lx, pte: %p", addr, pte);
 
 			/*
 			 * TODO:
@@ -260,7 +256,7 @@ void release_pgtable(struct task_struct *tsk,
 	unmap_page_range(mm, start, end);
 
 	/* Free pgtable pages */
-	free_pgd_range(mm, start, end, start, end);
+	free_pgd_range(mm, start, end);
 }
 
 /*

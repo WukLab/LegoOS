@@ -29,6 +29,7 @@
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
 #include <lego/ratelimit.h>
+#include <lego/checksum.h>
 #include <asm/io.h>
 
 #include <processor/pcache.h>
@@ -134,18 +135,27 @@ out:
 	return ret;
 }
 
+static inline void pcache_fill_update_stat(struct pcache_meta *pcm)
+{
+	struct pcache_set *pset;
+
+	pset = pcache_meta_to_pcache_set(pcm);
+	inc_pset_event(pset, PSET_FILL_MEMORY);
+	inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY);
+}
+
 /*
  * Callback for common fill code
  * Fill the pcache line from remote memory.
  */
+#ifndef CONFIG_DEBUG_PCACHE
 static int
 __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		      struct pcache_meta *pcm, void *unused)
 {
 	int ret, len;
-	struct p2m_llc_miss_struct payload;
-	struct pcache_set *pset;
 	void *pa_cache = pcache_meta_to_pa(pcm);
+	struct p2m_pcache_miss_struct payload;
 
 	payload.pid = current->pid;
 	payload.tgid = current->tgid;
@@ -155,7 +165,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
 
-	len = net_send_reply_timeout(get_memory_home_node(current), P2M_LLC_MISS,
+	len = net_send_reply_timeout(get_memory_home_node(current), P2M_PCACHE_MISS,
 			&payload, sizeof(payload),
 			pa_cache, PCACHE_LINE_SIZE, true, DEF_NET_TIMEOUT);
 
@@ -179,17 +189,71 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		}
 	}
 
-	/* Update counting */
-	pset = pcache_meta_to_pcache_set(pcm);
-	inc_pset_event(pset, PSET_FILL_MEMORY);
-	inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY);
-
+	pcache_fill_update_stat(pcm);
 	ret = 0;
 out:
 	pcache_fill_debug("O pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p ret:%d(%s)",
 		current->pid, current->tgid, address, flags, pa_cache, ret, perror(ret));
 	return ret;
 }
+#else
+static int
+__pcache_do_fill_page(unsigned long address, unsigned long flags,
+		      struct pcache_meta *pcm, void *unused)
+{
+	int ret, len;
+	struct p2m_pcache_miss_struct payload;
+	struct p2m_pcache_miss_reply_struct *reply;
+	void *va_pcache;
+	__wsum csum;
+
+	reply = kmalloc(sizeof(*reply), GFP_KERNEL);
+	if (!reply)
+		return -ENOMEM;
+
+	payload.pid = current->pid;
+	payload.tgid = current->tgid;
+	payload.flags = flags;
+	payload.missing_vaddr = address;
+
+	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx",
+		current->pid, current->tgid, address, flags);
+
+	len = net_send_reply_timeout(get_memory_home_node(current), P2M_PCACHE_MISS,
+			&payload, sizeof(payload),
+			reply, sizeof(*reply), false, DEF_NET_TIMEOUT);
+
+	if (len != sizeof(*reply)){
+		ret = -EFAULT;
+		goto out;
+	}
+
+	csum = csum_partial(reply->data, PCACHE_LINE_SIZE, 0);
+	if (csum != reply->csum) {
+		pr_info("csum: %x, reply->csum: %x\n", csum, reply->csum);
+		dump_pcache_meta(pcm, "csum mismatch");
+		BUG();
+	}
+
+	if (reply->mapping_flags & PCACHE_MAPPING_ANON) {
+		if (csum != 0) {
+			dump_pcache_meta(pcm, "anony csum not 0");
+			WARN_ON_ONCE(1);
+		}
+	}
+
+	va_pcache = pcache_meta_to_kva(pcm);
+	memcpy(va_pcache, reply->data, PCACHE_LINE_SIZE);
+
+	pcache_fill_update_stat(pcm);
+	ret = 0;
+out:
+	kfree(reply);
+	pcache_fill_debug("O pid:%u tgid:%u address:%#lx flags:%#lx ret:%d(%s)",
+		current->pid, current->tgid, address, flags, ret, perror(ret));
+	return ret;
+}
+#endif
 
 /*
  * This function handles normal cache line misses.

@@ -31,7 +31,7 @@ static void local_qemu_test(void)
 	struct common_header hdr;
 	struct p2m_fork_struct fork;
 	struct p2m_execve_struct *execve;
-	struct p2m_llc_miss_struct miss;
+	struct p2m_pcache_miss_struct miss;
 	struct lego_task_struct *tsk;
 	const char *str;
 	unsigned int nid, pid;
@@ -70,7 +70,7 @@ static void local_qemu_test(void)
 	miss.pid = pid;
 	miss.flags = FAULT_FLAG_WRITE;
 	miss.missing_vaddr = 0x400000ULL;
-	handle_p2m_llc_miss(&miss, 0, &hdr);
+	handle_p2m_pcache_miss(&miss, 0, &hdr);
 
 /* last page of stack, see argc etc info */
 	get_user_pages(tsk, 0x7fffffffe000, 1, 0, pages, NULL);
@@ -162,10 +162,10 @@ static int mc_dispatcher(void *passed)
 	 */
 	switch (hdr->opcode) {
 /* PCACHE */
-	case P2M_LLC_MISS:
-		handle_p2m_llc_miss(payload, desc, hdr);
+	case P2M_PCACHE_MISS:
+		handle_p2m_pcache_miss(payload, desc, hdr);
 		break;
-	case P2M_LLC_FLUSH:
+	case P2M_PCACHE_FLUSH:
 		handle_p2m_flush_one(payload, desc, hdr);
 		break;
 

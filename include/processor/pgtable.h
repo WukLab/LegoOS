@@ -23,8 +23,7 @@ void dump_page_tables(struct task_struct *tsk,
 		      unsigned long __user start, unsigned long __user end);
 
 void free_pgd_range(struct mm_struct *mm,
-		    unsigned long addr, unsigned long end,
-		    unsigned long floor, unsigned long ceiling);
+		    unsigned long __user addr, unsigned long __user end);
 
 void unmap_page_range(struct mm_struct *mm,
 		      unsigned long addr, unsigned long end);

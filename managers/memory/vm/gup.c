@@ -17,7 +17,7 @@ int faultin_page(struct vm_area_struct *vma, unsigned long start,
 {
 	int ret;
 
-	ret = handle_lego_mm_fault(vma, start, flags, kvaddr);
+	ret = handle_lego_mm_fault(vma, start, flags, kvaddr, NULL);
 	if (ret & VM_FAULT_ERROR) {
 		if (ret & VM_FAULT_OOM)
 			return -ENOMEM;
