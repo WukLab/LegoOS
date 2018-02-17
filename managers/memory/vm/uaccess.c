@@ -54,8 +54,9 @@ __lego_copy_to_user(void *to, const void *from, size_t len)
  *
  * Return bytes been copied, 0 on failure.
  */
-unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
-				void __user *to, const void *from, size_t n)
+unsigned long _lego_copy_to_user(struct lego_task_struct *tsk,
+				 void __user *to, const void *from, size_t n,
+				 const char *caller)
 {
 	unsigned long first_page, last_page, nr_pages;
 	long ret;
@@ -65,8 +66,8 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 		return 0;
 	}
 
-	uaccess_debug("to_usr[%#lx-%#lx], bytes=%zu",
-		(unsigned long)to, (unsigned long)to + n - 1, n);
+	uaccess_debug("to_usr[%#lx-%#lx], bytes=%zu, caller: %s",
+		(unsigned long)to, (unsigned long)to + n - 1, n, caller);
 
 	if ((unsigned long)to > TASK_SIZE) {
 		__lego_copy_to_user(to, from, n);
@@ -149,8 +150,9 @@ __lego_copy_from_user(void *to, const void *from, size_t len)
  *
  * Return bytes been copied, 0 on failure.
  */
-unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
-				  void *to , const void __user *from, size_t n)
+unsigned long _lego_copy_from_user(struct lego_task_struct *tsk,
+				   void *to , const void __user *from, size_t n,
+				   const char *caller)
 {
 	unsigned long first_page, last_page, nr_pages;
 	long ret;
@@ -160,8 +162,8 @@ unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
 		return 0;
 	}
 
-	uaccess_debug("from_usr[%#lx-%#lx], bytes=%zu",
-		(unsigned long)from, (unsigned long)from + n - 1, n);
+	uaccess_debug("from_usr[%#lx-%#lx], bytes=%zu, caller: %s",
+		(unsigned long)from, (unsigned long)from + n - 1, n, caller);
 
 	if ((unsigned long)from > TASK_SIZE) {
 		__lego_copy_from_user(to, from, n);
@@ -232,8 +234,8 @@ unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
  * Returns number of bytes that could not be cleared.
  * On success, this will be zero.
  */
-unsigned long __must_check lego_clear_user(struct lego_task_struct *tsk,
-					   void * __user dst, size_t cnt)
+unsigned long _lego_clear_user(struct lego_task_struct *tsk,
+			       void * __user dst, size_t cnt, const char *caller)
 {
 	char zero = 0;
 
@@ -244,8 +246,8 @@ unsigned long __must_check lego_clear_user(struct lego_task_struct *tsk,
 
 	WARN_ON(cnt > UACCESS_WARNING_LIMIT * PAGE_SIZE);
 
-	uaccess_debug("to_usr[%#lx-%#lx], bytes=%zu",
-		(unsigned long)dst, (unsigned long)dst + cnt - 1, cnt);
+	uaccess_debug("to_usr[%#lx-%#lx], bytes=%zu, caller: %s",
+		(unsigned long)dst, (unsigned long)dst + cnt - 1, cnt, caller);
 
 	while (cnt) {
 		if (unlikely(!lego_copy_to_user(tsk, dst++, &zero, 1)))

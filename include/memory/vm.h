@@ -345,13 +345,25 @@ lego_mm_populate(struct lego_mm_struct *mm, unsigned long start, unsigned long l
 }
 
 /* uaccess.c */
-unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
-				void __user *to, const void *from, size_t n);
+unsigned long _lego_copy_to_user(struct lego_task_struct *tsk,
+				 void __user *to, const void *from, size_t n,
+				 const char *caller);
 
-unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
-				  void *to , const void __user *from, size_t n);
+unsigned long _lego_copy_from_user(struct lego_task_struct *tsk,
+				   void *to , const void __user *from, size_t n,
+				   const char *caller);
 
-unsigned long __must_check lego_clear_user(struct lego_task_struct *tsk,
-					   void * __user dst, size_t cnt);
+unsigned long __must_check _lego_clear_user(struct lego_task_struct *tsk,
+					    void * __user dst, size_t cnt,
+					    const char *caller);
+
+#define lego_copy_to_user(tsk, to, from, n)	\
+	_lego_copy_to_user(tsk, to, from, n, __func__)
+
+#define lego_copy_from_user(tsk, to, from, n)	\
+	_lego_copy_from_user(tsk, to, from, n, __func__)
+
+#define lego_clear_user(tsk, dst, cnt)	\
+	_lego_clear_user(tsk, dst, cnt, __func__)
 
 #endif /* _LEGO_MEMORY_VM_H_ */
