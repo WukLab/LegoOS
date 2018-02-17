@@ -34,25 +34,21 @@
 
 #define BAD_ADDR(x)	((unsigned long)(x) >= TASK_SIZE)
 
-static int lego_clear_user(void * __user dst, size_t cnt)
-{
-	return 0;
-}
-
 /*
  * We need to explicitly zero any fractional pages
  * after the data section (i.e. bss).  This would
  * contain the junk from the file that should not
  * be in memory
  */
-static int padzero(unsigned long elf_bss)
+static int padzero(struct lego_task_struct *tsk, unsigned long elf_bss)
 {
 	unsigned long nbyte;
 
 	nbyte = ELF_PAGEOFFSET(elf_bss);
 	if (nbyte) {
 		nbyte = ELF_MIN_ALIGN - nbyte;
-		if (lego_clear_user((void *)elf_bss, nbyte))
+		loader_debug("[%#lx - %#lx]", elf_bss, elf_bss + nbyte - 1);
+		if (lego_clear_user(tsk, (void *)elf_bss, nbyte))
 			return -EFAULT;
 	}
 	return 0;
@@ -391,9 +387,10 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	int load_addr_set = 0;
 	unsigned long error;
 	struct elf_phdr *elf_ppnt, *elf_phdata;
-	unsigned long elf_bss, elf_brk;
 	int retval, i;
-	unsigned long elf_entry;
+	unsigned long elf_entry;	/* program entry point */
+	unsigned long elf_bss;		/* start of bss */
+	unsigned long elf_brk;		/* start of brk */
 	unsigned long interp_load_addr = 0;
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long reloc_func_desc __maybe_unused = 0;
@@ -489,7 +486,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	 * the correct location in memory.
 	 */
 	elf_ppnt = elf_phdata;
-	for(i = 0; i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
+	for (i = 0; i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
 		int elf_prot = 0, elf_flags;
 		unsigned long k, vaddr;
 		unsigned long total_size = 0;
@@ -517,8 +514,8 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 				nbyte = ELF_MIN_ALIGN - nbyte;
 				if (nbyte > elf_brk - elf_bss)
 					nbyte = elf_brk - elf_bss;
-				if (lego_clear_user((void *)elf_bss +
-							load_bias, nbyte)) {
+				if (lego_clear_user(tsk,
+					(void *)elf_bss + load_bias, nbyte)) {
 					/*
 					 * This bss-zeroing can fail if the ELF
 					 * file specifies odd protections. So
@@ -542,6 +539,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 			elf_flags |= MAP_FIXED;
 		} else if (loc->elf_ex.e_type == ET_DYN) {
 			/*
+			 * Lego Specific:
 			 * Dynamic linked files are not supported. 
 			 * Should not come here as type is verified.
 			 */
@@ -563,6 +561,7 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 			load_addr_set = 1;
 			load_addr = (elf_ppnt->p_vaddr - elf_ppnt->p_offset);
 			if (loc->elf_ex.e_type == ET_DYN) {
+				/* Lego Specific */
 				BUG();
 				retval = -ENOEXEC;
 				goto out_free_ph;
@@ -609,20 +608,34 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	start_data += load_bias;
 	end_data += load_bias;
 
+	loader_debug("code: [%#lx-%#lx] data: [%#lx-%#lx] "
+		     "elf_bss: %#lx, elf_brk: %#lx",
+		     start_code, end_code, start_data, end_data,
+		     elf_bss, elf_brk);
+
 	/*
 	 * Calling set_brk effectively mmaps the pages
 	 * that we need for the bss and break sections.
 	 *
-	 * .bss and brk is combined together!
+	 * .bss and brk are combined together!
 	 */
 	retval = set_brk(tsk, elf_bss, elf_brk);
 	if (retval)
 		goto out_free_ph;
-	if (likely(elf_bss != elf_brk) && unlikely(padzero(elf_bss))) {
+
+	/*
+	 * Clear the fontend of .bss that
+	 * may share the same page with .data
+	 */
+	if (likely(elf_bss != elf_brk) && unlikely(padzero(tsk, elf_bss))) {
 		retval = -EFAULT; /* Nobody gets to see this, but.. */
 		goto out_free_ph;
 	}
 
+	/*
+	 * e_entry is the VA to which the system first transfers control
+	 * Not the start_code! Normally, it is the <_start> function.
+	 */
 	elf_entry = loc->elf_ex.e_entry;
 	if (BAD_ADDR(elf_entry)) {
 		retval = -EINVAL;
@@ -649,10 +662,11 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	mm->start_data = start_data;
 	mm->end_data = end_data;
 	mm->start_stack = bprm->p;
+	mm->start_bss = elf_bss;
 
 	/*
 	 * e_entry is the VA to which the system first transfers control
-	 * Note the start_code! Normally, it is the <_start> function.
+	 * Not the start_code! Normally, it is the <_start> function.
 	 */
 	*new_ip = elf_entry;
 	*new_sp = mm->start_stack;

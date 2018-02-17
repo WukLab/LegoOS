@@ -1779,6 +1779,12 @@ out:
 	return 0;
 }
 
+/*
+ * This function is called by loader when setting
+ * up the ".bss+.brk" vma. At this point, brk's size is 0.
+ * So the whole vma is effectively starting with .bss.
+ * We must get zeroed pages for .bss.
+ */
 int vm_brk(struct lego_task_struct *tsk,
 	   unsigned long start, unsigned long len)
 {

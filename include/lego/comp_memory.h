@@ -121,6 +121,7 @@ struct lego_mm_struct {
 	unsigned long def_flags;
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack;
+	unsigned long start_bss;
 	unsigned long arg_start, arg_end, env_start, env_end;
 
 	/*

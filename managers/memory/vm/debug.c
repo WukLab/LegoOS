@@ -140,6 +140,7 @@ void dump_lego_mm(const struct lego_mm_struct *mm)
 		"total_vm %#lx\n"
 		"data_vm %#lx exec_vm %#lx stack_vm %#lx\n"
 		"start_code %#lx end_code %#lx start_data %#lx end_data %#lx\n"
+		"start_bss %#lx\n"
 		"start_brk %#lx brk %#lx start_stack %#lx\n"
 		"arg_start %#lx arg_end %#lx env_start %#lx env_end %#lx\n"
 		"def_flags: %#lx(%pGv)\n",
@@ -152,6 +153,7 @@ void dump_lego_mm(const struct lego_mm_struct *mm)
 		mm->total_vm,
 		mm->data_vm, mm->exec_vm, mm->stack_vm,
 		mm->start_code, mm->end_code, mm->start_data, mm->end_data,
+		mm->start_bss,
 		mm->start_brk, mm->brk, mm->start_stack,
 		mm->arg_start, mm->arg_end, mm->env_start, mm->env_end,
 		mm->def_flags, &mm->def_flags
