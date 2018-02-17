@@ -21,6 +21,31 @@
 #include <lego/kernel.h>
 #include <memory/vm.h>
 
+#ifdef CONFIG_DEBUG_VM_UACCESS
+#define uaccess_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void uaccess_debug(const char *fmt, ...) { }
+#endif
+
+/*
+ * Just used to catch potential bugs.
+ * If any uaccess functions want to touch more than
+ * this number of pages, we will inject a warning.
+ */
+#define UACCESS_WARNING_LIMIT	3
+
+static __always_inline void
+__lego_copy_to_user(void *to, const void *from, size_t len)
+{
+	uaccess_debug("    to_knl[%#lx-%#lx], from_knl[%#lx-%#lx] bytes=%zu",
+		(unsigned long)to, (unsigned long)to + len - 1,
+		(unsigned long)from, (unsigned long)from + len - 1,
+		len);
+
+	memcpy(to, from, len);
+}
+
 /**
  * lego_copy_to_user
  * @to: virtual address of user process
@@ -35,11 +60,16 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 	unsigned long first_page, last_page, nr_pages;
 	long ret;
 
-	if (!n)
+	if (!n) {
+		WARN_ON(1);
 		return 0;
+	}
+
+	uaccess_debug("to_usr[%#lx-%#lx], bytes=%zu",
+		(unsigned long)to, (unsigned long)to + n - 1, n);
 
 	if ((unsigned long)to > TASK_SIZE) {
-		memcpy(to, from, n);
+		__lego_copy_to_user(to, from, n);
 		return n;
 	}
 
@@ -57,7 +87,8 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 		if (unlikely(ret != 1))
 			return 0;
 
-		memcpy((void *)(page + offset_in_page(to)), from, n);
+		__lego_copy_to_user((void *)(page + offset_in_page(to)),
+				    from, n);
 		return n;
 	} else {
 	/* otherwise, it does not seem fast.. */
@@ -65,8 +96,7 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 		unsigned long bytes_to_copy, start, offset, copied = 0;
 		int i;
 
-		/* set a reasonable value to catch potential bug */
-		WARN_ON(nr_pages > 3);
+		WARN_ON(nr_pages > UACCESS_WARNING_LIMIT);
 
 		pages = kmalloc(sizeof(unsigned long) * nr_pages, GFP_KERNEL);
 		if (unlikely(!pages))
@@ -89,8 +119,8 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 			if (bytes_to_copy >= (n - copied))
 				bytes_to_copy = n - copied;
 
-			memcpy((void *)(pages[i] + offset),
-				from + copied, bytes_to_copy);
+			__lego_copy_to_user((void *)(pages[i] + offset),
+					    from + copied, bytes_to_copy);
 
 			copied += bytes_to_copy;
 			start += bytes_to_copy;
@@ -98,6 +128,17 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 		return copied;
 	}
 	return 0;
+}
+
+static __always_inline void
+__lego_copy_from_user(void *to, const void *from, size_t len)
+{
+	uaccess_debug("    to_knl[%#lx-%#lx], from_knl[%#lx-%#lx] bytes=%zu",
+		(unsigned long)to, (unsigned long)to + len - 1,
+		(unsigned long)from, (unsigned long)from + len - 1,
+		len);
+
+	memcpy(to, from, len);
 }
 
 /**
@@ -114,11 +155,16 @@ unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
 	unsigned long first_page, last_page, nr_pages;
 	long ret;
 
-	if (!n)
+	if (!n) {
+		WARN_ON(1);
 		return 0;
+	}
+
+	uaccess_debug("from_usr[%#lx-%#lx], bytes=%zu",
+		(unsigned long)from, (unsigned long)from + n - 1, n);
 
 	if ((unsigned long)from > TASK_SIZE) {
-		memcpy(to, from, n);
+		__lego_copy_from_user(to, from, n);
 		return n;
 	}
 
@@ -135,15 +181,14 @@ unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
 		if (unlikely(ret != 1))
 			return 0;
 
-		memcpy(to, (void *)(page + offset_in_page(from)), n);
+		__lego_copy_from_user(to, (void *)(page + offset_in_page(from)), n);
 		return n;
 	} else {
 		unsigned long *pages;
 		unsigned long bytes_to_copy, start, offset, copied = 0;
 		int i;
 
-		/* set a reasonable value to catch potential bug */
-		WARN_ON(nr_pages > 3);
+		WARN_ON(nr_pages > UACCESS_WARNING_LIMIT);
 
 		pages = kmalloc(sizeof(unsigned long) * nr_pages, GFP_KERNEL);
 		if (unlikely(!pages))
@@ -166,8 +211,8 @@ unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
 			if (bytes_to_copy >= (n - copied))
 				bytes_to_copy = n - copied;
 
-			memcpy(to + copied, (void *)(pages[i] + offset),
-				bytes_to_copy);
+			__lego_copy_from_user(to + copied,
+				(void *)(pages[i] + offset), bytes_to_copy);
 
 			copied += bytes_to_copy;
 			start += bytes_to_copy;
@@ -175,4 +220,37 @@ unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
 		return copied;
 	}
 	return 0;
+}
+
+/**
+ * lego_clear_user: - Zero a block of memory in user space.
+ * @to:   Destination address, in user space.
+ * @n:    Number of bytes to zero.
+ *
+ * Zero a block of memory in user space.
+ *
+ * Returns number of bytes that could not be cleared.
+ * On success, this will be zero.
+ */
+unsigned long __must_check lego_clear_user(struct lego_task_struct *tsk,
+					   void * __user dst, size_t cnt)
+{
+	char zero = 0;
+
+	if (!cnt) {
+		WARN_ON(1);
+		return 0;
+	}
+
+	WARN_ON(cnt > UACCESS_WARNING_LIMIT * PAGE_SIZE);
+
+	uaccess_debug("to_usr[%#lx-%#lx], bytes=%zu",
+		(unsigned long)dst, (unsigned long)dst + cnt - 1, cnt);
+
+	while (cnt) {
+		if (unlikely(!lego_copy_to_user(tsk, dst++, &zero, 1)))
+			break;
+		cnt--;
+	}
+	return cnt;
 }

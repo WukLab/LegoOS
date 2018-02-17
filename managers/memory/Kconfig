@@ -57,16 +57,6 @@ config DEBUG_HANDLE_PCACHE_FLUSH
 
 	  If unsure, say N
 
-config DEBUG_VM_RB
-	bool "Debug VM red-black trees"
-	default n
-	depends on COMP_MEMORY
-	depends on DEBUG_KERNEL
-	help
-	  Enable VM red-black tree debugging information and extra validations.
-
-	  If unsure, say N.
-
 config DEBUG_HANDLE_FORK
 	bool "Debug handle_fork.c"
 	default n
@@ -128,6 +118,40 @@ config DEBUG_M2S_READ_WRITE
 	help
 	  Enable to debug all interactions between memory and storage
 	  components. Mostly, m2s_read_write.c
+
+	  If unsure, say N.
+
+config DEBUG_VM
+	bool "Debug Memory Manager's VM subsystem"
+	default n
+	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
+	help
+	  Enable to debug memory manager VM subsystem. This is a high-level
+	  control option. It controls several other debug options.
+
+	  If unsure, say N.
+
+config DEBUG_VM_UACCESS
+	bool "Debug uaccess family"
+	default n
+	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
+	depends on DEBUG_VM
+	help
+	  Enable to debug uaccess family functions, e.g., lego_copy_to_user.
+	  It will print the destination address, or source address.
+
+	  If unsure, say N.
+
+config DEBUG_VM_RB
+	bool "Debug VM red-black trees"
+	default n
+	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
+	depends on DEBUG_VM
+	help
+	  Enable VM red-black tree debugging information and extra validations.
 
 	  If unsure, say N.
 

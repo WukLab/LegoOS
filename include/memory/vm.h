@@ -351,4 +351,7 @@ unsigned long lego_copy_to_user(struct lego_task_struct *tsk,
 unsigned long lego_copy_from_user(struct lego_task_struct *tsk,
 				  void *to , const void __user *from, size_t n);
 
+unsigned long __must_check lego_clear_user(struct lego_task_struct *tsk,
+					   void * __user dst, size_t cnt);
+
 #endif /* _LEGO_MEMORY_VM_H_ */
