@@ -1940,15 +1940,24 @@ static int acct_stack_growth(struct vm_area_struct *vma, unsigned long size, uns
 	return 0;
 }
 
+/* enforced gap between the expanding stack and other mappings. */
+unsigned long stack_guard_gap = 256UL<<PAGE_SHIFT;
+
 /*
  * vma is the first one with address < vma->vm_start.  Have to extend vma.
  */
 int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 {
 	struct lego_mm_struct *mm = vma->vm_mm;
+	unsigned long gap_addr;
 	int error;
 
 	address &= PAGE_MASK;
+
+	/* Enforce stack_guard_gap */
+	gap_addr = address - stack_guard_gap;
+	if (WARN_ON(gap_addr > address))
+		return -ENOMEM;
 
 	/* Somebody else might have raced and expanded it already */
 	if (address < vma->vm_start) {
@@ -1982,19 +1991,16 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 		}
 	}
 out:
+	validate_mm(mm);
 	return error;
 }
 
+/*
+ * We only support stack that grows down.
+ */
+
 int expand_stack(struct vm_area_struct *vma, unsigned long address)
 {
-	struct vm_area_struct *prev;
-
-	address &= PAGE_MASK;
-	prev = vma->vm_prev;
-	if (prev && prev->vm_end == address) {
-		if (!(prev->vm_flags & VM_GROWSDOWN))
-			return -ENOMEM;
-	}
 	return expand_downwards(vma, address);
 }
 
