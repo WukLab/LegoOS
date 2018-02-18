@@ -12,5 +12,12 @@
 
 void get_random_bytes(void *buf, int nbytes)
 {
+	int i;
+	char *s = buf;
 
+	WARN(1, "Fake Random Number. Implement Me");
+
+	for (i = 0; i < nbytes; i++) {
+		s[i] = 0x66;
+	}
 }

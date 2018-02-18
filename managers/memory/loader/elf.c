@@ -19,6 +19,7 @@
 #include <lego/kernel.h>
 #include <lego/auxvec.h>
 #include <lego/jiffies.h>
+#include <lego/random.h>
 #include <lego/comp_memory.h>
 
 #include <memory/vm.h>
@@ -61,16 +62,6 @@ static int padzero(struct lego_task_struct *tsk, unsigned long elf_bss)
 #define STACK_ROUND(sp, items)	(((unsigned long) (sp - items)) &~ 15UL)
 #define STACK_ALLOC(sp, len)	({ sp -= len ; sp; })
 
-static void get_random_bytes(void *buf, int nbytes)
-{
-	int i;
-	char *s;
-
-	for (i = 0, s = buf; i < nbytes; i++) {
-		s[i] = 0x12;
-	}
-}
-
 /*
  * This function finalize the stack layout, put some machine specific info,
  * create the real argv[], envp[] pointer array, and finally the last thing
@@ -112,6 +103,7 @@ static int create_elf_tables(struct lego_task_struct *tsk, struct lego_binprm *b
 	 * evictions by the processes running on the same package. One
 	 * thing we can do is to shuffle the initial stack for them.
 	 *
+	 * XXX:
 	 * Well. We do not have random things now.
 	 */
 	p &= ~0xf;
@@ -296,8 +288,12 @@ static unsigned long elf_map(struct lego_task_struct *tsk, struct lego_file *fil
 	 * the end. (which unmap is needed for ELF images with holes.)
 	 */
 	if (total_size) {
-		/* Used by dynamic-linked image */
+		/*
+		 * Lego Specific:
+		 * Used by dynamic-linked image
+		 */
 		BUG();
+
 		total_size = ELF_PAGEALIGN(total_size);
 		map_addr = vm_mmap(tsk, filep, addr, total_size, prot, type, off);
 		if (!BAD_ADDR(map_addr))
@@ -313,6 +309,8 @@ static int set_brk(struct lego_task_struct *tsk,
 {
 	start = ELF_PAGEALIGN(start);
 	end = ELF_PAGEALIGN(end);
+
+	loader_debug("[%#lx - %#lx]", start, end);
 	if (end > start) {
 		int error;
 

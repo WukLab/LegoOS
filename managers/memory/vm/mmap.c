@@ -1547,17 +1547,27 @@ mmap_region(struct lego_task_struct *p, struct lego_file *file,
 	vma->vm_flags = vm_flags;
 	vma->vm_page_prot = vm_get_page_prot(vm_flags);
 	vma->vm_pgoff = pgoff;
-	vma->vm_file = file;
 
 	/*
 	 * If we have a back-store, invoke the mmap() callback
 	 * it must setup the vma->vm_ops!
 	 */
 	if (file) {
+		vma->vm_file = file;
 		error = file->f_op->mmap(p, file, vma);
 		if (WARN_ON(error))
 			goto unmap_and_free_vma;
+
+		/* Must install vm_ops for pgfault */
 		BUG_ON(!vma->vm_ops);
+
+		/*
+		 * Bug: If addr is changed, prev, rb_link, rb_parent should
+		 *      be updated for vma_link()
+		 */
+		BUG_ON(addr != vma->vm_start);
+	} else if (vm_flags & VM_SHARED) {
+		WARN_ON(1);
 	}
 
 	vma_link(mm, vma, prev, rb_link, rb_parent);
@@ -1599,6 +1609,7 @@ static inline unsigned long round_hint_to_min(unsigned long hint)
 }
 
 /*
+ * File-backed mmap and anonymous mmap merge into this function.
  * The caller must hold down_write(&current->mm->mmap_sem).
  */
 unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
@@ -1606,6 +1617,9 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 	unsigned long flags, vm_flags_t vm_flags, unsigned long pgoff)
 {
 	struct lego_mm_struct *mm = p->mm;
+
+	if (!len)
+		return -EINVAL;
 
 	if (!(flags & MAP_FIXED))
 		addr = round_hint_to_min(addr);
@@ -1637,6 +1651,8 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 	if (file) {
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
+			WARN(1, "MAP_SHARED used for file-backed mmap!");
+
 			vm_flags |= VM_SHARED | VM_MAYSHARE;
 			/* fall through */
 		case MAP_PRIVATE:
@@ -1657,6 +1673,9 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 				WARN(1, "stack flag mis-used\n");
 				return -EINVAL;
 			}
+
+			WARN(1, "MAP_SHARED used for anonymous mmap!");
+
 			/*
 			 * Ignore pgoff.
 			 */
@@ -1664,10 +1683,12 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 			vm_flags |= VM_SHARED;
 			break;
 		case MAP_PRIVATE:
+
 			/*
-			 * Set pgoff according to addr for anon_vma.
+			 * Lego Specific:
+			 * pgoff is always 0 for anonymous mapping
 			 */
-			pgoff = addr >> PAGE_SHIFT;
+			pgoff = 0;
 			break;
 		default:
 			return -EINVAL;
