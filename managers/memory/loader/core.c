@@ -152,10 +152,11 @@ static int bprm_mm_init(struct lego_task_struct *tsk, struct lego_binprm *bprm)
 		goto err;
 
 #ifdef CONFIG_DEBUG_LOADER
-	pr_debug("--  Dump new mm and temporary stack vma:\n");
+	pr_debug("****    Dump new mm:\n");
 	dump_all_vmas_simple(bprm->mm);
+	dump_all_vmas(bprm->mm);
 	dump_lego_mm(bprm->mm);
-	pr_debug("--  Finish dump new mm\n");
+	pr_debug("****    Finish dump new mm\n");
 #endif
 
 	return 0;
@@ -313,10 +314,11 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 	kfree(bprm);
 
 #ifdef CONFIG_DEBUG_LOADER
-	pr_debug("--  Dump final mm after loading:\n");
+	pr_debug("****    Dump final mm\n");
 	dump_all_vmas_simple(tsk->mm);
+	dump_all_vmas(tsk->mm);
 	dump_lego_mm(tsk->mm);
-	pr_debug("--  Finish dump final mm\n");
+	pr_debug("****    Finish dump final mm\n");
 #endif
 	return 0;
 
