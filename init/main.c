@@ -119,6 +119,11 @@ static int kernel_init(void *unused)
 
 	/*
 	 * init can run on any cpu.
+	 *
+	 * NOTE: we get the cpus_allowed mask from parent, which
+	 * is the init_task, whose cpus_allowed will be cpu0 & nr_cpu_allowed=1.
+	 * That was set when it calls sched_init, which will further
+	 * call the sched_init_idle to make itself an idle thread.
 	 */
 	set_cpus_allowed_ptr(current, cpu_possible_mask);
 
