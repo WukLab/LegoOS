@@ -670,7 +670,7 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 				exporter = next->vm_next;
 #else
 			if (remove_next == 2) {
-				WARN_ONCE(1, "Not sure this change is correct");
+				WARN_ONCE(1, "Not sure if this change is correct");
 				exporter = next->vm_next;
 			}
 #endif
@@ -812,6 +812,10 @@ again:
 	return 0;
 }
 
+/*
+ * Anonymous vma is only mergeable with anonymous vma
+ * File-backed vma is only mergeable with file-backed vma
+ */
 static inline int is_mergeable_vma(struct vm_area_struct *vma,
 				   struct lego_file *file, unsigned long vm_flags)
 {
@@ -829,8 +833,16 @@ can_vma_merge_before(struct vm_area_struct *vma, unsigned long vm_flags,
 		     struct lego_file *file, pgoff_t vm_pgoff)
 {
 	if (is_mergeable_vma(vma, file, vm_flags)) {
-		if (vma->vm_pgoff == vm_pgoff)
+		/*
+		 * Anonymous vmas can merge no matter what
+		 */
+		if (vma_is_anonymous(vma)) {
 			return 1;
+		} else {
+			/* File-backed VMA */
+			if (vma->vm_pgoff == vm_pgoff)
+				return 1;
+		}
 	}
 	return 0;
 }
@@ -844,10 +856,18 @@ can_vma_merge_after(struct vm_area_struct *vma, unsigned long vm_flags,
 		    struct lego_file *file, pgoff_t vm_pgoff)
 {
 	if (is_mergeable_vma(vma, file, vm_flags)) {
-		pgoff_t vm_pglen;
-		vm_pglen = vma_pages(vma);
-		if (vma->vm_pgoff + vm_pglen == vm_pgoff)
+		/*
+		 * Anonymous vmas can merge no matter what
+		 */
+		if (vma_is_anonymous(vma)) {
 			return 1;
+		} else {
+			/* File-backed VMA */
+			pgoff_t vm_pglen;
+			vm_pglen = vma_pages(vma);
+			if (vma->vm_pgoff + vm_pglen == vm_pgoff)
+				return 1;
+		}
 	}
 	return 0;
 }
@@ -925,17 +945,15 @@ struct vm_area_struct *vma_merge(struct lego_mm_struct *mm,
 	 * Can it merge with the predecessor?
 	 */
 	if (prev && prev->vm_end == addr &&
-			can_vma_merge_after(prev, vm_flags,
-					    file, pgoff)) {
+	    can_vma_merge_after(prev, vm_flags, file, pgoff)) {
 		/*
 		 * OK, it can.  Can we now merge in the successor as well?
 		 */
 		if (next && end == next->vm_start &&
-				can_vma_merge_before(next, vm_flags, file, pgoff+pglen)) {
+		    can_vma_merge_before(next, vm_flags, file, pgoff+pglen)) {
 							/* cases 1, 6 */
 			err = __vma_adjust(prev, prev->vm_start,
-					 next->vm_end, prev->vm_pgoff, NULL,
-					 prev);
+					 next->vm_end, prev->vm_pgoff, NULL, prev);
 		} else					/* cases 2, 5, 7 */
 			err = __vma_adjust(prev, prev->vm_start,
 					 end, prev->vm_pgoff, NULL, prev);
@@ -948,8 +966,7 @@ struct vm_area_struct *vma_merge(struct lego_mm_struct *mm,
 	 * Can this new request be merged in front of next?
 	 */
 	if (next && end == next->vm_start &&
-			can_vma_merge_before(next, vm_flags,
-					     file, pgoff+pglen)) {
+	    can_vma_merge_before(next, vm_flags, file, pgoff+pglen)) {
 		if (prev && addr < prev->vm_end)	/* case 4 */
 			err = __vma_adjust(prev, prev->vm_start,
 					 addr, prev->vm_pgoff, NULL, next);
@@ -1191,8 +1208,8 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 	bool faulted_in_anon_vma = true;
 
 	/*
-	 * If anonymous vma has not yet been faulted, update new pgoff
-	 * to match new location, to increase its chance of merging.
+	 * If it is anonymous, pgoff really does not matter
+	 * vma_merge does not rely on it.
 	 */
 	if (unlikely(vma_is_anonymous(vma))) {
 		pgoff = addr >> PAGE_SHIFT;
@@ -1569,15 +1586,6 @@ mmap_region(struct lego_task_struct *p, struct lego_file *file,
 	vma_link(mm, vma, prev, rb_link, rb_parent);
 
 out:
-	/*
-	 * New (or expanded) vma always get soft dirty status.
-	 * Otherwise user-space soft-dirty page tracker won't
-	 * be able to distinguish situation when vma area unmapped,
-	 * then new mapped in-place (which must be aimed as
-	 * a completely new data area).
-	 */
-	vma->vm_flags |= VM_SOFTDIRTY;
-
 	vma_set_page_prot(vma);
 	return addr;
 
@@ -1681,10 +1689,9 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 		case MAP_PRIVATE:
 
 			/*
-			 * Lego Specific:
-			 * pgoff is always 0 for anonymous mapping
+			 *
 			 */
-			pgoff = 0;
+			pgoff = addr >> PAGE_SHIFT;
 			break;
 		default:
 			return -EINVAL;
