@@ -116,6 +116,12 @@ static int kernel_init(void *unused)
 {
 	/* Wait until kthreadd is all set-up. */
 	wait_for_completion(&kthreadd_done);
+
+	/*
+	 * init can run on any cpu.
+	 */
+	set_cpus_allowed_ptr(current, cpu_possible_mask);
+
 	set_task_comm(current, "kernel_init");
 
 	/*
