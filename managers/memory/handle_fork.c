@@ -68,7 +68,6 @@ static int dup_lego_mmap(struct lego_mm_struct *mm,
 		}
 
 		*tmp = *mpnt;
-		INIT_LIST_HEAD(&tmp->anon_vma_chain);
 		tmp->vm_mm = mm;
 
 		tmp->vm_flags &=

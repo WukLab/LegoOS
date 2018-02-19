@@ -26,6 +26,27 @@
 #include <memory/pid.h>
 #include <memory/vm-pgtable.h>
 
+/*
+ * Default maximum number of active map areas, this limits the number of vmas
+ * per mm struct. Users can overwrite this number by sysctl but there is a
+ * problem.
+ *
+ * When a program's coredump is generated as ELF format, a section is created
+ * per a vma. In ELF, the number of sections is represented in unsigned short.
+ * This means the number of sections should be smaller than 65535 at coredump.
+ * Because the kernel adds some informative sections to a image of program at
+ * generating coredump, we need some margin. The number of extra sections is
+ * 1-3 now and depends on arch. We use "5" as safe margin, here.
+ *
+ * ELF extended numbering allows more than 65535 sections, so 16-bit bound is
+ * not a hard limit any more. Although some userspace tools can be surprised by
+ * that.
+ */
+#define MAPCOUNT_ELF_CORE_MARGIN	(5)
+#define DEFAULT_MAX_MAP_COUNT	(USHRT_MAX - MAPCOUNT_ELF_CORE_MARGIN)
+
+int sysctl_max_map_count __read_mostly = DEFAULT_MAX_MAP_COUNT;
+
 static unsigned long
 arch_get_unmapped_area(struct lego_task_struct *p, struct lego_file *filp,
 		unsigned long addr, unsigned long len, unsigned long pgoff,
@@ -515,7 +536,8 @@ static void __insert_vm_struct(struct lego_mm_struct *mm, struct vm_area_struct 
 	mm->map_count++;
 }
 
-/* Insert vm structure into process list sorted by address
+/*
+ * Insert vm structure into process list sorted by address
  * and into the inode's i_mmap tree.  If vm_file is non-NULL
  * then i_mmap_rwsem is taken here.
  */
@@ -545,6 +567,7 @@ int insert_vm_struct(struct lego_mm_struct *mm, struct vm_area_struct *vma)
 	}
 
 	vma_link(mm, vma, prev, rb_link, rb_parent);
+
 	return 0;
 }
 
@@ -642,8 +665,15 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 			 * If next doesn't have anon_vma, import from vma after
 			 * next, if the vma overlaps with it.
 			 */
+#if 0
 			if (remove_next == 2 && !next->anon_vma)
 				exporter = next->vm_next;
+#else
+			if (remove_next == 2) {
+				WARN_ONCE(1, "Not sure if this change is correct");
+				exporter = next->vm_next;
+			}
+#endif
 
 		} else if (end > next->vm_start) {
 			/*
@@ -782,70 +812,62 @@ again:
 	return 0;
 }
 
+/*
+ * Anonymous vma is only mergeable with anonymous vma
+ * File-backed vma is only mergeable with file-backed vma
+ */
 static inline int is_mergeable_vma(struct vm_area_struct *vma,
-				struct lego_file *file, unsigned long vm_flags)
+				   struct lego_file *file, unsigned long vm_flags)
 {
 	if (vma->vm_file != file)
 		return 0;
 	return 1;
 }
 
-static inline int is_mergeable_anon_vma(struct anon_vma *anon_vma1,
-					struct anon_vma *anon_vma2,
-					struct vm_area_struct *vma)
-{
-	/*
-	 * The list_is_singular() test is to avoid merging VMA cloned from
-	 * parents. This can improve scalability caused by anon_vma lock.
-	 */
-	if ((!anon_vma1 || !anon_vma2) && (!vma ||
-		list_is_singular(&vma->anon_vma_chain)))
-		return 1;
-	return anon_vma1 == anon_vma2;
-}
-
 /*
- * Return true if we can merge this (vm_flags,anon_vma,file,vm_pgoff)
- * beyond (at a higher virtual address and file offset than) the vma.
- *
- * We cannot merge two vmas if they have differently assigned (non-NULL)
- * anon_vmas, nor if same anon_vma is assigned but offsets incompatible.
+ * Return true if we can merge this (vm_flags,file,vm_pgoff)
+ * in front of (at a lower virtual address and file offset than) the vma.
  */
 static int
-can_vma_merge_after(struct vm_area_struct *vma, unsigned long vm_flags,
-		    struct anon_vma *anon_vma, struct lego_file *file,
-		    pgoff_t vm_pgoff)
+can_vma_merge_before(struct vm_area_struct *vma, unsigned long vm_flags,
+		     struct lego_file *file, pgoff_t vm_pgoff)
 {
-	if (is_mergeable_vma(vma, file, vm_flags) &&
-	    is_mergeable_anon_vma(anon_vma, vma->anon_vma, vma)) {
-		pgoff_t vm_pglen;
-		vm_pglen = vma_pages(vma);
-		if (vma->vm_pgoff + vm_pglen == vm_pgoff)
+	if (is_mergeable_vma(vma, file, vm_flags)) {
+		/*
+		 * Anonymous vmas can merge no matter what
+		 */
+		if (vma_is_anonymous(vma)) {
 			return 1;
+		} else {
+			/* File-backed VMA */
+			if (vma->vm_pgoff == vm_pgoff)
+				return 1;
+		}
 	}
 	return 0;
 }
 
 /*
- * Return true if we can merge this (vm_flags,anon_vma,file,vm_pgoff)
- * in front of (at a lower virtual address and file offset than) the vma.
- *
- * We cannot merge two vmas if they have differently assigned (non-NULL)
- * anon_vmas, nor if same anon_vma is assigned but offsets incompatible.
- *
- * We don't check here for the merged mmap wrapping around the end of pagecache
- * indices (16TB on ia32) because do_mmap_pgoff() does not permit mmap's which
- * wrap, nor mmaps which cover the final page at index -1UL.
+ * Return true if we can merge this (vm_flags,file,vm_pgoff)
+ * beyond (at a higher virtual address and file offset than) the vma.
  */
 static int
-can_vma_merge_before(struct vm_area_struct *vma, unsigned long vm_flags,
-		     struct anon_vma *anon_vma, struct lego_file *file,
-		     pgoff_t vm_pgoff)
+can_vma_merge_after(struct vm_area_struct *vma, unsigned long vm_flags,
+		    struct lego_file *file, pgoff_t vm_pgoff)
 {
-	if (is_mergeable_vma(vma, file, vm_flags) &&
-	    is_mergeable_anon_vma(anon_vma, vma->anon_vma, vma)) {
-		if (vma->vm_pgoff == vm_pgoff)
+	if (is_mergeable_vma(vma, file, vm_flags)) {
+		/*
+		 * Anonymous vmas can merge no matter what
+		 */
+		if (vma_is_anonymous(vma)) {
 			return 1;
+		} else {
+			/* File-backed VMA */
+			pgoff_t vm_pglen;
+			vm_pglen = vma_pages(vma);
+			if (vma->vm_pgoff + vm_pglen == vm_pgoff)
+				return 1;
+		}
 	}
 	return 0;
 }
@@ -893,8 +915,7 @@ can_vma_merge_before(struct vm_area_struct *vma, unsigned long vm_flags,
 struct vm_area_struct *vma_merge(struct lego_mm_struct *mm,
 			struct vm_area_struct *prev, unsigned long addr,
 			unsigned long end, unsigned long vm_flags,
-			struct anon_vma *anon_vma, struct lego_file *file,
-			pgoff_t pgoff)
+			struct lego_file *file, pgoff_t pgoff)
 {
 	pgoff_t pglen = (end - addr) >> PAGE_SHIFT;
 	struct vm_area_struct *area, *next;
@@ -904,7 +925,7 @@ struct vm_area_struct *vma_merge(struct lego_mm_struct *mm,
 	 * We later require that vma->vm_flags == vm_flags,
 	 * so this tests vma->vm_flags & VM_SPECIAL, too.
 	 */
-	if (vm_flags & VM_SPECIAL)
+	if (WARN_ON(vm_flags & VM_SPECIAL))
 		return NULL;
 
 	if (prev)
@@ -924,21 +945,15 @@ struct vm_area_struct *vma_merge(struct lego_mm_struct *mm,
 	 * Can it merge with the predecessor?
 	 */
 	if (prev && prev->vm_end == addr &&
-			can_vma_merge_after(prev, vm_flags,
-					    anon_vma, file, pgoff)) {
+	    can_vma_merge_after(prev, vm_flags, file, pgoff)) {
 		/*
 		 * OK, it can.  Can we now merge in the successor as well?
 		 */
 		if (next && end == next->vm_start &&
-				can_vma_merge_before(next, vm_flags,
-						     anon_vma, file,
-						     pgoff+pglen) &&
-				is_mergeable_anon_vma(prev->anon_vma,
-						      next->anon_vma, NULL)) {
+		    can_vma_merge_before(next, vm_flags, file, pgoff+pglen)) {
 							/* cases 1, 6 */
 			err = __vma_adjust(prev, prev->vm_start,
-					 next->vm_end, prev->vm_pgoff, NULL,
-					 prev);
+					 next->vm_end, prev->vm_pgoff, NULL, prev);
 		} else					/* cases 2, 5, 7 */
 			err = __vma_adjust(prev, prev->vm_start,
 					 end, prev->vm_pgoff, NULL, prev);
@@ -951,8 +966,7 @@ struct vm_area_struct *vma_merge(struct lego_mm_struct *mm,
 	 * Can this new request be merged in front of next?
 	 */
 	if (next && end == next->vm_start &&
-			can_vma_merge_before(next, vm_flags,
-					     anon_vma, file, pgoff+pglen)) {
+	    can_vma_merge_before(next, vm_flags, file, pgoff+pglen)) {
 		if (prev && addr < prev->vm_end)	/* case 4 */
 			err = __vma_adjust(prev, prev->vm_start,
 					 addr, prev->vm_pgoff, NULL, next);
@@ -984,14 +998,12 @@ static int __split_vma(struct lego_mm_struct *mm, struct vm_area_struct *vma,
 	struct vm_area_struct *new;
 	int err = 0;
 
-	new = kzalloc(sizeof(*new), GFP_KERNEL);
+	new = kmalloc(sizeof(*new), GFP_KERNEL);
 	if (!new)
 		return -ENOMEM;
 
 	/* most fields are the same, copy all, and then fixup */
 	*new = *vma;
-
-	INIT_LIST_HEAD(&new->anon_vma_chain);
 
 	if (new_below)
 		new->vm_end = addr;
@@ -1000,17 +1012,11 @@ static int __split_vma(struct lego_mm_struct *mm, struct vm_area_struct *vma,
 		new->vm_pgoff += ((addr - vma->vm_start) >> PAGE_SHIFT);
 	}
 
-#if 0
-	err = anon_vma_clone(new, vma);
-	if (err)
-		goto out_free_mpol;
-
 	if (new->vm_file)
-		get_file(new->vm_file);
+		get_lego_file(new->vm_file);
 
 	if (new->vm_ops && new->vm_ops->open)
 		new->vm_ops->open(new);
-#endif
 
 	if (new_below)
 		err = vma_adjust(vma, addr, vma->vm_end, vma->vm_pgoff +
@@ -1022,14 +1028,11 @@ static int __split_vma(struct lego_mm_struct *mm, struct vm_area_struct *vma,
 	if (!err)
 		return 0;
 
-#if 0
 	/* Clean everything up if vma_adjust failed. */
 	if (new->vm_ops && new->vm_ops->close)
 		new->vm_ops->close(new);
 	if (new->vm_file)
-		fput(new->vm_file);
-	unlink_anon_vmas(new);
-#endif
+		put_lego_file(new->vm_file);
 
 	kfree(new);
 	return err;
@@ -1141,6 +1144,14 @@ int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len)
 	if (start > vma->vm_start) {
 		int error;
 
+		/*
+		 * Make sure that map_count on return from munmap() will
+		 * not exceed its limit; but let map_count go just above
+		 * its limit temporarily, to help free resources as expected.
+		 */
+		if (end < vma->vm_end && mm->map_count >= sysctl_max_map_count)
+			return -ENOMEM;
+
 		error = __split_vma(mm, vma, start, 0);
 		if (error)
 			return error;
@@ -1171,8 +1182,14 @@ int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len)
 int vm_munmap(struct lego_task_struct *p, unsigned long start, size_t len)
 {
 	int ret;
+	struct lego_mm_struct *mm = p->mm;
 
-	ret = do_munmap(p->mm, start, len);
+	if (down_write_killable(&mm->mmap_sem))
+		return -EINTR;
+
+	ret = do_munmap(mm, start, len);
+	up_write(&mm->mmap_sem);
+
 	return ret;
 }
 
@@ -1191,13 +1208,10 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 	bool faulted_in_anon_vma = true;
 
 	/*
-	 * If anonymous vma has not yet been faulted, update new pgoff
-	 * to match new location, to increase its chance of merging.
-	 *
-	 * XXX: I'm not quite understand what is anon_vma doing here.
-	 * It is always NULL, will this be a problem???
+	 * If it is anonymous, pgoff really does not matter
+	 * vma_merge does not rely on it.
 	 */
-	if (unlikely(vma_is_anonymous(vma) && !vma->anon_vma)) {
+	if (unlikely(vma_is_anonymous(vma))) {
 		pgoff = addr >> PAGE_SHIFT;
 		faulted_in_anon_vma = false;
 	}
@@ -1205,7 +1219,7 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 	if (find_vma_links(mm, addr, addr + len, &prev, &rb_link, &rb_parent))
 		return NULL;	/* should never get here */
 	new_vma = vma_merge(mm, prev, addr, addr + len, vma->vm_flags,
-			    vma->anon_vma, vma->vm_file, pgoff);
+			    vma->vm_file, pgoff);
 	if (new_vma) {
 		/*
 		 * Source vma may have been merged into new_vma
@@ -1235,7 +1249,6 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 		new_vma->vm_start = addr;
 		new_vma->vm_end = addr + len;
 		new_vma->vm_pgoff = pgoff;
-		INIT_LIST_HEAD(&new_vma->anon_vma_chain);
 		if (new_vma->vm_file)
 			get_lego_file(new_vma->vm_file);
 		if (new_vma->vm_ops && new_vma->vm_ops->open)
@@ -1533,7 +1546,7 @@ mmap_region(struct lego_task_struct *p, struct lego_file *file,
 
 	/* Can we just expand an old mapping? */
 	vma = vma_merge(mm, prev, addr, addr + len, vm_flags,
-			NULL, file, pgoff);
+			file, pgoff);
 	if (vma)
 		goto out;
 
@@ -1547,31 +1560,32 @@ mmap_region(struct lego_task_struct *p, struct lego_file *file,
 	vma->vm_flags = vm_flags;
 	vma->vm_page_prot = vm_get_page_prot(vm_flags);
 	vma->vm_pgoff = pgoff;
-	vma->vm_file = file;
 
 	/*
 	 * If we have a back-store, invoke the mmap() callback
 	 * it must setup the vma->vm_ops!
 	 */
 	if (file) {
+		vma->vm_file = file;
 		error = file->f_op->mmap(p, file, vma);
 		if (WARN_ON(error))
 			goto unmap_and_free_vma;
+
+		/* Must install vm_ops for pgfault */
 		BUG_ON(!vma->vm_ops);
+
+		/*
+		 * Bug: If addr is changed, prev, rb_link, rb_parent should
+		 *      be updated for vma_link()
+		 */
+		BUG_ON(addr != vma->vm_start);
+	} else if (vm_flags & VM_SHARED) {
+		WARN_ON(1);
 	}
 
 	vma_link(mm, vma, prev, rb_link, rb_parent);
 
 out:
-	/*
-	 * New (or expanded) vma always get soft dirty status.
-	 * Otherwise user-space soft-dirty page tracker won't
-	 * be able to distinguish situation when vma area unmapped,
-	 * then new mapped in-place (which must be aimed as
-	 * a completely new data area).
-	 */
-	vma->vm_flags |= VM_SOFTDIRTY;
-
 	vma_set_page_prot(vma);
 	return addr;
 
@@ -1599,6 +1613,7 @@ static inline unsigned long round_hint_to_min(unsigned long hint)
 }
 
 /*
+ * File-backed mmap and anonymous mmap merge into this function.
  * The caller must hold down_write(&current->mm->mmap_sem).
  */
 unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
@@ -1606,6 +1621,9 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 	unsigned long flags, vm_flags_t vm_flags, unsigned long pgoff)
 {
 	struct lego_mm_struct *mm = p->mm;
+
+	if (!len)
+		return -EINVAL;
 
 	if (!(flags & MAP_FIXED))
 		addr = round_hint_to_min(addr);
@@ -1637,6 +1655,8 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 	if (file) {
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
+			WARN(1, "MAP_SHARED used for file-backed mmap!");
+
 			vm_flags |= VM_SHARED | VM_MAYSHARE;
 			/* fall through */
 		case MAP_PRIVATE:
@@ -1657,6 +1677,9 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 				WARN(1, "stack flag mis-used\n");
 				return -EINVAL;
 			}
+
+			WARN(1, "MAP_SHARED used for anonymous mmap!");
+
 			/*
 			 * Ignore pgoff.
 			 */
@@ -1664,8 +1687,9 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 			vm_flags |= VM_SHARED;
 			break;
 		case MAP_PRIVATE:
+
 			/*
-			 * Set pgoff according to addr for anon_vma.
+			 *
 			 */
 			pgoff = addr >> PAGE_SHIFT;
 			break;
@@ -1753,7 +1777,7 @@ int do_brk(struct lego_task_struct *p, unsigned long addr,
 
 	/* Can we just expand an old private anonymous mapping? */
 	vma = vma_merge(mm, prev, addr, addr + len, flags,
-			NULL, NULL, pgoff);
+			NULL, pgoff);
 	if (vma)
 		goto out;
 
@@ -1764,7 +1788,6 @@ int do_brk(struct lego_task_struct *p, unsigned long addr,
 	if (!vma)
 		return -ENOMEM;
 
-	INIT_LIST_HEAD(&vma->anon_vma_chain);
 	vma->vm_mm = mm;
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
@@ -1919,15 +1942,24 @@ static int acct_stack_growth(struct vm_area_struct *vma, unsigned long size, uns
 	return 0;
 }
 
+/* enforced gap between the expanding stack and other mappings. */
+unsigned long stack_guard_gap = 256UL<<PAGE_SHIFT;
+
 /*
  * vma is the first one with address < vma->vm_start.  Have to extend vma.
  */
 int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 {
 	struct lego_mm_struct *mm = vma->vm_mm;
+	unsigned long gap_addr;
 	int error;
 
 	address &= PAGE_MASK;
+
+	/* Enforce stack_guard_gap */
+	gap_addr = address - stack_guard_gap;
+	if (WARN_ON(gap_addr > address))
+		return -ENOMEM;
 
 	/* Somebody else might have raced and expanded it already */
 	if (address < vma->vm_start) {
@@ -1961,19 +1993,16 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 		}
 	}
 out:
+	validate_mm(mm);
 	return error;
 }
 
+/*
+ * We only support stack that grows down.
+ */
+
 int expand_stack(struct vm_area_struct *vma, unsigned long address)
 {
-	struct vm_area_struct *prev;
-
-	address &= PAGE_MASK;
-	prev = vma->vm_prev;
-	if (prev && prev->vm_end == address) {
-		if (!(prev->vm_flags & VM_GROWSDOWN))
-			return -ENOMEM;
-	}
 	return expand_downwards(vma, address);
 }
 

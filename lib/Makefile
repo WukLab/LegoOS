@@ -22,3 +22,4 @@ obj-y += dump_task_struct.o
 obj-y += ratelimit.o
 obj-y += kstrtox.o
 obj-y += random.o
+obj-y += sched.o

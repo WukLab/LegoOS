@@ -7,17 +7,18 @@
  * (at your option) any later version.
  */
 
-#include <lego/random.h>
+#include <lego/sched.h>
 #include <lego/kernel.h>
 
-void get_random_bytes(void *buf, int nbytes)
+/*
+ * Helpers for scheduler related information
+ */
+
+void print_nr_cpus_allowd(int line)
 {
-	int i;
-	char *s = buf;
+	char buf[64];
 
-	WARN(1, "Fake Random Number. Implement Me");
-
-	for (i = 0; i < nbytes; i++) {
-		s[i] = 0x66;
-	}
+	scnprintf(buf, 64, "%*pbl", NR_CPUS, &current->cpus_allowed);
+	pr_info("Current: %d %s, nr_allowd: %d, %s (info: %d)\n",
+		current->pid, current->comm, current->nr_cpus_allowed, buf, line);
 }
