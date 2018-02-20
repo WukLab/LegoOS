@@ -512,9 +512,26 @@ extern spinlock_t tasklist_lock;
 #define task_thread_info(task)	((struct thread_info *)((task)->stack))
 #define task_stack_page(task)	((void *)((task)->stack))
 
+static inline int get_nr_threads(struct task_struct *tsk)
+{
+	return tsk->signal->nr_threads;
+}
+
 static inline bool thread_group_leader(struct task_struct *p)
 {
 	return p->exit_signal >= 0;
+}
+
+/*
+ * Do to the insanities of de_thread it is possible for a process
+ * to have the pid of the thread group leader without actually being
+ * the thread group leader.  For iteration through the pids in proc
+ * all we care about is that we have a task with the appropriate
+ * pid, we don't actually care if we have the right task.
+ */
+static inline bool has_group_leader_pid(struct task_struct *p)
+{
+	return p->pid == p->signal->leader_pid;
 }
 
 static inline int thread_group_empty(struct task_struct *p)
