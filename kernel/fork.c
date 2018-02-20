@@ -326,6 +326,10 @@ struct mm_struct *mm_alloc(void)
 	return mm_init(mm, current);
 }
 
+/*
+ * Allocate a new mm structure and copy contents from the
+ * mm structure of the passed in task structure.
+ */
 static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 {
 	struct mm_struct *mm, *oldmm;
@@ -340,6 +344,11 @@ static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 
 	if (!mm_init(mm, tsk))
 		return NULL;
+
+	/*
+	 * TODO:
+	 * May need to dup the pcache vm array here.
+	 */
 
 	return mm;
 }
@@ -356,6 +365,13 @@ static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)
 	tsk->nvcsw = tsk->nivcsw = 0;
 
 	oldmm = current->mm;
+
+	/*
+	 * In lego, even kernel thread has a mm
+	 * We don't steal mm.
+	 */
+	BUG_ON(!oldmm);
+
 	if (clone_flags & CLONE_VM) {
 		atomic_inc(&oldmm->mm_users);
 		mm = oldmm;
@@ -515,11 +531,10 @@ static int copy_sighand(unsigned long clone_flags, struct task_struct *tsk)
 
 	if (clone_flags & CLONE_SIGHAND) {
 		atomic_inc(&current->sighand->count);
-		tsk->sighand = current->sighand;
 		return 0;
 	}
 
-	sig = kmalloc(sizeof(*sig), GFP_KERNEL);
+	sig = kzalloc(sizeof(*sig), GFP_KERNEL);
 	if (!sig)
 		return -ENOMEM;
 
@@ -550,11 +565,10 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 
 	if (clone_flags & CLONE_THREAD) {
 		/* sigcnt will be incremented later in copy_process */
-		tsk->signal = current->signal;
 		return 0;
 	}
 
-	sig = kmalloc(sizeof(*sig), GFP_KERNEL);
+	sig = kzalloc(sizeof(*sig), GFP_KERNEL);
 	if (!sig)
 		return -ENOMEM;
 
@@ -748,6 +762,21 @@ struct task_struct *copy_process(unsigned long clone_flags,
 
 	spin_lock(&current->sighand->siglock);
 
+	/*
+	 * Process group and session signals need to be delivered to just the
+	 * parent before the fork or both the parent and the child after the
+	 * fork. Restart if a signal comes in before we add the new process to
+	 * it's process group.
+	 * A fatal signal pending means that current will exit, so the new
+	 * thread can't slip out of an OOM kill (or normal SIGKILL).
+	*/
+	recalc_sigpending();
+	if (signal_pending(current)) {
+		WARN_ON(1);
+		retval = -ERESTARTNOINTR;
+		goto out;
+	}
+
 	if (likely(p->pid)) {
 		if (thread_group_leader(p)) {
 			p->signal->leader_pid = pid;
@@ -771,6 +800,9 @@ struct task_struct *copy_process(unsigned long clone_flags,
 
 	return p;
 
+out:
+	spin_unlock(&current->sighand->siglock);
+	spin_unlock_irqrestore(&tasklist_lock, flags);
 out_cleanup_thread:
 	exit_thread(p);
 out_cleanup_mm:
