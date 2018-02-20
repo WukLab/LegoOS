@@ -1776,6 +1776,10 @@ int setup_sched_fork(unsigned long clone_flags, struct task_struct *p)
 		set_load_weight(p);
 	}
 
+	/*
+	 * We're setting the cpu for the first time, we don't migrate,
+	 * so use __set_task_cpu().
+	 */
 	__set_task_cpu(p, cpu);
 	if (p->sched_class->task_fork)
 		p->sched_class->task_fork(p);
