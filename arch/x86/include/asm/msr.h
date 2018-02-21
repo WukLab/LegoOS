@@ -12,44 +12,82 @@
 
 #ifndef __ASSEMBLY__
 
+#include <lego/errno.h>
 #include <lego/compiler.h>
+#include <asm/extable.h>
+#include <asm/bitops.h>
 
 /*
- * both i386 and x86_64 returns 64-bit value in edx:eax, but gcc's "A" constraint
- * has different meanings. For i386, "A" means exactly edx:eax, while for x86_64
- * it doesn't mean rdx:rax or edx:eax. Instead, it means rax *or* rdx. See:
- * [https://gcc.gnu.org/onlinedocs/gcc/Machine-Constraints.html#Machine-Constraints]
+ * both i386 and x86_64 returns 64-bit value in edx:eax, but gcc's "A"
+ * constraint has different meanings. For i386, "A" means exactly
+ * edx:eax, while for x86_64 it doesn't mean rdx:rax or edx:eax. Instead,
+ * it means rax *or* rdx.
  */
-#ifdef CONFIG_X86_32
-#define DECLARE_ARGS(val, low, high)	unsigned long long val
-#define EAX_EDX_VAL(val, low, high)	(val)
-#define EAX_EDX_RET(val, low, high)	"=A" (val)
-#else
+#ifdef CONFIG_X86_64
+/* Using 64-bit values saves one instruction clearing the high half of low */
 #define DECLARE_ARGS(val, low, high)	unsigned long low, high
 #define EAX_EDX_VAL(val, low, high)	((low) | (high) << 32)
 #define EAX_EDX_RET(val, low, high)	"=a" (low), "=d" (high)
+#else
+#define DECLARE_ARGS(val, low, high)	unsigned long long val
+#define EAX_EDX_VAL(val, low, high)	(val)
+#define EAX_EDX_RET(val, low, high)	"=A" (val)
 #endif
 
 static inline unsigned long long native_read_msr(unsigned int msr)
 {
 	DECLARE_ARGS(val, low, high);
-	asm volatile (
-		"rdmsr"
-		: EAX_EDX_RET(val, low, high)
-		: "c" (msr)
-	);
+
+	asm volatile("1: rdmsr\n"
+		     "2:\n"
+		     _ASM_EXTABLE_HANDLE(1b, 2b, ex_handler_rdmsr_unsafe)
+		     : EAX_EDX_RET(val, low, high) : "c" (msr));
+	return EAX_EDX_VAL(val, low, high);
+}
+
+static inline unsigned long long native_read_msr_safe(unsigned int msr,
+						      int *err)
+{
+	DECLARE_ARGS(val, low, high);
+
+	asm volatile("2: rdmsr ; xor %[err],%[err]\n"
+		     "1:\n\t"
+		     ".section .fixup,\"ax\"\n\t"
+		     "3: mov %[fault],%[err]\n\t"
+		     "xorl %%eax, %%eax\n\t"
+		     "xorl %%edx, %%edx\n\t"
+		     "jmp 1b\n\t"
+		     ".previous\n\t"
+		     _ASM_EXTABLE(2b, 3b)
+		     : [err] "=r" (*err), EAX_EDX_RET(val, low, high)
+		     : "c" (msr), [fault] "i" (-EIO));
 	return EAX_EDX_VAL(val, low, high);
 }
 
 static inline void native_write_msr(unsigned int msr, unsigned int low,
 				    unsigned int high)
 {
-	asm volatile (
-		"wrmsr"
-		:
-		: "c" (msr), "a" (low), "d" (high)
-		: "memory"
-	);
+	asm volatile("1: wrmsr\n"
+		     "2:\n"
+		     _ASM_EXTABLE_HANDLE(1b, 2b, ex_handler_wrmsr_unsafe)
+		     : : "c" (msr), "a"(low), "d" (high) : "memory");
+}
+
+static inline int native_write_msr_safe(unsigned int msr,
+					unsigned low, unsigned high)
+{
+	int err;
+	asm volatile("2: wrmsr ; xor %[err],%[err]\n"
+		     "1:\n\t"
+		     ".section .fixup,\"ax\"\n\t"
+		     "3:  mov %[fault],%[err] ; jmp 1b\n\t"
+		     ".previous\n\t"
+		     _ASM_EXTABLE(2b, 3b)
+		     : [err] "=a" (err)
+		     : "c" (msr), "0" (low), "d" (high),
+		       [fault] "i" (-EIO)
+		     : "memory");
+	return err;
 }
 
 /**
@@ -104,10 +142,6 @@ static __always_inline unsigned long long rdtsc_ordered(void)
  * using pointer indirection, this allows gcc to optimize better.
  */
 
-/*
- * WARNING: No exception handling
- */
-
 #define rdmsr(msr, low, high)					\
 do {								\
 	unsigned long long __val = native_read_msr((msr));	\
@@ -125,9 +159,138 @@ static inline void wrmsr(unsigned int msr, unsigned int low, unsigned int high)
 	native_write_msr(msr, low, high);
 }
 
-static inline void wrmsrl(unsigned int msr, unsigned long long val)
+static inline void wrmsrl(unsigned msr, u64 val)
 {
-	native_write_msr(msr, (unsigned int)val, (unsigned int)(val >> 32));
+	native_write_msr(msr, (u32)(val & 0xffffffffULL), (u32)(val >> 32));
+}
+
+/* wrmsr with exception handling */
+static inline int wrmsr_safe(unsigned msr, unsigned low, unsigned high)
+{
+	return native_write_msr_safe(msr, low, high);
+}
+
+/* rdmsr with exception handling */
+#define rdmsr_safe(msr, low, high)				\
+({								\
+	int __err;						\
+	u64 __val = native_read_msr_safe((msr), &__err);	\
+	(*low) = (u32)__val;					\
+	(*high) = (u32)(__val >> 32);				\
+	__err;							\
+})
+
+static inline int rdmsrl_safe(unsigned msr, unsigned long long *p)
+{
+	int err;
+
+	*p = native_read_msr_safe(msr, &err);
+	return err;
+}
+
+/*
+ * 64-bit version of wrmsr_safe():
+ */
+static inline int wrmsrl_safe(u32 msr, u64 val)
+{
+	return wrmsr_safe(msr, (u32)val,  (u32)(val >> 32));
+}
+
+struct msr {
+	union {
+		struct {
+			u32 l;
+			u32 h;
+		};
+		u64 q;
+	};
+};
+
+/**
+ * Read an MSR with error handling
+ *
+ * @msr: MSR to read
+ * @m: value to read into
+ *
+ * It returns read data only on success, otherwise it doesn't change the output
+ * argument @m.
+ *
+ */
+static inline int msr_read(u32 msr, struct msr *m)
+{
+	int err;
+	u64 val;
+
+	err = rdmsrl_safe(msr, &val);
+	if (!err)
+		m->q = val;
+
+	return err;
+}
+
+/**
+ * Write an MSR with error handling
+ *
+ * @msr: MSR to write
+ * @m: value to write
+ */
+static inline int msr_write(u32 msr, struct msr *m)
+{
+	return wrmsrl_safe(msr, m->q);
+}
+
+static inline int __flip_bit(u32 msr, u8 bit, bool set)
+{
+	struct msr m, m1;
+	int err = -EINVAL;
+
+	if (bit > 63)
+		return err;
+
+	err = msr_read(msr, &m);
+	if (err)
+		return err;
+
+	m1 = m;
+	if (set)
+		m1.q |=  BIT_64(bit);
+	else
+		m1.q &= ~BIT_64(bit);
+
+	if (m1.q == m.q)
+		return 0;
+
+	err = msr_write(msr, &m1);
+	if (err)
+		return err;
+
+	return 1;
+}
+
+/**
+ * Set @bit in a MSR @msr.
+ *
+ * Retval:
+ * < 0: An error was encountered.
+ * = 0: Bit was already set.
+ * > 0: Hardware accepted the MSR write.
+ */
+static inline int msr_set_bit(u32 msr, u8 bit)
+{
+	return __flip_bit(msr, bit, true);
+}
+
+/**
+ * Clear @bit in a MSR @msr.
+ *
+ * Retval:
+ * < 0: An error was encountered.
+ * = 0: Bit was already cleared.
+ * > 0: Hardware accepted the MSR write.
+ */
+static inline int msr_clear_bit(u32 msr, u8 bit)
+{
+	return __flip_bit(msr, bit, false);
 }
 
 #endif /* __ASSEMBLY__ */

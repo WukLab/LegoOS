@@ -18,6 +18,7 @@ config X86
 	def_bool y
 	select HAVE_MEMBLOCK
 	select HAVE_MEMBLOCK_NODE_MAP
+	select X86_FEATURE_NAMES		if COMP_PROCESSOR
 
 config OUTPUT_FORMAT
 	string
@@ -111,6 +112,17 @@ config SMP
 	  <http://www.tldp.org/docs.html#howto>.
 
 	  If you don't know what to do here, say N.
+
+config X86_FEATURE_NAMES
+	bool "Processor feature human-readable names"
+	default y
+	---help---
+	  This option compiles in a table of x86 feature bits and corresponding
+	  names.  This is required to support /proc/cpuinfo and a few kernel
+	  messages.  You can disable this to save space, at the expense of
+	  making those few kernel messages show numeric feature bits instead.
+
+	  If in doubt, say Y.
 
 config MAXSMP
 	bool "Enable Maximum number of SMP Processors and NUMA Nodes"

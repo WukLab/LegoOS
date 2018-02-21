@@ -5,9 +5,9 @@ obj-y += process.o
 obj-y += dumpstack.o
 obj-y += setup.o
 obj-y += e820.o
-obj-y += cpu.o cpu_intel.o
 obj-y += pci-dma.o
 obj-y += pci-nommu.o
+obj-y += cpu/
 
 obj-y += percpu.o
 obj-y += smp.o smpboot.o

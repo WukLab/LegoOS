@@ -286,6 +286,10 @@ void __init setup_arch(void)
 	copy_trampoline_code();
 
 	arch_init_ideal_nops();
+
+	identify_cpu(&default_cpu_info);
+	print_cpu_info(&default_cpu_info);
+
 	alternative_instructions();
 	pt_dump_init();
 

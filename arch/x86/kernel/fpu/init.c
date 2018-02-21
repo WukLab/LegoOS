@@ -197,9 +197,9 @@ static void fpu__init_system_early_generic(struct cpu_info *c)
 		     : "+m" (fsw), "+m" (fcw));
 
 	if (fsw == 0 && (fcw & 0x103f) == 0x003f)
-		cpu_set_cap(c, X86_FEATURE_FPU);
+		set_cpu_cap(c, X86_FEATURE_FPU);
 	else
-		cpu_clear_cap(c, X86_FEATURE_FPU);
+		clear_cpu_cap(c, X86_FEATURE_FPU);
 
 	if (!cpu_has(X86_FEATURE_FPU)) {
 		pr_emerg("x86/fpu: Giving up, no FPU found and no math emulation present\n");
@@ -274,8 +274,8 @@ static void __init fpu__init_system_xstate_size_legacy(void)
 		 * Disable xsave as we do not support it if i387
 		 * emulation is enabled.
 		 */
-		cpu_clear_cap(c, X86_FEATURE_XSAVE);
-		cpu_clear_cap(c, X86_FEATURE_XSAVEOPT);
+		clear_cpu_cap(c, X86_FEATURE_XSAVE);
+		clear_cpu_cap(c, X86_FEATURE_XSAVEOPT);
 		fpu_kernel_xstate_size = sizeof(struct swregs_state);
 	} else {
 		if (cpu_has(X86_FEATURE_FXSR))
@@ -351,7 +351,7 @@ static void __init fpu__init_system_ctx_switch(void)
 		eagerfpu = ENABLE;
 
 	if (eagerfpu == ENABLE)
-		cpu_set_cap(c, X86_FEATURE_EAGER_FPU);
+		set_cpu_cap(c, X86_FEATURE_EAGER_FPU);
 
 	printk(KERN_INFO "x86/fpu: Using '%s' FPU context switches.\n", eagerfpu == ENABLE ? "eager" : "lazy");
 }

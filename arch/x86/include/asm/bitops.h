@@ -31,6 +31,9 @@
 # error "Unexpected BITS_PER_LONG"
 #endif
 
+#define U64_C(x) x ## ULL
+#define BIT_64(n)			(U64_C(1) << (n))
+
 #define BITOP_ADDR(x) "+m" (*(volatile long *) (x))
 
 /*
