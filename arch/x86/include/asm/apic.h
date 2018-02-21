@@ -331,6 +331,8 @@ struct apic {
 
 	void (*init_apic_ldr)(void);
 
+	int (*phys_pkg_id)(int cpuid_apic, int index_msb);
+
 	int (*cpu_mask_to_apicid_and)(const struct cpumask *cpumask,
 				      const struct cpumask *andmask,
 				      unsigned int *apicid);

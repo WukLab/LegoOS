@@ -376,11 +376,44 @@ static void detect_vmx_virtcap(struct cpu_info *c)
 	}
 }
 
+/*
+ * find out the number of processor cores on the die
+ */
+static int intel_num_cpu_cores(struct cpu_info *c)
+{
+	unsigned int eax, ebx, ecx, edx;
+
+	if (!IS_ENABLED(CONFIG_SMP) || c->cpuid_level < 4)
+		return 1;
+
+	/* Intel has a non-standard dependency on %ecx for this CPUID level. */
+	cpuid_count(4, 0, &eax, &ebx, &ecx, &edx);
+	if (eax & 0x1f)
+		return (eax >> 26) + 1;
+	else
+		return 1;
+}
+
 static void init_intel(struct cpu_info *c)
 {
 	unsigned int l2 = 0;
 
 	early_init_intel(c);
+
+	/*
+	 * Detect the extended topology information if available. This
+	 * will reinitialise the initial_apicid which will be used
+	 * in init_intel_cacheinfo()
+	 */
+	detect_extended_topology(c);
+
+	if (!cpu_has(X86_FEATURE_XTOPOLOGY)) {
+		/*
+		 * let's use the legacy cpuid vector 0x1 and 0x4 for topology
+		 * detection.
+		 */
+		c->x86_max_cores = intel_num_cpu_cores(c);
+	}
 
 	if (c->cpuid_level > 9) {
 		unsigned eax = cpuid_eax(10);

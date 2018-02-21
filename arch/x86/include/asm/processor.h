@@ -263,6 +263,7 @@ void init_scattered_cpuid_features(struct cpu_info *c);
 void get_cpu_cap(struct cpu_info *c);
 void print_cpu_info(struct cpu_info *c);
 void identify_cpu(struct cpu_info *c);
+void detect_extended_topology(struct cpu_info *c);
 void __init early_cpu_init(void);
 void cpu_init(void);
 
