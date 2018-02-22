@@ -15,6 +15,7 @@
 #include <asm/pgtable.h>
 #include <asm/bootparam.h>
 #include <asm/trampoline.h>
+#include <asm/fpu/internal.h>
 
 #include <lego/smp.h>
 #include <lego/init.h>
@@ -325,6 +326,21 @@ int native_cpu_up(int cpu, struct task_struct *idle)
 {
 	int ret;
 	int apicid = cpu_to_apicid(cpu);
+
+	WARN_ON(irqs_disabled());
+
+	pr_debug("++++++++++++++++++++=_---CPU UP  %u\n", cpu);
+
+	/*
+	 * Already booted CPU?
+	 */
+	if (cpumask_test_cpu(cpu, cpu_online_mask)) {
+		pr_debug("do_boot_cpu %d Already started\n", cpu);
+		return -ENOSYS;
+	}
+
+	/* the FPU context is blank, nobody can own it */
+	__cpu_disable_lazy_restore(cpu);
 
 	ret = do_cpu_up(apicid, cpu, idle);
 	if (ret) {
