@@ -56,7 +56,7 @@ long do_arch_prctl(struct task_struct *task, int code, unsigned long addr)
 		task->thread.gsbase = addr;
 		if (doit) {
 			load_gs_index(0);
-			wrmsrl(MSR_KERNEL_GS_BASE, addr);
+			wrmsrl_safe(MSR_KERNEL_GS_BASE, addr);
 		}
 		put_cpu();
 		break;
@@ -71,7 +71,7 @@ long do_arch_prctl(struct task_struct *task, int code, unsigned long addr)
 		if (doit) {
 			/* set the selector to 0 to not confuse __switch_to */
 			loadsegment(fs, 0);
-			wrmsrl(MSR_FS_BASE, addr);
+			wrmsrl_safe(MSR_FS_BASE, addr);
 		}
 		put_cpu();
 		break;
@@ -168,6 +168,50 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 out:
 	return err;
 }
+
+/**
+ * start_thread	- Starting a new user thread
+ * @regs: pointer to pt_regs
+ * @new_ip: the first instruction IP of user thread
+ * @new_sp: the new stack pointer of user thread
+ *
+ * We do not return to usermode here, we simply replace the return IP of the
+ * regs frame. While the kernel thread returns, it will simply merge to syscall
+ * return path (check ret_from_fork() in entry.S for detial).
+ */
+static void
+start_thread_common(struct pt_regs *regs, unsigned long new_ip,
+		    unsigned long new_sp,
+		    unsigned int _cs, unsigned int _ss, unsigned int _ds)
+{
+	loadsegment(fs, 0);
+	loadsegment(es, _ds);
+	loadsegment(ds, _ds);
+	load_gs_index(0);
+	regs->ip		= new_ip;
+	regs->sp		= new_sp;
+	regs->cs		= _cs;
+	regs->ss		= _ss;
+	regs->flags		= X86_EFLAGS_IF;
+	force_iret();
+}
+
+void
+start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp)
+{
+	start_thread_common(regs, new_ip, new_sp,
+			    __USER_CS, __USER_DS, 0);
+}
+
+#ifdef CONFIG_COMPAT
+void compat_start_thread(struct pt_regs *regs, u32 new_ip, u32 new_sp)
+{
+	start_thread_common(regs, new_ip, new_sp,
+			    test_thread_flag(TIF_X32)
+			    ? __USER_CS : __USER32_CS,
+			    __USER_DS, __USER_DS);
+}
+#endif
 
 /*
  * switch_to(x,y) should switch tasks from x to y.
@@ -335,30 +379,6 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	return prev_p;
 }
 
-/**
- * start_thread	- Starting a new user thread
- * @regs: pointer to pt_regs
- * @new_ip: the first instruction IP of user thread
- * @new_sp: the new stack pointer of user thread
- *
- * We do not return to usermode here, we simply replace the return IP of the
- * regs frame. While the kernel thread returns, it will simply merge to syscall
- * return path (check ret_from_fork() in entry.S for detial).
- */
-void start_thread(struct pt_regs *regs, unsigned long new_ip,
-		  unsigned long new_sp)
-{
-	loadsegment(fs, 0);
-	loadsegment(es, 0);
-	loadsegment(ds, 0);
-	load_gs_index(0);
-	regs->ip		= new_ip;
-	regs->sp		= new_sp;
-	regs->cs		= __USER_CS;
-	regs->ss		= __USER_DS;
-	regs->flags		= X86_EFLAGS_IF;
-}
-
 /*
  * this gets called so that we can store lazy state into memory and copy the
  * current task into the new thread.
@@ -398,13 +418,11 @@ void exit_thread(struct task_struct *tsk)
 
 void flush_thread(void)
 {
-#if 0
-Looks like this code break the system
 	struct task_struct *tsk = current;
+
 	memset(tsk->thread.tls_array, 0, sizeof(tsk->thread.tls_array));
 
 	fpu__clear(&tsk->thread.fpu);
-#endif
 }
 
 static int die_counter;

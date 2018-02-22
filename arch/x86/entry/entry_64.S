@@ -17,9 +17,11 @@
 #include <asm/percpu.h>
 #include <asm/segment.h>
 #include <asm/extable.h>
+#include <asm/alternative-asm.h>
 #include <asm/irq_vectors.h>
 #include <asm/thread_info.h>
 #include <asm/processor-flags.h>
+#include <asm/processor-features-flags.h>
 
 #include <lego/errno.h>
 #include <lego/linkage.h>
@@ -107,9 +109,16 @@ ENTRY(entry_SYSCALL_64)
 	pushq	%r9				/* pt_regs->r9 */
 	pushq	%r10				/* pt_regs->r10 */
 	pushq	%r11				/* pt_regs->r11 */
-
-/* SYSCALL slowpath... */
 	sub	$(6*8), %rsp			/* pt_regs->bp, bx, r12-15 */
+
+/*
+ * TODO:
+ * Lego uses the SYSCALL slowpath compared with Linux
+ * This may have performance issues.
+ */
+
+entry_SYSCALL64_slow_path:
+	/* IRQs are off. */
 	SAVE_EXTRA_REGS
 
 	movq	%rsp, %rdi
@@ -217,6 +226,12 @@ END(native_load_gs_index)
 	/* running with kernelgs */
 bad_gs:
 	SWAPGS					/* switch back to user gs */
+.macro ZAP_GS
+	/* This can't be a string because the preprocessor needs to see it. */
+	movl $__USER_DS, %eax
+	movl %eax, %gs
+.endm
+	ALTERNATIVE "", "ZAP_GS", X86_BUG_NULL_SEG
 	xorl	%eax, %eax
 	movl	%eax, %gs
 	jmp	2b
@@ -397,7 +412,9 @@ IDT_ENTRY virtualization_exception	do_virtualization_exception	has_error_code=0
 
 	movq	%rsp, %rdi		/* pt_regs pointer */
 
-	call	\func
+	pushq	%rdi
+
+	call	\func			/* %rdi points to pt_regs */
 .endm
 
 /*
@@ -410,8 +427,13 @@ ENTRY(common_interrupt)
 	addq	$-0x80, (%rsp)
 	interrupt do_IRQ
 
+	/* 0(%rsp): old RSP */
 ret_from_intr:
 	cli
+
+	/* Restore saved previous stack */
+	popq	%rsp
+
 	testb	$3, CS(%rsp)
 	jz	retint_kernel
 
@@ -448,6 +470,9 @@ GLOBAL(restore_regs_and_iret)
 restore_c_regs_and_iret:
 	RESTORE_C_REGS
 	REMOVE_PT_GPREGS_FROM_STACK 8
+
+.global native_irq_return_iret
+native_irq_return_iret:
 	/*
 	 * The iretq could re-enable interrupts:
 	 */
@@ -457,8 +482,6 @@ restore_c_regs_and_iret:
 	 * Double-faults due to espfix64 are handled in do_double_fault.
 	 * Other faults here are fatal.
 	 */
-.global native_irq_return_iret
-native_irq_return_iret:
 	iretq
 END(common_interrupt)
 

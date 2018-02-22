@@ -77,7 +77,7 @@ do_IRQ(struct pt_regs *regs)
 	desc->handle_irq(desc);
 
 	set_irq_regs(old_regs);
-	return 0;
+	return 1;
 }
 
 asmlinkage __visible void
