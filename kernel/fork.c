@@ -937,6 +937,4 @@ void __init fork_init(void)
 {
 	pr_debug("fork: arch_task_struct_size: %d, task_struct: %lu\n",
 		arch_task_struct_size, sizeof(struct task_struct));
-	pr_debug("fork: xstate_sigframe_size: %#x bytes\n",
-		xstate_sigframe_size());
 }

@@ -13,8 +13,12 @@
 
 #include <asm/asm.h>
 #include <asm/traps.h>
+#include <asm/irq_regs.h>
 #include <asm/processor.h>
 #include <asm/fpu/internal.h>
+#include <asm/fpu/signal.h>
+#include <asm/fpu/regset.h>
+#include <asm/fpu/xstate.h>
 
 /*
  * Represents the initial FPU state. It's mostly (but not completely) zeroes,
@@ -52,9 +56,67 @@ static void kernel_fpu_enable(void)
 	this_cpu_write(in_kernel_fpu, false);
 }
 
+static bool kernel_fpu_disabled(void)
+{
+	return this_cpu_read(in_kernel_fpu);
+}
+
+/*
+ * Were we in an interrupt that interrupted kernel mode?
+ *
+ * On others, we can do a kernel_fpu_begin/end() pair *ONLY* if that
+ * pair does nothing at all: the thread must not have fpu (so
+ * that we don't try to save the FPU state), and TS must
+ * be set (so that the clts/stts pair does nothing that is
+ * visible in the interrupted kernel thread).
+ *
+ * Except for the eagerfpu case when we return true; in the likely case
+ * the thread has FPU but we are not going to set/clear TS.
+ */
+static bool interrupted_kernel_fpu_idle(void)
+{
+	if (kernel_fpu_disabled())
+		return false;
+
+	if (use_eager_fpu())
+		return true;
+
+	return !current->thread.fpu.fpregs_active && (read_cr0() & X86_CR0_TS);
+}
+
+/*
+ * Were we in user mode (or vm86 mode) when we were
+ * interrupted?
+ *
+ * Doing kernel_fpu_begin/end() is ok if we are running
+ * in an interrupt context from user mode - we'll just
+ * save the FPU state as required.
+ */
+static bool interrupted_user_mode(void)
+{
+	struct pt_regs *regs = get_irq_regs();
+	return regs && user_mode(regs);
+}
+
+/*
+ * Can we use the FPU in kernel mode with the
+ * whole "kernel_fpu_begin/end()" sequence?
+ *
+ * It's always ok in process context (ie "not interrupt")
+ * but it is sometimes ok even from an irq.
+ */
+bool irq_fpu_usable(void)
+{
+	return !in_interrupt() ||
+		interrupted_user_mode() ||
+		interrupted_kernel_fpu_idle();
+}
+
 void __kernel_fpu_begin(void)
 {
 	struct fpu *fpu = &current->thread.fpu;
+
+	WARN_ON_FPU(!irq_fpu_usable());
 
 	kernel_fpu_disable();
 
@@ -95,6 +157,33 @@ void kernel_fpu_end(void)
 }
 
 /*
+ * CR0::TS save/restore functions:
+ */
+int irq_ts_save(void)
+{
+	/*
+	 * If in process context and not atomic, we can take a spurious DNA fault.
+	 * Otherwise, doing clts() in process context requires disabling preemption
+	 * or some heavy lifting like kernel_fpu_begin()
+	 */
+	if (!in_atomic())
+		return 0;
+
+	if (read_cr0() & X86_CR0_TS) {
+		clts();
+		return 1;
+	}
+
+	return 0;
+}
+
+void irq_ts_restore(int TS_state)
+{
+	if (TS_state)
+		stts();
+}
+
+/*
  * Save the FPU state (mark it for reload if necessary):
  *
  * This only ever gets called for the current task.
@@ -115,12 +204,6 @@ void fpu__save(struct fpu *fpu)
 	preempt_enable();
 }
 
-static inline void fpstate_init_fxstate(struct fxregs_state *fx)
-{
-	fx->cwd = 0x37f;
-	fx->mxcsr = MXCSR_DEFAULT;
-}
-
 /*
  * Legacy x87 fpstate state init:
  */
@@ -134,8 +217,11 @@ static inline void fpstate_init_fstate(struct fregs_state *fp)
 
 void fpstate_init(union fpregs_state *state)
 {
-	if (!cpu_has(X86_FEATURE_FPU))
+	if (!cpu_has(X86_FEATURE_FPU)) {
+		BUG();
+		fpstate_init_soft(&state->soft);
 		return;
+	}
 
 	memset(state, 0, fpu_kernel_xstate_size);
 
@@ -399,6 +485,12 @@ static inline void copy_init_fpstate_to_fpregs(void)
 		copy_kernel_to_fxregs(&init_fpstate.fxsave);
 	else
 		copy_kernel_to_fregs(&init_fpstate.fsave);
+
+#if 0
+	XXX
+	if (boot_cpu_has(X86_FEATURE_OSPKE))
+		copy_init_pkru_to_fpregs();
+#endif
 }
 
 /*
@@ -443,7 +535,7 @@ int fpu__exception_code(struct fpu *fpu, int trap_nr)
 		 * and it will suffer the consequences since we won't be able to
 		 * fully reproduce the context of the exception.
 		 */
-		if (cpu_has(X86_FEATURE_FXSR)) {
+		if (boot_cpu_has(X86_FEATURE_FXSR)) {
 			cwd = fpu->state.fxsave.cwd;
 			swd = fpu->state.fxsave.swd;
 		} else {
@@ -461,7 +553,7 @@ int fpu__exception_code(struct fpu *fpu, int trap_nr)
 		 */
 		unsigned short mxcsr = MXCSR_DEFAULT;
 
-		if (cpu_has(X86_FEATURE_XMM))
+		if (boot_cpu_has(X86_FEATURE_XMM))
 			mxcsr = fpu->state.fxsave.mxcsr;
 
 		err = ~(mxcsr >> 7) & mxcsr;

@@ -1,159 +1,26 @@
+/*
+ * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+
 #include <lego/sched.h>
 #include <lego/siginfo.h>
 #include <lego/signal.h>
 #include <lego/uaccess.h>
 
+#include <asm/user32.h>
 #include <asm/sigframe.h>
 #include <asm/sigcontext.h>
 #include <asm/fpu/internal.h>
+#include <asm/fpu/signal.h>
+#include <asm/fpu/regset.h>
+#include <asm/fpu/xstate.h>
 
 static struct _fpx_sw_bytes fx_sw_reserved, fx_sw_reserved_ia32;
-
-static inline unsigned short twd_i387_to_fxsr(unsigned short twd)
-{
-	unsigned int tmp; /* to avoid 16 bit prefixes in the code */
-
-	/* Transform each pair of bits into 01 (valid) or 00 (empty) */
-	tmp = ~twd;
-	tmp = (tmp | (tmp>>1)) & 0x5555; /* 0V0V0V0V0V0V0V0V */
-	/* and move the valid bits to the lower byte. */
-	tmp = (tmp | (tmp >> 1)) & 0x3333; /* 00VV00VV00VV00VV */
-	tmp = (tmp | (tmp >> 2)) & 0x0f0f; /* 0000VVVV0000VVVV */
-	tmp = (tmp | (tmp >> 4)) & 0x00ff; /* 00000000VVVVVVVV */
-
-	return tmp;
-}
-
-void convert_to_fxsr(struct task_struct *tsk,
-		     const struct user_i387_ia32_struct *env)
-
-{
-	struct fxregs_state *fxsave = &tsk->thread.fpu.state.fxsave;
-	struct _fpreg *from = (struct _fpreg *) &env->st_space[0];
-	struct _fpxreg *to = (struct _fpxreg *) &fxsave->st_space[0];
-	int i;
-
-	fxsave->cwd = env->cwd;
-	fxsave->swd = env->swd;
-	fxsave->twd = twd_i387_to_fxsr(env->twd);
-	fxsave->fop = (u16) ((u32) env->fcs >> 16);
-	fxsave->rip = env->fip;
-	fxsave->rdp = env->foo;
-	/* cs and ds ignored */
-
-	for (i = 0; i < 8; ++i)
-		memcpy(&to[i], &from[i], sizeof(from[0]));
-}
-
-#define FPREG_ADDR(f, n)	((void *)&(f)->st_space + (n) * 16)
-#define FP_EXP_TAG_VALID	0
-#define FP_EXP_TAG_ZERO		1
-#define FP_EXP_TAG_SPECIAL	2
-#define FP_EXP_TAG_EMPTY	3
-
-static inline u32 twd_fxsr_to_i387(struct fxregs_state *fxsave)
-{
-	struct _fpxreg *st;
-	u32 tos = (fxsave->swd >> 11) & 7;
-	u32 twd = (unsigned long) fxsave->twd;
-	u32 tag;
-	u32 ret = 0xffff0000u;
-	int i;
-
-	for (i = 0; i < 8; i++, twd >>= 1) {
-		if (twd & 0x1) {
-			st = FPREG_ADDR(fxsave, (i - tos) & 7);
-
-			switch (st->exponent & 0x7fff) {
-			case 0x7fff:
-				tag = FP_EXP_TAG_SPECIAL;
-				break;
-			case 0x0000:
-				if (!st->significand[0] &&
-				    !st->significand[1] &&
-				    !st->significand[2] &&
-				    !st->significand[3])
-					tag = FP_EXP_TAG_ZERO;
-				else
-					tag = FP_EXP_TAG_SPECIAL;
-				break;
-			default:
-				if (st->significand[3] & 0x8000)
-					tag = FP_EXP_TAG_VALID;
-				else
-					tag = FP_EXP_TAG_SPECIAL;
-				break;
-			}
-		} else {
-			tag = FP_EXP_TAG_EMPTY;
-		}
-		ret |= tag << (2 * i);
-	}
-	return ret;
-}
-
-void
-convert_from_fxsr(struct user_i387_ia32_struct *env, struct task_struct *tsk)
-{
-	struct fxregs_state *fxsave = &tsk->thread.fpu.state.fxsave;
-	struct _fpreg *to = (struct _fpreg *) &env->st_space[0];
-	struct _fpxreg *from = (struct _fpxreg *) &fxsave->st_space[0];
-	int i;
-
-	env->cwd = fxsave->cwd | 0xffff0000u;
-	env->swd = fxsave->swd | 0xffff0000u;
-	env->twd = twd_fxsr_to_i387(fxsave);
-
-	env->fip = fxsave->rip;
-	env->foo = fxsave->rdp;
-	/*
-	 * should be actually ds/cs at fpu exception time, but
-	 * that information is not available in 64bit mode.
-	 */
-	env->fcs = task_pt_regs(tsk)->cs;
-	if (tsk == current) {
-		savesegment(ds, env->fos);
-	} else {
-		env->fos = tsk->thread.ds;
-	}
-	env->fos |= 0xffff0000;
-
-	for (i = 0; i < 8; ++i)
-		memcpy(&to[i], &from[i], sizeof(to[0]));
-}
-
-static inline void
-sanitize_restored_xstate(struct task_struct *tsk,
-			 struct user_i387_ia32_struct *ia32_env,
-			 u64 xfeatures, int fx_only)
-{
-	struct xregs_state *xsave = &tsk->thread.fpu.state.xsave;
-	struct xstate_header *header = &xsave->header;
-
-	if (use_xsave()) {
-		/* These bits must be zero. */
-		memset(header->reserved, 0, 48);
-
-		/*
-		 * Init the state that is not present in the memory
-		 * layout and not enabled by the OS.
-		 */
-		if (fx_only)
-			header->xfeatures = XFEATURE_MASK_FPSSE;
-		else
-			header->xfeatures &= (xfeatures_mask & xfeatures);
-	}
-
-	if (use_fxsr()) {
-		/*
-		 * mscsr reserved bits must be masked to zero for security
-		 * reasons.
-		 */
-		xsave->i387.mxcsr &= mxcsr_feature_mask;
-
-		convert_to_fxsr(tsk, ia32_env);
-	}
-}
 
 /*
  * Check for the presence of extended state information in the
@@ -188,6 +55,190 @@ static inline int check_for_xstate(struct fxregs_state __user *buf,
 		return -1;
 
 	return 0;
+}
+
+/*
+ * Signal frame handlers.
+ */
+static inline int save_fsave_header(struct task_struct *tsk, void __user *buf)
+{
+	if (use_fxsr()) {
+		struct xregs_state *xsave = &tsk->thread.fpu.state.xsave;
+		struct user_i387_ia32_struct env;
+		struct _fpstate_32 __user *fp = buf;
+
+		convert_from_fxsr(&env, tsk);
+
+		if (__copy_to_user(buf, &env, sizeof(env)) ||
+		    __put_user(xsave->i387.swd, &fp->status) ||
+		    __put_user(X86_FXSR_MAGIC, &fp->magic))
+			return -1;
+	} else {
+		struct fregs_state __user *fp = buf;
+		u32 swd;
+		if (__get_user(swd, &fp->swd) || __put_user(swd, &fp->status))
+			return -1;
+	}
+
+	return 0;
+}
+
+static inline int save_xstate_epilog(void __user *buf, int ia32_frame)
+{
+	struct xregs_state __user *x = buf;
+	struct _fpx_sw_bytes *sw_bytes;
+	u32 xfeatures;
+	int err;
+
+	/* Setup the bytes not touched by the [f]xsave and reserved for SW. */
+	sw_bytes = ia32_frame ? &fx_sw_reserved_ia32 : &fx_sw_reserved;
+	err = __copy_to_user(&x->i387.sw_reserved, sw_bytes, sizeof(*sw_bytes));
+
+	if (!use_xsave())
+		return err;
+
+	err |= __put_user(FP_XSTATE_MAGIC2,
+			  (__u32 *)(buf + fpu_user_xstate_size));
+
+	/*
+	 * Read the xfeatures which we copied (directly from the cpu or
+	 * from the state in task struct) to the user buffers.
+	 */
+	err |= __get_user(xfeatures, (__u32 *)&x->header.xfeatures);
+
+	/*
+	 * For legacy compatible, we always set FP/SSE bits in the bit
+	 * vector while saving the state to the user context. This will
+	 * enable us capturing any changes(during sigreturn) to
+	 * the FP/SSE bits by the legacy applications which don't touch
+	 * xfeatures in the xsave header.
+	 *
+	 * xsave aware apps can change the xfeatures in the xsave
+	 * header as well as change any contents in the memory layout.
+	 * xrestore as part of sigreturn will capture all the changes.
+	 */
+	xfeatures |= XFEATURE_MASK_FPSSE;
+
+	err |= __put_user(xfeatures, (__u32 *)&x->header.xfeatures);
+
+	return err;
+}
+
+static inline int copy_fpregs_to_sigframe(struct xregs_state __user *buf)
+{
+	int err;
+
+	if (use_xsave())
+		err = copy_xregs_to_user(buf);
+	else if (use_fxsr())
+		err = copy_fxregs_to_user((struct fxregs_state __user *) buf);
+	else
+		err = copy_fregs_to_user((struct fregs_state __user *) buf);
+
+	if (unlikely(err) && __clear_user(buf, fpu_user_xstate_size))
+		err = -EFAULT;
+	return err;
+}
+
+/*
+ * Save the fpu, extended register state to the user signal frame.
+ *
+ * 'buf_fx' is the 64-byte aligned pointer at which the [f|fx|x]save
+ *  state is copied.
+ *  'buf' points to the 'buf_fx' or to the fsave header followed by 'buf_fx'.
+ *
+ *	buf == buf_fx for 64-bit frames and 32-bit fsave frame.
+ *	buf != buf_fx for 32-bit frames with fxstate.
+ *
+ * If the fpu, extended register state is live, save the state directly
+ * to the user frame pointed by the aligned pointer 'buf_fx'. Otherwise,
+ * copy the thread's fpu state to the user frame starting at 'buf_fx'.
+ *
+ * If this is a 32-bit frame with fxstate, put a fsave header before
+ * the aligned state at 'buf_fx'.
+ *
+ * For [f]xsave state, update the SW reserved fields in the [f]xsave frame
+ * indicating the absence/presence of the extended state to the user.
+ */
+int copy_fpstate_to_sigframe(void __user *buf, void __user *buf_fx, int size)
+{
+	struct xregs_state *xsave = &current->thread.fpu.state.xsave;
+	struct task_struct *tsk = current;
+	int ia32_fxstate = (buf != buf_fx);
+
+	ia32_fxstate &= (IS_ENABLED(CONFIG_X86_32) ||
+			 IS_ENABLED(CONFIG_IA32_EMULATION));
+
+	if (!access_ok(VERIFY_WRITE, buf, size))
+		return -EACCES;
+
+	BUG_ON(!cpu_has(X86_FEATURE_FPU));
+
+	if (fpregs_active() || using_compacted_format()) {
+		/* Save the live register state to the user directly. */
+		if (copy_fpregs_to_sigframe(buf_fx))
+			return -1;
+		/* Update the thread's fxstate to save the fsave header. */
+		if (ia32_fxstate)
+			copy_fxregs_to_kernel(&tsk->thread.fpu);
+	} else {
+		/*
+		 * It is a *bug* if kernel uses compacted-format for xsave
+		 * area and we copy it out directly to a signal frame. It
+		 * should have been handled above by saving the registers
+		 * directly.
+		 */
+		if (boot_cpu_has(X86_FEATURE_XSAVES)) {
+			WARN_ONCE(1, "x86/fpu: saving compacted-format xsave area to a signal frame!\n");
+			return -1;
+		}
+
+		fpstate_sanitize_xstate(&tsk->thread.fpu);
+		if (__copy_to_user(buf_fx, xsave, fpu_user_xstate_size))
+			return -1;
+	}
+
+	/* Save the fsave header for the 32-bit frames. */
+	if ((ia32_fxstate || !use_fxsr()) && save_fsave_header(tsk, buf))
+		return -1;
+
+	if (use_fxsr() && save_xstate_epilog(buf_fx, ia32_fxstate))
+		return -1;
+
+	return 0;
+}
+
+static inline void
+sanitize_restored_xstate(struct task_struct *tsk,
+			 struct user_i387_ia32_struct *ia32_env,
+			 u64 xfeatures, int fx_only)
+{
+	struct xregs_state *xsave = &tsk->thread.fpu.state.xsave;
+	struct xstate_header *header = &xsave->header;
+
+	if (use_xsave()) {
+		/* These bits must be zero. */
+		memset(header->reserved, 0, 48);
+
+		/*
+		 * Init the state that is not present in the memory
+		 * layout and not enabled by the OS.
+		 */
+		if (fx_only)
+			header->xfeatures = XFEATURE_MASK_FPSSE;
+		else
+			header->xfeatures &= (xfeatures_mask & xfeatures);
+	}
+
+	if (use_fxsr()) {
+		/*
+		 * mscsr reserved bits must be masked to zero for security
+		 * reasons.
+		 */
+		xsave->i387.mxcsr &= mxcsr_feature_mask;
+
+		convert_to_fxsr(tsk, ia32_env);
+	}
 }
 
 /*
@@ -234,10 +285,7 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 
 	fpu__activate_curr(fpu);
 
-	if (!cpu_has(X86_FEATURE_FPU)) {
-		WARN(1, "Lego has no math-emulation support\n");
-		return -EFAULT;
-	}
+	BUG_ON(!cpu_has(X86_FEATURE_FPU));
 
 	if (use_xsave()) {
 		struct _fpx_sw_bytes fx_sw_user;
@@ -313,6 +361,12 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 	return 0;
 }
 
+static inline int xstate_sigframe_size(void)
+{
+	return use_xsave() ? fpu_user_xstate_size + FP_XSTATE_MAGIC2_SIZE :
+			fpu_user_xstate_size;
+}
+
 /*
  * Restore FPU state from a sigframe:
  */
@@ -327,160 +381,6 @@ int fpu__restore_sig(void __user *buf, int ia32_frame)
 	}
 
 	return __fpu__restore_sig(buf, buf_fx, size);
-}
-
-static inline int copy_fpregs_to_sigframe(struct xregs_state __user *buf)
-{
-	int err;
-
-	if (use_xsave())
-		err = copy_xregs_to_user(buf);
-	else if (use_fxsr())
-		err = copy_fxregs_to_user((struct fxregs_state __user *) buf);
-	else
-		err = copy_fregs_to_user((struct fregs_state __user *) buf);
-
-	if (unlikely(err) && __clear_user(buf, fpu_user_xstate_size))
-		err = -EFAULT;
-	return err;
-}
-
-/*
- * Signal frame handlers.
- */
-static inline int save_fsave_header(struct task_struct *tsk, void __user *buf)
-{
-	if (use_fxsr()) {
-		struct xregs_state *xsave = &tsk->thread.fpu.state.xsave;
-		struct user_i387_ia32_struct env;
-		struct _fpstate_32 __user *fp = buf;
-
-		convert_from_fxsr(&env, tsk);
-
-		if (__copy_to_user(buf, &env, sizeof(env)) ||
-		    __put_user(xsave->i387.swd, &fp->status) ||
-		    __put_user(X86_FXSR_MAGIC, &fp->magic))
-			return -1;
-	} else {
-		struct fregs_state __user *fp = buf;
-		u32 swd;
-		if (__get_user(swd, &fp->swd) || __put_user(swd, &fp->status))
-			return -1;
-	}
-
-	return 0;
-}
-
-static inline int save_xstate_epilog(void __user *buf, int ia32_frame)
-{
-	struct xregs_state __user *x = buf;
-	struct _fpx_sw_bytes *sw_bytes;
-	u32 xfeatures;
-	int err;
-
-	/* Setup the bytes not touched by the [f]xsave and reserved for SW. */
-	sw_bytes = ia32_frame ? &fx_sw_reserved_ia32 : &fx_sw_reserved;
-	err = __copy_to_user(&x->i387.sw_reserved, sw_bytes, sizeof(*sw_bytes));
-
-	if (!use_xsave())
-		return err;
-
-	err |= __put_user(FP_XSTATE_MAGIC2,
-			  (__u32 *)(buf + fpu_user_xstate_size));
-
-	/*
-	 * Read the xfeatures which we copied (directly from the cpu or
-	 * from the state in task struct) to the user buffers.
-	 */
-	err |= __get_user(xfeatures, (__u32 *)&x->header.xfeatures);
-
-	/*
-	 * For legacy compatible, we always set FP/SSE bits in the bit
-	 * vector while saving the state to the user context. This will
-	 * enable us capturing any changes(during sigreturn) to
-	 * the FP/SSE bits by the legacy applications which don't touch
-	 * xfeatures in the xsave header.
-	 *
-	 * xsave aware apps can change the xfeatures in the xsave
-	 * header as well as change any contents in the memory layout.
-	 * xrestore as part of sigreturn will capture all the changes.
-	 */
-	xfeatures |= XFEATURE_MASK_FPSSE;
-
-	err |= __put_user(xfeatures, (__u32 *)&x->header.xfeatures);
-
-	return err;
-}
-
-/*
- * Save the fpu, extended register state to the user signal frame.
- *
- * 'buf_fx' is the 64-byte aligned pointer at which the [f|fx|x]save
- *  state is copied.
- *  'buf' points to the 'buf_fx' or to the fsave header followed by 'buf_fx'.
- *
- *	buf == buf_fx for 64-bit frames and 32-bit fsave frame.
- *	buf != buf_fx for 32-bit frames with fxstate.
- *
- * If the fpu, extended register state is live, save the state directly
- * to the user frame pointed by the aligned pointer 'buf_fx'. Otherwise,
- * copy the thread's fpu state to the user frame starting at 'buf_fx'.
- *
- * If this is a 32-bit frame with fxstate, put a fsave header before
- * the aligned state at 'buf_fx'.
- *
- * For [f]xsave state, update the SW reserved fields in the [f]xsave frame
- * indicating the absence/presence of the extended state to the user.
- */
-int copy_fpstate_to_sigframe(void __user *buf, void __user *buf_fx, int size)
-{
-	struct xregs_state *xsave = &current->thread.fpu.state.xsave;
-	struct task_struct *tsk = current;
-	int ia32_fxstate = (buf != buf_fx);
-
-	ia32_fxstate &= (IS_ENABLED(CONFIG_X86_32) ||
-			 IS_ENABLED(CONFIG_IA32_EMULATION));
-
-	if (!access_ok(VERIFY_WRITE, buf, size))
-		return -EACCES;
-
-	if (!cpu_has(X86_FEATURE_FPU)) {
-		WARN_ON(1);
-		return -EFAULT;
-	}
-
-	if (fpregs_active() || using_compacted_format()) {
-		/* Save the live register state to the user directly. */
-		if (copy_fpregs_to_sigframe(buf_fx))
-			return -1;
-		/* Update the thread's fxstate to save the fsave header. */
-		if (ia32_fxstate)
-			copy_fxregs_to_kernel(&tsk->thread.fpu);
-	} else {
-		/*
-		 * It is a *bug* if kernel uses compacted-format for xsave
-		 * area and we copy it out directly to a signal frame. It
-		 * should have been handled above by saving the registers
-		 * directly.
-		 */
-		if (cpu_has(X86_FEATURE_XSAVES)) {
-			WARN_ONCE(1, "x86/fpu: saving compacted-format xsave area to a signal frame!\n");
-			return -1;
-		}
-
-		fpstate_sanitize_xstate(&tsk->thread.fpu);
-		if (__copy_to_user(buf_fx, xsave, fpu_user_xstate_size))
-			return -1;
-	}
-
-	/* Save the fsave header for the 32-bit frames. */
-	if ((ia32_fxstate || !use_fxsr()) && save_fsave_header(tsk, buf))
-		return -1;
-
-	if (use_fxsr() && save_xstate_epilog(buf_fx, ia32_fxstate))
-		return -1;
-
-	return 0;
 }
 
 unsigned long
@@ -499,7 +399,6 @@ fpu__alloc_mathframe(unsigned long sp, int ia32_frame,
 
 	return sp;
 }
-
 /*
  * Prepare the SW reserved portion of the fxsave memory layout, indicating
  * the presence of the extended state information in the memory layout

@@ -18,6 +18,7 @@ obj-y += acpi/ apic/
 obj-y += fpu/
 obj-y += alternative.o
 obj-y += signal.o
+obj-y += ptrace.o
 
 # Enable CONFIG_FRAME_POINTER to get precise kernel stack dumpinfo
 ifdef CONFIG_FRAME_POINTER

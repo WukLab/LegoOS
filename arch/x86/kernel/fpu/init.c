@@ -33,7 +33,10 @@ static void fpu__init_cpu_ctx_switch(void)
 	 *
 	 *	Yizhou, 24 Jul 2017
 	 */
-	clts();
+	if (!cpu_has(X86_FEATURE_EAGER_FPU))
+		stts();
+	else
+		clts();
 }
 
 /*
@@ -55,37 +58,13 @@ static void fpu__init_cpu_generic(void)
 	if (cr4_mask)
 		cr4_set_bits(cr4_mask);
 
-	/* clear TS and EM */
 	cr0 = read_cr0();
-	cr0 &= ~(X86_CR0_TS|X86_CR0_EM);
+	cr0 &= ~(X86_CR0_TS|X86_CR0_EM); /* clear TS and EM */
+	if (!cpu_has(X86_FEATURE_FPU))
+		cr0 |= X86_CR0_EM;
 	write_cr0(cr0);
 
 	asm volatile ("fninit");
-}
-
-/*
- * Enable the extended processor state save/restore feature.
- * Called once per CPU onlining.
- */
-void fpu__init_cpu_xstate(void)
-{
-	if (!cpu_has(X86_FEATURE_XSAVE) || !xfeatures_mask)
-		return;
-
-	pr_debug_once("x86/fpu: cpu has XSAVE\n");
-
-	/*
-	 * Make it clear that XSAVES supervisor states are not yet
-	 * implemented should anyone expect it to work by changing
-	 * bits in XFEATURE_MASK_* macros and XCR0.
-	 */
-	WARN_ONCE((xfeatures_mask & XFEATURE_MASK_SUPERVISOR),
-		"x86/fpu: XSAVES supervisor states are not yet implemented.\n");
-
-	xfeatures_mask &= ~XFEATURE_MASK_SUPERVISOR;
-
-	cr4_set_bits(X86_CR4_OSXSAVE);
-	xsetbv(XCR_XFEATURE_ENABLED_MASK, xfeatures_mask);
 }
 
 /*
@@ -96,84 +75,6 @@ void fpu__init_cpu(void)
 	fpu__init_cpu_generic();
 	fpu__init_cpu_xstate();
 	fpu__init_cpu_ctx_switch();
-}
-
-/*
- * Size of the FPU context state. All tasks in the system use the
- * same context size, regardless of what portion they use.
- * This is inherent to the XSAVE architecture which puts all state
- * components into a single, continuous memory block:
- */
-unsigned int fpu_kernel_xstate_size;
-
-/* Get alignment of the TYPE. */
-#define TYPE_ALIGN(TYPE) offsetof(struct { char x; TYPE test; }, test)
-
-/*
- * Enforce that 'MEMBER' is the last field of 'TYPE'.
- *
- * Align the computed size with alignment of the TYPE,
- * because that's how C aligns structs.
- */
-#define CHECK_MEMBER_AT_END_OF(TYPE, MEMBER) \
-	BUILD_BUG_ON(sizeof(TYPE) != ALIGN(offsetofend(TYPE, MEMBER), \
-					   TYPE_ALIGN(TYPE)))
-
-/*
- * FPU context switching strategies:
- *
- * Against popular belief, we don't do lazy FPU saves, due to the
- * task migration complications it brings on SMP - we only do
- * lazy FPU restores.
- *
- * 'lazy' is the traditional strategy, which is based on setting
- * CR0::TS to 1 during context-switch (instead of doing a full
- * restore of the FPU state), which causes the first FPU instruction
- * after the context switch (whenever it is executed) to fault - at
- * which point we lazily restore the FPU state into FPU registers.
- *
- * Tasks are of course under no obligation to execute FPU instructions,
- * so it can easily happen that another context-switch occurs without
- * a single FPU instruction being executed. If we eventually switch
- * back to the original task (that still owns the FPU) then we have
- * not only saved the restores along the way, but we also have the
- * FPU ready to be used for the original task.
- *
- * 'lazy' is deprecated because it's almost never a performance win
- * and it's much more complicated than 'eager'.
- *
- * 'eager' switching is by default on all CPUs, there we switch the FPU
- * state during every context switch, regardless of whether the task
- * has used FPU instructions in that time slice or not. This is done
- * because modern FPU context saving instructions are able to optimize
- * state saving and restoration in hardware: they can detect both
- * unused and untouched FPU state and optimize accordingly.
- *
- * [ Note that even in 'lazy' mode we might optimize context switches
- *   to use 'eager' restores, if we detect that a task is using the FPU
- *   frequently. See the fpu->counter logic in fpu/internal.h for that. ]
- */
-static enum { ENABLE, DISABLE } eagerfpu = ENABLE;
-
-/*
- * Find supported xfeatures based on cpu features and command-line input.
- * This must be called after fpu__init_parse_early_param() is called and
- * xfeatures_mask is enumerated.
- */
-u64 __init fpu__get_supported_xfeatures_mask(void)
-{
-	/* Support all xfeatures known to us */
-	if (eagerfpu != DISABLE)
-		return XCNTXT_MASK;
-
-	/* Warning of xfeatures being disabled for no eagerfpu mode */
-	if (xfeatures_mask & XFEATURE_MASK_EAGER) {
-		pr_err("x86/fpu: eagerfpu switching disabled, disabling the following xstate features: 0x%llx.\n",
-			xfeatures_mask & XFEATURE_MASK_EAGER);
-	}
-
-	/* Return a mask that masks out all features requiring eagerfpu mode */
-	return ~XFEATURE_MASK_EAGER;
 }
 
 /*
@@ -192,6 +93,12 @@ static void fpu__init_system_early_generic(struct cpu_info *c)
 	cr0 = read_cr0();
 	cr0 &= ~(X86_CR0_TS | X86_CR0_EM);
 	write_cr0(cr0);
+
+	/*
+	 * Lego has to use FPU
+	 * If somehow this is set, bug indeed.
+	 */
+	BUG_ON(test_bit(X86_FEATURE_FPU, (unsigned long *)cpu_caps_cleared));
 
 	asm volatile("fninit ; fnstsw %0 ; fnstcw %1"
 		     : "+m" (fsw), "+m" (fcw));
@@ -251,43 +158,25 @@ static void __init fpu__init_system_generic(void)
 }
 
 /*
- * Set up the user and kernel xstate sizes based on the legacy FPU context size.
- *
- * We set this up first, and later it will be overwritten by
- * fpu__init_system_xstate() if the CPU knows about xstates.
+ * Size of the FPU context state. All tasks in the system use the
+ * same context size, regardless of what portion they use.
+ * This is inherent to the XSAVE architecture which puts all state
+ * components into a single, continuous memory block:
  */
-static void __init fpu__init_system_xstate_size_legacy(void)
-{
-	struct cpu_info *c = &default_cpu_info;
-	static int on_boot_cpu __initdata = 1;
+unsigned int fpu_kernel_xstate_size;
 
-	WARN_ON(!on_boot_cpu);
-	on_boot_cpu = 0;
+/* Get alignment of the TYPE. */
+#define TYPE_ALIGN(TYPE) offsetof(struct { char x; TYPE test; }, test)
 
-	/*
-	 * Note that xstate sizes might be overwritten later during
-	 * fpu__init_system_xstate().
-	 */
-
-	if (!cpu_has(X86_FEATURE_FPU)) {
-		/*
-		 * Disable xsave as we do not support it if i387
-		 * emulation is enabled.
-		 */
-		clear_cpu_cap(c, X86_FEATURE_XSAVE);
-		clear_cpu_cap(c, X86_FEATURE_XSAVEOPT);
-		fpu_kernel_xstate_size = sizeof(struct swregs_state);
-	} else {
-		if (cpu_has(X86_FEATURE_FXSR))
-			fpu_kernel_xstate_size =
-				sizeof(struct fxregs_state);
-		else
-			fpu_kernel_xstate_size =
-				sizeof(struct fregs_state);
-	}
-
-	fpu_user_xstate_size = fpu_kernel_xstate_size;
-}
+/*
+ * Enforce that 'MEMBER' is the last field of 'TYPE'.
+ *
+ * Align the computed size with alignment of the TYPE,
+ * because that's how C aligns structs.
+ */
+#define CHECK_MEMBER_AT_END_OF(TYPE, MEMBER) \
+	BUILD_BUG_ON(sizeof(TYPE) != ALIGN(offsetofend(TYPE, MEMBER), \
+					   TYPE_ALIGN(TYPE)))
 
 /*
  * We append the 'struct fpu' to the task_struct:
@@ -323,6 +212,103 @@ static void __init fpu__init_task_struct_size(void)
 }
 
 /*
+ * Set up the user and kernel xstate sizes based on the legacy FPU context size.
+ *
+ * We set this up first, and later it will be overwritten by
+ * fpu__init_system_xstate() if the CPU knows about xstates.
+ */
+static void __init fpu__init_system_xstate_size_legacy(void)
+{
+	static int on_boot_cpu __initdata = 1;
+
+	WARN_ON(!on_boot_cpu);
+	on_boot_cpu = 0;
+
+	/*
+	 * Note that xstate sizes might be overwritten later during
+	 * fpu__init_system_xstate().
+	 */
+
+	if (!cpu_has(X86_FEATURE_FPU)) {
+		/*
+		 * Disable xsave as we do not support it if i387
+		 * emulation is enabled.
+		 */
+		BUG();
+		setup_clear_cpu_cap(X86_FEATURE_XSAVE);
+		setup_clear_cpu_cap(X86_FEATURE_XSAVEOPT);
+		fpu_kernel_xstate_size = sizeof(struct swregs_state);
+	} else {
+		if (cpu_has(X86_FEATURE_FXSR))
+			fpu_kernel_xstate_size =
+				sizeof(struct fxregs_state);
+		else
+			fpu_kernel_xstate_size =
+				sizeof(struct fregs_state);
+	}
+
+	fpu_user_xstate_size = fpu_kernel_xstate_size;
+	pr_info("fpu_user_xstate_size(fpu_kernel_xstate_size): size=%u\n", fpu_user_xstate_size);
+}
+
+/*
+ * FPU context switching strategies:
+ *
+ * Against popular belief, we don't do lazy FPU saves, due to the
+ * task migration complications it brings on SMP - we only do
+ * lazy FPU restores.
+ *
+ * 'lazy' is the traditional strategy, which is based on setting
+ * CR0::TS to 1 during context-switch (instead of doing a full
+ * restore of the FPU state), which causes the first FPU instruction
+ * after the context switch (whenever it is executed) to fault - at
+ * which point we lazily restore the FPU state into FPU registers.
+ *
+ * Tasks are of course under no obligation to execute FPU instructions,
+ * so it can easily happen that another context-switch occurs without
+ * a single FPU instruction being executed. If we eventually switch
+ * back to the original task (that still owns the FPU) then we have
+ * not only saved the restores along the way, but we also have the
+ * FPU ready to be used for the original task.
+ *
+ * 'lazy' is deprecated because it's almost never a performance win
+ * and it's much more complicated than 'eager'.
+ *
+ * 'eager' switching is by default on all CPUs, there we switch the FPU
+ * state during every context switch, regardless of whether the task
+ * has used FPU instructions in that time slice or not. This is done
+ * because modern FPU context saving instructions are able to optimize
+ * state saving and restoration in hardware: they can detect both
+ * unused and untouched FPU state and optimize accordingly.
+ *
+ * [ Note that even in 'lazy' mode we might optimize context switches
+ *   to use 'eager' restores, if we detect that a task is using the FPU
+ *   frequently. See the fpu->counter logic in fpu/internal.h for that. ]
+ */
+static enum { ENABLE, DISABLE } eagerfpu = ENABLE;
+
+/*
+ * Find supported xfeatures based on cpu features and command-line input.
+ * This must be called after fpu__init_parse_early_param() is called and
+ * xfeatures_mask is enumerated.
+ */
+u64 __init fpu__get_supported_xfeatures_mask(void)
+{
+	/* Support all xfeatures known to us */
+	if (eagerfpu != DISABLE)
+		return XCNTXT_MASK;
+
+	/* Warning of xfeatures being disabled for no eagerfpu mode */
+	if (xfeatures_mask & XFEATURE_MASK_EAGER) {
+		pr_err("x86/fpu: eagerfpu switching disabled, disabling the following xstate features: 0x%llx.\n",
+			xfeatures_mask & XFEATURE_MASK_EAGER);
+	}
+
+	/* Return a mask that masks out all features requiring eagerfpu mode */
+	return ~XFEATURE_MASK_EAGER;
+}
+
+/*
  * Pick the FPU context switching strategy:
  *
  * When eagerfpu is AUTO or ENABLE, we ensure it is ENABLE if either of
@@ -336,13 +322,12 @@ static void __init fpu__init_task_struct_size(void)
  */
 static void __init fpu__init_system_ctx_switch(void)
 {
-	struct cpu_info *c = &default_cpu_info;
 	static bool on_boot_cpu __initdata = 1;
 
-	WARN_ON_FPU(!on_boot_cpu);
+	WARN_ON(!on_boot_cpu);
 	on_boot_cpu = 0;
 
-	WARN_ON_FPU(current->thread.fpu.fpstate_active);
+	WARN_ON(current->thread.fpu.fpstate_active);
 
 	if (cpu_has(X86_FEATURE_XSAVEOPT) && eagerfpu != DISABLE)
 		eagerfpu = ENABLE;
@@ -351,7 +336,7 @@ static void __init fpu__init_system_ctx_switch(void)
 		eagerfpu = ENABLE;
 
 	if (eagerfpu == ENABLE)
-		set_cpu_cap(c, X86_FEATURE_EAGER_FPU);
+		setup_force_cpu_cap(X86_FEATURE_EAGER_FPU);
 
 	printk(KERN_INFO "x86/fpu: Using '%s' FPU context switches.\n", eagerfpu == ENABLE ? "eager" : "lazy");
 }

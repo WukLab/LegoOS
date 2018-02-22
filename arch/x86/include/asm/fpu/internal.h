@@ -1,10 +1,22 @@
+/*
+ * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+
 #ifndef _ASM_X86_FPU_INTERNAL_H_
 #define _ASM_X86_FPU_INTERNAL_H_
 
+#include <lego/sched.h>
 #include <asm/alternative.h>
 #include <asm/fpu/api.h>
 #include <asm/fpu/xstate.h>
-#include <lego/sched.h>
+
+static inline void clac(void) { }
+static inline void stac(void) { }
 
 /*
  * High level FPU state handling functions:
@@ -21,7 +33,7 @@ extern void fpu__drop(struct fpu *fpu);
 extern int  fpu__copy(struct fpu *dst_fpu, struct fpu *src_fpu);
 extern void fpu__clear(struct fpu *fpu);
 extern int  fpu__exception_code(struct fpu *fpu, int trap_nr);
-extern int  dump_fpu(struct pt_regs *ptregs);
+extern int  dump_fpu(struct pt_regs *ptregs, struct user_i387_struct *fpstate);
 
 /*
  * Boot time FPU initialization functions:
@@ -33,14 +45,6 @@ extern void fpu__init_system(struct cpu_info *c);
 extern void fpu__init_check_bugs(void);
 extern void fpu__resume_cpu(void);
 extern u64 fpu__get_supported_xfeatures_mask(void);
-
-/*
- * fpstate handling functions:
- */
-
-extern union fpregs_state init_fpstate;
-
-extern void fpstate_init(union fpregs_state *state);
 
 /*
  * Debugging facility:
@@ -56,7 +60,7 @@ extern void fpstate_init(union fpregs_state *state);
  */
 static __always_inline __pure bool use_eager_fpu(void)
 {
-	return true;
+	return cpu_has(X86_FEATURE_EAGER_FPU);
 }
 
 static __always_inline __pure bool use_xsaveopt(void)
@@ -72,6 +76,151 @@ static __always_inline __pure bool use_xsave(void)
 static __always_inline __pure bool use_fxsr(void)
 {
 	return cpu_has(X86_FEATURE_FXSR);
+}
+
+/*
+ * fpstate handling functions:
+ */
+
+extern union fpregs_state init_fpstate;
+
+extern void fpstate_init(union fpregs_state *state);
+
+#ifdef CONFIG_MATH_EMULATION
+#error "BUG"
+extern void fpstate_init_soft(struct swregs_state *soft);
+#else
+static inline void fpstate_init_soft(struct swregs_state *soft) {}
+#endif
+
+static inline void fpstate_init_fxstate(struct fxregs_state *fx)
+{
+	fx->cwd = 0x37f;
+	fx->mxcsr = MXCSR_DEFAULT;
+}
+extern void fpstate_sanitize_xstate(struct fpu *fpu);
+
+#define user_insn(insn, output, input...)				\
+({									\
+	int err;							\
+	asm volatile(ASM_STAC "\n"					\
+		     "1:" #insn "\n\t"					\
+		     "2: " ASM_CLAC "\n"				\
+		     ".section .fixup,\"ax\"\n"				\
+		     "3:  movl $-1,%[err]\n"				\
+		     "    jmp  2b\n"					\
+		     ".previous\n"					\
+		     _ASM_EXTABLE(1b, 3b)				\
+		     : [err] "=r" (err), output				\
+		     : "0"(0), input);					\
+	err;								\
+})
+
+#define check_insn(insn, output, input...)				\
+({									\
+	int err;							\
+	asm volatile("1:" #insn "\n\t"					\
+		     "2:\n"						\
+		     ".section .fixup,\"ax\"\n"				\
+		     "3:  movl $-1,%[err]\n"				\
+		     "    jmp  2b\n"					\
+		     ".previous\n"					\
+		     _ASM_EXTABLE(1b, 3b)				\
+		     : [err] "=r" (err), output				\
+		     : "0"(0), input);					\
+	err;								\
+})
+
+static inline int copy_fregs_to_user(struct fregs_state __user *fx)
+{
+	return user_insn(fnsave %[fx]; fwait,  [fx] "=m" (*fx), "m" (*fx));
+}
+
+static inline int copy_fxregs_to_user(struct fxregs_state __user *fx)
+{
+	if (IS_ENABLED(CONFIG_X86_32))
+		return user_insn(fxsave %[fx], [fx] "=m" (*fx), "m" (*fx));
+	else if (IS_ENABLED(CONFIG_AS_FXSAVEQ))
+		return user_insn(fxsaveq %[fx], [fx] "=m" (*fx), "m" (*fx));
+
+	/* See comment in copy_fxregs_to_kernel() below. */
+	return user_insn(rex64/fxsave (%[fx]), "=m" (*fx), [fx] "R" (fx));
+}
+
+static inline void copy_kernel_to_fxregs(struct fxregs_state *fx)
+{
+	int err;
+
+	if (IS_ENABLED(CONFIG_X86_32)) {
+		err = check_insn(fxrstor %[fx], "=m" (*fx), [fx] "m" (*fx));
+	} else {
+		if (IS_ENABLED(CONFIG_AS_FXSAVEQ)) {
+			err = check_insn(fxrstorq %[fx], "=m" (*fx), [fx] "m" (*fx));
+		} else {
+			/* See comment in copy_fxregs_to_kernel() below. */
+			err = check_insn(rex64/fxrstor (%[fx]), "=m" (*fx), [fx] "R" (fx), "m" (*fx));
+		}
+	}
+	/* Copying from a kernel buffer to FPU registers should never fail: */
+	WARN_ON_FPU(err);
+}
+
+static inline int copy_user_to_fxregs(struct fxregs_state __user *fx)
+{
+	if (IS_ENABLED(CONFIG_X86_32))
+		return user_insn(fxrstor %[fx], "=m" (*fx), [fx] "m" (*fx));
+	else if (IS_ENABLED(CONFIG_AS_FXSAVEQ))
+		return user_insn(fxrstorq %[fx], "=m" (*fx), [fx] "m" (*fx));
+
+	/* See comment in copy_fxregs_to_kernel() below. */
+	return user_insn(rex64/fxrstor (%[fx]), "=m" (*fx), [fx] "R" (fx),
+			  "m" (*fx));
+}
+
+static inline void copy_kernel_to_fregs(struct fregs_state *fx)
+{
+	int err = check_insn(frstor %[fx], "=m" (*fx), [fx] "m" (*fx));
+
+	WARN_ON_FPU(err);
+}
+
+static inline int copy_user_to_fregs(struct fregs_state __user *fx)
+{
+	return user_insn(frstor %[fx], "=m" (*fx), [fx] "m" (*fx));
+}
+
+static inline void copy_fxregs_to_kernel(struct fpu *fpu)
+{
+	if (IS_ENABLED(CONFIG_X86_32))
+		asm volatile( "fxsave %[fx]" : [fx] "=m" (fpu->state.fxsave));
+	else if (IS_ENABLED(CONFIG_AS_FXSAVEQ))
+		asm volatile("fxsaveq %[fx]" : [fx] "=m" (fpu->state.fxsave));
+	else {
+		/* Using "rex64; fxsave %0" is broken because, if the memory
+		 * operand uses any extended registers for addressing, a second
+		 * REX prefix will be generated (to the assembler, rex64
+		 * followed by semicolon is a separate instruction), and hence
+		 * the 64-bitness is lost.
+		 *
+		 * Using "fxsaveq %0" would be the ideal choice, but is only
+		 * supported starting with gas 2.16.
+		 *
+		 * Using, as a workaround, the properly prefixed form below
+		 * isn't accepted by any binutils version so far released,
+		 * complaining that the same type of prefix is used twice if
+		 * an extended register is needed for addressing (fix submitted
+		 * to mainline 2005-11-21).
+		 *
+		 *  asm volatile("rex64/fxsave %0" : "=m" (fpu->state.fxsave));
+		 *
+		 * This, however, we can work around by forcing the compiler to
+		 * select an addressing mode that doesn't require extended
+		 * registers.
+		 */
+		asm volatile( "rex64/fxsave (%[fx])"
+			     : "=m" (fpu->state.fxsave)
+			     : [fx] "R" (&fpu->state.fxsave));
+	}
 }
 
 /* These macros all use (%edi)/(%rdi) as the single memory argument. */
@@ -143,8 +292,6 @@ static __always_inline __pure bool use_fxsr(void)
 		     : "D" (st), "m" (*st), "a" (lmask), "d" (hmask)	\
 		     : "memory")
 
-void fpstate_sanitize_xstate(struct fpu *fpu);
-
 /*
  * This function is called only during boot time when x86 caps are not set
  * up and alternative can not be used yet.
@@ -155,6 +302,8 @@ static inline void copy_xregs_to_kernel_booting(struct xregs_state *xstate)
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
 	int err;
+
+	WARN_ON(system_state != SYSTEM_BOOTING);
 
 	if (cpu_has(X86_FEATURE_XSAVES))
 		XSTATE_OP(XSAVES, xstate, lmask, hmask, err);
@@ -175,6 +324,8 @@ static inline void copy_kernel_to_xregs_booting(struct xregs_state *xstate)
 	u32 lmask = mask;
 	u32 hmask = mask >> 32;
 	int err;
+
+	WARN_ON(system_state != SYSTEM_BOOTING);
 
 	if (cpu_has(X86_FEATURE_XSAVES))
 		XSTATE_OP(XRSTORS, xstate, lmask, hmask, err);
@@ -203,38 +354,65 @@ static inline void copy_xregs_to_kernel(struct xregs_state *xstate)
 	WARN_ON_FPU(err);
 }
 
-static inline void copy_fxregs_to_kernel(struct fpu *fpu)
+/*
+ * Restore processor xstate from xsave area.
+ */
+static inline void copy_kernel_to_xregs(struct xregs_state *xstate, u64 mask)
 {
-	if (IS_ENABLED(CONFIG_X86_32))
-		asm volatile( "fxsave %[fx]" : [fx] "=m" (fpu->state.fxsave));
-	else if (IS_ENABLED(CONFIG_AS_FXSAVEQ))
-		asm volatile("fxsaveq %[fx]" : [fx] "=m" (fpu->state.fxsave));
-	else {
-		/* Using "rex64; fxsave %0" is broken because, if the memory
-		 * operand uses any extended registers for addressing, a second
-		 * REX prefix will be generated (to the assembler, rex64
-		 * followed by semicolon is a separate instruction), and hence
-		 * the 64-bitness is lost.
-		 *
-		 * Using "fxsaveq %0" would be the ideal choice, but is only
-		 * supported starting with gas 2.16.
-		 *
-		 * Using, as a workaround, the properly prefixed form below
-		 * isn't accepted by any binutils version so far released,
-		 * complaining that the same type of prefix is used twice if
-		 * an extended register is needed for addressing (fix submitted
-		 * to mainline 2005-11-21).
-		 *
-		 *  asm volatile("rex64/fxsave %0" : "=m" (fpu->state.fxsave));
-		 *
-		 * This, however, we can work around by forcing the compiler to
-		 * select an addressing mode that doesn't require extended
-		 * registers.
-		 */
-		asm volatile( "rex64/fxsave (%[fx])"
-			     : "=m" (fpu->state.fxsave)
-			     : [fx] "R" (&fpu->state.fxsave));
-	}
+	u32 lmask = mask;
+	u32 hmask = mask >> 32;
+	int err;
+
+	XSTATE_XRESTORE(xstate, lmask, hmask, err);
+
+	/* We should never fault when copying from a kernel buffer: */
+	WARN_ON_FPU(err);
+}
+
+/*
+ * Save xstate to user space xsave area.
+ *
+ * We don't use modified optimization because xrstor/xrstors might track
+ * a different application.
+ *
+ * We don't use compacted format xsave area for
+ * backward compatibility for old applications which don't understand
+ * compacted format of xsave area.
+ */
+static inline int copy_xregs_to_user(struct xregs_state __user *buf)
+{
+	int err;
+
+	/*
+	 * Clear the xsave header first, so that reserved fields are
+	 * initialized to zero.
+	 */
+	err = __clear_user(&buf->header, sizeof(buf->header));
+	if (unlikely(err))
+		return -EFAULT;
+
+	stac();
+	XSTATE_OP(XSAVE, buf, -1, -1, err);
+	clac();
+
+	return err;
+}
+
+/*
+ * Restore xstate from user space xsave area.
+ */
+static inline int copy_user_to_xregs(struct xregs_state __user *buf, u64 mask)
+{
+	struct xregs_state *xstate = ((__force struct xregs_state *)buf);
+	u32 lmask = mask;
+	u32 hmask = mask >> 32;
+	int err;
+
+	stac();
+	XSTATE_OP(XRSTOR, xstate, lmask, hmask, err);
+	clac();
+
+	return err;
 }
 
 /*
@@ -268,93 +446,7 @@ static inline int copy_fpregs_to_fpstate(struct fpu *fpu)
 	return 0;
 }
 
-/*
- * Restore processor xstate from xsave area.
- */
-static inline void copy_kernel_to_xregs(struct xregs_state *xstate, u64 mask)
-{
-	u32 lmask = mask;
-	u32 hmask = mask >> 32;
-	int err;
-
-	XSTATE_XRESTORE(xstate, lmask, hmask, err);
-
-	/* We should never fault when copying from a kernel buffer: */
-	WARN_ON_FPU(err);
-}
-
-#define check_insn(insn, output, input...)				\
-({									\
-	int err;							\
-	asm volatile("1:" #insn "\n\t"					\
-		     "2:\n"						\
-		     ".section .fixup,\"ax\"\n"				\
-		     "3:  movl $-1,%[err]\n"				\
-		     "    jmp  2b\n"					\
-		     ".previous\n"					\
-		     _ASM_EXTABLE(1b, 3b)				\
-		     : [err] "=r" (err), output				\
-		     : "0"(0), input);					\
-	err;								\
-})
-
-#define user_insn(insn, output, input...)				\
-({									\
-	int err;							\
-	asm volatile("1:" #insn "\n\t"					\
-		     "2: \n"						\
-		     ".section .fixup,\"ax\"\n"				\
-		     "3:  movl $-1,%[err]\n"				\
-		     "    jmp  2b\n"					\
-		     ".previous\n"					\
-		     _ASM_EXTABLE(1b, 3b)				\
-		     : [err] "=r" (err), output				\
-		     : "0"(0), input);					\
-	err;								\
-})
-
-static inline int copy_fregs_to_user(struct fregs_state __user *fx)
-{
-	return user_insn(fnsave %[fx]; fwait,  [fx] "=m" (*fx), "m" (*fx));
-}
-
-static inline int copy_fxregs_to_user(struct fxregs_state __user *fx)
-{
-	if (IS_ENABLED(CONFIG_X86_32))
-		return user_insn(fxsave %[fx], [fx] "=m" (*fx), "m" (*fx));
-	else if (IS_ENABLED(CONFIG_AS_FXSAVEQ))
-		return user_insn(fxsaveq %[fx], [fx] "=m" (*fx), "m" (*fx));
-
-	/* See comment in copy_fxregs_to_kernel() below. */
-	return user_insn(rex64/fxsave (%[fx]), "=m" (*fx), [fx] "R" (fx));
-}
-
-static inline void copy_kernel_to_fxregs(struct fxregs_state *fx)
-{
-	int err;
-
-	if (IS_ENABLED(CONFIG_X86_32)) {
-		err = check_insn(fxrstor %[fx], "=m" (*fx), [fx] "m" (*fx));
-	} else {
-		if (IS_ENABLED(CONFIG_AS_FXSAVEQ)) {
-			err = check_insn(fxrstorq %[fx], "=m" (*fx), [fx] "m" (*fx));
-		} else {
-			/* See comment in copy_fxregs_to_kernel() below. */
-			err = check_insn(rex64/fxrstor (%[fx]), "=m" (*fx), [fx] "R" (fx), "m" (*fx));
-		}
-	}
-	/* Copying from a kernel buffer to FPU registers should never fail: */
-	WARN_ON_FPU(err);
-}
-
-static inline void copy_kernel_to_fregs(struct fregs_state *fx)
-{
-	int err = check_insn(frstor %[fx], "=m" (*fx), [fx] "m" (*fx));
-
-	WARN_ON_FPU(err);
-}
-
-static inline void copy_kernel_to_fpregs(union fpregs_state *fpstate)
+static inline void __copy_kernel_to_fpregs(union fpregs_state *fpstate)
 {
 	if (use_xsave()) {
 		copy_kernel_to_xregs(&fpstate->xsave, -1);
@@ -366,64 +458,26 @@ static inline void copy_kernel_to_fpregs(union fpregs_state *fpstate)
 	}
 }
 
-/*
- * Save xstate to user space xsave area.
- *
- * We don't use modified optimization because xrstor/xrstors might track
- * a different application.
- *
- * We don't use compacted format xsave area for
- * backward compatibility for old applications which don't understand
- * compacted format of xsave area.
- */
-static inline int copy_xregs_to_user(struct xregs_state __user *buf)
+static inline void copy_kernel_to_fpregs(union fpregs_state *fpstate)
 {
-	int err;
-
 	/*
-	 * Clear the xsave header first, so that reserved fields are
-	 * initialized to zero.
+	 * AMD K7/K8 CPUs don't save/restore FDP/FIP/FOP unless an exception is
+	 * pending. Clear the x87 state here by setting it to fixed values.
+	 * "m" is a random variable that should be in L1.
 	 */
-	err = __clear_user(&buf->header, sizeof(buf->header));
-	if (unlikely(err))
-		return -EFAULT;
+	if (unlikely(cpu_has_bug(&default_cpu_info, X86_BUG_FXSAVE_LEAK))) {
+		WARN_ON(1);
+		asm volatile(
+			"fnclex\n\t"
+			"emms\n\t"
+			"fildl %P[addr]"	/* set F?P to defined value */
+			: : [addr] "m" (fpstate));
+	}
 
-	XSTATE_OP(XSAVE, buf, -1, -1, err);
-
-	return err;
+	__copy_kernel_to_fpregs(fpstate);
 }
 
-/*
- * Restore xstate from user space xsave area.
- */
-static inline int copy_user_to_xregs(struct xregs_state __user *buf, u64 mask)
-{
-	struct xregs_state *xstate = ((__force struct xregs_state *)buf);
-	u32 lmask = mask;
-	u32 hmask = mask >> 32;
-	int err;
-
-	XSTATE_OP(XRSTOR, xstate, lmask, hmask, err);
-
-	return err;
-}
-
-static inline int copy_user_to_fxregs(struct fxregs_state __user *fx)
-{
-	if (IS_ENABLED(CONFIG_X86_32))
-		return user_insn(fxrstor %[fx], "=m" (*fx), [fx] "m" (*fx));
-	else if (IS_ENABLED(CONFIG_AS_FXSAVEQ))
-		return user_insn(fxrstorq %[fx], "=m" (*fx), [fx] "m" (*fx));
-
-	/* See comment in copy_fxregs_to_kernel() below. */
-	return user_insn(rex64/fxrstor (%[fx]), "=m" (*fx), [fx] "R" (fx),
-			  "m" (*fx));
-}
-
-static inline int copy_user_to_fregs(struct fregs_state __user *fx)
-{
-	return user_insn(frstor %[fx], "=m" (*fx), [fx] "m" (*fx));
-}
+extern int copy_fpstate_to_sigframe(void __user *buf, void __user *fp, int size);
 
 /*
  * FPU context switch related helper methods:
@@ -445,8 +499,9 @@ static inline void __cpu_disable_lazy_restore(unsigned int cpu)
 
 static inline int fpu_want_lazy_restore(struct fpu *fpu, unsigned int cpu)
 {
-	return fpu == this_cpu_read(fpu_fpregs_owner_ctx) && cpu == fpu->last_cpu;
+	return fpu == this_cpu_read_stable(fpu_fpregs_owner_ctx) && cpu == fpu->last_cpu;
 }
+
 
 /*
  * Wrap lazy FPU TS handling in a 'hw fpregs activation/deactivation'
@@ -465,6 +520,15 @@ static inline void __fpregs_deactivate_hw(void)
 		stts();
 }
 
+/* Must be paired with an 'stts' (fpregs_deactivate_hw()) after! */
+static inline void __fpregs_deactivate(struct fpu *fpu)
+{
+	WARN_ON_FPU(!fpu->fpregs_active);
+
+	fpu->fpregs_active = 0;
+	this_cpu_write(fpu_fpregs_owner_ctx, NULL);
+}
+
 /* Must be paired with a 'clts' (fpregs_activate_hw()) before! */
 static inline void __fpregs_activate(struct fpu *fpu)
 {
@@ -474,13 +538,19 @@ static inline void __fpregs_activate(struct fpu *fpu)
 	this_cpu_write(fpu_fpregs_owner_ctx, fpu);
 }
 
-/* Must be paired with an 'stts' (fpregs_deactivate_hw()) after! */
-static inline void __fpregs_deactivate(struct fpu *fpu)
+/*
+ * The question "does this thread have fpu access?"
+ * is slightly racy, since preemption could come in
+ * and revoke it immediately after the test.
+ *
+ * However, even in that very unlikely scenario,
+ * we can just assume we have FPU access - typically
+ * to save the FP state - we'll just take a #NM
+ * fault and get the FPU access back.
+ */
+static inline int fpregs_active(void)
 {
-	WARN_ON_FPU(!fpu->fpregs_active);
-
-	fpu->fpregs_active = 0;
-	this_cpu_write(fpu_fpregs_owner_ctx, NULL);
+	return current->thread.fpu.fpregs_active;
 }
 
 /*
@@ -562,6 +632,10 @@ switch_fpu_prepare(struct fpu *old_fpu, struct fpu *new_fpu, int cpu)
 }
 
 /*
+ * Misc helper functions:
+ */
+
+/*
  * By the time this gets called, we've already cleared CR0.TS and
  * given the process the FPU if we are going to preload the FPU
  * state - all we need to do is to conditionally restore the register
@@ -571,21 +645,6 @@ static inline void switch_fpu_finish(struct fpu *new_fpu, fpu_switch_t fpu_switc
 {
 	if (fpu_switch.preload)
 		copy_kernel_to_fpregs(&new_fpu->state);
-}
-
-/*
- * The question "does this thread have fpu access?"
- * is slightly racy, since preemption could come in
- * and revoke it immediately after the test.
- *
- * However, even in that very unlikely scenario,
- * we can just assume we have FPU access - typically
- * to save the FP state - we'll just take a #NM
- * fault and get the FPU access back.
- */
-static inline int fpregs_active(void)
-{
-	return current->thread.fpu.fpregs_active;
 }
 
 /*
@@ -632,19 +691,5 @@ static inline void xsetbv(u32 index, u64 value)
 	asm volatile(".byte 0x0f,0x01,0xd1" /* xsetbv */
 		     : : "a" (eax), "d" (edx), "c" (index));
 }
-
-static inline int xstate_sigframe_size(void)
-{
-	return use_xsave() ? fpu_user_xstate_size + FP_XSTATE_MAGIC2_SIZE :
-			fpu_user_xstate_size;
-}
-
-int copy_fpstate_to_sigframe(void __user *buf, void __user *buf_fx, int size);
-
-unsigned long
-fpu__alloc_mathframe(unsigned long sp, int ia32_frame,
-		     unsigned long *buf_fx, unsigned long *size);
-
-void fpu__init_prepare_fx_sw_frame(void);
 
 #endif /* _ASM_X86_FPU_INTERNAL_H_ */

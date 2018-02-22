@@ -30,6 +30,23 @@ config ARCH_DEFCONFIG
 	default "arch/x86/configs/i386_defconfig" if X86_32
 	default "arch/x86/configs/x86_64_defconfig" if X86_64
 
+config IA32_EMULATION
+	bool "IA32 Emulation"
+	def_bool y if X86_64
+	depends on X86_64
+	---help---
+	  Include code to run legacy 32-bit programs under a
+	  64-bit kernel. You should likely turn this on, unless you're
+	  100% sure that you don't have any 32-bit programs left.
+
+	  Lego really really does NOT support legacy 32-bit things.
+	  We just put this config option to enable certain code.
+	  Probably later on we need to support this, just to save some pain.
+
+config COMPAT
+	def_bool y
+	depends on IA32_EMULATION || X86_X32
+
 config ZONE_DMA32
 	def_bool y if X86_64
 
