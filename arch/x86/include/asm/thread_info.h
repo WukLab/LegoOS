@@ -179,6 +179,10 @@ static inline unsigned long current_stack_pointer(void)
 
 #else /* __ASSEMBLY__ */
 
+#ifdef CONFIG_X86_64
+# define cpu_current_top_of_stack	(cpu_tss + TSS_sp0)
+#endif
+
 /*
  * ASM operand which evaluates to a 'thread_info' address of
  * the current task, if it is known that "reg" is exactly "off"

@@ -85,7 +85,7 @@ ENTRY(entry_SYSCALL_64)
 	 * from *userspace*.
 	 */
 	movq	%rsp, PER_CPU_VAR(rsp_scratch)
-	movq	PER_CPU_VAR(cpu_tss + TSS_sp0), %rsp
+	movq	PER_CPU_VAR(cpu_current_top_of_stack), %rsp
 
 	/*
 	 * Construct struct pt_regs on stack
@@ -556,8 +556,8 @@ ENTRY(__switch_to_asm)
 	pushq	%r15
 
 	/* Switch stack */
-	movq	%rsp, TASK_THREAD_SP(%rdi)
-	movq	TASK_THREAD_SP(%rsi), %rsp
+	movq	%rsp, TASK_threadsp(%rdi)
+	movq	TASK_threadsp(%rsi), %rsp
 
 	/* restore callee-saved registers */
 	popq	%r15
