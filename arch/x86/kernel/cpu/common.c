@@ -603,10 +603,24 @@ static void syscall_init(void)
 	wrmsr(MSR_STAR, 0, (__USER32_CS << 16) | __KERNEL_CS);
 	wrmsrl(MSR_LSTAR, (unsigned long)entry_SYSCALL_64);
 
+#ifdef CONFIG_IA32_EMULATION
+	wrmsrl(MSR_CSTAR, (unsigned long)entry_SYSCALL_compat);
+	/*
+	 * This only works on Intel CPUs.
+	 * On AMD CPUs these MSRs are 32-bit, CPU truncates MSR_IA32_SYSENTER_EIP.
+	 * This does not cause SYSENTER to jump to the wrong location, because
+	 * AMD doesn't allow SYSENTER in long mode (either 32- or 64-bit).
+	 */
+	wrmsrl_safe(MSR_IA32_SYSENTER_CS, (u64)__KERNEL_CS);
+	wrmsrl_safe(MSR_IA32_SYSENTER_ESP, 0ULL);
+	wrmsrl_safe(MSR_IA32_SYSENTER_EIP, (u64)entry_SYSENTER_compat);
+#else
 	wrmsrl(MSR_CSTAR, (unsigned long)ignore_sysret);
-	wrmsrl(MSR_IA32_SYSENTER_CS, (u64)GDT_ENTRY_INVALID_SEG);
-	wrmsrl(MSR_IA32_SYSENTER_ESP, 0ULL);
-	wrmsrl(MSR_IA32_SYSENTER_EIP, 0ULL);
+	wrmsrl_safe(MSR_IA32_SYSENTER_CS, (u64)GDT_ENTRY_INVALID_SEG);
+	wrmsrl_safe(MSR_IA32_SYSENTER_ESP, 0ULL);
+	wrmsrl_safe(MSR_IA32_SYSENTER_EIP, 0ULL);
+#endif
+
 
 	/* Flags to clear on syscall */
 	wrmsrl(MSR_SYSCALL_MASK,

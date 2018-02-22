@@ -154,7 +154,12 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	 * Set a new TLS for the child thread?
 	 */
 	if (clone_flags & CLONE_SETTLS) {
-		err = do_arch_prctl(p, ARCH_SET_FS, tls);
+#ifdef CONFIG_IA32_EMULATION
+		if (in_ia32_syscall())
+			BUG();
+		else
+#endif
+			err = do_arch_prctl(p, ARCH_SET_FS, tls);
 		if (err)
 			goto out;
 	}
