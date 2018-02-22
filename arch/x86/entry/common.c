@@ -71,6 +71,21 @@ __visible inline void prepare_exit_to_usermode(struct pt_regs *regs)
 
 	if (unlikely(cached_flags & EXIT_TO_USERMODE_LOOP_FLAGS))
 		exit_to_usermode_loop(regs, cached_flags);
+
+#ifdef CONFIG_COMPAT
+	/*
+	 * Compat syscalls set TS_COMPAT.  Make sure we clear it before
+	 * returning to user mode.  We need to clear it *after* signal
+	 * handling, because syscall restart has a fixup for compat
+	 * syscalls.  The fixup is exercised by the ptrace_syscall_32
+	 * selftest.
+	 *
+	 * We also need to clear TS_REGS_POKED_I386: the 32-bit tracer
+	 * special case only applies after poking regs and before the
+	 * very next return to user mode.
+	 */
+	current->thread.status &= ~(TS_COMPAT|TS_I386_REGS_POKED);
+#endif
 }
 
 /*
@@ -79,10 +94,14 @@ __visible inline void prepare_exit_to_usermode(struct pt_regs *regs)
  */
 __visible inline void syscall_return_slowpath(struct pt_regs *regs)
 {
+	if (WARN(irqs_disabled(), "syscall %ld left IRQs disabled", regs->orig_ax))
+		local_irq_enable();
+
 	local_irq_disable();
 	prepare_exit_to_usermode(regs);
 }
 
+#ifdef CONFIG_X86_64
 __visible void do_syscall_64(struct pt_regs *regs)
 {
 	unsigned long nr = regs->orig_ax;
@@ -106,3 +125,38 @@ __visible void do_syscall_64(struct pt_regs *regs)
 
 	trace_syscall_exit();
 }
+#endif
+
+/*
+ * Legacy Stuff
+ * Lego really does not support these at this stage.
+ */
+
+#if defined(CONFIG_X86_32) || defined(CONFIG_IA32_EMULATION)
+/*
+ * Does a 32-bit syscall.  Called with IRQs on in CONTEXT_KERNEL.  Does
+ * all entry and exit work and returns with IRQs off.  This function is
+ * extremely hot in workloads that use it, and it's usually called from
+ * do_fast_syscall_32, so forcibly inline it to improve performance.
+ */
+static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs)
+{
+#ifdef CONFIG_IA32_EMULATION
+	current->thread.status |= TS_COMPAT;
+#endif
+
+	BUG();
+}
+
+/* Handles int $0x80 */
+__visible void do_int80_syscall_32(struct pt_regs *regs)
+{
+	BUG();
+}
+
+/* Returns 0 to return using IRET or 1 to return using SYSEXIT/SYSRETL. */
+__visible long do_fast_syscall_32(struct pt_regs *regs)
+{
+	BUG();
+}
+#endif

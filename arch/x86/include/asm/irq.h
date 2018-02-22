@@ -12,6 +12,11 @@
 
 #include <asm/processor-flags.h>
 
+/*
+ * TODO
+ */
+#define in_interrupt()		(0)
+
 static inline unsigned long arch_local_save_flags(void)
 {
 	unsigned long flags;

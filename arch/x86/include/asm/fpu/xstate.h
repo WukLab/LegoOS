@@ -11,6 +11,7 @@
 #define _ASM_X86_FPU_XSTATE_H_
 
 #include <asm/fpu/types.h>
+#include <asm/user.h>
 
 /* Bit 63 of XCR0 is reserved for future expansion */
 #define XFEATURE_MASK_EXTEND	(~(XFEATURE_MASK_FPSSE | (1ULL << 63)))
@@ -51,6 +52,7 @@
 #endif
 
 extern u64 xfeatures_mask;
+extern u64 xstate_fx_sw_bytes[USER_XSTATE_FX_SW_WORDS];
 
 extern void __init update_regset_xstate_info(unsigned int size,
 					     u64 xstate_mask);

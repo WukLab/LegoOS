@@ -204,8 +204,6 @@ static int de_thread(struct task_struct *tsk)
 	if (thread_group_empty(tsk))
 		goto no_thread_group;
 
-	WARN(1, "Need to patch this function for multithread process");
-
 	/* Kill all other threads in the thread group */
 	spin_lock_irq(lock);
 	if (signal_group_exit(sig)) {
@@ -216,6 +214,101 @@ static int de_thread(struct task_struct *tsk)
 		spin_unlock_irq(lock);
 		return -EAGAIN;
 	}
+
+	sig->group_exit_task = tsk;
+	sig->notify_count = zap_other_threads(tsk);
+	if (!thread_group_leader(tsk))
+		sig->notify_count--;
+
+	while (sig->notify_count) {
+		__set_current_state(TASK_KILLABLE);
+		spin_unlock_irq(lock);
+		schedule();
+		if (unlikely(__fatal_signal_pending(tsk)))
+			goto killed;
+		spin_lock_irq(lock);
+	}
+	spin_unlock_irq(lock);
+
+	/*
+	 * At this point all other threads have exited, all we have to
+	 * do is to wait for the thread group leader to become inactive,
+	 * and to assume its PID:
+	 */
+	if (!thread_group_leader(tsk)) {
+		struct task_struct *leader = tsk->group_leader;
+
+		for (;;) {
+			spin_lock_irq(&tasklist_lock);
+			/*
+			 * Do this under tasklist_lock to ensure that
+			 * exit_notify() can't miss ->group_exit_task
+			 */
+			sig->notify_count = -1;
+			if (likely(leader->exit_state))
+				break;
+			__set_current_state(TASK_KILLABLE);
+			spin_unlock_irq(&tasklist_lock);
+			schedule();
+			if (unlikely(__fatal_signal_pending(tsk)))
+				goto killed;
+		}
+
+		/*
+		 * The only record we have of the real-time age of a
+		 * process, regardless of execs it's done, is start_time.
+		 * All the past CPU time is accumulated in signal_struct
+		 * from sister threads now dead.  But in this non-leader
+		 * exec, nothing survives from the original leader thread,
+		 * whose birth marks the true age of this process now.
+		 * When we take on its identity by switching to its PID, we
+		 * also take its birthdate (always earlier than our own).
+		 */
+		tsk->start_time = leader->start_time;
+		tsk->real_start_time = leader->real_start_time;
+
+		BUG_ON(!same_thread_group(leader, tsk));
+		BUG_ON(has_group_leader_pid(tsk));
+		/*
+		 * An exec() starts a new thread group with the
+		 * TGID of the previous thread group. Rehash the
+		 * two threads with a switched PID, and release
+		 * the former thread group leader:
+		 */
+
+		BUG();
+#if 0
+		TODO
+		/* Become a process group leader with the old leader's pid.
+		 * The old leader becomes a thread of the this thread group.
+		 * Note: The old leader also uses this pid until release_task
+		 *       is called.  Odd but simple and correct.
+		 */
+		tsk->pid = leader->pid;
+		change_pid(tsk, PIDTYPE_PID, task_pid(leader));
+		transfer_pid(leader, tsk, PIDTYPE_PGID);
+		transfer_pid(leader, tsk, PIDTYPE_SID);
+
+		list_replace_rcu(&leader->tasks, &tsk->tasks);
+		list_replace_init(&leader->sibling, &tsk->sibling);
+
+		tsk->group_leader = tsk;
+		leader->group_leader = tsk;
+
+		tsk->exit_signal = SIGCHLD;
+		leader->exit_signal = -1;
+
+		BUG_ON(leader->exit_state != EXIT_ZOMBIE);
+		leader->exit_state = EXIT_DEAD;
+
+		spin_unlock_irq(&tasklist_lock);
+
+		release_task(leader);
+#endif
+	}
+
+	sig->group_exit_task = NULL;
+	sig->notify_count = 0;
 
 no_thread_group:
 	/* we have changed execution domain */
@@ -249,6 +342,15 @@ no_thread_group:
 
 	BUG_ON(!thread_group_leader(tsk));
 	return 0;
+
+killed:
+	/* protects against exit_notify() and __exit_signal() */
+	spin_lock(&tasklist_lock);
+	sig->group_exit_task = NULL;
+	sig->notify_count = 0;
+	spin_unlock(&tasklist_lock);
+
+	return -EAGAIN;
 }
 
 static int flush_old_exec(void)

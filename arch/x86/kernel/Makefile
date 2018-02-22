@@ -5,9 +5,9 @@ obj-y += process.o
 obj-y += dumpstack.o
 obj-y += setup.o
 obj-y += e820.o
-obj-y += cpu.o cpu_intel.o
 obj-y += pci-dma.o
 obj-y += pci-nommu.o
+obj-y += cpu/
 
 obj-y += percpu.o
 obj-y += smp.o smpboot.o
@@ -18,6 +18,7 @@ obj-y += acpi/ apic/
 obj-y += fpu/
 obj-y += alternative.o
 obj-y += signal.o
+obj-y += ptrace.o
 
 # Enable CONFIG_FRAME_POINTER to get precise kernel stack dumpinfo
 ifdef CONFIG_FRAME_POINTER

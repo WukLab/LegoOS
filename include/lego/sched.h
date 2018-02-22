@@ -62,10 +62,19 @@
 #define CLONE_DETACHED		0x00400000	/* Unused, ignored */
 #define CLONE_UNTRACED		0x00800000	/* set if the tracing process can't force CLONE_PTRACE on this clone */
 #define CLONE_CHILD_SETTID	0x01000000	/* set the TID in the child */
+#define CLONE_NEWCGROUP		0x02000000	/* New cgroup namespace */
+#define CLONE_NEWUTS		0x04000000	/* New utsname namespace */
+#define CLONE_NEWIPC		0x08000000	/* New ipc namespace */
+#define CLONE_NEWUSER		0x10000000	/* New user namespace */
+#define CLONE_NEWPID		0x20000000	/* New pid namespace */
+#define CLONE_NEWNET		0x40000000	/* New network namespace */
+#define CLONE_IO		0x80000000	/* Clone io context */
 
-/* TODO Conflict with Linux's define */
-#define CLONE_IDLE_THREAD	0x80000000	/* set if we want to clone an idle thread */
-#define CLONE_GLOBAL_THREAD	0x40000000	/* set if it is global */
+/*
+ * Lego Specific clone flags:
+ */
+#define CLONE_IDLE_THREAD	0x100000000	/* set if we want to clone an idle thread */
+#define CLONE_GLOBAL_THREAD	0x200000000	/* set if it is global */
 
 /*
  * task->state and task->exit_state
@@ -503,9 +512,26 @@ extern spinlock_t tasklist_lock;
 #define task_thread_info(task)	((struct thread_info *)((task)->stack))
 #define task_stack_page(task)	((void *)((task)->stack))
 
+static inline int get_nr_threads(struct task_struct *tsk)
+{
+	return tsk->signal->nr_threads;
+}
+
 static inline bool thread_group_leader(struct task_struct *p)
 {
 	return p->exit_signal >= 0;
+}
+
+/*
+ * Do to the insanities of de_thread it is possible for a process
+ * to have the pid of the thread group leader without actually being
+ * the thread group leader.  For iteration through the pids in proc
+ * all we care about is that we have a task with the appropriate
+ * pid, we don't actually care if we have the right task.
+ */
+static inline bool has_group_leader_pid(struct task_struct *p)
+{
+	return p->pid == p->signal->leader_pid;
 }
 
 static inline int thread_group_empty(struct task_struct *p)

@@ -203,6 +203,11 @@ default_cpu_mask_to_apicid_and(const struct cpumask *cpumask,
 	return -EINVAL;
 }
 
+static int flat_phys_pkg_id(int initial_apic_id, int index_msb)
+{
+	return initial_apic_id >> index_msb;
+}
+
 /*
  * YS:
  * According to Intel SDM vol3, sec 10.6.2.2 Logical Destination Mode,
@@ -229,6 +234,8 @@ static struct apic apic_flat = {
 
 	.vector_allocation_domain	= flat_vector_allocation_domain,
 	.init_apic_ldr			= flat_init_apic_ldr,
+
+	.phys_pkg_id			= flat_phys_pkg_id,
 
 	.cpu_mask_to_apicid_and		= flat_cpu_mask_to_apicid_and,
 
@@ -290,6 +297,8 @@ static struct apic apic_physflat = {
 	.vector_allocation_domain	= default_vector_allocation_domain,
 	/* not needed, but shouldn't hurt: */
 	.init_apic_ldr			= flat_init_apic_ldr,
+
+	.phys_pkg_id			= flat_phys_pkg_id,
 
 	.cpu_mask_to_apicid_and		= default_cpu_mask_to_apicid_and,
 

@@ -79,6 +79,15 @@ void __put_task_struct(struct task_struct *tsk)
 	free_task_struct(tsk);
 }
 
+static void setup_thread_stack(struct task_struct *p, struct task_struct *org)
+{
+	/* Duplicate whole stack! */
+	*task_thread_info(p) = *task_thread_info(org);
+
+	/* Make the `current' macro work */
+	task_thread_info(p)->task = p;
+}
+
 /*
  * Duplicate a new task_struct based on parent task_struct.
  * Allocate a new kernel stack and setup stack_info to make current work.
@@ -108,11 +117,7 @@ static struct task_struct *dup_task_struct(struct task_struct *old, int node)
 	if (err)
 		goto free_stack;
 
-	/* Duplicate whole stack! */
-	*task_thread_info(new) = *task_thread_info(old);
-
-	/* Make current macro work */
-	task_thread_info(new)->task = new;
+	setup_thread_stack(new, old);
 	clear_tsk_need_resched(new);
 	setup_task_stack_end_magic(new);
 
@@ -321,6 +326,10 @@ struct mm_struct *mm_alloc(void)
 	return mm_init(mm, current);
 }
 
+/*
+ * Allocate a new mm structure and copy contents from the
+ * mm structure of the passed in task structure.
+ */
 static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 {
 	struct mm_struct *mm, *oldmm;
@@ -335,6 +344,11 @@ static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 
 	if (!mm_init(mm, tsk))
 		return NULL;
+
+	/*
+	 * TODO:
+	 * May need to dup the pcache vm array here.
+	 */
 
 	return mm;
 }
@@ -351,6 +365,13 @@ static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)
 	tsk->nvcsw = tsk->nivcsw = 0;
 
 	oldmm = current->mm;
+
+	/*
+	 * In lego, even kernel thread has a mm
+	 * We don't steal mm.
+	 */
+	BUG_ON(!oldmm);
+
 	if (clone_flags & CLONE_VM) {
 		atomic_inc(&oldmm->mm_users);
 		mm = oldmm;
@@ -445,9 +466,9 @@ static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
 	BUG_ON(!oldf);
 
 	if (clone_flags & CLONE_FILES) {
-		newf = oldf;
 		atomic_inc(&oldf->count);
-		goto set;
+		/* already copied the value in dup_task_struct */
+		goto out;
 	}
 
 	newf = dup_fd(oldf);
@@ -456,10 +477,8 @@ static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
 		goto out;
 	}
 
-set:
 	tsk->files = newf;
 	ret = 0;
-
 out:
 	return ret;
 }
@@ -512,11 +531,10 @@ static int copy_sighand(unsigned long clone_flags, struct task_struct *tsk)
 
 	if (clone_flags & CLONE_SIGHAND) {
 		atomic_inc(&current->sighand->count);
-		tsk->sighand = current->sighand;
 		return 0;
 	}
 
-	sig = kmalloc(sizeof(*sig), GFP_KERNEL);
+	sig = kzalloc(sizeof(*sig), GFP_KERNEL);
 	if (!sig)
 		return -ENOMEM;
 
@@ -547,11 +565,10 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 
 	if (clone_flags & CLONE_THREAD) {
 		/* sigcnt will be incremented later in copy_process */
-		tsk->signal = current->signal;
 		return 0;
 	}
 
-	sig = kmalloc(sizeof(*sig), GFP_KERNEL);
+	sig = kzalloc(sizeof(*sig), GFP_KERNEL);
 	if (!sig)
 		return -ENOMEM;
 
@@ -597,6 +614,13 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	int pid = 0;
 	unsigned long flags;
 
+	if (clone_flags & (CLONE_NEWCGROUP | CLONE_NEWNS | CLONE_NEWUSER |
+			   CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWUTS | CLONE_NEWIPC)) {
+		pr_info("Unsupported flags detected: %#lx\n", clone_flags);
+		WARN_ON(1);
+		return ERR_PTR(-EINVAL);
+	}
+
 	/*
 	 * Thread groups must share signals as well, and detached threads
 	 * can only be started up within the thread group.
@@ -610,6 +634,16 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	 * for various simplifications in other code.
 	 */
 	if ((clone_flags & CLONE_SIGHAND) && !(clone_flags & CLONE_VM))
+		return ERR_PTR(-EINVAL);
+
+	/*
+	 * Siblings of global init remain as zombies on exit since they are
+	 * not reaped by their parent (swapper). To solve this and to avoid
+	 * multi-rooted process trees, prevent global and container-inits
+	 * from creating siblings.
+	 */
+	if ((clone_flags & CLONE_PARENT) &&
+				current->signal->flags & SIGNAL_UNKILLABLE)
 		return ERR_PTR(-EINVAL);
 
 	/* Duplicate task_struct and create new stack */
@@ -728,6 +762,21 @@ struct task_struct *copy_process(unsigned long clone_flags,
 
 	spin_lock(&current->sighand->siglock);
 
+	/*
+	 * Process group and session signals need to be delivered to just the
+	 * parent before the fork or both the parent and the child after the
+	 * fork. Restart if a signal comes in before we add the new process to
+	 * it's process group.
+	 * A fatal signal pending means that current will exit, so the new
+	 * thread can't slip out of an OOM kill (or normal SIGKILL).
+	*/
+	recalc_sigpending();
+	if (signal_pending(current)) {
+		WARN_ON(1);
+		retval = -ERESTARTNOINTR;
+		goto out;
+	}
+
 	if (likely(p->pid)) {
 		if (thread_group_leader(p)) {
 			p->signal->leader_pid = pid;
@@ -751,6 +800,9 @@ struct task_struct *copy_process(unsigned long clone_flags,
 
 	return p;
 
+out:
+	spin_unlock(&current->sighand->siglock);
+	spin_unlock_irqrestore(&tasklist_lock, flags);
 out_cleanup_thread:
 	exit_thread(p);
 out_cleanup_mm:
@@ -775,7 +827,9 @@ out_free:
 	return ERR_PTR(retval);;
 }
 
-/* Well, Lego's main fork-routine */
+/*
+ * Lego's main fork-routine
+ */
 pid_t do_fork(unsigned long clone_flags,
 	      unsigned long stack_start,
 	      unsigned long stack_size,
@@ -792,7 +846,12 @@ pid_t do_fork(unsigned long clone_flags,
 	if (IS_ERR(p))
 		return PTR_ERR(p);
 
-	/* Tell remote memory component */
+	/*
+	 * Tell remote memory component.
+	 *
+	 * Do this prior waking up the new thread - the thread pointer
+	 * might get invalid after that point, if the thread exits quickly.
+	 */
 #ifdef CONFIG_COMP_PROCESSOR
 	if (clone_flags & CLONE_GLOBAL_THREAD) {
 		int ret;
@@ -806,10 +865,6 @@ pid_t do_fork(unsigned long clone_flags,
 	}
 #endif
 
-	/*
-	 * Do this prior waking up the new thread - the thread pointer
-	 * might get invalid after that point, if the thread exits quickly.
-	 */
 	pid = p->pid;
 	if (clone_flags & CLONE_PARENT_SETTID)
 		put_user(pid, parent_tidptr);
@@ -845,13 +900,11 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 
 SYSCALL_DEFINE0(fork)
 {
-	__syscall_enter();
 	return do_fork(CLONE_GLOBAL_THREAD | SIGCHLD, 0, 0, NULL, NULL, 0);
 }
 
 SYSCALL_DEFINE0(vfork)
 {
-	__syscall_enter();
 	WARN(1, "Check vfork() state");
 	return do_fork(CLONE_GLOBAL_THREAD | CLONE_VFORK | CLONE_VM | SIGCHLD,
 		       0, 0, NULL, NULL, 0);
@@ -864,9 +917,6 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 {
 	pid_t pid;
 
-	syscall_enter("clone_flags:%#lx,newsp:%#lx,parent_tidptr:%p,child_tidptr:%p,tls:%lx\n",
-		clone_flags, newsp, parent_tidptr, child_tidptr, tls);
-
 	/*
 	 * Libraries may use clone() instead of fork()
 	 * to create new process. Add global flag if so:
@@ -874,13 +924,11 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 	if (!(clone_flags & CLONE_THREAD))
 		clone_flags |= CLONE_GLOBAL_THREAD;
 	pid = do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
-	syscall_exit(pid);
 	return pid;
 }
 
 SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)
 {
-	syscall_enter("tidptr: %p\n", tidptr);
 	current->clear_child_tid = tidptr;
 	return current->pid;
 }
@@ -889,6 +937,4 @@ void __init fork_init(void)
 {
 	pr_debug("fork: arch_task_struct_size: %d, task_struct: %lu\n",
 		arch_task_struct_size, sizeof(struct task_struct));
-	pr_debug("fork: xstate_sigframe_size: %#x bytes\n",
-		xstate_sigframe_size());
 }

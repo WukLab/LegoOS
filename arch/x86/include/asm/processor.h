@@ -68,12 +68,22 @@ struct cpu_info {
 	__u8			x86_vendor;	/* CPU vendor */
 	__u8			x86_model;
 	__u8			x86_mask;
+#ifdef CONFIG_X86_32
+	char			wp_works_ok;	/* It doesn't on 386's */
+
+	/* Problems on some 486Dx4's and old 386's: */
+	char			rfu;
+	char			pad0;
+	char			pad1;
+#else
 	/* Number of 4K pages in DTLB/ITLB combined(in pages): */
 	int			x86_tlbsize;
+#endif
 	__u8			x86_virt_bits;
 	__u8			x86_phys_bits;
 	/* CPUID returned core id bits: */
 	__u8			x86_coreid_bits;
+	__u8			cu_id;
 	/* Max extended CPUID function supported: */
 	__u32			extended_cpuid_level;
 	/* Maximum supported CPUID level, -1=no CPUID: */
@@ -104,6 +114,7 @@ struct cpu_info {
 	u16			cpu_core_id;
 	/* Index into per_cpu list: */
 	u16			cpu_index;
+	u32			microcode;
 };
 
 #define X86_VENDOR_INTEL	0
@@ -248,6 +259,11 @@ static inline unsigned long current_top_of_stack(void)
 
 #define task_pt_regs(tsk)	((struct pt_regs *)(tsk)->thread.sp0 - 1)
 
+void init_scattered_cpuid_features(struct cpu_info *c);
+void get_cpu_cap(struct cpu_info *c);
+void print_cpu_info(struct cpu_info *c);
+void identify_cpu(struct cpu_info *c);
+void detect_extended_topology(struct cpu_info *c);
 void __init early_cpu_init(void);
 void cpu_init(void);
 

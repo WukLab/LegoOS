@@ -18,6 +18,7 @@
 #include <asm/traps.h>
 #include <asm/ptrace.h>
 #include <asm/kdebug.h>
+#include <asm/syscalls.h>
 #include <asm/irq_vectors.h>
 #include <asm/fpu/internal.h>
 
@@ -344,6 +345,11 @@ void __init trap_init(void)
 
 	for (i = 0; i < FIRST_EXTERNAL_VECTOR; i++)
 		set_bit(i, used_vectors);
+
+#ifdef CONFIG_IA32_EMULATION
+	set_system_intr_gate(IA32_SYSCALL_VECTOR, entry_INT80_compat);
+	set_bit(IA32_SYSCALL_VECTOR, used_vectors);
+#endif
 
 	load_idt((const struct desc_ptr *)&idt_desc);
 }

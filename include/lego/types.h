@@ -139,6 +139,10 @@ typedef s64	__kernel_suseconds_t;
 typedef s32	__kernel_timer_t;
 typedef s32	__kernel_clockid_t;
 
+typedef struct {
+	int	val[2];
+} __kernel_fsid_t;
+
 typedef __kernel_time_t		time_t;
 typedef __kernel_clock_t	clock_t;
 typedef unsigned long		uintptr_t;

@@ -15,6 +15,7 @@
 #include <asm/sigframe.h>
 #include <asm/sigcontext.h>
 #include <asm/fpu/internal.h>
+#include <asm/fpu/signal.h>
 #include <asm/processor.h>
 #include <generated/unistd_64.h>
 
@@ -82,9 +83,17 @@ static int restore_sigcontext(struct pt_regs *regs,
 
 	get_user_try {
 
+#ifdef CONFIG_X86_32
+		set_user_gs(regs, GET_SEG(gs));
+		COPY_SEG(fs);
+		COPY_SEG(es);
+		COPY_SEG(ds);
+#endif /* CONFIG_X86_32 */
+
 		COPY(di); COPY(si); COPY(bp); COPY(sp); COPY(bx);
 		COPY(dx); COPY(cx); COPY(ip); COPY(ax);
 
+#ifdef CONFIG_X86_64
 		COPY(r8);
 		COPY(r9);
 		COPY(r10);
@@ -93,10 +102,12 @@ static int restore_sigcontext(struct pt_regs *regs,
 		COPY(r13);
 		COPY(r14);
 		COPY(r15);
+#endif /* CONFIG_X86_64 */
 
 		COPY_SEG_CPL3(cs);
 		COPY_SEG_CPL3(ss);
 
+#ifdef CONFIG_X86_64
 		/*
 		 * Fix up SS if needed for the benefit of old DOSEMU and
 		 * CRIU.
@@ -104,6 +115,7 @@ static int restore_sigcontext(struct pt_regs *regs,
 		if (unlikely(!(uc_flags & UC_STRICT_RESTORE_SS) &&
 			     user_64bit_mode(regs)))
 			force_valid_ss(regs);
+#endif
 
 		get_user_ex(tmpflags, &sc->flags);
 		regs->flags = (regs->flags & ~FIX_EFLAGS) | (tmpflags & FIX_EFLAGS);
@@ -127,6 +139,13 @@ int setup_sigcontext(struct sigcontext __user *sc, void __user *fpstate,
 
 	put_user_try {
 
+#ifdef CONFIG_X86_32
+		put_user_ex(get_user_gs(regs), (unsigned int __user *)&sc->gs);
+		put_user_ex(regs->fs, (unsigned int __user *)&sc->fs);
+		put_user_ex(regs->es, (unsigned int __user *)&sc->es);
+		put_user_ex(regs->ds, (unsigned int __user *)&sc->ds);
+#endif /* CONFIG_X86_32 */
+
 		put_user_ex(regs->di, &sc->di);
 		put_user_ex(regs->si, &sc->si);
 		put_user_ex(regs->bp, &sc->bp);
@@ -135,6 +154,7 @@ int setup_sigcontext(struct sigcontext __user *sc, void __user *fpstate,
 		put_user_ex(regs->dx, &sc->dx);
 		put_user_ex(regs->cx, &sc->cx);
 		put_user_ex(regs->ax, &sc->ax);
+#ifdef CONFIG_X86_64
 		put_user_ex(regs->r8, &sc->r8);
 		put_user_ex(regs->r9, &sc->r9);
 		put_user_ex(regs->r10, &sc->r10);
@@ -143,15 +163,23 @@ int setup_sigcontext(struct sigcontext __user *sc, void __user *fpstate,
 		put_user_ex(regs->r13, &sc->r13);
 		put_user_ex(regs->r14, &sc->r14);
 		put_user_ex(regs->r15, &sc->r15);
+#endif /* CONFIG_X86_64 */
 
 		put_user_ex(current->thread.trap_nr, &sc->trapno);
 		put_user_ex(current->thread.error_code, &sc->err);
 		put_user_ex(regs->ip, &sc->ip);
+#ifdef CONFIG_X86_32
+		put_user_ex(regs->cs, (unsigned int __user *)&sc->cs);
+		put_user_ex(regs->flags, &sc->flags);
+		put_user_ex(regs->sp, &sc->sp_at_signal);
+		put_user_ex(regs->ss, (unsigned int __user *)&sc->ss);
+#else /* !CONFIG_X86_32 */
 		put_user_ex(regs->flags, &sc->flags);
 		put_user_ex(regs->cs, &sc->cs);
 		put_user_ex(0, &sc->gs);
 		put_user_ex(0, &sc->fs);
 		put_user_ex(regs->ss, &sc->ss);
+#endif /* CONFIG_X86_32 */
 
 		put_user_ex(fpstate, &sc->fpstate);
 
@@ -167,11 +195,23 @@ int setup_sigcontext(struct sigcontext __user *sc, void __user *fpstate,
  * Set up a signal frame.
  */
 
+/*
+ * Determine which stack to use..
+ */
 static unsigned long align_sigframe(unsigned long sp)
 {
+#ifdef CONFIG_X86_32
+	/*
+	 * Align the stack pointer according to the i386 ABI,
+	 * i.e. so that on function entry ((sp + 4) & 15) == 0.
+	 */
+	sp = ((sp + 4) & -16ul) - 4;
+#else /* !CONFIG_X86_32 */
 	sp = round_down(sp, 16) - 8;
+#endif
 	return sp;
 }
+
 
 static void __user *
 get_sigframe(struct k_sigaction *ka, struct pt_regs *regs, size_t frame_size,
@@ -185,12 +225,21 @@ get_sigframe(struct k_sigaction *ka, struct pt_regs *regs, size_t frame_size,
 	struct fpu *fpu = &current->thread.fpu;
 
 	/* redzone */
-	sp -= 128;
+	if (IS_ENABLED(CONFIG_X86_64))
+		sp -= 128;
 
 	/* This is the X/Open sanctioned signal stack switching.  */
 	if (ka->sa.sa_flags & SA_ONSTACK) {
 		if (sas_ss_flags(sp) == 0)
 			sp = current->sas_ss_sp + current->sas_ss_size;
+	} else if (IS_ENABLED(CONFIG_X86_32) &&
+		   !onsigstack &&
+		   (regs->ss & 0xffff) != __USER_DS &&
+		   !(ka->sa.sa_flags & SA_RESTORER) &&
+		   ka->sa.sa_restorer) {
+		/* This is the legacy signal stack switching. */
+		sp = (unsigned long) ka->sa.sa_restorer;
+		BUG();
 	}
 
 	if (fpu->fpstate_active) {
@@ -308,11 +357,36 @@ static int __setup_rt_frame(int sig, struct ksignal *ksig,
 	return 0;
 }
 
+static inline int is_ia32_compat_frame(struct ksignal *ksig)
+{
+	return IS_ENABLED(CONFIG_IA32_EMULATION) &&
+		ksig->ka.sa.sa_flags & SA_IA32_ABI;
+}
+
+static inline int is_ia32_frame(struct ksignal *ksig)
+{
+	return IS_ENABLED(CONFIG_X86_32) || is_ia32_compat_frame(ksig);
+}
+
+static inline int is_x32_frame(struct ksignal *ksig)
+{
+	return IS_ENABLED(CONFIG_X86_X32_ABI) &&
+		ksig->ka.sa.sa_flags & SA_X32_ABI;
+}
+
 static int
 setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs)
 {
 	sigset_t *set = sigmask_to_save();
-	return __setup_rt_frame(ksig->sig, ksig, set, regs);
+
+	/* Set up the stack frame */
+	if (is_ia32_frame(ksig)) {
+		BUG();
+	} else if (is_x32_frame(ksig)) {
+		BUG();
+	} else {
+		return __setup_rt_frame(ksig->sig, ksig, set, regs);
+	}
 }
 
 static void
@@ -372,6 +446,38 @@ handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 	signal_setup_done(failed, ksig, stepping);
 }
 
+static inline unsigned long get_nr_restart_syscall(const struct pt_regs *regs)
+{
+	/*
+	 * This function is fundamentally broken as currently
+	 * implemented.
+	 *
+	 * The idea is that we want to trigger a call to the
+	 * restart_block() syscall and that we want in_ia32_syscall(),
+	 * in_x32_syscall(), etc. to match whatever they were in the
+	 * syscall being restarted.  We assume that the syscall
+	 * instruction at (regs->ip - 2) matches whatever syscall
+	 * instruction we used to enter in the first place.
+	 *
+	 * The problem is that we can get here when ptrace pokes
+	 * syscall-like values into regs even if we're not in a syscall
+	 * at all.
+	 *
+	 * For now, we maintain historical behavior and guess based on
+	 * stored state.  We could do better by saving the actual
+	 * syscall arch in restart_block or (with caveats on x32) by
+	 * checking if regs->ip points to 'int $0x80'.  The current
+	 * behavior is incorrect if a tracer has a different bitness
+	 * than the tracee.
+	 */
+#ifdef CONFIG_IA32_EMULATION
+	if (current->thread.status & (TS_COMPAT|TS_I386_REGS_POKED)) {
+		BUG();
+	}
+#endif
+	return __NR_restart_syscall;
+}
+
 /*
  * Note that 'init' is a special process: it doesn't get signals it doesn't
  * want to handle. Thus you cannot kill init even with a SIGKILL even by
@@ -402,7 +508,7 @@ void do_signal(struct pt_regs *regs)
 			break;
 
 		case -ERESTART_RESTARTBLOCK:
-			regs->ax = __NR_restart_syscall;
+			regs->ax = get_nr_restart_syscall(regs);
 			regs->ip -= 2;
 			break;
 		}

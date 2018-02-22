@@ -18,6 +18,7 @@ config X86
 	def_bool y
 	select HAVE_MEMBLOCK
 	select HAVE_MEMBLOCK_NODE_MAP
+	select X86_FEATURE_NAMES		if COMP_PROCESSOR
 
 config OUTPUT_FORMAT
 	string
@@ -28,6 +29,23 @@ config ARCH_DEFCONFIG
 	string
 	default "arch/x86/configs/i386_defconfig" if X86_32
 	default "arch/x86/configs/x86_64_defconfig" if X86_64
+
+config IA32_EMULATION
+	bool "IA32 Emulation"
+	def_bool y if X86_64
+	depends on X86_64
+	---help---
+	  Include code to run legacy 32-bit programs under a
+	  64-bit kernel. You should likely turn this on, unless you're
+	  100% sure that you don't have any 32-bit programs left.
+
+	  Lego really really does NOT support legacy 32-bit things.
+	  We just put this config option to enable certain code.
+	  Probably later on we need to support this, just to save some pain.
+
+config COMPAT
+	def_bool y
+	depends on IA32_EMULATION || X86_X32
 
 config ZONE_DMA32
 	def_bool y if X86_64
@@ -78,6 +96,18 @@ config ILLEGAL_POINTER_VALUE
        default 0 if X86_32
        default 0xdead000000000000 if X86_64
 
+config X86_DEBUG_FPU
+	bool "Debug the x86 FPU code"
+	depends on DEBUG_KERNEL
+	default y
+	---help---
+	  If this option is enabled then there will be extra sanity
+	  checks and (boot time) debug printouts added to the kernel.
+	  This debugging adds some small amount of runtime overhead
+	  to the kernel.
+
+	  If unsure, say N.
+
 source "init/Kconfig"
 
 menu "Processor type and features"
@@ -111,6 +141,17 @@ config SMP
 	  <http://www.tldp.org/docs.html#howto>.
 
 	  If you don't know what to do here, say N.
+
+config X86_FEATURE_NAMES
+	bool "Processor feature human-readable names"
+	default y
+	---help---
+	  This option compiles in a table of x86 feature bits and corresponding
+	  names.  This is required to support /proc/cpuinfo and a few kernel
+	  messages.  You can disable this to save space, at the expense of
+	  making those few kernel messages show numeric feature bits instead.
+
+	  If in doubt, say Y.
 
 config MAXSMP
 	bool "Enable Maximum number of SMP Processors and NUMA Nodes"
