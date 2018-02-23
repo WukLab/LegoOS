@@ -208,7 +208,23 @@ static void __init fpu__init_task_struct_size(void)
 	CHECK_MEMBER_AT_END_OF(struct thread_struct, fpu);
 	CHECK_MEMBER_AT_END_OF(struct task_struct, thread);
 
+	/*
+	 * According to Intel SDM, xsave must be 64-bytes aligned
+	 * Any misalignment lead to general-protection (#GP) exception.
+	 *
+	 * Since this #GP will be hidden by fixup during runtime,
+	 * if CONFIG_X86_64 is not enabled, we will not notice anything
+	 * except some random crash.
+	 *
+	 * Thus, make sure, xsave is 64-bytes aligned to both struct fpu
+	 * and struct task_struct. By doing so, we only need to make sure
+	 * allocated task_struct is 64-bytes aligned at runtime.
+	 */
+	BUILD_BUG_ON((offsetof(struct fpu, state.xsave) & (64-1)) != 0);
+	BUILD_BUG_ON((offsetof(struct task_struct, thread.fpu.state.xsave) & (64-1)) != 0);
+
 	arch_task_struct_size = task_size;
+	arch_task_struct_order = get_order(arch_task_struct_size);
 }
 
 /*

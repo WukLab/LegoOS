@@ -26,6 +26,7 @@
 
 /* Initialized by the architecture: */
 int arch_task_struct_size __read_mostly = sizeof(struct task_struct);
+int arch_task_struct_order __read_mostly = get_order(sizeof(struct task_struct));
 
 DEFINE_SPINLOCK(tasklist_lock);
 unsigned long total_forks;
@@ -33,12 +34,15 @@ int nr_threads;			/* The idle threads do not count.. */
 
 static inline struct task_struct *alloc_task_struct_node(int node)
 {
-	return kzalloc(arch_task_struct_size, GFP_KERNEL);
+	unsigned long p;
+
+	p = __get_free_pages(GFP_KERNEL, arch_task_struct_order);
+	return (struct task_struct *)p;
 }
 
 static inline void free_task_struct(struct task_struct *tsk)
 {
-	kfree(tsk);
+	free_pages((unsigned long)tsk, arch_task_struct_order);
 }
 
 static inline unsigned long *
@@ -935,6 +939,6 @@ SYSCALL_DEFINE1(set_tid_address, int __user *, tidptr)
 
 void __init fork_init(void)
 {
-	pr_debug("fork: arch_task_struct_size: %d, task_struct: %lu\n",
-		arch_task_struct_size, sizeof(struct task_struct));
+	pr_debug("fork: arch_task_struct_size: %d, order: %d task_struct: %lu\n",
+		arch_task_struct_size, arch_task_struct_order, sizeof(struct task_struct));
 }
