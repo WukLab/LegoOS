@@ -229,10 +229,7 @@ static inline void load_sp0(struct tss_struct *tss,
 
 static inline unsigned long current_top_of_stack(void)
 {
-	int cpu = smp_processor_id();
-	struct tss_struct *tss = &per_cpu(cpu_tss, cpu);
-
-	return tss->x86_tss.sp0;
+	return this_cpu_read_stable(cpu_tss.x86_tss.sp0);
 }
 
 #define TOP_OF_INIT_STACK ((unsigned long)&init_stack + sizeof(init_stack) - \
