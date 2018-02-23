@@ -11,7 +11,7 @@
 #include <lego/extable.h>
 #include <asm/traps.h>
 
-#ifdef CONFIG_DEBUG_FIXUP_EXCEPTION
+#ifdef CONFIG_X86_DEBUG_FIXUP_EXCEPTION
 #define fixup_debug(fmt, ...)					\
 	pr_debug("fixup_exception pid(%d) cpu(%d) " fmt "\n",	\
 		current->pid, smp_processor_id(), __VA_ARGS__)

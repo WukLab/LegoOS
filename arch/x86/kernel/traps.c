@@ -22,6 +22,17 @@
 #include <asm/irq_vectors.h>
 #include <asm/fpu/internal.h>
 
+#define print_trap()							\
+	pr_crit("TRAP %s in CPU%d, error_code: %ld current:%p %d %s\n",	\
+		__func__, smp_processor_id(), error_code,		\
+		current, current->pid, current->comm)
+
+#ifdef CONFIG_X86_DEBUG_TRAP
+#define debug_print_trap()	print_trap
+#else
+static inline void debug_print_trap(void) { }
+#endif
+
 /*
  * The default IDT table
  * Filled during early boot and will NOT be changed afterwards.
@@ -158,6 +169,8 @@ static void do_error_trap(struct pt_regs *regs, long error_code, char *str,
 {
 	siginfo_t info;
 
+	debug_print_trap();
+
 	cond_local_irq_enable(regs);
 	do_trap(trapnr, signr, str, regs, error_code,
 		fill_trap_info(regs, signr, trapnr, &info));
@@ -185,6 +198,8 @@ dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 {
 	struct task_struct *tsk = current;
 
+	debug_print_trap();
+
 	cond_local_irq_enable(regs);
 	if (!user_mode(regs)) {
 		if (fixup_exception(regs, X86_TRAP_GP))
@@ -209,19 +224,15 @@ dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 	force_sig_info(SIGSEGV, SEND_SIG_PRIV, tsk);
 }
 
-#define print_this_event()				\
-	pr_crit("%s in CPU%d, error_code: %ld\n",	\
-		__func__, smp_processor_id(), error_code)
-
 dotraplinkage void do_device_not_available(struct pt_regs *regs, long error_code)
 {
-	print_this_event();
+	print_trap();
 	fpu__restore(&current->thread.fpu); /* interrupts still off */
 }
 
 dotraplinkage void do_spurious_interrupt_bug(struct pt_regs *regs, long error_code)
 {
-	print_this_event();
+	print_trap();
 	cond_local_irq_enable(regs);
 }
 
@@ -271,13 +282,13 @@ static void math_error(struct pt_regs *regs, int error_code, int trapnr)
 dotraplinkage void
 do_simd_exception(struct pt_regs *regs, long error_code)
 {
-	print_this_event();
+	print_trap();
 	math_error(regs, error_code, X86_TRAP_XF);
 }
 
 dotraplinkage void do_coprocessor_error(struct pt_regs *regs, long error_code)
 {
-	print_this_event();
+	print_trap();
 	math_error(regs, error_code, X86_TRAP_MF);
 }
 
@@ -312,7 +323,7 @@ dotraplinkage void do_reserved(struct pt_regs *regs, long error_code)
 /* TODO */
 dotraplinkage void do_nmi(struct pt_regs *regs, long error_code)
 {
-	print_this_event();
+	print_trap();
 	for(;;)
 		hlt();
 }

@@ -220,16 +220,6 @@ config TRACE_SYSCALL
 
 	  If unsure, say N.
 
-config DEBUG_SMP_IPI
-	bool "Debug all SMP IPI Handlers"
-	default n
-	depends on DEBUG_KERNEL
-	help
-	  Enable to print some message in every IPI handler.
-	  Only used during development of IPI handlers.
-
-	  If unsure, say N.
-
 config DEBUG_FORCE_ZERO_ALLOCATION
 	bool "Pass __GFP_ZERO to every page allocation (Catch uninitliazed bug)"
 	default n
@@ -240,18 +230,6 @@ config DEBUG_FORCE_ZERO_ALLOCATION
 
 	  If anything went wrong without this option AND went alright wirh this option,
 	  that means you have uninitialized buffer.
-
-	  If unsure, say N.
-
-config DEBUG_FIXUP_EXCEPTION
-	bool "Debug fixup and exception handling"
-	default n
-	depends on DEBUG_KERNEL
-	help
-	  Enable to trace every fixup_exception() activity.
-	  Code that will generate exceptions are well controlled.
-	  For example, get_user, rdmsr_unsafe etc.
-	  This option is useful if you are adding any fixup/exception code.
 
 	  If unsure, say N.
 

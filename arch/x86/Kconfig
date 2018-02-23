@@ -108,6 +108,39 @@ config X86_DEBUG_FPU
 
 	  If unsure, say N.
 
+config X86_DEBUG_TRAP
+	bool "Debug the x86 specific traps"
+	depends on DEBUG_KERNEL
+	default n
+	help
+	  If this option is enabled, then every intel predefined traps
+	  and exceptions (except pgfault) will print a message whenever
+	  triggered, no matter it is taken care by fixup or not.
+
+	  If unsure, say N.
+
+config X86_DEBUG_FIXUP_EXCEPTION
+	bool "Debug fixup and exception handling"
+	default n
+	depends on DEBUG_KERNEL
+	help
+	  Enable to trace every fixup_exception() activity.
+	  Code that will generate exceptions are well controlled.
+	  For example, get_user, rdmsr_unsafe etc.
+	  This option is useful if you are adding any fixup/exception code.
+
+	  If unsure, say N.
+
+config X86_DEBUG_SMP_IPI
+	bool "Debug all SMP IPI Handlers"
+	default n
+	depends on DEBUG_KERNEL
+	help
+	  Enable to print some message in every IPI handler.
+	  Only used during development of IPI handlers.
+
+	  If unsure, say N.
+
 source "init/Kconfig"
 
 menu "Processor type and features"
