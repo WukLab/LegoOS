@@ -10,6 +10,7 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
+#include <lego/strace.h>
 #include <lego/syscalls.h>
 #include <generated/asm-offsets.h>
 

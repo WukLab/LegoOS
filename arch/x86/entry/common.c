@@ -115,11 +115,13 @@ __visible void do_syscall_64(struct pt_regs *regs)
 	 * table.  The only functional difference is the x32 bit in
 	 * regs->orig_ax, which changes the behavior of some syscalls.
 	 */
+	strace_enter(regs);
 	if (likely(nr < NR_syscalls)) {
 		regs->ax = sys_call_table[nr](
 			regs->di, regs->si, regs->dx,
 			regs->r10, regs->r8, regs->r9);
 	}
+	strace_exit(regs);
 
 	syscall_return_slowpath(regs);
 
