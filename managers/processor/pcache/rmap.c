@@ -175,28 +175,6 @@ rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 				     __builtin_return_address(0));
 }
 
-static int __dump_pcache_rmaps(struct pcache_meta *pcm,
-			       struct pcache_rmap *rmap, void *arg)
-{
-	pte_t *ptep = rmap->page_table;
-
-	pr_debug("rmap:%p flags:%#lx owner-tgid:%u user_va:%#lx ptep:%p\n",
-		rmap, rmap->flags, rmap->owner_process->pid, rmap->address, ptep);
-	dump_pte(ptep, NULL);
-
-	return PCACHE_RMAP_AGAIN;
-}
-
-static void dump_pcache_rmaps(struct pcache_meta *pcm)
-{
-	struct rmap_walk_control rwc = {
-		.rmap_one = __dump_pcache_rmaps,
-	};
-
-	/* pcm is already locked */
-	rmap_walk(pcm, &rwc);
-}
-
 static void validate_pcache_mapcount(struct pcache_meta *pcm)
 {
 	if (unlikely(atomic_read(&pcm->mapcount) > 1)) {
@@ -206,7 +184,7 @@ static void validate_pcache_mapcount(struct pcache_meta *pcm)
 			"****    Remove this checking after we are confident about pcache!\n"
 			"****\n");
 		dump_pcache_meta(pcm, NULL);
-		dump_pcache_rmaps(pcm);
+		dump_pcache_rmaps_locked(pcm);
 		pr_warn("****\n"
 			"****    END WARNING\n"
 			"****\n");

@@ -62,6 +62,44 @@ void dump_pcache_rmap(struct pcache_rmap *rmap, const char *reason)
 		pr_debug("pcache_rmap dumped because: %s\n", reason);
 }
 
+static int __dump_pcache_rmaps(struct pcache_meta *pcm,
+			       struct pcache_rmap *rmap, void *arg)
+{
+	dump_pcache_rmap(rmap, NULL);
+	return PCACHE_RMAP_AGAIN;
+}
+
+void dump_pcache_rmaps_locked(struct pcache_meta *pcm)
+{
+	struct rmap_walk_control rwc = {
+		.rmap_one = __dump_pcache_rmaps,
+	};
+
+	rmap_walk(pcm, &rwc);
+}
+
+void dump_pcache_rmaps(struct pcache_meta *pcm)
+{
+	lock_pcache(pcm);
+	dump_pcache_rmaps_locked(pcm);
+	unlock_pcache(pcm);
+}
+
+void dump_pset(struct pcache_set *pset)
+{
+	struct pcache_meta *pcm;
+	int way;
+
+	pr_debug("pset:%p set_idx: %lu nr_lru:%d\n",
+		pset, pcache_set_to_set_index(pset),
+		IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0);
+
+	pcache_for_each_way_set(pcm, pset, way) {
+		dump_pcache_meta(pcm, NULL);
+		dump_pcache_rmaps(pcm);
+	}
+}
+
 /**
  * pcache_line_csum
  * @pcm: pcache line in question

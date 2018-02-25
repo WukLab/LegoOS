@@ -192,12 +192,26 @@ const struct trace_print_flags victimflag_names[] = {
 
 void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason)
 {
-	pr_debug("victim:%p index:%d refcount:%d nr_fill:%d locked:%d flags:(%pGV)\n",
+	pr_debug("victim:%p index:%d refcount:%d nr_fill:%d locked:%d flags:(%pGV) "
+		 "pcm:%p pset:%p\n",
 		victim, victim_index(victim), atomic_read(&victim->_refcount),
 		atomic_read(&victim->nr_fill_pcache), spin_is_locked(&victim->lock),
-		&victim->flags);
+		&victim->flags, victim->pcm, victim->pset);
+	if (victim->pcm)
+		dump_pcache_meta(victim->pcm, "dump_victim");
+	if (victim->pset)
+		dump_pset(victim->pset);
 	if (reason)
 		pr_debug("victim dumped because: %s\n", reason);
+}
+
+void dump_all_victim(void)
+{
+	struct pcache_victim_meta *v;
+	int index;
+
+	for_each_victim(v, index)
+		dump_pcache_victim(v, NULL);
 }
 
 static void victim_free_hit_entries(struct pcache_victim_meta *victim);
@@ -431,6 +445,7 @@ retry:
 		       alloc_start + sysctl_victim_alloc_timeout_sec * HZ)) {
 		WARN(1, "Abort victim alloc (%ums) pid:%u",
 			jiffies_to_msecs(jiffies - alloc_start), current->pid);
+		dump_all_victim();
 		return NULL;
 	}
 

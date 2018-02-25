@@ -24,7 +24,7 @@
  *
  * The maximum time a pcache_alloc can take due to slowpath eviction.
  */
-unsigned long sysctl_pcache_alloc_timeout_sec __read_mostly = 10;
+unsigned long sysctl_pcache_alloc_timeout_sec __read_mostly = 30;
 
 static void bad_pcache(struct pcache_meta *pcm,
 		       const char *reason, unsigned long bad_flags)
@@ -174,6 +174,7 @@ retry:
 		       alloc_start + sysctl_pcache_alloc_timeout_sec * HZ)) {
 		WARN(1, "Abort pcache alloc (%ums) pid:%u, addr:%#lx",
 			jiffies_to_msecs(jiffies - alloc_start), current->pid, address);
+		dump_pset(pset);
 		return NULL;
 	}
 
