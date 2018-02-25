@@ -29,3 +29,4 @@ obj-y += profile.o
 
 obj-$(CONFIG_FUTEX) += futex.o
 obj-$(CONFIG_WORK_QUEUE) += workqueue.o
+obj-$(CONFIG_STRACE) += strace/

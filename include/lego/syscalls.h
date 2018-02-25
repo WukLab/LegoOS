@@ -16,6 +16,7 @@
 #include <lego/rlimit.h>
 #include <lego/linkage.h>
 #include <lego/compiler.h>
+#include <lego/kernel.h>
 #include <lego/time.h>
 
 #include <asm/syscalls.h>
@@ -51,33 +52,6 @@ do {										\
 #define __syscall_enter()	do { } while (0)
 #define syscall_exit(ret)	do { } while (0)
 #endif /* CONFIG_DEBUG_SYSCALL */
-
-/*
- * __MAP - apply a macro to syscall arguments
- * __MAP(n, m, t1, a1, t2, a2, ..., tn, an) will expand to
- *    m(t1, a1), m(t2, a2), ..., m(tn, an)
- * The first argument must be equal to the amount of type/name
- * pairs given.  Note that this list of pairs (i.e. the arguments
- * of __MAP starting at the third one) is in the same format as
- * for SYSCALL_DEFINE<n>/COMPAT_SYSCALL_DEFINE<n>
- */
-#define __MAP0(m,...)
-#define __MAP1(m,t,a) m(t,a)
-#define __MAP2(m,t,a,...) m(t,a), __MAP1(m,__VA_ARGS__)
-#define __MAP3(m,t,a,...) m(t,a), __MAP2(m,__VA_ARGS__)
-#define __MAP4(m,t,a,...) m(t,a), __MAP3(m,__VA_ARGS__)
-#define __MAP5(m,t,a,...) m(t,a), __MAP4(m,__VA_ARGS__)
-#define __MAP6(m,t,a,...) m(t,a), __MAP5(m,__VA_ARGS__)
-#define __MAP(n,...) __MAP##n(__VA_ARGS__)
-
-#define __SC_DECL(t, a)	t a
-#define __TYPE_IS_L(t)	(__same_type((t)0, 0L))
-#define __TYPE_IS_UL(t)	(__same_type((t)0, 0UL))
-#define __TYPE_IS_LL(t) (__same_type((t)0, 0LL) || __same_type((t)0, 0ULL))
-#define __SC_LONG(t, a) __typeof(__builtin_choose_expr(__TYPE_IS_LL(t), 0LL, 0L)) a
-#define __SC_CAST(t, a)	(t) a
-#define __SC_ARGS(t, a)	a
-#define __SC_TEST(t, a) (void)BUILD_BUG_ON_ZERO(!__TYPE_IS_LL(t) && sizeof(t) > sizeof(long))
 
 #define SYSCALL_DEFINE0(sname)					\
 	asmlinkage long sys_##sname(void)

@@ -19,6 +19,9 @@ __wsum pcache_line_csum(struct pcache_meta *pcm);
 void dump_pcache_meta(struct pcache_meta *pcm, const char *reason);
 void dump_pcache_line(struct pcache_meta *pcm, const char *reason);
 void dump_pcache_rmap(struct pcache_rmap *rmap, const char *reason);
+void dump_pcache_rmaps(struct pcache_meta *pcm);
+void dump_pcache_rmaps_locked(struct pcache_meta *pcm);
+void dump_pset(struct pcache_set *pset);
 extern const struct trace_print_flags pcacheflag_names[];
 
 #ifdef CONFIG_DEBUG_PCACHE
