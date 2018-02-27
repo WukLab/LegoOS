@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
  */
 
 #ifndef _BOOT_VIDEO_H_

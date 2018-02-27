@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
  *
  * Build a disk-image from two different files:
  *

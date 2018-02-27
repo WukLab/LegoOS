@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
  *
  * Linker script for the 16-bit kernel code.
  */
