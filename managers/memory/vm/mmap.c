@@ -1566,6 +1566,11 @@ mmap_region(struct lego_task_struct *p, struct lego_file *file,
 	 * it must setup the vma->vm_ops!
 	 */
 	if (file) {
+		/*
+		 * Each VMA should hold an extra reference
+		 */
+		get_lego_file(file);
+
 		vma->vm_file = file;
 		error = file->f_op->mmap(p, file, vma);
 		if (WARN_ON(error))

@@ -29,14 +29,12 @@
 /* TODO vdso */
 #define vdso64_enabled 0
 
-#ifdef CONFIG_X86_32
-/* x86-32 */
-# define ARCH_DLINFO		ARCH_DLINFO_IA32
-#else
 /* x86-64*/
-# define ARCH_DLINFO							\
+#define ARCH_DLINFO							\
 do {									\
 	if (vdso64_enabled)						\
+		NEW_AUX_ENT(AT_SYSINFO_EHDR, 0);			\
+	else								\
 		NEW_AUX_ENT(AT_SYSINFO_EHDR, 0);			\
 } while (0)
 
@@ -51,6 +49,5 @@ do {									\
 
 # define COMPAT_ARCH_DLINFO	ARCH_DLINFO_IA32
 # define COMPAT_ELF_ET_DYN_BASE	(TASK_UNMAPPED_BASE + 0x1000000)
-#endif /* !CONFIG_X86_32 */
 
 #endif /* _ASM_X86_AUXVEC_H_ */

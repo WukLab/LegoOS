@@ -20,6 +20,14 @@ ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,
 	return file->f_op->read(tsk, file, buf, count, pos);
 }
 
+ssize_t kernel_read(struct lego_task_struct *tsk, struct lego_file *file,
+		loff_t offset, char *addr, unsigned long count)
+{
+	loff_t pos = offset;
+
+	return file_read(tsk, file, (void __user *)addr, count, &pos);
+}
+
 ssize_t file_write(struct lego_task_struct *tsk, struct lego_file *file,
 		   const char __user *buf, size_t count, loff_t *pos)
 {
@@ -53,4 +61,12 @@ void file_close(struct lego_file *file)
 {
 	BUG_ON(!file);
 	put_lego_file(file);
+}
+
+void __put_lego_file(struct lego_file *filp)
+{
+	BUG_ON(atomic_read(&filp->f_count) != 0);
+
+	pr_debug("%s: fname: %s\n", __func__, filp->filename);
+	kfree(filp);
 }

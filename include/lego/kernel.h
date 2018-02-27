@@ -24,6 +24,8 @@
 #include <lego/compiler.h>
 #include <lego/byteorder.h>
 
+#include <uapi/limits.h>
+
 #define FUNC	__func__
 #define LINE	__LINE__
 

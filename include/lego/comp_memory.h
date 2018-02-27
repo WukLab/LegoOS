@@ -185,11 +185,7 @@ static inline void get_lego_file(struct lego_file *filp)
 	atomic_inc(&filp->f_count);
 }
 
-static inline void __put_lego_file(struct lego_file *filp)
-{
-	BUG_ON(atomic_read(&filp->f_count) != 0);
-	kfree(filp);
-}
+void __put_lego_file(struct lego_file *filp);
 
 static inline void put_lego_file(struct lego_file *filp)
 {

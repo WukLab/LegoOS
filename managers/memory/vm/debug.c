@@ -126,7 +126,7 @@ void dump_all_vmas(struct lego_mm_struct *mm)
 
 	while (vma) {
 		dump_vma(vma);
-		vma = vma->vm_prev;
+		vma = vma->vm_next;
 	}
 }
 

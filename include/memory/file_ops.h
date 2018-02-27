@@ -20,6 +20,8 @@ ssize_t file_read(struct lego_task_struct *tsk, struct lego_file *file,
 		  char __user *buf, size_t count, loff_t *pos);
 ssize_t file_write(struct lego_task_struct *tsk, struct lego_file *file,
 		   const char __user *buf, size_t count, loff_t *pos);
+ssize_t kernel_read(struct lego_task_struct *tsk, struct lego_file *file,
+		loff_t offset, char *addr, unsigned long count);
 
 struct lego_file *file_open(struct lego_task_struct *tsk, const char *filename);
 void file_close(struct lego_file *file);

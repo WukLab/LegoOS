@@ -274,6 +274,9 @@ static unsigned long elf_map(struct lego_task_struct *tsk, struct lego_file *fil
 	addr = ELF_PAGESTART(addr);
 	size = ELF_PAGEALIGN(size);
 
+	loader_debug("f:%s, addr: %#lx, size: %#lx type: %d total_size: %#lx (caller: %pS)",
+		filep->filename, addr, size, type, total_size, __builtin_return_address(0));
+
 	/* mmap() will return -EINVAL if given a zero size, but a
 	 * segment with zero filesize is perfectly valid */
 	if (!size)
@@ -288,12 +291,6 @@ static unsigned long elf_map(struct lego_task_struct *tsk, struct lego_file *fil
 	 * the end. (which unmap is needed for ELF images with holes.)
 	 */
 	if (total_size) {
-		/*
-		 * Lego Specific:
-		 * Used by dynamic-linked image
-		 */
-		BUG();
-
 		total_size = ELF_PAGEALIGN(total_size);
 		map_addr = vm_mmap(tsk, filep, addr, total_size, prot, type, off);
 		if (!BAD_ADDR(map_addr))
@@ -320,6 +317,24 @@ static int set_brk(struct lego_task_struct *tsk,
 	}
 	tsk->mm->start_brk = tsk->mm->brk = end;
 	return 0;
+}
+
+static unsigned long total_mapping_size(struct elf_phdr *cmds, int nr)
+{
+	int i, first_idx = -1, last_idx = -1;
+
+	for (i = 0; i < nr; i++) {
+		if (cmds[i].p_type == PT_LOAD) {
+			last_idx = i;
+			if (first_idx == -1)
+				first_idx = i;
+		}
+	}
+	if (first_idx == -1)
+		return 0;
+
+	return cmds[last_idx].p_vaddr + cmds[last_idx].p_memsz -
+				ELF_PAGESTART(cmds[first_idx].p_vaddr);
 }
 
 /**
@@ -378,13 +393,143 @@ out:
 	return elf_phdata;
 }
 
+/* This is much more generalized than the library routine read function,
+   so we keep this separate.  Technically the library read function
+   is only provided so that we can read a.out libraries that have
+   an ELF header */
+
+static unsigned long load_elf_interp(struct lego_task_struct *tsk,
+		struct elfhdr *interp_elf_ex,
+		struct lego_file *interpreter, unsigned long *interp_map_addr,
+		unsigned long no_base, struct elf_phdr *interp_elf_phdata)
+{
+	struct elf_phdr *eppnt;
+	unsigned long load_addr = 0;
+	int load_addr_set = 0;
+	unsigned long last_bss = 0, elf_bss = 0;
+	unsigned long error = ~0UL;
+	unsigned long total_size;
+	int i;
+
+	/* First of all, some simple consistency checks */
+	if (interp_elf_ex->e_type != ET_EXEC &&
+	    interp_elf_ex->e_type != ET_DYN)
+		goto out;
+	if (!elf_check_arch(interp_elf_ex))
+		goto out;
+	BUG_ON(!interpreter->f_op->mmap);
+
+	total_size = total_mapping_size(interp_elf_phdata,
+					interp_elf_ex->e_phnum);
+	if (!total_size) {
+		error = -EINVAL;
+		goto out;
+	}
+
+	eppnt = interp_elf_phdata;
+	for (i = 0; i < interp_elf_ex->e_phnum; i++, eppnt++) {
+		if (eppnt->p_type == PT_LOAD) {
+			int elf_type = MAP_PRIVATE | MAP_DENYWRITE;
+			int elf_prot = 0;
+			unsigned long vaddr = 0;
+			unsigned long k, map_addr;
+
+			if (eppnt->p_flags & PF_R)
+		    		elf_prot = PROT_READ;
+			if (eppnt->p_flags & PF_W)
+				elf_prot |= PROT_WRITE;
+			if (eppnt->p_flags & PF_X)
+				elf_prot |= PROT_EXEC;
+			vaddr = eppnt->p_vaddr;
+			if (interp_elf_ex->e_type == ET_EXEC || load_addr_set)
+				elf_type |= MAP_FIXED;
+			else if (no_base && interp_elf_ex->e_type == ET_DYN)
+				load_addr = -vaddr;
+
+			map_addr = elf_map(tsk, interpreter, load_addr + vaddr,
+					eppnt, elf_prot, elf_type, total_size);
+			total_size = 0;
+			if (!*interp_map_addr)
+				*interp_map_addr = map_addr;
+			error = map_addr;
+			if (BAD_ADDR(map_addr))
+				goto out;
+
+			if (!load_addr_set &&
+			    interp_elf_ex->e_type == ET_DYN) {
+				load_addr = map_addr - ELF_PAGESTART(vaddr);
+				load_addr_set = 1;
+			}
+
+			/*
+			 * Check to see if the section's size will overflow the
+			 * allowed task size. Note that p_filesz must always be
+			 * <= p_memsize so it's only necessary to check p_memsz.
+			 */
+			k = load_addr + eppnt->p_vaddr;
+			if (BAD_ADDR(k) ||
+			    eppnt->p_filesz > eppnt->p_memsz ||
+			    eppnt->p_memsz > TASK_SIZE ||
+			    TASK_SIZE - eppnt->p_memsz < k) {
+				error = -ENOMEM;
+				goto out;
+			}
+
+			/*
+			 * Find the end of the file mapping for this phdr, and
+			 * keep track of the largest address we see for this.
+			 */
+			k = load_addr + eppnt->p_vaddr + eppnt->p_filesz;
+			if (k > elf_bss)
+				elf_bss = k;
+
+			/*
+			 * Do the same thing for the memory mapping - between
+			 * elf_bss and last_bss is the bss section.
+			 */
+			k = load_addr + eppnt->p_vaddr + eppnt->p_memsz;
+			if (k > last_bss)
+				last_bss = k;
+		}
+	}
+
+	/*
+	 * Now fill out the bss section: first pad the last page from
+	 * the file up to the page boundary, and zero it from elf_bss
+	 * up to the end of the page.
+	 */
+	if (padzero(tsk, elf_bss)) {
+		error = -EFAULT;
+		goto out;
+	}
+	/*
+	 * Next, align both the file and mem bss up to the page size,
+	 * since this is where elf_bss was just zeroed up to, and where
+	 * last_bss will end after the vm_brk() below.
+	 */
+	elf_bss = ELF_PAGEALIGN(elf_bss);
+	last_bss = ELF_PAGEALIGN(last_bss);
+	/* Finally, if there is still more bss to allocate, do it. */
+	if (last_bss > elf_bss) {
+		error = vm_brk(tsk, elf_bss, last_bss - elf_bss);
+		if (error)
+			goto out;
+	}
+
+	error = load_addr;
+out:
+	return error;
+}
+
 static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bprm,
 			   u64 *new_ip, u64 *new_sp, unsigned long *argv_len, unsigned long *envp_len)
 {
+	struct lego_file *interpreter = NULL;
+	char *elf_interpreter = NULL;
  	unsigned long load_addr = 0, load_bias = 0;
 	int load_addr_set = 0;
 	unsigned long error;
-	struct elf_phdr *elf_ppnt, *elf_phdata;
+	struct elf_phdr *elf_ppnt, *elf_phdata, *interp_elf_phdata = NULL;
 	int retval, i;
 	unsigned long elf_entry;	/* program entry point */
 	unsigned long elf_bss;		/* start of bss */
@@ -419,9 +564,10 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	 * Lego only supportes executables.
 	 * (Both dynamic/static linked executables are ET_EXEC)
 	 * No relocatable object file (ET_REL)
-	 * No shared library (ET_DYN)
+	 * -----No shared library (ET_DYN) ----
+	 *  02.27.18 We now support
 	 */
-	if (loc->elf_ex.e_type != ET_EXEC)
+	if (loc->elf_ex.e_type != ET_EXEC && loc->elf_ex.e_type != ET_DYN)
 		goto out;
 
 	if (!elf_check_arch(&loc->elf_ex))
@@ -432,23 +578,102 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		goto out;
 
 	elf_ppnt = elf_phdata;
-	for (i = 0; i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
+	elf_bss = 0;
+	elf_brk = 0;
+
+	start_code = ~0UL;
+	end_code = 0;
+	start_data = 0;
+	end_data = 0;
+
+	for (i = 0; i < loc->elf_ex.e_phnum; i++) {
 		if (elf_ppnt->p_type == PT_INTERP) {
+#ifdef CONFIG_USE_RAMFS
+			panic("Using dynamically-linked ELF requires storage node.");
+#endif
+
 			/*
 			 * This is the program interpreter used for
-			 * dynamic linked elf - not supported for now
+			 * shared libraries - for now assume that this
+			 * is an a.out format binary
 			 */
-			WARN(1, "Only static-linked elf is supported!\n");
 			retval = -ENOEXEC;
-			goto out_free_ph;
-		}
+			if (elf_ppnt->p_filesz > PATH_MAX || 
+			    elf_ppnt->p_filesz < 2)
+				goto out_free_ph;
 
-		if (elf_ppnt->p_type == PT_GNU_STACK) {
+			retval = -ENOMEM;
+			elf_interpreter = kmalloc(elf_ppnt->p_filesz,
+						  GFP_KERNEL);
+			if (!elf_interpreter)
+				goto out_free_ph;
+
+			/* Get ELF interpreter file name */
+			retval = kernel_read(tsk, bprm->file, elf_ppnt->p_offset,
+					     elf_interpreter,
+					     elf_ppnt->p_filesz);
+			if (retval != elf_ppnt->p_filesz) {
+				WARN_ON(1);
+				if (retval >= 0)
+					retval = -EIO;
+				goto out_free_interp;
+			}
+
+			/* make sure path is NULL terminated */
+			retval = -ENOEXEC;
+			if (elf_interpreter[elf_ppnt->p_filesz - 1] != '\0')
+				goto out_free_interp;
+
+			loader_debug("elf_interpreter: %s", elf_interpreter);
+
+			interpreter = file_open(tsk, elf_interpreter);
+			retval = PTR_ERR(interpreter);
+			if (IS_ERR(interpreter))
+				goto out_free_interp;
+
+			/* Get the exec headers */
+			retval = kernel_read(tsk, interpreter, 0,
+					     (void *)&loc->interp_elf_ex,
+					     sizeof(loc->interp_elf_ex));
+			if (retval != sizeof(loc->interp_elf_ex)) {
+				WARN_ON(1);
+				if (retval >= 0)
+					retval = -EIO;
+				goto out_free_dentry;
+			}
+
+			break;
+		}
+		elf_ppnt++;
+	}
+
+	elf_ppnt = elf_phdata;
+	for (i = 0; i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
+		switch (elf_ppnt->p_type) {
+		case PT_GNU_STACK:
 			if (elf_ppnt->p_flags & PF_X)
 				executable_stack = EXSTACK_ENABLE_X;
 			else
 				executable_stack = EXSTACK_DISABLE_X;
+			break;
 		}
+	}
+
+	/* Some simple consistency checks for the interpreter */
+	if (elf_interpreter) {
+		retval = -ELIBBAD;
+		/* Not an ELF interpreter */
+		if (memcmp(loc->interp_elf_ex.e_ident, ELFMAG, SELFMAG) != 0)
+			goto out_free_dentry;
+		/* Verify the interpreter has a valid arch */
+		if (!elf_check_arch(&loc->interp_elf_ex))
+			goto out_free_dentry;
+
+		/* Load the interpreter program headers */
+		interp_elf_phdata = load_elf_phdrs(tsk, &loc->interp_elf_ex,
+						   interpreter);
+		if (!interp_elf_phdata)
+			goto out_free_dentry;
 	}
 
 	/*
@@ -463,6 +688,8 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 	setup_new_exec(tsk, bprm);
 
 	/*
+	 * Do this so that we can load the interpreter.
+	 *
 	 * Adjust previously allocated temporary stack vma
 	 * shift everything down if needed:
 	 */
@@ -471,13 +698,6 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		goto out_free_ph;
 
 	tsk->mm->start_stack = bprm->p;
-
-	elf_bss = 0;
-	elf_brk = 0;
-	start_code = ~0UL;
-	end_code = 0;
-	start_data = 0;
-	end_data = 0;
 
 	/*
 	 * Now we do a little grungy work by mmapping the ELF image into
@@ -533,17 +753,66 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		elf_flags = MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE;
 
 		vaddr = elf_ppnt->p_vaddr;
+		/*
+		 * If we are loading ET_EXEC or we have already performed
+		 * the ET_DYN load_addr calculations, proceed normally.
+		 */
 		if (loc->elf_ex.e_type == ET_EXEC || load_addr_set) {
 			elf_flags |= MAP_FIXED;
 		} else if (loc->elf_ex.e_type == ET_DYN) {
 			/*
-			 * Lego Specific:
-			 * Dynamic linked files are not supported. 
-			 * Should not come here as type is verified.
+			 * This logic is run once for the first LOAD Program
+			 * Header for ET_DYN binaries to calculate the
+			 * randomization (load_bias) for all the LOAD
+			 * Program Headers, and to calculate the entire
+			 * size of the ELF mapping (total_size). (Note that
+			 * load_addr_set is set to true later once the
+			 * initial mapping is performed.)
+			 *
+			 * There are effectively two types of ET_DYN
+			 * binaries: programs (i.e. PIE: ET_DYN with INTERP)
+			 * and loaders (ET_DYN without INTERP, since they
+			 * _are_ the ELF interpreter). The loaders must
+			 * be loaded away from programs since the program
+			 * may otherwise collide with the loader (especially
+			 * for ET_EXEC which does not have a randomized
+			 * position). For example to handle invocations of
+			 * "./ld.so someprog" to test out a new version of
+			 * the loader, the subsequent program that the
+			 * loader loads must avoid the loader itself, so
+			 * they cannot share the same load range. Sufficient
+			 * room for the brk must be allocated with the
+			 * loader as well, since brk must be available with
+			 * the loader.
+			 *
+			 * Therefore, programs are loaded offset from
+			 * ELF_ET_DYN_BASE and loaders are loaded into the
+			 * independently randomized mmap region (0 load_bias
+			 * without MAP_FIXED).
 			 */
-			BUG();
-			retval = -ENOEXEC;
-			goto out_free_ph;
+
+			loader_debug("ET_DYN: shared object file. (%s)", elf_interpreter);
+			if (elf_interpreter) {
+				load_bias = ELF_ET_DYN_BASE;
+				elf_flags |= MAP_FIXED;
+			} else
+				load_bias = 0;
+
+			/*
+			 * Since load_bias is used for all subsequent loading
+			 * calculations, we must lower it by the first vaddr
+			 * so that the remaining calculations based on the
+			 * ELF vaddrs will be correctly offset. The result
+			 * is then page aligned.
+			 */
+			load_bias = ELF_PAGESTART(load_bias - vaddr);
+
+			total_size = total_mapping_size(elf_phdata,
+							loc->elf_ex.e_phnum);
+			if (!total_size) {
+				retval = -EINVAL;
+				goto out_free_dentry;
+			}
 		}
 
 		error = elf_map(tsk, bprm->file, load_bias + vaddr, elf_ppnt,
@@ -559,10 +828,10 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 			load_addr_set = 1;
 			load_addr = (elf_ppnt->p_vaddr - elf_ppnt->p_offset);
 			if (loc->elf_ex.e_type == ET_DYN) {
-				/* Lego Specific */
-				BUG();
-				retval = -ENOEXEC;
-				goto out_free_ph;
+				load_bias += error -
+				             ELF_PAGESTART(load_bias + vaddr);
+				load_addr += load_bias;
+				reloc_func_desc = load_bias;
 			}
 		}
 
@@ -630,16 +899,43 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		goto out_free_ph;
 	}
 
-	/*
-	 * e_entry is the VA to which the system first transfers control
-	 * Not the start_code! Normally, it is the <_start> function.
-	 */
-	elf_entry = loc->elf_ex.e_entry;
-	if (BAD_ADDR(elf_entry)) {
-		retval = -EINVAL;
-		goto out_free_ph;
+	if (elf_interpreter) {
+		unsigned long interp_map_addr = 0;
+
+		elf_entry = load_elf_interp(tsk, &loc->interp_elf_ex,
+					    interpreter,
+					    &interp_map_addr,
+					    load_bias, interp_elf_phdata);
+		if (!IS_ERR((void *)elf_entry)) {
+			/*
+			 * load_elf_interp() returns relocation
+			 * adjustment
+			 */
+			interp_load_addr = elf_entry;
+			elf_entry += loc->interp_elf_ex.e_entry;
+		}
+		if (BAD_ADDR(elf_entry)) {
+			retval = IS_ERR((void *)elf_entry) ?
+					(int)elf_entry : -EINVAL;
+			goto out_free_dentry;
+		}
+		reloc_func_desc = interp_load_addr;
+
+		put_lego_file(interpreter);
+		kfree(elf_interpreter);
+	} else {
+		/*
+		 * e_entry is the VA to which the system first transfers control
+		 * Not the start_code! Normally, it is the <_start> function.
+		 */
+		elf_entry = loc->elf_ex.e_entry;
+		if (BAD_ADDR(elf_entry)) {
+			retval = -EINVAL;
+			goto out_free_dentry;
+		}
 	}
 
+	kfree(interp_elf_phdata);
 	kfree(elf_phdata);
 
 #ifdef ARCH_HAS_SETUP_ADDITIONAL_PAGES
@@ -677,6 +973,12 @@ out_ret:
 	return retval;
 
 	/* error cleanup */
+out_free_dentry:
+	kfree(interp_elf_phdata);
+	if (interpreter)
+		put_lego_file(interpreter);
+out_free_interp:
+	kfree(elf_interpreter);
 out_free_ph:
 	kfree(elf_phdata);
 	goto out;
