@@ -10,9 +10,12 @@
 #include <lego/stat.h>
 #include <lego/files.h>
 #include <lego/sched.h>
+#include <lego/getcpu.h>
 #include <lego/utsname.h>
 #include <lego/syscalls.h>
 #include <processor/pcache.h>
+
+#include <asm/numa.h>
 
 /* Non-implemented system calls get redirected here. */
 asmlinkage long sys_ni_syscall(void)
@@ -199,6 +202,25 @@ SYSCALL_DEFINE1(setgid, gid_t, gid)
 	return 0;
 }
 
+/*
+ * TODO:
+ * This is a vDSO syscall in Linux.
+ * If later on we found applications use this syscall a lot, we should probably
+ * add vDSO support.
+ */
+SYSCALL_DEFINE3(getcpu, unsigned __user *, cpup, unsigned __user *, nodep,
+		struct getcpu_cache __user *, unused)
+{
+	int err = 0;
+	int cpu = smp_processor_id();
+
+	if (cpup)
+		err |= put_user(cpu, cpup);
+	if (nodep)
+		err |= put_user(cpu_to_node(cpu), nodep);
+	return err ? -EFAULT : 0;
+}
+
 #ifndef CONFIG_FUTEX
 SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
 		size_t, len)
@@ -355,6 +377,12 @@ SYSCALL_DEFINE1(pcache_stat, struct pcache_stat __user *, statbuf)
 }
 
 SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(getcpu, unsigned __user *, cpup, unsigned __user *, nodep,
+		struct getcpu_cache __user *, unused)
 {
 	BUG();
 }
