@@ -935,7 +935,8 @@ static int load_elf_binary(struct lego_task_struct *tsk, struct lego_binprm *bpr
 		}
 	}
 
-	kfree(interp_elf_phdata);
+	if (interp_elf_phdata)
+		kfree(interp_elf_phdata);
 	kfree(elf_phdata);
 
 #ifdef ARCH_HAS_SETUP_ADDITIONAL_PAGES
