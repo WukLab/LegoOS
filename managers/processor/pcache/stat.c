@@ -23,8 +23,9 @@ DEFINE_PER_CPU(struct pcache_event_stat, pcache_event_stats) = {{0}};
 
 static const char *const pcache_event_text[] = {
 	"nr_pgfault",
-	"nr_wp_pgfault",
-	"nr_wp_cow_pgfault",
+	"nr_pgfault_wp",
+	"nr_pgfault_wp_cow",
+	"nr_pgfault_wp_reuse",
 	"nr_pgfault_due_to_concurrent_eviction",	/* perset list specific */
 	"nr_pcache_fill_from_memory",
 	"nr_pcache_fill_from_victim",			/* victim cache specific */

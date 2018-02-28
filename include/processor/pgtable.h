@@ -28,12 +28,15 @@ void free_pgd_range(struct mm_struct *mm,
 void unmap_page_range(struct mm_struct *mm,
 		      unsigned long addr, unsigned long end);
 
-int copy_page_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
-		    struct p_vm_area_struct *vma);
+/* Callback for fork() */
+int pcache_copy_page_range(struct mm_struct *dst, struct mm_struct *src,
+			   unsigned long addr, unsigned long end,
+			   unsigned long vm_flags, struct task_struct *dst_task);
 
 void release_pgtable(struct task_struct *tsk,
 		     unsigned long __user start, unsigned long __user end);
 
+/* Callback for mremap() */
 unsigned long move_page_tables(struct task_struct *tsk,
 			       unsigned long __user old_addr,
 			       unsigned long __user new_addr, unsigned long len);

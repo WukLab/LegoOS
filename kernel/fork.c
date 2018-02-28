@@ -350,7 +350,7 @@ static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 	if (!mm_init(mm, tsk))
 		return NULL;
 
-	err = fork_dup_pcache(mm, oldmm);
+	err = fork_dup_pcache(tsk, mm, oldmm);
 	if (err)
 		goto out;
 

@@ -8,9 +8,8 @@
  */
 
 /*
- * NOTE:
- * Only processor manager need those functions to manipulate
- * the emulated pgtable. Those functions work on user pgtable ranges.
+ * Only processor manager needs those functions to manipulate the pgtable
+ * used to emulate pcache. Those functions work on user pgtable ranges.
  */
 
 #include <lego/mm.h>
@@ -18,6 +17,7 @@
 #include <lego/string.h>
 #include <lego/kernel.h>
 #include <lego/memblock.h>
+#include <processor/pcache.h>
 #include <processor/pgtable.h>
 
 #include <asm/io.h>
@@ -149,18 +149,8 @@ zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 
 			pgtable_debug("addr: %#lx, pte: %p", addr, pte);
 
-			/*
-			 * TODO:
-			 * Deadlock, temporary fix
-			 * Other rmap code do: lock pcache, lock pte
-			 * But here we do: lock pte, lock pcache.
-			 *
-			 * To avoid deadlock, release the pte lock (will not
-			 * impact correctness, but hurt performance.)
-			 */
-			spin_unlock(ptl);
-			pcache_zap_pte(mm, addr, ptent, pte);
-			spin_lock(ptl);
+			/* Let pcache clear bookkeeping */
+			pcache_zap_pte(mm, addr, ptent, pte, ptl);
 			continue;
 		}
 
@@ -259,24 +249,20 @@ void release_pgtable(struct task_struct *tsk,
 	free_pgd_range(mm, start, end);
 }
 
-/*
- * TODO:
- * Callback to pcache, let pcache update metadata keeping if any.
- */
 static inline int
-copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
-		pte_t *dst_pte, pte_t *src_pte, struct p_vm_area_struct *vma,
-		unsigned long addr)
+pcache_copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
+		pte_t *dst_pte, pte_t *src_pte, unsigned long addr,
+		unsigned long vm_flags, struct task_struct *dst_task)
 {
-	unsigned long vm_flags = vma->vm_flags;
 	pte_t pte = *src_pte;
+	struct pcache_meta *pcm;
 
 	/*
-	 * PTE contains position in swap or file
+	 * PTE contains position in swap or file?
 	 * Lego does not have any swap now, so skip.
 	 */
 	if (unlikely(!pte_present(pte))) {
-		WARN_ONCE(1, "No swap file, this case should NOT happen!");
+		WARN_ON(1);
 		goto pte_set;
 	}
 
@@ -286,6 +272,12 @@ copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	 */
 	if (is_cow_mapping(vm_flags)) {
 		ptep_set_wrprotect(src_pte);
+		/*
+		 * TODO:
+		 * Should be batched
+		 * Doing this one by one make fork() very slow.
+		 */
+		flush_tlb_mm_range(src_mm, addr, addr + PAGE_SIZE);
 		pte = pte_wrprotect(pte);
 	}
 
@@ -299,12 +291,24 @@ copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 
 pte_set:
 	pte_set(dst_pte, pte);
+
+	/*
+	 * Add one more reverse mapping.
+	 * Do this after pet_set because rmap will be validated.
+	 */
+	pcm = pte_to_pcache_meta(pte);
+	if (pcm) {
+		get_pcache(pcm);
+		pcache_add_rmap(pcm, dst_pte, addr, dst_mm, dst_task);
+	}
 	return 0;
 }
 
-static int copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
-		   pmd_t *dst_pmd, pmd_t *src_pmd, struct p_vm_area_struct *vma,
-		   unsigned long addr, unsigned long end)
+static inline int
+pcache_copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
+		      pmd_t *dst_pmd, pmd_t *src_pmd,
+		      unsigned long addr, unsigned long end,
+		      unsigned long vm_flags, struct task_struct *dst_task)
 {
 	pte_t *orig_src_pte, *orig_dst_pte;
 	pte_t *src_pte, *dst_pte;
@@ -317,8 +321,6 @@ static int copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 
 	src_pte = pte_offset(src_pmd, addr);
 	src_ptl = pte_lockptr(src_mm, src_pmd);
-
-	/* we may not using per-PTE lock */
 	if (src_ptl != dst_ptl)
 		spin_lock(src_ptl);
 
@@ -329,8 +331,7 @@ static int copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	do {
 		if (pte_none(*src_pte))
 			continue;
-		if (unlikely(copy_one_pte(dst_mm, src_mm, dst_pte, src_pte,
-					  vma, addr))) {
+		if (pcache_copy_one_pte(dst_mm, src_mm, dst_pte, src_pte, addr, vm_flags, dst_task)) {
 			ret = -ENOMEM;
 			break;
 		}
@@ -340,12 +341,14 @@ static int copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		spin_unlock(src_ptl);
 	spin_unlock(dst_ptl);
 
-	return ret;
+	return 0;
 }
 
-static inline int copy_pmd_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
-		pud_t *dst_pud, pud_t *src_pud, struct p_vm_area_struct *vma,
-		unsigned long addr, unsigned long end)
+static inline int
+pcache_copy_pmd_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
+		      pud_t *dst_pud, pud_t *src_pud,
+		      unsigned long addr, unsigned long end,
+		      unsigned long vm_flags, struct task_struct *dst_task)
 {
 	pmd_t *src_pmd, *dst_pmd;
 	unsigned long next;
@@ -353,22 +356,23 @@ static inline int copy_pmd_range(struct mm_struct *dst_mm, struct mm_struct *src
 	dst_pmd = pmd_alloc(dst_mm, dst_pud, addr);
 	if (!dst_pmd)
 		return -ENOMEM;
-
 	src_pmd = pmd_offset(src_pud, addr);
 	do {
 		next = pmd_addr_end(addr, end);
 		if (pmd_none_or_clear_bad(src_pmd))
 			continue;
-		if (unlikely(copy_pte_range(dst_mm, src_mm, dst_pmd, src_pmd,
-						vma, addr, next)))
+		if (pcache_copy_pte_range(dst_mm, src_mm, dst_pmd, src_pmd,
+						addr, next, vm_flags, dst_task))
 			return -ENOMEM;
 	} while (dst_pmd++, src_pmd++, addr = next, addr != end);
 	return 0;
 }
 
-static inline int copy_pud_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
-		pgd_t *dst_pgd, pgd_t *src_pgd, struct p_vm_area_struct *vma,
-		unsigned long addr, unsigned long end)
+static inline int
+pcache_copy_pud_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
+		      pgd_t *dst_pgd, pgd_t *src_pgd,
+		      unsigned long addr, unsigned long end,
+		      unsigned long vm_flags, struct task_struct *dst_task)
 {
 	pud_t *src_pud, *dst_pud;
 	unsigned long next;
@@ -376,42 +380,39 @@ static inline int copy_pud_range(struct mm_struct *dst_mm, struct mm_struct *src
 	dst_pud = pud_alloc(dst_mm, dst_pgd, addr);
 	if (!dst_pud)
 		return -ENOMEM;
-
 	src_pud = pud_offset(src_pgd, addr);
 	do {
 		next = pud_addr_end(addr, end);
 		if (pud_none_or_clear_bad(src_pud))
 			continue;
-		if (unlikely(copy_pmd_range(dst_mm, src_mm, dst_pud, src_pud,
-						vma, addr, next)))
+		if (pcache_copy_pmd_range(dst_mm, src_mm, dst_pud, src_pud,
+						addr, next, vm_flags, dst_task))
 			return -ENOMEM;
 	} while (dst_pud++, src_pud++, addr = next, addr != end);
 	return 0;
 }
 
 /*
- * Copy one vm_area from one task to the other. Assumes the page tables
- * already present in the new task to be cleared in the whole range
- * covered by this vma.
+ * Duplicate the pgtable used to emulate pcache.
+ * Write-protect both ends if it is COW mapping.
  */
-int copy_page_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
-		    struct p_vm_area_struct *vma)
+int pcache_copy_page_range(struct mm_struct *dst, struct mm_struct *src,
+			   unsigned long addr, unsigned long end,
+			   unsigned long vm_flags, struct task_struct *dst_task)
 {
 	pgd_t *src_pgd, *dst_pgd;
 	unsigned long next;
-	unsigned long addr = vma->vm_start;
-	unsigned long end = vma->vm_end;
 	int ret;
 
 	ret = 0;
-	dst_pgd = pgd_offset(dst_mm, addr);
-	src_pgd = pgd_offset(src_mm, addr);
+	dst_pgd = pgd_offset(dst, addr);
+	src_pgd = pgd_offset(src, addr);
 	do {
 		next = pgd_addr_end(addr, end);
 		if (pgd_none_or_clear_bad(src_pgd))
 			continue;
-		if (unlikely(copy_pud_range(dst_mm, src_mm, dst_pgd, src_pgd,
-					    vma, addr, next))) {
+		if (unlikely(pcache_copy_pud_range(dst, src, dst_pgd, src_pgd,
+					    addr, next, vm_flags, dst_task))) {
 			ret = -ENOMEM;
 			break;
 		}

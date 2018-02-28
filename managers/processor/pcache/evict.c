@@ -209,10 +209,20 @@ evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
  * @pset: the pcache set to find a line to evict
  * @address: the user virtual address who initalized this eviction
  *
+ * 1)
  * This function will try to evict one cache line from @pset.
  * If succeed, the cache line will be flushed back to its backing memory.
  * This function can be called concurrently: the selection of cache line
  * is serialized by pset lock, the real eviction procedure can be overlapped.
+ *
+ * 2)
+ * We clear pte and pcache in this sequence:
+ * 	a) unmap pte
+ * 	b) free pcache
+ * This guarantees: if pgfault routines (pcache_do_wp_page) or some rmap walkers
+ * use pte_to_pcache_meta() to get the corresponding pcm, and continues holding
+ * the pte lock while doing something to this pcm, they are guaranteed this pcm
+ * will not go away in the middle.
  *
  * Return 0 on success, otherwise on failures.
  */

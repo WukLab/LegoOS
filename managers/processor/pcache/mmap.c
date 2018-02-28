@@ -21,14 +21,24 @@
 #include <lego/memblock.h>
 
 #include <processor/pcache.h>
+#include <processor/pgtable.h>
 #include <processor/processor.h>
 
 /*
  * Called when a new process is created.
  * This share the same purpose of dup_lego_mmap() from memory side.
+ *
+ * TODO:
+ * 1) should optimize the walk, only just valid range.
+ * 2) Have real vm_flags, so avoid wrprotect shared mapping
  */
-int fork_dup_pcache(struct mm_struct *mm, struct mm_struct *oldmm)
+int fork_dup_pcache(struct task_struct *dst_task,
+		    struct mm_struct *dst_mm, struct mm_struct *src_mm)
 {
+	unsigned long vm_flags;
+
+	vm_flags = VM_MAYWRITE;
+	pcache_copy_page_range(dst_mm, src_mm, 0, TASK_SIZE, vm_flags, dst_task);
 	return 0;
 }
 

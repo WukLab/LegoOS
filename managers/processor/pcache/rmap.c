@@ -35,6 +35,10 @@ static inline void rmap_debug(const char *fmt, ...) { }
  * 	lock pset (optional)
  * 	lock pcache
  * 	lock pte
+ *
+ * And due to the rmap design, the lock ordering of pcache and pte can NOT
+ * be changed. Other code the breaks this ordering guarantee should be very
+ * careful not to introduce deadlock.
  */
 
 static struct pcache_rmap *alloc_pcache_rmap(void)
@@ -175,22 +179,6 @@ rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 				     __builtin_return_address(0));
 }
 
-static void validate_pcache_mapcount(struct pcache_meta *pcm)
-{
-	if (unlikely(atomic_read(&pcm->mapcount) > 1)) {
-		pr_warn("****\n"
-			"****    WARNING:\n"
-			"****    This is BUG if you are running _single-process_ application!\n"
-			"****    Remove this checking after we are confident about pcache!\n"
-			"****\n");
-		dump_pcache_meta(pcm, NULL);
-		dump_pcache_rmaps_locked(pcm);
-		pr_warn("****\n"
-			"****    END WARNING\n"
-			"****\n");
-	}
-}
-
 static inline pte_t *
 rmap_get_pte_unlocked(struct mm_struct *mm, unsigned long address)
 {
@@ -243,7 +231,7 @@ out:
 	pr_info("pcache_pfn: %#lx, pte_pfn: %#lx\n", pcache_pfn, _pte_pfn);
 	dump_pcache_meta(pcm, NULL);
 	dump_pcache_rmap(rmap, NULL);
-	BUG();
+	panic("Validate pcache rmap failed!");
 }
 
 #else
@@ -305,11 +293,6 @@ out:
 	return ptep;
 }
 
-static inline void validate_pcache_mapcount(struct pcache_meta *pcm)
-{
-
-}
-
 static inline void
 validate_pcache_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap)
 {
@@ -350,13 +333,20 @@ int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 	rmap->page_table = page_table;
 	rmap->address = address & PAGE_MASK;
 	rmap->owner_mm = owner_mm;
+
+	/* Must be thread group leader */
+	BUG_ON(!thread_group_leader(owner_process));
 	rmap->owner_process = owner_process;
 
 	if (likely(list_empty(&pcm->rmap)))
 		goto add;
 
-	list_for_each_entry(pos, &pcm->rmap, next)
+	/* No duplication */
+	list_for_each_entry(pos, &pcm->rmap, next) {
 		BUG_ON(pos->page_table == page_table);
+		BUG_ON(pos->owner_mm == owner_mm);
+		BUG_ON(pos->owner_process == owner_process);
+	}
 
 add:
 	ret = 0;
@@ -369,7 +359,6 @@ add:
 	 */
 	SetPcacheValid(pcm);
 
-	validate_pcache_mapcount(pcm);
 	validate_pcache_rmap(pcm, rmap);
 out:
 	unlock_pcache(pcm);
@@ -380,8 +369,8 @@ out:
  * Internal function to remove one rmap from pcm
  * @pcm is locked upon entry.
  */
-static inline void pcache_remove_rmap(struct pcache_meta *pcm,
-				      struct pcache_rmap *rmap)
+static inline void __pcache_remove_rmap(struct pcache_meta *pcm,
+				        struct pcache_rmap *rmap)
 {
 	list_del(&rmap->next);
 	free_pcache_rmap(rmap);
@@ -392,6 +381,67 @@ static inline void pcache_remove_rmap(struct pcache_meta *pcm,
 	 */
 	if (likely(pcache_mapcount_dec_and_test(pcm)))
 		ClearPcacheValid(pcm);
+}
+
+struct pcache_remove_rmap_info {
+	struct mm_struct *mm;
+	unsigned long address;
+	pte_t *pte;
+	bool removed;
+};
+
+static inline bool matched_rmap_for_remove(struct pcache_rmap *rmap,
+					   struct pcache_remove_rmap_info *rri)
+{
+	if (rmap->page_table == rri->pte &&
+	    rmap->owner_mm   == rri->mm  &&
+	    rmap->address    == rri->address)
+		return true;
+	return false;
+}
+
+static int __pcache_remove_rmap_one(struct pcache_meta *pcm,
+				    struct pcache_rmap *rmap, void *arg)
+{
+	struct pcache_remove_rmap_info *rri = arg;
+
+	if (likely(matched_rmap_for_remove(rmap, rri))) {
+		rmap_debug("tgid: %u [%#lx %p]",
+			rmap->owner_process->tgid, rmap->address,
+			rmap->page_table);
+
+		__pcache_remove_rmap(pcm, rmap);
+		rri->removed = true;
+
+		/* Break the rmap walk loop */
+		return PCACHE_RMAP_SUCCEED;
+	}
+	return PCACHE_RMAP_AGAIN;
+}
+
+/*
+ * @pcm is locked when called
+ * Not consistent with pcache_add_rmap, I know.
+ */
+void pcache_remove_rmap(struct pcache_meta *pcm, pte_t *ptep, unsigned long address,
+			struct mm_struct *owner_mm, struct task_struct *owner_process)
+{
+	struct pcache_remove_rmap_info rri = {
+		.mm = owner_mm,
+		.address = address & PAGE_MASK,
+		.pte = ptep,
+		.removed = false,
+	};
+	struct rmap_walk_control rwc = {
+		.arg = &rri,
+		.rmap_one = __pcache_remove_rmap_one,
+	};
+
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
+	rmap_walk(pcm, &rwc);
+
+	/* Well, failure is not an option */
+	BUG_ON(!rri.removed);
 }
 
 struct pcache_move_pte_info {
@@ -498,7 +548,7 @@ static int __pcache_move_pte_slowpath(struct pcache_meta *old_pcm,
 	new_line = pcache_meta_to_kva(new_pcm);
 	memcpy(new_line, old_line, PCACHE_LINE_SIZE);
 
-	pcache_remove_rmap(old_pcm, rmap);
+	__pcache_remove_rmap(old_pcm, rmap);
 	mpi->updated = true;
 
 	rmap_debug("tgid: %d [va pa]: [%#lx %p] -> [%#lx %p]",
@@ -624,7 +674,7 @@ static int __pcache_zap_pte(struct pcache_meta *pcm,
 			rmap->owner_process->tgid, rmap->address,
 			rmap->page_table);
 
-		pcache_remove_rmap(pcm, rmap);
+		__pcache_remove_rmap(pcm, rmap);
 		zpc->zapped = true;
 
 		/* Break the rmap walk loop */
@@ -639,9 +689,11 @@ static int __pcache_zap_pte(struct pcache_meta *pcm,
  * Called from zap_pte_range() when the emulated page table is cleared.
  * When called, the pte is already cleared, thus @pte is already 0,
  * while @ptent holds the previous pte content.
+ *
+ * We enter with @pte locked.
  */
 void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
-		    pte_t ptent, pte_t *pte)
+		    pte_t ptent, pte_t *pte, spinlock_t *ptl)
 {
 	struct pcache_meta *pcm;
 	struct pcache_zap_pte_control zpc = {
@@ -658,7 +710,27 @@ void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
 	pcm = pte_to_pcache_meta(ptent);
 	BUG_ON(!pcm);
 
-	lock_pcache(pcm);
+	/*
+	 * We have a strict lock ordering everyone should obey:
+	 * 	lock pcache
+	 * 	lock pte
+	 * The caller already locked pte, thus we should avoid deadlock here
+	 * by droping pte lock first and then acquire both of them in order.
+	 */
+	if (unlikely(!trylock_pcache(pcm))) {
+		get_pcache(pcm);
+		spin_unlock(ptl);
+
+		lock_pcache(pcm);
+		spin_lock(ptl);
+		put_pcache(pcm);
+		/*
+		 * We zeroed the pte before calling this function
+		 * and we don't care about the content anyway.
+		 * So no need to check if pte content was changed.
+		 */
+	}
+
 	rmap_walk(pcm, &rwc);
 	unlock_pcache(pcm);
 
@@ -687,7 +759,7 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 				   rmap->address,
 				   rmap->address + PAGE_SIZE -1);
 
-	pcache_remove_rmap(pcm, rmap);
+	__pcache_remove_rmap(pcm, rmap);
 
 	spin_unlock(ptl);
 	return ret;
