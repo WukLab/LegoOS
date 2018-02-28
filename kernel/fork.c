@@ -337,6 +337,7 @@ struct mm_struct *mm_alloc(void)
 static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 {
 	struct mm_struct *mm, *oldmm;
+	int err;
 
 	oldmm = current->mm;
 
@@ -349,12 +350,15 @@ static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 	if (!mm_init(mm, tsk))
 		return NULL;
 
-	/*
-	 * TODO:
-	 * May need to dup the pcache vm array here.
-	 */
+	err = fork_dup_pcache(mm, oldmm);
+	if (err)
+		goto out;
 
 	return mm;
+
+out:
+	mmput(mm);
+	return NULL;
 }
 
 /*

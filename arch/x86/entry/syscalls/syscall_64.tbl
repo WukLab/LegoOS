@@ -69,6 +69,7 @@
 234	common	tgkill			sys_tgkill
 273	64	set_robust_list		sys_set_robust_list
 274	64	get_robust_list		sys_get_robust_list
+309	common	getcpu			sys_getcpu
 
 #
 # Lego specific SYSCALL

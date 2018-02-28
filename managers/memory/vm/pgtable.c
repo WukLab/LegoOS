@@ -283,14 +283,8 @@ void lego_free_pgtables(struct vm_area_struct *vma,
 	}
 }
 
-/*
- * copy one vm_area from one task to the other. Assumes the page tables
- * already present in the new task to be cleared in the whole range
- * covered by this vma.
- */
-
 static inline int
-copy_one_pte(struct lego_mm_struct *dst_mm, struct lego_mm_struct *src_mm,
+lego_copy_one_pte(struct lego_mm_struct *dst_mm, struct lego_mm_struct *src_mm,
 		pte_t *dst_pte, pte_t *src_pte, struct vm_area_struct *vma,
 		unsigned long addr)
 {
@@ -298,7 +292,7 @@ copy_one_pte(struct lego_mm_struct *dst_mm, struct lego_mm_struct *src_mm,
 	pte_t pte = *src_pte;
 
 	/*
-	 * PTE contains position in swap or file
+	 * PTE contains position in swap or file?
 	 * Lego does not have any swap now, so skip.
 	 */
 	if (unlikely(!pte_present(pte)))
@@ -321,18 +315,12 @@ copy_one_pte(struct lego_mm_struct *dst_mm, struct lego_mm_struct *src_mm,
 		pte = pte_mkclean(pte);
 	pte = pte_mkold(pte);
 
-	/*
-	 * TODO:
-	 * If we need rmap in memory component
-	 * we need to increment 1 mapcount here!
-	 */
-
 pte_set:
 	pte_set(dst_pte, pte);
 	return 0;
 }
 
-static int copy_pte_range(struct lego_mm_struct *dst_mm,
+static int lego_copy_pte_range(struct lego_mm_struct *dst_mm,
 			  struct lego_mm_struct *src_mm,
 		   	  pmd_t *dst_pmd, pmd_t *src_pmd,
 			  struct vm_area_struct *vma,
@@ -359,7 +347,7 @@ static int copy_pte_range(struct lego_mm_struct *dst_mm,
 	do {
 		if (pte_none(*src_pte))
 			continue;
-		if (copy_one_pte(dst_mm, src_mm, dst_pte, src_pte, vma, addr)) {
+		if (lego_copy_one_pte(dst_mm, src_mm, dst_pte, src_pte, vma, addr)) {
 			ret = -ENOMEM;
 			break;
 		}
@@ -372,7 +360,7 @@ static int copy_pte_range(struct lego_mm_struct *dst_mm,
 	return 0;
 }
 
-static inline int copy_pmd_range(struct lego_mm_struct *dst_mm,
+static inline int lego_copy_pmd_range(struct lego_mm_struct *dst_mm,
 				 struct lego_mm_struct *src_mm,
 				 pud_t *dst_pud, pud_t *src_pud,
 				 struct vm_area_struct *vma,
@@ -389,14 +377,14 @@ static inline int copy_pmd_range(struct lego_mm_struct *dst_mm,
 		next = pmd_addr_end(addr, end);
 		if (pmd_none_or_clear_bad(src_pmd))
 			continue;
-		if (copy_pte_range(dst_mm, src_mm, dst_pmd, src_pmd,
+		if (lego_copy_pte_range(dst_mm, src_mm, dst_pmd, src_pmd,
 						vma, addr, next))
 			return -ENOMEM;
 	} while (dst_pmd++, src_pmd++, addr = next, addr != end);
 	return 0;
 }
 
-static inline int copy_pud_range(struct lego_mm_struct *dst_mm,
+static inline int lego_copy_pud_range(struct lego_mm_struct *dst_mm,
 				 struct lego_mm_struct *src_mm,
 				 pgd_t *dst_pgd, pgd_t *src_pgd,
 				 struct vm_area_struct *vma,
@@ -413,7 +401,7 @@ static inline int copy_pud_range(struct lego_mm_struct *dst_mm,
 		next = pud_addr_end(addr, end);
 		if (pud_none_or_clear_bad(src_pud))
 			continue;
-		if (copy_pmd_range(dst_mm, src_mm, dst_pud, src_pud,
+		if (lego_copy_pmd_range(dst_mm, src_mm, dst_pud, src_pud,
 						vma, addr, next))
 			return -ENOMEM;
 	} while (dst_pud++, src_pud++, addr = next, addr != end);
@@ -424,6 +412,9 @@ static inline int copy_pud_range(struct lego_mm_struct *dst_mm,
  * This function is called during fork() time.
  * It will copy the vma page table mapping from source mm to destination mm.
  * It will make writable && non-shared pages RO for both mm (for COW).
+ *
+ * TODO:
+ * There a lot ways to implement the
  */
 int lego_copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
 			 struct vm_area_struct *vma)
@@ -441,7 +432,7 @@ int lego_copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
 		next = pgd_addr_end(addr, end);
 		if (pgd_none_or_clear_bad(src_pgd))
 			continue;
-		if (unlikely(copy_pud_range(dst, src, dst_pgd, src_pgd,
+		if (unlikely(lego_copy_pud_range(dst, src, dst_pgd, src_pgd,
 					    vma, addr, next))) {
 			ret = -ENOMEM;
 			break;

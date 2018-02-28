@@ -32,6 +32,9 @@ static inline void fork_debug(const char *fmt, ...) { }
  * This function duplicate mmap layout from parent,
  * which is the basic COW guarantee of fork().
  *
+ * TODO: Yutong
+ * Besides duplicating the address space, we also need to duplicate the free pool
+ *
  * The whole lego_mm_struct will be replcaed by a new one
  * when execve() is called. This is also what execve() guarantees.
  * Check managers/memory/loader/vm.c for detail.
@@ -74,10 +77,11 @@ static int dup_lego_mmap(struct lego_mm_struct *mm,
 			~(VM_LOCKED|VM_LOCKONFAULT|VM_UFFD_MISSING|VM_UFFD_WP);
 		tmp->vm_next = tmp->vm_prev = NULL;
 
-		/* Hold 1 more ref */
 		file = tmp->vm_file;
-		if (file)
+		if (file) {
+			/* Hold 1 more ref is enough now */
 			get_lego_file(file);
+		}
 
 		/*
 		 * Link in the new vma and copy the page table entries.

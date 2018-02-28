@@ -7,6 +7,12 @@
  * (at your option) any later version.
  */
 
+/*
+ * Things about bulk pgtable operations, mostly for fork, exit.
+ * Probably we also want to move pcache_zap, pcache_move here.
+ * Also, the free pool code.
+ */
+
 #include <lego/mm.h>
 #include <lego/slab.h>
 #include <lego/log2.h>
@@ -16,6 +22,15 @@
 
 #include <processor/pcache.h>
 #include <processor/processor.h>
+
+/*
+ * Called when a new process is created.
+ * This share the same purpose of dup_lego_mmap() from memory side.
+ */
+int fork_dup_pcache(struct mm_struct *mm, struct mm_struct *oldmm)
+{
+	return 0;
+}
 
 /*
  * Called when a process exit

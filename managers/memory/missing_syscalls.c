@@ -17,6 +17,7 @@
 #include <lego/files.h>
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
+#include <lego/getcpu.h>
 #include <processor/pcache.h>
 
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
