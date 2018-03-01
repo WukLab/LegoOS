@@ -205,10 +205,13 @@ static void rest_init(void)
 	cpu_idle();
 }
 
+void __init patch_init_task(void);
+
 asmlinkage void __init start_kernel(void)
 {
 	local_irq_disable();
 
+	patch_init_task();
 	setup_task_stack_end_magic(&init_task);
 	mm_init_cpumask(&init_mm);
 

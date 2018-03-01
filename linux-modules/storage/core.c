@@ -22,8 +22,7 @@
 #include <linux/mutex.h>
 #include <linux/mm.h>
 
-#define MAX_RXBUF_SIZE	\
-	(5*BLK_SIZE+sizeof(__u32)+sizeof(struct m2s_read_write_payload))
+#define MAX_RXBUF_SIZE	(129 * PAGE_SIZE)
 
 struct info_struct {
 	uintptr_t desc;

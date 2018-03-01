@@ -16,6 +16,7 @@
 #include <lego/comp_common.h>	/* must come at last */
 
 #include <processor/processor_types.h>
+#include <processor/node.h>
 
 #ifdef CONFIG_COMP_PROCESSOR
 

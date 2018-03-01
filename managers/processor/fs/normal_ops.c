@@ -37,7 +37,6 @@ static int normal_p2s_open(struct file *f)
 	void *msg;
 	u32 len_msg, *opcode;
 	struct p2s_open_struct *payload;
-
 	len_msg = sizeof(*opcode) + sizeof(*payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (!msg)
@@ -55,7 +54,8 @@ static int normal_p2s_open(struct file *f)
 	file_debug("f_name: %s, mode: 0%o, flags: %x",
 		payload->filename, payload->permission, payload->flags);
 
-	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval, sizeof(retval), false);
+	ibapi_send_reply_imm(current_storage_home_node(), msg, len_msg,
+			     &retval, sizeof(retval), false);
 	if (retval < 0)
 		pr_debug("%s: %s\n", FUNC, ret_to_string(ERR_TO_LEGO_RET((long)retval)));
 
@@ -76,6 +76,7 @@ static ssize_t normal_p2m_read(struct file *f, char __user *buf,
 	void *retbuf, *msg, *content;
 	struct common_header *hdr;
 	struct p2m_read_write_payload *payload;
+	int mem_node;	/* = pgcache_node if defined or memory homenode */
 
 	len_retbuf = sizeof(ssize_t) + count;
 	retbuf = kmalloc(len_retbuf, GFP_KERNEL);
@@ -105,8 +106,10 @@ static ssize_t normal_p2m_read(struct file *f, char __user *buf,
 	payload->len = count;
 	payload->offset = *off;
 
-	retlen = ibapi_send_reply_imm(current_memory_home_node(), msg, len_msg,
+	mem_node = current_pgcache_home_node();
+	retlen = ibapi_send_reply_imm(mem_node, msg, len_msg,
 				      retbuf, len_retbuf, false);
+
 	if (unlikely(retlen == sizeof(ssize_t))) {
 		retval = *(ssize_t *)retbuf;
 		file_debug("%s", ret_to_string(ERR_TO_LEGO_RET(retval)));
@@ -154,6 +157,7 @@ static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
 	void *msg, *content;
 	struct common_header *hdr;
 	struct p2m_read_write_payload *payload;
+	int mem_node;
 
 	len_msg = sizeof(*hdr) + sizeof(*payload) + count;
 	msg = kmalloc(len_msg, GFP_KERNEL);
@@ -173,6 +177,7 @@ static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
 	payload->uid = current_uid();
 	payload->flags = f->f_flags;
 	payload->len = count;
+	
 	payload->offset = (*off);
 	strncpy(payload->filename, f->f_name, MAX_FILENAME_LENGTH);
 
@@ -184,7 +189,8 @@ static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
 	}
 
 	/* Send to memory home node */
-	retlen = ibapi_send_reply_imm(current_memory_home_node(), msg, len_msg,
+	mem_node = current_pgcache_home_node();
+	retlen = ibapi_send_reply_imm(mem_node, msg, len_msg,
 			&retval, sizeof(retval), false);
 	if (unlikely(retlen != sizeof(retval))) {
 		WARN_ON(1);

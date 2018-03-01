@@ -10,29 +10,29 @@
 #ifndef _LEGO_PROCESSOR_PROCESSOR_TYPES_H_
 #define _LEGO_PROCESSOR_PROCESSOR_TYPES_H_
 
+#include <lego/types.h>
 #include <lego/atomic.h>
 
 #ifdef CONFIG_COMP_PROCESSOR
 
+/*
+ * If you add anything to structure, please check if these fields
+ * need to be initlizaed in the init_task.c
+ */
 struct processor_manager {
 	int		home_node;
 #ifdef CONFIG_CHECKPOINT
 	atomic_t	process_barrier;
 #endif
+
+#ifdef CONFIG_GSM
+	int		pgcache_node;
+	int		storage_node;
+#endif
 };
 
-#define get_memory_home_node(tsk) ({		\
-	tsk->pm_data.home_node;			\
-})
-
-#define set_memory_home_node(tsk, new)		\
-	do {					\
-		tsk->pm_data.home_node = new;	\
-	} while (0)
-
-#define current_memory_home_node() ({		\
-	get_memory_home_node(current);		\
-})
+#define UNSET_PGCACHE_NODE	(INT_MAX)
+#define UNSET_STORAGE_NODE	(INT_MAX)
 
 #endif /* COMP_PROSESSOR */
 

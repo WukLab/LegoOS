@@ -94,29 +94,37 @@ int metadata_init(void)
  */
 
 int get_metadata(void){
-	printk("get_metadata enter.\n\n");
-	char metadata_buf[4096];
+	char *metadata_buf;
 	ssize_t ret;
 	struct file *metadata_filp;
+	loff_t pos = 0;
+	mm_segment_t old_fs;
+	size_t len_meta;
+	
+	printk("get_metadata enter.\n\n");
 	metadata_filp = filp_open(FILE_METADATA, O_RDONLY, 0);
 	if (IS_ERR(metadata_filp)){
 		printk("get_metadata : Error to open metadata file.\n");
 		return OP_FAILURE;
 	}
 
-	loff_t pos = 0;
-	mm_segment_t old_fs;
+	len_meta = sizeof(struct metadata) * MAX_SIZE;
+	metadata_buf = kmalloc(len_meta, GFP_KERNEL);
+	if (unlikely(!metadata_buf)) {
+		return OP_FAILURE;
+	}
+
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
-	ret = metadata_filp->f_op->read(metadata_filp, metadata_buf, sizeof(struct metadata)*MAX_SIZE, &pos);
+	ret = metadata_filp->f_op->read(metadata_filp, metadata_buf, len_meta, &pos);
 	set_fs(old_fs);
 
-	if (ret == -EFAULT || ret != sizeof(struct metadata)*MAX_SIZE){
+	if (ret == -EFAULT || ret != len_meta){
 		printk("get_metadata : Incorrect metadata file length [%lu].\n", ret);
 		return OP_FAILURE;
 	}
 	
-	memcpy(global_metadata, metadata_buf, sizeof(struct metadata)*MAX_SIZE);
+	memcpy(global_metadata, metadata_buf, len_meta);
 	printk("get_metadata success.\n");
 	return OP_SUCCESS;
 }
@@ -127,10 +135,14 @@ int get_metadata(void){
 
 int update_metadata(void){
 	ssize_t ret;
+	struct file *filp;
+	loff_t pos = 0;
+	mm_segment_t old_fs;
+	size_t len_meta;
 
+	len_meta = sizeof(struct metadata) * MAX_SIZE;
 	//metadata_lock;
 	mutex_lock(&metadata_lock);
-	struct file *filp;
 	filp = filp_open(FILE_METADATA, O_WRONLY, 0);
 	if (IS_ERR(global_metadata) || IS_ERR(filp)){
 		filp_close(filp, NULL);
@@ -138,13 +150,11 @@ int update_metadata(void){
 		mutex_unlock(&metadata_lock);
 		return OP_FAILURE;
 	}
-	loff_t pos = 0;
-	mm_segment_t old_fs;
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
-	ret = filp->f_op->write(filp, global_metadata, sizeof(struct metadata)*MAX_SIZE, &pos);
+	ret = filp->f_op->write(filp, (char *) global_metadata, len_meta, &pos);
 	set_fs(old_fs);
-	if (ret == -EFAULT || ret != sizeof(struct metadata)*MAX_SIZE){
+	if (ret == -EFAULT || ret != len_meta){
 		filp_close(filp, NULL);
 		//release_lock;
 		mutex_unlock(&metadata_lock);

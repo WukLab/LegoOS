@@ -13,6 +13,8 @@
 #include <lego/sched.h>
 #include <lego/sched_rt.h>
 #include <lego/signal.h>
+#include <lego/comp_common.h>
+#include <processor/processor.h>
 
 #if 0
 #define INIT_SCHED_POLICY						\
@@ -132,6 +134,18 @@ static struct files_struct init_files = {
 static struct signal_struct init_signals = INIT_SIGNALS(init_signals);
 static struct sighand_struct init_sighand = INIT_SIGHAND(init_sighand);
 
+#ifdef CONFIG_COMP_PROCESSOR
+static struct processor_manager	init_pm_data = {
+#ifdef CONFIG_GSM
+	.pgcache_node		= UNSET_PGCACHE_NODE,
+	.storage_node		= UNSET_STORAGE_NODE,
+#endif
+#ifdef CONFIG_CHECKPOINT
+	.process_barrier	= ATOMIC_INIT(0),
+#endif
+};
+#endif
+
 struct task_struct init_task = INIT_TASK(init_task);
 
 /*
@@ -141,3 +155,10 @@ struct task_struct init_task = INIT_TASK(init_task);
 union thread_union init_thread_union __init_task_data = {
 	INIT_THREAD_INFO(init_task)
 };
+
+void __init patch_init_task(void)
+{
+#ifdef CONFIG_COMP_PROCESSOR
+	init_task.pm_data = init_pm_data;
+#endif
+}

@@ -73,7 +73,15 @@ static int handle_special_stat(char *f_name)
 }
 
 #ifndef CONFIG_USE_RAMFS
-static int get_kstat_from_storage(char *filepath, bool is_lstat, struct kstat *stat)
+/*
+ * get_kstat_from_storage: get corresponding stats specific path
+ * @filepath: full pathname on storage side
+ * @stat: address of a struct kstat to be filled with
+ * @flag: flag passed to storage side for fstatat request
+ * return value: 0 on success, -errno on fail
+ */
+
+static int get_kstat_from_storage(char *filepath, struct kstat *stat, int flag)
 {
 	u32 *opcode;
 	void *msg, *retbuf;
@@ -92,7 +100,7 @@ static int get_kstat_from_storage(char *filepath, bool is_lstat, struct kstat *s
 
 	payload = msg + sizeof(*opcode);
 	strncpy(payload->filename, filepath, MAX_FILENAME_LENGTH);
-	payload->is_lstat = is_lstat;
+	payload->flag = flag;
 
 	len_ret = sizeof(int) + sizeof(struct kstat);
 	retbuf = kmalloc(len_ret, GFP_KERNEL);
@@ -101,9 +109,8 @@ static int get_kstat_from_storage(char *filepath, bool is_lstat, struct kstat *s
 		goto free_msg;
 	}
 
-	ret = ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, 
-			retbuf, len_ret, false);
-
+	ret = ibapi_send_reply_imm(current_storage_home_node(), msg, len_msg,
+				   retbuf, len_ret, false);
 	if (ret != len_ret) {
 		ret = -EIO;
 		goto free;
@@ -145,7 +152,7 @@ SYSCALL_DEFINE2(newstat, const char __user *, filename,
 	dummy_fillstat(&stat);
 	stat.mode |= S_IFREG;
 #else
-	ret = get_kstat_from_storage(buf, false, &stat);
+	ret = get_kstat_from_storage(buf, &stat, 0);
 	if (ret)
 		goto out;
 #endif
@@ -175,7 +182,7 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
 	dummy_fillstat(&stat);
 	stat.mode |= S_IFREG;
 #else
-	ret = get_kstat_from_storage(buf, true, &stat);
+	ret = get_kstat_from_storage(buf, &stat, AT_SYMLINK_NOFOLLOW);
 	if (ret) 
 		goto out;
 #endif
@@ -213,7 +220,7 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 		stat.mode |= S_IFCHR;
 		stat.size = 1*1024;
 #ifndef CONFIG_USE_RAMFS
-		ret = get_kstat_from_storage(f->f_name, false, &stat);
+		ret = get_kstat_from_storage(f->f_name, &stat, 0);
 		if (ret)
 			goto out;
 #endif
