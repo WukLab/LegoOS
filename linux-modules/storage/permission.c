@@ -251,12 +251,13 @@ void test_grant_yield_access(void *data) {
 	//only for test
 	//printk_hello(NULL);
 	
+	request rq;
+	int metadata_entry, user_entry;
+	int users[2];
 	//test the unused_entry
 	printk("There are [%d] unused metadata entries.\n", unused_entry());
-	request rq;
 	//owner r/w, other r;
 	rq = constuct_request(23, "testfile1", 0744, 0, 0, O_CREAT | O_WRONLY);
-	int metadata_entry, user_entry;
 	grant_access(&rq, &metadata_entry, &user_entry);
 	printk("Test O_CREAT, unused entries : [%d], metadata_entry : [%d], user_entry : [%d]\n",
 			unused_entry(), metadata_entry, user_entry);
@@ -311,11 +312,10 @@ void test_grant_yield_access(void *data) {
 	 * Then we 24 yield_access testfile1, now 25 should be able to access testfile1 with O_RDONLY flags. 
 	 *
 	*/
-	int users[2];
 	users[0] = 23;
 	users[1] = 24;
-	set_metadata(0, &users, 2, 0744, 1, 23, "testfile1");
-	set_metadata(1, &users, 2, 0744, 1, 24, "testfile2");
+	set_metadata(0, users, 2, 0744, 1, 23, "testfile1");
+	set_metadata(1, users, 2, 0744, 1, 24, "testfile2");
 	printk("\nCheck if metedata set correct before testing'\n");
 	dump_metadata();
 

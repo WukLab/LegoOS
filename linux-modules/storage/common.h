@@ -57,5 +57,5 @@ struct p2s_access_struct {
 
 struct p2s_stat_struct {
 	char filename[MAX_FILENAME_LENGTH];
-	bool is_lstat;
+	int flag;
 };

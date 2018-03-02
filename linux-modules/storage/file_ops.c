@@ -83,7 +83,7 @@ ssize_t local_file_write(struct file *file, const char __user *buf, ssize_t len,
  * -----------------------------------------
 */
 
-ssize_t local_file_read(struct file *file, const char __user *buf, ssize_t len, loff_t *pos){
+ssize_t local_file_read(struct file *file, char __user *buf, ssize_t len, loff_t *pos){
 	//printk("local_file_read : Called\n");
 	ssize_t ret;
 	mm_segment_t old_fs;
@@ -127,7 +127,8 @@ int faccessat_root(const char __user * filename, int mode)
 	old_cred = override_creds(override_cred);
 retry:
 	//set_fs_pwd(current->fs, &current->fs->root);
-	res = user_path_at(AT_FDCWD, filename, lookup_flags, &path);
+	//res = user_path_at(AT_FDCWD, filename, lookup_flags, &path);
+	res = kern_path(filename, lookup_flags, &path);
 	if (res)
 		goto out;
 
@@ -172,18 +173,14 @@ out:
 	return res;
 }
 
-int kernel_fs_stat(const char *name, bool is_lstat, struct kstat *stat)
+int kernel_fs_stat(const char *name, struct kstat *stat, int flag)
 {
 	mm_segment_t old_fs;
 	int err;
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
-	if (is_lstat) {
-		err = vfs_lstat(name, stat);
-	} else {
-		err = vfs_stat(name, stat);
-	}
+	err = vfs_fstatat(AT_FDCWD, name, stat, flag);
 	set_fs(old_fs);
 	return err;
 }

@@ -139,7 +139,7 @@ static void debug_fork_dump_mm(struct lego_mm_struct *new_mm,
 		pr_debug("**** No Parent, above is brand new mm\n");
 }
 #else
-#define debug_fork_dump_mm(foo, bar)	do { } while(0)
+#define debug_fork_dump_mm(foo, bar, a)	do { } while(0)
 #endif
 
 static int dup_lego_mm(struct lego_task_struct *t,

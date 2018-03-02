@@ -50,6 +50,22 @@ config RAMFS_OBJECT_FILE
 	help
 	  Please give the full path
 
+config GSM
+	bool "Contact GSM for locating page_cache/storage homenode"
+	default n
+	help
+	  Contact GSM for locating page_cache/storage homenode
+
+if GSM
+
+config GSM_HOMENODE
+	int "GSM homenode ID (normally 3)"
+	default 3
+	help
+	  asd
+
+endif #if GSM
+
 endmenu
 
 #

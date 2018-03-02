@@ -243,6 +243,12 @@ out:
 }
 
 #ifndef CONFIG_USE_RAMFS
+/* 
+ * p2s_access: get access permission from storage
+ * @kname: string of absolute file path on storage component
+ * @mode: access mode for permission check
+ * return value: 0 on success, -errno on fail
+ */
 static int p2s_access(char *kname, int mode)
 {
 	int retval; 
@@ -262,8 +268,8 @@ static int p2s_access(char *kname, int mode)
 	payload->mode = mode;
 	strncpy(payload->filename, kname, MAX_FILENAME_LENGTH);
 
-	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval,
-			sizeof(retval), false);
+	ibapi_send_reply_imm(current_storage_home_node(), msg, len_msg,
+			     &retval, sizeof(retval), false);
 
 	kfree(msg);
 	return retval;

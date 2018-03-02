@@ -67,6 +67,8 @@ extern unsigned int LEGO_LOCAL_NID;
 /* Memory to Storage */
 #define M2S_READ	P2M_READ		/* Reuse the same nr */
 #define M2S_WRITE	P2M_WRITE		/* Reuse the same nr */
+/* Processor to GSM */
+#define P2GSM_COMMON	P2S_OPEN		/* Resue the open nr */
 
 /* Return status */
 #define RET_OKAY	((__u32)0)	/* Operation succeed */
@@ -348,7 +350,11 @@ struct p2s_access_struct {
 
 struct p2s_stat_struct {
 	char filename[MAX_FILENAME_LENGTH];
-	bool is_lstat;
+	int flag;
 };
 
+struct gsm2p_ret_struct {
+	int mid;
+	int sid;
+};
 #endif /* _LEGO_COMP_COMMON_H_ */

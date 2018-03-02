@@ -25,7 +25,6 @@
 
 #define MAX_SIZE		2 
 
-#define TEST_STORAGE
 
 
 struct metadata {
@@ -66,9 +65,9 @@ request constuct_request(int, char *, fmode_t, ssize_t, loff_t, int);
 struct file *local_file_open (request *);
 int local_file_close(struct file *);
 ssize_t local_file_write(struct file *, const char __user *, ssize_t, loff_t *);
-ssize_t local_file_read(struct file *, const char __user *, ssize_t, loff_t *);
+ssize_t local_file_read(struct file *, char __user *, ssize_t, loff_t *);
 int local_fsync(struct file *);
-int kernel_fs_stat(const char *, bool, struct kstat *);
+int kernel_fs_stat(const char *, struct kstat *, int);
 int faccessat_root(const char __user *, int);
 
 /* handler.c */
