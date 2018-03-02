@@ -414,7 +414,7 @@ static inline int lego_copy_pud_range(struct lego_mm_struct *dst_mm,
  * It will make writable && non-shared pages RO for both mm (for COW).
  *
  * TODO:
- * There a lot ways to implement the
+ * There a lot ways to implement the VM organization besides page-based.
  */
 int lego_copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
 			 struct vm_area_struct *vma)

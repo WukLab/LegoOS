@@ -561,7 +561,7 @@ enum pcache_rmap_status {
 };
 
 void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
-		    pte_t ptent, pte_t *pte);
+		    pte_t ptent, pte_t *pte, spinlock_t *ptl);
 int pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
 		    unsigned long old_addr, unsigned long new_addr);
 
@@ -569,8 +569,20 @@ int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 		    unsigned long address, struct mm_struct *owner_mm,
 		    struct task_struct *owner_process);
 
+void pcache_remove_rmap(struct pcache_meta *pcm, pte_t *ptep, unsigned long address,
+			struct mm_struct *owner_mm, struct task_struct *owner_process);
+
+#ifdef CONFIG_COMP_PROCESSOR
 /* Called when fork() happens, duplicate the pcache */
-int fork_dup_pcache(struct mm_struct *mm, struct mm_struct *oldmm);
+int fork_dup_pcache(struct task_struct *dst_task,
+		    struct mm_struct *dst_mm, struct mm_struct *src_mm);
+#else
+static inline int fork_dup_pcache(struct task_struct *t,
+				  struct mm_struct *m1, struct mm_struct *m2)
+{
+	return 0;
+}
+#endif
 
 int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
 int pcache_try_to_unmap(struct pcache_meta *pcm);

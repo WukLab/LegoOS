@@ -30,7 +30,9 @@
 #include <lego/syscalls.h>
 #include <lego/ratelimit.h>
 #include <lego/checksum.h>
+
 #include <asm/io.h>
+#include <asm/tlbflush.h>
 
 #include <processor/pcache.h>
 #include <processor/processor.h>
@@ -267,6 +269,15 @@ pcache_do_fill_page(struct mm_struct *mm, unsigned long address,
 			__pcache_do_fill_page, NULL);
 }
 
+static inline void cow_pcache(struct pcache_meta *dst_pcm, struct pcache_meta *src_pcm)
+{
+	void *dst_vaddr, *src_vaddr;
+
+	dst_vaddr = pcache_meta_to_kva(dst_pcm);
+	src_vaddr = pcache_meta_to_kva(src_pcm);
+	memcpy(dst_vaddr, src_vaddr, PCACHE_LINE_SIZE);
+}
+
 /*
  * This function handles present write-protected cache lines.
  *
@@ -276,35 +287,132 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 			     pte_t *page_table, pmd_t *pmd, spinlock_t *ptl,
 			     pte_t orig_pte) __releases(ptl)
 {
-	struct pcache_meta *pcm;
+	struct pcache_meta *old_pcm;
 	int ret;
 
-	pcm = pte_to_pcache_meta(orig_pte);
-	if (!pcm) {
+	/*
+	 * We are holding pte lock,
+	 * this pcm is guaranteed to be safe during this period.
+	 * See comments above pcache_evict_line().
+	 */
+	old_pcm = pte_to_pcache_meta(orig_pte);
+	if (!old_pcm) {
 		print_bad_pte(mm, address, orig_pte, NULL);
 		ret = VM_FAULT_SIGBUS;
 		goto out;
 	}
 
-#ifdef CONFIG_PCACHE_EVICTION_WRITE_PROTECT
 	/*
-	 * Pcache line might be locked by eviction routine.
-	 * But we must NOT sleep here because we are holding pte lock.
-	 * Just return to release the pte lock, so others can proceeed
-	 * and finish what they are doing.
+	 * pcache might be under flush back if pcache eviction is using
+	 * write-protect mechanism to guarantee clflush atomicity.
+	 *
+	 * If this happens, pcache must have PcacheReclaim set. And it
+	 * will be unmapped soon. But we are holding pte lock here, we
+	 * should just release the lock and return. If a pgfault immediately
+	 * follows after we return, it will: either comes here again,
+	 * or it will fetch the page from remote (already unmapped).
+	 *
+	 * And do note this case only happens for write-protect mechanism,
+	 * other two mechanisms will do unmap directly. Thus it is impossible
+	 * to see a PcacheReclaim here.
 	 */
-	if (likely(!trylock_pcache(pcm))) {
+	if (unlikely(PcacheReclaim(old_pcm))) {
+#ifdef CONFIG_PCACHE_EVICTION_WRITE_PROTECT
 		ret = 0;
 		inc_pcache_event(PCACHE_FAULT_CONCUR_EVICTION)
 		goto out;
-	}
+#else
+		dump_pcache_meta(old_pcm, "BUG PcacheReclaim");
+		dump_pcache_rmaps(old_pcm);
+		ret = VM_FAULT_SIGBUS;
+		goto out;
 #endif
+	}
 
-	panic("COW is not implemented now!");
-	unlock_pcache(pcm);
-	inc_pcache_event(PCACHE_FAULT_WP_COW);
+	/*
+	 * COW should only happen to fork()-ed pcache lines.
+	 * But when the wp fault happens, some processes may already exit().
+	 * Thus it is possible to have the mapcount == 1, in which case we
+	 * can simply upgrade pte permission to RW, and we are good to go.
+	 *
+	 * However, after fork, any rmap pcache related operations will
+	 * race with this function: exit(), mremap(), munmap(), or another fork().
+	 *
+	 * About deadlock:
+	 * I think, if another operations come from other address spaces,
+	 * then lock_pcache will be good enough and safe.
+	 * But what if other operations come from the same address space?
+	 * We need to obey the pcache->pte lock ordering.
+	 */
+	PCACHE_BUG_ON_PCM(!PcacheValid(old_pcm), old_pcm);
 
-	ret = 0;
+	if (unlikely(!trylock_pcache(old_pcm))) {
+		get_pcache(old_pcm);
+		spin_unlock(ptl);
+		lock_pcache(old_pcm);
+		spin_lock(ptl);
+
+		/* Since we released the lock, it could got changed. */
+		if (!pte_same(*page_table, orig_pte)) {
+			ret = 0;
+			put_pcache(old_pcm);
+			goto unlock;
+		}
+		put_pcache(old_pcm);
+	}
+
+	/* We are the only user left, just upgrade pte to RW */
+	if (pcache_mapcount(old_pcm) == 1) {
+		pte_t entry;
+
+		entry = pte_mkyoung(orig_pte);
+		entry = pte_mkdirty(entry);
+		entry = pte_mkwrite(entry);
+		*page_table = entry;
+
+		inc_pcache_event(PCACHE_FAULT_WP_REUSE);
+		ret = 0;
+	} else {
+		/* We need to make a copy */
+		struct pcache_meta *new_pcm;
+		pte_t entry;
+
+		new_pcm = pcache_alloc(address);
+		if (!new_pcm) {
+			ret = VM_FAULT_OOM;
+			goto unlock;
+		}
+		cow_pcache(new_pcm, old_pcm);
+
+		/* TODO: need right permission */
+		entry = pcache_mk_pte(new_pcm, PAGE_SHARED_EXEC);
+		entry = pte_mkdirty(entry);
+		entry = pte_mkwrite(entry);
+
+		pte_set(page_table, entry);
+		flush_tlb_mm_range(mm, address, address + PAGE_SIZE);
+
+		/* which will also mark PcacheValid */
+		ret = pcache_add_rmap(new_pcm, page_table, address,
+				      current->mm, current->group_leader);
+		if (unlikely(ret)) {
+			put_pcache(new_pcm);
+			pte_clear(page_table);
+			ret = VM_FAULT_OOM;
+			goto unlock;
+		}
+
+		pcache_remove_rmap(old_pcm, page_table, address,
+				   current->mm, current->group_leader);
+
+		/* ref grabbed during fork */
+		put_pcache(old_pcm);
+		inc_pcache_event(PCACHE_FAULT_WP_COW);
+		ret = 0;
+	}
+
+unlock:
+	unlock_pcache(old_pcm);
 out:
 	spin_unlock(ptl);
 	inc_pcache_event(PCACHE_FAULT_WP);
@@ -369,17 +477,10 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 		entry = pte_mkdirty(entry);
 	}
 
-	/*
-	 * If we are here, it means the PTE is both present and writable.
-	 * Then why pgfault happens at all? The case is: two or more CPUs
-	 * fault into the same address concurrently. One established the
-	 * mapping even before other CPUs do "entry = *pte" in first line.
-	 */
+	/* May due to stale tlb entries */
 	entry = pte_mkyoung(entry);
 	if (!pte_same(*pte, entry) && (flags & FAULT_FLAG_WRITE)) {
-		dump_pte(pte, NULL);
-		pr_info("%#lx\n", entry.pte);
-		WARN_ON(1);
+		dump_pte(pte, __func__);
 		*pte = entry;
 	}
 

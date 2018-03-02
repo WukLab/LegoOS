@@ -5,38 +5,40 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
+#include "includeme.h"
 
-static pid_t gettid(void)
+void getcpu(int *cpu, int *node)
 {
-	syscall(SYS_gettid);
-}
-
-static void *thread_1(void *arg)
-{
-	printf("In %s(), pid: %d, tid: %d \n",
-		__func__, getpid(), gettid());
-
-	if (fork()) {
-		printf("Parent after fork(): pid:%d\n", getpid());
-	} else {
-		printf("Child after fork(): pid:%d, parent_pid:%d\n",
-			getpid(), getppid());
-	}
+	syscall(SYS_getcpu, cpu, node, NULL);
 }
 
 int main(void)
 {
-	int ret, *j;
-	pthread_t tid;
+	int ret, cpu, node;
+	pid_t pid;
+	int a = 100;
 
-	printf("In %s(), pid: %d, tid: %d \n",
-		__func__, getpid(), gettid());
+	setbuf(stdout, NULL);
 
-	ret = pthread_create(&tid, NULL, thread_1, NULL);
-	if (ret) {
-		printf("pthread_create failed\n");
-		exit(-1);
+	getcpu(&cpu, &node);
+	printf("Parent before fork: pid: %d, tid: %d CPU:%d NODE:%d\n",
+		getpid(), gettid(), cpu, node);
+	printf("CPU page: %#lx a page: %#lx\n", (unsigned long)&cpu & PAGE_MASK, (unsigned long)&a & PAGE_MASK);
+
+	pid = fork();
+	if (pid == 0) {
+		a = 200;
+		getcpu(&cpu, &node);
+		printf("Child after fork: pid: %d, tid: %d CPU:%d NODE:%d a=%d\n",
+			getpid(), gettid(), cpu, node, a);
+		exit(1);
+	} else {
+		a = 400;
+		getcpu(&cpu, &node);
+		printf("Parent after fork: pid: %d, tid: %d CPU:%d NODE:%d a=%d\n",
+			getpid(), gettid(), cpu, node, a);
+
 	}
-	pthread_join(tid, NULL);
-	printf("new thread id is: %u\n", tid);
+
+	return 0;
 }

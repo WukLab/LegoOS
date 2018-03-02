@@ -47,6 +47,7 @@ enum pcache_event_item {
 	PCACHE_FAULT,			/* nr of page fault occurred */
 	PCACHE_FAULT_WP,		/* nr of write-protected faults */
 	PCACHE_FAULT_WP_COW,		/* nr of copy-on-right faults */
+	PCACHE_FAULT_WP_REUSE,		/* nr of reused wp faults */
 	PCACHE_FAULT_CONCUR_EVICTION,	/* nr of faults due to concurrent eviction */
 	PCACHE_FAULT_FILL_FROM_MEMORY,	/* nr of pcache fill from remote memory */
 	PCACHE_FAULT_FILL_FROM_VICTIM,	/* nr of pcache fill from victim cache */

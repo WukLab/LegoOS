@@ -21,7 +21,7 @@
 void strace_enter_default(unsigned long nr, unsigned long a1, unsigned long a2,
 			  unsigned long a3, unsigned long a4, unsigned long a5, unsigned long a6)
 {
-	pr_info("CPU%d %pS\n", smp_processor_id(), sys_call_table[nr]);
+	pr_info("CPU%d PID%d %pS\n", smp_processor_id(), current->pid, sys_call_table[nr]);
 }
 
 static struct strace_flag sf_clone[] = {

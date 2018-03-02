@@ -108,13 +108,39 @@ static int dup_lego_mmap(struct lego_mm_struct *mm,
 			goto out;
 	}
 
-	dump_both_vmas(mm, oldmm);
 	ret = 0;
 out:
 	up_write(&mm->mmap_sem);
 	up_write(&oldmm->mmap_sem);
 	return ret;
 }
+
+#ifdef CONFIG_DEBUG_HANDLE_FORK
+static void DUMP(struct lego_mm_struct *mm)
+{
+	dump_all_vmas_simple(mm);
+	dump_all_vmas(mm);
+	dump_lego_mm(mm);
+}
+
+static void debug_fork_dump_mm(struct lego_mm_struct *new_mm,
+			       struct lego_task_struct *child,
+			       struct lego_task_struct *parent)
+{
+	pr_debug("**** Dump Child (%d) mm:\n", child->pid);
+	DUMP(new_mm);
+	pr_debug("**** Finish Dump Child (%d) mm\n", child->pid);
+
+	if (parent) {
+		pr_debug("**** Dump Parent (%d) mm:\n", parent->pid);
+		DUMP(parent->mm);
+		pr_debug("**** Finish Dump Parent (%d) mm:\n", parent->pid);
+	} else
+		pr_debug("**** No Parent, above is brand new mm\n");
+}
+#else
+#define debug_fork_dump_mm(foo, bar)	do { } while(0)
+#endif
 
 static int dup_lego_mm(struct lego_task_struct *t,
 		       struct lego_task_struct *parent)
@@ -128,27 +154,18 @@ static int dup_lego_mm(struct lego_task_struct *t,
 	t->mm = mm;
 
 	if (parent) {
-#ifdef CONFIG_DEBUG_HANDLE_FORK
-		pr_debug(" dup_mm from parent: %d\n", parent->pid);
-		dump_lego_mm(mm);
-		dump_all_vmas_simple(mm);
-#endif
-
 		oldmm = parent->mm;
 		err = dup_lego_mmap(mm, oldmm);
 		if (err)
 			goto out;
 	} else {
-#ifdef CONFIG_DEBUG_HANDLE_FORK
-		pr_debug(" brand new mm: %p\n", mm);
-		dump_lego_mm(mm);
-#endif
 		/*
 		 * The only possibility that parent is NULL
 		 * is that this is the first process here.
 		 * And it will call the execve() immediately.
 		 */
 	}
+	debug_fork_dump_mm(mm, t, parent);
 
 	return 0;
 
