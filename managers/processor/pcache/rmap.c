@@ -684,13 +684,13 @@ static int __pcache_zap_pte(struct pcache_meta *pcm,
 }
 
 /*
- * Remove the rmap that currently points to @pte within @mm.
+ * Zap the rmap that currently points to @pte within @mm.
  *
  * Called from zap_pte_range() when the emulated page table is cleared.
  * When called, the pte is already cleared, thus @pte is already 0,
  * while @ptent holds the previous pte content.
  *
- * We enter with @pte locked.
+ * We enter with @pte locked, return with @pte still locked.
  */
 void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
 		    pte_t ptent, pte_t *pte, spinlock_t *ptl)

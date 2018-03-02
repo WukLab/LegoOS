@@ -38,7 +38,7 @@ int fork_dup_pcache(struct task_struct *dst_task,
 	unsigned long vm_flags;
 
 	vm_flags = VM_MAYWRITE;
-	pcache_copy_page_range(dst_mm, src_mm, 0, TASK_SIZE, vm_flags, dst_task);
+	pcache_copy_page_range(dst_mm, src_mm, PAGE_SIZE, TASK_SIZE, vm_flags, dst_task);
 	return 0;
 }
 
@@ -52,8 +52,10 @@ int fork_dup_pcache(struct task_struct *dst_task,
  *
  * Be careful against pcache eviction
  */
-void pcache_process_exit(struct mm_struct *mm)
+void pcache_process_exit(struct task_struct *tsk)
 {
+	/* will also free rmap */
+	release_pgtable(tsk, PAGE_SIZE, TASK_SIZE);
 	print_pcache_events();
 }
 

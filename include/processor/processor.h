@@ -27,7 +27,7 @@ int __init pcache_range_register(u64 start, u64 size);
 int pcache_handle_fault(struct mm_struct *mm,
 			unsigned long address, unsigned long flags);
 
-void pcache_process_exit(struct mm_struct *mm);
+void pcache_process_exit(struct task_struct *tsk);
 void pcache_thread_exit(struct task_struct *tsk);
 
 #ifdef CONFIG_CHECKPOINT
@@ -48,7 +48,7 @@ void open_stdio_files(void);
  * Provide some empty function prototypes.
  */
 
-static inline void pcache_process_exit(struct mm_struct *mm) { }
+static inline void pcache_process_exit(struct task_struct *tsk) { }
 static inline void pcache_thread_exit(struct task_struct *tsk) { }
 
 static inline void processor_manager_init(void) { }
