@@ -10,14 +10,17 @@
 #ifndef _ASM_X86_FIXMAP_H_
 #define _ASM_X86_FIXMAP_H_
 
-#include <asm/page.h>
-#include <asm/pgtable.h>
-#include <asm/apic_types.h>
-
 #include <lego/bug.h>
 #include <lego/types.h>
+#include <lego/kernel.h>
 
-#define FIXADDR_TOP (0xfffffffffffff000)
+#include <asm/page.h>
+#include <asm/pgtable.h>
+#include <asm/vsyscall.h>
+#include <asm/apic_types.h>
+
+#define FIXADDR_TOP	(round_up(VSYSCALL_ADDR + PAGE_SIZE, 1<<PMD_SHIFT) - \
+			 PAGE_SIZE)
 
 /*
  * Compile-tome virtual memory allocation
@@ -34,7 +37,9 @@
  * TLB entries of such buffers will not be flushed across task switches.
  */
 enum fixed_addresses {
-	FIX_SAFETY_HOLE,
+#ifdef CONFIG_X86_VSYSCALL_EMULATION
+	VSYSCALL_PAGE = (FIXADDR_TOP - VSYSCALL_ADDR) >> PAGE_SHIFT,
+#endif
 #ifdef CONFIG_X86_LOCAL_APIC
 	FIX_APIC_BASE,	/* local (CPU) APIC) -- required for SMP or not */
 #endif
@@ -122,6 +127,9 @@ void __early_ioremap_set_fixmap(enum fixed_addresses idx,
 #define set_fixmap(idx, phys) \
 	__set_fixmap(idx, phys, PAGE_KERNEL)
 
+/*
+ * Some hardware wants to get fixmapped without caching.
+ */
 #define set_fixmap_nocache(idx, phys) \
 	__set_fixmap(idx, phys, PAGE_KERNEL_NOCACHE)
 

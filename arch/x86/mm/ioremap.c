@@ -126,6 +126,7 @@ void __init early_ioremap_init(void)
 {
 	pmd_t *pmd;
 
+#if 0
 	/*
 	 * In head_64.S, we only have one level1_fixmap_pgt
 	 * installed at PMD (level2_fixmap_pgt). So the size
@@ -145,6 +146,7 @@ void __init early_ioremap_init(void)
 	 */
 	BUILD_BUG_ON(__fix_to_virt(__end_of_fixed_addresses)
 			< (~0UL - PUD_SIZE));
+#endif
 
 	/* Must be PMD aligned */
 	BUILD_BUG_ON((fix_to_virt(0) + PAGE_SIZE) & ((1 << PMD_SHIFT) - 1));

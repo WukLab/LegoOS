@@ -360,6 +360,22 @@ static void show_fault_oops(struct pt_regs *regs, unsigned long error_code,
 	dump_pagetable(address);
 }
 
+static void
+force_sig_info_fault(int si_signo, int si_code, unsigned long address,
+		     struct task_struct *tsk, int fault)
+{
+	unsigned lsb = 0;
+	siginfo_t info;
+
+	info.si_signo	= si_signo;
+	info.si_errno	= 0;
+	info.si_code	= si_code;
+	info.si_addr	= (void __user *)address;
+	info.si_addr_lsb = lsb;
+
+	force_sig_info(si_signo, &info, tsk);
+}
+
 #define task_stack_end_corrupted(task) \
 		(*(end_of_stack(task)) != STACK_END_MAGIC)
 
@@ -377,6 +393,21 @@ no_context(struct pt_regs *regs, unsigned long error_code,
 
 	/* Are we prepared to handle this kernel fault? */
 	if (fixup_exception(regs, X86_TRAP_PF)) {
+		/*
+		 * Per the above we're !in_interrupt(), aka. task context.
+		 *
+		 * In this case we need to make sure we're not recursively
+		 * faulting through the emulate_vsyscall() logic.
+		 */
+		if (current->thread.sig_on_uaccess_err && signal) {
+			tsk->thread.trap_nr = X86_TRAP_PF;
+			tsk->thread.error_code = error_code | PF_USER;
+			tsk->thread.cr2 = address;
+
+			force_sig_info_fault(signal, si_code, address,
+					     tsk, 0);
+		}
+
 		/* Barring that, we can do the fixup and be happy. */
 		return;
 	}
@@ -413,22 +444,6 @@ no_context(struct pt_regs *regs, unsigned long error_code,
 	/* Executive summary in case the body of the oops scrolled away */
 	printk(KERN_DEFAULT "CR2: %016lx\n", address);
 	panic("Fatal exception");
-}
-
-static void
-force_sig_info_fault(int si_signo, int si_code, unsigned long address,
-		     struct task_struct *tsk, int fault)
-{
-	unsigned lsb = 0;
-	siginfo_t info;
-
-	info.si_signo	= si_signo;
-	info.si_errno	= 0;
-	info.si_code	= si_code;
-	info.si_addr	= (void __user *)address;
-	info.si_addr_lsb = lsb;
-
-	force_sig_info(si_signo, &info, tsk);
 }
 
 /*
@@ -474,7 +489,8 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 		 */
 		if (unlikely((error_code & PF_INSTR) &&
 			     ((address & ~0xfff) == VSYSCALL_ADDR))) {
-			panic("We need vsyscall emulation.");
+			if (emulate_vsyscall(regs, address))
+				return;
 		}
 #endif
 
