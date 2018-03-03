@@ -19,6 +19,7 @@
 #include <asm/fixmap.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
+#include <asm/vsyscall.h>
 #include <asm/tlbflush.h>
 #include <asm/processor.h>
 #include <asm/bootparam.h>
@@ -179,6 +180,7 @@ void __init early_setup_arch(void)
 /*
  * setup_arch
  * x86-64 specific initiliazation
+ * fixmaps are ready for use even before this is called.
  */
 void __init setup_arch(void)
 {
@@ -207,6 +209,8 @@ void __init setup_arch(void)
 	reserve_standard_io_resources();
 
 	early_ioremap_init();
+
+	map_vsyscall();
 
 	finish_e820_parsing();
 	max_pfn = e820_end_of_ram_pfn();

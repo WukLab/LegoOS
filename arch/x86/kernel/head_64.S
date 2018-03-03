@@ -417,12 +417,15 @@ NEXT_PAGE(level2_kernel_pgt)
  * fixmap entries, we need to provide a L1 pgtable, which will
  * be the level1_fixmap_pgt.
  *
- * Also because the FIXADDR_TOP is 0xfffffffffffff000 now,
- * hence we need the last PMD entry:
+ * Also because the FIXADDR_TOP starts from vsyscall, which is
+ * 0xfffffffff600000, thus we need to fill the level1_fixmap_pgt
+ * into the right slot (507)
  */
 NEXT_PAGE(level2_fixmap_pgt)
-	.fill	511,8,0
+	.fill	506,8,0
 	.quad	level1_fixmap_pgt - __START_KERNEL_map + _PAGE_TABLE
+	/* 8MB reserved for vsyscalls + a 2MB hole = 4 + 1 entries */
+	.fill	5,8,0
 
 NEXT_PAGE(level1_fixmap_pgt)
 	.fill	512,8,0

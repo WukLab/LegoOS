@@ -299,7 +299,7 @@ void __init register_lapic_address(unsigned long address)
 	mp_lapic_addr = address;
 
 	if (!x2apic_mode) {
-		set_fixmap(FIX_APIC_BASE, address);
+		set_fixmap_nocache(FIX_APIC_BASE, address);
 		pr_info("Mapped APIC to %#16lx (%#16lx)\n", APIC_BASE, address);
 	}
 	if (boot_cpu_physical_apicid == -1U) {

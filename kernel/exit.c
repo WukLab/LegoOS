@@ -34,16 +34,16 @@ static void exit_mm(struct task_struct *tsk)
 	/* Wait for any pending pcache activities */
 	pcache_thread_exit(tsk);
 
-	task_lock(tsk);
-	tsk->mm = NULL;
-	task_unlock(tsk);
-
 	/*
 	 * Decrease mm_users by 1.
 	 * Other threads within the group still hold the mm_users,
 	 * so the mm will not be freed until the last thread exit.
 	 */
 	mmput(mm);
+
+	task_lock(tsk);
+	tsk->mm = NULL;
+	task_unlock(tsk);
 }
 
 void exit_files(struct task_struct *tsk)

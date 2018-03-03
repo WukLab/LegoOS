@@ -20,6 +20,7 @@
 #include <asm/pgtable.h>
 #include <asm/segment.h>
 #include <asm/tlbflush.h>
+#include <asm/fixmap.h>
 
 extern pgd_t early_level4_pgt[PTRS_PER_PGD];
 extern pmd_t early_dynamic_pgts[EARLY_DYNAMIC_PAGE_TABLES][PTRS_PER_PMD];
@@ -143,6 +144,8 @@ static void __init load_early_idt_handlers(void)
 asmlinkage __visible void __init x86_64_start_kernel(char *real_mode_data)
 {
 	BUILD_BUG_ON((__START_KERNEL_map & ~PMD_MASK) != 0);
+	BUILD_BUG_ON((__START_KERNEL_map & ~PMD_MASK) != 0);
+	BUILD_BUG_ON(__fix_to_virt(__end_of_fixed_addresses) <= MODULES_END);
 
 	cr4_init_shadow();
 

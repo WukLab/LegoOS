@@ -198,7 +198,7 @@ static inline void __mmput(struct mm_struct *mm)
 	BUG_ON(mm == &init_mm);
 
 	/* Remove leftover of this process in pcache */
-	pcache_process_exit(mm);
+	pcache_process_exit(current);
 
 	/* dec mm->mm_count */
 	mmdrop(mm);

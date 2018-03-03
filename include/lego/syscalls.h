@@ -18,8 +18,10 @@
 #include <lego/compiler.h>
 #include <lego/kernel.h>
 #include <lego/time.h>
+#include <lego/getcpu.h>
 
 #include <asm/syscalls.h>
+#include <generated/unistd_64.h>
 
 #ifdef CONFIG_DEBUG_SYSCALL
 #define debug_syscall_print()			\
@@ -146,6 +148,11 @@ asmlinkage long sys_rt_sigsuspend(sigset_t __user *unewset, size_t sigsetsize);
 asmlinkage long sys_futex(u32 __user *uaddr, int op, u32 val,
 			struct timespec __user *utime, u32 __user *uaddr2,
 			u32 val3);
+
+asmlinkage long sys_getcpu(unsigned __user *cpu, unsigned __user *node, struct getcpu_cache __user *cache);
+asmlinkage long sys_time(time_t __user *tloc);
+asmlinkage long sys_gettimeofday(struct timeval __user *tv,
+				struct timezone __user *tz);
 
 /* Lego only */
 asmlinkage long sys_checkpoint_process(pid_t pid);
