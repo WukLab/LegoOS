@@ -18,6 +18,7 @@
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
 #include <lego/getcpu.h>
+#include <lego/waitpid.h>
 #include <processor/pcache.h>
 
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
@@ -148,6 +149,18 @@ SYSCALL_DEFINE1(pcache_stat, struct pcache_stat __user *, statbuf)
 }
 
 SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE5(waitid, int, which, pid_t, upid, struct siginfo __user *,
+		infop, int, options, struct rusage __user *, ru)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE4(wait4, pid_t, upid, int __user *, stat_addr,
+		int, options, struct rusage __user *, ru)
 {
 	BUG();
 }

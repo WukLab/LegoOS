@@ -420,6 +420,14 @@ struct task_struct {
 	struct list_head sibling;		/* linkage in my parent's children list */
 	struct task_struct *group_leader;	/* threadgroup leader */
 
+	/*
+	 * ptraced is the list of tasks this task is using ptrace on.
+	 * This includes both natural children and PTRACE_ATTACH targets.
+	 * p->ptrace_entry is p's link on the p->parent->ptraced list.
+	 */
+	struct list_head ptraced;
+	struct list_head ptrace_entry;
+
 	struct list_head thread_group;
 	struct list_head thread_node;
 
@@ -1131,6 +1139,23 @@ void show_state_filter(unsigned long state_filter, bool print_rq);
 static inline void show_sched_state(void)
 {
 	show_state_filter(0, true);
+}
+
+void release_task(struct task_struct * p);
+bool do_notify_parent(struct task_struct *tsk, int sig);
+
+#define delay_group_leader(p) \
+		(thread_group_leader(p) && !thread_group_empty(p))
+
+/* TODO: One process one process group */
+static inline pid_t task_pgrp(struct task_struct *task)
+{
+	return task->group_leader->pid;
+}
+
+static inline pid_t task_session(struct task_struct *task)
+{
+	return task->group_leader->pid;
 }
 
 #endif /* _LEGO_SCHED_H_ */

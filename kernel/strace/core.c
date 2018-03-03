@@ -12,6 +12,7 @@
 #include <lego/strace.h>
 #include <lego/sched.h>
 #include <lego/syscalls.h>
+#include <lego/waitpid.h>
 #include <generated/asm-offsets.h>
 #include <generated/unistd_64.h>
 
@@ -62,8 +63,55 @@ STRACE_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 
 	memset(buf, 0, 128);
 	strace_printflags(sf_clone, clone_flags, buf);
-	sp("flags(%#lx): %s, newsp=%#lx, parent_tidptr=%p, child_tidptr=%p, tls=%#lx",
+	sp("flags(%#lx)=%s, newsp=%#lx, parent_tidptr=%p, child_tidptr=%p, tls=%#lx",
 		clone_flags, buf, newsp, parent_tidptr, child_tidptr, tls);
+}
+
+static struct strace_flag sf_waitid_which[] = {
+	SF(P_ALL),
+	SF(P_PID),
+	SF(P_PGID),
+	SEND,
+};
+
+/* Used by both waitid and wait4 */
+static struct strace_flag sf_waitid_options[] = {
+	SF(WNOHANG),
+	SF(WUNTRACED),
+	SF(WSTOPPED),
+	SF(WEXITED),
+	SF(WCONTINUED),
+	SF(WNOWAIT),
+	SF(__WNOTHREAD),
+	SF(__WALL),
+	SF(__WCLONE),
+	SEND,
+};
+
+STRACE_DEFINE5(waitid, int, which, pid_t, upid, struct siginfo __user *, infop,
+	       int, options, struct rusage __user *, ru)
+{
+	unsigned char buf_which[16];
+	unsigned char buf_options[128];
+
+	memset(buf_which, 0, 16);
+	memset(buf_options, 0, 128);
+	strace_printflags(sf_waitid_which, options, buf_which);
+	strace_printflags(sf_waitid_options, options, buf_options);
+
+	sp("while(%d)=%s, upid=%d, siginfo=%p, options(%#x)=%s, ru=%p",
+		which, buf_which, upid, infop, options, buf_options, ru);
+}
+
+STRACE_DEFINE4(wait4, pid_t, upid, int __user *, stat_addr,
+	       int, options, struct rusage __user *, ru)
+{
+	unsigned char buf_options[128];
+
+	memset(buf_options, 0, 128);
+	strace_printflags(sf_waitid_options, options, buf_options);
+	sp("upid=%d, stat_addr=%p, options(%#x)=%s, ru=%p",
+		upid, stat_addr, options, buf_options, ru);
 }
 
 STRACE_DEFINE0(getpid)
@@ -96,6 +144,8 @@ const strace_call_ptr_t strace_call_table[__NR_syscall_max+1] = {
 	[0 ... __NR_syscall_max]	= &strace_enter_default,
 
 	[__NR_clone]			= (strace_call_ptr_t)&strace__clone,
+	[__NR_wait4]			= (strace_call_ptr_t)&strace__wait4,
+	[__NR_waitid]			= (strace_call_ptr_t)&strace__waitid,
 };
 
 void strace_enter(struct pt_regs *regs)

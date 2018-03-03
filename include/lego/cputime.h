@@ -65,4 +65,7 @@ typedef unsigned long cputime_t;
 #define clock_t_to_cputime(__x)		\
 	jiffies_to_cputime(clock_t_to_jiffies(__x))
 
+struct timeval;
+void jiffies_to_timeval(const unsigned long jiffies, struct timeval *value);
+
 #endif /* _LEGO_CPUTIME_H_ */

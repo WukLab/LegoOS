@@ -13,6 +13,7 @@
 #include <lego/getcpu.h>
 #include <lego/utsname.h>
 #include <lego/syscalls.h>
+#include <lego/waitpid.h>
 #include <processor/pcache.h>
 
 #include <asm/numa.h>
@@ -221,6 +222,160 @@ SYSCALL_DEFINE3(getcpu, unsigned __user *, cpup, unsigned __user *, nodep,
 	return err ? -EFAULT : 0;
 }
 
+/*
+ * It would make sense to put struct rusage in the task_struct,
+ * except that would make the task_struct be *really big*.  After
+ * task_struct gets moved into malloc'ed memory, it would
+ * make sense to do this.  It will make moving the rest of the information
+ * a lot simpler!  (Which we're not doing right now because we're not
+ * measuring them yet).
+ *
+ * When sampling multiple threads for RUSAGE_SELF, under SMP we might have
+ * races with threads incrementing their own counters.  But since word
+ * reads are atomic, we either get new values or old values and we don't
+ * care which for the sums.  We always take the siglock to protect reading
+ * the c* fields from p->signal from races with exit.c updating those
+ * fields when reaping, so a sample either gets all the additions of a
+ * given child after it's reaped, or none so this sample is before reaping.
+ *
+ * Locking:
+ * We need to take the siglock for CHILDEREN, SELF and BOTH
+ * for  the cases current multithreaded, non-current single threaded
+ * non-current multithreaded.  Thread traversal is now safe with
+ * the siglock held.
+ * Strictly speaking, we donot need to take the siglock if we are current and
+ * single threaded,  as no one else can take our signal_struct away, no one
+ * else can  reap the  children to update signal->c* counters, and no one else
+ * can race with the signal-> fields. If we do not take any lock, the
+ * signal-> fields could be read out of order while another thread was just
+ * exiting. So we should  place a read memory barrier when we avoid the lock.
+ * On the writer side,  write memory barrier is implied in  __exit_signal
+ * as __exit_signal releases  the siglock spinlock after updating the signal->
+ * fields. But we don't do this yet to keep things simple.
+ *
+ */
+
+/* TODO no accounting yet */
+static void accumulate_thread_rusage(struct task_struct *t, struct rusage *r)
+{
+	r->ru_nvcsw += t->nvcsw;
+	r->ru_nivcsw += t->nivcsw;
+	r->ru_minflt += 0;
+	r->ru_majflt += 0;
+	r->ru_inblock += 0;
+	r->ru_oublock += 0;
+}
+
+/* TODO: check if this is correct */
+void task_cputime_adjusted(struct task_struct *p, cputime_t *ut, cputime_t *st)
+{
+	*ut = p->utime;
+	*st = p->stime;
+}
+
+/* TODO */
+void thread_group_cputime_adjusted(struct task_struct *p, cputime_t *ut, cputime_t *st)
+{
+	*ut = 0;
+	*st = 0;
+}
+
+/* TODO */
+static inline void setmax_mm_hiwater_rss(unsigned long *maxrss,
+					 struct mm_struct *mm)
+{
+}
+
+static void k_getrusage(struct task_struct *p, int who, struct rusage *r)
+{
+	struct task_struct *t;
+	unsigned long flags;
+	cputime_t tgutime, tgstime, utime, stime;
+	unsigned long maxrss = 0;
+
+	memset((char *)r, 0, sizeof (*r));
+	utime = stime = 0;
+
+	if (who == RUSAGE_THREAD) {
+		task_cputime_adjusted(current, &utime, &stime);
+		accumulate_thread_rusage(p, r);
+		maxrss = p->signal->maxrss;
+		goto out;
+	}
+
+	if (!lock_task_sighand(p, &flags))
+		return;
+
+	switch (who) {
+	case RUSAGE_BOTH:
+	case RUSAGE_CHILDREN:
+		utime = p->signal->cutime;
+		stime = p->signal->cstime;
+		r->ru_nvcsw = p->signal->cnvcsw;
+		r->ru_nivcsw = p->signal->cnivcsw;
+		r->ru_minflt = p->signal->cmin_flt;
+		r->ru_majflt = p->signal->cmaj_flt;
+		r->ru_inblock = p->signal->cinblock;
+		r->ru_oublock = p->signal->coublock;
+		maxrss = p->signal->cmaxrss;
+
+		if (who == RUSAGE_CHILDREN)
+			break;
+
+	case RUSAGE_SELF:
+		thread_group_cputime_adjusted(p, &tgutime, &tgstime);
+		utime += tgutime;
+		stime += tgstime;
+		r->ru_nvcsw = p->signal->cnvcsw;
+		r->ru_nivcsw = p->signal->cnivcsw;
+		r->ru_minflt = p->signal->cmin_flt;
+		r->ru_majflt = p->signal->cmaj_flt;
+		r->ru_inblock = p->signal->cinblock;
+		r->ru_oublock = p->signal->coublock;
+		if (maxrss < p->signal->maxrss)
+			maxrss = p->signal->maxrss;
+		t = p;
+		do {
+			accumulate_thread_rusage(t, r);
+		} while_each_thread(p, t);
+		break;
+
+	default:
+		BUG();
+	}
+	unlock_task_sighand(p, &flags);
+
+out:
+	cputime_to_timeval(utime, &r->ru_utime);
+	cputime_to_timeval(stime, &r->ru_stime);
+
+	if (who != RUSAGE_CHILDREN) {
+		struct mm_struct *mm = get_task_mm(p);
+
+		if (mm) {
+			setmax_mm_hiwater_rss(&maxrss, mm);
+			mmput(mm);
+		}
+	}
+	r->ru_maxrss = maxrss * (PAGE_SIZE / 1024); /* convert pages to KBs */
+}
+
+int getrusage(struct task_struct *p, int who, struct rusage __user *ru)
+{
+	struct rusage r;
+
+	k_getrusage(p, who, &r);
+	return copy_to_user(ru, &r, sizeof(r)) ? -EFAULT : 0;
+}
+
+SYSCALL_DEFINE2(getrusage, int, who, struct rusage __user *, ru)
+{
+	if (who != RUSAGE_SELF && who != RUSAGE_CHILDREN &&
+	    who != RUSAGE_THREAD)
+		return -EINVAL;
+	return getrusage(current, who, ru);
+}
+
 #ifndef CONFIG_FUTEX
 SYSCALL_DEFINE2(set_robust_list, struct robust_list_head __user *, head,
 		size_t, len)
@@ -383,6 +538,18 @@ SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
 
 SYSCALL_DEFINE3(getcpu, unsigned __user *, cpup, unsigned __user *, nodep,
 		struct getcpu_cache __user *, unused)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE5(waitid, int, which, pid_t, upid, struct siginfo __user *,
+		infop, int, options, struct rusage __user *, ru)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE4(wait4, pid_t, upid, int __user *, stat_addr,
+		int, options, struct rusage __user *, ru)
 {
 	BUG();
 }
