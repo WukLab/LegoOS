@@ -127,6 +127,11 @@ static ssize_t normal_p2m_read(struct file *f, char __user *buf,
 	retval = *retval_ptr;
 	content = retbuf + sizeof(ssize_t);
 
+	/* Either remote memory or storage is buggy */
+	BUG_ON(retval > count);
+
+	file_debug(" app wants to read: %zu, we read: %zu", count, retval);
+
 	/* If success, we copy the content into user's cacheline */
 	if (likely(retval >= 0)) {
 #ifdef CONFIG_DEBUG_FILE

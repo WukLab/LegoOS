@@ -64,6 +64,13 @@ int handle_p2m_read(struct p2m_read_write_payload *payload, u64 desc,
 		goto err_reply;
 	}
 
+	/*
+	 * The first 8 bytes is nr of bytes be read
+	 * We really need a structure to fill this.
+	 * This is hard to code and debug.
+	 */
+	*(ssize_t *)retbuf = retval;
+
 	/* Succeed */
 	ibapi_reply_message(retbuf, count + sizeof(retval), desc);
 

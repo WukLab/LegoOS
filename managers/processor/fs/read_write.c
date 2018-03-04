@@ -19,7 +19,6 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
 	struct file *f;
 	long ret;
-	//loff_t off = 0;
 
 	syscall_enter("fd: %d, buf: %p, count: %zu\n",
 		fd, buf, count);
@@ -43,7 +42,6 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 {
 	struct file *f;
 	long ret;
-	//loff_t off = 0;
 
 	syscall_enter("fd: %d buf: %p count: %zu\n",
 		fd, buf, count);
