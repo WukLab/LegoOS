@@ -12,6 +12,23 @@
 
 #include <lego/sched.h>
 
+/*
+ * XXX:
+ *
+ * Currently in Lego, we don't support pgid
+ * thus pid == pgid
+ */
+enum pid_type
+{
+	PIDTYPE_PID,
+	PIDTYPE_PGID,
+	PIDTYPE_SID,
+	PIDTYPE_MAX,
+
+	/* only valid to __task_pid_nr_ns() */
+	__PIDTYPE_TGID
+};
+
 pid_t alloc_pid(struct task_struct *p);
 void free_pid(pid_t pid);
 

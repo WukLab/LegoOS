@@ -526,4 +526,7 @@ static inline void mmdrop(struct mm_struct *mm)
 		__mmdrop(mm);
 }
 
+/* Grab a reference to a task's mm, if it is not already going away */
+struct mm_struct *get_task_mm(struct task_struct *task);
+
 #endif /* _LEGO_MM_H_ */

@@ -88,6 +88,8 @@
 		.time_slice	= RR_TIMESLICE,				\
 	},								\
 	.tasks		= LIST_HEAD_INIT(tsk.tasks),			\
+	.ptraced	= LIST_HEAD_INIT(tsk.ptraced),			\
+	.ptrace_entry	= LIST_HEAD_INIT(tsk.ptrace_entry),		\
 	.real_parent	= &tsk,						\
 	.parent		= &tsk,						\
 	.children	= LIST_HEAD_INIT(tsk.children),			\

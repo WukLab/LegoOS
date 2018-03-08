@@ -446,6 +446,14 @@ int kthreadd(void *unused)
 
 	/* Setup a clean context for our children to inherit. */
 	set_task_comm(tsk, "kthreadd");
+
+	/*
+	 * We don't want to be interrupted by any signals
+	 * Especially if some children exit while we are during copy_process(),
+	 * children will send signals to us.
+	 */
+	ignore_signals(tsk);
+
 	set_cpus_allowed_ptr(tsk, cpu_possible_mask);
 
 	pr_info("%s(pid:%d/cpu:%d) is running as daemon\n",

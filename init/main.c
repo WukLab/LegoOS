@@ -159,11 +159,10 @@ static int kernel_init(void *unused)
 	memory_component_init();
 #endif
 
-	/*
-	 * We don't need pid 1 anymore.
-	 *  - ys
-	 */
-	do_exit(0);
+	while (1) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule();
+	}
 	BUG();
 	return 0;
 }

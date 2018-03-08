@@ -36,6 +36,47 @@ static void print_fatal_signal(int signr)
 	preempt_enable();
 }
 
+static void __sigqueue_free(struct sigqueue *q)
+{
+	kfree(q);
+}
+
+void flush_sigqueue(struct sigpending *queue)
+{
+	struct sigqueue *q;
+
+	sigemptyset(&queue->signal);
+	while (!list_empty(&queue->list)) {
+		q = list_entry(queue->list.next, struct sigqueue , list);
+		list_del_init(&q->list);
+		__sigqueue_free(q);
+	}
+}
+
+/*
+ * Flush all pending signals for this kthread.
+ */
+void flush_signals(struct task_struct *t)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&t->sighand->siglock, flags);
+	clear_tsk_thread_flag(t, TIF_SIGPENDING);
+	flush_sigqueue(&t->pending);
+	flush_sigqueue(&t->signal->shared_pending);
+	spin_unlock_irqrestore(&t->sighand->siglock, flags);
+}
+
+void ignore_signals(struct task_struct *t)
+{
+	int i;
+
+	for (i = 0; i < _NSIG; ++i)
+		t->sighand->action[i].sa.sa_handler = SIG_IGN;
+
+	flush_signals(t);
+}
+
 /* Flush all handlers for a task. */
 void flush_signal_handlers(struct task_struct *t, int force_default)
 {
@@ -287,11 +328,6 @@ __sigqueue_alloc(int sig, struct task_struct *t, gfp_t flags, int override_rlimi
 		q->flags = 0;
 	}
 	return q;
-}
-
-static void __sigqueue_free(struct sigqueue *q)
-{
-	kfree(q);
 }
 
 /*
@@ -642,6 +678,101 @@ static inline void task_cputime(struct task_struct *t,
 		*utime = t->utime;
 	if (stime)
 		*stime = t->stime;
+}
+
+/*
+ * Let a parent know about the death of a child.
+ * For a stopped/continued status change, use do_notify_parent_cldstop instead.
+ *
+ * Returns true if our parent ignored us and so we've switched to
+ * self-reaping.
+ */
+bool do_notify_parent(struct task_struct *tsk, int sig)
+{
+	struct siginfo info;
+	unsigned long flags;
+	struct sighand_struct *psig;
+	bool autoreap = false;
+
+	BUG_ON(sig == -1);
+
+ 	/* do_notify_parent_cldstop should have been called instead.  */
+ 	BUG_ON(task_is_stopped_or_traced(tsk));
+
+	BUG_ON(!tsk->ptrace &&
+	       (tsk->group_leader != tsk || !thread_group_empty(tsk)));
+
+	if (sig != SIGCHLD) {
+		/*
+		 * This is only possible if parent == real_parent.
+		 * Check if it has changed security domain.
+		 */
+		if (tsk->parent_exec_id != tsk->parent->self_exec_id)
+			sig = SIGCHLD;
+	}
+
+	info.si_signo = sig;
+	info.si_errno = 0;
+	/*
+	 * We are under tasklist_lock here so our parent is tied to
+	 * us and cannot change.
+	 *
+	 * task_active_pid_ns will always return the same pid namespace
+	 * until a task passes through release_task.
+	 *
+	 * write_lock() currently calls preempt_disable() which is the
+	 * same as rcu_read_lock(), but according to Oleg, this is not
+	 * correct to rely on this
+	 */
+	info.si_pid = tsk->pid;
+	info.si_uid = 0;
+
+#if 0
+	task_cputime(tsk, &utime, &stime);
+	info.si_utime = cputime_to_clock_t(utime + tsk->signal->utime);
+	info.si_stime = cputime_to_clock_t(stime + tsk->signal->stime);
+#endif
+
+	info.si_status = tsk->exit_code & 0x7f;
+	if (tsk->exit_code & 0x80)
+		info.si_code = CLD_DUMPED;
+	else if (tsk->exit_code & 0x7f)
+		info.si_code = CLD_KILLED;
+	else {
+		info.si_code = CLD_EXITED;
+		info.si_status = tsk->exit_code >> 8;
+	}
+
+	psig = tsk->parent->sighand;
+	spin_lock_irqsave(&psig->siglock, flags);
+	if (!tsk->ptrace && sig == SIGCHLD &&
+	    (psig->action[SIGCHLD-1].sa.sa_handler == SIG_IGN ||
+	     (psig->action[SIGCHLD-1].sa.sa_flags & SA_NOCLDWAIT))) {
+		/*
+		 * We are exiting and our parent doesn't care.  POSIX.1
+		 * defines special semantics for setting SIGCHLD to SIG_IGN
+		 * or setting the SA_NOCLDWAIT flag: we should be reaped
+		 * automatically and not left for our parent's wait4 call.
+		 * Rather than having the parent do it as a magic kind of
+		 * signal handler, we just set this to tell do_exit that we
+		 * can be cleaned up without becoming a zombie.  Note that
+		 * we still call __wake_up_parent in this case, because a
+		 * blocked sys_wait4 might now return -ECHILD.
+		 *
+		 * Whether we send SIGCHLD or not for SA_NOCLDWAIT
+		 * is implementation-defined: we do (if you don't want
+		 * it, just use SIG_IGN instead).
+		 */
+		autoreap = true;
+		if (psig->action[SIGCHLD-1].sa.sa_handler == SIG_IGN)
+			sig = 0;
+	}
+	if (valid_signal(sig) && sig)
+		__group_send_sig_info(sig, &info, tsk->parent);
+	__wake_up_parent(tsk, tsk->parent);
+	spin_unlock_irqrestore(&psig->siglock, flags);
+
+	return autoreap;
 }
 
 /**
@@ -1655,6 +1786,36 @@ int do_send_sig_info(int sig, struct siginfo *info,
 	return ret;
 }
 
+static int check_kill_permission(int sig, struct siginfo *info,
+				 struct task_struct *t)
+{
+	if (!valid_signal(sig))
+		return -EINVAL;
+
+	/* kernel can send do anything */
+	if (!si_fromuser(info))
+		return 0;
+
+	if (!same_thread_group(current, t))
+		return -EPERM;
+
+	return 0;
+}
+
+/*
+ * send signal info to all the members of a group
+ */
+int group_send_sig_info(int sig, struct siginfo *info, struct task_struct *p)
+{
+	int ret;
+
+	ret = check_kill_permission(sig, info, p);
+	if (!ret && sig)
+		ret = do_send_sig_info(sig, info, p, true);
+
+	return ret;
+}
+
 int kill_pid_info(int sig, struct siginfo *info, pid_t pid)
 {
 	int error = -ESRCH;
@@ -1672,6 +1833,18 @@ int kill_pid_info(int sig, struct siginfo *info, pid_t pid)
 		 * de_thread() it will find the new leader.
 		 */
 	}
+}
+
+/*
+ * __kill_pgrp_info() sends a signal to a process group: this is what the tty
+ * control characters do (^C, ^Z etc)
+ * - the caller must hold at least a readlock on tasklist_lock
+ */
+int __kill_pgrp_info(int sig, struct siginfo *info, pid_t pgrp)
+{
+	/* TODO */
+	WARN_ON_ONCE(1);
+	return 0;
 }
 
 /*
@@ -1708,22 +1881,6 @@ SYSCALL_DEFINE2(kill, pid_t, pid, int, sig)
 	info.si_uid = 0;
 
 	return kill_something_info(sig, &info, pid);
-}
-
-static int check_kill_permission(int sig, struct siginfo *info,
-				 struct task_struct *t)
-{
-	if (!valid_signal(sig))
-		return -EINVAL;
-
-	/* kernel can send do anything */
-	if (!si_fromuser(info))
-		return 0;
-
-	if (!same_thread_group(current, t))
-		return -EPERM;
-
-	return 0;
 }
 
 static int

@@ -214,6 +214,31 @@ void mmput(struct mm_struct *mm)
 		__mmput(mm);
 }
 
+/**
+ * get_task_mm - acquire a reference to the task's mm
+ *
+ * Returns %NULL if the task has no mm.  Checks PF_KTHREAD (meaning
+ * this kernel workthread has transiently adopted a user mm with use_mm,
+ * to do its AIO) is not set and if so returns a reference to it, after
+ * bumping up the use count.  User must release the mm via mmput()
+ * after use.  Typically used by /proc and ptrace.
+ */
+struct mm_struct *get_task_mm(struct task_struct *task)
+{
+	struct mm_struct *mm;
+
+	task_lock(task);
+	mm = task->mm;
+	if (mm) {
+		if (task->flags & PF_KTHREAD)
+			mm = NULL;
+		else
+			atomic_inc(&mm->mm_users);
+	}
+	task_unlock(task);
+	return mm;
+}
+
 static void complete_vfork_done(struct task_struct *tsk)
 {
 	struct completion *vfork;
@@ -786,6 +811,12 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	}
 
 	if (likely(p->pid)) {
+		/* ptrace related init */
+		INIT_LIST_HEAD(&p->ptrace_entry);
+		INIT_LIST_HEAD(&p->ptraced);
+		p->parent = p->real_parent;
+		p->jobctl = 0;
+
 		if (thread_group_leader(p)) {
 			p->signal->leader_pid = pid;
 			list_add_tail(&p->sibling, &p->real_parent->children);

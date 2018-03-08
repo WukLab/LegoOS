@@ -359,7 +359,30 @@ struct signal_struct {
 
 	pid_t			leader_pid;
 
+	/*
+	 * Cumulative resource counters for dead threads in the group,
+	 * and for reaped dead child processes forked by this group.
+	 * Live threads maintain their own counters and add to these
+	 * in __exit_signal, except for the group leader.
+	 */
 	spinlock_t		stats_lock;
+	cputime_t utime, stime, cutime, cstime;
+	cputime_t gtime;
+	cputime_t cgtime;
+
+	unsigned long nvcsw, nivcsw, cnvcsw, cnivcsw;
+	unsigned long min_flt, maj_flt, cmin_flt, cmaj_flt;
+	unsigned long inblock, oublock, cinblock, coublock;
+	unsigned long maxrss, cmaxrss;
+
+	/*
+	 * Cumulative ns of schedule CPU time fo dead threads in the
+	 * group, not including a zombie group leader, (This only differs
+	 * from jiffies_to_ns(utime + stime) if sched_clock uses something
+	 * other than jiffies.)
+	 */
+	unsigned long long sum_sched_runtime;
+
 	/*
 	 * We don't bother to synchronize most readers of this at all,
 	 * because there is no reader checking a limit that actually needs
@@ -434,15 +457,21 @@ void __cleanup_sighand(struct sighand_struct *);
 
 void flush_signal_handlers(struct task_struct *, int force_default);
 
+int group_send_sig_info(int sig, struct siginfo *info, struct task_struct *p);
+
 /* Nuke all other threads in the group */
 int zap_other_threads(struct task_struct *p);
 
 int copy_siginfo_to_user(siginfo_t __user *to, const siginfo_t *from);
+int __kill_pgrp_info(int sig, struct siginfo *info, pid_t pgrp);
+void ignore_signals(struct task_struct *t);
 
 /* kernel/coredump.c */
 void do_coredump(const siginfo_t *siginfo);
 
 void dump_sigaction(struct sigaction *action, const char *prefix);
+
+void flush_sigqueue(struct sigpending *queue);
 
 /*
  * In POSIX a signal is sent either to a specific thread (Linux task)

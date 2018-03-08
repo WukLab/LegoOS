@@ -37,3 +37,13 @@ void exit_itimers(struct signal_struct *sig)
 {
 }
 
+/* TODO */
+void posix_cpu_timers_exit(struct task_struct *task)
+{
+
+}
+
+void posix_cpu_timers_exit_group(struct task_struct *task)
+{
+
+}

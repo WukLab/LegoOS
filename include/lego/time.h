@@ -186,4 +186,8 @@ static __always_inline void timespec_add_ns(struct timespec *a, u64 ns)
 	a->tv_nsec = ns;
 }
 
+struct task_struct;
+void posix_cpu_timers_exit(struct task_struct *task);
+void posix_cpu_timers_exit_group(struct task_struct *task);
+
 #endif /* _LEGO_TIME_H_ */
