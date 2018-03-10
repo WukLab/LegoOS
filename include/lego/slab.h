@@ -127,7 +127,6 @@
 /*
  * Common kmalloc functions provided by all allocators
  */
-void kfree(const void *p);
 size_t ksize(const void *);
 void *__kmalloc(size_t size, gfp_t flags) __assume_kmalloc_alignment __malloc;
 
@@ -201,6 +200,7 @@ static __always_inline void *kmalloc_large(size_t size, gfp_t flags)
  * for general use, and so are not documented here. For a full list of
  * potential flags, always refer to linux/gfp.h.
  */
+#ifndef CONFIG_DEBUG_KMALLOC_USE_BUDDY
 static __always_inline void *kmalloc(size_t size, gfp_t flags)
 {
 	if (__builtin_constant_p(size)) {
@@ -220,6 +220,21 @@ static __always_inline void *kmalloc(size_t size, gfp_t flags)
 	}
 	return __kmalloc(size, flags);
 }
+void kfree(const void *p);
+
+#else
+/*
+ * DEBUG Option
+ * Make kmalloc use buddy allocator directly
+ */
+static inline void *kmalloc(size_t size, gfp_t flags)
+{
+	int order = get_order(size);
+	return (void *)__get_free_pages(flags, order);
+}
+
+static inline void kfree(const void *p) { }
+#endif
 
 /*
  * Determine size used for the nth kmalloc cache.

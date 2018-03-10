@@ -931,7 +931,7 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 {
 	struct page *page;
 
-#ifdef CONFIG_DEBUG_FORCE_ZERO_ALLOCATION
+#ifdef CONFIG_DEBUG_BUDDY_FORCE_GFP_ZERO
 	gfp_mask |= __GFP_ZERO;
 #endif
 

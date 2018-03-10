@@ -69,13 +69,12 @@ static inline int lru_get_pcache(struct pcache_meta *pcm)
 struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
 {
 	struct pcache_meta *pcm;
+	bool found = false;
 
 	spin_lock(&pset->lru_lock);
 
-	if (pset_has_free_lines(pset)) {
-		pcm = ERR_PTR(-EAGAIN);
+	if (pset_has_free_lines(pset))
 		goto unlock_lru;
-	}
 
 	list_for_each_entry_reverse(pcm, &pset->lru_list, lru) {
 		PCACHE_BUG_ON_PCM(PcacheReclaim(pcm), pcm);
@@ -85,10 +84,8 @@ struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
 		 * Counter is updated within lru_lock, but we are holding it.
 		 * Hence here we release the lock and tell caller retry directly
 		 */
-		if (unlikely(lru_get_pcache(pcm))) {
-			pcm = ERR_PTR(-EAGAIN);
+		if (unlikely(lru_get_pcache(pcm)))
 			goto unlock_lru;
-		}
 
 		/*
 		 * This means pcache is within common_do_fill_page(),
@@ -128,6 +125,7 @@ struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
 		 *
 		 * Remove it from LRU list, and set Reclaim
 		 */
+		found = true;
 		__del_from_lru_list(pcm, pset);
 		SetPcacheReclaim(pcm);
 		goto unlock_lru;
@@ -141,15 +139,15 @@ put_pcache:
 		 * Previous lru_put_pcache() *may* free a line
 		 * Someone else *may* free in the middle
 		 */
-		if (pset_has_free_lines(pset)) {
-			pcm = ERR_PTR(-EAGAIN);
+		if (pset_has_free_lines(pset))
 			goto unlock_lru;
-		}
 	}
 
 unlock_lru:
 	spin_unlock(&pset->lru_lock);
 
+	if (!found)
+		pcm = ERR_PTR(-EAGAIN);
 	return pcm;
 }
 

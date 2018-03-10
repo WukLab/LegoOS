@@ -442,6 +442,12 @@ void pcache_remove_rmap(struct pcache_meta *pcm, pte_t *ptep, unsigned long addr
 
 	/* Well, failure is not an option */
 	BUG_ON(!rri.removed);
+
+	/*
+	 * Unlike pcache_zap_pte, we don't need to put_cache here.
+	 * Caller will do so. And normally, this pcm should have
+	 * multiple users if this function is called from wp handler.
+	 */
 }
 
 struct pcache_move_pte_info {
@@ -486,6 +492,10 @@ static int __pcache_move_pte_fastpath(struct pcache_meta *pcm,
 	return PCACHE_RMAP_AGAIN;
 }
 
+/*
+ * Reuse the existing pcache line since both @old_addr and @new_addr belong
+ * to the same pcache set. We just need to *update* the rmap information.
+ */
 static int pcache_move_pte_fastpath(struct mm_struct *mm,
 				    pte_t *old_pte, pte_t *new_pte,
 				    unsigned long old_addr, unsigned long new_addr)
@@ -558,7 +568,17 @@ static int __pcache_move_pte_slowpath(struct pcache_meta *old_pcm,
 	return PCACHE_RMAP_SUCCEED;
 }
 
-/* Copy pcache line content from one set to another set */
+/*
+ * Copy pcache line content from one set to another set, since @old_addr and @new_addr
+ * belong to different set. We must remove the rmap from old_pcm, and setup a new pcm.
+ *
+ * Overall flow:
+ * - allocate a new pcm
+ * - rmap walk to find the old_pcm, and remove it
+ * - try to free old pcm
+ * - set pte to point to new pcm
+ * - add rmap for new pcm
+ */
 static int pcache_move_pte_slowpath(struct mm_struct *mm,
 				    pte_t *old_pte, pte_t *new_pte,
 				    unsigned long old_addr, unsigned long new_addr)
@@ -604,13 +624,10 @@ static int pcache_move_pte_slowpath(struct mm_struct *mm,
 	BUG_ON(!mpi.updated);
 
 	/*
-	 * XXX: racy?
-	 * What if another thread just tried to lock
-	 * the pcache? If others always get_pcache first
-	 * then it is okay.
+	 * Try to free the old pcm.
+	 * Similar to pcache_zap_pte's last step.
 	 */
-	if (!pcache_mapped(old_pcm))
-		put_pcache(old_pcm);
+	put_pcache(old_pcm);
 
 	/*
 	 * Set new_pte before adding rmap,
@@ -619,6 +636,10 @@ static int pcache_move_pte_slowpath(struct mm_struct *mm,
 	new_pte_entry = pcache_dup_pte_pgprot(new_pcm, old_pte_entry);
 	pte_set(new_pte, new_pte_entry);
 
+	/*
+	 * Adding rmap will mark new_pcm PcacheValid
+	 * Thus can be selected as an eviction candidate.
+	 */
 	ret = pcache_add_rmap(new_pcm, new_pte, new_addr,
 			      mm, current->group_leader);
 
@@ -690,6 +711,9 @@ static int __pcache_zap_pte(struct pcache_meta *pcm,
  * When called, the pte is already cleared, thus @pte is already 0,
  * while @ptent holds the previous pte content.
  *
+ * The higher level caller can be: munmap() and exit().
+ * We might race with pcache_do_wp_page().
+ *
  * We enter with @pte locked, return with @pte still locked.
  */
 void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
@@ -736,6 +760,13 @@ void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
 
 	/* Failure is not an option. */
 	BUG_ON(!zpc.zapped);
+
+	/*
+	 * Last step, try to free this pcache line
+	 * Each rmap counts one refcount. If we are the
+	 * only rmap, then this pcm will be freed.
+	 */
+	put_pcache(pcm);
 }
 
 static int pcache_try_to_unmap_one(struct pcache_meta *pcm,

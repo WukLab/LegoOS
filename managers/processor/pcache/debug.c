@@ -20,7 +20,7 @@
 	{1UL << PC_usable,		"usable"	},	\
 	{1UL << PC_valid,		"valid"		},	\
 	{1UL << PC_dirty,		"dirty"		},	\
-	{1UL << PC_reclaim,		"recliam"	},	\
+	{1UL << PC_reclaim,		"reclaim"	},	\
 	{1UL << PC_writeback,		"writeback"	}
 
 const struct trace_print_flags pcacheflag_names[] = {
@@ -37,9 +37,10 @@ const struct trace_print_flags pcacheflag_names[] = {
  */
 void dump_pcache_meta(struct pcache_meta *pcm, const char *reason)
 {
-	pr_debug("pcache:%p mapcount:%d refcount:%d flags:(%pGc)\n",
+	pr_debug("pcache:%p mapcount:%d refcount:%d flags:(%pGc) kva: %p\n",
 		pcm, atomic_read(&pcm->mapcount),
-		atomic_read(&pcm->_refcount), &pcm->bits);
+		atomic_read(&pcm->_refcount), &pcm->bits,
+		pcache_meta_to_kva(pcm));
 	if (reason)
 		pr_debug("pcache dumped because: %s\n", reason);
 }

@@ -160,12 +160,19 @@ RMAP_FLAGS(Reserved, reserved)
  * pcacheline->bits
  *
  * PC_locked:		Pcacheline is locked. DO NOT TOUCH.
+ * 			e.g., under rmap operations
+ *
  * PC_allocated:	Pcacheline is allocated, but may not be usable (internal)
  * PC_usable:		Pcacheline is usable, for all users (public)
+ *
  * PC_valid:		Pcacheline has a valid mapping and content.
+ * 			Depends on if there are rmap, thus set/clear by rmap functions.
+ * 			Only valid pcache line can be evicted.
+ *
  * PC_dirty:		Pcacheline is dirty
  * PC_reclaim:		Pcacheline was selected to be evicted
  * PC_writeback:	Pcacheline is being writtern back to memory
+ * 			Only set/clear by flush routine
  *
  * Hack: remember to update the pcacheflag_names array in debug file.
  *

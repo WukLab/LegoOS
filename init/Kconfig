@@ -220,19 +220,6 @@ config TRACE_SYSCALL
 
 	  If unsure, say N.
 
-config DEBUG_FORCE_ZERO_ALLOCATION
-	bool "Pass __GFP_ZERO to every page allocation (Catch uninitliazed bug)"
-	default n
-	depends on DEBUG_KERNEL
-	help
-	  This option is used to catch uninitliazed bug. If this option is on,
-	  then all pages allocated by buddy allocator will be cleared upon return.
-
-	  If anything went wrong without this option AND went alright wirh this option,
-	  that means you have uninitialized buffer.
-
-	  If unsure, say N.
-
 config DEBUG_EXIT
 	bool "Debug all thread exit activities"
 	default n
@@ -245,6 +232,8 @@ config DEBUG_EXIT
 	  If unsure, say N.
 
 endmenu # Basic Kernel Debug and Trace Options
+
+
 
 menu "Lego Kernel Profiling"
 config PROFILING

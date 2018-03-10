@@ -165,5 +165,35 @@ config SLOB
 
 endchoice
 
+config DEBUG_MM_ALLOCATION
+	bool "Debug kmalloc and buddy allocator"
+	depends on DEBUG_KERNEL
+	default n
+
+config DEBUG_KMALLOC_USE_BUDDY
+	bool "Make kmalloc use buddy directly, kfree is empty"
+	depends on DEBUG_KERNEL
+	depends on DEBUG_MM_ALLOCATION
+	default n
+	help
+	  Make kmalloc() use buddy allocator directly, without going through
+	  slob/slab/slub. This option can be used to catch bugs introduced by kmalloc.
+
+	  If unsure, say N.
+
+config DEBUG_BUDDY_FORCE_GFP_ZERO
+	bool "Pass __GFP_ZERO to every physical page allocation (Catch uninitliazed bug)"
+	depends on DEBUG_KERNEL
+	depends on DEBUG_MM_ALLOCATION
+	default n
+	help
+	  This option is used to catch uninitliazed bug. If this option is on,
+	  then all pages allocated by buddy allocator will be cleared upon return.
+
+	  If anything went wrong without this option AND went alright with this option,
+	  that means you have uninitialized buffer.
+
+	  If unsure, say N.
+
 
 endmenu
