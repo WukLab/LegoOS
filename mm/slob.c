@@ -268,7 +268,7 @@ static void *slob_alloc(size_t size, gfp_t gfp, int align, int node)
 /*
  * slob_free: entry point into the slob allocator.
  */
-static void slob_free(void *block, int size)
+__maybe_unused static void slob_free(void *block, int size)
 {
 	struct page *sp;
 	slob_t *prev, *next, *b = (slob_t *)block;
@@ -385,6 +385,7 @@ void *__kmalloc(size_t size, gfp_t gfp)
 	return __do_kmalloc_node(size, gfp, NUMA_NO_NODE, _RET_IP_);
 }
 
+#ifndef CONFIG_DEBUG_KMALLOC_USE_BUDDY
 void kfree(const void *block)
 {
 	struct page *sp;
@@ -406,6 +407,7 @@ void kfree(const void *block)
 		 */
 		__free_pages(sp, page_private(sp));
 }
+#endif
 
 size_t ksize(const void *block)
 {
