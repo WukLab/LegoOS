@@ -301,6 +301,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 		ret = VM_FAULT_SIGBUS;
 		goto out;
 	}
+	PCACHE_BUG_ON_PCM(!PcacheValid(old_pcm), old_pcm);
 
 	/*
 	 * pcache might be under flush back if pcache eviction is using
@@ -330,24 +331,15 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 	}
 
 	/*
-	 * COW should only happen to fork()-ed pcache lines.
-	 * But when the wp fault happens, some processes may already exit().
-	 * Thus it is possible to have the mapcount == 1, in which case we
-	 * can simply upgrade pte permission to RW, and we are good to go.
-	 *
-	 * However, after fork, any rmap pcache related operations will
-	 * race with this function: exit(), mremap(), munmap(), or another fork().
-	 *
-	 * About deadlock:
-	 * I think, if another operations come from other address spaces,
-	 * then lock_pcache will be good enough and safe.
+	 * If other operations come from other address spaces,
+	 * then lock_pcache() will be good enough and safe.
 	 * But what if other operations come from the same address space?
-	 * We need to obey the pcache->pte lock ordering.
+	 * We must obey the pcache -> pte lock ordering to avoid deadlock.
+	 *
+	 * Also, we don't need to get_pcache before unlock the ptl.
+	 * Because we have one rmap which has grabbed one refcount.
 	 */
-	PCACHE_BUG_ON_PCM(!PcacheValid(old_pcm), old_pcm);
-
 	if (unlikely(!trylock_pcache(old_pcm))) {
-		get_pcache(old_pcm);
 		spin_unlock(ptl);
 		lock_pcache(old_pcm);
 		spin_lock(ptl);
@@ -355,13 +347,22 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 		/* Since we released the lock, it could got changed. */
 		if (!pte_same(*page_table, orig_pte)) {
 			ret = 0;
-			put_pcache(old_pcm);
 			goto unlock;
 		}
-		put_pcache(old_pcm);
 	}
 
-	/* We are the only user left, just upgrade pte to RW */
+	/*
+	 * COW should only happen to fork()-ed pcache lines.
+	 * But when the wp fault happens, some processes may already exit(),
+	 * or did munmap to this shared mapping. Thus it is possible to have
+	 * the mapcount == 1 case, where we can simply upgrade pte permission
+	 * to RW, since we are the only user left.
+	 *
+	 * Do note, after fork(), any rmap pcache related operations will
+	 * race with this function: exit(), mremap(), munmap(), or another fork().
+	 *
+	 * mapcount is always updated with pcm locked, thus we are stable here
+	 */
 	if (pcache_mapcount(old_pcm) == 1) {
 		pte_t entry;
 
@@ -392,7 +393,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 		pte_set(page_table, entry);
 		flush_tlb_mm_range(mm, address, address + PAGE_SIZE);
 
-		/* which will also mark PcacheValid */
+		/* which will also mark new_pcm PcacheValid */
 		ret = pcache_add_rmap(new_pcm, page_table, address,
 				      current->mm, current->group_leader);
 		if (unlikely(ret)) {
@@ -402,11 +403,15 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 			goto unlock;
 		}
 
+		/*
+		 * Remove rmap from old_pcm and dec its refcount
+		 * old_pcm must still be alive since there are
+		 * other processes mapped to it.
+		 */
 		pcache_remove_rmap(old_pcm, page_table, address,
 				   current->mm, current->group_leader);
-
-		/* ref grabbed during fork */
 		put_pcache(old_pcm);
+
 		inc_pcache_event(PCACHE_FAULT_WP_COW);
 		ret = 0;
 	}
