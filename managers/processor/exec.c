@@ -398,6 +398,7 @@ static void setup_new_exec(const char *filename)
 	 * An exec changes our domain.
 	 * We are no longer part of the thread group:
 	 */
+	current->self_exec_id++;
 	flush_signal_handlers(current, 0);
 }
 

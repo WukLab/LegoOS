@@ -25,9 +25,24 @@
 #define debug_exit(fmt, ...)	do { } while (0)
 #endif
 
-/* TODO */
+/*
+ * This function is called with tasklist_lock locked.
+ * It will do necessary cleanup, a counterpart of fork.
+ *
+ * TODO:
+ * Still need to detach/release PID
+ */
 static void __unhash_process(struct task_struct *p, bool group_dead)
 {
+	nr_threads--;
+
+	if (group_dead) {
+		list_del(&p->tasks);
+		list_del_init(&p->sibling);
+	}
+
+	list_del(&p->thread_group);
+	list_del(&p->thread_node);
 }
 
 /*
@@ -76,7 +91,10 @@ static void __exit_signal(struct task_struct *tsk)
 	sig->nivcsw += tsk->nivcsw;
 	sig->sum_sched_runtime += tsk->se.sum_exec_runtime;
 	sig->nr_threads--;
+
+	/* This is a very important cleanup function.. */
 	__unhash_process(tsk, group_dead);
+
 	spin_unlock(&sig->stats_lock);
 
 	/*
@@ -123,6 +141,12 @@ repeat:
 	}
 
 	spin_unlock_irq(&tasklist_lock);
+
+	/*
+	 * The task->usage is 2 when initalized.
+	 * Thus when we drop 1 here, p will not be freed.
+	 * The last free maybe performed by finish_task_switch().
+	 */
 	put_task_struct(p);
 
 	p = leader;
@@ -335,6 +359,7 @@ static void exit_notify(struct task_struct *tsk, int group_dead)
 				!ptrace_reparented(tsk) ?
 			tsk->exit_signal : SIGCHLD;
 		autoreap = do_notify_parent(tsk, sig);
+		WARN(1, "Should not happen.");
 	} else if (thread_group_leader(tsk)) {
 		autoreap = thread_group_empty(tsk) &&
 			do_notify_parent(tsk, tsk->exit_signal);

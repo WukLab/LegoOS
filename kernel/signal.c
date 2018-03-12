@@ -767,9 +767,12 @@ bool do_notify_parent(struct task_struct *tsk, int sig)
 		if (psig->action[SIGCHLD-1].sa.sa_handler == SIG_IGN)
 			sig = 0;
 	}
+
 	if (valid_signal(sig) && sig)
 		__group_send_sig_info(sig, &info, tsk->parent);
+
 	__wake_up_parent(tsk, tsk->parent);
+
 	spin_unlock_irqrestore(&psig->siglock, flags);
 
 	return autoreap;

@@ -690,6 +690,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	INIT_LIST_HEAD(&p->sibling);
 	INIT_LIST_HEAD(&p->thread_group);
 	p->vfork_done = NULL;
+	p->pdeath_signal = 0;
 	spin_lock_init(&p->alloc_lock);
 
 	init_sigpending(&p->pending);
@@ -816,6 +817,7 @@ struct task_struct *copy_process(unsigned long clone_flags,
 		INIT_LIST_HEAD(&p->ptraced);
 		p->parent = p->real_parent;
 		p->jobctl = 0;
+		p->ptrace = 0;
 
 		if (thread_group_leader(p)) {
 			p->signal->leader_pid = pid;
