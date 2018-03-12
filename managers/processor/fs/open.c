@@ -100,16 +100,23 @@ static struct file_operations debug_ramfs_f_ops = {
 };
 #endif
 
-SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
+/*
+ * do_sys_open: open for pathname as the relative path of dfd
+ * @dfd: directory file descriptor to be severed as the base for relative path resolving
+ * @pathname: relative path from dfd
+ * @flags: open flags
+ * @mode: create file with mode when O_CREAT flag is specified
+ * return value: fd, on success fd > 0, on fail, fd = errno
+ */
+static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t mode)
 {
 	char kname[FILENAME_LEN_DEFAULT];
 	int fd, ret;
 	struct file *f;
 
-	if (strncpy_from_user(kname, filename, FILENAME_LEN_DEFAULT) < 0) {
-		fd = -EFAULT;
+	fd = get_absolute_pathname(dfd, kname, pathname);
+	if (unlikely(fd < 0))
 		goto out;
-	}
 
 	/*
 	 * Allocate fd and struct file
@@ -161,6 +168,48 @@ put:
 out:
 	pr_info("%s() CPU%d PID:%d f_name: %s, flags: %x, mode: %x fd: %d\n",
 		__func__, smp_processor_id(), current->pid, kname, flags, mode, fd);
+	return fd;
+}
+
+SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
+{
+	long fd;
+
+	syscall_filename(filename);
+	syscall_enter("flags: %x, mode: %x\n", flags, mode);
+
+	flags |= O_LARGEFILE;
+	fd = do_sys_open(AT_FDCWD, filename, flags, mode);
+
+	syscall_exit(fd);
+	return fd;
+}
+
+SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename,
+		int, flags, umode_t, mode)
+{
+	long fd;
+
+	syscall_filename(filename);
+	syscall_enter("dfd: %d, flags: %x, mode: %x\n", dfd, flags, mode);
+
+	flags |= O_LARGEFILE;
+	fd = do_sys_open(dfd, filename, flags, mode);
+
+	syscall_exit(fd);
+	return fd;
+}
+
+SYSCALL_DEFINE2(creat, const char __user *, pathname, umode_t, mode)
+{
+	long fd;
+
+	syscall_filename(pathname);
+	syscall_enter("mode: %x\n", mode);
+
+	fd = do_sys_open(AT_FDCWD, pathname, O_CREAT | O_WRONLY | O_TRUNC | O_LARGEFILE, mode);
+
+	syscall_exit(fd);
 	return fd;
 }
 

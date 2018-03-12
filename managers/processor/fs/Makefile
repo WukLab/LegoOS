@@ -9,6 +9,9 @@ obj-y += fcntl.o
 obj-y += ioctl.o
 obj-y += stdio.o
 obj-y += normal_ops.o
+obj-y += truncate.o
+obj-y += namei.o
+obj-y += statfs.o
 
 #
 # To maintain compability with linux

@@ -14,6 +14,7 @@
 #include <lego/mutex.h>
 #include <lego/kernel.h>
 #include <lego/spinlock.h>
+#include <lego/fcntl.h>
 
 #define SEEK_SET	0	/* seek relative to beginning of file */
 #define SEEK_CUR	1	/* seek relative to current file position */
@@ -147,29 +148,41 @@ static inline void put_file(struct file *filp)
 		__put_file(filp);
 }
 
-/* fcntl flags */
-#define O_ACCMODE	00000003
-#define O_RDONLY	00000000
-#define O_WRONLY	00000001
-#define O_RDWR		00000002
-#define O_CREAT		00000100	/* not fcntl */
-#define O_EXCL		00000200	/* not fcntl */
-#define O_NOCTTY	00000400	/* not fcntl */
-#define O_TRUNC		00001000	/* not fcntl */
-#define O_APPEND	00002000
-#define O_NONBLOCK	00004000
-#define O_DSYNC		00010000	/* used to be O_SYNC, see below */
-#define FASYNC		00020000	/* fcntl, for BSD compatibility */
-#define O_DIRECT	00040000	/* direct disk access hint */
-#define O_LARGEFILE	00100000
-#define O_DIRECTORY	00200000	/* must be a directory */
-#define O_NOFOLLOW	00400000	/* don't follow links */
-#define O_NOATIME	01000000
-#define O_CLOEXEC	02000000	/* set close_on_exec */
-#define AT_FDCWD	-100    	/* Special value used to indicate
-                                           openat should use the current
-                                           working directory. */
-#define AT_SYMLINK_NOFOLLOW	0x100   /* Do not follow symbolic links.  */
-#define AT_REMOVEDIR	0x200   	/* Remove directory instead of
-                                           unlinking file.  */
+int get_absolute_pathname(int dfd, char *k_pathname, const char __user *pathname);
+
+/* statfs.c */
+struct kstatfs {
+	long f_type;
+	long f_bsize;
+	u64 f_blocks;
+	u64 f_bfree;
+	u64 f_bavail;
+	u64 f_files;
+	u64 f_ffree;
+	__kernel_fsid_t f_fsid;
+	long f_namelen;
+	long f_frsize;
+	long f_flags;
+	long f_spare[4];
+};
+
+/*
+ * arch dependent, long for x86_64
+ */
+#define __statfs_word long
+
+struct statfs {
+	__statfs_word f_type;
+	__statfs_word f_bsize;
+	__statfs_word f_blocks;
+	__statfs_word f_bfree;
+	__statfs_word f_bavail;
+	__statfs_word f_files;
+	__statfs_word f_ffree;
+	__kernel_fsid_t f_fsid;
+	__statfs_word f_namelen;
+	__statfs_word f_frsize;
+	__statfs_word f_flags;
+	__statfs_word f_spare[4];
+};
 #endif /* _LEGO_FILES_H_ */
