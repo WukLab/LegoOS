@@ -454,12 +454,9 @@ static inline void
 show_signal_msg(struct pt_regs *regs, unsigned long error_code,
 		unsigned long address, struct task_struct *tsk)
 {
-	printk("%s[%d]: segfault at %#lx ip %p sp %p error %lx",
+	printk("%s[%d]: segfault at %#lx ip %p sp %p error %lx\n",
 		tsk->comm, tsk->pid, address,
 		(void *)regs->ip, (void *)regs->sp, error_code);
-	printk(KERN_CONT "\n");
-
-	show_regs(regs);
 }
 
 static noinline void
@@ -567,7 +564,9 @@ mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 			return;
 		}
 
-		panic("Out-of-memory: need to explicitly free memory!");
+		pr_info("CPU%d PID:%d fail to allocate pcache or victim cache lines.\n",
+			smp_processor_id(), current->pid);
+		bad_area_nosemaphore(regs, error_code, address);
 	} else {
 		if (fault & VM_FAULT_SIGBUS) {
 			do_sigbus(regs, error_code, address, fault);

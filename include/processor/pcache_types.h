@@ -84,6 +84,24 @@ struct pcache_set {
 #endif
 } ____cacheline_aligned;
 
+static inline void lock_pset(struct pcache_set *pset)
+{
+#ifdef CONFIG_PCACHE_EVICT_LRU
+	spin_lock(&pset->lru_lock);
+#elif defined (CONFIG_PCACHE_EVICTION_PERSET_LIST)
+	spin_lock(&pset->eviction_list_lock);
+#endif
+}
+
+static inline void unlock_pset(struct pcache_set *pset)
+{
+#ifdef CONFIG_PCACHE_EVICT_LRU
+	spin_unlock(&pset->lru_lock);
+#elif defined (CONFIG_PCACHE_EVICTION_PERSET_LIST)
+	spin_unlock(&pset->eviction_list_lock);
+#endif
+}
+
 /**
  * struct pcache_meta	- Metadata about one pcache line
  * @bits: various state bits (see below)

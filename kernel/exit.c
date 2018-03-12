@@ -19,8 +19,9 @@
 #include <processor/processor.h>
 
 #ifdef CONFIG_DEBUG_EXIT
-#define debug_exit(fmt, ...)	\
-	pr_debug("%s() " fmt "\n", __func__, __VA_ARGS__)
+#define debug_exit(fmt, ...)					\
+	pr_debug("%s() CPU:%d" fmt "\n",			\
+		__func__, smp_processor_id(), __VA_ARGS__)
 #else
 #define debug_exit(fmt, ...)	do { } while (0)
 #endif

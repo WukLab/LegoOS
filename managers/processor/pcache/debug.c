@@ -91,6 +91,8 @@ void dump_pset(struct pcache_set *pset)
 	struct pcache_meta *pcm;
 	int way;
 
+	lock_pset(pset);
+
 	pr_debug("pset:%p set_idx: %lu nr_lru:%d\n",
 		pset, pcache_set_to_set_index(pset),
 		IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0);
@@ -99,6 +101,8 @@ void dump_pset(struct pcache_set *pset)
 		dump_pcache_meta(pcm, NULL);
 		dump_pcache_rmaps(pcm);
 	}
+
+	unlock_pset(pset);
 }
 
 /**

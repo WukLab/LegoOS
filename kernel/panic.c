@@ -12,6 +12,8 @@
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
 #include <lego/atomic.h>
+#include <processor/pcache.h>
+#include <processor/processor.h>
 
 /*
  * 64-bit random ID for oopses:
@@ -108,11 +110,15 @@ void panic(const char *fmt, ...)
 	show_stack_content(current, NULL, NULL);
 	show_call_trace(current, NULL, NULL);
 
-	/* Print short info on all tasks */
-	show_state_filter(0, false);
-
 	smp_send_stop();
 	pr_emerg("---[ end Kernel panic - not syncing: %s\n", buf);
+
+	/* Print short info on all tasks */
+	if (scheduler_state == SCHED_UP)
+		show_state_filter(0, false);
+
+	if (manager_state == MANAGER_UP)
+		print_pcache_events();
 
 	for (;;)
 		hlt();

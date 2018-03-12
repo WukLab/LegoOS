@@ -231,18 +231,19 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int ret;
 
-	pcache_debug("pset: %p, for uva: %#lx", pset, address);
+	inc_pcache_event(PCACHE_EVICTION_TRIGGERED);
 
-	/* Part I: algorithm hook */
+	/* Algorithm hook */
 	pcm = evict_find_line(pset);
 	if (IS_ERR_OR_NULL(pcm)) {
-		if (likely(PTR_ERR(pcm) == -EAGAIN))
+		if (likely(PTR_ERR(pcm) == -EAGAIN)) {
 			/*
 			 * Some pcache line become avaiable,
 			 * tell caller to have a quick retry.
 			 */
+			inc_pcache_event(PCACHE_EVICTION_EAGAIN);
 			return PCACHE_EVICT_SUCCESS_NOACTION;
-		else
+		} else
 			return PCACHE_EVICT_FAILED;
 	}
 
@@ -260,21 +261,32 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	 */
 	PCACHE_BUG_ON_PCM(pcache_ref_count(pcm) > 2, pcm);
 
-	/* Part II: mechanism hook */
+	/*
+	 * After a successful eviction, @pcm has no rmap left
+	 * which implies PcacheValid is cleared too.
+	 */
 	ret = evict_line(pset, pcm);
 	if (ret) {
-		ret = PCACHE_EVICT_FAILED;
-		goto unlock;
+		/*
+		 * Revert what algorithm has done:
+		 * - Clear reclaim flag
+		 * - add it back to lru list (update counter)
+		 * - unlock
+		 * - dec ref (may lead to free)
+		 */
+		ClearPcacheReclaim(pcm);
+		add_to_lru_list(pcm, pset);
+		unlock_pcache(pcm);
+		put_pcache(pcm);
+		return PCACHE_EVICT_FAILED;
 	}
+
+	/*
+	 * This line has been evicted,
+	 * and we are the only user can this @pcm now.
+	 * Clear its state and return it to free pool.
+	 */
 	ClearPcacheReclaim(pcm);
-	ClearPcacheValid(pcm);
-
-	inc_pset_event(pset, PSET_EVICTION);
-	inc_pcache_event(PCACHE_EVICTION);
-
-	ret = PCACHE_EVICT_SUCCESS_ONE;
-
-unlock:
 	unlock_pcache(pcm);
 
 	/*
@@ -291,5 +303,10 @@ unlock:
 		pcache_ref_count_set(pcm, 0);
 		__put_pcache_nolru(pcm);
 	}
-	return ret;
+
+	/* Update counters */
+	inc_pset_event(pset, PSET_EVICTION);
+	inc_pcache_event(PCACHE_EVICTION_SUCCEED);
+
+	return PCACHE_EVICT_SUCCESS_ONE;
 }

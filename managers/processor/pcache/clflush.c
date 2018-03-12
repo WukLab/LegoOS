@@ -57,7 +57,7 @@ static int __clflush_one(struct task_struct *tsk, unsigned long user_va,
 	}
 
 	if (unlikely(reply)) {
-		pr_err("%s(): %s\n", FUNC, perror(reply));
+		pr_err("%s(): %s tsk: %d user_va: %#lx\n", FUNC, perror(reply), tsk->pid, user_va);
 		retval = reply;
 		goto out;
 	}
@@ -79,6 +79,7 @@ out:
 int clflush_one(struct task_struct *tsk, unsigned long user_va,
 		void *cache_addr)
 {
+	inc_pcache_event(PCACHE_CLFLUSH);
 	return __clflush_one(tsk, user_va, cache_addr,
 			__builtin_return_address(0));
 }

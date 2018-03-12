@@ -98,7 +98,7 @@
  * 	Set only by victim flush routine.
  * 	Only victims with Flushed set can be viewed as an eviction candidate.
  *
- *    Evicting:
+ *    Reclaim:
  *      Set when a line is selected to be evicted.
  *      Protected by victim->spinlock.
  *      Used to sync with pcache fill path.
@@ -131,7 +131,7 @@
  * D)
  * If a victim is both pcache hit safe and victim eviction safe, we need to
  * make sure eviction and fill do not happen at the same time. What we are
- * doing here is to use Evicting flag and a filling counter. Both parties
+ * doing here is to use Reclaim flag and a filling counter. Both parties
  * need to first acquire victim->lock and do checking/updating. This ensures
  * up filling to pcache and victim evictim won't conflict.
  * (victim_check_hit_entry() and find_victim_to_evict())
@@ -183,12 +183,28 @@ static inline void dequeue_usable_victim(struct pcache_victim_meta *v)
 	{1UL << PCACHE_VICTIM_hasdata,		"hasdata"	},	\
 	{1UL << PCACHE_VICTIM_writeback,	"writeback"	},	\
 	{1UL << PCACHE_VICTIM_flushed,		"flushed"	},	\
-	{1UL << PCACHE_VICTIM_evicting,		"evicting"	},
+	{1UL << PCACHE_VICTIM_reclaim,		"reclaim"	},
 
 const struct trace_print_flags victimflag_names[] = {
 	__def_victimflag_names
 	{0, NULL}
 };
+
+static void dump_pcache_victim_hits(struct pcache_victim_meta *victim)
+{
+	struct pcache_victim_hit_entry *entry;
+	int i = 0;
+
+	if (list_empty(&victim->hits)) {
+		pr_info("    WARN victim has no hits entries\n");
+	}
+
+	list_for_each_entry(entry, &victim->hits, next) {
+		pr_info("    hit[%d] owner: [%s][%d] addr: %#lx\n",
+			i++, entry->owner->comm, entry->owner->pid,
+			entry->address);
+	}
+}
 
 void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason)
 {
@@ -197,21 +213,51 @@ void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason)
 		victim, victim_index(victim), atomic_read(&victim->_refcount),
 		atomic_read(&victim->nr_fill_pcache), spin_is_locked(&victim->lock),
 		&victim->flags, victim->pcm, victim->pset);
+
+	dump_pcache_victim_hits(victim);
+
 	if (victim->pcm)
 		dump_pcache_meta(victim->pcm, "dump_victim");
-	if (victim->pset)
-		dump_pset(victim->pset);
+
+	if (victim->pset) {
+		pr_debug("    pset:%p set_idx: %lu nr_lru:%d\n",
+			victim->pset, pcache_set_to_set_index(victim->pset),
+			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&victim->pset->nr_lru) : 0);
+	}
+
 	if (reason)
-		pr_debug("victim dumped because: %s\n", reason);
+		pr_debug("    victim dumped because: %s\n", reason);
+	else
+		pr_debug("\n");
 }
+
+/* To avoid tons of mixed messages */
+static DEFINE_SPINLOCK(victim_dump_lock);
+static bool victim_dumped = false;
 
 void dump_all_victim(void)
 {
 	struct pcache_victim_meta *v;
 	int index;
 
+	spin_lock(&victim_dump_lock);
+
+	if (!victim_dumped)
+		victim_dumped = true;
+	else
+		goto unlock;
+
+	pr_info("  --   Start Dump Victim Cache     -- \n");
+	pr_info("  --   CPU%d [%s][pid=%d, tgid=%d] --\n",
+		smp_processor_id(), current->comm, current->pid, current->tgid);
+
 	for_each_victim(v, index)
 		dump_pcache_victim(v, NULL);
+
+	pr_info("  --   End Dump Victim Cache       --\n");
+
+unlock:
+	spin_unlock(&victim_dump_lock);
 }
 
 static void victim_free_hit_entries(struct pcache_victim_meta *victim);
@@ -259,7 +305,7 @@ find_victim_to_evict(void)
 	spin_lock(&usable_victims_lock);
 	list_for_each_entry_safe(v, saver, &usable_victims, next) {
 		PCACHE_BUG_ON_VICTIM(!VictimUsable(v), v);
-		PCACHE_BUG_ON_VICTIM(VictimEvicting(v), v);
+		PCACHE_BUG_ON_VICTIM(VictimReclaim(v), v);
 
 		victim_debug("    checking v%u", victim_index(v));
 
@@ -309,11 +355,11 @@ find_victim_to_evict(void)
 		 * 2) locked by us
 		 * 3) not filling pcache
 		 *
-		 * Now set the Evicting flag, unlock the victim,
+		 * Now set the Reclaim flag, unlock the victim,
 		 * and remove it from usable_victims_list.
 		 * But we still hold 1 more ref here.
 		 */
-		if (unlikely(TestSetVictimEvicting(v))) {
+		if (unlikely(TestSetVictimReclaim(v))) {
 			dump_pcache_victim(v, NULL);
 			BUG();
 		}
@@ -358,14 +404,14 @@ static int victim_evict_line(void)
 
 	/*
 	 * If a victim is selected to be evicted, it is removed
-	 * from the allocated_victim list, and has Evicting flag set.
+	 * from the allocated_victim list, and has Reclaim flag set.
 	 * Also it has ref=1 or ref=2.
 	 */
 	victim = find_victim_to_evict();
 	if (!victim)
 		return -EAGAIN;
 
-	PCACHE_BUG_ON_VICTIM(!VictimEvicting(victim), victim);
+	PCACHE_BUG_ON_VICTIM(!VictimReclaim(victim), victim);
 	if (unlikely(victim_ref_count(victim) > 2)) {
 		dump_pcache_victim(victim, "victim/ref bug");
 		BUG();
@@ -374,7 +420,7 @@ static int victim_evict_line(void)
 	/*
 	 * This victim is out of allocated list now. But victim_try_fill_pcache()
 	 * is still able to see this victim, because it use for_each_victim to walk.
-	 * However, this is OKAY. Because this victim has Evicting bit set, and it
+	 * However, this is OKAY. Because this victim has Reclaim bit set, and it
 	 * will not be reset until the last step. Check comment in that function.
 	 *
 	 * We manually set refcount to 0 and free it, it is kind of weird.
@@ -430,7 +476,7 @@ victim_alloc_fastpath(void)
 unsigned long sysctl_victim_alloc_timeout_sec __read_mostly = 10;
 
 static struct pcache_victim_meta *
-victim_alloc_slowpath(void)
+victim_alloc_slowpath(struct pcache_set *pset)
 {
 	struct pcache_victim_meta *victim;
 	int ret;
@@ -441,10 +487,19 @@ retry:
 	if (ret && ret != -EAGAIN)
 		return NULL;
 
-	if (time_after(jiffies,
-		       alloc_start + sysctl_victim_alloc_timeout_sec * HZ)) {
-		WARN(1, "Abort victim alloc (%ums) pid:%u",
-			jiffies_to_msecs(jiffies - alloc_start), current->pid);
+	if (time_after(jiffies, alloc_start + sysctl_victim_alloc_timeout_sec * HZ)) {
+		/*
+		 * If this got printed, nr_lru will not equal to PCACHE_ASSOCIATIVTY.
+		 * In fact, it must equal to (PCACHE_ASSOCIATIVITY - 1).
+		 * Because one @pcm has been removed from list as the eviction candidate.
+		 */
+		pr_info("CPU%d PID:%d Abort victim alloc (%ums) nr_usable_victims: %d "
+		        "req from pset:%p, pset_idx:%lu, nr_lru:%d\n",
+			smp_processor_id(), current->pid,
+			jiffies_to_msecs(jiffies - alloc_start),
+			atomic_read(&nr_usable_victims),
+			pset, pcache_set_to_set_index(pset),
+			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0);
 		dump_all_victim();
 		return NULL;
 	}
@@ -455,7 +510,7 @@ retry:
 	return victim;
 }
 
-static struct pcache_victim_meta *victim_alloc(void)
+static struct pcache_victim_meta *victim_alloc(struct pcache_set *pset)
 {
 	struct pcache_victim_meta *v;
 
@@ -463,7 +518,7 @@ static struct pcache_victim_meta *victim_alloc(void)
 	if (likely(v))
 		return v;
 
-	v = victim_alloc_slowpath();
+	v = victim_alloc_slowpath(pset);
 	if (likely(v))
 		return v;
 	return NULL;
@@ -564,7 +619,13 @@ victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
 
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 
-	victim = victim_alloc();
+	/*
+	 * Update counter even before we allocate
+	 * Because we want to catch the failed allocation
+	 */
+	inc_pcache_event(PCACHE_VICTIM_PREPARE_INSERT);
+
+	victim = victim_alloc(pset);
 	if (!victim)
 		return ERR_PTR(-ENOMEM);
 	victim->pset = pset;
@@ -623,6 +684,9 @@ void victim_finish_insert(struct pcache_victim_meta *victim)
 	victim->pcm = NULL;
 	smp_wmb();
 	SetVictimHasdata(victim);
+
+	/* Update counter */
+	inc_pcache_event(PCACHE_VICTIM_FINISH_INSERT);
 
 	/*
 	 * Submit flush job to worker thread
@@ -749,31 +813,31 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 		/*
 		 * There is a small time frame after eviction release
 		 * the lock and before frees it. If we happen to see this,
-		 * we skip this line. If victim is _not_ Evicting, it is either
+		 * we skip this line. If victim is _not_ Reclaim, it is either
 		 * Usable or simply free. Futher, this victim will _not_ be marked
-		 * as Evicting after this check, since we are holding the lock above.
+		 * as Reclaim after this check, since we are holding the lock above.
 		 *
 		 * Worst case:
 		 * 		CPU0			CPU1
 		 * t0	find_victim_to_evict
 		 * t1	  spin_lock
-		 * t2	    SetVictimEvicting
+		 * t2	    SetVictimReclaim
 		 * t3	    __dequeue
 		 * t4	  spin_unlock
 		 * t5   ..				spin_lock
 		 * t6	..
 		 * t7   ..
 		 * t8	__put_victim_nolist
-		 * t9					 VictimEvicting (1, continue)
+		 * t9					 VictimReclaim (1, continue)
 		 * t10     v->flags = 0;
-		 * t11					 VictimEvicting (0)
+		 * t11					 VictimReclaim (0)
 		 * t12					 <interrupt>
 		 * t13   victim_alloc
 		 * t14   ..				 VictimUsable   (0)
 		 * t15     SetVictimUsable
 		 * t16					 VictimUsable   (1)
 		 *
-		 * VictimEvicting test can avoid t5-t9 race. Assume CPU1 gets an
+		 * VictimReclaim test can avoid t5-t9 race. Assume CPU1 gets an
 		 * interrupt after t11 testing (which yields 0), right before
 		 * the VictimUsable testing. Meanwhile, this victim got allocated
 		 * agagin by CPU0! As for CPU1, it may do the VictimUsable test at
@@ -787,7 +851,7 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 		 * In all, these two checkings ensure us a victim that is Usable,
 		 * within the allocated victim list, and not being evicted.
 		 */
-		if (unlikely(VictimEvicting(v)))
+		if (unlikely(VictimReclaim(v)))
 			continue;
 		if (unlikely(!VictimUsable(v)))
 			continue;

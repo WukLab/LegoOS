@@ -1158,4 +1158,11 @@ static inline pid_t task_session(struct task_struct *task)
 	return task->group_leader->pid;
 }
 
+enum sched_state {
+	SCHED_DOWN,
+	SCHED_UP,
+};
+
+extern int scheduler_state;
+
 #endif /* _LEGO_SCHED_H_ */

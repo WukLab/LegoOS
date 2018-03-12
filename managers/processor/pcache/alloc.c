@@ -29,7 +29,8 @@ unsigned long sysctl_pcache_alloc_timeout_sec __read_mostly = 30;
 static void bad_pcache(struct pcache_meta *pcm,
 		       const char *reason, unsigned long bad_flags)
 {
-	pr_alert("BUG: Bad pcache state in process %s\n", current->comm);
+	pr_alert("BUG: Bad pcache state in process [%s][pid:%d tgid: %d]\n",
+		current->comm, current->pid, current->tgid);
 
 	dump_pcache_meta(pcm, reason);
 
@@ -170,11 +171,13 @@ retry:
 		return NULL;
 
 	/* Do we still have time? */
-	if (time_after(jiffies,
-		       alloc_start + sysctl_pcache_alloc_timeout_sec * HZ)) {
-		WARN(1, "Abort pcache alloc (%ums) pid:%u, addr:%#lx",
-			jiffies_to_msecs(jiffies - alloc_start), current->pid, address);
-		dump_pset(pset);
+	if (time_after(jiffies, alloc_start + sysctl_pcache_alloc_timeout_sec * HZ)) {
+		pr_info("CPU%d PID:%d Abort pcache alloc (%ums) addr:%#lx, pset_idx:%lu, nr_lru:%d\n",
+			smp_processor_id(), current->pid, jiffies_to_msecs(jiffies - alloc_start),
+			address, pcache_set_to_set_index(pset),
+			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0);
+		if (atomic_read(&pset->nr_lru) < PCACHE_ASSOCIATIVITY)
+			dump_pset(pset);
 		return NULL;
 	}
 

@@ -17,6 +17,14 @@
 #include <lego/ktime.h>
 #include <lego/pid.h>
 
+#ifdef CONFIG_DEBUG_SIGNAL
+#define debug_signal(fmt, ...)					\
+	pr_debug("%s() CPU:%d " fmt "\n",			\
+		__func__, smp_processor_id(), __VA_ARGS__)
+#else
+#define debug_signal(fmt, ...)	do { } while (0)
+#endif
+
 int print_fatal_signals __read_mostly;
 static int __init setup_print_fatal_signals(char *str)
 {
@@ -1259,8 +1267,9 @@ relock:
 		}
 
 		signr = dequeue_signal(current, &current->blocked, &ksig->info);
-		pr_debug("%s(): dequeue_signr: %d, handler:%p\n",
-			FUNC, signr, signr > 0 ? (&sighand->action[signr-1])->sa.sa_handler : NULL);
+
+		debug_signal("dequeue_signr: %d, handler:%p", signr,
+			signr > 0 ? (&sighand->action[signr-1])->sa.sa_handler : NULL);
 
 		/*
 		 * No signal to handle

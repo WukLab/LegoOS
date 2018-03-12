@@ -23,14 +23,30 @@ DEFINE_PER_CPU(struct pcache_event_stat, pcache_event_stats) = {{0}};
 
 static const char *const pcache_event_text[] = {
 	"nr_pgfault",
+
+	"nr_clflush",
+
+	/* write-protection fault */
 	"nr_pgfault_wp",
 	"nr_pgfault_wp_cow",
 	"nr_pgfault_wp_reuse",
+
 	"nr_pgfault_due_to_concurrent_eviction",	/* perset list specific */
+
 	"nr_pcache_fill_from_memory",
 	"nr_pcache_fill_from_victim",			/* victim cache specific */
-	"nr_pcache_eviction",
+
+	"nr_pcache_eviction_triggered",
+	"nr_pcache_eviction_eagain",
+	"nr_pcache_eviction_succeed",
+
 	"nr_victim_eviction",
+
+	/* Victim internal debug counter */
+	"nr_victim_prepare_insert",
+	"nr_victim_finish_insert",
+	"nr_victim_flush_submitted",
+	"nr_victim_flush_finished",
 };
 
 void sum_pcache_events(struct pcache_event_stat *buf)

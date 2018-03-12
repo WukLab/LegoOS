@@ -329,8 +329,6 @@ int native_cpu_up(int cpu, struct task_struct *idle)
 
 	WARN_ON(irqs_disabled());
 
-	pr_debug("++++++++++++++++++++=_---CPU UP  %u\n", cpu);
-
 	/*
 	 * Already booted CPU?
 	 */

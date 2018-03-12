@@ -35,8 +35,8 @@
  * lead to an early panic.
  */
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	= 	"wuklab13",
-	[1]	= 	"wuklab15",
+	[0]	= 	"wuklab12",
+	[1]	= 	"wuklab14",
 	[2]	= 	"wuklab16",
 };
 

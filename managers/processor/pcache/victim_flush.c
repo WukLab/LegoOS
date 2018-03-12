@@ -53,7 +53,7 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait)
 	get_victim(victim);
 
 	info = kmalloc(sizeof(*info), GFP_KERNEL);
-	if (!info)
+	if (WARN_ON(!info))
 		return -ENOMEM;
 	info->victim = victim;
 	info->wait = wait;
@@ -64,10 +64,14 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait)
 	list_add_tail(&info->list, &victim_flush_list);
 	spin_unlock(&victim_flush_lock);
 
+	/* Update counter */
+	inc_pcache_event(PCACHE_VICTIM_FLUSH_SUBMITTED);
+
 	/* flush thread will free info */
 	wake_up_process(victim_flush_thread);
 	if (unlikely(wait))
 		wait_for_completion(&info->done);
+
 	return 0;
 }
 
@@ -120,6 +124,9 @@ static void __victim_flush_func(struct victim_flush_info *info)
 	if (unlikely(wait))
 		complete(done);
 	kfree(info);
+
+	/* Update counter */
+	inc_pcache_event(PCACHE_VICTIM_FLUSH_FINISHED);
 }
 
 static int victim_flush_func(void *unused)

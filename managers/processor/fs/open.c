@@ -111,9 +111,6 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 		goto out;
 	}
 
-	syscall_enter("f_name: %s, flags: %x, mode: %x\n",
-		kname, flags, mode);
-
 	/*
 	 * Allocate fd and struct file
 	 * and @file has ref set to 1 if succeed
@@ -162,7 +159,8 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 put:
 	put_file(f);
 out:
-	syscall_exit(fd);
+	pr_info("%s() CPU%d PID:%d f_name: %s, flags: %x, mode: %x fd: %d\n",
+		__func__, smp_processor_id(), current->pid, kname, flags, mode, fd);
 	return fd;
 }
 
@@ -191,8 +189,9 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 	}
 	spin_unlock(&files->file_lock);
 
-	pr_info("%s(): [%d] -> [%s]\n", __func__, fd,
-		f ? f->f_name : "-EBADF");
+	pr_info("%s() CPU%d PID:%d [fd: %d] -> [%s]\n",
+		__func__, smp_processor_id(), current->pid,
+		fd, f ? f->f_name : "-EBADF");
 
 	syscall_exit(ret);
 	return ret;

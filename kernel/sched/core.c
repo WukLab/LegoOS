@@ -26,6 +26,8 @@
 
 bool sysctl_SCHED_FEATURE_TTWU_QUEUE = false;
 
+int scheduler_state = SCHED_DOWN;
+
 DEFINE_PER_CPU(int, __preempt_count) = INIT_PREEMPT_COUNT;
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
@@ -1877,6 +1879,8 @@ void __init sched_init(void)
 
 	/* At last, set cpu0's idle thread */
 	sched_init_idle(current, smp_processor_id());
+
+	scheduler_state = SCHED_UP;
 
 	pr_info("Scheduler is up and running\n");
 }

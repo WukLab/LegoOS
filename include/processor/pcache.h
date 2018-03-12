@@ -576,12 +576,15 @@ void pcache_remove_rmap(struct pcache_meta *pcm, pte_t *ptep, unsigned long addr
 /* Called when fork() happens, duplicate the pcache */
 int fork_dup_pcache(struct task_struct *dst_task,
 		    struct mm_struct *dst_mm, struct mm_struct *src_mm);
+void __init pcache_print_info(void);
 #else
 static inline int fork_dup_pcache(struct task_struct *t,
 				  struct mm_struct *m1, struct mm_struct *m2)
 {
 	return 0;
 }
+
+static inline void pcache_print_info(void) { }
 #endif
 
 int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
@@ -597,8 +600,6 @@ typedef int (*fill_func_t)(unsigned long, unsigned long, struct pcache_meta *, v
 int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 			pte_t *page_table, pmd_t *pmd,
 			unsigned long flags, fill_func_t fill_func, void *arg);
-
-void __init pcache_print_info(void);
 
 #include <processor/pcache_victim.h>
 #include <processor/pcache_evict.h>

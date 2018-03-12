@@ -231,6 +231,16 @@ config DEBUG_EXIT
 
 	  If unsure, say N.
 
+config DEBUG_SIGNAL
+	bool "Debug signal"
+	default n
+	depends on DEBUG_KERNEL
+	help
+	  Enable if you want to know what signals have been caught
+	  by a running thread.
+
+	  If unsure, say N.
+
 endmenu # Basic Kernel Debug and Trace Options
 
 

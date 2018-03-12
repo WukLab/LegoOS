@@ -152,7 +152,7 @@ enum pcache_victim_flags {
 	PCACHE_VICTIM_hasdata,
 	PCACHE_VICTIM_writeback,
 	PCACHE_VICTIM_flushed,
-	PCACHE_VICTIM_evicting,
+	PCACHE_VICTIM_reclaim,
 
 	NR_PCACHE_VICTIM_FLAGS
 };
@@ -200,7 +200,7 @@ VICTIM_FLAGS(Usable, usable)
 VICTIM_FLAGS(Hasdata, hasdata)
 VICTIM_FLAGS(Writeback, writeback)
 VICTIM_FLAGS(Flushed, flushed)
-VICTIM_FLAGS(Evicting, evicting)
+VICTIM_FLAGS(Reclaim, reclaim)
 
 static inline void lock_victim(struct pcache_victim_meta *victim)
 {
