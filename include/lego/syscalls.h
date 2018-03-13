@@ -82,10 +82,14 @@ do {										\
 	static inline long SYSC##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 
 asmlinkage long sys_read(unsigned int fd, char __user *buf, size_t count);
+asmlinkage long sys_pread64(unsigned int fd, char __user *buf,
+			    size_t count, loff_t pos);
 asmlinkage long sys_readv(unsigned long fd,
 			  const struct iovec __user *vec,
 			  unsigned long vlen);
 asmlinkage long sys_write(unsigned int fd, const char __user *buf, size_t count);
+asmlinkage long sys_pwrite64(unsigned int fd, const char __user *buf,
+			     size_t count, loff_t pos);
 asmlinkage long sys_writev(unsigned long fd,
 			   const struct iovec __user *vec,
 			   unsigned long vlen);
@@ -105,6 +109,7 @@ asmlinkage long sys_setuid(uid_t uid);
 asmlinkage long sys_gettid(void);
 asmlinkage long sys_getpid(void);
 asmlinkage long sys_getppid(void);
+asmlinkage long sys_getpgrp(void);
 asmlinkage long sys_fork(void);
 asmlinkage long sys_vfork(void);
 asmlinkage long sys_clone(unsigned long, unsigned long, int __user *,
@@ -122,6 +127,11 @@ asmlinkage long sys_mprotect(unsigned long start, size_t len,
 			     unsigned long prot);
 asmlinkage long sys_munmap(unsigned long addr, size_t len);
 asmlinkage long sys_msync(unsigned long start, size_t len, int flags);
+asmlinkage long sys_mbind(unsigned long start, unsigned long len,
+				unsigned long mode,
+				const unsigned long __user *nmask,
+				unsigned long maxnode,
+				unsigned flags);
 
 asmlinkage long sys_getrlimit(unsigned int resource,
 				struct rlimit __user *rlim);
@@ -153,6 +163,8 @@ asmlinkage long sys_getcpu(unsigned __user *cpu, unsigned __user *node, struct g
 asmlinkage long sys_time(time_t __user *tloc);
 asmlinkage long sys_gettimeofday(struct timeval __user *tv,
 				struct timezone __user *tz);
+asmlinkage long sys_clock_gettime(const clockid_t which_clock,
+				struct timespec __user *tp);
 
 /* Lego only */
 asmlinkage long sys_checkpoint_process(pid_t pid);

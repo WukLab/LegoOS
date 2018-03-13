@@ -145,6 +145,7 @@ typedef struct {
 
 typedef __kernel_time_t		time_t;
 typedef __kernel_clock_t	clock_t;
+typedef __kernel_clockid_t	clockid_t;
 typedef unsigned long		uintptr_t;
 typedef long long		loff_t;
 typedef unsigned short		umode_t;

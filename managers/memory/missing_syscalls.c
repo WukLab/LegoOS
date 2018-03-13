@@ -32,6 +32,18 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 	BUG();
 }
 
+SYSCALL_DEFINE4(pread64, unsigned int, fd, char __user *, buf,
+		size_t, count, loff_t, pos)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE4(pwrite64, unsigned int, fd, const char __user *, buf,
+		size_t, count, loff_t, pos)
+{
+	BUG();
+}
+
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
 	BUG();

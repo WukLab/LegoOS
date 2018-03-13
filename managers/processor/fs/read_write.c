@@ -37,6 +37,34 @@ out:
 	return ret;
 }
 
+SYSCALL_DEFINE4(pread64, unsigned int, fd, char __user *, buf,
+		size_t, count, loff_t, pos)
+{
+	struct file *f;
+	long ret;
+
+	syscall_enter("fd: %d, buf: %p, count: %zu, pos: %Ld\n",
+		fd, buf, count, pos);
+
+	if (pos < 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	f = fdget(fd);
+	if (!f) {
+		ret = -EBADF;
+		goto out;
+	}
+
+	ret = f->f_op->read(f, buf, count, &pos);
+
+	put_file(f);
+out:
+	syscall_exit(ret);
+	return ret;
+}
+
 SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 		size_t, count)
 {
@@ -53,6 +81,34 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 	}
 
 	ret = f->f_op->write(f, buf, count, &f->f_pos);
+
+	put_file(f);
+out:
+	syscall_exit(ret);
+	return ret;
+}
+
+SYSCALL_DEFINE4(pwrite64, unsigned int, fd, const char __user *, buf,
+		size_t, count, loff_t, pos)
+{
+	struct file *f;
+	long ret;
+
+	syscall_enter("fd: %d buf: %p count: %zu, pos: %Ld\n",
+		fd, buf, count, pos);
+
+	if (pos < 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	f = fdget(fd);
+	if (!f) {
+		ret = -EBADF;
+		goto out;
+	}
+	
+	ret = f->f_op->write(f, buf, count, &pos);
 
 	put_file(f);
 out:

@@ -62,6 +62,11 @@ SYSCALL_DEFINE0(getppid)
 	return current->real_parent->pid;
 }
 
+SYSCALL_DEFINE0(getpgrp)
+{
+	return current->group_leader->pid;
+}
+
 /* make sure you are allowed to change @tsk limits before calling this */
 int do_prlimit(struct task_struct *tsk, unsigned int resource,
 		struct rlimit *new_rlim, struct rlimit *old_rlim)

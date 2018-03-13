@@ -285,3 +285,39 @@ SYSCALL_DEFINE2(gettimeofday, struct timeval __user *, tv,
 	}
 	return 0;
 }
+
+/* 
+ * allow get real time, boot time, mono time
+ * TODO: currently we assume no one use settime/settimeofday,
+ * suspend system, etc.
+ * Thus mono time is identical to boot time.
+ */
+SYSCALL_DEFINE2(clock_gettime, const clockid_t, which_clock,
+		struct timespec __user *, tp)
+{
+	struct timespec kts;
+	long ret = 0;
+	
+	switch (which_clock) {
+	case CLOCK_REALTIME:
+	case CLOCK_REALTIME_COARSE:
+		__do_gettimeofday(&kts);
+		break;
+	case CLOCK_MONOTONIC:
+	case CLOCK_MONOTONIC_COARSE:
+	case CLOCK_MONOTONIC_RAW:
+	case CLOCK_BOOTTIME:
+		getboottime(&kts);
+		break;
+	case CLOCK_PROCESS_CPUTIME_ID:
+	case CLOCK_THREAD_CPUTIME_ID:
+		pr_warn("%s(): process/thread time not implemented.\n", __func__);
+		ret = -EINVAL;
+		break;
+	
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
