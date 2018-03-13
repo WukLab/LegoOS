@@ -13,7 +13,7 @@ obj-y += stat.o
 obj-y += syscall.o
 obj-y += thread.o
 obj-$(CONFIG_PCACHE_PREFETCH) += prefetch.o
-obj-$(CONFIG_PCACHE_EVICTION_VICTIM) += victim.o victim_flush.o
+obj-$(CONFIG_PCACHE_EVICTION_VICTIM) += victim.o victim_flush.o victim_debug.o
 
 #
 # Eviction Algorithm

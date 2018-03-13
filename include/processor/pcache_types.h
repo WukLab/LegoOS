@@ -10,6 +10,7 @@
 #ifndef _LEGO_PROCESSOR_PCACHE_TYPES_H_
 #define _LEGO_PROCESSOR_PCACHE_TYPES_H_
 
+#include <lego/mm.h>
 #include <lego/const.h>
 #include <lego/bitops.h>
 #include <lego/spinlock.h>
@@ -311,8 +312,7 @@ static inline void pcache_reset_flags(struct pcache_meta *pcm)
 	 * to free pool. prep_new_pcache_meta() will initialize the
 	 * pcm properly at next allocation time.
 	 */
-	smp_wmb();
-	pcm->bits = 0;
+	smp_store_mb(pcm->bits, 0);
 }
 
 /*

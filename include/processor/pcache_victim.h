@@ -16,12 +16,7 @@
 
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 
-#ifdef CONFIG_DEBUG_PCACHE_VICTIM
-#define victim_debug(fmt, ...)	\
-	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
-#else
-static inline void victim_debug(const char *fmt, ...) { }
-#endif
+#include <lego/completion.h>
 
 #define VICTIM_NR_ENTRIES \
 	((unsigned int)CONFIG_PCACHE_EVICTION_VICTIM_NR_ENTRIES)
@@ -59,6 +54,13 @@ struct pcache_victim_hit_entry {
 	unsigned long		address;	/* page aligned */
 	struct task_struct	*owner;
 	struct list_head	next;
+};
+
+struct victim_flush_job {
+	struct pcache_victim_meta *victim;
+	struct completion done;
+	bool wait;
+	struct list_head next;
 };
 
 static inline int victim_ref_count(struct pcache_victim_meta *v)
@@ -141,7 +143,21 @@ extern void *pcache_victim_data_map;
  * PCACHE_VICTIM_allocated:	victim cache is allocated
  * PCACHE_VICTIM_usable:	victim cache is usable for all users
  * PCACHE_VICTIM_hasdata:	victim cache has real data in its line
- * PCACHE_VICTIM_writeback:	victim cache is being written to memory.
+ * 				Set once the second step of insertion finished.
+ *
+ * PCACHE_VICTIM_writeback:	victim cache is being written to memory
+ * 				Set when the victim is under clflush routine.
+ * 				This is a pure debug flag
+ *
+ * PCACHE_VICTIM_waitflush:	victim cache has been submitted to flush queue
+ * 				waiting to be flushed. Exclusive with flushed flag.
+ * 				This is a pure debug flag
+ *
+ * PCACHE_VICTIM_flushed:	victim cache has been flushed back
+ * 				This is used be victim eviction routine to select
+ * 				condidate.
+ *
+ * PCACHE_VICTIM_reclaim:	victim cache is selected to be evicted, but not yet
  *
  * Hack: remember to update the victimflag_names array in debug file.
  */
@@ -151,6 +167,7 @@ enum pcache_victim_flags {
 	PCACHE_VICTIM_usable,
 	PCACHE_VICTIM_hasdata,
 	PCACHE_VICTIM_writeback,
+	PCACHE_VICTIM_waitflush,
 	PCACHE_VICTIM_flushed,
 	PCACHE_VICTIM_reclaim,
 
@@ -199,6 +216,7 @@ VICTIM_FLAGS(Allocated, allocated)
 VICTIM_FLAGS(Usable, usable)
 VICTIM_FLAGS(Hasdata, hasdata)
 VICTIM_FLAGS(Writeback, writeback)
+VICTIM_FLAGS(Waitflush, waitflush)
 VICTIM_FLAGS(Flushed, flushed)
 VICTIM_FLAGS(Reclaim, reclaim)
 
@@ -219,14 +237,6 @@ static inline void set_victim_usable(struct pcache_victim_meta *victim)
 	SetVictimUsable(victim);
 	barrier();
 }
-
-#ifdef CONFIG_PCACHE_EVICTION_VICTIM
-void __init victim_cache_early_init(void);
-void __init victim_cache_post_init(void);
-#else
-static inline void victim_cache_early_init(void) { }
-static inline void victim_cache_post_init(void) { }
-#endif
 
 struct pcache_victim_meta *
 victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm);
@@ -269,6 +279,8 @@ victim_submit_flush_wait(struct pcache_victim_meta *victim)
 {
 	return victim_submit_flush(victim, true);
 }
+
+int victim_flush_sync(void);
 
 static inline void pcache_set_victim_inc(struct pcache_set *pset)
 {
@@ -330,6 +342,31 @@ static inline bool victim_is_filling(struct pcache_victim_meta *victim)
 	return false;
 }
 
+void __init victim_cache_early_init(void);
+void __init victim_cache_post_init(void);
+
+extern atomic_t nr_flush_jobs;
+extern spinlock_t victim_flush_lock;
+extern struct list_head victim_flush_queue;
+
+static inline int nr_flush_queue_jobs(void)
+{
+	return atomic_read(&nr_flush_jobs);
+}
+
+void dump_victim_flush_queue(void);
+void dump_all_victim(void);
+void dump_victim_lines_and_queue(void);
+
+void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason);
+void dump_pcache_victim_simple(struct pcache_victim_meta *victim);
+void dump_pcache_victim_hits(struct pcache_victim_meta *victim);
+
+void wake_up_victim_flushd(void);
+
+#else
+static inline void victim_cache_early_init(void) { }
+static inline void victim_cache_post_init(void) { }
 #endif /* CONFIG_PCACHE_EVICTION_VICTIM */
 
 #endif /* _LEGO_PROCESSOR_PCACHE_VICTIM_H_ */

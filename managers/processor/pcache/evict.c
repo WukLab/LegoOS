@@ -168,6 +168,7 @@ evict_line_victim(struct pcache_set *pset, struct pcache_meta *pcm)
 	 */
 	smp_wmb();
 	pcache_try_to_unmap(pcm);
+	PCACHE_BUG_ON_PCM(pcache_mapped(pcm), pcm);
 
 	victim_finish_insert(victim);
 

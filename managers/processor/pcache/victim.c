@@ -142,6 +142,14 @@
  *   .. victim->lock
  */
 
+#ifdef CONFIG_DEBUG_PCACHE_VICTIM
+#define victim_debug(fmt, ...)				\
+	pr_debug("%s() CPU:%d PID:%d " fmt "\n",	\
+		__func__, smp_processor_id(), current->pid, __VA_ARGS__)
+#else
+static inline void victim_debug(const char *fmt, ...) { }
+#endif
+
 struct pcache_victim_meta *pcache_victim_meta_map __read_mostly;
 void *pcache_victim_data_map __read_mostly;
 
@@ -176,90 +184,6 @@ static inline void dequeue_usable_victim(struct pcache_victim_meta *v)
 	spin_unlock(&usable_victims_lock);
 }
 
-#define __def_victimflag_names						\
-	{1UL << PCACHE_VICTIM_locked,		"locked"	},	\
-	{1UL << PCACHE_VICTIM_allocated,	"allocated"	},	\
-	{1UL << PCACHE_VICTIM_usable,		"usable"	},	\
-	{1UL << PCACHE_VICTIM_hasdata,		"hasdata"	},	\
-	{1UL << PCACHE_VICTIM_writeback,	"writeback"	},	\
-	{1UL << PCACHE_VICTIM_flushed,		"flushed"	},	\
-	{1UL << PCACHE_VICTIM_reclaim,		"reclaim"	},
-
-const struct trace_print_flags victimflag_names[] = {
-	__def_victimflag_names
-	{0, NULL}
-};
-
-static void dump_pcache_victim_hits(struct pcache_victim_meta *victim)
-{
-	struct pcache_victim_hit_entry *entry;
-	int i = 0;
-
-	if (list_empty(&victim->hits)) {
-		pr_info("    WARN victim has no hits entries\n");
-	}
-
-	list_for_each_entry(entry, &victim->hits, next) {
-		pr_info("    hit[%d] owner: [%s][%d] addr: %#lx\n",
-			i++, entry->owner->comm, entry->owner->pid,
-			entry->address);
-	}
-}
-
-void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason)
-{
-	pr_debug("victim:%p index:%d refcount:%d nr_fill:%d locked:%d flags:(%pGV) "
-		 "pcm:%p pset:%p\n",
-		victim, victim_index(victim), atomic_read(&victim->_refcount),
-		atomic_read(&victim->nr_fill_pcache), spin_is_locked(&victim->lock),
-		&victim->flags, victim->pcm, victim->pset);
-
-	dump_pcache_victim_hits(victim);
-
-	if (victim->pcm)
-		dump_pcache_meta(victim->pcm, "dump_victim");
-
-	if (victim->pset) {
-		pr_debug("    pset:%p set_idx: %lu nr_lru:%d\n",
-			victim->pset, pcache_set_to_set_index(victim->pset),
-			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&victim->pset->nr_lru) : 0);
-	}
-
-	if (reason)
-		pr_debug("    victim dumped because: %s\n", reason);
-	else
-		pr_debug("\n");
-}
-
-/* To avoid tons of mixed messages */
-static DEFINE_SPINLOCK(victim_dump_lock);
-static bool victim_dumped = false;
-
-void dump_all_victim(void)
-{
-	struct pcache_victim_meta *v;
-	int index;
-
-	spin_lock(&victim_dump_lock);
-
-	if (!victim_dumped)
-		victim_dumped = true;
-	else
-		goto unlock;
-
-	pr_info("  --   Start Dump Victim Cache     -- \n");
-	pr_info("  --   CPU%d [%s][pid=%d, tgid=%d] --\n",
-		smp_processor_id(), current->comm, current->pid, current->tgid);
-
-	for_each_victim(v, index)
-		dump_pcache_victim(v, NULL);
-
-	pr_info("  --   End Dump Victim Cache       --\n");
-
-unlock:
-	spin_unlock(&victim_dump_lock);
-}
-
 static void victim_free_hit_entries(struct pcache_victim_meta *victim);
 
 static void __put_victim_nolist(struct pcache_victim_meta *v)
@@ -272,8 +196,7 @@ static void __put_victim_nolist(struct pcache_victim_meta *v)
 	victim_free_hit_entries(v);
 
 	/* Clear all flags */
-	smp_wmb();
-	v->flags = 0;
+	smp_store_mb(v->flags, 0);
 }
 
 /* Called when refcount drops to 0 */
@@ -307,7 +230,11 @@ find_victim_to_evict(void)
 		PCACHE_BUG_ON_VICTIM(!VictimUsable(v), v);
 		PCACHE_BUG_ON_VICTIM(VictimReclaim(v), v);
 
-		victim_debug("    checking v%u", victim_index(v));
+		victim_debug("  victim:%p index:%d refcount:%d nr_fill:%d locked:%d flags:(%pGV) "
+			 "pcm:%p pset:%p\n",
+			v, victim_index(v), atomic_read(&v->_refcount),
+			atomic_read(&v->nr_fill_pcache), spin_is_locked(&v->lock),
+			&v->flags, v->pcm, v->pset);
 
 		/*
 		 * Grab a ref first in case it goes away,
@@ -402,14 +329,18 @@ static int victim_evict_line(void)
 {
 	struct pcache_victim_meta *victim;
 
+	inc_pcache_event(PCACHE_VICTIM_EVICTION_TRIGGERED);
+
 	/*
 	 * If a victim is selected to be evicted, it is removed
 	 * from the allocated_victim list, and has Reclaim flag set.
 	 * Also it has ref=1 or ref=2.
 	 */
 	victim = find_victim_to_evict();
-	if (!victim)
+	if (!victim) {
+		inc_pcache_event(PCACHE_VICTIM_EVICTION_EAGAIN);
 		return -EAGAIN;
+	}
 
 	PCACHE_BUG_ON_VICTIM(!VictimReclaim(victim), victim);
 	if (unlikely(victim_ref_count(victim) > 2)) {
@@ -428,7 +359,7 @@ static int victim_evict_line(void)
 	victim_ref_count_set(victim, 0);
 	__put_victim_nolist(victim);
 
-	inc_pcache_event(PCACHE_VICTIM_EVICTION);
+	inc_pcache_event(PCACHE_VICTIM_EVICTION_SUCCEED);
 	return 0;
 }
 
@@ -451,19 +382,22 @@ victim_alloc_fastpath(void)
 	int index;
 	struct pcache_victim_meta *v;
 
+	spin_lock(&usable_victims_lock);
 	for_each_victim(v, index) {
 		if (likely(!TestSetVictimAllocated(v))) {
 			prep_new_victim(v);
-			enqueue_usable_victim(v);
+			__enqueue_usable_victim(v);
 
 			/*
 			 * Make the victim line visible to other
 			 * victim code such as pgfault fill path:
 			 */
 			set_victim_usable(v);
+			spin_unlock(&usable_victims_lock);
 			return v;
 		}
 	}
+	spin_unlock(&usable_victims_lock);
 
 	return NULL;
 }
@@ -473,7 +407,7 @@ victim_alloc_fastpath(void)
  *
  * The maximum time a victim_alloc can take due to slowpath eviction.
  */
-unsigned long sysctl_victim_alloc_timeout_sec __read_mostly = 10;
+unsigned long sysctl_victim_alloc_timeout_sec __read_mostly = 20;
 
 static struct pcache_victim_meta *
 victim_alloc_slowpath(struct pcache_set *pset)
@@ -487,6 +421,7 @@ retry:
 	if (ret && ret != -EAGAIN)
 		return NULL;
 
+	wake_up_victim_flushd();
 	if (time_after(jiffies, alloc_start + sysctl_victim_alloc_timeout_sec * HZ)) {
 		/*
 		 * If this got printed, nr_lru will not equal to PCACHE_ASSOCIATIVTY.
@@ -500,7 +435,7 @@ retry:
 			atomic_read(&nr_usable_victims),
 			pset, pcache_set_to_set_index(pset),
 			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0);
-		dump_all_victim();
+		dump_victim_lines_and_queue();
 		return NULL;
 	}
 

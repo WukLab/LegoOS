@@ -51,6 +51,7 @@ do {									\
 	if (unlikely(cond)) {						\
 		dump_pcache_meta(pcm,					\
 			"PCACHE_BUG_ON_PCM("__stringify(cond)")");	\
+		dump_pcache_rmaps_locked(pcm);				\
 		BUG();							\
 	}								\
 } while (0)

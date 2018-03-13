@@ -352,6 +352,7 @@ add:
 	ret = 0;
 	list_add(&rmap->next, &pcm->rmap);
 	atomic_inc(&pcm->mapcount);
+	PCACHE_BUG_ON_PCM(PcacheReclaim(pcm), pcm);
 
 	/*
 	 * Also informs eviction code that we could be

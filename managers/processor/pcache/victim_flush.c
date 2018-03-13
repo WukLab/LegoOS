@@ -26,24 +26,61 @@
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
-struct victim_flush_info {
-	struct pcache_victim_meta *victim;
-	struct completion done;
-	bool wait;
-	struct list_head list;
-};
-
-static DEFINE_SPINLOCK(victim_flush_lock);
-static LIST_HEAD(victim_flush_list);
+atomic_t nr_flush_jobs = ATOMIC_INIT(0);
+DEFINE_SPINLOCK(victim_flush_lock);
+LIST_HEAD(victim_flush_queue);
 static struct task_struct *victim_flush_thread;
 
+static inline void __dequeue_victim_flush_job(struct victim_flush_job *job)
+{
+	list_del(&job->next);
+	atomic_dec(&nr_flush_jobs);
+
+	/* Sane test only if DEBUG_PCACHE is on */
+	PCACHE_BUG_ON(atomic_read(&nr_flush_jobs) < 0);
+}
+
+static inline void __enqueue_victim_flush_job(struct victim_flush_job *job)
+{
+	list_add_tail(&job->next, &victim_flush_queue);
+	atomic_inc(&nr_flush_jobs);
+
+	/* Sane test only if DEBUG_PCACHE is on */
+	PCACHE_BUG_ON(atomic_read(&nr_flush_jobs) > VICTIM_NR_ENTRIES);
+}
+
+static inline void dequeue_victim_flush_job(struct victim_flush_job *job)
+{
+	spin_lock(&victim_flush_lock);
+	__dequeue_victim_flush_job(job);
+	spin_unlock(&victim_flush_lock);
+}
+
+static inline void enqueue_victim_flush_job(struct victim_flush_job *job)
+{
+	spin_lock(&victim_flush_lock);
+	__enqueue_victim_flush_job(job);
+	spin_unlock(&victim_flush_lock);
+}
+
+void wake_up_victim_flushd(void)
+{
+	wake_up_process(victim_flush_thread);
+}
+
+/*
+ * Submit a victim cache line to flush queue.
+ * @wait: true if you want to wait for completion
+ */
 int victim_submit_flush(struct pcache_victim_meta *victim, bool wait)
 {
-	struct victim_flush_info *info;
+	struct victim_flush_job *job;
 
+	PCACHE_BUG_ON_VICTIM(!VictimHasdata(victim) || !VictimAllocated(victim), victim);
 	PCACHE_BUG_ON_VICTIM(VictimFlushed(victim) || VictimWriteback(victim) ||
-			    !VictimHasdata(victim) || !VictimAllocated(victim),
-			    victim);
+			     VictimWaitflush(victim), victim);
+
+	SetVictimWaitflush(victim);
 
 	/*
 	 * Make sure this victim will not go away during flush.
@@ -52,29 +89,31 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait)
 	 */
 	get_victim(victim);
 
-	info = kmalloc(sizeof(*info), GFP_KERNEL);
-	if (WARN_ON(!info))
+	job = kmalloc(sizeof(*job), GFP_KERNEL);
+	if (WARN_ON(!job))
 		return -ENOMEM;
-	info->victim = victim;
-	info->wait = wait;
+	job->victim = victim;
+	job->wait = wait;
 	if (unlikely(wait))
-		init_completion(&info->done);
+		init_completion(&job->done);
 
-	spin_lock(&victim_flush_lock);
-	list_add_tail(&info->list, &victim_flush_list);
-	spin_unlock(&victim_flush_lock);
+	enqueue_victim_flush_job(job);
 
 	/* Update counter */
 	inc_pcache_event(PCACHE_VICTIM_FLUSH_SUBMITTED);
 
-	/* flush thread will free info */
+	/* flush thread will free job */
 	wake_up_process(victim_flush_thread);
 	if (unlikely(wait))
-		wait_for_completion(&info->done);
+		wait_for_completion(&job->done);
 
 	return 0;
 }
 
+/*
+ * Return number of succeed clflush
+ * It can be 0, if the address belonged area was unmapped
+ */
 static int victim_flush_one(struct pcache_victim_meta *victim)
 {
 	void *cache_kva;
@@ -98,20 +137,21 @@ static int victim_flush_one(struct pcache_victim_meta *victim)
 	return nr_flushed;
 }
 
-static void __victim_flush_func(struct victim_flush_info *info)
+static void __victim_flush_func(struct victim_flush_job *job)
 {
-	bool wait = info->wait;
-	struct completion *done = &info->done;
-	struct pcache_victim_meta *victim = info->victim;
+	bool wait = job->wait;
+	struct completion *done = &job->done;
+	struct pcache_victim_meta *victim = job->victim;
 
-	PCACHE_BUG_ON_VICTIM(VictimFlushed(victim) || VictimWriteback(victim) ||
-			    !VictimHasdata(victim) || !VictimAllocated(victim),
-			    victim);
+	PCACHE_BUG_ON_VICTIM(!VictimHasdata(victim) || !VictimAllocated(victim), victim);
+	PCACHE_BUG_ON_VICTIM(VictimFlushed(victim) || VictimWriteback(victim), victim);
+	PCACHE_BUG_ON_VICTIM(!VictimWaitflush(victim), victim);
 
 	SetVictimWriteback(victim);
 	victim_flush_one(victim);
 	ClearVictimWriteback(victim);
 
+	ClearVictimWaitflush(victim);
 	/*
 	 * Once this flag is set,
 	 * this victim can be an eviction candidate.
@@ -123,33 +163,65 @@ static void __victim_flush_func(struct victim_flush_info *info)
 
 	if (unlikely(wait))
 		complete(done);
-	kfree(info);
+	kfree(job);
 
 	/* Update counter */
 	inc_pcache_event(PCACHE_VICTIM_FLUSH_FINISHED);
 }
 
-static int victim_flush_func(void *unused)
+/*
+ * Synchronously flush victim cache lines
+ * return number of lines be flushed at this run.
+ */
+int victim_flush_sync(void)
+{
+	int nr_flushed = 0;
+
+	inc_pcache_event(PCACHE_VICTIM_FLUSH_SYNC);
+
+	/*
+	 * Don't release the lock in the middle
+	 * We may end up flushing for more than we wanted.
+	 */
+	spin_lock(&victim_flush_lock);
+	while (!list_empty(&victim_flush_queue)) {
+		struct victim_flush_job *job;
+
+		job = list_entry(victim_flush_queue.next,
+				 struct victim_flush_job, next);
+		__dequeue_victim_flush_job(job);
+
+		__victim_flush_func(job);
+		nr_flushed++;
+	}
+	spin_unlock(&victim_flush_lock);
+
+	return nr_flushed;
+}
+
+static int victim_flush_async(void *unused)
 {
 	set_cpus_allowed_ptr(current, cpu_active_mask);
 
 	for (;;) {
 		/* Sleep until someone wakes me up before september ends */
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		if (list_empty(&victim_flush_list))
+		if (list_empty(&victim_flush_queue))
 			schedule();
 		__set_current_state(TASK_RUNNING);
 
-		spin_lock(&victim_flush_lock);
-		while (!list_empty(&victim_flush_list)) {
-			struct victim_flush_info *info;
+		inc_pcache_event(PCACHE_VICTIM_FLUSH_ASYNC_RUN);
 
-			info = list_entry(victim_flush_list.next,
-					  struct victim_flush_info, list);
-			list_del_init(&info->list);
+		spin_lock(&victim_flush_lock);
+		while (!list_empty(&victim_flush_queue)) {
+			struct victim_flush_job *job;
+
+			job = list_entry(victim_flush_queue.next,
+					 struct victim_flush_job, next);
+			__dequeue_victim_flush_job(job);
 			spin_unlock(&victim_flush_lock);
 
-			__victim_flush_func(info);
+			__victim_flush_func(job);
 
 			spin_lock(&victim_flush_lock);
 		}
@@ -161,7 +233,7 @@ static int victim_flush_func(void *unused)
 /* Has to be called after kthreadd is running */
 void __init victim_cache_post_init(void)
 {
-	victim_flush_thread = kthread_run(victim_flush_func, NULL, "kvictim_flushd");
+	victim_flush_thread = kthread_run(victim_flush_async, NULL, "kvictim_flushd");
 	if (IS_ERR(victim_flush_thread))
 		panic("Fail to create victim flush thread!");
 }

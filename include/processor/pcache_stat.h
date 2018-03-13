@@ -37,8 +37,6 @@ static inline void dec_pset_event(struct pcache_set *pset,
 }
 
 /*
- * Lightweight percpu system-wide counters
- *
  * Counters should only be incremented.
  * Counters are handled completely inline.
  */
@@ -68,12 +66,19 @@ enum pcache_event_item {
 	/*
 	 * pcache eviction stat
 	 * nr_eviction_failed = triggered - eagain - succeed
+	 * (failure really should not happen if victim cache alway succeed in evicting.)
 	 */
 	PCACHE_EVICTION_TRIGGERED,	/* nr of pcache evictions triggered */
 	PCACHE_EVICTION_EAGAIN,		/* nr of times eviction tell caller to retry alloc */
 	PCACHE_EVICTION_SUCCEED,	/* nr of pcache evictions succeed */
 
-	PCACHE_VICTIM_EVICTION,		/* nr of victim cache eviction happened */
+	/*
+	 * triggered = eagain + succeed
+	 * Failure is not an option for victim cache eviction 
+	 */
+	PCACHE_VICTIM_EVICTION_TRIGGERED,	/* nr of victim cache eviction triggered */
+	PCACHE_VICTIM_EVICTION_EAGAIN,		/* nr of times eviction tell caller to retry */
+	PCACHE_VICTIM_EVICTION_SUCCEED,		/* nr of successful victim cache evictions */
 
 	/*
 	 * Victim internal debug counter
@@ -82,27 +87,22 @@ enum pcache_event_item {
 	PCACHE_VICTIM_FINISH_INSERT,	/* nr of successful insertion into victim */
 	PCACHE_VICTIM_FLUSH_SUBMITTED,	/* nr of submitted victim flush jobs */
 	PCACHE_VICTIM_FLUSH_FINISHED,	/* nr of finished victim flush jobs */
+	PCACHE_VICTIM_FLUSH_ASYNC_RUN,	/* nr of times async victim_flushd got running */
+	PCACHE_VICTIM_FLUSH_SYNC,	/* nr of times sync flush is invoked */
 
 	NR_PCACHE_EVENT_ITEMS,
 };
 
 struct pcache_event_stat {
-	unsigned long event[NR_PCACHE_EVENT_ITEMS];
+	atomic_long_t event[NR_PCACHE_EVENT_ITEMS];
 };
 
-DECLARE_PER_CPU(struct pcache_event_stat, pcache_event_stats);
+extern struct pcache_event_stat pcache_event_stats;
 
 static inline void inc_pcache_event(enum pcache_event_item item)
 {
-	this_cpu_inc(pcache_event_stats.event[item]);
+	atomic_long_inc(&pcache_event_stats.event[item]);
 }
-
-static inline void __inc_pcache_event(enum pcache_event_item item)
-{
-	__this_cpu_inc(pcache_event_stats.event[item]);
-}
-
-void sum_pcache_events(struct pcache_event_stat *buf);
 
 #ifdef CONFIG_COMP_PROCESSOR
 void print_pcache_events(void);

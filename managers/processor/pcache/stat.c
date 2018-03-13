@@ -7,19 +7,10 @@
  * (at your option) any later version.
  */
 
-#include <lego/mm.h>
-#include <lego/wait.h>
-#include <lego/slab.h>
-#include <lego/log2.h>
-#include <lego/hash.h>
 #include <lego/kernel.h>
-#include <lego/pgfault.h>
-#include <lego/syscalls.h>
-#include <lego/jiffies.h>
 #include <processor/pcache.h>
-#include <processor/processor.h>
 
-DEFINE_PER_CPU(struct pcache_event_stat, pcache_event_stats) = {{0}};
+struct pcache_event_stat pcache_event_stats;
 
 static const char *const pcache_event_text[] = {
 	"nr_pgfault",
@@ -40,38 +31,27 @@ static const char *const pcache_event_text[] = {
 	"nr_pcache_eviction_eagain",
 	"nr_pcache_eviction_succeed",
 
-	"nr_victim_eviction",
+	"nr_victim_eviction_triggered",
+	"nr_victim_eviction_eagain",
+	"nr_victim_eviction_succeed",
 
 	/* Victim internal debug counter */
 	"nr_victim_prepare_insert",
 	"nr_victim_finish_insert",
 	"nr_victim_flush_submitted",
 	"nr_victim_flush_finished",
+	"nr_victim_flush_async_run",
+	"nr_victim_flush_sync",
 };
-
-void sum_pcache_events(struct pcache_event_stat *buf)
-{
-	int cpu, i;
-	struct pcache_event_stat *this;
-
-	memset(buf->event, 0, NR_PCACHE_EVENT_ITEMS * sizeof(unsigned long));
-
-	for_each_online_cpu(cpu) {
-		this = &per_cpu(pcache_event_stats, cpu);
-		for (i = 0; i < NR_PCACHE_EVENT_ITEMS; i++)
-			buf->event[i] += this->event[i];
-	}
-}
 
 void print_pcache_events(void)
 {
-	struct pcache_event_stat stat;
 	int i;
 
 	BUILD_BUG_ON(NR_PCACHE_EVENT_ITEMS > ARRAY_SIZE(pcache_event_text));
 
-	sum_pcache_events(&stat);
 	for (i = 0; i < NR_PCACHE_EVENT_ITEMS; i++) {
-		pr_info("%s: %lu\n", pcache_event_text[i], stat.event[i]);
+		pr_info("%s: %lu\n", pcache_event_text[i],
+			atomic_long_read(&pcache_event_stats.event[i]));
 	}
 }
