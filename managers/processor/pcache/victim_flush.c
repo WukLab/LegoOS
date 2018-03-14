@@ -12,6 +12,7 @@
  */
 
 #include <lego/mm.h>
+#include <lego/smp.h>
 #include <lego/wait.h>
 #include <lego/slab.h>
 #include <lego/log2.h>
@@ -201,17 +202,14 @@ int victim_flush_sync(void)
 
 static int victim_flush_async(void *unused)
 {
-	set_cpus_allowed_ptr(current, cpu_active_mask);
+	int cpu = get_cpu();
+
+	set_cpus_allowed_ptr(current, get_cpu_mask(cpu));
+	set_cpu_active(cpu, false);
+	pr_info("%s() running on CPU%d\n", __func__, cpu);
+	put_cpu();
 
 	for (;;) {
-		/* Sleep until someone wakes me up before september ends */
-		set_current_state(TASK_UNINTERRUPTIBLE);
-		if (list_empty(&victim_flush_queue))
-			schedule();
-		__set_current_state(TASK_RUNNING);
-
-		inc_pcache_event(PCACHE_VICTIM_FLUSH_ASYNC_RUN);
-
 		spin_lock(&victim_flush_lock);
 		while (!list_empty(&victim_flush_queue)) {
 			struct victim_flush_job *job;

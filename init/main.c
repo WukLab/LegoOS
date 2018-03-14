@@ -151,13 +151,13 @@ static int kernel_init(void *unused)
 	wait_for_completion(&ib_init_done);
 #endif
 
-	dump_cpumasks();
 	/* Final step towards a running component.. */
 #ifdef CONFIG_COMP_PROCESSOR
 	processor_manager_init();
 #elif defined(CONFIG_COMP_MEMORY)
 	memory_component_init();
 #endif
+	dump_cpumasks();
 
 	while (1) {
 		set_current_state(TASK_INTERRUPTIBLE);
