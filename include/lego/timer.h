@@ -139,4 +139,6 @@ void __init init_timers(void);
 void msleep(unsigned int msecs);
 unsigned long msleep_interruptible(unsigned int msecs);
 
+void it_real_fn(unsigned long __data);
+
 #endif /* _LEGO_TIMER_H_ */

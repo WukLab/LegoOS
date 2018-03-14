@@ -620,6 +620,8 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	init_sigpending(&sig->shared_pending);
 	INIT_LIST_HEAD(&sig->posix_timers);
 	spin_lock_init(&sig->stats_lock);
+	init_timer(&sig->real_timer);
+	sig->real_timer.function = it_real_fn;
 
 	task_lock(current->group_leader);
 	memcpy(sig->rlim, current->signal->rlim, sizeof sig->rlim);

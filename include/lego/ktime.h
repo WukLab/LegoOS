@@ -22,6 +22,9 @@ typedef s64	ktime_t;
 /* Map the ktime_t to timespec conversion to ns_to_timespec function */
 #define ktime_to_timespec(kt)		ns_to_timespec((kt))
 
+/* Map the ktime_t to timeval conversion to ns_to_timeval function */
+#define ktime_to_timeval(kt)		ns_to_timeval((kt))
+
 /**
  * ktime_set - Set a ktime_t variable from a seconds/nanoseconds value
  * @secs:	seconds to set
@@ -91,6 +94,12 @@ static inline ktime_t ktime_sub_ms(const ktime_t kt, const u64 msec)
 static inline ktime_t timespec_to_ktime(struct timespec ts)
 {
 	return ktime_set(ts.tv_sec, ts.tv_nsec);
+}
+
+/* convert a timeval to ktime_t format: */
+static inline ktime_t timeval_to_ktime(struct timeval tv)
+{
+	return ktime_set(tv.tv_sec, tv.tv_usec * NSEC_PER_USEC);
 }
 
 static inline ktime_t ns_to_ktime(u64 ns)

@@ -17,6 +17,8 @@
 #include <lego/rlimit.h>
 #include <lego/siginfo.h>
 #include <lego/spinlock.h>
+#include <lego/ktime.h>
+#include <lego/timer.h>
 
 #include <asm/signal.h>	/* for sigset_t */
 
@@ -357,6 +359,10 @@ struct signal_struct {
 	int			posix_timer_id;
 	struct list_head	posix_timers;
 
+	/* ITIMER_REAL timer for the process */
+	struct timer_list	real_timer;	/* TODO: maybe support hrtimer in future */
+	unsigned long		it_real_incr;	/* same granularity as jiffies */
+
 	pid_t			leader_pid;
 
 	/*
@@ -458,6 +464,7 @@ void __cleanup_sighand(struct sighand_struct *);
 void flush_signal_handlers(struct task_struct *, int force_default);
 
 int group_send_sig_info(int sig, struct siginfo *info, struct task_struct *p);
+int kill_pid_info(int sig, struct siginfo *info, pid_t pid);
 
 /* Nuke all other threads in the group */
 int zap_other_threads(struct task_struct *p);

@@ -165,6 +165,8 @@ asmlinkage long sys_gettimeofday(struct timeval __user *tv,
 				struct timezone __user *tz);
 asmlinkage long sys_clock_gettime(const clockid_t which_clock,
 				struct timespec __user *tp);
+asmlinkage long setitimer(int which, struct timeval __user *value,
+			struct timeval __user *ovalue);
 
 /* Lego only */
 asmlinkage long sys_checkpoint_process(pid_t pid);

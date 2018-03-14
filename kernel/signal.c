@@ -1165,9 +1165,18 @@ int dequeue_signal(struct task_struct *tsk, sigset_t *mask, siginfo_t *info)
 		 * reducing the timer noise on heavy loaded !highres
 		 * systems too.
 		 */
+
+		 /* 
+		  * Don't warn me now, now I implemented itimer on
+		  * low resoulation timer (old way), which requires
+		  * sending SIGALRM periodically
+		  *  - yilun
+		  */
+#if 0
 		if (unlikely(signr == SIGALRM)) {
 			WARN_ON(1);
 		}
+#endif
 	}
 
 	recalc_sigpending();

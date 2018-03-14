@@ -8,7 +8,7 @@
  */
 
 #ifndef _LEGO_JIFFIES_H_
-#define _LEGO_JIFFIESS_H_
+#define _LEGO_JIFFIES_H_
 
 #include <lego/time.h>
 
@@ -145,6 +145,32 @@ int register_refined_jiffies(long clock_tick_rate);
 /* time_is_after_jiffies(a) return true if a is after jiffies */
 #define time_is_after_jiffies(a) time_before(jiffies, a)
 
+#define SEC_JIFFIE_SC (31 - SHIFT_HZ)
+#if !((((NSEC_PER_SEC << 2) / TICK_NSEC) << (SEC_JIFFIE_SC - 2)) & 0x80000000)
+#undef SEC_JIFFIE_SC
+#define SEC_JIFFIE_SC (32 - SHIFT_HZ)
+#endif
+#define NSEC_JIFFIE_SC (SEC_JIFFIE_SC + 29)
+#define SEC_CONVERSION ((unsigned long)((((u64)NSEC_PER_SEC << SEC_JIFFIE_SC) +\
+                                TICK_NSEC -1) / (u64)TICK_NSEC))
+
+#define NSEC_CONVERSION ((unsigned long)((((u64)1 << NSEC_JIFFIE_SC) +\
+                                        TICK_NSEC -1) / (u64)TICK_NSEC))
+
+/*
+ * The maximum jiffie value is (MAX_INT >> 1).  Here we translate that
+ * into seconds.  The 64-bit case will overflow if we are not careful,
+ * so use the messy SH_DIV macro to do it.  Still all constants.
+ */
+#if BITS_PER_LONG < 64
+# define MAX_SEC_IN_JIFFIES \
+	(long)((u64)((u64)MAX_JIFFY_OFFSET * TICK_NSEC) / NSEC_PER_SEC)
+#else	/* take care of overflow on 64 bits machines */
+# define MAX_SEC_IN_JIFFIES \
+	(SH_DIV((MAX_JIFFY_OFFSET >> SEC_JIFFIE_SC) * TICK_NSEC, NSEC_PER_SEC, 1) - 1)
+
+#endif
+
 /*
  * Convert various time units to each other:
  */
@@ -152,5 +178,7 @@ unsigned int jiffies_to_msecs(const unsigned long j);
 unsigned int jiffies_to_usecs(const unsigned long j);
 
 unsigned long msecs_to_jiffies(const unsigned int m);
+
+unsigned long timeval_to_jiffies(const struct timeval *value);
 
 #endif /* _LEGO_JIFFIES_H_ */
