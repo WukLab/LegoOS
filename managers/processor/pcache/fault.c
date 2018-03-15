@@ -290,18 +290,23 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 	struct pcache_meta *old_pcm;
 	int ret;
 
-	/*
-	 * We are holding pte lock,
-	 * this pcm is guaranteed to be safe during this period.
-	 * See comments above pcache_evict_line().
-	 */
+	inc_pcache_event(PCACHE_FAULT_WP);
+
 	old_pcm = pte_to_pcache_meta(orig_pte);
 	if (!old_pcm) {
 		print_bad_pte(mm, address, orig_pte, NULL);
 		ret = VM_FAULT_SIGBUS;
-		goto out;
+		goto unlock_pte;
 	}
+
+	/*
+	 * It is 100% impossible to see an invalid pcm here.
+	 * We are holding pte lock. Even if this pcm was selected
+	 * to be evicted, that thread will be blocked at
+	 * pcache_try_to_unmap(). Thus must be valid.
+	 */
 	PCACHE_BUG_ON_PCM(!PcacheValid(old_pcm), old_pcm);
+	PCACHE_BUG_ON_PCM(!pcache_mapped(old_pcm), old_pcm);
 
 	/*
 	 * pcache might be under flush back if pcache eviction is using
@@ -312,43 +317,30 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 	 * should just release the lock and return. If a pgfault immediately
 	 * follows after we return, it will: either comes here again,
 	 * or it will fetch the page from remote (already unmapped).
-	 *
-	 * And do note this case only happens for write-protect mechanism,
-	 * other two mechanisms will do unmap directly. Thus it is impossible
-	 * to see a PcacheReclaim here.
 	 */
-	if (unlikely(PcacheReclaim(old_pcm))) {
 #ifdef CONFIG_PCACHE_EVICTION_WRITE_PROTECT
+	if (unlikely(PcacheReclaim(old_pcm))) {
 		ret = 0;
 		inc_pcache_event(PCACHE_FAULT_CONCUR_EVICTION)
-		goto out;
-#else
-		dump_pcache_meta(old_pcm, "BUG PcacheReclaim");
-		dump_pcache_rmaps(old_pcm);
-		ret = VM_FAULT_SIGBUS;
-		goto out;
-#endif
+		goto unlock_pte;
 	}
+#endif
 
-	/*
-	 * If other operations come from other address spaces,
-	 * then lock_pcache() will be good enough and safe.
-	 * But what if other operations come from the same address space?
-	 * We must obey the pcache -> pte lock ordering to avoid deadlock.
-	 *
-	 * Also, we don't need to get_pcache before unlock the ptl.
-	 * Because we have one rmap which has grabbed one refcount.
-	 */
+	/* See comments on pcache_zap_pte */
 	if (unlikely(!trylock_pcache(old_pcm))) {
+		get_pcache(old_pcm);
 		spin_unlock(ptl);
+
 		lock_pcache(old_pcm);
 		spin_lock(ptl);
 
-		/* Since we released the lock, it could got changed. */
 		if (!pte_same(*page_table, orig_pte)) {
-			ret = 0;
-			goto unlock;
+			unlock_pcache(old_pcm);
+			spin_unlock(ptl);
+			put_pcache(old_pcm);
+			return 0;
 		}
+		put_pcache(old_pcm);
 	}
 
 	/*
@@ -360,8 +352,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 	 *
 	 * Do note, after fork(), any rmap pcache related operations will
 	 * race with this function: exit(), mremap(), munmap(), or another fork().
-	 *
-	 * mapcount is always updated with pcm locked, thus we are stable here
+	 * Since mapcount is always updated with pcm locked, we are stable here
 	 */
 	if (pcache_mapcount(old_pcm) == 1) {
 		pte_t entry;
@@ -381,7 +372,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 		new_pcm = pcache_alloc(address);
 		if (!new_pcm) {
 			ret = VM_FAULT_OOM;
-			goto unlock;
+			goto unlock_all;
 		}
 		cow_pcache(new_pcm, old_pcm);
 
@@ -400,7 +391,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 			put_pcache(new_pcm);
 			pte_clear(page_table);
 			ret = VM_FAULT_OOM;
-			goto unlock;
+			goto unlock_all;
 		}
 
 		/*
@@ -416,11 +407,10 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 		ret = 0;
 	}
 
-unlock:
+unlock_all:
 	unlock_pcache(old_pcm);
-out:
+unlock_pte:
 	spin_unlock(ptl);
-	inc_pcache_event(PCACHE_FAULT_WP);
 	return ret;
 }
 

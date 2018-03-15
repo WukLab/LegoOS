@@ -28,7 +28,10 @@ static const char *const pcache_event_text[] = {
 	"nr_pcache_fill_from_victim",			/* victim cache specific */
 
 	"nr_pcache_eviction_triggered",
-	"nr_pcache_eviction_eagain",
+	"nr_pcache_eviction_eagain_freeable",
+	"nr_pcache_eviction_eagain_concurrent",
+	"nr_pcache_eviction_failure_find",
+	"nr_pcache_eviction_failure_evict",
 	"nr_pcache_eviction_succeed",
 
 	"nr_victim_eviction_triggered",

@@ -99,8 +99,6 @@ static inline void pcache_free_check(struct pcache_meta *pcm)
 void __put_pcache_nolru(struct pcache_meta *pcm)
 {
 	pcache_free_check(pcm);
-
-	/* pcache line is actually freed once flags are reset to 0 */
 	pcache_reset_flags(pcm);
 }
 
@@ -167,8 +165,17 @@ pcache_alloc_slowpath(struct pcache_set *pset, unsigned long address)
 
 retry:
 	ret = pcache_evict_line(pset, address);
-	if (unlikely(ret == PCACHE_EVICT_FAILED))
+	switch (ret) {
+	case PCACHE_EVICT_FAILURE_FIND:
+	case PCACHE_EVICT_FAILURE_EVICT:
 		return NULL;
+	case PCACHE_EVICT_EAGAIN_FREEABLE:
+	case PCACHE_EVICT_EAGAIN_CONCURRENT:
+	case PCACHE_EVICT_SUCCEED:
+		break;
+	default:
+		BUG();
+	};
 
 	/* Do we still have time? */
 	if (time_after(jiffies, alloc_start + sysctl_pcache_alloc_timeout_sec * HZ)) {

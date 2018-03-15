@@ -352,12 +352,12 @@ add:
 	ret = 0;
 	list_add(&rmap->next, &pcm->rmap);
 	atomic_inc(&pcm->mapcount);
-	PCACHE_BUG_ON_PCM(PcacheReclaim(pcm), pcm);
 
 	/*
 	 * Also informs eviction code that we could be
 	 * selected as the eviction candidate.
 	 */
+	PCACHE_BUG_ON_PCM(PcacheReclaim(pcm) && !PcacheValid(pcm), pcm);
 	SetPcacheValid(pcm);
 
 	validate_pcache_rmap(pcm, rmap);
@@ -499,7 +499,8 @@ static int __pcache_move_pte_fastpath(struct pcache_meta *pcm,
  */
 static int pcache_move_pte_fastpath(struct mm_struct *mm,
 				    pte_t *old_pte, pte_t *new_pte,
-				    unsigned long old_addr, unsigned long new_addr)
+				    unsigned long old_addr, unsigned long new_addr,
+				    spinlock_t *old_ptl)
 {
 	struct pcache_move_pte_info mpi = {
 		.mm = mm,
@@ -514,7 +515,7 @@ static int pcache_move_pte_fastpath(struct mm_struct *mm,
 		.rmap_one = __pcache_move_pte_fastpath,
 	};
 	struct pcache_meta *pcm;
-	pte_t pte;
+	pte_t ptent;
 
 	/*
 	 * The identity change of PTEs and update of rmap are
@@ -522,13 +523,27 @@ static int pcache_move_pte_fastpath(struct mm_struct *mm,
 	 * where the rmap associted with the pcache points to
 	 * wrong pte. This case will be detected by rmap_get_pte_locked().
 	 */
-	pte = ptep_get_and_clear(old_addr, old_pte);
-	pte_set(new_pte, pte);
+	ptent = ptep_get_and_clear(old_addr, old_pte);
+	pte_set(new_pte, ptent);
 
-	pcm = pte_to_pcache_meta(pte);
+	pcm = pte_to_pcache_meta(ptent);
 	BUG_ON(!pcm);
 
-	lock_pcache(pcm);
+	/* See comments on pcache_zap_pte */
+	if (unlikely(!trylock_pcache(pcm))) {
+		get_pcache(pcm);
+		spin_unlock(old_ptl);
+
+		lock_pcache(pcm);
+		spin_lock(old_ptl);
+
+		if (!pte_same(*old_pte, ptent)) {
+			unlock_pcache(pcm);
+			put_pcache(pcm);
+			return -EAGAIN;
+		}
+		put_pcache(pcm);
+	}
 	rmap_walk(pcm, &rwc);
 	unlock_pcache(pcm);
 
@@ -582,7 +597,8 @@ static int __pcache_move_pte_slowpath(struct pcache_meta *old_pcm,
  */
 static int pcache_move_pte_slowpath(struct mm_struct *mm,
 				    pte_t *old_pte, pte_t *new_pte,
-				    unsigned long old_addr, unsigned long new_addr)
+				    unsigned long old_addr, unsigned long new_addr,
+				    spinlock_t *old_ptl)
 {
 	struct pcache_move_pte_info mpi = {
 		.mm = mm,
@@ -617,7 +633,21 @@ static int pcache_move_pte_slowpath(struct mm_struct *mm,
 	}
 	mpi.new_pcm = new_pcm;
 
-	lock_pcache(old_pcm);
+	/* See comments on pcache_zap_pte */
+	if (unlikely(!trylock_pcache(old_pcm))) {
+		get_pcache(old_pcm);
+		spin_unlock(old_ptl);
+
+		lock_pcache(old_pcm);
+		spin_lock(old_ptl);
+
+		if (unlikely(!pte_same(*old_pte, old_pte_entry))) {
+			unlock_pcache(old_pcm);
+			put_pcache(old_pcm);
+			return -EAGAIN;
+		}
+		put_pcache(old_pcm);
+	}
 	rmap_walk(old_pcm, &rwc);
 	unlock_pcache(old_pcm);
 
@@ -654,7 +684,7 @@ out:
  * Batched TLB flush is performed by caller.
  */
 int pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
-		    unsigned long old_addr, unsigned long new_addr)
+		    unsigned long old_addr, unsigned long new_addr, spinlock_t *old_ptl)
 {
 	unsigned long old_index, new_index;
 
@@ -663,10 +693,10 @@ int pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
 
 	if (old_index == new_index)
 		return pcache_move_pte_fastpath(mm, old_pte, new_pte,
-						old_addr, new_addr);
+						old_addr, new_addr, old_ptl);
 	else
 		return pcache_move_pte_slowpath(mm, old_pte, new_pte,
-						old_addr, new_addr);
+						old_addr, new_addr, old_ptl);
 }
 
 struct pcache_zap_pte_control {
@@ -717,8 +747,8 @@ static int __pcache_zap_pte(struct pcache_meta *pcm,
  *
  * We enter with @pte locked, return with @pte still locked.
  */
-void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
-		    pte_t ptent, pte_t *pte, spinlock_t *ptl)
+int pcache_zap_pte(struct mm_struct *mm, unsigned long address,
+		   pte_t ptent, pte_t *pte, spinlock_t *ptl)
 {
 	struct pcache_meta *pcm;
 	struct pcache_zap_pte_control zpc = {
@@ -743,23 +773,41 @@ void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
 	 * by droping pte lock first and then acquire both of them in order.
 	 */
 	if (unlikely(!trylock_pcache(pcm))) {
+		/* in case it got evicted and @pcm becomes invalid */
 		get_pcache(pcm);
 		spin_unlock(ptl);
 
 		lock_pcache(pcm);
 		spin_lock(ptl);
-		put_pcache(pcm);
+
 		/*
-		 * We zeroed the pte before calling this function
-		 * and we don't care about the content anyway.
-		 * So no need to check if pte content was changed.
+		 * Since we dropped the lock, the pcache line might
+		 * be got evicted in the middle.
 		 */
+		if (!pte_same(*pte, ptent)) {
+			unlock_pcache(pcm);
+			/*
+			 * This put maybe decreases the ref to 0
+			 * and eventually free the pcache line.
+			 * This happens if the @pcm was selected
+			 * to be evicted at the same time.
+			 */
+			put_pcache(pcm);
+			return -EAGAIN;
+		}
+		put_pcache(pcm);
 	}
 
 	rmap_walk(pcm, &rwc);
 	unlock_pcache(pcm);
 
-	/* Failure is not an option. */
+	/*
+	 * Failure is not an option!
+	 * Why? You ask. Well, the above few lines of code make sure if we are
+	 * here, then @pcm: 1) has not been selected as eviction candidate,
+	 * cos we checked pte content after releasing the ptl lock.
+	 * 2) will not be selected as condidate cos we locked pcache.
+	 */
 	BUG_ON(!zpc.zapped);
 
 	/*
@@ -768,6 +816,8 @@ void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
 	 * only rmap, then this pcm will be freed.
 	 */
 	put_pcache(pcm);
+
+	return 0;
 }
 
 static int pcache_try_to_unmap_one(struct pcache_meta *pcm,

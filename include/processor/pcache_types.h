@@ -305,16 +305,6 @@ PCACHE_META_BITS(Dirty, dirty)
 PCACHE_META_BITS(Reclaim, reclaim)
 PCACHE_META_BITS(Writeback, writeback)
 
-static inline void pcache_reset_flags(struct pcache_meta *pcm)
-{
-	/*
-	 * Once the Allocated bit is 0, this pcache line is returned
-	 * to free pool. prep_new_pcache_meta() will initialize the
-	 * pcm properly at next allocation time.
-	 */
-	smp_store_mb(pcm->bits, 0);
-}
-
 /*
  * Flags checked when a pcache is freed.
  * Pcache lines being freed should not have these flags set.

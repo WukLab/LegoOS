@@ -168,7 +168,6 @@ evict_line_victim(struct pcache_set *pset, struct pcache_meta *pcm)
 	 */
 	smp_wmb();
 	pcache_try_to_unmap(pcm);
-	PCACHE_BUG_ON_PCM(pcache_mapped(pcm), pcm);
 
 	victim_finish_insert(victim);
 
@@ -230,6 +229,7 @@ evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 {
 	struct pcache_meta *pcm;
+	int nr_mapped;
 	int ret;
 
 	inc_pcache_event(PCACHE_EVICTION_TRIGGERED);
@@ -238,34 +238,21 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	pcm = evict_find_line(pset);
 	if (IS_ERR_OR_NULL(pcm)) {
 		if (likely(PTR_ERR(pcm) == -EAGAIN)) {
-			/*
-			 * Some pcache line become avaiable,
-			 * tell caller to have a quick retry.
-			 */
-			inc_pcache_event(PCACHE_EVICTION_EAGAIN);
-			return PCACHE_EVICT_SUCCESS_NOACTION;
-		} else
-			return PCACHE_EVICT_FAILED;
+			inc_pcache_event(PCACHE_EVICTION_EAGAIN_FREEABLE);
+			return PCACHE_EVICT_EAGAIN_FREEABLE;
+		} else {
+			inc_pcache_event(PCACHE_EVICTION_FAILURE_FIND);
+			return PCACHE_EVICT_FAILURE_FIND;
+		}
 	}
 
-	/* And we are also holding another ref in case it went away */
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 	PCACHE_BUG_ON_PCM(!PcacheReclaim(pcm), pcm);
 
-	/*
-	 * XXX:
-	 * This part need more attention.
-	 * Currently we only have pcache_alloc/put, and eviction running.
-	 * If later on, we add code such as exit_mmap(), chkpoint_flush(),
-	 * those code has to be written with caution, esp. the op sequence
-	 * of lock, get/put, flag_set etc.
-	 */
-	PCACHE_BUG_ON_PCM(pcache_ref_count(pcm) > 2, pcm);
+	/* we locked, it can not be unmapped by others */
+	nr_mapped = pcache_mapcount(pcm);
+	BUG_ON(nr_mapped < 1);
 
-	/*
-	 * After a successful eviction, @pcm has no rmap left
-	 * which implies PcacheValid is cleared too.
-	 */
 	ret = evict_line(pset, pcm);
 	if (ret) {
 		/*
@@ -279,35 +266,57 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 		add_to_lru_list(pcm, pset);
 		unlock_pcache(pcm);
 		put_pcache(pcm);
-		return PCACHE_EVICT_FAILED;
+
+		inc_pcache_event(PCACHE_EVICTION_FAILURE_EVICT);
+		return PCACHE_EVICT_FAILURE_EVICT;
 	}
 
 	/*
-	 * This line has been evicted,
-	 * and we are the only user can this @pcm now.
-	 * Clear its state and return it to free pool.
+	 * After a successful eviction, @pcm has no rmap left
+	 * which implies PcacheValid is cleared too.
 	 */
-	ClearPcacheReclaim(pcm);
-	unlock_pcache(pcm);
+	PCACHE_BUG_ON_PCM(pcache_mapped(pcm) || PcacheValid(pcm), pcm);
 
 	/*
-	 * evict_find_line() has inc'ed ref 1 for us
-	 * plus the original allocation ref 1, we *should* have
-	 * at most ref=2 here. If that is not the case, bug, and
-	 * we need to check the users of pcache again.
+	 * Each rmap counts one refcount, plus the one grabbed
+	 * during evict_find_line(), we should have (nr_mapped + 1)
+	 * here if there are no any other users.
+	 *
+	 * Furthurmore, others can not go from munmap/mremap/wp to
+	 * put_pcache() within pcache_zap_pte(), pcache_move_pte()
+	 * or pcache_do_wp_page(). Thus the refcount must larger or
+	 * equal to (nr_mapped + 1).
+	 *
+	 * But if there truly other users (refcount > nr_mapped + 1),
+	 * then we should manually sub the refcount. The other users
+	 * which are currently holding the ref, will free the pcache
+	 * once it call put_pcache.
 	 */
-	if (unlikely(pcache_ref_count(pcm) > 2)) {
-		dump_pcache_meta(pcm, "evict/ref bug");
-		BUG();
-	} else {
-		/* kind of dangerous, right? */
-		pcache_ref_count_set(pcm, 0);
-		__put_pcache_nolru(pcm);
+	PCACHE_BUG_ON_PCM(pcache_ref_count(pcm) < nr_mapped + 1, pcm);
+	if (unlikely(!pcache_ref_freeze(pcm, nr_mapped + 1))) {
+		if (unlikely(pcache_ref_sub_and_test(pcm, nr_mapped + 1))) {
+			pr_info("BUG: pcm refcount, nr_mapped: %d\n", nr_mapped);
+			dump_pcache_meta(pcm, "ref error");
+			BUG();
+		}
+
+		ClearPcacheReclaim(pcm);
+		add_to_lru_list(pcm, pset);
+		unlock_pcache(pcm);
+
+		inc_pcache_event(PCACHE_EVICTION_EAGAIN_CONCURRENT);
+		return PCACHE_EVICT_EAGAIN_CONCURRENT;
 	}
 
-	/* Update counters */
+	/*
+	 * Succeed: pcm is unmapped, and no other threads
+	 * are using it. Simply free and return it to pset.
+	 */
+	__ClearPcacheReclaim(pcm);
+	__ClearPcacheLocked(pcm);
+	__put_pcache_nolru(pcm);
+
 	inc_pset_event(pset, PSET_EVICTION);
 	inc_pcache_event(PCACHE_EVICTION_SUCCEED);
-
-	return PCACHE_EVICT_SUCCESS_ONE;
+	return PCACHE_EVICT_SUCCEED;
 }

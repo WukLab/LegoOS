@@ -130,6 +130,16 @@ static inline void unlock_pcache(struct pcache_meta *pcm)
 #endif
 }
 
+static inline void pcache_reset_flags(struct pcache_meta *pcm)
+{
+	/*
+	 * Once the Allocated bit is 0, this pcache line is returned
+	 * to free pool. prep_new_pcache_meta() will initialize the
+	 * pcm properly at next allocation time.
+	 */
+	smp_store_mb(pcm->bits, 0);
+}
+
 /* refcount helpers */
 static inline int pcache_ref_count(struct pcache_meta *p)
 {
@@ -156,6 +166,11 @@ static inline void pcache_ref_count_dec(struct pcache_meta *p)
 	atomic_dec(&p->_refcount);
 }
 
+static inline void pcache_ref_sub(struct pcache_meta *p, int nr)
+{
+	atomic_sub(nr, &p->_refcount);
+}
+
 static inline int pcache_ref_count_dec_and_test(struct pcache_meta *p)
 {
 	return atomic_dec_and_test(&p->_refcount);
@@ -164,6 +179,20 @@ static inline int pcache_ref_count_dec_and_test(struct pcache_meta *p)
 static inline int pcache_ref_count_add_unless(struct pcache_meta *p, int nr, int u)
 {
 	return atomic_add_unless(&p->_refcount, nr, u);
+}
+
+/* Return true if value drops to 0 */
+static inline int pcache_ref_sub_and_test(struct pcache_meta *p, int nr)
+{
+	int ret = atomic_sub_and_test(nr, &p->_refcount);
+	return ret;
+}
+
+/* Return true if the original value equals @count */
+static inline int pcache_ref_freeze(struct pcache_meta *p, int count)
+{
+	int ret = likely(atomic_cmpxchg(&p->_refcount, count, 0) == count);
+	return ret;
 }
 
 /* Grab a ref */
@@ -560,10 +589,10 @@ enum pcache_rmap_status {
 	PCACHE_RMAP_FAILED,
 };
 
-void pcache_zap_pte(struct mm_struct *mm, unsigned long address,
-		    pte_t ptent, pte_t *pte, spinlock_t *ptl);
+int pcache_zap_pte(struct mm_struct *mm, unsigned long address,
+		   pte_t ptent, pte_t *pte, spinlock_t *ptl);
 int pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
-		    unsigned long old_addr, unsigned long new_addr);
+		    unsigned long old_addr, unsigned long new_addr, spinlock_t *old_ptl);
 
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 		    unsigned long address, struct mm_struct *owner_mm,

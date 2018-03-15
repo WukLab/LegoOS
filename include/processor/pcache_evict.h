@@ -12,15 +12,12 @@
 
 #include <processor/pcache_types.h>
 
-/*
- * SUCCESS_ONE: We evicted one pcache line successfully
- * SUCCESS_NOACTION: There are free pcache lines showed up during eviction
- * SUCCESS_FAILED: Eviction code failed somehow
- */
 enum evict_status {
-	PCACHE_EVICT_SUCCESS_ONE,
-	PCACHE_EVICT_SUCCESS_NOACTION,
-	PCACHE_EVICT_FAILED
+	PCACHE_EVICT_SUCCEED,
+	PCACHE_EVICT_EAGAIN_FREEABLE,
+	PCACHE_EVICT_EAGAIN_CONCURRENT,
+	PCACHE_EVICT_FAILURE_FIND,
+	PCACHE_EVICT_FAILURE_EVICT,
 };
 
 /*

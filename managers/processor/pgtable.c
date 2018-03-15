@@ -10,6 +10,11 @@
 /*
  * Only processor manager needs those functions to manipulate the pgtable
  * used to emulate pcache. Those functions work on user pgtable ranges.
+ *
+ * There major pte functions:
+ * 	- zap		pcache_zap_pte
+ * 	- copy		pcache_copy_one_pte
+ * 	- move		pcache_move_pte
  */
 
 #include <lego/mm.h>
@@ -125,11 +130,23 @@ zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 	pte = start_pte;
 
 	do {
-		pte_t ptent = *pte;
+		pte_t ptent;
+		bool retried = false;
 
+retry_verify:
+		ptent = *pte;
 		if (pte_none(ptent))
 			continue;
 		if (pte_present(ptent)) {
+			int ret;
+
+			/*
+			 * The retry only happen if @pcm happen to be evicted
+			 * at the same time. Thus the first retry should got passed
+			 * in the above pte_none testing.
+			 */
+			BUG_ON(retried);
+
 			/*
 			 * If we remove rmap first, there is a small
 			 * time frame where the pcm that pte maps to
@@ -149,9 +166,14 @@ zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 
 			pgtable_debug("addr: %#lx, pte: %p", addr, pte);
 
-			/* Let pcache clear bookkeeping */
-			pcache_zap_pte(mm, addr, ptent, pte, ptl);
-			continue;
+			ret = pcache_zap_pte(mm, addr, ptent, pte, ptl);
+			if (likely(!ret))
+				continue;
+			else if (ret == -EAGAIN) {
+				retried = true;
+				goto retry_verify;
+			} else
+				WARN_ON_ONCE(1);
 		}
 
 		pte_clear(pte);
@@ -249,6 +271,10 @@ void release_pgtable(struct task_struct *tsk,
 	free_pgd_range(mm, start, end);
 }
 
+/*
+ * We enter with both @src_pte and @dst_pte locked.
+ * We leave with both @src_pte and @dst_pte locked.
+ */
 static inline int
 pcache_copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		pte_t *dst_pte, pte_t *src_pte, unsigned long addr,
@@ -299,6 +325,13 @@ pte_set:
 	pcm = pte_to_pcache_meta(pte);
 	if (pcm) {
 		get_pcache(pcm);
+
+		/*
+		 * XXX:
+		 * May deadlock. We are holding pte lock. Happens if:
+		 * another thread which is doing eviction, already locked
+		 * this pcm and tried to acquire pte lock to do unmap.
+		 */
 		pcache_add_rmap(pcm, dst_pte, addr, dst_mm, dst_task);
 	}
 	return 0;
@@ -476,11 +509,23 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 
 	for (; old_addr < old_end; old_pte++, old_addr += PAGE_SIZE,
 				   new_pte++, new_addr += PAGE_SIZE) {
+		bool retried = false;
+		int ret;
+
+retry_verify:
 		if (pte_none(*old_pte))
 			continue;
 
-		/* Let pcache take care of everything */
-		if (pcache_move_pte(mm, old_pte, new_pte, old_addr, new_addr))
+		/* Concurrent eviction happened, above pte_none must be true */
+		BUG_ON(retried);
+
+		ret = pcache_move_pte(mm, old_pte, new_pte, old_addr, new_addr, old_ptl);
+		if (likely(!ret))
+			continue;
+		else if (ret == -EAGAIN) {
+			retried = true;
+			goto retry_verify;
+		} else
 			WARN_ON_ONCE(1);
 	}
 

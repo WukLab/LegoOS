@@ -16,12 +16,17 @@
 #include <lego/seq_file.h>
 #include <processor/fs.h>
 
+/*
+ * We don't actually return the real number of online cpus here
+ * We return the number of active cpus, which can be scheduled threads upon.
+ * Because we have reserved cores for IB pooling, victim flush.
+ */
 static int devices_system_cpu_online_show(struct seq_file *m, void *v)
 {
 	char buf[64];
 
 	memset(buf, 0, 64);
-	scnprintf(buf, 64, "%*pbl", num_online_cpus(), cpu_online_mask);
+	scnprintf(buf, 64, "%*pbl", num_active_cpus(), cpu_active_mask);
 	seq_printf(m, "%s\n", buf);
 
 	return 0;

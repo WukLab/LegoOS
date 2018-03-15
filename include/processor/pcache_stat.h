@@ -65,12 +65,19 @@ enum pcache_event_item {
 
 	/*
 	 * pcache eviction stat
-	 * nr_eviction_failed = triggered - eagain - succeed
-	 * (failure really should not happen if victim cache alway succeed in evicting.)
+	 * triggered: how many times pcache_alloc wants evict lines
+	 * eagain_freeable: someone freed before eviction starting find a condidate
+	 * egain_concurrent: the condidate who has been unmapped has concurrent users
+	 * failure_find: algorithm part failed to find a candidate
+	 * failure_evict: mechanism part failed to evict the candidate
+	 * succeed: evicted a line
 	 */
-	PCACHE_EVICTION_TRIGGERED,	/* nr of pcache evictions triggered */
-	PCACHE_EVICTION_EAGAIN,		/* nr of times eviction tell caller to retry alloc */
-	PCACHE_EVICTION_SUCCEED,	/* nr of pcache evictions succeed */
+	PCACHE_EVICTION_TRIGGERED,
+	PCACHE_EVICTION_EAGAIN_FREEABLE,
+	PCACHE_EVICTION_EAGAIN_CONCURRENT,
+	PCACHE_EVICTION_FAILURE_FIND,
+	PCACHE_EVICTION_FAILURE_EVICT,
+	PCACHE_EVICTION_SUCCEED,
 
 	/*
 	 * triggered = eagain + succeed
