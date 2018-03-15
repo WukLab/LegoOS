@@ -68,6 +68,27 @@ static void storage_dispatch(void *msg, uintptr_t desc)
 	case P2S_STAT:
 		handle_stat_request(payload, desc);
 		break;
+	case P2S_TRUNCATE:
+		handle_truncate_request(payload, desc);
+		break;
+	case P2S_UNLINK:
+		handle_unlink_request(payload, desc);
+		break;
+	case P2S_MKDIR:
+		handle_mkdir_request(payload, desc);
+		break;
+	case P2S_RMDIR:
+		handle_rmdir_request(payload, desc);
+		break;
+	case P2S_STATFS:
+		handle_statfs_request(payload, desc);
+		break;
+	case P2S_GETDENTS:
+		handle_getdents_request(payload, desc);
+		break;
+	case P2S_READLINK:
+		handle_readlink_request(payload, desc);
+		break;
 
 	default:
 		handle_bad_request(*opcode, desc);

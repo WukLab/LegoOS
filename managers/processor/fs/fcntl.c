@@ -16,8 +16,85 @@
 #include <processor/processor.h>
 #include <processor/fs.h>
 
+#define SETFL_MASK (O_APPEND | O_NONBLOCK | O_NDELAY | O_DIRECT | O_NOATIME)
+
+static int setfl(struct file * filp, unsigned long arg)
+{
+	/*
+	 * O_APPEND cannot be cleared
+	 */
+	if (((arg ^ filp->f_flags) & O_APPEND))
+		return -EPERM;
+
+	/* does not allow set O_DIRECT */
+	if (arg & O_DIRECT)
+		return -EINVAL;
+
+	spin_lock(&filp->f_pos_lock);
+	filp->f_flags = (arg & SETFL_MASK) | (filp->f_flags & ~SETFL_MASK);
+	spin_unlock(&filp->f_pos_lock);
+
+	return 0;
+}
+
+static long do_fcntl(int fd, unsigned int cmd, unsigned long arg)
+{
+	long err = -EINVAL;
+	struct file *fp;
+
+	fp = fdget(fd);
+	if (unlikely(!fp)) {
+		err = -EBADF;
+		goto out;
+	}
+
+	switch(cmd) {
+	case F_GETFD:
+		err = 0;
+		break;
+	case F_SETFD:
+		err = 0;
+		break;
+	case F_GETFL:
+		err = fp->f_flags;
+		break;
+	case F_SETFL:
+		err = setfl(fp, arg);
+		break;
+	case F_DUPFD:
+	case F_DUPFD_CLOEXEC:
+	case F_GETLK:
+	case F_SETLK:
+	case F_SETLKW:
+	case F_GETOWN:
+	case F_SETOWN:
+	case F_GETOWN_EX:
+	case F_SETOWN_EX:
+	case F_GETOWNER_UIDS:
+	case F_GETSIG:
+	case F_SETSIG:
+	case F_GETLEASE:
+	case F_SETLEASE:
+	case F_NOTIFY:
+	case F_SETPIPE_SZ:
+	case F_GETPIPE_SZ:
+		pr_warn("cmd not implemented: %u\n", cmd);
+		err = 0;
+		break;
+
+	default:
+		break;
+	}
+
+out:
+	return err;
+}
+
 SYSCALL_DEFINE3(fcntl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 {	
+	long ret;
 	syscall_enter("fd: %u, cmd: %u, arg: %lu\n", fd, cmd, arg);
-	return 0;
+	ret = do_fcntl(fd, cmd, arg);
+	syscall_exit(ret);
+	return ret;
 }

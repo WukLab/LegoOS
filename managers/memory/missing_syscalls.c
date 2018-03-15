@@ -48,6 +48,13 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
 	BUG();
 }
+
+SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename,
+		int, flags, umode_t, mode)
+{
+	BUG();
+}
+
 SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
 {
 	BUG();
@@ -130,6 +137,12 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 	BUG();
 }
 
+SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
+		struct stat __user *, statbuf, int, flag)
+{
+	BUG();
+}
+
 SYSCALL_DEFINE2(dup2, unsigned int, oldfd, unsigned int, newfd)
 {
 	BUG();
@@ -167,6 +180,69 @@ SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
 
 SYSCALL_DEFINE5(waitid, int, which, pid_t, upid, struct siginfo __user *,
 		infop, int, options, struct rusage __user *, ru)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE0(sync)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(truncate, const char __user *, path, long, length)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(ftruncate, unsigned int, fd, unsigned long, length)
+{
+	BUG();
+}
+
+
+SYSCALL_DEFINE2(creat, const char  __user *, pathname, umode_t, mode)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE1(unlink, const char __user *, pathname)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(unlinkat, int, dfd, const char __user *, pathname, int, flag)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(mkdir, const char __user *, pathname, umode_t, mode)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE1(rmdir, const char __user *, pathname)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(getcwd, char __user *, buf, unsigned long, size)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(statfs, const char __user *, pathname, struct statfs __user *, buf)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(getdents, unsigned int, fd,
+		struct lego_dirent __user *, dirent, unsigned int, count)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(readlink, const char __user *, path, char __user *, buf,
+		int, bufsiz)
 {
 	BUG();
 }

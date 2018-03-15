@@ -231,3 +231,115 @@ out:
 	syscall_exit(ret);
 	return ret;
 }
+
+SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
+		struct stat __user *, statbuf, int, flag)
+{
+	char kname[FILENAME_LEN_DEFAULT];
+	struct kstat stat;
+	long ret;
+
+	ret = get_absolute_pathname(dfd, kname, filename);
+	if (ret)
+		goto out;
+
+	syscall_enter("filename: %s, statbuf: %p\n", kname, statbuf);
+
+	ret = handle_special_stat(kname);
+	if (ret)
+		goto out;
+
+#ifdef CONFIG_USE_RAMFS
+	dummy_fillstat(&stat);
+	stat.mode |= S_IFREG;
+#else
+	ret = get_kstat_from_storage(kname, &stat, flag);
+	if (ret)
+		goto out;
+#endif
+
+	ret = cp_new_stat(&stat, statbuf);
+
+out:
+	syscall_exit(ret);
+	return ret;
+}
+
+/*
+ * do_readlinkat: read symbolic link from storage side
+ * @dfd: directory file descriptor of relative path resolving root
+ * @pathname: pathname of target link name
+ * @buf: buffer to put readlink result
+ * @bufsiz: user buffer size
+ * return value: nrbytes read on success, -errno on fail
+ */
+static long do_readlinkat(int dfd, const char __user *pathname,
+		char __user *buf, int bufsiz)
+{
+	long ret;
+	void *msg;
+	u32 *opcode;
+	struct p2s_readlink_struct *payload;
+	u32 len_msg = sizeof(*opcode) + sizeof(*payload);
+	
+	/* retval (8 bytes) + content */
+	void *retbuf;
+	u32 len_retbuf;
+	int retlen;
+	char *kbuf;
+
+	if (unlikely(bufsiz <= 0))
+		return -EINVAL;
+
+	len_retbuf = sizeof(long) + bufsiz;
+	retbuf = kmalloc(len_retbuf, GFP_KERNEL);
+	if (unlikely(!retbuf)) {
+		return -ENOMEM;
+	}
+	kbuf = retbuf + sizeof(long);
+	
+	msg = kmalloc(len_msg, GFP_KERNEL);
+	if (unlikely(!msg)) {
+		kfree(retbuf);
+		return -ENOMEM;
+	}
+
+	opcode = msg;
+	payload = msg + sizeof(*opcode);
+	*opcode = P2S_READLINK;
+	payload->bufsiz = bufsiz;
+	ret = get_absolute_pathname(dfd, payload->filename, pathname);
+	
+	if (unlikely(ret))
+		goto free;
+
+	retlen = ibapi_send_reply_imm(current_storage_home_node(), msg, len_msg,
+			retbuf, len_retbuf, false);
+	/* error in storage side */
+	if (unlikely(retlen == sizeof(ret))) {
+		ret = *((long *) retbuf);
+		goto free;
+	}
+
+	if (copy_to_user(buf, kbuf, bufsiz)) {
+		ret = -EFAULT;
+		goto free;
+	}
+	ret = *(long *)retbuf;
+free:
+	kfree(msg);
+	kfree(retbuf);
+	return ret;
+}
+
+SYSCALL_DEFINE3(readlink, const char __user *, path, char __user *, buf,
+		int, bufsiz)
+{
+	long ret;
+	syscall_filename(path);
+	syscall_enter("bufsiz %d\n", bufsiz);
+	ret = do_readlinkat(AT_FDCWD, path, buf, bufsiz);
+
+	syscall_exit(ret);
+	return ret;
+}

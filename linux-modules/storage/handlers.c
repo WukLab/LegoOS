@@ -12,6 +12,7 @@
 #include <linux/dcache.h>
 #include <linux/mutex.h>
 #include <linux/mm.h>
+#include <linux/namei.h>
 
 request constuct_request(int uid, char *fileName, fmode_t permission, ssize_t len, 
 		loff_t offset, int flags){
@@ -75,7 +76,7 @@ ssize_t handle_read_request(void *payload, uintptr_t desc)
 		*retval = PTR_ERR(filp);
 		goto out_reply;
 	}
-	
+
 	*retval = local_file_read(filp, (char __user *)readbuf, rq.len, &rq.offset);
 	local_file_close(filp);
 	//yield_access(metadata_entry, user_entry); //enable in future
@@ -203,5 +204,141 @@ int handle_access_request(void *payload, uintptr_t desc)
 
 	pr_info("%s %s %d, %d\n", __func__, acc->filename, acc->mode, ret);
 	ibapi_reply_message(&ret, sizeof(int), desc);
+	return ret;
+}
+
+long handle_truncate_request(void *payload, uintptr_t desc)
+{
+	struct p2s_truncate_struct *trunc = payload;
+	long ret;
+	unsigned int lookup_flags = LOOKUP_FOLLOW;
+	struct path path;
+	long length = trunc->length;
+	
+	if (length < 0)	{	/* sorry, but loff_t says... */
+		ret = -EINVAL;
+		goto reply;
+	}
+
+retry:
+	//ret = user_path_at(AT_FDCWD, trunc->filename, lookup_flags, &path);
+	ret = kern_path(trunc->filename, lookup_flags, &path);
+	if (!ret) {
+		ret = vfs_truncate(&path, length);
+		path_put(&path);
+	}
+	if (retry_estale(ret, lookup_flags)) {
+		lookup_flags |= LOOKUP_REVAL;
+		goto retry;
+	}
+
+reply:
+	ibapi_reply_message(&ret, sizeof(ret), desc);
+	return ret;
+}
+
+long handle_unlink_request(void *payload, uintptr_t desc)
+{
+	struct p2s_unlink_struct *unlink = payload;
+	long ret;
+
+	ret = do_unlink(unlink->filename);
+
+	ibapi_reply_message(&ret, sizeof(ret), desc);
+	return ret;
+}
+
+long handle_mkdir_request(void *payload, uintptr_t desc)
+{
+	struct p2s_mkdir_struct *mkdir = payload;
+	long ret;
+
+	ret = do_mkdir(mkdir->filename, mkdir->mode);
+
+	ibapi_reply_message(&ret, sizeof(ret), desc);
+	return ret;
+}
+
+long handle_rmdir_request(void *payload, uintptr_t desc)
+{
+	struct p2s_rmdir_struct *rmdir = payload;
+	long ret;
+
+	ret = do_rmdir(rmdir->filename);
+
+	ibapi_reply_message(&ret, sizeof(ret), desc);
+	return ret;
+}
+
+long handle_statfs_request(void *payload, uintptr_t desc)
+{
+	struct p2s_statfs_struct *strq = payload;
+	struct p2s_statfs_ret_struct retbuf;
+
+	retbuf.retval = do_kstatfs(strq->filename, &retbuf.kstatfs);
+
+	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
+	return retbuf.retval;
+}
+
+long handle_getdents_request(void *payload, uintptr_t desc)
+{
+	struct p2s_getdents_struct * __payload = payload;
+	void *retbuf;
+	struct p2s_getdents_retval_struct *retval_struct;
+	u32 retlen = sizeof(*retval_struct) + __payload->count;
+	long ret;
+	struct linux_dirent * dirent;
+
+	retbuf = kmalloc(retlen, GFP_KERNEL);
+	if (unlikely(!retbuf)) {
+		ret = -ENOMEM;
+		goto enomem;
+	}
+
+	retval_struct = retbuf;
+	dirent = retbuf + sizeof(*retval_struct);
+
+	retval_struct->pos = __payload->pos;
+	retval_struct->retval = do_getdents(__payload->filename,
+			dirent, &retval_struct->pos, __payload->count);
+	ret = retval_struct->retval;
+
+	ibapi_reply_message(retbuf, retlen, desc);
+	kfree(retbuf);
+	return ret;
+
+enomem:
+	ibapi_reply_message(&ret, sizeof(ret), desc);
+	return ret;
+}
+
+long handle_readlink_request(void *payload, uintptr_t desc)
+{
+	struct p2s_readlink_struct *__payload = payload;
+	long ret = 0;
+	u32 retlen = sizeof(ret) + __payload->bufsiz;
+	/* 
+	 * retbuf format: retval(8 bytes) + string buffer
+	 */
+	void *retbuf;
+	char *content;
+
+	retbuf = kmalloc(retlen, GFP_KERNEL);
+	if (unlikely(!retbuf)) {
+		ret = -ENOMEM;
+		goto enomem;
+	}
+
+	content = retbuf + sizeof(ret);
+	*(long *)retbuf = do_readlink(__payload->filename, content, __payload->bufsiz);
+
+	ibapi_reply_message(retbuf, retlen, desc);
+	ret = *(long *)retbuf;
+	kfree(retbuf);
+	return ret;
+
+enomem:
+	ibapi_reply_message(&ret, sizeof(ret), desc);
 	return ret;
 }

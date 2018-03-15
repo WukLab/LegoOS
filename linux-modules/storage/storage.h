@@ -14,6 +14,7 @@
 #include <linux/mutex.h>
 #include <linux/stat.h>
 #include <asm/uaccess.h>
+#include <asm/mman.h>
 
 #define OP_SUCCESS		1
 #define OP_FAILURE		0
@@ -26,6 +27,7 @@
 #define MAX_SIZE		2 
 
 
+struct linux_dirent;
 
 struct metadata {
 	int			users[MAX_USERS_ALLOWED]; // Users who have access to this file
@@ -69,6 +71,13 @@ ssize_t local_file_read(struct file *, char __user *, ssize_t, loff_t *);
 int local_fsync(struct file *);
 int kernel_fs_stat(const char *, struct kstat *, int);
 int faccessat_root(const char __user *, int);
+long do_unlink(const char *pathname);
+long do_mkdir(const char *pathname, umode_t mode);
+long do_rmdir(const char *pathname);
+long do_kstatfs(const char *pathname, struct kstatfs *statfsbuf);
+long do_getdents(const char *pathname, struct linux_dirent *dirent,
+		loff_t *pos, unsigned int count);
+long do_readlink(const char *pathname, char *buf, int bufsiz);
 
 /* handler.c */
 int handle_open_request(void *, uintptr_t);
@@ -76,5 +85,12 @@ ssize_t handle_write_request(void *, uintptr_t);
 ssize_t handle_read_request(void *, uintptr_t);
 int handle_stat_request(void *, uintptr_t);
 int handle_access_request(void *, uintptr_t);
+long handle_truncate_request(void *, uintptr_t);
+long handle_unlink_request(void *, uintptr_t);
+long handle_mkdir_request(void *, uintptr_t);
+long handle_rmdir_request(void *, uintptr_t);
+long handle_statfs_request(void *payload, uintptr_t desc);
+long handle_getdents_request(void *payload, uintptr_t desc);
+long handle_readlink_request(void *payload, uintptr_t desc);
 
 #endif /* _LEGO_STORAGE_STORAGE_H_ */

@@ -21,7 +21,10 @@
 #include <lego/getcpu.h>
 
 #include <asm/syscalls.h>
+#include <asm/stat.h>
 #include <generated/unistd_64.h>
+
+struct lego_dirent;
 
 #ifdef CONFIG_DEBUG_SYSCALL
 #define debug_syscall_print()			\
@@ -48,11 +51,22 @@ do {										\
 		__func__, smp_processor_id(), current->pid, current->tgid,	\
 		current->comm, (unsigned long)ret, (long)ret);
 
+static inline int syscall_filename(const char __user *pathname)
+{
+	char kbuf[FILENAME_LEN_DEFAULT];
+	if (strncpy_from_user(kbuf, pathname, FILENAME_LEN_DEFAULT) < 0) {
+		return -EFAULT;
+	}
+	syscall_enter("filename: %s\n", kbuf);
+	return 0;
+}
+
 #else
 #define debug_syscall_print()	do { } while (0)
 #define syscall_enter(fmt, ...)	do { } while (0)
 #define __syscall_enter()	do { } while (0)
 #define syscall_exit(ret)	do { } while (0)
+#define syscall_filename(filename)	do { } while (0)
 #endif /* CONFIG_DEBUG_SYSCALL */
 
 #define SYSCALL_DEFINE0(sname)					\
@@ -94,8 +108,33 @@ asmlinkage long sys_writev(unsigned long fd,
 			   const struct iovec __user *vec,
 			   unsigned long vlen);
 asmlinkage long sys_open(const char __user *filename, int flags, umode_t mode);
+asmlinkage long sys_openat(int dfd, const char __user *filename,
+			int flags, umode_t mode);
+asmlinkage long sys_creat(const char __user *pathname, umode_t mode);
 asmlinkage long sys_close(unsigned int fd);
+
+/* stats */
+asmlinkage long sys_newstat(const char __user *filename,
+			struct stat __user *statbuf);
+asmlinkage long sys_newlstat(const char __user *filename,
+			struct stat __user *statbuf);
+asmlinkage long sys_newfstat(unsigned int fd, struct stat __user *statbuf);
+asmlinkage long sys_newfstatat(int dfd, const char __user *filename,
+			struct stat __user *statbuf, int flag);
+asmlinkage long sys_statfs(const char __user *pathname, struct statfs __user *buf);
+
 asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg);
+asmlinkage long sys_sync(void);
+asmlinkage long sys_truncate(const char __user *path, long length);
+asmlinkage long sys_ftruncate(unsigned int fd, unsigned long length);
+asmlinkage long sys_unlink(const char __user *pathname);
+asmlinkage long sys_unlinkat(int dfd, const char __user *pathname, int flag);
+asmlinkage long sys_mkdir(const char __user *filename, umode_t mode);
+asmlinkage long sys_rmdir(const char __user *pathname);
+asmlinkage long sys_getdents(unsigned int fd,
+			struct lego_dirent __user *dirent, unsigned int count);
+asmlinkage long sys_readlink(const char __user *path, char __user *buf, int bufsiz);
+
 asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg);
 
 asmlinkage long sys_getuid(void);

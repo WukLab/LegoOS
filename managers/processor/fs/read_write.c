@@ -116,6 +116,12 @@ out:
 	return ret;
 }
 
+/* fake sync() */
+SYSCALL_DEFINE0(sync)
+{
+	return 0;
+}
+
 static ssize_t do_readv(unsigned long fd, const struct iovec __user *vec,
 			unsigned long vlen, int flags)
 {
