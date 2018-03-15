@@ -953,6 +953,36 @@ static unsigned int get_rr_interval_fair(struct rq *rq, struct task_struct *task
 	return rr_interval;
 }
 
+/*
+ * sched_yield() is very simple
+ *
+ * The magic of dealing with the ->skip buddy is in pick_next_entity.
+ */
+static void yield_task_fair(struct rq *rq)
+{
+	struct task_struct *curr = rq->curr;
+	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
+	struct sched_entity *se = &curr->se;
+
+	/*
+	 * Are we the only task in the tree?
+	 */
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+
+	if (curr->policy != SCHED_BATCH) {
+		update_rq_clock(rq);
+		/*
+		 * Update run-time statistics of the 'current'.
+		 */
+		update_curr(cfs_rq);
+	}
+
+	set_skip_buddy(se);
+}
+
 #ifdef CONFIG_SMP
 static int find_lowest_rq(struct task_struct *p, int prev_cpu)
 {
@@ -1002,6 +1032,7 @@ const struct sched_class fair_sched_class = {
 
 	.enqueue_task		= enqueue_task_fair,
 	.dequeue_task		= dequeue_task_fair,
+	.yield_task		= yield_task_fair,
 
 	.check_preempt_curr	= check_preempt_curr_fair,
 

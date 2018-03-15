@@ -1708,6 +1708,47 @@ void kick_process(struct task_struct *p)
 }
 
 /*
+ * this_rq_lock - lock this runqueue and disable interrupts.
+ */
+static struct rq *this_rq_lock(void)
+{
+	struct rq *rq;
+
+	local_irq_disable();
+	rq = this_rq();
+	spin_lock(&rq->lock);
+
+	return rq;
+}
+
+/**
+ * sys_sched_yield - yield the current processor to other threads.
+ *
+ * This function yields the current CPU to other tasks. If there are no
+ * other threads running on this CPU then this function will return.
+ *
+ * Return: 0.
+ */
+SYSCALL_DEFINE0(sched_yield)
+{
+	struct rq *rq = this_rq_lock();
+
+	BUG_ON(!current->sched_class->yield_task);
+	current->sched_class->yield_task(rq);
+
+	/*
+	 * Since we are going to call schedule() anyway, there's
+	 * no need to preempt or enable interrupts:
+	 */
+	spin_unlock(&rq->lock);
+	preempt_enable_no_resched();
+
+	schedule();
+
+	return 0;
+}
+
+/*
  * Perform scheduler related setup for a newly forked process p.
  * p is forked by current.
  *
