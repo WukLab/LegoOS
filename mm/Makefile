@@ -13,6 +13,7 @@ obj-y += early_ioremap.o
 obj-y += percpu.o
 obj-y += maccess.o
 obj-y += mbind.o
+obj-y += vmstat.o
 
 obj-y += slab_common.o
 obj-$(CONFIG_SLOB) += slob.o

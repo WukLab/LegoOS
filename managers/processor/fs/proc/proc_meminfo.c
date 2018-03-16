@@ -7,13 +7,16 @@
  * (at your option) any later version.
  */
 
+#include <lego/mm.h>
 #include <lego/stat.h>
 #include <lego/slab.h>
-#include <lego/uaccess.h>
+#include <lego/vmstat.h>
 #include <lego/files.h>
+#include <lego/uaccess.h>
 #include <lego/seq_file.h>
 #include <lego/spinlock.h>
 #include <lego/kernel_stat.h>
+#include <lego/sysinfo.h>
 
 extern void arch_report_meminfo(struct seq_file *m);
 
@@ -38,10 +41,22 @@ static void show_val_kb(struct seq_file *m, const char *s, unsigned long num)
 
 static int meminfo_show(struct seq_file *m, void *v)
 {
+	struct manager_sysinfo i;
 
-	show_val_kb(m, "MemTotal:       ", totalram_pages);
-	show_val_kb(m, "MemFree:        ", totalram_pages);
-	show_val_kb(m, "MemAvailable:   ", totalram_pages);
+	/*
+	 * XXX:
+	 * We should report the memory usage, which is the sum
+	 * of from all used memory components.
+	 */
+	manager_meminfo(&i);
+
+	show_val_kb(m, "MemTotal:       ", i.totalram);
+	show_val_kb(m, "MemFree:        ", i.freeram);
+	show_val_kb(m, "MemAvailable:   ", i.freeram);
+
+	show_val_kb(m, "PageTables:     ",
+		    global_page_state(NR_PAGETABLE));
+
 	arch_report_meminfo(m);
 
 	return 0;

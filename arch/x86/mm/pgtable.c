@@ -11,13 +11,42 @@
 #include <asm/tlbflush.h>
 
 #include <lego/mm.h>
+#include <lego/vmstat.h>
 #include <lego/kernel.h>
+
+static inline bool pgtable_page_ctor(struct page *page)
+{
+	if (!ptlock_init(page))
+		return false;
+	inc_zone_page_state(page, NR_PAGETABLE);
+	return true;
+}
+
+static inline void pgtable_page_dtor(struct page *page)
+{
+	pte_lock_deinit(page);
+	dec_zone_page_state(page, NR_PAGETABLE);
+}
 
 #define PGALLOC_GFP	(GFP_KERNEL | __GFP_ZERO)
 
 pte_t *pte_alloc_one_kernel(struct mm_struct *mm, unsigned long address)
 {
 	return (pte_t *)__get_free_page(PGALLOC_GFP);
+}
+
+struct page *pte_alloc_one(struct mm_struct *mm, unsigned long address)
+{
+	struct page *pte;
+
+	pte = alloc_pages(PGALLOC_GFP, 0);
+	if (!pte)
+		return NULL;
+	if (!pgtable_page_ctor(pte)) {
+		__free_page(pte);
+		return NULL;
+	}
+	return pte;
 }
 
 pud_t *pud_alloc_one(struct mm_struct *mm, unsigned long addr)
@@ -30,26 +59,16 @@ pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr)
 	return (pmd_t *)__get_free_page(PGALLOC_GFP);
 }
 
-struct page *pte_alloc_one(struct mm_struct *mm, unsigned long address)
-{
-	struct page *pte;
-
-	pte = alloc_pages(PGALLOC_GFP, 0);
-	if (!pte)
-		return NULL;
-/*
-	if (!pgtable_page_ctor(pte)) {
-		__free_page(pte);
-		return NULL;
-	}
-*/
-	return pte;
-}
-
 void pte_free_kernel(struct mm_struct *mm, pte_t *pte)
 {
 	BUG_ON((unsigned long)pte & (PAGE_SIZE-1));
 	free_page((unsigned long)pte);
+}
+
+void pte_free(struct mm_struct *mm, struct page *pte)
+{
+	pgtable_page_dtor(pte);
+	__free_page(pte);
 }
 
 void pmd_free(struct mm_struct *mm, pmd_t *pmd)
@@ -62,12 +81,6 @@ void pud_free(struct mm_struct *mm, pud_t *pud)
 {
 	BUG_ON((unsigned long)pud & (PAGE_SIZE-1));
 	free_page((unsigned long)pud);
-}
-
-void pte_free(struct mm_struct *mm, struct page *pte)
-{
-	/* pgtable_page_dtor(pte); */
-	__free_page(pte);
 }
 
 /*

@@ -19,6 +19,8 @@
 #include <lego/sched.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
+#include <lego/vmstat.h>
+#include <lego/sysinfo.h>
 #include <lego/nodemask.h>
 #include <lego/memblock.h>
 #include <lego/spinlock.h>
@@ -617,6 +619,8 @@ __free_one_page(struct page *page, unsigned long pfn, struct zone *zone,
 	unsigned long buddy_idx;
 	struct page *buddy;
 
+	__mod_zone_page_state(zone, NR_FREE_PAGES, 1 << order);
+
 	page_idx = pfn & ((1 << MAX_ORDER) - 1);
 
 	VM_BUG_ON_PAGE(page_idx & ((1 << order) - 1), page);
@@ -885,6 +889,7 @@ struct page *buffered_rmqueue(struct zone *zone, unsigned int order,
 	if (!page)
 		goto failed;
 
+	__mod_zone_page_state(zone, NR_FREE_PAGES, -(1<< order));
 	local_irq_restore(flags);
 	return page;
 
@@ -1401,6 +1406,13 @@ void dump_zonelists(void)
 				((zone->zone_start_pfn + zone->spanned_pages) << PAGE_SHIFT) - 1);
 		}
 	}
+}
+
+void manager_meminfo(struct manager_sysinfo *val)
+{
+	val->totalram = totalram_pages;
+	val->freeram = global_page_state(NR_FREE_PAGES);
+	val->mem_unit = PAGE_SIZE;
 }
 
 void __init memory_init(void)

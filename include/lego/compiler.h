@@ -85,6 +85,8 @@
 	__attribute__((__aligned__(L1_CACHE_BYTES),		\
 	__section__(".data..cacheline_aligned")))
 
+#define __cacheline_aligned_in_smp	__cacheline_aligned
+
 #ifdef CONFIG_SMP
 #define ____cacheline_aligned_in_smp	____cacheline_aligned
 #else

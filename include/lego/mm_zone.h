@@ -90,6 +90,35 @@ enum zone_type {
 	__MAX_NR_ZONES
 };
 
+/*
+ * zone->lock and the zone lru_lock are two of the hottest locks in the kernel.
+ * So add a wild amount of padding here to ensure that they fall into separate
+ * cachelines.  There are very few zone structures in the machine, so space
+ * consumption is not a concern here.
+ */
+#if defined(CONFIG_SMP)
+struct zone_padding {
+	char x[0];
+} ____cacheline_aligned_in_smp;
+#define ZONE_PADDING(name)	struct zone_padding name;
+#else
+#define ZONE_PADDING(name)
+#endif
+
+enum zone_stat_item {
+	NR_FREE_PAGES,
+	NR_PAGETABLE,		/* used for pagetables */
+
+	NR_VM_ZONE_STAT_ITEMS,
+};
+
+enum node_stat_item {
+	NR_DIRTIED,		/* page dirtyings since bootup */
+	NR_WRITTEN,		/* page writings since bootup */
+
+	NR_VM_NODE_STAT_ITEMS,
+};
+
 #ifndef __GENERATING_BOUNDS_H
 
 struct zone {
@@ -149,6 +178,9 @@ struct zone {
 
 	const char		*name;
 
+	/* Write-intensive fields used from the page allocator */
+	ZONE_PADDING(_pad1_)
+
 	/* free areas of different sizes */
 	struct free_area	free_area[MAX_ORDER];
 
@@ -156,8 +188,13 @@ struct zone {
 	unsigned long		flags;
 
 	/* Primarily protects free_area */
+	ZONE_PADDING(_pad2_)
 	spinlock_t		lock;
-};
+
+	/* Zone statistics */
+	ZONE_PADDING(_pad3_)
+	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS];
+} ____cacheline_aligned_in_smp;
 
 static inline unsigned long zone_end_pfn(const struct zone *zone)
 {
@@ -219,6 +256,8 @@ struct zonelist {
 /*
  * On NUMA machines, each NUMA node would have a pg_data_t to describe
  * it's memory layout.
+ *
+ * Memory statistics are maintained on a per-zone basis.
  */
 typedef struct pglist_data {
 	struct zone node_zones[MAX_NR_ZONES];
@@ -232,6 +271,9 @@ typedef struct pglist_data {
 	unsigned long node_spanned_pages;	/* total size of physical page
 						   range, including holes */
 	int node_id;
+
+	ZONE_PADDING(_pad2_)
+	atomic_long_t		vm_stat[NR_VM_NODE_STAT_ITEMS];
 } pg_data_t;
 
 #define node_present_pages(nid)	(NODE_DATA(nid)->node_present_pages)
