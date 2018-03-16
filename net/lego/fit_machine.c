@@ -34,27 +34,45 @@
  * Hostnames are listed by the order of FIT node ID. Any wrong configuration
  * lead to an early panic.
  */
+/* Built based on node id */
+struct fit_machine_info *lego_cluster[CONFIG_FIT_NR_NODES];
+
+#ifdef CONFIG_SAME_MACHINE_VMS
+/*
+ * multiple VMs on the same machine
+ * only need to change lid below
+ * NOTE: always start vm1 first, then vm2, etc.
+ */
+static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
+	[0]	= 	"vm1",
+	[1]	= 	"vm2",
+	[2]	= 	"vm3",
+};
+
+static struct fit_machine_info WUKLAB_CLUSTER[] = {
+[0]	= {	.hostname =	"vm1",	.lid =	21,	.first_qpn =	72,	},
+[1]	= {	.hostname =	"vm2",	.lid =	21,	.first_qpn =	72,	},
+[2]	= {	.hostname =	"vm3",	.lid =	21,	.first_qpn =	72,	},
+};
+#else
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
 	[0]	= 	"wuklab12",
 	[1]	= 	"wuklab14",
 	[2]	= 	"wuklab16",
 };
 
-/* Built based on node id */
-struct fit_machine_info *lego_cluster[CONFIG_FIT_NR_NODES];
-
 static struct fit_machine_info WUKLAB_CLUSTER[] = {
 [0]	= {	.hostname =	"wuklab00",	.lid =	2,	.first_qpn =	0,	},
-[1]	= {	.hostname =	"wuklab01",	.lid =	6,	.first_qpn =	0,	},
+[1]	= {	.hostname =	"wuklab01",	.lid =	6,	.first_qpn =	72,	},
 [2]	= {	.hostname =	"wuklab02",	.lid =	8,	.first_qpn =	0,	},
 [3]	= {	.hostname =	"wuklab03",	.lid =	9,	.first_qpn =	74,	},
 [4]	= {	.hostname =	"wuklab04",	.lid =	7,	.first_qpn =	72,	},
 [5]	= {	.hostname =	"wuklab05",	.lid =	3,	.first_qpn =	0,	},
 [6]	= {	.hostname =	"wuklab06",	.lid =	5,	.first_qpn =	0,	},
-[7]	= {	.hostname =	"wuklab07",	.lid =	4,	.first_qpn =	0,	},
-[8]	= {	.hostname =	"wuklab08",	.lid =	10,	.first_qpn =	0,	},
-[9]	= {	.hostname =	"wuklab09",	.lid =	12,	.first_qpn =	0,	},
-[10]	= {	.hostname =	"wuklab10",	.lid =	11,	.first_qpn =	0,	},
+[7]	= {	.hostname =	"wuklab07",	.lid =	4,	.first_qpn =	72,	},
+[8]	= {	.hostname =	"wuklab08",	.lid =	10,	.first_qpn =	72,	},
+[9]	= {	.hostname =	"wuklab09",	.lid =	12,	.first_qpn =	72,	},
+[10]	= {	.hostname =	"wuklab10",	.lid =	11,	.first_qpn =	74,	},
 [11]	= {	.hostname =	"wuklab11",	.lid =	14,	.first_qpn =	0,	},
 [12]	= {	.hostname =	"wuklab12",	.lid =	13,	.first_qpn =	72,	},
 [13]	= {	.hostname =	"wuklab13",	.lid =	15,	.first_qpn =	72,	},
@@ -63,8 +81,9 @@ static struct fit_machine_info WUKLAB_CLUSTER[] = {
 [16]	= {	.hostname =	"wuklab16",	.lid =	20,	.first_qpn =	74,	},
 [17]	= {	.hostname =	"wuklab17",	.lid =	21,	.first_qpn =	0,	},
 [18]	= {	.hostname =	"wuklab18",	.lid =	19,	.first_qpn =	0,	},
-[19]	= {	.hostname =	"wuklab19",	.lid =	18,	.first_qpn =	74,	},
+[19]	= {	.hostname =	"wuklab19",	.lid =	18,	.first_qpn =	72,	},
 };
+#endif
 
 /* Indicate machines that are used by lego */
 static DECLARE_BITMAP(cluster_used_machines, 32);
@@ -82,7 +101,11 @@ unsigned int get_node_global_lid(unsigned int nid)
 unsigned int get_node_first_qpn(unsigned int nid)
 {
 	BUG_ON(nid >= CONFIG_FIT_NR_NODES);
+#ifdef CONFIG_SAME_MACHINE_VMS
+	return first_qpn[nid] + MAX_CONNECTION * nid;
+#else
 	return first_qpn[nid];
+#endif
 }
 
 /*

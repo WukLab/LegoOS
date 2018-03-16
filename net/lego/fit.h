@@ -14,6 +14,7 @@
 #include <lego/atomic.h>
 //#include <lego/wait.h>
 #include <net/arch/cc.h>
+#include <lego/socket.h>
 
 #define DEBUG_SHINYEH
 
@@ -34,11 +35,19 @@
 #define RECV_DEPTH 256
 #define CONNECTION_ID_PUSH_BITS_BASED_ON_RECV_DEPTH 8
 #define NUM_PARALLEL_CONNECTION 4
-#define GET_NODE_ID_FROM_POST_RECEIVE_ID(id) (id>>8)/NUM_PARALLEL_CONNECTION
+#ifdef CONFIG_SOCKET_O_IB
+#define GET_NODE_ID_FROM_POST_RECEIVE_ID(id) (id>>8) / (NUM_PARALLEL_CONNECTION + 1)
+#else
+#define GET_NODE_ID_FROM_POST_RECEIVE_ID(id) (id>>8) / NUM_PARALLEL_CONNECTION
+#endif
 #define GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(id) (id&0x000000ff)
 
 #define LID_SEND_RECV_FORMAT "0000:0000:000000:000000:00000000000000000000000000000000"
+#ifdef CONFIG_SOCKET_O_IB
+#define MAX_CONNECTION MAX_NODE * (NUM_PARALLEL_CONNECTION + 1) //Assume that MAX_CONNECTION is smaller than 256
+#else
 #define MAX_CONNECTION MAX_NODE * NUM_PARALLEL_CONNECTION //Assume that MAX_CONNECTION is smaller than 256
+#endif
 #define MAX_PARALLEL_THREAD 64
 #define WRAP_UP_NUM_FOR_WRID 256 //since there are 64 bits in wr_id, we are going to use 9-12 bits to do thread id waiting passing
 #define WRAP_UP_NUM_FOR_CIRCULAR_ID 256
@@ -47,6 +56,8 @@
 //const int MAX_NODE = 4;
 #define POST_RECEIVE_CACHE_SIZE 256
 #define SERVER_ID 0
+
+#define FIT_LINUX_PAGE_OFFSET 0x00000fff
 
 #define HIGH_PRIORITY 4
 #define LOW_PRIORITY 0
@@ -182,6 +193,7 @@ enum register_application_port_ret{
 struct app_reg_port{
 	struct client_ibv_mr ring_mr;
 //	unsigned int port;
+
 	unsigned int node;
 //	uint64_t hash_key;
 	uint64_t port_node_key;
@@ -299,6 +311,8 @@ enum {
 	MSG_DO_UD_POST_RECEIVE,
 	MSG_DO_ACK_INTERNAL,
 	MSG_DO_ACK_REMOTE,
+	MSG_SOCK_DO_ACK_INTERNAL,
+	MSG_SOCK_DO_ACK_REMOTE,
 	MSG_SEND_RDMA_RING_MR
 };
 
@@ -333,7 +347,7 @@ struct imm_header_from_cq_to_port
 	struct list_head list;
 };
 
-struct pingpong_context {
+struct lego_context {
 	struct ib_context	*context;
 	struct ib_comp_channel *channel;
 	struct ib_pd		*pd;
@@ -342,7 +356,14 @@ struct pingpong_context {
     	//wait_queue_head_t *cq_block_queue;
 	struct ib_cq		**send_cq;
 	struct ib_qp		**qp; // multiple queue pair for multiple connections
-	
+
+#ifdef CONFIG_SOCKET_O_IB
+	/* socket related */
+	struct ib_qp		**sock_qp;
+	struct ib_cq		**sock_send_cq;
+	struct ib_cq		*sock_recv_cq;
+#endif
+
 	struct ib_qp		*qpUD;// one UD qp for all the send-reply connections
 	struct ib_cq		*cqUD;
 	struct ib_cq		*send_cqUD;
@@ -403,6 +424,17 @@ struct pingpong_context {
 	spinlock_t *local_last_ack_index_lock;
 	struct client_ibv_mr *remote_rdma_ring_mrs;
 
+#ifdef CONFIG_SOCKET_O_IB
+	void **local_sock_rdma_recv_rings;
+	int *remote_sock_rdma_ring_mrs_offset;
+	int *remote_sock_last_ack_index;
+	spinlock_t *remote_sock_imm_offset_lock;
+	struct client_ibv_mr *local_sock_rdma_ring_mrs;
+	int *local_sock_last_ack_index;
+	spinlock_t *local_sock_last_ack_index_lock;
+	struct client_ibv_mr *remote_sock_rdma_ring_mrs;
+#endif
+
    	int (*send_handler)(char *addr, uint32_t size, int sender_id);
 	int (*send_reply_handler)(char *input_addr, uint32_t input_size, char *output_addr, uint32_t *output_size, int sender_id);
 	int (*send_reply_opt_handler)(char *input_buf, uint32_t size, void **output_buf, uint32_t *output_size, int sender_id);
@@ -427,6 +459,11 @@ struct pingpong_context {
 	struct imm_header_from_cq_to_port imm_waitqueue_perport[IMM_MAX_PORT];
 	int imm_perport_reg_num[IMM_MAX_PORT];//-1 no registeration, 0 up --> how many
 	spinlock_t imm_waitqueue_perport_lock[IMM_MAX_PORT];
+
+#ifdef CONFIG_SOCKET_O_IB
+	struct imm_header_from_cq_to_port sock_imm_waitqueue_perport[SOCK_MAX_LISTEN_PORTS];
+	spinlock_t sock_imm_waitqueue_perport_lock[SOCK_MAX_LISTEN_PORTS];
+#endif
 	
 	//local semaphore related
 	void **imm_inbox_semaphore;
@@ -449,9 +486,9 @@ struct pingpong_context {
 	struct fit_lock_form *lock_data;
 	struct fit_lock_queue_element *lock_queue;
 };
-typedef struct pingpong_context ppc;
+typedef struct lego_context ppc;
 
-struct pingpong_dest {
+struct lego_dest {
 	int node_id;
 	int lid;
 	int qpn;

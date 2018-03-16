@@ -61,4 +61,6 @@ unsigned int get_node_first_qpn(unsigned int nid);
 extern unsigned int global_lid[];
 extern unsigned int first_qpn[];
 
+int sock_send_message(ppc *ctx, int targe_node, int port, int if_internal_port, void *buf, int size, unsigned long timeout_sec, int if_userspace);
+int sock_receive_message(ppc *ctx, int *target_node, int port, void *ret_addr, int receive_size, int if_userspace, int sock_type);
 #endif /* _INCLUDE_FIT_INTERNAL_H */

@@ -38,7 +38,7 @@ struct ib_pd *ctx_pd;
 
 static void ibv_add_one(struct ib_device *device)
 {
-	FIT_ctx = (struct pingpong_context *)kmalloc(sizeof(struct pingpong_context), GFP_KERNEL);
+	FIT_ctx = (struct lego_context *)kmalloc(sizeof(struct lego_context), GFP_KERNEL);
 	ibapi_dev = device;
 	
 	ctx_pd = ib_alloc_pd(device);
@@ -101,6 +101,38 @@ int ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_ad
 			__builtin_return_address(0));
 }
 
+inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor)
+{
+	ppc *ctx = FIT_ctx;
+	return client_receive_message(ctx, designed_port, ret_addr, receive_size, descriptor, 0);
+}
+
+inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
+{
+	ppc *ctx = FIT_ctx;
+	return client_reply_message(ctx, addr, size, descriptor, 0);
+}
+
+#ifdef CONFIG_SOCKET_O_IB
+int ibapi_sock_send_message(int target_node, int dest_port, int if_internal_port, void *buf, int size, unsigned long timeout_sec, int if_userspace)
+{
+	ppc *ctx = FIT_ctx;
+
+	if (target_node == MY_NODE_ID || target_node > MAX_NODE) {
+		pr_crit("%s: wrong target node %d\n", __func__, target_node);
+		return -1;
+	}
+
+	return sock_send_message(ctx, target_node, dest_port, if_internal_port, buf, size, timeout_sec, if_userspace);
+}
+
+int ibapi_sock_receive_message(int *target_node, int port, uintptr_t *ret_addr, int receive_size, int if_userspace, int if_nonblock)
+{
+	ppc *ctx = FIT_ctx;
+	return sock_receive_message(ctx, target_node, port, ret_addr, receive_size, if_userspace, if_nonblock);
+}
+#endif
+
 #if 0
 int ibapi_register_application(unsigned int designed_port, unsigned int max_size_per_message, unsigned int max_user_per_node, char *name, uint64_t name_len)
 {
@@ -121,17 +153,6 @@ int ibapi_query_port(int target_node, int designed_port, int requery_flag)
 }
 #endif
 
-inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor)
-{
-	ppc *ctx = FIT_ctx;
-	return client_receive_message(ctx, designed_port, ret_addr, receive_size, descriptor, 0);
-}
-
-inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
-{
-	ppc *ctx = FIT_ctx;
-	return client_reply_message(ctx, addr, size, descriptor, 0);
-}
 #if 0
 uint64_t ibapi_dist_barrier(unsigned int check_num)
 {
@@ -291,7 +312,7 @@ int lego_ib_init(void *unused)
 	init_global_lid_qpn();
 	print_gloabl_lid();
 
-	while (mad_got_one < 10)
+	while (mad_got_one < 7)
 		schedule();
 
 	ret = ib_register_client(&ibv_client);
