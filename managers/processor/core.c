@@ -23,7 +23,16 @@
 
 /* http://c-faq.com/decl/spiral.anderson.html */
 static const char *argv_init[MAX_INIT_ARGS+2];
-const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
+const char *envp_init[MAX_INIT_ENVS+2] =
+{
+	"HOME=/",
+	"TERM=linux",
+	"LANG=en_US.UTF-8",
+	"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin",
+	"USER=root",
+	"PWD=/",
+	NULL,
+};
  
 static int procmgmt(void *unused)
 {

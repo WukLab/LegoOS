@@ -432,6 +432,17 @@ static void close_files(struct files_struct *files)
 		f = files->fd_array[fd];
 		BUG_ON(!f);
 
+		/*
+		 * XXX:
+		 * If the file is shared by more than one processes,
+		 * the f_op->release might be called more than once.
+		 * This more be valid for pipe files, but does this
+		 * also applies to all other kind of files?
+		 *
+		 * We need to be careful here! Check later.
+		 */
+		if (f->f_op->release)
+			f->f_op->release(f);
 		put_file(f);
 		__clear_bit(fd, files->fd_bitmap);
 		files->fd_array[fd] = NULL;
@@ -447,7 +458,7 @@ static void put_files_struct(struct files_struct *files)
 	}
 }
 
-static void exit_files(struct task_struct *tsk)
+void exit_files(struct task_struct *tsk)
 {
 	struct files_struct * files = tsk->files;
 
@@ -484,6 +495,14 @@ static struct files_struct *dup_fd(struct files_struct *oldf)
 		BUG_ON(!f);
 		newf->fd_array[fd] = f;
 		get_file(f);
+
+		/*
+		 * Let special files know what is going on
+		 * - pipe
+		 * - socket?
+		 */
+		if (pipe_file(f->f_name))
+			f->f_op->open(f);
 	}
 	spin_unlock(&oldf->file_lock);
 

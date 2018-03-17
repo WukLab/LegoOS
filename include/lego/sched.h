@@ -928,6 +928,8 @@ static inline int signal_pending_state(long state, struct task_struct *p)
 /* arch-specific exit */
 void exit_thread(struct task_struct *tsk);
 
+void exit_files(struct task_struct *tsk);
+
 /* flush stale state in sys_exec() time */
 void flush_thread(void);
 

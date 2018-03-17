@@ -102,12 +102,13 @@ static struct file_operations debug_ramfs_f_ops = {
 #endif
 
 /*
- * do_sys_open: open for pathname as the relative path of dfd
+ * do_sys_open		- open for pathname as the relative path of dfd
  * @dfd: directory file descriptor to be severed as the base for relative path resolving
  * @pathname: relative path from dfd
  * @flags: open flags
  * @mode: create file with mode when O_CREAT flag is specified
- * return value: fd, on success fd > 0, on fail, fd = errno
+ *
+ * Return: fd, on success fd > 0, on fail, fd = errno
  */
 static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t mode)
 {

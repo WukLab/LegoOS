@@ -17,8 +17,9 @@
 #include <lego/comp_common.h>
 #include <lego/fit_ibapi.h>
 
-/* absolute_pathname: judge if a pathname is absolute path
- * return non-zero if pathname is absolute path
+/*
+ * Check if a pathname is starts from "/".
+ * Return 1 if that is the case.
  */
 static inline int absolute_pathname(const char *pathname)
 {
@@ -66,48 +67,56 @@ out:
 	return error;
 }
 
-/* get_absolute_pathname: pull a kernel buffer with full pathname
- * callers: openat, unlinkat, unlink, etc.
+/*
+ * get_absolute_pathname	-	fill a kernel buffer with full pathname
  * @dfd: directory file descriptor of relative path
  * @pathname: source pathname from user space
  * @k_pathname: destination buffer, will be filled with absolute path on success.
- * return value: 0 on success.
+ *
+ * Return value: 0 on success.
+ * Callers: openat, unlinkat, unlink, etc.
  */
 int get_absolute_pathname(int dfd, char *k_pathname, const char __user *pathname)
 {
 	char k_buff[FILENAME_LEN_DEFAULT];
-	struct file *f;
+	struct file *f = NULL;
 
-	if (strncpy_from_user(k_buff, pathname, FILENAME_LEN_DEFAULT) < 0) {
+	if (strncpy_from_user(k_buff, pathname, FILENAME_LEN_DEFAULT) < 0)
 		return -EFAULT;
-	}
 
 	if (dfd == AT_FDCWD)
 		goto strcat;
 
 	f = fdget(dfd);
-	if (!f) {
+	if (!f)
 		return -EBADF;
-	}
 
 strcat:
-	if (likely(absolute_pathname(pathname))) {
-		memcpy(k_pathname, k_buff, FILENAME_LEN_DEFAULT);
-	} else {
-		if (dfd == AT_FDCWD) {
-			/* TODO: replace with current working directory */
-			strcpy(k_pathname, do_getcwd());
-		} else {
-			memcpy(k_pathname, f->f_name, FILENAME_LEN_DEFAULT);
+	if (likely(absolute_pathname(pathname)))
+		strncpy(k_pathname, k_buff, FILENAME_LEN_DEFAULT);
+	else {
+		/*
+		 * Manually construct an absolute pathname, either
+		 *  - combine with cwd
+		 *  - or, combine with dfd->f_name
+		 */
+		if (dfd == AT_FDCWD)
+			/*
+			 * TODO: replace with current working directory
+			 * from open(), creat(), but pathname does not start from "/".
+			 */
+			strncpy(k_pathname, do_getcwd(), FILENAME_LEN_DEFAULT);
+		else {
+			/* from openat() */
+			strncpy(k_pathname, f->f_name, FILENAME_LEN_DEFAULT);
+			if (k_pathname[strlen(k_pathname) - 1] != '/')
+				strlcat(k_pathname, "/", FILENAME_LEN_DEFAULT);
 		}
-		
-		if (k_pathname[strlen(k_pathname) - 1] != '/')
-			strlcat(k_pathname, "/", FILENAME_LEN_DEFAULT);
 
 		strlcat(k_pathname, k_buff, FILENAME_LEN_DEFAULT);
 	}
 
-	if (dfd != AT_FDCWD)
+	if (f)
 		put_file(f);
 	return 0;
 }

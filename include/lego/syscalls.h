@@ -125,6 +125,8 @@ asmlinkage long sys_newfstatat(int dfd, const char __user *filename,
 asmlinkage long sys_statfs(const char __user *pathname, struct statfs __user *buf);
 
 asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg);
+asmlinkage long sys_pipe2(int __user *flides, int flags);
+asmlinkage long sys_pipe(int __user *flides);
 asmlinkage long sys_sync(void);
 asmlinkage long sys_truncate(const char __user *path, long length);
 asmlinkage long sys_ftruncate(unsigned int fd, unsigned long length);

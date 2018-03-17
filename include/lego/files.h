@@ -131,6 +131,11 @@ struct iovec {
 #define UIO_FASTIOV	8
 #define UIO_MAXIOV	1024
 
+static inline bool pipe_file(char *filename)
+{
+	return !memcmp(filename, "PIPE", 4);
+}
+
 static inline void get_file(struct file *filp)
 {
 	atomic_inc(&filp->f_count);

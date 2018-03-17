@@ -27,6 +27,7 @@
 19	64	readv			sys_readv
 20	64	writev			sys_writev
 21	common	access			sys_access
+22	common	pipe			sys_pipe
 25	common	mremap			sys_mremap
 #23	common	select			sys_select
 26	common	msync			sys_msync
@@ -104,6 +105,7 @@
 247	64	waitid			sys_waitid
 273	64	set_robust_list		sys_set_robust_list
 274	64	get_robust_list		sys_get_robust_list
+293	common	pipe2			sys_pipe2
 309	common	getcpu			sys_getcpu
 
 #

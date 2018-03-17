@@ -405,11 +405,6 @@ static void exit_mm(struct task_struct *tsk)
 	task_unlock(tsk);
 }
 
-void exit_files(struct task_struct *tsk)
-{
-	/* TODO */
-}
-
 void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;

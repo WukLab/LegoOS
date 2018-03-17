@@ -252,3 +252,13 @@ SYSCALL_DEFINE4(wait4, pid_t, upid, int __user *, stat_addr,
 {
 	BUG();
 }
+
+SYSCALL_DEFINE2(pipe2, int __user *, flides, int, flags)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE1(pipe, int __user *, flides)
+{
+	BUG();
+}

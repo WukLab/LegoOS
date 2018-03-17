@@ -19,6 +19,7 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
 	struct file *f;
 	long ret;
+	loff_t pos;
 
 	syscall_enter("fd: %d, buf: %p, count: %zu\n",
 		fd, buf, count);
@@ -29,7 +30,13 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 		goto out;
 	}
 
-	ret = f->f_op->read(f, buf, count, &f->f_pos);
+	/*
+	 * f_pos is updated without locking
+	 * synchronization is maintained by application
+	 */
+	pos = f->f_pos;
+	ret = f->f_op->read(f, buf, count, &pos);
+	f->f_pos = pos;
 
 	put_file(f);
 out:
@@ -70,6 +77,7 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 {
 	struct file *f;
 	long ret;
+	loff_t pos;
 
 	syscall_enter("fd: %d buf: %p count: %zu\n",
 		fd, buf, count);
@@ -80,7 +88,13 @@ SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 		goto out;
 	}
 
-	ret = f->f_op->write(f, buf, count, &f->f_pos);
+	/*
+	 * f_pos is updated without locking
+	 * synchronization is maintained by application
+	 */
+	pos = f->f_pos;
+	ret = f->f_op->write(f, buf, count, &pos);
+	f->f_pos = pos;
 
 	put_file(f);
 out:
@@ -200,40 +214,49 @@ SYSCALL_DEFINE3(lseek, unsigned int, fd, off_t, offset, unsigned int, whence)
 {
         struct file *f = fdget(fd);
 
-	syscall_enter("fd: %u", fd);
+	syscall_enter("fd: %u\n", fd);
 
-        if(IS_ERR(f))
-                return -EBADF;
-	if(whence > SEEK_MAX)
+	if (fd <= 2)
 		return -ESPIPE;
+
+        if (IS_ERR_OR_NULL(f))
+                return -EBADF;
+
+	if (whence > SEEK_MAX)
+		return -ESPIPE;
+
 	switch(whence){
-		case SEEK_END:
-			printk("file seek_end is failed\n");
-			break;		
-		case SEEK_CUR:
-			if (offset == 0) {
-				return f->f_pos;
-			}
-				offset += f->f_pos;
-			break;
-		case SEEK_DATA:
-			printk("warning:seek data is failed\n");
-			/*if (offset >= size) {
-				return -ENXIO;
-			}*/
-			break;
-		case SEEK_HOLE:
-			printk("warning:file seek hole is failed\n");
-			/*if (offset >= size) {
-				return -ENXIO;
-			}
-			offset = size;*/
-			break;
+	case SEEK_END:
+		printk("file seek_end is failed\n");
+		break;		
+	case SEEK_CUR:
+		if (offset == 0) {
+			return f->f_pos;
+		}
+		offset += f->f_pos;
+		break;
+	case SEEK_DATA:
+		printk("warning:seek data is failed\n");
+		/*if (offset >= size) {
+			return -ENXIO;
+		}*/
+		break;
+	case SEEK_HOLE:
+		printk("warning:file seek hole is failed\n");
+		/*if (offset >= size) {
+			return -ENXIO;
+		}
+		offset = size;*/
+		break;
+	default:
+		WARN_ON(1);;
 	}
+
 	if (offset != f->f_pos) {
 		f->f_pos = offset;
 	}
-	if(offset < 0)
+
+	if (offset < 0)
 		return -EINVAL;
 	return offset;
 }

@@ -12,6 +12,7 @@ obj-y += normal_ops.o
 obj-y += truncate.o
 obj-y += namei.o
 obj-y += statfs.o
+obj-y += pipe.o
 
 #
 # To maintain compability with linux
