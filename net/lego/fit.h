@@ -76,10 +76,14 @@
 #define IMM_SEND_REPLY_SEND	0x80000000
 #define IMM_SEND_REPLY_RECV	0x40000000
 #define IMM_ACK			0x20000000
+#define IMM_REPLY_W_EXTRA_BITS	0x10000000
 #define IMM_PORT_PUSH_BIT	24
 #define IMM_GET_PORT_NUMBER(imm) (imm<<2)>>26
 #define IMM_GET_OFFSET		0x00ffffff
-#define IMM_GET_SEMAPHORE	0x00ffffff
+#define IMM_GET_REPLY_INDICATOR_INDEX	0x000fffff
+#define IMM_SET_PRIVATE_BITS(bits)	(bits << 20)
+#define IMM_GET_PRIVATE_BITS(imm)	((imm >> 20) & 0xff)
+#define REPLY_PRIVATE_BITS_CNT	8
 //#define IMM_NODE_BITS		24
 //#define IMM_GET_NODE_ID(imm)	(imm>>24)&0xff
 #define IMM_GET_OPCODE		0x0f000000
@@ -137,13 +141,13 @@ struct ibapi_post_receive_intermediate_struct
 
 struct ibapi_header{
 	uint32_t        src_id;
-	uint64_t        inbox_addr;
-	uint64_t        inbox_semaphore;
+	uint64_t        reply_addr;
+	uint64_t        reply_indicator_index;
 	uint32_t        length;
 	int             priority;
 	int             type;
 };
-struct client_ibv_mr {
+struct fit_ibv_mr {
 	//struct ib_device	*context;
 	//struct ib_pd		*pd;
 	void			*addr;
@@ -167,14 +171,14 @@ struct atomic_struct{
 };
 
 struct ask_mr_reply_form{
-	struct client_ibv_mr reply_mr;
+	struct fit_ibv_mr reply_mr;
 	uint64_t permission;
 	uint64_t op_code;
 };
 
 struct mr_request_form{
-	struct client_ibv_mr request_mr;
-	struct client_ibv_mr copyto_mr;
+	struct fit_ibv_mr request_mr;
+	struct fit_ibv_mr copyto_mr;
 	uint64_t offset;
 	uint64_t copyto_offset;
 	uint64_t size;
@@ -191,7 +195,7 @@ enum register_application_port_ret{
 };
 
 struct app_reg_port{
-	struct client_ibv_mr ring_mr;
+	struct fit_ibv_mr ring_mr;
 //	unsigned int port;
 
 	unsigned int node;
@@ -215,7 +219,7 @@ struct imm_ack_form{
 #if 0
 struct fit_lock_form{
 	int lock_num;
-	struct client_ibv_mr lock_mr;
+	struct fit_ibv_mr lock_mr;
 	uint64_t ticket_num;
 };
 typedef struct fit_lock_form remote_spinlock_t;
@@ -227,7 +231,7 @@ struct fit_lock_reserve_form{
 
 struct fit_lock_queue_element{
 	uint64_t        inbox_addr;
-	uint64_t        inbox_semaphore;	
+	uint64_t        reply_indicator_index;	
 	uint32_t        src_id;
 	unsigned int	ticket_num;
 	int	lock_num;
@@ -263,7 +267,7 @@ struct send_and_reply_format
 {       
         uint32_t        src_id;
         uint64_t        inbox_addr;
-	uint64_t	inbox_semaphore;
+	uint64_t	reply_indicator_index;
         uint32_t        length;
 	int		type;
         char            *msg;
@@ -321,7 +325,7 @@ enum {
 	PINGPONG_SEND_WRID = 2,
 };
 
-struct client_ah_combined
+struct fit_ah_combined
 {
 	int			qpn;
 	int			node_id;
@@ -334,9 +338,9 @@ struct client_ah_combined
 struct imm_message_metadata
 {
 	uint32_t source_node_id;
-        uintptr_t inbox_addr;
-	uint32_t inbox_rkey;
-	uint32_t inbox_semaphore;
+        uintptr_t reply_addr;
+	uint32_t reply_rkey;
+	uint32_t reply_indicator_index;
 	uint32_t size;
 };
 
@@ -368,7 +372,7 @@ struct lego_context {
 	struct ib_cq		*cqUD;
 	struct ib_cq		*send_cqUD;
 	struct ib_ah 		**ah;
-	struct client_ah_combined *ah_attrUD;
+	struct fit_ah_combined *ah_attrUD;
 
 	int recv_numUD;
 	spinlock_t connection_lockUD;
@@ -419,26 +423,26 @@ struct lego_context {
 	int *remote_rdma_ring_mrs_offset;
 	int *remote_last_ack_index;
 	spinlock_t *remote_imm_offset_lock;
-	struct client_ibv_mr *local_rdma_ring_mrs;
+	struct fit_ibv_mr *local_rdma_ring_mrs;
 	int *local_last_ack_index;
 	spinlock_t *local_last_ack_index_lock;
-	struct client_ibv_mr *remote_rdma_ring_mrs;
+	struct fit_ibv_mr *remote_rdma_ring_mrs;
 
 #ifdef CONFIG_SOCKET_O_IB
 	void **local_sock_rdma_recv_rings;
 	int *remote_sock_rdma_ring_mrs_offset;
 	int *remote_sock_last_ack_index;
 	spinlock_t *remote_sock_imm_offset_lock;
-	struct client_ibv_mr *local_sock_rdma_ring_mrs;
+	struct fit_ibv_mr *local_sock_rdma_ring_mrs;
 	int *local_sock_last_ack_index;
 	spinlock_t *local_sock_last_ack_index_lock;
-	struct client_ibv_mr *remote_sock_rdma_ring_mrs;
+	struct fit_ibv_mr *remote_sock_rdma_ring_mrs;
 #endif
 
    	int (*send_handler)(char *addr, uint32_t size, int sender_id);
 	int (*send_reply_handler)(char *input_addr, uint32_t input_size, char *output_addr, uint32_t *output_size, int sender_id);
 	int (*send_reply_opt_handler)(char *input_buf, uint32_t size, void **output_buf, uint32_t *output_size, int sender_id);
-	int (*send_reply_rdma_imm_handler)(int sender_id, void *msg, uint32_t size, uint32_t inbox_addr, uint32_t inbox_rkey, uint32_t inbox_semaphore);
+	int (*send_reply_rdma_imm_handler)(int sender_id, void *msg, uint32_t size, uint32_t inbox_addr, uint32_t inbox_rkey, uint32_t reply_indicator_index);
 
 	atomic_t* connection_congestion_status;
 	
@@ -465,15 +469,15 @@ struct lego_context {
 	spinlock_t sock_imm_waitqueue_perport_lock[SOCK_MAX_LISTEN_PORTS];
 #endif
 	
-	//local semaphore related
-	void **imm_inbox_semaphore;
-	unsigned long *imm_inbox_semaphore_bitmap;
-	spinlock_t imm_inbox_semaphore_lock;
+	//local reply ready indicator related
+	void **reply_ready_indicators;
+	unsigned long *reply_ready_indicators_bitmap;
+	spinlock_t reply_ready_indicators_lock;
 #ifdef ADAPTIVE_MODEL
 	wait_queue_head_t *imm_inbox_block_queue;
 #endif
 #ifdef SCHEDULE_MODEL
-	struct task_struct **imm_inbox_semaphore_task;
+	struct task_struct **thread_waiting_for_reply;
 #endif
 
 	atomic_t imm_cache_perport_work_head[IMM_MAX_PORT];
@@ -496,7 +500,7 @@ struct lego_dest {
 	union ib_gid gid;
 };
 
-struct client_data{
+struct fit_data{
 	char server_information_buffer[sizeof(LID_SEND_RECV_FORMAT)];
 };
 

@@ -162,7 +162,8 @@ static int mlx4_cmd_post(struct mlx4_dev *dev, u64 in_param, u64 out_param,
 	int ret = -EAGAIN;
 	unsigned long end;
 
-	//pr_debug("%s\n", __func__);
+	//pr_debug("%s\n", __func__); 
+	pr_info("%s():%d  preempt_count: %d\n", __func__, __LINE__, preempt_count());
 	mutex_lock(&cmd->hcr_mutex);
 
 	end = jiffies;

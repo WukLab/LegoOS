@@ -248,12 +248,185 @@ SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 }
 
 /*
+ *	set socket TCP options.
+ */
+static int tcp_setsockopt(struct lego_socket *sock, int level,
+		int optname, char __user *optval, unsigned int optlen)
+{
+	struct sock_options *sk = &(sock->sk_opt);
+	int val;
+	int err = 0;
+
+	if (optlen < sizeof(int))
+		return -EINVAL;
+
+	if (copy_from_user(&val, optval, sizeof(int)))
+		return -EFAULT;
+
+	switch (optname) {
+		case TCP_NODELAY:
+			if (val) {
+				sk->tcp_nodelay = 1;
+			} else {
+				sk->tcp_nodelay = 0;
+			}
+			break;
+		default:
+			err = -ENOPROTOOPT;
+			break;
+	}
+
+	return err;
+}
+
+/*
+ *	get socket TCP options.
+ */
+static int tcp_getsockopt(struct lego_socket *sock, int level,
+		int optname, char __user *optval, unsigned int optlen)
+{
+	struct sock_options *sk = &(sock->sk_opt);
+	int len;
+	int val;
+	int err = 0;
+
+	if (copy_from_user(&len, &optlen, sizeof(int)))
+		return -EFAULT;
+	if (len < 0)
+		return -EINVAL;
+
+	switch (optname) {
+		case TCP_NODELAY:
+			val = sk->tcp_nodelay;
+			break;
+		default:
+			err = -ENOPROTOOPT;
+			break;
+	}
+
+	if (len > sizeof(int))
+		len = sizeof(int);
+	if (copy_to_user(optval, &val, len))
+		return -EFAULT;
+
+	return err;
+}
+
+/*
+ *	Limited set of socket opt implemented here
+ *	not a generic implementation!
+ */
+int sock_setsockopt(struct lego_socket *sock, int level, int optname,
+		    char __user *optval, unsigned int optlen)
+{
+	struct sock_options *sk = &(sock->sk_opt);
+	int val;
+	int valbool;
+	int ret = 0;
+
+	if (optlen < sizeof(int))
+		return -EINVAL;
+
+	if (copy_from_user(&val, optval, sizeof(int)))
+		return -EFAULT;
+
+	valbool = val ? 1 : 0;
+
+	switch (optname) {
+		case SO_REUSEADDR:
+			sk->sk_reuse = (valbool ? SK_CAN_REUSE : SK_NO_REUSE);
+			break;
+		case SO_REUSEPORT:
+			sk->sk_reuseport = valbool;
+			break;
+		case SO_ERROR:
+			ret = -ENOPROTOOPT;
+			break;
+		default:
+			ret = -ENOPROTOOPT;
+			break;
+	}
+	return ret;
+}
+
+/*
+ *  	Recover an error report and clear atomically
+ */
+
+static inline int sock_error(struct sock_options *sk)
+{
+	int err;
+	if (likely(!sk->sk_err))
+		return 0;
+	err = xchg(&sk->sk_err, 0);
+	return -err;
+}
+
+/*
+ *	Limited set of socket opt implemented here
+ *	not a generic implementation!
+ */
+int sock_getsockopt(struct lego_socket *sock, int level, int optname,
+		    char __user *optval, int __user *optlen)
+{
+	struct sock_options *sk = &(sock->sk_opt);
+	int len;
+	int val;
+
+	if (copy_from_user(&len, &optlen, sizeof(int)))
+		return -EFAULT;
+	if (len < 0)
+		return -EINVAL;
+
+	switch (optname) {
+
+	case SO_REUSEADDR:
+		val = sk->sk_reuse;
+		break;
+
+	case SO_REUSEPORT:
+		val = sk->sk_reuseport;
+		break;
+
+	case SO_ERROR:
+		val = -sock_error(sk);
+		if (val == 0)
+			val = xchg(&sk->sk_err_soft, 0);
+		break;
+
+	default:
+		return -ENOPROTOOPT;
+	}
+
+	if (len > sizeof(int))
+		len = sizeof(int);
+	if (copy_to_user(optval, &val, len))
+		return -EFAULT;
+
+	return 0;
+}
+
+/*
  *	Set a socket option. Because we don't know the option lengths we have
  *	to pass the user mode parameter for the protocols to sort out.
  */
 SYSCALL_DEFINE5(setsockopt, int, fd, int, level, int, optname,
 		char __user *, optval, int, optlen)
 {
+	struct lego_socket *sock;
+	struct file *f = fdget(fd);
+
+	if (!f)
+		return -ENFILE;
+	sock = (struct lego_socket *)f->private_data;
+
+	if (level == SOL_SOCKET) {
+		sock_setsockopt(sock, level, optname, optval, optlen);
+	}
+	else if (level == SOL_TCP) {
+		tcp_setsockopt(sock, level, optname, optval, optlen);
+	}
+
 	return 0;
 }
 
@@ -264,6 +437,20 @@ SYSCALL_DEFINE5(setsockopt, int, fd, int, level, int, optname,
 SYSCALL_DEFINE5(getsockopt, int, fd, int, level, int, optname,
 		char __user *, optval, int __user *, optlen)
 {
+	struct lego_socket *sock;
+	struct file *f = fdget(fd);
+
+	if (!f)
+		return -ENFILE;
+	sock = (struct lego_socket *)f->private_data;
+
+	if (level == SOL_SOCKET) {
+		sock_getsockopt(sock, level, optname, optval, optlen);
+	}
+	else if (level == SOL_TCP) {
+		tcp_getsockopt(sock, level, optname, optval, optlen);
+	}
+
 	return 0;
 }
 

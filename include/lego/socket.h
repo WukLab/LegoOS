@@ -128,6 +128,18 @@ struct sock_recved_msg_metadata
 	struct list_head list;
 };
 
+struct sock_options {
+	int		sk_reuse;
+	int		sk_reuseport;
+	/*	@sk_err: last error*/
+	int		sk_err;
+	/*	@sk_err_soft: errors that don't cause failure but are the cause of a
+	 *	       persistent failure not just 'timed out'
+	 */
+	int		sk_err_soft;
+	int		tcp_nodelay;
+};
+
 struct lego_socket {
 	int			fd;
 	struct sockaddr_in	sockaddr;
@@ -145,6 +157,7 @@ struct lego_socket {
 	int			curr_num_conn;
 	struct lego_sock_conn	recvd_conn_list; /* we now assume only one thread calling socket listen, so no need to lock the list */
 	struct list_head	list;
+	struct sock_options	sk_opt;
 };
 
 struct lego_sock_header {
@@ -410,6 +423,45 @@ enum sock_type {
 
 #define MSG_EOF         MSG_FIN
 
+/*
+ * SK_CAN_REUSE and SK_NO_REUSE on a socket mean that the socket is OK
+ * or not whether his port will be reused by someone else. SK_FORCE_REUSE
+ * on a socket means that the socket will reuse everybody else's port
+ * without looking at the other's sk_reuse value.
+ */
+
+#define SK_NO_REUSE	0
+#define SK_CAN_REUSE	1
+#define SK_FORCE_REUSE	2
+
+/* For setsockopt(2) */
+#define SOL_SOCKET	1
+
+#define SO_DEBUG	1
+#define SO_REUSEADDR	2
+#define SO_TYPE		3
+#define SO_ERROR	4
+#define SO_DONTROUTE	5
+#define SO_BROADCAST	6
+#define SO_SNDBUF	7
+#define SO_RCVBUF	8
+#define SO_SNDBUFFORCE	32
+#define SO_RCVBUFFORCE	33
+#define SO_KEEPALIVE	9
+#define SO_OOBINLINE	10
+#define SO_NO_CHECK	11
+#define SO_PRIORITY	12
+#define SO_LINGER	13
+#define SO_BSDCOMPAT	14
+#define SO_REUSEPORT	15
+#ifndef SO_PASSCRED /* powerpc only differs in these */
+#define SO_PASSCRED	16
+#define SO_PEERCRED	17
+#define SO_RCVLOWAT	18
+#define SO_SNDLOWAT	19
+#define SO_RCVTIMEO	20
+#define SO_SNDTIMEO	21
+#endif
 
 /* Setsockoptions(2) level. Thanks to BSD these must match IPPROTO_xxx */
 #define SOL_IP		0
@@ -418,6 +470,8 @@ enum sock_type {
 #define SOL_UDP		17
 #define SOL_IPV6	41
 #define SOL_ICMPV6	58
+#define SOL_SCTP	132
+#define SOL_UDPLITE	136     /* UDP-Lite (RFC 3828) */
 #define SOL_RAW		255
 #define SOL_IPX		256
 #define SOL_AX25	257
@@ -430,8 +484,48 @@ enum sock_type {
 #define SOL_ATM		264	/* ATM layer (cell level) */
 #define SOL_AAL		265	/* ATM Adaption Layer (packet level) */
 #define SOL_IRDA        266
+#define SOL_NETBEUI	267
+#define SOL_LLC		268
+#define SOL_DCCP	269
+#define SOL_NETLINK	270
+#define SOL_TIPC	271
+#define SOL_RXRPC	272
+#define SOL_PPPOL2TP	273
+#define SOL_BLUETOOTH	274
+#define SOL_PNPIPE	275
+#define SOL_RDS		276
+#define SOL_IUCV	277
+#define SOL_CAIF	278
+#define SOL_ALG		279
+#define SOL_NFC		280
 
 /* IPX options */
 #define IPX_TYPE	1
+
+/* TCP socket options */
+#define TCP_NODELAY		1	/* Turn off Nagle's algorithm. */
+#define TCP_MAXSEG		2	/* Limit MSS */
+#define TCP_CORK		3	/* Never send partially complete segments */
+#define TCP_KEEPIDLE		4	/* Start keeplives after this period */
+#define TCP_KEEPINTVL		5	/* Interval between keepalives */
+#define TCP_KEEPCNT		6	/* Number of keepalives before death */
+#define TCP_SYNCNT		7	/* Number of SYN retransmits */
+#define TCP_LINGER2		8	/* Life time of orphaned FIN-WAIT-2 state */
+#define TCP_DEFER_ACCEPT	9	/* Wake up listener only when data arrive */
+#define TCP_WINDOW_CLAMP	10	/* Bound advertised window */
+#define TCP_INFO		11	/* Information about this connection. */
+#define TCP_QUICKACK		12	/* Block/reenable quick acks */
+#define TCP_CONGESTION		13	/* Congestion control algorithm */
+#define TCP_MD5SIG		14	/* TCP MD5 Signature (RFC2385) */
+#define TCP_THIN_LINEAR_TIMEOUTS 16      /* Use linear timeouts for thin streams*/
+#define TCP_THIN_DUPACK         17      /* Fast retrans. after 1 dupack */
+#define TCP_USER_TIMEOUT	18	/* How long for loss retry before timeout */
+#define TCP_REPAIR		19	/* TCP sock is under repair right now */
+#define TCP_REPAIR_QUEUE	20
+#define TCP_QUEUE_SEQ		21
+#define TCP_REPAIR_OPTIONS	22
+#define TCP_FASTOPEN		23	/* Enable FastOpen on listeners */
+#define TCP_TIMESTAMP		24
+#define TCP_NOTSENT_LOWAT	25	/* limit number of unsent bytes in write queue */
 
 #endif /* _LEGO_SOCKET_H */

@@ -27,7 +27,9 @@
 
 #include "fit_internal.h"
 
-enum ib_mtu client_mtu_to_enum(int mtu)
+atomic_t global_sock_avail_recv_bufs;
+
+enum ib_mtu fit_mtu_to_enum(int mtu)
 {
 	switch (mtu) {
 	case 256:  return IB_MTU_256;
@@ -43,25 +45,26 @@ enum ib_mtu mtu;
 int                     sl;
 static int              page_size;
 int                     rcnt, scnt;
-struct client_data full_connect_data[MAX_CONNECTION];
-struct client_data my_QPset[MAX_CONNECTION];
+struct fit_data full_connect_data[MAX_CONNECTION];
+struct fit_data my_QPset[MAX_CONNECTION];
 int                     ib_port = 1;
 //static struct task_struct **thread_poll_cq, *thread_handler;
 
-ppc **Connected_Ctx;
+struct lego_context **Connected_Ctx;
 atomic_t Connected_FIT_Num;
 
 int num_recvd_rdma_ring_mrs;
 
 spinlock_t wq_lock;
 
+spinlock_t sock_qp_lock[MAX_NODE];
 spinlock_t connection_lock[MAX_CONNECTION];
 spinlock_t connection_lock_pedal[MAX_CONNECTION];
 spinlock_t multicast_lock; //only one multicast can be executed at a single time
 
 struct send_and_reply_format request_list;
 
-int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority);
+int fit_send_message_sge(struct lego_context *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority);
 #if 0
 //LOCK related
 #define HASH_TABLE_SIZE_BIT 16
@@ -72,33 +75,78 @@ spinlock_t LOCK_QUEUE_HASHTABLE_LOCK[1<<HASH_TABLE_SIZE_BIT];
 long long int Internal_Stat_Sum=0;
 int Internal_Stat_Count=0;
 
-int client_find_cq(ppc *ctx, struct ib_cq *tar_cq)
+#ifdef CONFIG_SOCKET_O_IB
+int init_socket_over_ib(struct lego_context *ctx, int port, int rx_depth, int i)
 {
-	int i;
-	if(ctx->cqUD == tar_cq)
+	pr_info("%s mynodeid %d remote node %d\n", __func__, ctx->node_id, i);
+
+	ctx->sock_send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
+	//ctx->send_cq[i] = ctx->send_cq[0];
+	struct ib_qp_attr attr;
+	struct ib_qp_init_attr init_attr = {
+		.send_cq = ctx->sock_send_cq[i],
+		.recv_cq = ctx->sock_recv_cq,
+		.cap = {
+			.max_send_wr = 1, //rx_depth + 2,
+			//.max_send_wr = 12000,
+			.max_recv_wr = rx_depth,
+			.max_send_sge = 16,
+			.max_recv_sge = 16
+		},
+		.qp_type = IB_QPT_RC,
+		.sq_sig_type = IB_SIGNAL_REQ_WR
+	};
+
+	ctx->sock_qp[i] = ib_create_qp(ctx->pd, &init_attr);
+	if(!ctx->sock_qp[i])
 	{
-		return NUM_POLLING_THREADS;
+		printk(KERN_ALERT "Fail to create sock_qp\n");
+		return -EINVAL;
 	}
-	for(i=0;i<NUM_POLLING_THREADS;i++)
+	ib_query_qp(ctx->sock_qp[i], &attr, IB_QP_CAP, &init_attr);
+	//if(init_attr.cap.max_inline_data >= size)
+	//{
+	//	ctx->send_flags |= IB_SEND_INLINE;
+	//}
+
+	struct ib_qp_attr attr1 = {
+		.qp_state = IB_QPS_INIT,
+		.pkey_index = 0,
+		.port_num = port,
+		.qp_access_flags = IB_ACCESS_REMOTE_WRITE|IB_ACCESS_REMOTE_READ|IB_ACCESS_LOCAL_WRITE|IB_ACCESS_REMOTE_ATOMIC,
+		.path_mtu = IB_MTU_2048,
+		.retry_cnt = 7,
+		.rnr_retry = 7
+	};
+	if(ib_modify_qp(ctx->sock_qp[i], &attr1,
+				IB_QP_STATE		|
+				IB_QP_PKEY_INDEX	|
+				IB_QP_PORT		|
+				IB_QP_ACCESS_FLAGS))
 	{
-		if(ctx->cq[i]==tar_cq)
-			return i;
+		printk(KERN_ALERT "Fail to modify sock_qp\n");
+		ib_destroy_qp(ctx->sock_qp[i]);
+		return -EINVAL;
 	}
 
-	return -1;
+	pr_info("%s created sock_qp for %d\n", __func__, i);
+
+	return 0;
 }
+#endif
 
-struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev, int mynodeid)
+struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev, int mynodeid)
 {
 	int i;
 	int num_connections = MAX_CONNECTION;
-	ppc *ctx;
+	struct lego_context *ctx;
+	int rem_node_id;
 
 	printk(KERN_CRIT "%s\n", __func__);
-	ctx = (struct pingpong_context*)kzalloc(sizeof(struct pingpong_context), GFP_KERNEL);
+	ctx = (struct lego_context*)kzalloc(sizeof(struct lego_context), GFP_KERNEL);
 	if(!ctx)
 	{
-		printk(KERN_ALERT "FAIL to initialize ctx in client_init_ctx\n");
+		printk(KERN_ALERT "FAIL to initialize ctx in fit_init_ctx\n");
 		return NULL;
 	}
 	ctx->node_id = mynodeid;
@@ -184,11 +232,31 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 		return NULL;
 	}
 
+#ifdef CONFIG_SOCKET_O_IB
+	ctx->sock_send_cq = (struct ib_cq **)kmalloc(MAX_NODE * sizeof(struct ib_cq *), GFP_KERNEL);
+	ctx->sock_qp = (struct ib_qp **)kmalloc(MAX_NODE * sizeof(struct ib_qp *), GFP_KERNEL);
+	ctx->sock_recv_cq = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
+	BUG_ON(!ctx->sock_send_cq || !ctx->sock_recv_cq || !ctx->sock_qp);
+#endif
+
 	for(i=0;i<num_connections;i++)
 	{
-		printk(KERN_CRIT "%s mynodeid %d i %d %d\n", __func__, ctx->node_id, i, i/NUM_PARALLEL_CONNECTION);
-		if (i/NUM_PARALLEL_CONNECTION == ctx->node_id)
+#ifdef CONFIG_SOCKET_O_IB
+		rem_node_id = i/(NUM_PARALLEL_CONNECTION+1);
+		printk(KERN_CRIT "mynodeid %d i %d connecting node %d\n", ctx->node_id, i, rem_node_id);
+		if (rem_node_id == ctx->node_id)
 			continue;
+		/* last one for every remote node is a socket qp */
+		if (i % (NUM_PARALLEL_CONNECTION+1) == NUM_PARALLEL_CONNECTION) {
+			init_socket_over_ib(ctx, port, rx_depth, rem_node_id);
+			continue;
+		}
+#else
+		rem_node_id = i/NUM_PARALLEL_CONNECTION;
+		printk(KERN_CRIT "%s mynodeid %d i %d %d\n", __func__, ctx->node_id, i, rem_node_id);
+		if (rem_node_id == ctx->node_id)
+			continue;
+#endif
 		ctx->send_state[i] = SS_INIT;
 		ctx->recv_state[i] = RS_INIT;
 
@@ -252,9 +320,9 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	check_current_first_qpn(ctx->qp[0]->qp_num);
 
 	//Do IMM local ring setup (imm-send-reply)
-	ctx->imm_inbox_semaphore = (void **)kmalloc(sizeof(void*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
-	ctx->imm_inbox_semaphore_bitmap = kzalloc(sizeof(unsigned long) * BITS_TO_LONGS(IMM_NUM_OF_SEMAPHORE), GFP_KERNEL);
-	spin_lock_init(&ctx->imm_inbox_semaphore_lock);
+	ctx->reply_ready_indicators = (void **)kmalloc(sizeof(void*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
+	ctx->reply_ready_indicators_bitmap = kzalloc(sizeof(unsigned long) * BITS_TO_LONGS(IMM_NUM_OF_SEMAPHORE), GFP_KERNEL);
+	spin_lock_init(&ctx->reply_ready_indicators_lock);
 
 	for(i=0;i<IMM_MAX_PORT;i++)
 	{
@@ -263,13 +331,21 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 		ctx->imm_perport_reg_num[i]=-1;
 	}
 	
+#ifdef CONFIG_SOCKET_O_IB
+	for(i = 0; i < SOCK_MAX_LISTEN_PORTS; i++)
+	{
+		INIT_LIST_HEAD(&(ctx->sock_imm_waitqueue_perport[i].list));
+		spin_lock_init(&ctx->sock_imm_waitqueue_perport_lock[i]);
+	}
+#endif
+	
 #ifdef ADAPTIVE_MODEL
 	ctx->imm_inbox_block_queue = (wait_queue_head_t*)kmalloc((IMM_NUM_OF_SEMAPHORE)*sizeof(wait_queue_head_t), GFP_KERNEL);
 	for(i=0;i<IMM_NUM_OF_SEMAPHORE;i++)
 	        init_waitqueue_head(&ctx->imm_inbox_block_queue[i]);
 #endif
 #ifdef SCHEDULE_MODEL
-	ctx->imm_inbox_semaphore_task = (struct task_struct **)kzalloc(sizeof(struct task_struct*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
+	ctx->thread_waiting_for_reply = (struct task_struct **)kzalloc(sizeof(struct task_struct*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
 #endif
 	
 	#if 0
@@ -280,22 +356,22 @@ struct pingpong_context *client_init_ctx(int size, int rx_depth, int port, struc
 	return ctx;
 }
 
-ppc *client_init_interface(int ib_port, struct ib_device *ib_dev, int mynodeid)
+struct lego_context *fit_init_interface(int ib_port, struct ib_device *ib_dev, int mynodeid)
 {
 	int	size = 4096;
 	int	rx_depth = RECV_DEPTH;
 	int	ret;
-	ppc *ctx;
+	struct lego_context *ctx;
 	mtu = IB_MTU_2048;
 	sl = 0;
 
 	page_size = PAGE_SIZE;
 	rcnt = 0;
 	scnt = 0;
-	ctx = client_init_ctx(size,rx_depth,ib_port, ib_dev, mynodeid);
+	ctx = fit_init_ctx(size,rx_depth,ib_port, ib_dev, mynodeid);
 	if(!ctx)
 	{
-		printk(KERN_ALERT "Fail to do client_init_ctx\n");
+		printk(KERN_ALERT "Fail to do fit_init_ctx\n");
 		return 0;
 	}
 
@@ -314,12 +390,12 @@ retry:
 	else
 		printk(KERN_CRIT "got local LID %d\n", ctx->portinfo.lid);
 
-	printk(KERN_ALERT "I am here before return client_init_interface\n");
+	printk(KERN_ALERT "I am here before return fit_init_interface\n");
 	return ctx;
 
 }
 
-uintptr_t client_ib_reg_mr_phys_addr(ppc *ctx, void *addr, size_t length)
+uintptr_t fit_ib_reg_mr_phys_addr(struct lego_context *ctx, void *addr, size_t length)
 {
 	struct ib_device *ibd = (struct ib_device*)ctx->context;
 	return (uintptr_t)phys_to_dma(ibd->dma_device, (phys_addr_t)addr);
@@ -328,9 +404,9 @@ uintptr_t client_ib_reg_mr_phys_addr(ppc *ctx, void *addr, size_t length)
 int pr_test=0;
 struct ib_mr *proc_test;
 
-struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum ib_access_flags access)
+struct fit_ibv_mr *fit_ib_reg_mr(struct lego_context *ctx, void *addr, size_t length, enum ib_access_flags access)
 {
-	struct client_ibv_mr *ret;
+	struct fit_ibv_mr *ret;
 	struct ib_mr *proc;
 	
 	/*
@@ -343,7 +419,7 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 	*/
 	proc = ctx->proc; //proc_test;
 
-	ret = (struct client_ibv_mr *)kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
+	ret = (struct fit_ibv_mr *)kmalloc(sizeof(struct fit_ibv_mr), GFP_KERNEL);
 	
 	ret->addr = (void *)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
 	
@@ -355,17 +431,17 @@ struct client_ibv_mr *client_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum
 	return ret;
 }
 
-inline uintptr_t client_ib_reg_mr_addr_phys(ppc *ctx, void *addr, size_t length)
+inline uintptr_t fit_ib_reg_mr_addr_phys(struct lego_context *ctx, void *addr, size_t length)
 {
-	return client_ib_reg_mr_phys_addr(ctx, addr, length);
+	return fit_ib_reg_mr_phys_addr(ctx, addr, length);
 }
 
-inline uintptr_t client_ib_reg_mr_addr(ppc *ctx, void *addr, size_t length)
+inline uintptr_t fit_ib_reg_mr_addr(struct lego_context *ctx, void *addr, size_t length)
 {
 	return (uintptr_t)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
 }
 
-void client_ib_dereg_mr_addr(ppc *ctx, void *addr, size_t length)
+void fit_ib_dereg_mr_addr(struct lego_context *ctx, void *addr, size_t length)
 {
 	return ib_dma_unmap_single((struct ib_device *)ctx->context, (uint64_t)addr, length, DMA_BIDIRECTIONAL); 
 	//return (uintptr_t)ib_dma_unmap_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL); 
@@ -383,7 +459,7 @@ void header_cache_UD_free(void *ptr)
 // XXX	kmem_cache_free(header_cache_UD, ptr);
 }
 
-int client_post_receives_message(ppc *ctx, int connection_id, int depth)
+int fit_post_receives_message(struct lego_context *ctx, int connection_id, int depth)
 {
 	int i;
 
@@ -398,33 +474,96 @@ int client_post_receives_message(ppc *ctx, int connection_id, int depth)
 		//printk(KERN_CRIT "%s postrecv %d buffers wr_id %d\n", __func__, depth, wr.wr_id);
 	}
 
-	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, FIT_STAT_CLEAR));
+	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, fit_internal_stat(0, FIT_STAT_CLEAR));
 	return depth;
 }
 
-	struct page *pp;
-int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int depth)
+struct page *pp;
+
+#ifdef CONFIG_SOCKET_O_IB
+int sock_post_receives_message(struct lego_context *ctx, int connection_id, int depth)
+{
+	int i;
+
+	for(i=0;i<depth;i++)
+	{
+		struct ib_recv_wr wr, *bad_wr = NULL;
+		wr.wr_id = i + (connection_id << CONNECTION_ID_PUSH_BITS_BASED_ON_RECV_DEPTH);
+		wr.next = NULL;
+		wr.sg_list = NULL;
+		wr.num_sge = 0;
+		ib_post_recv(ctx->sock_qp[connection_id], &wr, &bad_wr);
+		//printk(KERN_CRIT "%s postrecv %d buffers wr_id %d\n", __func__, depth, wr.wr_id);
+	}
+
+	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, fit_internal_stat(0, FIT_STAT_CLEAR));
+	return depth;
+}
+
+#define SOCK_MAX_IB_RECV_SIZE 4096*3
+int sock_post_receive_buffer(struct lego_context *ctx, int connection_id, int depth)
+{
+	int i;
+	char *buf;
+	uintptr_t addr;
+	int size = SOCK_MAX_IB_RECV_SIZE;
+	int ret;
+
+	printk(KERN_CRIT "%s post %d buffers\n", __func__, depth);
+	for(i=0;i<depth;i++)
+	{
+		struct ib_sge sge[1];
+
+		buf = kmalloc(SOCK_MAX_IB_RECV_SIZE, GFP_KERNEL);
+		addr = fit_ib_reg_mr_addr(ctx, buf, size);
+
+		sge[0].addr = (uintptr_t)addr;
+		sge[0].length = size;
+		sge[0].lkey = ctx->proc->lkey;
+
+		struct ib_recv_wr wr, *bad_wr = NULL;
+		wr.wr_id = (uint64_t)buf;
+		wr.next = NULL;
+		wr.sg_list = sge;
+		wr.num_sge = 1;
+		ret = ib_post_recv(ctx->sock_qp[connection_id], &wr, &bad_wr);
+		if (ret) {
+			printk(KERN_CRIT "ERROR: %s post recv error %d i %d\n", 
+				__func__, ret, i);
+		}
+		printk(KERN_CRIT "%s buf %p addr %p lkey %d\n", 
+				__func__, buf, addr, ctx->proc->lkey);
+	}
+
+	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, fit_internal_stat(0, FIT_STAT_CLEAR));
+	return depth;
+}
+#endif
+
+int fit_post_receives_message_with_buffer(struct lego_context *ctx, int connection_id, int depth)
 {
 	int i;
 	char *buf, *header;
 	uintptr_t header_addr;
 	struct ibapi_post_receive_intermediate_struct *p_r_i_struct;
 	uintptr_t addr;
-	int size = sizeof(struct client_ibv_mr);
+	int size;
 	int ret;
-        pp = alloc_pages(GFP_KERNEL, 2);
 
 	printk(KERN_CRIT "%s conn %d post %d buffers\n", __func__, connection_id, depth);
+#ifdef CONFIG_SOCKET_O_IB
+	size = 2 * sizeof(struct fit_ibv_mr);
+#else
+	size = sizeof(struct fit_ibv_mr);
+#endif
 	for(i=0;i<depth;i++)
 	{
 		struct ib_sge sge[2];
 
-        	//buf = (char *)page_address(pp);
-		//memset(buf, 0x7b, size);
-		buf = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
-		addr = client_ib_reg_mr_addr(ctx, buf, size);
+		buf = kmalloc(sizeof(struct fit_ibv_mr), GFP_KERNEL);
+		addr = fit_ib_reg_mr_addr(ctx, buf, size);
 		header = kmalloc(sizeof(struct ibapi_header), GFP_KERNEL);
-		header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct ibapi_header));
+		header_addr = fit_ib_reg_mr_addr(ctx, header, sizeof(struct ibapi_header));
 		p_r_i_struct = (struct ibapi_post_receive_intermediate_struct *)kmalloc(sizeof(struct ibapi_post_receive_intermediate_struct), GFP_KERNEL);
 		p_r_i_struct->header = (uintptr_t)header;
 		p_r_i_struct->msg = (uintptr_t)buf;
@@ -451,11 +590,66 @@ int client_post_receives_message_with_buffer(ppc *ctx, int connection_id, int de
 				__func__, header, header_addr, buf, addr, ctx->proc->lkey);
 	}
 
-	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, client_internal_stat(0, FIT_STAT_CLEAR));
+	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, fit_internal_stat(0, FIT_STAT_CLEAR));
 	return depth;
 }
 
-int client_connect_ctx(ppc *ctx, int connection_id, int port, enum ib_mtu mtu, int sl, int destlid, int destqpn)
+#ifdef CONFIG_SOCKET_O_IB
+int connect_sock_qp(struct lego_context *ctx, int connection_id, int port, enum ib_mtu mtu, int sl, int destlid, int destqpn)
+{
+	struct ib_qp_attr attr = {
+		.qp_state	= IB_QPS_RTR,
+		.path_mtu	= mtu,
+		.dest_qp_num	= destqpn,
+		.rq_psn		= 1,
+		.max_dest_rd_atomic	= 1,
+		.min_rnr_timer	= 12,
+		.ah_attr	= {
+			.dlid		= destlid,
+			.sl		= sl,
+			.src_path_bits	= 0,
+			.port_num	= port
+		}
+	};
+
+	if(ib_modify_qp(ctx->sock_qp[connection_id], &attr, 
+				IB_QP_STATE	|
+				IB_QP_AV	|
+				IB_QP_PATH_MTU	|
+				IB_QP_DEST_QPN	|
+				IB_QP_RQ_PSN	|
+				IB_QP_MAX_DEST_RD_ATOMIC	|
+				IB_QP_MIN_RNR_TIMER))
+	{
+		printk(KERN_ALERT "Fail to modify QP to RTR at sock-qp\n");
+		return 1;
+	}
+
+
+	attr.qp_state	= IB_QPS_RTS;
+	attr.timeout	= 21;
+	attr.retry_cnt	= 7;
+	attr.rnr_retry	= 7;
+	attr.sq_psn	= 1;
+	attr.max_rd_atomic = 1;
+	if(ib_modify_qp(ctx->sock_qp[connection_id], &attr,
+				IB_QP_STATE	|
+				IB_QP_TIMEOUT	|
+				IB_QP_RETRY_CNT	|
+				IB_QP_RNR_RETRY	|
+				IB_QP_SQ_PSN	|
+				IB_QP_MAX_QP_RD_ATOMIC))
+	{
+		printk(KERN_ALERT "Fail to modify QP to RTS at sock-qp\n");
+		return 2;
+	}
+
+	printk(KERN_CRIT "%s connected sock-qp destqpn %d\n", __func__, destqpn);
+	return 0;
+}
+#endif
+
+int fit_connect_ctx(struct lego_context *ctx, int connection_id, int port, enum ib_mtu mtu, int sl, int destlid, int destqpn)
 {
 	struct ib_qp_attr attr = {
 		.qp_state	= IB_QPS_RTR,
@@ -516,17 +710,54 @@ int get_global_qpn(int mynodeid, int remnodeid, int conn)
 	remote_first_qpn = get_node_first_qpn(remnodeid);
 	BUG_ON(!remote_first_qpn);
 
+#ifdef CONFIG_SOCKET_O_IB
+	/* +1 for sock_qp */
 	if (remnodeid > mynodeid)
-		ret = mynodeid * NUM_PARALLEL_CONNECTION + conn;
+		ret = mynodeid * (NUM_PARALLEL_CONNECTION+1) + conn;
 	else
-		ret = (mynodeid - 1) * NUM_PARALLEL_CONNECTION + conn;
+		ret = (mynodeid - 1) * (NUM_PARALLEL_CONNECTION+1) + conn;
+#else
+	if (remnodeid > mynodeid)
+		ret = mynodeid * (NUM_PARALLEL_CONNECTION) + conn;
+	else
+		ret = (mynodeid - 1) * (NUM_PARALLEL_CONNECTION) + conn;
+#endif
 
 	return ret + remote_first_qpn;
 }
 
 int init_global_connt = 0;
 
-int client_add_newnode(ppc *ctx, int rem_node_id, int mynodeid)
+#ifdef CONFIG_SOCKET_O_IB
+int sock_connect_nodes(struct lego_context *ctx, int rem_node_id, int mynodeid)
+{
+	int ret;
+	int global_qpn;
+
+	/* 
+	 * sock_qp is the last qp created on every node 
+	 * only one qp per remote node for socket
+	 */
+	global_qpn = get_global_qpn(ctx->node_id, rem_node_id, NUM_PARALLEL_CONNECTION);
+	printk(KERN_ALERT "%s: mynode %d remnode %d remotelid %d remoteqpn %d\n", 
+			__func__, ctx->node_id, rem_node_id, global_lid[rem_node_id], global_qpn);
+retry:
+	ret = connect_sock_qp(ctx, rem_node_id, ib_port, mtu, sl, global_lid[rem_node_id], global_qpn);
+	if(ret)
+	{
+		printk("fail to connect to node %d sock conn\n", rem_node_id);
+		goto retry;
+	}
+
+	/* post receive IMM buffers */
+	sock_post_receives_message(ctx, rem_node_id, ctx->rx_depth);
+
+	printk(KERN_ALERT "successfully connect sock to node %d\n", rem_node_id);
+	return 0;
+}
+#endif
+
+int fit_add_newnode(struct lego_context *ctx, int rem_node_id, int mynodeid)
 {
 	int i;
 	int ret;
@@ -534,12 +765,16 @@ int client_add_newnode(ppc *ctx, int rem_node_id, int mynodeid)
 	int global_qpn;
 
 	for (i = 0; i < NUM_PARALLEL_CONNECTION; i++) {
-		cur_connection = (rem_node_id*ctx->num_parallel_connection)+atomic_read(&ctx->num_alive_connection[rem_node_id]);
+#ifdef CONFIG_SOCKET_O_IB
+		cur_connection = (rem_node_id * (ctx->num_parallel_connection + 1)) + atomic_read(&ctx->num_alive_connection[rem_node_id]);
+#else
+		cur_connection = (rem_node_id * ctx->num_parallel_connection) + atomic_read(&ctx->num_alive_connection[rem_node_id]);
+#endif
 		global_qpn = get_global_qpn(ctx->node_id, rem_node_id, i);
 		printk(KERN_ALERT "%s: cur connection %d mynode %d remnode %d remotelid %d remoteqpn %d\n", 
 				__func__, cur_connection, ctx->node_id, rem_node_id, global_lid[rem_node_id], global_qpn);
 retry:
-		ret = client_connect_ctx(ctx, cur_connection, ib_port, mtu, sl, global_lid[rem_node_id], global_qpn);
+		ret = fit_connect_ctx(ctx, cur_connection, ib_port, mtu, sl, global_lid[rem_node_id], global_qpn);
 		if(ret)
 		{
 			printk("fail to connect to node %d conn %d\n", rem_node_id, i);
@@ -548,10 +783,10 @@ retry:
 
 		/* post receive buffers to get remote ring mrs, always through first conn */
 		if (i == 0)
-			client_post_receives_message_with_buffer(ctx, cur_connection, 1); //ctx->num_node - 1);
+			fit_post_receives_message_with_buffer(ctx, cur_connection, 1); //ctx->num_node - 1);
 
 		/* post receive buffers for IMM */
-		client_post_receives_message(ctx, cur_connection, ctx->rx_depth);
+		fit_post_receives_message(ctx, cur_connection, ctx->rx_depth);
 
 		atomic_inc(&ctx->num_alive_connection[rem_node_id]);
 		atomic_inc(&ctx->alive_connection);
@@ -564,6 +799,15 @@ retry:
 		init_global_connt++;
 	}
 
+#ifdef CONFIG_SOCKET_O_IB
+	ret = sock_connect_nodes(ctx, rem_node_id, mynodeid);
+	if (ret != 0) {
+		pr_info("Error: can't connect socket QP between remote node %d and local node %d\n",
+				rem_node_id, mynodeid);
+		return ret;
+	}
+#endif
+
 	pr_info("***  Successfully built QP for node %2d [LID: %d QPN: %d]\n",
 		rem_node_id, get_node_global_lid(rem_node_id),
 		get_node_first_qpn(rem_node_id));
@@ -571,22 +815,50 @@ retry:
 	return 0;
 }
 
-inline int client_find_qp_id_by_qpnum(ppc *ctx, uint32_t qp_num)
+inline int fit_find_qp_id_by_qpnum(struct lego_context *ctx, uint32_t qp_num)
 {
 	int i;
+
 	for(i=0;i<ctx->num_connections;i++)
 	{
-		if (i/NUM_PARALLEL_CONNECTION == ctx->node_id)
-		       continue;	
+#ifdef CONFIG_SOCKET_O_IB
+		if (i / (NUM_PARALLEL_CONNECTION + 1) == ctx->node_id)
+			continue;
+		/* a socket qp */
+		if (i % (NUM_PARALLEL_CONNECTION + 1) == NUM_PARALLEL_CONNECTION)
+			continue;
+#else
+		if (i / NUM_PARALLEL_CONNECTION == ctx->node_id)
+			continue;
+#endif
 		//printk(KERN_CRIT "[%s] qp i %d num_connection %d qp_num %d\n", __func__, i, ctx->num_connections, qp_num);
 		if(ctx->qp[i]->qp_num==qp_num)
 			return i;
 	}
 	return -1;
 }
-inline int client_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
+
+#ifdef CONFIG_SOCKET_O_IB
+inline int fit_find_sock_qp_id_by_qpnum(struct lego_context *ctx, uint32_t qp_num)
 {
-	int tmp = client_find_qp_id_by_qpnum(ctx, qp_num);
+	int i;
+	
+	for(i = 0; i < MAX_NODE; i++)
+	{
+		/* does not support loop back currently */
+		if (i == CONFIG_FIT_LOCAL_ID)
+			continue;
+		if(ctx->sock_qp[i]->qp_num == qp_num)
+			return i;
+	}
+
+	return -1;
+}
+#endif
+
+inline int fit_find_node_id_by_qpnum(struct lego_context *ctx, uint32_t qp_num)
+{
+	int tmp = fit_find_qp_id_by_qpnum(ctx, qp_num);
 	if(tmp>=0)
 	{
 		return tmp/NUM_PARALLEL_CONNECTION;
@@ -594,7 +866,7 @@ inline int client_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 	return -1;
 }
 
-int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check)
+int fit_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check)
 {
 #if SEPARATE_SEND_POLL_THREAD
 	/* 
@@ -635,7 +907,7 @@ int client_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *ch
 #endif
 }
 
-int client_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_id, uint32_t input_mr_rkey, 
+int fit_send_message_with_rdma_write_with_imm_request(struct lego_context *ctx, int connection_id, uint32_t input_mr_rkey, 
 		uintptr_t input_mr_addr, void *addr, int size, int offset, uint32_t imm, enum mode s_mode, 
 		struct imm_message_metadata *header, int userspace_flag)
 {
@@ -659,18 +931,18 @@ retry_send_imm_request:
 
 	if(s_mode == FIT_SEND_MESSAGE_HEADER_AND_IMM)
 	{
-		wr.wr_id = (uint64_t)ctx->imm_inbox_semaphore[header->inbox_semaphore];//get the real wait_send_reply_id address from inbox information
+		wr.wr_id = (uint64_t)ctx->reply_ready_indicators[header->inbox_semaphore];//get the real wait_send_reply_id address from inbox information
 		wr.send_flags = IB_SEND_SIGNALED;
 		wr.num_sge = 2;
 		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 
-		temp_header_addr = client_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
+		temp_header_addr = fit_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
 		wr.ex.imm_data = imm;
 		
 		sge[0].addr = temp_header_addr;
 		sge[0].length = sizeof(struct imm_message_metadata);
 		sge[0].lkey = ctx->proc->lkey;
-		temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
+		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
 		sge[1].addr = temp_addr;
 		sge[1].length = size;
 		sge[1].lkey = ctx->proc->lkey;
@@ -684,7 +956,7 @@ retry_send_imm_request:
 		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 
 		wr.ex.imm_data = imm;
-		temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
+		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
 		sge[0].addr = temp_addr;
 		sge[0].length = size;
 		sge[0].lkey = ctx->proc->lkey;
@@ -699,7 +971,7 @@ retry_send_imm_request:
 
 		wr.ex.imm_data = imm;
 		/*
-		temp_addr = client_ib_reg_mr_addr(ctx, addr, size);
+		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
 		sge[0].addr = temp_addr;
 		sge[0].length = size;
 		sge[0].lkey = ctx->proc->lkey;
@@ -718,7 +990,7 @@ retry_send_imm_request:
 	
 	if(!ret)
 	{
-		client_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
+		fit_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
 	}
 	else
 	{
@@ -729,13 +1001,18 @@ retry_send_imm_request:
 	return 0;
 }
 
-inline int client_get_connection_by_atomic_number(ppc *ctx, int target_node, int priority)
+inline int fit_get_connection_by_atomic_number(struct lego_context *ctx, int target_node, int priority)
 {
+#ifdef CONFIG_SOCKET_O_IB
+	return atomic_inc_return(&ctx->atomic_request_num[target_node]) % (atomic_read(&ctx->num_alive_connection[target_node])) 
+			+ (NUM_PARALLEL_CONNECTION +1) * target_node;
+#else	
 	return atomic_inc_return(&ctx->atomic_request_num[target_node]) % (atomic_read(&ctx->num_alive_connection[target_node])) 
 			+ NUM_PARALLEL_CONNECTION * target_node;
+#endif			
 }
 
-int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag)
+int fit_receive_message(struct lego_context *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag)
 {
 	//This ret_addr is 
 	struct imm_message_metadata *tmp;
@@ -829,71 +1106,257 @@ int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int rece
 	return get_size;
 }
 
-int client_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag)
+int fit_reply_message(struct lego_context *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag)
 {
 	struct imm_message_metadata *tmp = (struct imm_message_metadata *)descriptor;
-	int re_connection_id = client_get_connection_by_atomic_number(ctx, tmp->source_node_id, LOW_PRIORITY);
+	int re_connection_id = fit_get_connection_by_atomic_number(ctx, tmp->source_node_id, LOW_PRIORITY);
 	unsigned long phys_addr;
 	void *real_addr;
 	struct ib_device *ibd = (struct ib_device *)ctx->context;
 
-	client_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->inbox_rkey, tmp->inbox_addr, addr, size, 0, tmp->inbox_semaphore | IMM_SEND_REPLY_RECV, FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+	fit_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->inbox_rkey, 
+			tmp->inbox_addr, addr, size, 0, tmp->inbox_semaphore | IMM_SEND_REPLY_RECV, 
+			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
 	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);
 
 	return 0;
 }
 
-#if 0
-/*
- * LEGO
- * reply msg
- * when this function returns, reply msg is delivered
- * and app can delete reply buffer
- */
-int client_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag)
+#ifdef CONFIG_SOCKET_O_IB
+int sock_receive_message(struct lego_context *ctx, int *target_node, int port, void *ret_addr, int receive_size, int if_userspace, int sock_type)
 {
-	struct imm_message_metadata *tmp = (struct imm_message_metadata *)descriptor;
-	int re_connection_id = client_get_connection_by_atomic_number(ctx, tmp->source_node_id, LOW_PRIORITY);
-	unsigned long phys_addr;
+	int get_size = 0;
+	int offset;
+	int node_id;
+	struct sock_recved_msg_metadata *new_request = NULL, *temp_entry;
+	int last_ack;
+	int ack_flag=0;
+	int total_received_size = 0;
 
-	client_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, 
-			tmp->inbox_rkey, tmp->inbox_addr, addr, size, 0, 
-			tmp->inbox_semaphore | IMM_SEND_REPLY_RECV, FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+	printk(KERN_CRIT "port %d sock_type %x if_userspace %d\n", port, sock_type, if_userspace);
 
-	kfree(tmp);
-	//kmem_cache_free(imm_message_metadata_cache, tmp);
+get_next_request:
+	new_request = NULL;
+	get_size = 0;
+
+	while(1)
+	{
+		spin_lock(&ctx->sock_imm_waitqueue_perport_lock[port]);
+		list_for_each_entry_safe(new_request, temp_entry, 
+			&(ctx->sock_imm_waitqueue_perport[port].list), list)
+		{
+			//printk(KERN_CRIT "%s port %d got req\n", __func__, port);
+			node_id = new_request->source_node_id;
+			get_size = new_request->size;
+			offset = new_request->offset;
+			printk(KERN_CRIT "got new req offset %d sourcenode %d size %d\n", 
+					offset, node_id, get_size);
+			if(get_size > receive_size)
+			{
+				new_request->size -= receive_size;
+				new_request->offset += receive_size;
+				get_size = receive_size;
+			}
+			else
+				list_del(&new_request->list);	
+			break;
+		}
+		spin_unlock(&ctx->sock_imm_waitqueue_perport_lock[port]);
+
+		if (get_size > 0)
+			break;
+		if ((sock_type & O_NONBLOCK) > 0) {
+			printk(KERN_CRIT "nonblock break %d\n", total_received_size);
+			return total_received_size;
+		}
+		schedule();
+	}
+
+	/* 
+	 * got all current requests
+	 * return immediately for non-block socket
+	 */
+	if ((sock_type & O_NONBLOCK) > 0 && get_size == 0) {
+		printk(KERN_CRIT "nonblock socket return when running out of received buffer %d\n", total_received_size);
+		return total_received_size;
+	}
+
+	total_received_size += get_size;
+	
+	*target_node = node_id;
+	printk(KERN_CRIT "adjusted new req offset %d sourcenode %d size %d\n", 
+			offset, node_id, get_size);
+	//free list
+	// XXX kmem_cache_free(imm_header_from_cq_to_port_cache, new_request);
+	kfree(new_request);
+
+	/*
+	* copy incoming data to user buffer
+	* size of int is for the internal port header 
+	*/
+	if (if_userspace) {
+		int cp_ret;
+
+		cp_ret = copy_to_user(ret_addr, ctx->local_sock_rdma_recv_rings[node_id] + offset, get_size);
+		WARN_ON(cp_ret);
+	} else
+		memcpy(ret_addr, ctx->local_sock_rdma_recv_rings[node_id] + offset, get_size);
+	printk(KERN_CRIT "offset-%d recv %s srcnodeid-%d\n", offset, ret_addr, node_id);
+
+	//do ack based on the last_ack_index, submit a request to waiting_queue_handler	
+	//printk(KERN_CRIT "%s last_ack %d offset %d\n", __func__, last_ack, offset);
+	spin_lock(&ctx->local_sock_last_ack_index_lock[node_id]);
+	last_ack = ctx->local_sock_last_ack_index[node_id];
+	if( (offset>= last_ack && offset - last_ack >= IMM_ACK_FREQ) || 
+	    (offset< last_ack && offset + IMM_PORT_CACHE_SIZE - last_ack >= IMM_ACK_FREQ))
+	{
+		ack_flag = 1;
+		ctx->local_sock_last_ack_index[node_id] = offset;
+	}
+	spin_unlock(&ctx->local_sock_last_ack_index_lock[node_id]);
+
+	if(ack_flag)
+	{	
+		struct send_and_reply_format *pass;
+
+		pass = kmalloc(sizeof(*pass), GFP_KERNEL);
+		if (!pass)
+			return -ENOMEM;
+
+		pass->msg = (void *)(long)node_id;
+		pass->length = offset;
+		pass->type = MSG_SOCK_DO_ACK_INTERNAL;
+
+		printk(KERN_CRIT "add ack req node %d offset %d\n", node_id, offset);
+		spin_lock(&wq_lock);
+		list_add_tail(&(pass->list), &request_list.list);
+		spin_unlock(&wq_lock);
+	}
+	
+	if (total_received_size < receive_size) {
+		printk(KERN_CRIT "go to next request received size %d total %d\n", total_received_size, receive_size);
+		goto get_next_request;
+	}
+
+	return total_received_size;
+}
+
+int sock_send_message_with_rdma_imm(struct lego_context *ctx, int target_node, uint32_t input_mr_rkey, 
+		uintptr_t input_mr_addr, void *addr, int size, int offset, uint32_t imm_data,
+		void* header, int header_size, enum mode s_mode, int if_use_phys_addr_reg)
+{
+	struct ib_send_wr wr, *bad_wr = NULL;
+	struct ib_sge sge[2];
+	int ret, i, ne;
+	uintptr_t temp_addr, header_addr;
+	int poll_status = SEND_REPLY_WAIT;
+	struct ib_wc wc[1];
+
+	printk(KERN_CRIT "%s target_node %d rkey %d mraddr %lx addr %p size %d offset %d imm-0x%x mode %d\n", 
+			__func__, target_node, input_mr_rkey, input_mr_addr, addr, size, offset, imm_data, s_mode);
+	memset(&wr, 0, sizeof(struct ib_send_wr));
+	memset(&sge, 0, sizeof(struct ib_sge));
+	
+	wr.sg_list = sge;
+	wr.wr.rdma.remote_addr = (uintptr_t) (input_mr_addr+offset);
+	wr.wr.rdma.rkey = input_mr_rkey;
+
+	printk(KERN_CRIT "wr: remotr_addr: %p, rkey: %#lx header %p header size %d\n",
+			wr.wr.rdma.remote_addr, wr.wr.rdma.rkey, header, header_size);
+
+	if(s_mode == FIT_SEND_MESSAGE_HEADER_AND_IMM)
+	{
+		wr.wr_id = (uint64_t)&poll_status;
+		wr.send_flags = IB_SEND_SIGNALED;
+		wr.num_sge = 2;
+		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+
+		header_addr = fit_ib_reg_mr_addr(ctx, header, header_size);
+		wr.ex.imm_data = imm_data;
+		
+		sge[0].addr = header_addr;
+		sge[0].length = header_size;
+		sge[0].lkey = ctx->proc->lkey;
+		if (if_use_phys_addr_reg)
+			temp_addr = fit_ib_reg_mr_addr_phys(ctx, addr, size);
+		else
+			temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
+		sge[1].addr = temp_addr;
+		sge[1].length = size;
+		sge[1].lkey = ctx->proc->lkey;
+	}
+	else if(s_mode == FIT_SEND_MESSAGE_IMM_ONLY)
+	{
+		wr.wr_id = (uint64_t)&poll_status;
+		wr.send_flags = IB_SEND_SIGNALED;
+
+		wr.num_sge = 1;
+		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+
+		wr.ex.imm_data = imm_data;
+		if (if_use_phys_addr_reg)
+			temp_addr = fit_ib_reg_mr_addr_phys(ctx, addr, size);
+		else
+			temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
+		sge[0].addr = temp_addr;
+		sge[0].length = size;
+		sge[0].lkey = ctx->proc->lkey;
+	}
+	else if(s_mode == FIT_SEND_ACK_IMM_ONLY)
+	{
+		wr.wr_id = (uint64_t)&poll_status;
+		wr.send_flags = IB_SEND_SIGNALED;
+
+		wr.num_sge = 0;
+		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+
+		wr.ex.imm_data = imm_data;
+	}
+	else
+	{
+		printk(KERN_CRIT "%s: wrong mode %d - testing function\n", __func__, s_mode);
+		return -1;
+	}
+
+	spin_lock(&sock_qp_lock[target_node]);
+	//printk(KERN_CRIT "%s about to post send conn %d wr_id %d num_sge %d\n",
+	//		__func__, connection_id, wr.wr_id, wr.num_sge);
+	ret = ib_post_send(ctx->sock_qp[target_node], &wr, &bad_wr);
+	
+	if(!ret)
+	{
+		do{
+			ne = ib_poll_cq(ctx->sock_send_cq[target_node], 1, wc);
+			if(ne < 0)
+			{
+				printk(KERN_ALERT "poll send_cq failed at send-qp\n");
+				spin_unlock(&sock_qp_lock[target_node]);
+				return 1;
+			}
+		}while(ne<1);
+		for(i=0;i<ne;i++)
+		{
+			if(wc[i].status!=IB_WC_SUCCESS)
+			{
+				printk(KERN_ALERT "send failed at send-qp as %d\n", wc[i].status);
+				spin_unlock(&sock_qp_lock[target_node]);
+				return 2;
+			}
+		}
+	}
+	else
+	{
+		spin_unlock(&sock_qp_lock[target_node]);
+		printk(KERN_INFO "%s: send fail %d ret %d\n", __func__, target_node, ret);
+	}
+	spin_unlock(&sock_qp_lock[target_node]);
+
 	return 0;
 }
 
-// XXX
-int client_query_port(ppc *ctx, int target_node, int designed_port, int requery_flag)
-{	
-	uintptr_t tempaddr;
-	int priority = LOW_PRIORITY;
-	int wait_send_reply_id;
-	struct ask_mr_reply_form reply_mr_form;
-	int dummy;
-
-	wait_send_reply_id = SEND_REPLY_WAIT;
-	tempaddr = client_ib_reg_mr_addr(ctx, &dummy, sizeof(int));
-//	client_send_message_sge_UD(ctx, target_node, MSG_QUERY_PORT_1, (void *)tempaddr, sizeof(int), 
-//			(uint64_t)&reply_mr_form, (uint64_t)&wait_send_reply_id, priority);
-	while(wait_send_reply_id==SEND_REPLY_WAIT)
-		cpu_relax();
-	if(reply_mr_form.op_code == MR_ASK_SUCCESS)
-	{
-		memcpy(&ctx->remote_rdma_ring_mrs[target_node], &reply_mr_form.reply_mr, sizeof(struct client_ibv_mr));
-		printk(KERN_CRIT "%s: SUCCESS node %d remote addr %p remote rkey %d\n", 
-				__func__, target_node, ctx->remote_rdma_ring_mrs[target_node].addr, ctx->remote_rdma_ring_mrs[target_node].rkey);
-		return reply_mr_form.op_code;
-	}
-
-	printk(KERN_CRIT "%s: FAIL\n", __func__);
-	return reply_mr_form.op_code;
-}
 #endif
 
-void *client_alloc_memory_for_mr(unsigned int length)
+void *fit_alloc_memory_for_mr(unsigned int length)
 {
 	void *tempptr;
 	tempptr = kmalloc(length, GFP_KERNEL);//Modify from kzalloc to kmalloc
@@ -905,7 +1368,7 @@ void *client_alloc_memory_for_mr(unsigned int length)
 /*
  * busy polls IMM
  */
-int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
+int fit_poll_cq(struct lego_context *ctx, struct ib_cq *target_cq)
 {
 	int ne;
 	struct ib_wc wc[NUM_PARALLEL_CONNECTION];
@@ -968,7 +1431,10 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				printk(KERN_CRIT "%s received wr_id %lx type %d\n", __func__, wc[i].wr_id, type);
 
 				if (type == MSG_SEND_RDMA_RING_MR) {
-					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id], addr, sizeof(struct client_ibv_mr));
+					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id], addr, sizeof(struct fit_ibv_mr));
+#ifdef CONFIG_SOCKET_O_IB
+					memcpy(&ctx->remote_sock_rdma_ring_mrs[temp_header.src_id], addr + sizeof(struct fit_ibv_mr), sizeof(struct fit_ibv_mr));
+#endif
 					num_recvd_rdma_ring_mrs++;
 					printk(KERN_CRIT "node %d remote addr %p remote rkey %d num_recvd_rdma_ring_mrs %d\n", 
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
@@ -987,9 +1453,9 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 						semaphore = wc[i].ex.imm_data & IMM_GET_SEMAPHORE;
 						opcode = IMM_GET_OPCODE_NUMBER(wc[i].ex.imm_data);
 						printk(KERN_CRIT "%s: case 1 semaphore-%d\n", __func__, semaphore);
-						*(int *)(ctx->imm_inbox_semaphore[semaphore]) = -(opcode);
-						ctx->imm_inbox_semaphore[semaphore] = NULL;
-						clear_bit(semaphore, ctx->imm_inbox_semaphore_bitmap);
+						*(int *)(ctx->reply_ready_indicators[semaphore]) = -(opcode);
+						ctx->reply_ready_indicators[semaphore] = NULL;
+						clear_bit(semaphore, ctx->reply_ready_indicators_bitmap);
 					}
 					else if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND) // only send
 					{
@@ -1023,26 +1489,26 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 						length = wc[i].byte_len;
 						semaphore = wc[i].ex.imm_data & IMM_GET_SEMAPHORE;
 						//printk(KERN_CRIT "%s: case 2 semaphore-%d len-%d\n", __func__, semaphore, wc[i].byte_len);
-						//*(int *)(ctx->imm_inbox_semaphore[semaphore]) = wc[i].byte_len;
-						memcpy((void *)ctx->imm_inbox_semaphore[semaphore], &length, sizeof(int));
+						//*(int *)(ctx->reply_ready_indicators[semaphore]) = wc[i].byte_len;
+						memcpy((void *)ctx->reply_ready_indicators[semaphore], &length, sizeof(int));
 
 						#ifdef ADAPTIVE_MODEL
                 	        		wake_up_interruptible(&ctx->imm_inbox_block_queue[semaphore]);//Wakeup waiting queue
 						#endif
 						#ifdef SCHEDULE_MODEL
-						wake_up_process(ctx->imm_inbox_semaphore_task[semaphore]);
-						ctx->imm_inbox_semaphore_task[semaphore]=NULL;
+						wake_up_process(ctx->thread_waiting_for_reply[semaphore]);
+						ctx->thread_waiting_for_reply[semaphore]=NULL;
 						#endif
 
-						ctx->imm_inbox_semaphore[semaphore] = NULL;
-						clear_bit(semaphore, ctx->imm_inbox_semaphore_bitmap);
+						ctx->reply_ready_indicators[semaphore] = NULL;
+						clear_bit(semaphore, ctx->reply_ready_indicators_bitmap);
 					}
 				}
 				
 				if(GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
 				{
-					connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);	
-					client_post_receives_message(ctx, connection_id, ctx->rx_depth/4);
+					connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);	
+					fit_post_receives_message(ctx, connection_id, ctx->rx_depth/4);
 					recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
 					recv->length = ctx->rx_depth/4;
 					recv->src_id = connection_id;
@@ -1055,7 +1521,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 			}
 			else
 			{	
-				connection_id = client_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
+				connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
 				printk(KERN_ALERT "%s: connection %d Recv weird event as %d\n", __func__, connection_id, (int)wc[i].opcode);
 			}
 
@@ -1064,11 +1530,11 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	return 0;
 }
 
-int client_poll_cq_pass(void *in)
+int fit_poll_cq_pass(void *in)
 {
 	struct thread_pass_struct *input = (struct thread_pass_struct *)in;
 	//printk(KERN_CRIT "%s: target_cq %p\n", __func__, input->target_cq);
-	client_poll_cq(input->ctx, input->target_cq);
+	fit_poll_cq(input->ctx, input->target_cq);
 	kfree(input);
 	//printk(KERN_CRIT "%s: kill ctx %p cq %p\n", __func__, (void *)input->ctx, (void *)input->target_cq);
 	return 0;
@@ -1078,7 +1544,7 @@ int waiting_queue_handler(void *in)
 {
 	struct send_and_reply_format *new_request;
 	int local_flag, last_ack, imm_data;
-	ppc *ctx = (ppc *)in;
+	struct lego_context *ctx = (struct lego_context *)in;
 	//allow_signal(SIGKILL);
 	
 	//printk(KERN_CRIT "%s\n", __func__);
@@ -1105,8 +1571,8 @@ int waiting_queue_handler(void *in)
 		{
 			//printk(KERN_CRIT "%s got new req type %d\n", __func__, new_request->type);
 			case MSG_DO_RC_POST_RECEIVE:
-				//new_request->src_id keeps the connection_id (done by client_poll_cq)
-				client_post_receives_message(ctx, new_request->src_id, new_request->length);
+				//new_request->src_id keeps the connection_id (done by fit_poll_cq)
+				fit_post_receives_message(ctx, new_request->src_id, new_request->length);
 				break;
 			case MSG_DO_ACK_INTERNAL:
 				{
@@ -1123,12 +1589,18 @@ int waiting_queue_handler(void *in)
 					ack_packet.node_id= ctx->node_id;
 					//ack_packet.designed_port = target_port;
 					ack_packet.ack_offset = offset;
-					tempaddr = client_ib_reg_mr_addr(ctx, &ack_packet, sizeof(struct imm_ack_form));
-					client_send_message_sge(ctx, target_node, MSG_DO_ACK_REMOTE, (void *)tempaddr, sizeof(struct imm_ack_form), 0, 0, LOW_PRIORITY);
+					tempaddr = fit_ib_reg_mr_addr(ctx, &ack_packet, sizeof(struct imm_ack_form));
+					fit_send_message_sge(ctx, target_node, MSG_DO_ACK_REMOTE, (void *)tempaddr, sizeof(struct imm_ack_form), 0, 0, LOW_PRIORITY);
 #endif
 					imm_data = IMM_ACK | offset;
 					//printk(KERN_CRIT "%s sending ack offset %d targetnode %d imm %x\n", __func__, offset, target_node, imm_data);
-					client_send_message_with_rdma_write_with_imm_request(ctx, target_node * NUM_PARALLEL_CONNECTION, 0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+#ifdef CONFIG_SOCKET_O_IB					
+					fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * (NUM_PARALLEL_CONNECTION + 1), 
+							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+#else					
+					fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * NUM_PARALLEL_CONNECTION, 
+							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+#endif					
 					break;
 				}
 			case MSG_DO_ACK_REMOTE:
@@ -1149,7 +1621,7 @@ int waiting_queue_handler(void *in)
 	}
 }
 
-void client_setup_ibapi_header(uint32_t src_id, uint64_t inbox_addr, uint64_t inbox_semaphore, uint32_t length, int priority, int type, struct ibapi_header *output_header)
+void fit_setup_ibapi_header(uint32_t src_id, uint64_t inbox_addr, uint64_t inbox_semaphore, uint32_t length, int priority, int type, struct ibapi_header *output_header)
 {
 	output_header->src_id = src_id;
 	output_header->inbox_addr = inbox_addr;
@@ -1159,7 +1631,7 @@ void client_setup_ibapi_header(uint32_t src_id, uint64_t inbox_addr, uint64_t in
 	output_header->type = type;
 }
 
-int client_send_cq_poller(ppc *ctx)
+int fit_send_cq_poller(struct lego_context *ctx)
 {
 	int ne, i;
 	struct ib_wc *wc;
@@ -1191,7 +1663,7 @@ int client_send_cq_poller(ppc *ctx)
 	return 0;
 }
 
-int client_send_request(ppc *ctx, int connection_id, enum mode s_mode, struct client_ibv_mr *input_mr, void *addr, int size, int offset, int userspace_flag)
+int fit_send_request(struct lego_context *ctx, int connection_id, enum mode s_mode, struct fit_ibv_mr *input_mr, void *addr, int size, int offset, int userspace_flag)
 {
 	struct ib_send_wr wr, *bad_wr = NULL;
 	struct ib_sge sge;
@@ -1217,7 +1689,7 @@ int client_send_request(ppc *ctx, int connection_id, enum mode s_mode, struct cl
 	}
 	else
 	{
-		tempaddr = client_ib_reg_mr_addr(ctx, addr, size);
+		tempaddr = fit_ib_reg_mr_addr(ctx, addr, size);
 		sge.addr = tempaddr;
 	}
 	sge.length = size;
@@ -1226,7 +1698,7 @@ int client_send_request(ppc *ctx, int connection_id, enum mode s_mode, struct cl
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
 	if(!ret)
 	{
-		client_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
+		fit_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
 	}
 	else
 	{
@@ -1235,26 +1707,26 @@ int client_send_request(ppc *ctx, int connection_id, enum mode s_mode, struct cl
 	return 0;
 }
 
-inline int client_get_inbox_by_addr(ppc *ctx, void *addr)
+inline int fit_get_inbox_by_addr(struct lego_context *ctx, void *addr)
 {
 	int tar;
-	spin_lock(&ctx->imm_inbox_semaphore_lock);
+	spin_lock(&ctx->reply_ready_indicators_lock);
 
-	tar = find_first_zero_bit(ctx->imm_inbox_semaphore_bitmap, IMM_NUM_OF_SEMAPHORE);
+	tar = find_first_zero_bit(ctx->reply_ready_indicators_bitmap, IMM_NUM_OF_SEMAPHORE);
 	while(tar==IMM_NUM_OF_SEMAPHORE)
 	{
 		schedule();
-		tar = find_first_zero_bit(ctx->imm_inbox_semaphore_bitmap, IMM_NUM_OF_SEMAPHORE);
+		tar = find_first_zero_bit(ctx->reply_ready_indicators_bitmap, IMM_NUM_OF_SEMAPHORE);
 	}
-	set_bit(tar, ctx->imm_inbox_semaphore_bitmap);	
+	set_bit(tar, ctx->reply_ready_indicators_bitmap);	
 
-	spin_unlock(&ctx->imm_inbox_semaphore_lock);
-	ctx->imm_inbox_semaphore[tar] = addr;
+	spin_unlock(&ctx->reply_ready_indicators_lock);
+	ctx->reply_ready_indicators[tar] = addr;
 
 	return tar;
 }
 
-int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int userspace_flag, int if_use_ret_phys_addr)
+int fit_send_reply_with_rdma_write_with_imm(struct lego_context *ctx, int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int userspace_flag, int if_use_ret_phys_addr)
 {
 	int tar_offset_start;
 	int connection_id;
@@ -1264,7 +1736,7 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 	int real_size = size + sizeof(struct imm_message_metadata);
 	void *remote_addr;
 	uint32_t remote_rkey;
-	struct client_ibv_mr *remote_mr;
+	struct fit_ibv_mr *remote_mr;
 	struct imm_message_metadata output_header;
 	unsigned long phys_addr;
 	int last_ack;
@@ -1304,15 +1776,15 @@ int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *
 
 retry_send_reply_with_imm_request:
 
-	connection_id = client_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);
-	inbox_id = client_get_inbox_by_addr(ctx, &wait_send_reply_id);
+	connection_id = fit_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);
+	inbox_id = fit_get_inbox_by_addr(ctx, &wait_send_reply_id);
 	
 	imm_data = IMM_SEND_REPLY_SEND | tar_offset_start; 
 	
 	if (if_use_ret_phys_addr == 1)
-		output_header.inbox_addr = client_ib_reg_mr_addr_phys(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
+		output_header.inbox_addr = fit_ib_reg_mr_addr_phys(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
 	else
-		output_header.inbox_addr = client_ib_reg_mr_addr(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
+		output_header.inbox_addr = fit_ib_reg_mr_addr(ctx, ret_addr, max_ret_size);//This part need to be handled careful in the future
 	output_header.inbox_rkey = ctx->proc->rkey;
 	output_header.inbox_semaphore = inbox_id;
 	output_header.source_node_id = ctx->node_id;
@@ -1322,10 +1794,10 @@ retry_send_reply_with_imm_request:
 	//printk(KERN_CRIT "%s: send imm-%x addr-%x rkey-%x oaddr-%x orkey-%x\n", __func__, imm_data, remote_addr, remote_rkey, output_header.inbox_addr, output_header.inbox_rkey);
 
 #ifdef SCHEDULE_MODEL
-	ctx->imm_inbox_semaphore_task[inbox_id] = get_current();
+	ctx->thread_waiting_for_reply[inbox_id] = get_current();
 	set_current_state(TASK_INTERRUPTIBLE);
 #endif
-	client_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, 
+	fit_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, 
 			(uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, 
 			FIT_SEND_MESSAGE_HEADER_AND_IMM, &output_header, FIT_KERNELSPACE_FLAG);
 
@@ -1373,7 +1845,7 @@ retry_send_reply_with_imm_request:
 	return wait_send_reply_id;
 }
 
-int client_send_request_without_polling(ppc *ctx, int connection_id, enum mode s_mode, struct client_ibv_mr *input_mr, void *addr, int size, int offset, int wr_id)
+int fit_send_request_without_polling(struct lego_context *ctx, int connection_id, enum mode s_mode, struct fit_ibv_mr *input_mr, void *addr, int size, int offset, int wr_id)
 {
 	struct ib_send_wr wr, *bad_wr = NULL;
 	struct ib_sge sge;
@@ -1391,7 +1863,7 @@ int client_send_request_without_polling(ppc *ctx, int connection_id, enum mode s
 
 	wr.wr.rdma.remote_addr = (uintptr_t) (input_mr->addr+offset);
 	wr.wr.rdma.rkey = input_mr->rkey;
-	tempaddr = client_ib_reg_mr_addr(ctx, addr, size);
+	tempaddr = fit_ib_reg_mr_addr(ctx, addr, size);
 	sge.addr = tempaddr;
 	sge.length = size;
 	sge.lkey = ctx->proc->lkey;
@@ -1403,7 +1875,7 @@ int client_send_request_without_polling(ppc *ctx, int connection_id, enum mode s
 	return 0;
 }
 
-int client_send_request_polling_only(ppc *ctx, int connection_id, int polling_num, struct ib_wc *wc)
+int fit_send_request_polling_only(struct lego_context *ctx, int connection_id, int polling_num, struct ib_wc *wc)
 {
 	int ne, i;
 	int cur_num = polling_num;
@@ -1432,13 +1904,13 @@ int client_send_request_polling_only(ppc *ctx, int connection_id, int polling_nu
 	return 0;
 }
 
-void client_free_recv_buf(void *input_buf)
+void fit_free_recv_buf(void *input_buf)
 {
 	kfree(input_buf);
 	//kmem_cache_free(post_receive_cache, input_buf);
 }
 
-int client_send_test(ppc *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority)
+int fit_send_test(struct lego_context *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority)
 {	
 	struct ib_send_wr wr, *bad_wr = NULL;
 	struct ib_sge sge;
@@ -1453,7 +1925,7 @@ int client_send_test(ppc *ctx, int connection_id, int type, void *addr, int size
 
 	memset(&wr, 0, sizeof(wr));
 
-	sge.addr = (uintptr_t)client_ib_reg_mr_addr(ctx, addr, size);
+	sge.addr = (uintptr_t)fit_ib_reg_mr_addr(ctx, addr, size);
 	sge.length = size;
 	sge.lkey = ctx->proc->lkey;
 	printk(KERN_CRIT "%s registered addr %lx lkey %d\n", sge.addr, sge.lkey);
@@ -1494,7 +1966,7 @@ int client_send_test(ppc *ctx, int connection_id, int type, void *addr, int size
 	return ret;
 }
 
-int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority)
+int fit_send_message_sge(struct lego_context *ctx, int connection_id, int type, void *addr, int size, uint64_t inbox_addr, uint64_t inbox_semaphore, int priority)
 {	
 	struct ib_send_wr wr, *bad_wr = NULL;
 	struct ib_sge sge[2];
@@ -1516,12 +1988,12 @@ int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, i
 	wr.num_sge = 2;
 	wr.send_flags = IB_SEND_SIGNALED;
 
-	client_setup_ibapi_header(ctx->node_id, inbox_addr, inbox_semaphore, size, priority, type, &output_header);
-	output_header_addr = (void *)client_ib_reg_mr_addr(ctx, &output_header, sizeof(struct ibapi_header));
+	fit_setup_ibapi_header(ctx->node_id, inbox_addr, inbox_semaphore, size, priority, type, &output_header);
+	output_header_addr = (void *)fit_ib_reg_mr_addr(ctx, &output_header, sizeof(struct ibapi_header));
 	sge[0].addr = (uintptr_t)output_header_addr;
 	sge[0].length = sizeof(struct ibapi_header);
 	sge[0].lkey = ctx->proc->lkey;
-	sge[1].addr = (uintptr_t)client_ib_reg_mr_addr(ctx, addr, size);
+	sge[1].addr = (uintptr_t)fit_ib_reg_mr_addr(ctx, addr, size);
 	sge[1].length = size;
 	sge[1].lkey = ctx->proc->lkey;
 
@@ -1555,39 +2027,51 @@ int client_send_message_sge(ppc *ctx, int connection_id, int type, void *addr, i
 	return ret;
 }
 
-int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
+int send_rdma_ring_mr_to_other_nodes(struct lego_context *ctx)
 {
 	int i;
 	int connection_id;
 	char *msg;
 	int ret;
+	int size;
 
-	msg = kmalloc(sizeof(struct client_ibv_mr), GFP_KERNEL);
+#ifdef CONFIG_SOCKET_O_IB
+	msg = kmalloc(2 * sizeof(struct fit_ibv_mr), GFP_KERNEL);
+	size = 2 * sizeof(struct fit_ibv_mr);
+#else
+	msg = kmalloc(sizeof(struct fit_ibv_mr), GFP_KERNEL);
+	size = sizeof(struct fit_ibv_mr);
+#endif
 	for (i = 0; i < ctx->num_node; i++) {
 		if (ctx->node_id == i)
 			continue;
-		memcpy(msg, &ctx->local_rdma_ring_mrs[i], sizeof(struct client_ibv_mr)); 
+		memcpy(msg, &ctx->local_rdma_ring_mrs[i], sizeof(struct fit_ibv_mr)); 
+#ifdef CONFIG_SOCKET_O_IB
+		connection_id = (NUM_PARALLEL_CONNECTION + 1) * i;
+		memcpy(msg + sizeof(struct fit_ibv_mr), &ctx->local_sock_rdma_ring_mrs[i], sizeof(struct fit_ibv_mr)); 
+#else
 		connection_id = NUM_PARALLEL_CONNECTION * i;
+#endif
 		printk(KERN_CRIT "%s send ringmr addr %p lkey %lx rkey %lx conn %d node %d\n",
 				__func__, ctx->local_rdma_ring_mrs[i].addr,
 				ctx->local_rdma_ring_mrs[i].lkey, 
 				ctx->local_rdma_ring_mrs[i].rkey, connection_id, i);
-		//ret = client_send_test(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);
-		ret = client_send_message_sge(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct client_ibv_mr), 0, 0, LOW_PRIORITY);
+		//ret = fit_send_test(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct fit_ibv_mr), 0, 0, LOW_PRIORITY);
+		ret = fit_send_message_sge(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct fit_ibv_mr), 0, 0, LOW_PRIORITY);
 	}
 	kfree(msg);
 
 	return ret;
 }
 
-ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
+struct lego_context *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 {
 	int     ret;
 	int     i;
         int             temp_ctx_number;
-	ppc *ctx;
+	struct lego_context *ctx;
         temp_ctx_number = atomic_inc_return(&Connected_FIT_Num);
-	struct client_ibv_mr *ret_mr;
+	struct fit_ibv_mr *ret_mr;
 	//struct task_struct *thread;
 	struct thread_pass_struct thread_pass_poll_cq;
 	int num_connected_nodes = 0;
@@ -1605,7 +2089,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	init_global_lid_qpn();
 	print_gloabl_lid();
 
-	ctx = client_init_interface(ib_port, ib_dev, mynodeid);
+	ctx = fit_init_interface(ib_port, ib_dev, mynodeid);
 	if(!ctx)
 	{
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
@@ -1618,6 +2102,13 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	{
 		spin_lock_init(&connection_lock[i]);
 	}
+
+#ifdef CONFIG_SOCKET_O_IB
+	for (i = 0; i < MAX_NODE; i++) {
+		spin_lock_init(&sock_qp_lock[i]);
+	}
+#endif
+
 	//Initialize waiting_queue/request list related items
 	spin_lock_init(&wq_lock);
 	INIT_LIST_HEAD(&(request_list.list));
@@ -1628,7 +2119,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	//Start handling completion cq
 	thread_pass_poll_cq.ctx = ctx;
 	thread_pass_poll_cq.target_cq = ctx->cq[0];
-	kthread_run(client_poll_cq_pass, &thread_pass_poll_cq, "recvpollcq");
+	kthread_run(fit_poll_cq_pass, &thread_pass_poll_cq, "recvpollcq");
 	//wake_up_process(thread);
 	printk(KERN_CRIT "%s created poll cq thread\n", __func__);
 	
@@ -1636,7 +2127,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	printk(KERN_CRIT "%s created wait queue thread\n", __func__);
 
 #ifdef SEPARATE_SEND_POLL_THREAD
-	thread = kthread_create((void *)client_send_cq_poller, ctx, "separate_poll_send");
+	thread = kthread_create((void *)fit_send_cq_poller, ctx, "separate_poll_send");
 	if(IS_ERR(thread))
 	{
 		printk(KERN_ALERT "fail to do send-cq poller\n");
@@ -1649,18 +2140,18 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	 * Allocate and register local RDMA-IMM rings for all nodes
 	 */
 	ctx->local_rdma_recv_rings = kmalloc(MAX_NODE * sizeof(void *), GFP_KERNEL);
-	ctx->local_rdma_ring_mrs = (struct client_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct client_ibv_mr), GFP_KERNEL);
+	ctx->local_rdma_ring_mrs = (struct fit_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct fit_ibv_mr), GFP_KERNEL);
 	for(i=0; i<MAX_NODE; i++)
 	{
-		ctx->local_rdma_recv_rings[i] = client_alloc_memory_for_mr(IMM_PORT_CACHE_SIZE);
-		ret_mr = client_ib_reg_mr(ctx, ctx->local_rdma_recv_rings[i], IMM_RING_SIZE,
+		ctx->local_rdma_recv_rings[i] = fit_alloc_memory_for_mr(IMM_PORT_CACHE_SIZE);
+		ret_mr = fit_ib_reg_mr(ctx, ctx->local_rdma_recv_rings[i], IMM_RING_SIZE,
 				IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
-		memcpy(&ctx->local_rdma_ring_mrs[i], ret_mr, sizeof(struct client_ibv_mr));
+		memcpy(&ctx->local_rdma_ring_mrs[i], ret_mr, sizeof(struct fit_ibv_mr));
 		printk(KERN_CRIT "allocated local recv mr for node %d addr %p %p lkey %d rkey %d",
 				i, ctx->local_rdma_recv_rings[i], ret_mr->addr, ret_mr->lkey, ret_mr->rkey);
 	}
 	/* array to store rdma ring mr for all remote nodes */
-	ctx->remote_rdma_ring_mrs = (struct client_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct client_ibv_mr), GFP_KERNEL);
+	ctx->remote_rdma_ring_mrs = (struct fit_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct fit_ibv_mr), GFP_KERNEL);
 	ctx->remote_rdma_ring_mrs_offset = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
 	ctx->remote_last_ack_index = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
 	ctx->local_last_ack_index = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
@@ -1671,16 +2162,44 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		spin_lock_init(&ctx->local_last_ack_index_lock[i]);
 	}
 
-	printk(KERN_CRIT "%s allocated local rdma buffers, about to connect qps\n", __func__);
+#ifdef CONFIG_SOCKET_O_IB
+	/*
+	 * Allocate and register local RDMA-IMM rings for socket
+	 */
+	ctx->local_sock_rdma_recv_rings = kmalloc(MAX_NODE * sizeof(void *), GFP_KERNEL);
+	ctx->local_sock_rdma_ring_mrs = (struct fit_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct fit_ibv_mr), GFP_KERNEL);
+	for(i = 0; i < MAX_NODE; i++)
+	{
+		ctx->local_sock_rdma_recv_rings[i] = fit_alloc_memory_for_mr(SOCK_PERNODE_RECV_MR_SIZE);
+		ret_mr = fit_ib_reg_mr(ctx, ctx->local_sock_rdma_recv_rings[i], SOCK_PERNODE_RECV_MR_SIZE,
+				IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
+		memcpy(&ctx->local_sock_rdma_ring_mrs[i], ret_mr, sizeof(struct fit_ibv_mr));
+		//printk(KERN_CRIT "allocated local recv mr for node %d addr %p %p lkey %d rkey %d",
+		//		i, ctx->local_rdma_recv_rings[i], ret_mr->addr, ret_mr->lkey, ret_mr->rkey);
+	}
+	/* array to store rdma ring mr for socket */
+	ctx->remote_sock_rdma_ring_mrs = (struct fit_ibv_mr *)kmalloc(MAX_NODE * sizeof(struct fit_ibv_mr), GFP_KERNEL);
+	ctx->remote_sock_rdma_ring_mrs_offset = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
+	ctx->remote_sock_last_ack_index = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
+	ctx->local_sock_last_ack_index = (int *)kzalloc(MAX_NODE * sizeof(int), GFP_KERNEL);
+	ctx->local_sock_last_ack_index_lock = (spinlock_t *)kmalloc(MAX_NODE * sizeof(spinlock_t), GFP_KERNEL);
+	ctx->remote_sock_imm_offset_lock = (spinlock_t *)kmalloc(MAX_NODE * sizeof(spinlock_t), GFP_KERNEL); 
+	for(i=0; i<MAX_NODE; i++) {
+		spin_lock_init(&ctx->remote_sock_imm_offset_lock[i]);
+		spin_lock_init(&ctx->local_sock_last_ack_index_lock[i]);
+	}
+#endif
+
+	printk(KERN_CRIT "[%s] node: %d allocated local rdma buffers, about to connect qps\n", __func__, mynodeid);
 	ctx->node_id = mynodeid;
 	for (i = 0; i < mynodeid; i++) {
-		client_add_newnode(ctx, i, mynodeid);
+		fit_add_newnode(ctx, i, mynodeid);
 		num_connected_nodes++;
 	}
 
 	//if (num_connected_nodes == mynodeid - 1) {
 		for (i = mynodeid + 1; i < MAX_NODE; i++) {
-			client_add_newnode(ctx, i, mynodeid);
+			fit_add_newnode(ctx, i, mynodeid);
 			num_connected_nodes ++;
 		}
 	//}
@@ -1695,7 +2214,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	//if (ctx->node_id == 0)
 		send_rdma_ring_mr_to_other_nodes(ctx);
 	//else
-	//	client_poll_cq_pass(&thread_pass_poll_cq);
+	//	fit_poll_cq_pass(&thread_pass_poll_cq);
 	printk(KERN_CRIT "%s sent rdma ring mrs\n", __func__);
 
 	//schedule();
@@ -1709,7 +2228,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	return ctx;
 }
 
-int client_cleanup_module(void)
+int fit_cleanup_module(void)
 {
 	printk(KERN_INFO "Ready to remove module\n");
 	return 0;
@@ -1717,7 +2236,7 @@ int client_cleanup_module(void)
 
 int fit_internal_init(void)
 {
-        Connected_Ctx = (ppc **)kmalloc(sizeof(ppc*)*MAX_FIT_NUM, GFP_KERNEL);
+        Connected_Ctx = (struct lego_context **)kmalloc(sizeof(struct lego_context*)*MAX_FIT_NUM, GFP_KERNEL);
         atomic_set(&Connected_FIT_Num, 0);
 	printk(KERN_CRIT "insmod fit_internal module\n");
 	return 0;

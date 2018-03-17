@@ -14,9 +14,11 @@
 #include <linux/atomic.h>
 
 /* Lego cluster config */
-#define CONFIG_FIT_LOCAL_ID	2
-#define CONFIG_FIT_NR_NODES	3
+#define CONFIG_FIT_LOCAL_ID	3
+#define CONFIG_FIT_NR_NODES	4
 #define MAX_NODE		CONFIG_FIT_NR_NODES
+
+#define CONFIG_SOCKET_O_IB
 
 #define MAX_FIT_NUM 4
 
@@ -30,7 +32,11 @@
 #define RECV_DEPTH 256
 #define CONNECTION_ID_PUSH_BITS_BASED_ON_RECV_DEPTH 8
 #define NUM_PARALLEL_CONNECTION 4
-#define GET_NODE_ID_FROM_POST_RECEIVE_ID(id) (id>>8)/NUM_PARALLEL_CONNECTION
+#ifdef CONFIG_SOCKET_O_IB
+#define GET_NODE_ID_FROM_POST_RECEIVE_ID(id) (id>>8) / (NUM_PARALLEL_CONNECTION + 1)
+#else
+#define GET_NODE_ID_FROM_POST_RECEIVE_ID(id) (id>>8) / NUM_PARALLEL_CONNECTION
+#endif
 #define GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(id) (id&0x000000ff)
 
 #define LID_SEND_RECV_FORMAT "0000:0000:000000:000000:00000000000000000000000000000000"
@@ -67,7 +73,7 @@
 //#define IMM_NODE_BITS		24
 //#define IMM_GET_NODE_ID(imm)	(imm>>24)&0xff
 #define IMM_GET_OPCODE		0x0f000000
-#define IMM_GET_OPCODE_NUMBER(imm) (imm<<4)>>28
+#define IMM_GET_OPCODE_NUMBER(imm)	(imm << 4) >> 28
 #define IMM_DATA_BIT 32
 #define IMM_NUM_OF_SEMAPHORE 64
 #define IMM_MAX_PORT 64
@@ -125,7 +131,7 @@ struct ibapi_header{
 	int             priority;
 	int             type;
 };
-struct client_ibv_mr {
+struct fit_ibv_mr {
 	//struct ib_device	*context;
 	//struct ib_pd		*pd;
 	void			*addr;
@@ -149,14 +155,14 @@ struct atomic_struct{
 };
 
 struct ask_mr_reply_form{
-	struct client_ibv_mr reply_mr;
+	struct fit_ibv_mr reply_mr;
 	uint64_t permission;
 	uint64_t op_code;
 };
 
 struct mr_request_form{
-	struct client_ibv_mr request_mr;
-	struct client_ibv_mr copyto_mr;
+	struct fit_ibv_mr request_mr;
+	struct fit_ibv_mr copyto_mr;
 	uint64_t offset;
 	uint64_t copyto_offset;
 	uint64_t size;
@@ -173,7 +179,7 @@ enum register_application_port_ret{
 };
 
 struct app_reg_port{
-	struct client_ibv_mr ring_mr;
+	struct fit_ibv_mr ring_mr;
 //	unsigned int port;
 	unsigned int node;
 //	uint64_t hash_key;
@@ -196,7 +202,7 @@ struct imm_ack_form{
 #if 0
 struct fit_lock_form{
 	int lock_num;
-	struct client_ibv_mr lock_mr;
+	struct fit_ibv_mr lock_mr;
 	uint64_t ticket_num;
 };
 typedef struct fit_lock_form remote_spinlock_t;
@@ -292,13 +298,10 @@ enum {
 	MSG_DO_UD_POST_RECEIVE,
 	MSG_DO_ACK_INTERNAL,
 	MSG_DO_ACK_REMOTE,
+	MSG_SOCK_DO_ACK_INTERNAL,
+	MSG_SOCK_DO_ACK_REMOTE,
 	MSG_SEND_RDMA_RING_MR
 };
-struct buf_message
-{
-	char buf[MESSAGE_SIZE];
-};
-
 
 enum {
 	PINGPONG_RECV_WRID = 1,
@@ -331,7 +334,7 @@ enum asy_IO_event_type {
 	ASY_WAIT=8
 };
 
-struct client_ah_combined
+struct fit_ah_combined
 {
 	int			qpn;
 	int			node_id;
@@ -357,7 +360,15 @@ struct imm_header_from_cq_to_port
 	struct list_head list;
 };
 
-struct pingpong_context {
+#ifdef CONFIG_SOCKET_O_IB
+#define MAX_SOCK_PORT_BITS	8 // maximum number of socket ports per node
+#define SOCK_PORT_HASH_BUCKET_BITS	5
+#define SOCK_MAX_OFFSET_BITS	20
+#define SOCK_PERNODE_RECV_MR_SIZE (1 << SOCK_MAX_OFFSET_BITS)
+#define SOCK_MAX_LISTEN_PORTS		(1 << MAX_SOCK_PORT_BITS)
+#endif
+
+struct lego_context {
 	struct ib_context	*context;
 	struct ib_comp_channel *channel;
 	struct ib_pd		*pd;
@@ -367,11 +378,18 @@ struct pingpong_context {
 	struct ib_cq		**send_cq;
 	struct ib_qp		**qp; // multiple queue pair for multiple connections
 	
+#ifdef CONFIG_SOCKET_O_IB
+	/* socket related */
+	struct ib_qp		**sock_qp;
+	struct ib_cq		**sock_send_cq;
+	struct ib_cq		*sock_recv_cq;
+#endif
+
 	struct ib_qp		*qpUD;// one UD qp for all the send-reply connections
 	struct ib_cq		*cqUD;
 	struct ib_cq		*send_cqUD;
 	struct ib_ah 		**ah;
-	struct client_ah_combined *ah_attrUD;
+	struct fit_ah_combined *ah_attrUD;
 
 	int recv_numUD;
 	spinlock_t connection_lockUD;
@@ -423,10 +441,21 @@ struct pingpong_context {
 	int *remote_rdma_ring_mrs_offset;
 	int *remote_last_ack_index;
 	spinlock_t *remote_imm_offset_lock;
-	struct client_ibv_mr *local_rdma_ring_mrs;
+	struct fit_ibv_mr *local_rdma_ring_mrs;
 	int *local_last_ack_index;
 	spinlock_t *local_last_ack_index_lock;
-	struct client_ibv_mr *remote_rdma_ring_mrs;
+	struct fit_ibv_mr *remote_rdma_ring_mrs;
+
+#ifdef CONFIG_SOCKET_O_IB
+	void **local_sock_rdma_recv_rings;
+	int *remote_sock_rdma_ring_mrs_offset;
+	int *remote_sock_last_ack_index;
+	spinlock_t *remote_sock_imm_offset_lock;
+	struct fit_ibv_mr *local_sock_rdma_ring_mrs;
+	int *local_sock_last_ack_index;
+	spinlock_t *local_sock_last_ack_index_lock;
+	struct fit_ibv_mr *remote_sock_rdma_ring_mrs;
+#endif
 
    	int (*send_handler)(char *addr, uint32_t size, int sender_id);
 	int (*send_reply_handler)(char *input_addr, uint32_t input_size, char *output_addr, uint32_t *output_size, int sender_id);
@@ -453,15 +482,20 @@ struct pingpong_context {
 	int imm_perport_reg_num[IMM_MAX_PORT];//-1 no registeration, 0 up --> how many
 	spinlock_t imm_waitqueue_perport_lock[IMM_MAX_PORT];
 	
-	//local semaphore related
-	void **imm_inbox_semaphore;
-	unsigned long *imm_inbox_semaphore_bitmap;
-	spinlock_t imm_inbox_semaphore_lock;
+#ifdef CONFIG_SOCKET_O_IB
+	struct imm_header_from_cq_to_port sock_imm_waitqueue_perport[SOCK_MAX_LISTEN_PORTS];
+	spinlock_t sock_imm_waitqueue_perport_lock[SOCK_MAX_LISTEN_PORTS];
+#endif
+	
+	//local reply ready indicator related
+	void **reply_ready_indicators;
+	unsigned long *reply_ready_indicators_bitmap;
+	spinlock_t reply_ready_indicators_lock;
 #ifdef ADAPTIVE_MODEL
 	wait_queue_head_t *imm_inbox_block_queue;
 #endif
 #ifdef SCHEDULE_MODEL
-	struct task_struct **imm_inbox_semaphore_task;
+	struct task_struct **thread_waiting_for_reply;
 #endif
 
 	atomic_t imm_cache_perport_work_head[IMM_MAX_PORT];
@@ -474,7 +508,6 @@ struct pingpong_context {
 	struct fit_lock_form *lock_data;
 	struct fit_lock_queue_element *lock_queue;
 };
-typedef struct pingpong_context ppc;
 
 struct pingpong_dest {
 	int node_id;
@@ -484,12 +517,12 @@ struct pingpong_dest {
 	union ib_gid gid;
 };
 
-struct client_data{
+struct fit_data{
 	char server_information_buffer[sizeof(LID_SEND_RECV_FORMAT)];
 };
 
 struct thread_pass_struct{
-	ppc *ctx;
+	struct lego_context *ctx;
 	struct ib_cq *target_cq;
 	char *msg;
 	struct send_and_reply_format *sr_request;

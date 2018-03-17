@@ -33,20 +33,25 @@
 /* send poll thread model */
 //#define SEPARATE_SEND_POLL_THREAD
 
-inline void client_free_recv_buf(void *input_buf);
+inline void fit_free_recv_buf(void *input_buf);
 
-ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid);
-int client_cleanup_module(void);
+ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid);
+int fit_cleanup_module(void);
 
 //The below functions in ibapi are required to modify based on these four
-//int client_query_port(ppc *ctx, int target_node, int desigend_port, int requery_flag);
+//int fit_query_port(ppc *ctx, int target_node, int desigend_port, int requery_flag);
 
-int client_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
+int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
 				int size, void *ret_addr, int max_ret_size, int userspace_flag,
 				int if_use_ret_phys_addr, unsigned long timeout_sec, void *caller);
+int fit_send_reply_with_rdma_write_with_imm_reply_extra_bits(ppc *ctx, int target_node, void *addr,
+					       int size, void *ret_addr, int max_ret_size, int *ret_private_bits,
+					       int userspace_flag, int if_use_ret_phys_addr,
+					       unsigned long timeout_sec, void *caller);
 
-int client_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag);
-int client_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag);
+int fit_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag);
+int fit_reply_message_w_extra_bits(ppc *ctx, void *addr, int size, int private_bits, uintptr_t descriptor, int userspace_flag);
+int fit_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag);
 
 int fit_internal_init(void);
 int fit_internal_cleanup(void);
