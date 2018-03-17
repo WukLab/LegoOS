@@ -131,22 +131,15 @@ zap_pte_range(struct mm_struct *mm, pmd_t *pmd,
 
 	do {
 		pte_t ptent;
-		bool retried = false;
 
-retry_verify:
+retry:
 		ptent = *pte;
 		if (pte_none(ptent))
 			continue;
 		if (pte_present(ptent)) {
 			int ret;
 
-			/*
-			 * The retry only happen if @pcm happen to be evicted
-			 * at the same time. Thus the first retry should got passed
-			 * in the above pte_none testing.
-			 */
-			BUG_ON(retried);
-
+			pgtable_debug("addr: %#lx, pte: %p", addr, pte);
 			/*
 			 * If we remove rmap first, there is a small
 			 * time frame where the pcm that pte maps to
@@ -158,20 +151,16 @@ retry_verify:
 			 *
 			 * Both create in-consistent view.
 			 *
-			 * Probably the second one is better, thus we can keep
-			 * consistent with move_ptes(). Also, we can catch
-			 * this very confidently in rmap code.
+			 * Furthermore, this also race with concurrent eviction:
+			 * Our old version use pte_get_and_clear() before calling
+			 * into pcache_zap_pte(). When concurrent eviction calls
+			 * pcache_try_to_unmap(), it will fail to remove the rmap.
 			 */
-			ptent = ptep_get_and_clear(addr, pte);
-
-			pgtable_debug("addr: %#lx, pte: %p", addr, pte);
-
 			ret = pcache_zap_pte(mm, addr, ptent, pte, ptl);
 			if (likely(!ret))
 				continue;
 			else if (ret == -EAGAIN) {
-				retried = true;
-				goto retry_verify;
+				goto retry;
 			} else
 				WARN_ON_ONCE(1);
 		}
@@ -509,22 +498,17 @@ static void move_ptes(struct mm_struct *mm, pmd_t *old_pmd,
 
 	for (; old_addr < old_end; old_pte++, old_addr += PAGE_SIZE,
 				   new_pte++, new_addr += PAGE_SIZE) {
-		bool retried = false;
 		int ret;
 
-retry_verify:
+retry:
 		if (pte_none(*old_pte))
 			continue;
-
-		/* Concurrent eviction happened, above pte_none must be true */
-		BUG_ON(retried);
 
 		ret = pcache_move_pte(mm, old_pte, new_pte, old_addr, new_addr, old_ptl);
 		if (likely(!ret))
 			continue;
 		else if (ret == -EAGAIN) {
-			retried = true;
-			goto retry_verify;
+			goto retry;
 		} else
 			WARN_ON_ONCE(1);
 	}

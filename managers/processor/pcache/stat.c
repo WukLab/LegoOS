@@ -45,13 +45,21 @@ static const char *const pcache_event_text[] = {
 	"nr_victim_flush_finished",
 	"nr_victim_flush_async_run",
 	"nr_victim_flush_sync",
+
+	/* sweep */
+	"nr_sweep_run",
+	"nr_sweep_nr_pset",
+	"nr_sweep_nr_moved_pcm",
+
+	"nr_mremap_pset_same",
+	"nr_mremap_pset_diff",
 };
 
 void print_pcache_events(void)
 {
 	int i;
 
-	BUILD_BUG_ON(NR_PCACHE_EVENT_ITEMS > ARRAY_SIZE(pcache_event_text));
+	BUILD_BUG_ON(NR_PCACHE_EVENT_ITEMS != ARRAY_SIZE(pcache_event_text));
 
 	for (i = 0; i < NR_PCACHE_EVENT_ITEMS; i++) {
 		pr_info("%s: %lu\n", pcache_event_text[i],

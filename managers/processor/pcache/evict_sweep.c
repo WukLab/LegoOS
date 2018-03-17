@@ -13,6 +13,7 @@
  */
 
 #include <lego/mm.h>
+#include <lego/smp.h>
 #include <lego/wait.h>
 #include <lego/slab.h>
 #include <lego/log2.h>
@@ -26,24 +27,16 @@
 
 static struct task_struct *sweep_thread;
 
-static void sweep(void)
-{
-	u64 start, end;
-	int setidx;
-	struct pcache_set *pset;
-
-	start = profile_clock();
-	pcache_for_each_set(pset, setidx) {
-		sweep_pset_lru(pset);
-	}
-	end = profile_clock();
-}
-
 static int kevict_sweepd(void *unused)
 {
-	for (;;) {
-		sweep();
-	}
+	int cpu = get_cpu();
+
+	set_cpus_allowed_ptr(current, get_cpu_mask(cpu));
+	set_cpu_active(cpu, false);
+	pr_info("%s() running on CPU%d\n", __func__, cpu);
+	put_cpu();
+
+	kevict_sweepd_lru();
 	return 0;
 }
 

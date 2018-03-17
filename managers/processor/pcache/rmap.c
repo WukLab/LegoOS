@@ -18,6 +18,7 @@
 #include <processor/processor.h>
 
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/tlbflush.h>
 
 #ifdef CONFIG_DEBUG_PCACHE_RMAP
@@ -105,6 +106,7 @@ static void report_bad_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 
 	dump_pcache_rmap(rmap, "Corrupted RMAP");
 	dump_pcache_meta(pcm, "Corrupted RMAP");
+	dump_pcache_rmaps_locked(pcm);
 	BUG();
 }
 
@@ -145,20 +147,7 @@ __rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 	}
 
 	if (unlikely(pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
-
-		/*
-		 * This can happen in two cases:
-		 * 1) mremap: original pte is moved to new pte
-		 * 2) munmap: original pte is cleared.
-		 *
-		 * Both of them have a small time frame before rmap got
-		 * updated. We should not treat this as bug.
-		 *
-		 * XXX: How to distinguish it from real bug?
-		 */
-		if (unlikely(pte_pfn(*ptep) != 0))
-			report_bad_rmap(pcm, rmap, address, ptep, caller);
-
+		report_bad_rmap(pcm, rmap, address, ptep, caller);
 		ptep = NULL;
 		goto out;
 	}
@@ -267,20 +256,7 @@ rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 	}
 
 	if (unlikely(pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
-
-		/*
-		 * This can happen in two cases:
-		 * 1) mremap: original pte is moved to new pte
-		 * 2) munmap: original pte is cleared.
-		 *
-		 * Both of them have a small time frame before rmap got
-		 * updated. We should not treat this as bug.
-		 *
-		 * XXX: How to distinguish it from real bug?
-		 */
-		if (unlikely(pte_pfn(*ptep) != 0))
-			report_bad_rmap(pcm, rmap, address, ptep, NULL);
-
+		report_bad_rmap(pcm, rmap, address, ptep, NULL);
 		ptep = NULL;
 		goto out;
 	}
@@ -300,6 +276,48 @@ validate_pcache_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap)
 }
 
 #endif /* CONFIG_DEBUG_PCACHE */
+
+/*
+ * Only trylock pte, don't race with normal operations.
+ */
+static __always_inline pte_t *
+rmap_get_pte_trylock(struct pcache_meta *pcm, struct pcache_rmap *rmap,
+		     spinlock_t **ptlp, int *pte_contention) __acquires(*ptlp)
+{
+	pte_t *ptep;
+	pmd_t *pmd;
+	spinlock_t *ptl;
+	struct mm_struct *mm = rmap->owner_mm;
+	unsigned long address = rmap->address;
+
+	pmd = rmap_get_pmd(mm, address);
+	ptep = pte_offset(pmd, address);
+
+	if (unlikely(ptep != rmap->page_table)) {
+		report_bad_rmap(pcm, rmap, address, ptep, NULL);
+		ptep = NULL;
+		goto out;
+	}
+
+	if (unlikely(pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
+		report_bad_rmap(pcm, rmap, address, ptep, NULL);
+		ptep = NULL;
+		goto out;
+	}
+
+	ptl = pte_lockptr(mm, pmd);
+	if (!spin_trylock(ptl)) {
+		*pte_contention = 1;
+		ptep = NULL;
+		goto out;
+	}
+
+	*pte_contention = 0;
+	*ptlp = ptl;
+
+out:
+	return ptep;
+}
 
 /**
  * pcache_add_rmap
@@ -471,12 +489,18 @@ static inline bool matched_rmap_for_move(struct pcache_rmap *rmap,
 	return false;
 }
 
+/*
+ * All @pcm, @new_pte, @old_pte are locked
+ * If matched, rmap is updated, new_pte is installed, old_pte is cleared.
+ */
 static int __pcache_move_pte_fastpath(struct pcache_meta *pcm,
 				      struct pcache_rmap *rmap, void *arg)
 {
 	struct pcache_move_pte_info *mpi = arg;
 
 	if (likely(matched_rmap_for_move(rmap, mpi))) {
+		pte_t old_ptent;
+
 		rmap_debug("tgid: %u [%#lx %p] -> [%#lx %p]",
 			rmap->owner_process->tgid, rmap->address,
 			rmap->page_table, mpi->new_addr, mpi->new_pte);
@@ -484,6 +508,10 @@ static int __pcache_move_pte_fastpath(struct pcache_meta *pcm,
 		rmap->page_table = mpi->new_pte;
 		rmap->address = mpi->new_addr;
 		mpi->updated = true;
+
+		old_ptent = ptep_get_and_clear(mpi->old_addr, mpi->old_pte);
+		PCACHE_BUG_ON_PCM(pte_to_pcache_meta(old_ptent) != pcm, pcm);
+		pte_set(mpi->new_pte, old_ptent);
 
 		validate_pcache_rmap(pcm, rmap);
 
@@ -515,18 +543,10 @@ static int pcache_move_pte_fastpath(struct mm_struct *mm,
 		.rmap_one = __pcache_move_pte_fastpath,
 	};
 	struct pcache_meta *pcm;
-	pte_t ptent;
+	pte_t old_ptent;
 
-	/*
-	 * The identity change of PTEs and update of rmap are
-	 * divided into two steps. There exists a small time frame
-	 * where the rmap associted with the pcache points to
-	 * wrong pte. This case will be detected by rmap_get_pte_locked().
-	 */
-	ptent = ptep_get_and_clear(old_addr, old_pte);
-	pte_set(new_pte, ptent);
-
-	pcm = pte_to_pcache_meta(ptent);
+	old_ptent = *old_pte;
+	pcm = pte_to_pcache_meta(old_ptent);
 	BUG_ON(!pcm);
 
 	/* See comments on pcache_zap_pte */
@@ -537,7 +557,7 @@ static int pcache_move_pte_fastpath(struct mm_struct *mm,
 		lock_pcache(pcm);
 		spin_lock(old_ptl);
 
-		if (!pte_same(*old_pte, ptent)) {
+		if (!pte_same(*old_pte, old_ptent)) {
 			unlock_pcache(pcm);
 			put_pcache(pcm);
 			return -EAGAIN;
@@ -558,6 +578,9 @@ static int __pcache_move_pte_slowpath(struct pcache_meta *old_pcm,
 	struct pcache_move_pte_info *mpi = arg;
 	struct pcache_meta *new_pcm;
 	void *old_line, *new_line;
+	pte_t *new_pte, *old_pte;
+	pte_t old_pte_entry, new_pte_entry;
+	int ret;
 
 	if (unlikely(!matched_rmap_for_move(rmap, mpi)))
 		return PCACHE_RMAP_AGAIN;
@@ -574,13 +597,36 @@ static int __pcache_move_pte_slowpath(struct pcache_meta *old_pcm,
 	new_line = pcache_meta_to_kva(new_pcm);
 	memcpy(new_line, old_line, PCACHE_LINE_SIZE);
 
+	/* Clear old_pte */
+	old_pte = mpi->old_pte;
+	old_pte_entry = ptep_get_and_clear(mpi->old_addr, old_pte);
+	PCACHE_BUG_ON_PCM(pte_to_pcache_meta(old_pte_entry) != old_pcm, old_pcm);
 	__pcache_remove_rmap(old_pcm, rmap);
-	mpi->updated = true;
+
+	/*
+	 * Set new_pte before adding rmap,
+	 * cause rmap may need to validate pte.
+	 */
+	new_pte = mpi->new_pte;
+	new_pte_entry = pcache_dup_pte_pgprot(new_pcm, old_pte_entry);
+	pte_set(new_pte, new_pte_entry);
+
+	/*
+	 * Adding rmap will mark new_pcm PcacheValid
+	 * Thus can be selected as an eviction candidate.
+	 */
+	ret = pcache_add_rmap(new_pcm, new_pte, mpi->new_addr,
+			      current->mm, current->group_leader);
+	if (ret) {
+		WARN_ON(1);
+		return PCACHE_RMAP_AGAIN;
+	}
 
 	rmap_debug("tgid: %d [va pa]: [%#lx %p] -> [%#lx %p]",
 		rmap->owner_process->tgid, mpi->old_addr, old_line,
 		mpi->new_addr, new_line);
 
+	mpi->updated = true;
 	return PCACHE_RMAP_SUCCEED;
 }
 
@@ -591,9 +637,11 @@ static int __pcache_move_pte_slowpath(struct pcache_meta *old_pcm,
  * Overall flow:
  * - allocate a new pcm
  * - rmap walk to find the old_pcm, and remove it
+ *   - copy data
+ *   - clear old pte
+ *   - set pte to point to new pcm
+ *   - add rmap for new pcm
  * - try to free old pcm
- * - set pte to point to new pcm
- * - add rmap for new pcm
  */
 static int pcache_move_pte_slowpath(struct mm_struct *mm,
 				    pte_t *old_pte, pte_t *new_pte,
@@ -613,15 +661,10 @@ static int pcache_move_pte_slowpath(struct mm_struct *mm,
 		.rmap_one = __pcache_move_pte_slowpath,
 	};
 	struct pcache_meta *old_pcm, *new_pcm;
-	pte_t old_pte_entry, new_pte_entry;
+	pte_t old_pte_entry;
 	int ret;
 
-	/*
-	 * There exists a small time frame where the rmap associted
-	 * with the pcache points to wrong pte, since we have cleared
-	 * this pte content. This case will be detected by rmap_get_pte_locked().
-	 */
-	old_pte_entry = ptep_get_and_clear(old_addr, old_pte);
+	old_pte_entry = *old_pte;
 	old_pcm = pte_to_pcache_meta(old_pte_entry);
 	BUG_ON(!old_pcm);
 
@@ -660,20 +703,6 @@ static int pcache_move_pte_slowpath(struct mm_struct *mm,
 	 */
 	put_pcache(old_pcm);
 
-	/*
-	 * Set new_pte before adding rmap,
-	 * cause rmap may need to validate pte.
-	 */
-	new_pte_entry = pcache_dup_pte_pgprot(new_pcm, old_pte_entry);
-	pte_set(new_pte, new_pte_entry);
-
-	/*
-	 * Adding rmap will mark new_pcm PcacheValid
-	 * Thus can be selected as an eviction candidate.
-	 */
-	ret = pcache_add_rmap(new_pcm, new_pte, new_addr,
-			      mm, current->group_leader);
-
 out:
 	return ret;
 }
@@ -681,6 +710,7 @@ out:
 /*
  * Callback for move_ptes(), from mremap().
  * Both @old_pte and @new_pte are locked when called.
+ * When called, @old_pte remains unchanged.
  * Batched TLB flush is performed by caller.
  */
 int pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
@@ -691,12 +721,15 @@ int pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
 	old_index = user_vaddr_to_set_index(old_addr);
 	new_index = user_vaddr_to_set_index(new_addr);
 
-	if (old_index == new_index)
+	if (old_index == new_index) {
+		inc_pcache_event(PCACHE_MREMAP_PSET_SAME);
 		return pcache_move_pte_fastpath(mm, old_pte, new_pte,
 						old_addr, new_addr, old_ptl);
-	else
+	} else {
+		inc_pcache_event(PCACHE_MREMAP_PSET_DIFF);
 		return pcache_move_pte_slowpath(mm, old_pte, new_pte,
 						old_addr, new_addr, old_ptl);
+	}
 }
 
 struct pcache_zap_pte_control {
@@ -716,6 +749,10 @@ static inline bool matched_rmap_for_zap(struct pcache_rmap *rmap,
 	return false;
 }
 
+/*
+ * Called with both @pcache and @pte locked
+ * If matched, pte is cleared, rmap is removed
+ */
 static int __pcache_zap_pte(struct pcache_meta *pcm,
 			    struct pcache_rmap *rmap, void *arg)
 {
@@ -726,6 +763,8 @@ static int __pcache_zap_pte(struct pcache_meta *pcm,
 			rmap->owner_process->tgid, rmap->address,
 			rmap->page_table);
 
+		/* TLB batch flush is performed by caller */
+		pte_clear(rmap->page_table);
 		__pcache_remove_rmap(pcm, rmap);
 		zpc->zapped = true;
 
@@ -738,13 +777,11 @@ static int __pcache_zap_pte(struct pcache_meta *pcm,
 /*
  * Zap the rmap that currently points to @pte within @mm.
  *
- * Called from zap_pte_range() when the emulated page table is cleared.
- * When called, the pte is already cleared, thus @pte is already 0,
- * while @ptent holds the previous pte content.
+ * Called from zap_pte_range() when the pgtable is going to be cleared.
+ * When called, @pte remains untouched, and @ptent is @pte content.
  *
  * The higher level caller can be: munmap() and exit().
- * We might race with pcache_do_wp_page().
- *
+ * We might race with pcache_do_wp_page(), concurrent eviction.
  * We enter with @pte locked, return with @pte still locked.
  */
 int pcache_zap_pte(struct mm_struct *mm, unsigned long address,
@@ -1031,6 +1068,7 @@ int pcache_wrprotect(struct pcache_meta *pcm)
 }
 
 struct pcache_referenced_control {
+	int pte_contention;
 	int referenced;
 	int mapcount;
 };
@@ -1086,6 +1124,78 @@ int pcache_referenced(struct pcache_meta *pcm)
 	rmap_walk(pcm, &rwc);
 
 	return prc.referenced;
+}
+
+static int pcache_referenced_trylock_one(struct pcache_meta *pcm,
+					 struct pcache_rmap *rmap, void *arg)
+{
+	struct pcache_referenced_control *prc = arg;
+	spinlock_t *ptl = NULL;
+	pte_t *pte;
+	int pte_contention;
+
+	pte = rmap_get_pte_trylock(pcm, rmap, &ptl, &pte_contention);
+
+	/*
+	 * pte lock contention?
+	 * Break the rmap walk and return.
+	 */
+	if (pte_contention) {
+		prc->pte_contention = 1;
+		goto out;
+	}
+
+	if (unlikely(!pte))
+		return PCACHE_RMAP_AGAIN;
+
+	if (ptep_clear_flush_young(pte))
+		prc->referenced = 1;
+	spin_unlock(ptl);
+
+	/*
+	 * We don't need to walk through the whole rmap list
+	 * Once found one referenced rmap, we are good to go.
+	 */
+	if (prc->referenced)
+		goto out;
+
+	prc->mapcount--;
+	if (!prc->mapcount)
+		return PCACHE_RMAP_SUCCEED;
+	return PCACHE_RMAP_AGAIN;
+
+out:
+	return PCACHE_RMAP_SUCCEED;
+}
+
+/*
+ * Differences with pcache_referenced():
+ *  - this function will only *trylock* the pte.
+ *  - this function will return once one referenced pte is found
+ */
+void pcache_referenced_trylock(struct pcache_meta *pcm,
+			       int *pte_referenced, int *pte_contention)
+{
+	struct pcache_referenced_control prc = {
+		.mapcount = pcache_mapcount(pcm),
+		.referenced = 0,
+		.pte_contention = 0,
+	};
+	struct rmap_walk_control rwc = {
+		.arg = (void *)&prc,
+		.rmap_one = pcache_referenced_trylock_one,
+	};
+
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
+
+	if (!pcache_mapped(pcm))
+		goto out;
+
+	rmap_walk(pcm, &rwc);
+
+out:
+	*pte_referenced = prc.referenced;
+	*pte_contention = prc.pte_contention;
 }
 
 /*

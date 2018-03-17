@@ -2657,14 +2657,21 @@ int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
 #ifdef CONFIG_SOCKET_O_IB
 		connection_id = (NUM_PARALLEL_CONNECTION + 1) * i;
 		memcpy(msg + sizeof(struct fit_ibv_mr), &ctx->local_sock_rdma_ring_mrs[i], sizeof(struct fit_ibv_mr)); 
-#else
-		connection_id = NUM_PARALLEL_CONNECTION * i;
-#endif
+
 		fit_debug("send ringmr addr %p lkey %lx rkey %lx sockaddr %p conn %d node %d\n",
 				ctx->local_rdma_ring_mrs[i].addr,
-				ctx->local_rdma_ring_mrs[i].lkey, 
+				ctx->local_rdma_ring_mrs[i].lkey,
 				ctx->local_rdma_ring_mrs[i].rkey,
 				ctx->local_sock_rdma_ring_mrs[i], connection_id, i);
+#else
+		connection_id = NUM_PARALLEL_CONNECTION * i;
+
+		fit_debug("send ringmr addr %p lkey %lx rkey %lx conn %d node %d\n",
+				ctx->local_rdma_ring_mrs[i].addr,
+				ctx->local_rdma_ring_mrs[i].lkey,
+				ctx->local_rdma_ring_mrs[i].rkey,
+				connection_id, i);
+#endif
 		ret = fit_send_message_sge(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, size, 0, 0, LOW_PRIORITY);
 	}
 	kfree(msg);

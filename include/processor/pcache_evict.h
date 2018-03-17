@@ -104,8 +104,7 @@ static inline void init_pcache_lru(struct pcache_meta *pcm)
 /* Callback: find a pcache line to evict */
 struct pcache_meta *evict_find_line_lru(struct pcache_set *pset);
 
-/* Callback: sweep a given set */
-void sweep_pset_lru(struct pcache_set *pset);
+void kevict_sweepd_lru(void);
 
 #else
 static inline void
@@ -124,7 +123,7 @@ evict_find_line_lru(struct pcache_set *pset)
 	BUG();
 }
 
-static inline void sweep_pset_lru(struct pcache_set *pset)
+static inline void kevict_sweepd_lru(void)
 {
 	BUG();
 }

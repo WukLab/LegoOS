@@ -15,6 +15,12 @@
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
+/*
+ * New pcache lines are inserted at the head
+ * Eviction scan from the tail reversely
+ * Sweep will move unused pcache to tail
+ */
+
 static inline bool pset_has_free_lines(struct pcache_set *pset)
 {
 	if (pset_nr_lru(pset) < PCACHE_ASSOCIATIVITY)
@@ -22,7 +28,8 @@ static inline bool pset_has_free_lines(struct pcache_set *pset)
 	return false;
 }
 
-static inline void lru_put_pcache(struct pcache_meta *pcm, struct pcache_set *pset)
+/* Return 1 if we freed it, otherwise return 0 */
+static inline int lru_put_pcache(struct pcache_meta *pcm, struct pcache_set *pset)
 {
 	/*
 	 * This can happen as follows:
@@ -38,7 +45,9 @@ static inline void lru_put_pcache(struct pcache_meta *pcm, struct pcache_set *ps
 	if (unlikely(put_pcache_testzero(pcm))) {
 		__del_from_lru_list(pcm, pset);
 		__put_pcache_nolru(pcm);
+		return 1;
 	}
+	return 0;
 }
 
 /* Return 1 if it was already 0, otherwise we inc the ref */
@@ -105,13 +114,6 @@ struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
 		 * 1 for original allocation
 		 * 1 for lru_get_pcache above
 		 * Otherwise, it is used by others.
-		 *
-		 * XXX:
-		 * This part need more attention.
-		 * Currently we only have pcache_alloc/put, and eviction running.
-		 * If later on, we add code such as exit_mmap(), chkpoint_flush(),
-		 * those code has to be written with caution, esp. the op sequence
-		 * of lock, get/put, flag_set etc.
 		 */
 		if (unlikely(pcache_ref_count(pcm) > 2))
 			goto unlock_pcache;
@@ -155,28 +157,64 @@ unlock_lru:
  * This function determines how "aggressive" the sweep is.
  * It is aggressive if whole LRU list is scanned, cause scan is not free
  */
-static inline int get_sweep_count(struct pcache_set *pset)
+static inline void
+get_sweep_count(struct pcache_set *pset, int *nr_to_sweep, int *nr_goal)
 {
-	return pset_nr_lru(pset);
+	int threshold;
+
+	/*
+	 * How many pcm we want to move during this sweep?
+	 * Maybe 1 or 2 is enough?
+	 */
+	*nr_goal = 1;
+
+	/*
+	 * If concurrent evict happens, then at least one pcache
+	 * will be removed from the list. Minus 1 here means if
+	 * only one evict happen, then we sweep anyway. But if multiple
+	 * evicti happen, we abort sweep to reduce lock contention.
+	 */
+	threshold = PCACHE_ASSOCIATIVITY - 1;
+
+	if (likely(pset_nr_lru(pset) < threshold)) {
+		*nr_to_sweep = 0;
+		return;
+	}
+
+	/*
+	 * XXX:
+	 * To be or not to be? How many to sweep is a hard question.
+	 * sweep half? Just a random guess now.
+	 */
+	*nr_to_sweep = PCACHE_ASSOCIATIVITY/2;
 }
 
-void sweep_pset_lru(struct pcache_set *pset)
+/*
+ * References
+ * https://linux-mm.org/PageReplacementDesign
+ * https://linux-mm.org/PageReplacementRequirements
+ */
+static void sweep_pset(struct pcache_set *pset)
 {
 	struct pcache_meta *pcm, *n;
-	int nr_to_sweep;
+	int nr_to_sweep, nr_goal;
+
+	get_sweep_count(pset, &nr_to_sweep, &nr_goal);
+	if (!nr_to_sweep || !nr_goal)
+		return;
 
 	spin_lock(&pset->lru_lock);
-
-	if (list_empty(&pset->lru_list))
-		goto unlock;
-
-	nr_to_sweep = get_sweep_count(pset);
-
 	list_for_each_entry_safe(pcm, n, &pset->lru_list, lru) {
+		int pte_referenced, pte_contention;
+
 		PCACHE_BUG_ON_PCM(PcacheReclaim(pcm), pcm);
 
+		/*
+		 * If someone is trying to free the pcm
+		 * we don't want to block it.
+		 */
 		if (unlikely(lru_get_pcache(pcm)))
-			goto check_next;
+			break;
 
 		/*
 		 * This means pcache is within common_do_fill_page(),
@@ -199,19 +237,74 @@ void sweep_pset_lru(struct pcache_set *pset)
 		 * If it has not been used for some time, move it to tail.
 		 * Eviction will scan reversely.
 		 */
-		if (!pcache_referenced(pcm))
+		pcache_referenced_trylock(pcm, &pte_referenced, &pte_contention);
+
+		if (!pte_contention && !pte_referenced) {
+			nr_goal--;
 			list_move_tail(&pcm->lru, &pset->lru_list);
+			inc_pcache_event(PCACHE_SWEEP_NR_MOVED_PCM);
+		}
 
 unlock_pcache:
 		unlock_pcache(pcm);
 put_pcache:
-		lru_put_pcache(pcm, pset);
-check_next:
+		/*
+		 * Someone just tried to free it
+		 * We should not block it
+		 */
+		if (lru_put_pcache(pcm, pset))
+			break;
+
+		/*
+		 * We have achieved our goal yet?
+		 */
+		if (!nr_goal)
+			break;
+
+		/*
+		 * Stop the checking if reaches the requirement.
+		 * Do not attempt to walk through whole list.
+		 */
 		nr_to_sweep--;
 		if (nr_to_sweep <= 0)
 			break;
-	}
 
-unlock:
+		/*
+		 * Pset has eviction request.
+		 * We should release the lock
+		 */
+		if (PsetEvicting(pset))
+			break;
+	}
 	spin_unlock(&pset->lru_lock);
+}
+
+void kevict_sweepd_lru(void)
+{
+	int setidx;
+	struct pcache_set *pset;
+
+	while (1) {
+		pcache_for_each_set(pset, setidx) {
+			/*
+			 * Probably don't race with normal eviction loops
+			 */
+			if (PsetEvicting(pset))
+				continue;
+
+			/*
+			 * If it is not under eviction and set is not full
+			 * we probably don't want to adjust its list
+			 */
+			if ((pset_nr_lru(pset) < PCACHE_ASSOCIATIVITY))
+				continue;
+
+			__SetPsetSweeping(pset);
+			sweep_pset(pset);
+			__ClearPsetSweeping(pset);
+
+			inc_pcache_event(PCACHE_SWEEP_NR_PSET);
+		}
+		inc_pcache_event(PCACHE_SWEEP_RUN);
+	}
 }

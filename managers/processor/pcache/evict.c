@@ -168,6 +168,7 @@ evict_line_victim(struct pcache_set *pset, struct pcache_meta *pcm)
 	 */
 	smp_wmb();
 	pcache_try_to_unmap(pcm);
+	PCACHE_BUG_ON_PCM(pcache_mapped(pcm), pcm);
 
 	victim_finish_insert(victim);
 
@@ -234,8 +235,17 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 
 	inc_pcache_event(PCACHE_EVICTION_TRIGGERED);
 
-	/* Algorithm hook */
+	/*
+	 * Algorithm Hook.
+	 *
+	 * We mark this pcache set as Evicting, so sweep thread
+	 * will try to avoid use it concurrently. Since lock is
+	 * held within evict_find_line(), it is fine to clear it.
+	 */
+	__SetPsetEvicting(pset);
 	pcm = evict_find_line(pset);
+	__ClearPsetEvicting(pset);
+
 	if (IS_ERR_OR_NULL(pcm)) {
 		if (likely(PTR_ERR(pcm) == -EAGAIN)) {
 			inc_pcache_event(PCACHE_EVICTION_EAGAIN_FREEABLE);

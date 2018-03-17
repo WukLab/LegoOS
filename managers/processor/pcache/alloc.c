@@ -208,6 +208,7 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 	struct pcache_meta *pcm;
 
 	pset = user_vaddr_to_pcache_set(address);
+	inc_pset_event(pset, PSET_ALLOC);
 
 	/* Fastpath: try to allocate one directly */
 	pcm = pcache_alloc_fastpath(pset);

@@ -620,6 +620,8 @@ int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
 int pcache_try_to_unmap(struct pcache_meta *pcm);
 int pcache_wrprotect(struct pcache_meta *pcm);
 int pcache_referenced(struct pcache_meta *pcm);
+void pcache_referenced_trylock(struct pcache_meta *pcm,
+			       int *pte_referenced, int *pte_contention);
 
 int pcache_try_to_unmap_reserve(struct pcache_meta *pcm);
 int pcache_free_reserved_rmap(struct pcache_meta *pcm);

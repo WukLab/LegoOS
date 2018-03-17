@@ -15,9 +15,8 @@
 #include <processor/pcache_types.h>
 
 /*
- * Per set counters
+ * pcache set counters
  */
-
 static inline void mod_pset_event(int i, struct pcache_set *pset,
 				  enum pcache_set_stat_item item)
 {
@@ -96,6 +95,13 @@ enum pcache_event_item {
 	PCACHE_VICTIM_FLUSH_FINISHED,	/* nr of finished victim flush jobs */
 	PCACHE_VICTIM_FLUSH_ASYNC_RUN,	/* nr of times async victim_flushd got running */
 	PCACHE_VICTIM_FLUSH_SYNC,	/* nr of times sync flush is invoked */
+
+	PCACHE_SWEEP_RUN,		/* nr of whole pcache sweep runned */
+	PCACHE_SWEEP_NR_PSET,		/* nr of pset that have been sweeped */
+	PCACHE_SWEEP_NR_MOVED_PCM,	/* nr of moved pcache lines */
+
+	PCACHE_MREMAP_PSET_SAME,
+	PCACHE_MREMAP_PSET_DIFF,
 
 	NR_PCACHE_EVENT_ITEMS,
 };

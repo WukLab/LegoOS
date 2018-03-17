@@ -51,8 +51,8 @@ config SAME_MACHINE_VMS
 	depends on FIT
 
 config SOCKET_O_IB
-	bool "IB support of Socket" if EXPERT
-	default y
+	bool "IB support of Socket"
+	default n
 	depends on FIT
 	help
 	  Enable if you want to have socket APIs built over Infiniband.

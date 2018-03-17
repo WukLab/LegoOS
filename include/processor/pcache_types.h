@@ -28,6 +28,7 @@ struct pcache_meta;
 #define PCACHE_LINE_NR_PAGES		(PCACHE_LINE_SIZE / PAGE_SIZE)
 
 enum pcache_set_stat_item {
+	PSET_ALLOC,
 	PSET_FILL_MEMORY,
 	PSET_FILL_VICTIM,
 	PSET_EVICTION,
@@ -55,6 +56,7 @@ struct pset_eviction_entry {
  */
 struct pcache_set {
 	atomic_t		stat[NR_PSET_STAT_ITEMS];
+	unsigned long		flags;
 
 	/*
 	 * Eviction Algorithms Specific
@@ -133,12 +135,6 @@ struct pcache_meta {
 #endif
 } ____cacheline_aligned;
 
-enum pcache_rmap_flags {
-	PCACHE_RMAP_reserved,
-
-	NR_PCACHE_RMAP_FLAGS
-};
-
 struct pcache_rmap {
 	pte_t			*page_table;
 	unsigned long		flags;
@@ -148,6 +144,16 @@ struct pcache_rmap {
 	/* page aligned */
 	unsigned long		address;
 	struct list_head	next;
+} ____cacheline_aligned;
+
+/*
+ * struct pcache_rmap flags
+ */
+
+enum pcache_rmap_flags {
+	PCACHE_RMAP_reserved,
+
+	NR_PCACHE_RMAP_FLAGS
 };
 
 #define TEST_RMAP_FLAGS(uname, lname)				\
@@ -174,6 +180,61 @@ static inline void ClearRmap##uname(struct pcache_rmap *p)	\
 	CLEAR_RMAP_FLAGS(uname, lname)
 
 RMAP_FLAGS(Reserved, reserved)
+
+/*
+ * struct pcache_set flags
+ */
+
+enum pcache_set_flags {
+	PCACHE_SET_evicting,		/* pset is under eviction now */
+	PCACHE_SET_sweeping,		/* Sweep thread is scaning this set now */
+
+	NR_PCACHE_SET_FLAGS
+};
+
+#define TEST_PSET_FLAGS(uname, lname)				\
+static inline int Pset##uname(const struct pcache_set *p)	\
+{								\
+	return test_bit(PCACHE_SET_##lname, &p->flags);		\
+}
+
+#define SET_PSET_FLAGS(uname, lname)				\
+static inline void SetPset##uname(struct pcache_set *p)		\
+{								\
+	set_bit(PCACHE_SET_##lname, &p->flags);			\
+}
+
+#define __SET_PSET_FLAGS(uname, lname)				\
+static inline void __SetPset##uname(struct pcache_set *p)	\
+{								\
+	__set_bit(PCACHE_SET_##lname, &p->flags);		\
+}
+
+#define CLEAR_PSET_FLAGS(uname, lname)				\
+static inline void ClearPset##uname(struct pcache_set *p)	\
+{								\
+	clear_bit(PCACHE_SET_##lname, &p->flags);		\
+}
+
+#define __CLEAR_PSET_FLAGS(uname, lname)			\
+static inline void __ClearPset##uname(struct pcache_set *p)	\
+{								\
+	__clear_bit(PCACHE_SET_##lname, &p->flags);		\
+}
+
+#define PSET_FLAGS(uname, lname)				\
+	TEST_PSET_FLAGS(uname, lname)				\
+	SET_PSET_FLAGS(uname, lname)				\
+	CLEAR_PSET_FLAGS(uname, lname)				\
+	__SET_PSET_FLAGS(uname, lname)				\
+	__CLEAR_PSET_FLAGS(uname, lname)
+
+PSET_FLAGS(Evicting, evicting)
+PSET_FLAGS(Sweeping, sweeping)
+
+/*
+ * struct pcache_meta bits
+ */
 
 /*
  * pcacheline->bits
