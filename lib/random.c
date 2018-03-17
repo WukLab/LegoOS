@@ -9,15 +9,21 @@
 
 #include <lego/random.h>
 #include <lego/kernel.h>
+#include <lego/sched.h>
+
+static inline char __get_random_byte(void)
+{
+	return (char)sched_clock();
+}
 
 void get_random_bytes(void *buf, int nbytes)
 {
 	int i;
 	char *s = buf;
 
-	WARN(1, "Fake Random Number. Implement Me");
+	if (WARN_ON(!nbytes))
+		return;
 
-	for (i = 0; i < nbytes; i++) {
-		s[i] = 0x66;
-	}
+	for (i = 0; i < nbytes; i++)
+		s[i] = __get_random_byte();
 }
