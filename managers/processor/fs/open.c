@@ -7,15 +7,16 @@
  * (at your option) any later version.
  */
 
+#include <lego/net.h>
 #include <lego/stat.h>
 #include <lego/slab.h>
 #include <lego/uaccess.h>
 #include <lego/files.h>
 #include <lego/syscalls.h>
 #include <lego/spinlock.h>
+#include <lego/fit_ibapi.h>
 #include <processor/fs.h>
 #include <processor/processor.h>
-#include <lego/fit_ibapi.h>
 
 /*
  * Find @file by @fd
@@ -133,6 +134,11 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 	/*
 	 * Ugh.. Just a dirty workaround for the
 	 * 	Everything is a file philosophy.
+	 * We currently emulate:
+	 *  - /proc
+	 *  - /sys
+	 *  - /dev
+	 *  - socket
 	 */
 	if (unlikely(proc_file(kname)))
 		ret = proc_file_open(f, kname);
@@ -140,9 +146,8 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 		ret = sys_file_open(f, kname);
 	else if (unlikely(dev_file(kname)))
 		ret = dev_file_open(f, kname);
-	else if (socket_file(kname)) {
-		ret = create_socket_file(f);
-	}
+	else if (unlikely(socket_file(kname)))
+		ret = socket_file_open(f);
 	else {
 #ifdef CONFIG_USE_RAMFS
 		f->f_op = &debug_ramfs_f_ops;

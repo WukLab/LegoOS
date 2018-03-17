@@ -10,20 +10,30 @@
 #ifndef _LEGO_NET_H_
 #define _LEGO_NET_H_
 
+#include <processor/fs.h>
+#include <lego/kernel.h>
+
 void init_lwip(void);
 
 #define TOTAL_PHYS_NODE 20
 #define MAX_NODE	CONFIG_FIT_NR_NODES
 
-#ifdef CONFIG_SOCKET_O_IB
+/*
+ * Socket SYSCALL Hook
+ */
+#ifdef CONFIG_SOCKET_SYSCALL
 void init_socket(void);
-void test_socket_client(void);
-void test_socket_server(void);
+void test_socket(void);
+int socket_file_open(struct file *filp);
 #else
-static inline void init_socket(void) {return;}
-static inline void test_socket_server(void) {return;}
-static inline void test_socket_client(void) {return;}
-#endif
+static inline void init_socket(void) { }
+static inline void test_socket(void) { }
+
+static inline int socket_file_open(struct file *filp)
+{
+	return -ENODEV;
+}
+#endif /* CONFIG_SOCKET_SYSCALL */
 
 #ifdef CONFIG_INFINIBAND
 extern struct completion ib_init_done;

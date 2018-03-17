@@ -185,9 +185,5 @@ struct statfs {
 	__statfs_word f_flags;
 	__statfs_word f_spare[4];
 };
-int alloc_fd(struct files_struct *files, char *filename);
-void free_fd(struct files_struct *files, int fd);
-
-int create_socket_file(struct file *filp);
 
 #endif /* _LEGO_FILES_H_ */

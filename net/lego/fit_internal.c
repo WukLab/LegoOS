@@ -1309,7 +1309,7 @@ get_next_request:
 
 		if (get_size > 0)
 			break;
-		if (sock_type & O_NONBLOCK > 0) {
+		if ((sock_type & O_NONBLOCK) > 0) {
 			fit_debug("nonblock break %d\n", total_received_size);
 			return total_received_size;
 		}
@@ -1320,7 +1320,7 @@ get_next_request:
 	 * got all current requests
 	 * return immediately for non-block socket
 	 */
-	if (sock_type & O_NONBLOCK > 0 && get_size == 0) {
+	if ((sock_type & O_NONBLOCK) > 0 && get_size == 0) {
 		fit_debug("nonblock socket return when running out of received buffer %d\n", total_received_size);
 		return total_received_size;
 	}
@@ -1338,9 +1338,12 @@ get_next_request:
 	* copy incoming data to user buffer
 	* size of int is for the internal port header 
 	*/
-	if (if_userspace)
-		copy_to_user(ret_addr, ctx->local_sock_rdma_recv_rings[node_id] + offset, get_size);
-	else
+	if (if_userspace) {
+		int cp_ret;
+
+		cp_ret = copy_to_user(ret_addr, ctx->local_sock_rdma_recv_rings[node_id] + offset, get_size);
+		WARN_ON(cp_ret);
+	} else
 		memcpy(ret_addr, ctx->local_sock_rdma_recv_rings[node_id] + offset, get_size);
 	fit_debug("offset-%d recv %s srcnodeid-%d\n", offset, ret_addr, node_id);
 
@@ -1568,7 +1571,10 @@ int sock_send_message(ppc *ctx, int target_node, int dest_port, int if_internal_
 		}
 		else {
 			kbuf = kmalloc(size, GFP_KERNEL);
-			copy_from_user(kbuf, addr, size);
+
+			ret = copy_from_user(kbuf, addr, size);
+			WARN_ON(ret);
+
 			ret = sock_send_message_with_rdma_imm(ctx, target_node, remote_rkey, 
 					(uintptr_t)remote_addr, kbuf, size, tar_offset_start, imm_data, 
 					&dest_port_data, sizeof(int),
@@ -1612,9 +1618,6 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	int test_result=0;
 #endif
 	struct imm_header_from_cq_to_port *tmp;
-#ifdef CONFIG_SOCKET_O_IB
-	struct sock_recved_msg_metadata *tmp_sock;
-#endif
 	//set_current_state(TASK_INTERRUPTIBLE);
 
 	pr_info("***  recvpollcq runs on CPU%d\n", smp_processor_id());
@@ -1773,7 +1776,7 @@ int client_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	return 0;
 }
 
-#ifdef CONFIG_SOCKET_INTERFACE
+#ifdef CONFIG_SOCKET_SYSCALL
 /*
  * main polling function for all non-socket requests
  */
@@ -2009,7 +2012,7 @@ int waiting_queue_handler(void *in)
 					ctx->remote_last_ack_index[new_request->src_id] = last_ack;
 					break;
 				}
-#ifdef CONFIG_SOCKET_INTERFACE
+#ifdef CONFIG_SOCKET_SYSCALL
 			case MSG_SOCK_DO_ACK_INTERNAL:
 				{
 					//First do check again
@@ -2490,14 +2493,19 @@ int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
 #ifdef CONFIG_SOCKET_O_IB
 		connection_id = (NUM_PARALLEL_CONNECTION + 1) * i;
 		memcpy(msg + sizeof(struct client_ibv_mr), &ctx->local_sock_rdma_ring_mrs[i], sizeof(struct client_ibv_mr)); 
-#else
-		connection_id = NUM_PARALLEL_CONNECTION * i;
-#endif
+
 		fit_debug("send ringmr addr %p lkey %lx rkey %lx sockaddr %p conn %d node %d\n",
 				ctx->local_rdma_ring_mrs[i].addr,
 				ctx->local_rdma_ring_mrs[i].lkey, 
 				ctx->local_rdma_ring_mrs[i].rkey,
 				ctx->local_sock_rdma_ring_mrs[i], connection_id, i);
+#else
+		connection_id = NUM_PARALLEL_CONNECTION * i;
+
+		fit_debug("send conn %d node %d\n",
+				connection_id, i);
+#endif
+
 		ret = client_send_message_sge(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, size, 0, 0, LOW_PRIORITY);
 	}
 	kfree(msg);
@@ -2511,7 +2519,7 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
         int temp_ctx_number;
 	ppc *ctx;
 	struct client_ibv_mr *ret_mr;
-	struct thread_pass_struct thread_pass_poll_cq, sock_thread_pass_poll_cq;
+	struct thread_pass_struct thread_pass_poll_cq;
 	int num_connected_nodes = 0;
 	num_recvd_rdma_ring_mrs = 0;
 
@@ -2556,10 +2564,15 @@ ppc *client_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	thread_pass_poll_cq.ctx = ctx;
 	thread_pass_poll_cq.target_cq = ctx->cq[0];
 	kthread_run(client_poll_cq_pass, &thread_pass_poll_cq, "recvpollcq");
-#ifdef CONFIG_SOCKET_INTERFACE
-	sock_thread_pass_poll_cq.ctx = ctx;
-	sock_thread_pass_poll_cq.target_cq = ctx->sock_recv_cq;
-	kthread_run(sock_poll_cq, &sock_thread_pass_poll_cq, "sockrecvpollcq");
+
+#ifdef CONFIG_SOCKET_SYSCALL
+	if (1) {
+		struct thread_pass_struct sock_thread_pass_poll_cq;
+
+		sock_thread_pass_poll_cq.ctx = ctx;
+		sock_thread_pass_poll_cq.target_cq = ctx->sock_recv_cq;
+		kthread_run(sock_poll_cq, &sock_thread_pass_poll_cq, "sockrecvpollcq");
+	}
 #endif
 	//wake_up_process(thread);
 

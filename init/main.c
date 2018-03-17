@@ -145,20 +145,13 @@ static int kernel_init(void *unused)
 
 #if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
 	ib_cm_init();
-#ifdef CONFIG_SOCKET_INTERFACE
 	init_socket();
-#endif
 	kthread_run(lego_ib_init, NULL, "ib-initd");
 
 	/* wait until ib finished initialization */
 	wait_for_completion(&ib_init_done);
-#endif
 
-#ifdef CONFIG_SOCKET_SERVER
-	test_socket_server();
-#endif
-#ifdef CONFIG_SOCKET_CLIENT
-	test_socket_client();
+	test_socket();
 #endif
 
 	/* Final step towards a running component.. */
@@ -167,6 +160,8 @@ static int kernel_init(void *unused)
 #elif defined(CONFIG_COMP_MEMORY)
 	memory_component_init();
 #endif
+
+	/* Print scheduablable CPUs */
 	dump_cpumasks();
 
 	while (1) {

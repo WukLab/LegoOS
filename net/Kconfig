@@ -51,30 +51,46 @@ config SAME_MACHINE_VMS
 	depends on FIT
 
 config SOCKET_O_IB
-	bool "IB support of Socket"
+	bool "IB support of Socket" if EXPERT
 	default y
 	depends on FIT
 	help
-	  Always enable if you have at least one node in the cluster that needs socket.
+	  Enable if you want to have socket APIs built over Infiniband.
+	  You must enable this on ALL nodes if you want the cluster to support socket.
 
-config SOCKET_INTERFACE
-	bool "Socket interface"
-	default n
+	  If unsure, say N.
+
+config SOCKET_SYSCALL
+	bool "Socket SYSCALL Support"
+	default y if COMP_PROCESSOR
+	default n if COMP_MEMORY
 	depends on SOCKET_O_IB
 	help
-	  Enable if you need socket APIs on the node (a processor node)
+	  Enable if you need socket SYSCALL on the node. Only processor component
+	  can enable this config since that is the only one will run user program.
+
+	  You must enable this if you want to use socket syscall.
+
+	  If unsure, say N.
 
 config SOCKET_SERVER
 	bool "socket server test code"
 	default n
-	depends on SOCKET_INTERFACE
+	depends on SOCKET_SYSCALL
+	help
+	  Enable to test socket server during boot.
+
+	  If unsure, say N.
 
 config SOCKET_CLIENT
 	bool "socket server test code"
 	default n
-	depends on SOCKET_INTERFACE
+	depends on SOCKET_SYSCALL
+	help
+	  Enable to test socket client during boot.
 
+	  If unsure, say N.
 
-endif
+endif # INFINIBAND
 
-endmenu
+endmenu # Networking

@@ -559,3 +559,102 @@ SYSCALL_DEFINE4(wait4, pid_t, upid, int __user *, stat_addr,
 	BUG();
 }
 #endif
+
+/*
+ * Just to make the kernel compile
+ */
+#ifndef CONFIG_SOCKET_SYSCALL
+SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
+{
+	BUG();
+}
+SYSCALL_DEFINE5(setsockopt, int, fd, int, level, int, optname,
+		char __user *, optval, int, optlen)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE5(getsockopt, int, fd, int, level, int, optname,
+		char __user *, optval, int __user *, optlen)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(getsockname, int, fd, struct sockaddr __user *, usockaddr,
+		int __user *, usockaddr_len)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, addr, int, addr_len)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(listen, int, fd, int, backlog)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
+		int, addrlen)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
+		int __user *, upeer_addrlen, int, flags)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(accept, int, fd, struct sockaddr __user *, upeer_sockaddr,
+		int __user *, upeer_addrlen)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len,
+		unsigned int, flags, struct sockaddr __user *, addr,
+		int, addr_len)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
+		unsigned int, flags)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(sendmsg, int, fd, struct user_msghdr __user *, msg, 
+		unsigned int, flags)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE6(recvfrom, int, fd, void __user *, ubuf, size_t, size,
+		unsigned int, flags, struct sockaddr __user *, addr,
+		int __user *, uaddr_len)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE4(recv, int, fd, void __user *, buff, size_t, len,
+		unsigned int, flags)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE3(recvmsg, int, fd, struct user_msghdr __user *, msg, 
+		unsigned int, flags)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE2(shutdown, int, fd, int, how)
+{
+	BUG();
+}
+
+#endif /* Socket SYSCALL */

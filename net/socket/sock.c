@@ -411,7 +411,8 @@ SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
 	pr_crit("%s: fd %d f %p\n", __func__, fd, f);
 	if (!f)
 		return -ENFILE;
-	pr_crit("%s: fd %d f private %p\n", __func__, fd, f, f->private_data);
+	pr_crit("%s: fd %d f %p private %p\n", __func__, fd, f, f->private_data);
+
 	sock = (struct lego_socket *)f->private_data;
 	if (!sock)
 		return -ENFILE;
@@ -591,11 +592,11 @@ int socket_send_data(struct lego_socket *sock, void __user *buff, size_t len)
 	int ret;
 
 	if (len <= 0) {
-		pr_crit("%s: sending size wrong %d\n", __func__, len);
+		pr_crit("%s: sending size wrong %zu\n", __func__, len);
 		return -1;
 	}
 	if (len > MAX_SOCK_SEND_SIZE) {
-		pr_crit("%s: sending too big %d. currently only support sending up to %dB\n",
+		pr_crit("%s: sending too big %zu. currently only support sending up to %dB\n",
 				__func__, len, MAX_SOCK_SEND_SIZE);
 		return -1;
 	}
@@ -686,9 +687,7 @@ SYSCALL_DEFINE3(sendmsg, int, fd, struct user_msghdr __user *, msg,
 		}
 	}
 
-out_freeiov:
 	kfree(iov);
-
 	return total_sent_size;
 }
 
@@ -846,7 +845,7 @@ static ssize_t sock_write(struct file *f, const char __user *buf,
 			size_t count, loff_t *off)
 {
 	pr_crit("%s\n", __func__);
-	return socket_send_data((struct lego_socket *)f->private_data, buf, count);
+	return socket_send_data((struct lego_socket *)f->private_data, (char __user *)buf, count);
 }
 
 /* File callbacks that implement the socket fd behaviour */
@@ -856,7 +855,11 @@ static const struct file_operations socket_fops = {
 	.write		= sock_write,
 };
 
-int create_socket_file(struct file *filp)
+/*
+ * Callback for syscall open()
+ * Used to install socket-specific file operations
+ */
+int socket_file_open(struct file *filp)
 {
 	filp->f_op = &socket_fops;
 	return 0;
@@ -864,7 +867,9 @@ int create_socket_file(struct file *filp)
 
 /* testing socket server */
 #define SERV_PORT 3000
-void test_socket_server(void)
+
+#ifdef CONFIG_SOCKET_SERVER
+static void test_socket_server(void)
 {
 	int listenfd, connfd;
 	struct sockaddr_in cliaddr, servaddr;
@@ -921,9 +926,11 @@ void test_socket_server(void)
 	pr_crit("received %d total data, buf1 %s buf2 %s buf3 %s\n",
 			n, buf1, buf2, buf3);
 }
+#endif
 
 /* testing socket client */
-void test_socket_client(void)
+#ifdef CONFIG_SOCKET_CLIENT
+static void test_socket_client(void)
 {
 	int sockfd;
 	struct sockaddr_in servaddr;
@@ -970,6 +977,17 @@ void test_socket_client(void)
 	n = sys_sendmsg(sockfd, &msg, 0);
 	pr_crit("received %d total data, buf1 %s buf2 %s\n",
 			n, buf1, buf2);
+}
+#endif
+
+void test_socket(void)
+{
+#ifdef CONFIG_SOCKET_SERVER
+	test_socket_server();
+#endif
+#ifdef CONFIG_SOCKET_CLIENT
+	test_socket_client();
+#endif
 }
 
 void init_socket(void)
