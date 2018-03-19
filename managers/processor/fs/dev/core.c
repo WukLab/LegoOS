@@ -26,6 +26,7 @@
 extern const struct file_operations stdio_file_op;
 extern const struct file_operations random_file_ops;
 extern const struct file_operations urandom_file_ops;
+extern const struct file_operations null_file_ops;
 
 struct dev_file_struct {
 	char f_name[FILENAME_LEN_DEFAULT];
@@ -44,6 +45,10 @@ static struct dev_file_struct dev_files[] = {
 	{
 		.f_name	= "/dev/urandom",
 		.f_op	= &urandom_file_ops,
+	},
+	{
+		.f_name	= "/dev/null",
+		.f_op	= &null_file_ops,
 	},
 };
 
