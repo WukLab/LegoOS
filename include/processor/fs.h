@@ -57,4 +57,6 @@ static inline int normal_file_open(struct file *f, char *f_name)
 	return 0;
 }
 
+void do_close_on_exec(struct files_struct *files);
+
 #endif /* _LEGO_PROCESSOR_FS_H_ */

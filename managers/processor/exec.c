@@ -20,6 +20,8 @@
 #include <lego/syscalls.h>
 #include <lego/uaccess.h>
 #include <lego/fit_ibapi.h>
+
+#include <processor/fs.h>
 #include <processor/processor.h>
 
 static int exec_mmap(void)
@@ -32,6 +34,7 @@ static int exec_mmap(void)
 	if (!new_mm)
 		return -ENOMEM;
 
+	/* Notify parent that we're no longer interested in the old VM */
 	tsk = current;
 	old_mm = current->mm;
 	mm_release(tsk, old_mm);
@@ -47,7 +50,8 @@ static int exec_mmap(void)
 	return 0;
 }
 
-static __u32 count_param(const char * const *argv, int max, __u32 *size)
+static __u32 count_param(const char __user * const * __user argv,
+			 int max, __u32 *size)
 {
 	int i = 0;
 
@@ -81,7 +85,7 @@ static __u32 count_param(const char * const *argv, int max, __u32 *size)
 }
 
 /* Copy strings from userspace to core-kernel paylaod */
-static int copy_strings(__u32 argc, const char * const *argv,
+static int copy_strings(__u32 argc, const char __user * const * __user argv,
 			struct p2m_execve_struct *payload, __u32 *array_oft)
 {
 	int i;
@@ -112,9 +116,9 @@ static int copy_strings(__u32 argc, const char * const *argv,
  * Processor-Component
  * Prepare the payload being sent to memory-component
  */
-static void *prepare_exec_payload(const char *filename,
-				  const char * const *argv,
-				  const char * const *envp,
+static void *prepare_exec_payload(const char __user *filename,
+				  const char __user * const * __user argv,
+				  const char __user * const * __user envp,
 				  __u32 *payload_size)
 {
 	__u32 argc, envc, size = 0, array_oft = 0;
@@ -382,6 +386,14 @@ static int flush_old_exec(void)
 	current->flags &= ~(PF_KTHREAD | PF_NO_SETAFFINITY);
 	flush_thread();
 
+	/*
+	 * We have to apply CLOEXEC before we change whether the process is
+	 * dumpable (in setup_new_exec) to avoid a race with a process in userspace
+	 * trying to access the should-be-closed file descriptors of a process
+	 * undergoing exec(2).
+	 */
+	do_close_on_exec(current->files);
+
 	ret = 0;
 out:
 	return ret;
@@ -402,9 +414,9 @@ static void setup_new_exec(const char *filename)
 	flush_signal_handlers(current, 0);
 }
 
-int do_execve(const char *filename,
-	      const char * const *argv,
-	      const char * const *envp)
+int do_execve(const char __user *filename,
+	      const char __user * const * __user argv,
+	      const char __user * const * __user envp)
 {
 	int ret;
 	__u32 payload_size, reply_size;
@@ -431,7 +443,11 @@ int do_execve(const char *filename,
 	if (ret)
 		goto out;
 
-	setup_new_exec(filename);
+	/*
+	 * Use the f_name saved in payload
+	 * to save one extra strncpy_from_user
+	 */
+	setup_new_exec(((struct p2m_execve_struct *)payload)->filename);
 
 #ifdef ELF_PLAT_INIT
 	/*
@@ -471,6 +487,5 @@ SYSCALL_DEFINE3(execve,
 		const char __user *const __user *, argv,
 		const char __user *const __user *, envp)
 {
-	__syscall_enter();
 	return do_execve(filename, argv, envp);
 }

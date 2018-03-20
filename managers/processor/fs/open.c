@@ -96,6 +96,16 @@ void free_fd(struct files_struct *files, int fd)
 	spin_unlock(&files->file_lock);
 }
 
+/*
+ * TODO:
+ * Use to close files that has FD_CLEEXEC set, which means
+ * close this file if execv is called.
+ */
+void do_close_on_exec(struct files_struct *files)
+{
+	pr_info("%s(): TODO, not implemented.\n", __func__);
+}
+
 #ifdef CONFIG_USE_RAMFS
 static struct file_operations debug_ramfs_f_ops = {
 };
