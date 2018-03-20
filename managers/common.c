@@ -63,8 +63,9 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 	ret = ibapi_send_reply_timeout(node, msg, len_msg, retbuf,
 				   max_len_retbuf, retbuf_is_phys, timeout);
 	if (ret == -ETIMEDOUT)
-		pr_info(" %s() caller: %pS\n",
-			FUNC, __builtin_return_address(0));
+		pr_info("  %s() CPU:%d PID:%d caller: %pS\n",
+			FUNC, smp_processor_id(), current->pid,
+			__builtin_return_address(0));
 
 	kfree(msg);
 	return ret;

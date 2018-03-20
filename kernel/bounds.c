@@ -18,12 +18,20 @@
 #include <lego/kbuild.h>
 
 /* Include headers that define the enum constants of interest */
+#include <lego/log2.h>
+#include <lego/mm_types.h>
 #include <lego/mm_zone.h>
 #include <lego/page-flags.h>
+#include <lego/spinlock.h>
 
 void wuklabisawesome(void)
 {
 	/* The enum constants to put into include/generated/bounds.h */
 	DEFINE(MAX_NR_ZONES, __MAX_NR_ZONES);
 	DEFINE(NR_PAGEFLAGS, __NR_PAGEFLAGS);
+#ifdef CONFIG_SMP
+	DEFINE(NR_CPU_BITS, ilog2(CONFIG_NR_CPUS));
+#endif
+	DEFINE(SPINLOCK_SIZE, sizeof(spinlock_t));
+	DEFINE(STRUCT_PAGE_SIZE, sizeof(struct page));
 }

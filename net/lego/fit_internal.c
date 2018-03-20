@@ -2252,7 +2252,8 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 	while (local_reply_ready_checker == SEND_REPLY_WAIT) {
 		cpu_relax();
 		if (unlikely(time_after(jiffies, start_time + timeout_sec * HZ))) {
-			pr_warn("ibapi_send_reply() polling timeout (%u ms), caller: %pS\n",
+			pr_warn("ibapi_send_reply() CPU:%d PID:%d timeout (%u ms), caller: %pS\n",
+				smp_processor_id(), current->pid,
 				jiffies_to_msecs(jiffies - start_time), caller);
 			return -ETIMEDOUT;
 		}

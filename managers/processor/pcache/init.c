@@ -207,7 +207,7 @@ void __init pcache_post_init(void)
 	 * and ioremap() needs buddy allocator. Check Kconfig comments for why we have
 	 * these two configurations.
 	 */
-#ifdef CONFIG_MEMMAP_MEMBLOCK_RESERVED
+#ifdef CONFIG_PROCESSOR_MEMMAP_MEMBLOCK_RESERVED
 	virt_start_cacheline = (unsigned long)phys_to_virt(pcache_registered_start);
 #else
 	virt_start_cacheline = (unsigned long)ioremap_cache(pcache_registered_start,
@@ -287,7 +287,8 @@ void __init pcache_print_info(void)
 	pr_info("    Way cache stride:  %#llx\n", pcache_way_cache_stride);
 
 	pr_info("    Memmap $ semantic:       %s\n",
-		IS_ENABLED(CONFIG_MEMMAP_MEMBLOCK_RESERVED) ? "memblock reserved" : "e820 reserved");
+		IS_ENABLED(CONFIG_PROCESSOR_MEMMAP_MEMBLOCK_RESERVED) ?
+		"memblock reserved" : "e820 reserved");
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 	pr_info("    NR victim $ entries:     %u\n", VICTIM_NR_ENTRIES);
 #endif
@@ -303,7 +304,7 @@ void __init pcache_print_info(void)
  * memory is initialized. For x86, this is registered during the parsing of
  * memmap=N$N command line option.
  *
- * If CONFIG_MEMMAP_MEMBLOCK_RESERVED is ON, this range will not be bailed out
+ * If PROCESSOR_MEMMAP_MEMBLOCK_RESERVED is ON, this range will not be bailed out
  * from e820 table, it is marked as reserved in memblock. So pages within
  * this range still have `struct page'. Otherwise, pcache memory range will not
  * have any associated `struct page'.

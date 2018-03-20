@@ -19,6 +19,20 @@
 #include <lego/spinlock.h>
 
 /*
+ * Options to control if use per-pte, per-pmd locks.
+ * The spinlock is embedded within 'struct page'.
+ * No dynamic allocation is used now.
+ */
+#ifdef CONFIG_COMP_PROCESSOR
+# define USE_SPLIT_PTE_PTLOCKS	(NR_CPUS >= CONFIG_PROCESSOR_SPLIT_PTLOCK_CPUS)
+# define USE_SPLIT_PMD_PTLOCKS	(USE_SPLIT_PTE_PTLOCKS && \
+				IS_ENABLED(CONFIG_PROCESSOR_ENABLE_SPLIT_PMD_PTLOCK))
+#else
+# define USE_SPLIT_PTE_PTLOCKS	0
+# define USE_SPLIT_PMD_PTLOCKS	0
+#endif
+
+/*
  * Each physical page in the system has a struct page associated with
  * it to keep track of whatever it is we are using the page for at the
  * moment. Note that we have no way to track which tasks are using
@@ -50,7 +64,11 @@ struct page {
 
 	struct list_head lru;
 	unsigned long private;
-};
+
+#if USE_SPLIT_PTE_PTLOCKS
+	spinlock_t ptl;
+#endif
+} ____cacheline_aligned;
 
 enum {
 	MM_FILEPAGES,	/* Resident file mapping pages */

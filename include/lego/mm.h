@@ -445,21 +445,78 @@ pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 }
 
 /*
- * We use mm->page_table_lock to guard all pagetable pages of the mm.
- *
- * TODO: Per-page spinlock if we have large memory
+ * Per PTE page lock
+ * pmd_page() returns the page that is used as the PTE page
  */
-static inline bool ptlock_init(struct page *page) { return true; }
-static inline void pte_lock_deinit(struct page *page) {}
+#if USE_SPLIT_PTE_PTLOCKS
+static inline spinlock_t *ptlock_ptr(struct page *page)
+{
+	return &page->ptl;
+}
+
+static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
+{
+	return ptlock_ptr(pmd_page(*pmd));
+}
+
+static inline bool ptlock_init(struct page *page)
+{
+	spin_lock_init(ptlock_ptr(page));
+	return true;
+}
+
+static inline void pte_lock_deinit(struct page *page)
+{
+}
+
+#else	/* !USE_SPLIT_PTE_PTLOCKS */
+/*
+ * We use mm->page_table_lock to guard all pagetable pages of the mm.
+ */
 static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
 {
 	return &mm->page_table_lock;
 }
+static inline bool ptlock_init(struct page *page) { return true; }
+static inline void pte_lock_deinit(struct page *page) {}
+#endif /* USE_SPLIT_PTE_PTLOCKS */
 
+/*
+ * Per PMD page lock
+ * pmd_to_page returns the page that is used as the PMD page
+ */
+#if USE_SPLIT_PMD_PTLOCKS
+static struct page *pmd_to_page(pmd_t *pmd)
+{
+	unsigned long mask = ~(PTRS_PER_PMD * sizeof(pmd_t) - 1);
+	return virt_to_page((void *)((unsigned long) pmd & mask));
+}
+
+static inline spinlock_t *pmd_lockptr(struct mm_struct *mm, pmd_t *pmd)
+{
+	return ptlock_ptr(pmd_to_page(pmd));
+}
+
+static inline bool pgtable_pmd_page_ctor(struct page *page)
+{
+	return ptlock_init(page);
+}
+
+static inline void pgtable_pmd_page_dtor(struct page *page)
+{
+}
+
+#else /* !USE_SPLIT_PMD_PTLOCKS */
+/*
+ * We use mm->page_table_lock to guard all pagetable pages of the mm.
+ */
 static inline spinlock_t *pmd_lockptr(struct mm_struct *mm, pmd_t *pmd)
 {
 	return &mm->page_table_lock;
 }
+static inline bool pgtable_pmd_page_ctor(struct page *page) { return true; }
+static inline void pgtable_pmd_page_dtor(struct page *page) {}
+#endif
 
 static inline spinlock_t *pmd_lock(struct mm_struct *mm, pmd_t *pmd)
 {

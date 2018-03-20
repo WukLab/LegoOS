@@ -3,6 +3,8 @@ menu "Lego Processor Component Configurations"
 config COMP_PROCESSOR
 	bool "Configure Lego as processor component"
 	default n
+	select PROCESSOR_ENABLE_SPLIT_PMD_PTLOCK
+	select PROCESSOR_MEMMAP_MEMBLOCK_RESERVED
 	---help---
 	  Say Y if you are going to build a processor-component
 	  controller of Lego OS.
@@ -19,7 +21,25 @@ config CHECKPOINT
 
 	  If unsure, say N.
 
-config MEMMAP_MEMBLOCK_RESERVED
+#
+# Heavily threaded applications may benefit from splitting the mm-wide
+# page_table_lock, so that faults on different parts of the user address
+# space can be handled with less contention: split it at this NR_CPUS.
+# Default to 4 for wider testing, though 8 might be more appropriate.
+# DEBUG_SPINLOCK and DEBUG_LOCK_ALLOC spinlock_t also enlarge struct page.
+#
+config PROCESSOR_SPLIT_PTLOCK_CPUS
+	int
+	default "4"
+
+#
+# Use per-pmd ptlock
+# This should only be selected by Processor Manager
+#
+config PROCESSOR_ENABLE_SPLIT_PMD_PTLOCK
+	bool
+
+config PROCESSOR_MEMMAP_MEMBLOCK_RESERVED
 	bool "Reseve memmap $ marked memory to memblock"
 	default y
 	help

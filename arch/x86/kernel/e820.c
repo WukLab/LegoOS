@@ -48,7 +48,7 @@ static int __init parse_memmap_one(char *p)
 		start_at = memparse(p+1, &p);
 
 /* Check managers/processor/Kconfig for detail */
-#ifdef CONFIG_MEMMAP_MEMBLOCK_RESERVED
+#ifdef CONFIG_PROCESSOR_MEMMAP_MEMBLOCK_RESERVED
 		memblock_reserve(start_at, mem_size);
 #else
 		e820_add_region(start_at, mem_size, E820_RESERVED);

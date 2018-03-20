@@ -163,7 +163,11 @@ config SLOB
 	   allocator. SLOB is generally more space efficient but
 	   does not perform as well on large systems.
 
-endchoice
+endchoice # "Kmalloc Allocator"
+
+#
+# MM Debug Options
+#
 
 config DEBUG_MM_ALLOCATION
 	bool "Debug kmalloc and buddy allocator"
