@@ -39,14 +39,18 @@ static int exec_mmap(void)
 	old_mm = current->mm;
 	mm_release(tsk, old_mm);
 
+	/*
+	 * We should do this before changing mm,
+	 * because pcache_process_exit() needs old_mm to clean up
+	 */
+	mmput(old_mm);
+
 	task_lock(tsk);
 	tsk->mm = new_mm;
 	tsk->active_mm = new_mm;
 	activate_mm(old_mm, new_mm);
 	task_unlock(tsk);
 
-	if (old_mm)
-		mmput(old_mm);
 	return 0;
 }
 
