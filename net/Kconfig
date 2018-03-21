@@ -19,6 +19,17 @@ config FIT_DEBUG
 	help
 	  Enable to enable fit_debug() marco
 
+config FIT_SEQUENTIAL_IBAPI
+	bool "Make ibapi sequentially executed"
+	default n
+	depends on FIT
+	depends on DEBUG_KERNEL
+	help
+	  This option will make ibapi_send_reply() sequentially executed.
+	  This is achieved by adding a lock to protec the function.
+
+	  If unsure say N.
+
 config FIT_INITIAL_SLEEP_TIMEOUT
 	int "FIT initial sleep timeout (s) for connection"
 	default 10

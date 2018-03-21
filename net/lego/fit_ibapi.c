@@ -54,6 +54,21 @@ static void ibv_remove_one(struct ib_device *device)
 	return;
 }
 
+#ifdef CONFIG_FIT_SEQUENTIAL_IBAPI
+static DEFINE_SPINLOCK(ibapi_send_reply_lock);
+static inline void lock_ib(void)
+{
+	spin_lock(&ibapi_send_reply_lock);
+}
+static inline void unlock_ib(void)
+{
+	spin_unlock(&ibapi_send_reply_lock);
+}
+#else
+static inline void lock_ib(void) { }
+static inline void unlock_ib(void) { }
+#endif
+
 static inline int
 __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr,
 			   int max_ret_size, int if_use_ret_phys_addr,
@@ -62,9 +77,11 @@ __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr
 	ppc *ctx = FIT_ctx;
 	int ret;
 
+	lock_ib();
 	ret = fit_send_reply_with_rdma_write_with_imm(ctx, target_node, addr,
 			size, ret_addr, max_ret_size, 0, if_use_ret_phys_addr,
 			timeout_sec, caller);
+	unlock_ib();
 
 	return ret;
 }
