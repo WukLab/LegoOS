@@ -43,6 +43,7 @@
 #include <lego/stop_machine.h>
 
 #include <lego/comp_memory.h>
+#include <lego/comp_common.h>
 #include <processor/processor.h>
 
 #include <asm/io.h>
@@ -163,6 +164,7 @@ static int kernel_init(void *unused)
 
 	/* Print scheduablable CPUs */
 	dump_cpumasks();
+	print_pinned_threads();
 
 	while (1) {
 		set_current_state(TASK_INTERRUPTIBLE);

@@ -23,6 +23,7 @@
 #include <lego/jiffies.h>
 #include <lego/kthread.h>
 #include <lego/memblock.h>
+#include <lego/comp_common.h>
 #include <lego/completion.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
@@ -202,14 +203,11 @@ int victim_flush_sync(void)
 
 static int victim_flush_async(void *unused)
 {
-	int cpu = get_cpu();
-
-	set_cpus_allowed_ptr(current, get_cpu_mask(cpu));
-	set_cpu_active(cpu, false);
-	pr_info("%s() running on CPU%d\n", __func__, cpu);
-	put_cpu();
+	if (pin_current_thread_core())
+		panic("Fail to pin victim flush");
 
 	for (;;) {
+		check_pinned_status();
 		spin_lock(&victim_flush_lock);
 		while (!list_empty(&victim_flush_queue)) {
 			struct victim_flush_job *job;

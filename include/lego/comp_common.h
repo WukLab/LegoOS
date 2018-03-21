@@ -28,6 +28,14 @@ enum {
 extern int manager_state;
 extern unsigned int LEGO_LOCAL_NID;
 
+void print_pinned_threads(void);
+int pin_current_thread_core(void);
+#ifdef CONFIG_CHECK_PINNED_THREADS
+void check_pinned_status(void);
+#else
+static inline void check_pinned_status(void) { }
+#endif
+
 /*
  * Rules about our message opcodes:
  *

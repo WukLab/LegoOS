@@ -22,33 +22,41 @@ config PCACHE_ASSOCIATIVITY_SHIFT
 endmenu
 
 menu "General Manager Config/Debug Options"
-#
-# Assume P node is 0
-#
 config DEFAULT_MEM_NODE
-	int "Default memory homenode ID (normally 1)"
-	default 1
-	help
-	  asd
+	int "Default memory homenode ID"
+	depends on COMP_PROCESSOR || COMP_MEMORY
 
 config DEFAULT_STORAGE_NODE
-	int "Default storage node ID (normally 2)"
-	default 2
+	int "Default storage node ID"
+	depends on COMP_PROCESSOR || COMP_MEMORY
+
+config CHECK_PINNED_THREADS
+	bool "Runtime check of pinned threads integrity"
+	default n
+	depends on COMP_PROCESSOR || COMP_MEMORY
 	help
-	  asd
+	  Runtime check
+	  - if those pinned threads have been migrated to other cores
+	  - if those cores have other threads
+	  Warning will be ejected if any of the above assumption break.
+
+	  This adds additional overhead during runtime, if unsure, say N.
 
 config USE_RAMFS
 	bool "Use RAMFS in P or M"
 	default y
+	depends on COMP_PROCESSOR || COMP_MEMORY
 	help
 	  Enable to use RAMFS in memory or processor component. Debug only.
+
+	  If unsure, say N.
 
 config RAMFS_OBJECT_FILE
 	string "The static-linked image embedded into Lego"
 	default "managers/memory/ramfs/bin/word_count-seq"
 	depends on COMP_MEMORY && USE_RAMFS
 	help
-	  Please give the full path
+	  Please give the full pathname.
 
 config GSM
 	bool "Contact GSM for locating page_cache/storage homenode"
@@ -59,14 +67,12 @@ config GSM
 if GSM
 
 config GSM_HOMENODE
-	int "GSM homenode ID (normally 3)"
-	default 3
-	help
-	  asd
+	int "GSM homenode ID"
+	depends on FIT_LOCAL_ID || FIT_NR_NODES
 
 endif #if GSM
 
-endmenu
+endmenu # General Manager Config/Debug
 
 #
 # Co-locate with net info to ease .config modification

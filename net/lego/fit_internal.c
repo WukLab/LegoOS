@@ -23,6 +23,7 @@
 #include <lego/timer.h>
 #include <lego/kernel.h>
 #include <lego/fit_ibapi.h>
+#include <lego/comp_common.h>
 #include <rdma/ib_verbs.h>
 
 #include "fit_internal.h"
@@ -1587,11 +1588,9 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 #endif
 	struct imm_header_from_cq_to_port *tmp;
 	int reply_data, private_bits;
-	//set_current_state(TASK_INTERRUPTIBLE);
 
-	pr_info("***  recvpollcq runs on CPU%d\n", smp_processor_id());
-
-	set_cpu_active(smp_processor_id(), false);
+	if (pin_current_thread_core())
+		panic("Fail to pin poll_cq");
 
 	while(1) {
 		do {
@@ -1614,6 +1613,7 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 			//msleep(1);
 		} while(ne < 1);
 
+		check_pinned_status();
 		for (i = 0; i < ne; i++) {
 			connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
 			if (connection_id == -1) {

@@ -11,3 +11,4 @@ obj-$(CONFIG_COMP_MEMORY)	+= memory/
 obj-y				+= lib/
 
 obj-y				+= common.o
+obj-y				+= pin.o
