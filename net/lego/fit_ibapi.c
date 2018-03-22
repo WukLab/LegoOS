@@ -134,16 +134,25 @@ __ibapi_send_reply_timeout_w_private_bits(int target_node, void *addr, int size,
 }
 
 /**
- * ibapi_send_reply_timeout_w_private_bits
- * Similar to ibapi_send_reply_timeout, but also fills up private bits on return
+ * ibapi_multicast_send_reply_timeout - issue a RDMA request with several sge request - mainly used for multicast in kernel
+ * @ctx: fit context
+ * @num_nodes: number of multicast node
+ * @target_node: target node array
+ * @sglist: message array to be sent to the nodes
+ * @output_msg: array of reply message buffer
+ * @timeout_sec: timeout value in seconds
  */
-int ibapi_send_reply_timeout_w_private_bits(int target_node, void *addr, int size, void *ret_addr,
-			     int max_ret_size, int *private_bits, int if_use_ret_phys_addr,
-			     unsigned long timeout_sec)
+int ibapi_multicast_send_reply_timeout(int num_nodes, int *target_node, 
+				struct fit_sglist *sglist, struct fit_sglist *output_msg,
+				int max_ret_size, int if_use_ret_phys_addr, unsigned long timeout_sec)
 {
-	return __ibapi_send_reply_timeout_w_private_bits(target_node, addr, size, ret_addr,
-			max_ret_size, private_bits, if_use_ret_phys_addr, timeout_sec,
-			__builtin_return_address(0));
+	ppc *ctx = FIT_ctx;
+	int ret;
+
+	ret = fit_multicast_send_reply(ctx, num_nodes, target_node, sglist,
+			output_msg, max_ret_size, 0, if_use_ret_phys_addr,
+			timeout_sec, __builtin_return_address(0));
+	return ret;
 }
 
 inline int ibapi_receive_message(unsigned int designed_port, 

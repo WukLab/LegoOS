@@ -141,7 +141,15 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 	f = fdget(fd);
 	f->f_flags = flags;
 	f->f_mode = mode;
-
+#ifdef CONFIG_EPOLL
+	INIT_LIST_HEAD(&f->f_epi_links);
+#endif
+#ifdef CONFIG_POLL
+	INIT_LIST_HEAD(&f->f_poll_links);
+#endif
+#if (CONFIG_EPOLL || CONFIG_POLL)
+	f->ready_size = 0;
+#endif
 	/*
 	 * Ugh.. Just a dirty workaround for the
 	 * 	Everything is a file philosophy.

@@ -30,6 +30,13 @@
 #include <lego/time.h>
 #include <lego/timer.h>
 
+#ifdef CONFIG_DEBUG_SOCKET
+#define sock_debug(fmt, ...) \
+	pr_debug("%s():%d " fmt, __func__, __LINE__, __VA_ARGS__)
+#else
+static inline void sock_debug(const char *fmt, ...) { }
+#endif
+
 atomic_t global_flow_id;
 
 u32 ip2saddr[TOTAL_PHYS_NODE];
@@ -116,12 +123,12 @@ int get_FIT_node_id_from_saddr(u32 saddr)
 {
 	int i;
 	
-	pr_crit("%s: saddr %x\n", __func__, saddr);
+	sock_debug("%s: saddr %x\n", __func__, saddr);
 	for (i = 0; i < TOTAL_PHYS_NODE; i++) {
 		if (ip2saddr[i] == saddr)
 			break;
 	}
-	pr_crit("%s: saddr %x node %d\n", __func__, saddr, i);
+	sock_debug("%s: saddr %x node %d\n", __func__, saddr, i);
 	
 	if (i == TOTAL_PHYS_NODE || ipid2nodeid[i] == -1) {
 		pr_crit("wrong socket address!\n");
@@ -155,14 +162,14 @@ int get_and_insert_new_local_port(int target_node)
 	set_bit(new_port, sock_local_port_bitmap);
 	spin_unlock(&sock_local_port_bitmap_lock);
 	new_port += SOCK_KERNEL_START_PORT_NUM;
-	pr_crit("%s: targetnode %d new port %d\n", __func__, target_node, new_port);
+	sock_debug("%s: targetnode %d new port %d\n", __func__, target_node, new_port);
 
 	/* search for the next fit internal port */
 	spin_lock(&fit_local_port_bitmap_lock);
 	new_fit_port = find_first_zero_bit(fit_local_port_bitmap, 1);
 	set_bit(new_fit_port, fit_local_port_bitmap);
 	spin_unlock(&fit_local_port_bitmap_lock);
-	pr_crit("%s: targetnode %d new port %d fitport %d\n", __func__, target_node, new_port, new_fit_port);
+	sock_debug("%s: targetnode %d new port %d fitport %d\n", __func__, target_node, new_port, new_fit_port);
 
 	/* insert port map to hash table */
 	new_entry = (struct sock_port_to_ib_port *)kmalloc(sizeof(struct sock_port_to_ib_port), GFP_KERNEL);
@@ -188,7 +195,7 @@ int set_internal_port(int target_node, int port)
 	new_entry->fit_port = new_fit_port;
 	hash_add(port_hash[target_node], &new_entry->hlist, port);
 
-	pr_crit("%s target_node %d port %d internal port %d\n",
+	sock_debug("%s target_node %d port %d internal port %d\n",
 			__func__, target_node, port, new_fit_port);
 	return new_fit_port;
 }
@@ -204,7 +211,7 @@ int get_internal_port(int target_node, int port)
 	}
 	spin_unlock(&port_hash_lock[target_node]);
 
-	pr_crit("%s target_node %d port %d internal port %d\n",
+	sock_debug("%s target_node %d port %d internal port %d\n",
 			__func__, target_node, port, internal_port_num);
 
 	if (internal_port_num == -1)
@@ -224,7 +231,7 @@ SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 		return fd;
 	}
 
-	pr_info("%s family %d type %x protocol %d fd %d\n",
+	sock_debug("%s family %d type %x protocol %d fd %d\n",
 			__func__, family, type, protocol, fd);
 
 	f = fdget(fd);
@@ -239,11 +246,15 @@ SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 	sock->sa_family = family;
 	sock->type = type;
 	sock->fd = fd;
+	sock->file = f;
 	INIT_LIST_HEAD(&sock->recvd_conn_list.list);
 
 	spin_lock(&global_sock_list_lock);
 	list_add_tail(&sock->list, &global_socket_list);
 	spin_unlock(&global_sock_list_lock);
+
+	sock_debug("%s created sock %p fd %d f %p\n", __func__, sock, fd, f);
+
 	return fd;
 }
 
@@ -283,14 +294,14 @@ static int tcp_setsockopt(struct lego_socket *sock, int level,
  *	get socket TCP options.
  */
 static int tcp_getsockopt(struct lego_socket *sock, int level,
-		int optname, char __user *optval, unsigned int optlen)
+		int optname, char __user *optval, int __user *optlen)
 {
 	struct sock_options *sk = &(sock->sk_opt);
 	int len;
 	int val;
 	int err = 0;
 
-	if (copy_from_user(&len, &optlen, sizeof(int)))
+	if (copy_from_user(&len, optlen, sizeof(int)))
 		return -EFAULT;
 	if (len < 0)
 		return -EINVAL;
@@ -373,7 +384,7 @@ int sock_getsockopt(struct lego_socket *sock, int level, int optname,
 	int len;
 	int val;
 
-	if (copy_from_user(&len, &optlen, sizeof(int)))
+	if (copy_from_user(&len, optlen, sizeof(int)))
 		return -EFAULT;
 	if (len < 0)
 		return -EINVAL;
@@ -504,20 +515,22 @@ SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, addr, int, addr_len)
 	saddr = sockaddr.sin_addr.s_addr;
 
 	if (saddr != htonl(INADDR_ANY)) {
-		pr_crit("Not supporting sa family other than INADD_ANY currently!\n");
+		pr_crit("Not supporting sa family other than INADDR_ANY currently!\n");
 		return -EFAULT;
 	}
-	pr_crit("binding port %d\n", port);
+	sock_debug("binding port %d\n", port);
 
 	memcpy(&sock->sockaddr, &sockaddr, addr_len);
 	sock->addr_len = addr_len;
 	sock->sa_family = sa_family;
 	sock->local_port = port;
 	sock->status = SOCK_BOUND;
+	sock->peer_node_id = -1; /* -1 for INADDR_ANY */
 
-	sock->local_port = set_internal_port(MY_NODE_ID, port);
+	sock->local_internal_port = set_internal_port(MY_NODE_ID, port);
 
-	pr_crit("binding to local fit port %d\n", sock->local_port);
+	sock_debug("bound fd %d sock %p to port %d fit internal port %d\n", 
+			fd, sock, port, sock->local_internal_port);
 
 	return 0;
 }
@@ -535,12 +548,11 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
 	int sender_id;
 	struct lego_sock_conn *sock_conn;
 
-	pr_crit("%s: fd %d f %p\n", __func__, fd, f);
+	sock_debug("%s: fd %d f %p\n", __func__, fd, f);
 	if (!f)
 		return -ENFILE;
 	sock = (struct lego_socket *)f->private_data;
-
-	sock_conn = (struct lego_sock_conn *)kmalloc(sizeof(struct lego_sock_conn), GFP_KERNEL);
+	sock->type |= f->f_flags;
 
 	/* has to bind first, then listen */
 	if (sock->status != SOCK_BOUND) {
@@ -549,22 +561,31 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
 	sock->status = SOCK_LISTEN;
 	sock->max_num_conn = backlog;
 	sock->curr_num_conn = 0;
+	
+	sock_conn = (struct lego_sock_conn *)kmalloc(sizeof(struct lego_sock_conn), GFP_KERNEL);
+	BUG_ON(!sock_conn);
+
 	receive_size = sizeof(struct lego_sock_conn);
-	pr_crit("%s: listening on fd %d backlog %d port %d local_port %d internal port %d\n", 
+	sock_debug("%s: listening on fd %d backlog %d port %d local_port %d internal port %d\n", 
 			__func__, fd, backlog, sock->local_port, sock->local_port, sock->local_internal_port);
 
 	while (sock->curr_num_conn < sock->max_num_conn) {
-		pr_crit("%s: fd %d curr_num_conn %d max_num_conn %d\n",
+		sock_debug("%s: fd %d curr_num_conn %d max_num_conn %d\n",
 				__func__, fd, sock->curr_num_conn, sock->max_num_conn);
-		/* listen always block */
-		ret_size= ibapi_sock_receive_message(&sender_id, sock->local_internal_port, (void *)sock_conn, receive_size, 0, 0);
+		ret_size= ibapi_sock_receive_message(&sender_id, sock->local_internal_port, (void *)sock_conn, receive_size, 0, sock->type);
 		if (ret_size > 0)
 			sock->curr_num_conn++;
+		sock_debug("%s: retsize %d socktype %x\n", __func__, ret_size, sock->type);
+		/* nonblocking socket, return immediately */
+		if (ret_size == 0 && (sock->type & O_NONBLOCK)) {
+			sock_debug("%s nonblocking socket, no incoming connections now.\n", __func__);
+			break;
+		}
 		if (ret_size != sizeof(struct lego_sock_conn)) {
 			pr_crit("BUG: [%s] received wrong sock data, smaller than sock header %d\n", __func__, ret_size);
 		}
 		if (sock_conn->op_code != SOCK_BUILD_CONN) { /* peer_fit_node_id field reused as OP code when sending */
-			pr_crit("Error: got message to port %d from node %d other than connection request\n",
+			sock_debug("Error: got message to port %d from node %d other than connection request\n",
 					sock->local_port, sender_id);
 			return -EINVAL;
 		}
@@ -595,14 +616,15 @@ SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
 	struct sock_conn_handshake_metadata handshake_header;
 	int sender_id;
 
-	pr_crit("%s: fd %d f %p\n", __func__, fd, f);
+	sock_debug("%s: fd %d f %p\n", __func__, fd, f);
 	if (!f)
 		return -ENFILE;
-	pr_crit("%s: fd %d f %p private %p\n", __func__, fd, f, f->private_data);
+	sock_debug("%s: fd %d f %p private %p\n", __func__, fd, f, f->private_data);
 
 	sock = (struct lego_socket *)f->private_data;
 	if (!sock)
 		return -ENFILE;
+	sock->type |= f->f_flags;
 
 	memcpy(&sockaddr, uservaddr, addrlen);
 	//if (copy_from_user(&sockaddr, uservaddr, addrlen))
@@ -612,7 +634,7 @@ SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
 	/* node_id -1 means not bound to a specific conn */
 	node_id = get_FIT_node_id_from_saddr(saddr);
 
-	pr_crit("%s: connecting to node %d port %d\n", __func__, node_id, sockaddr.sin_port);
+	sock_debug("%s: connecting to node %d port %d\n", __func__, node_id, sockaddr.sin_port);
 	memcpy(&sock->peer_sockaddr, &sockaddr, addrlen);
 	sock->peer_addr_len = addrlen;
 	sock->peer_node_id = node_id;
@@ -627,10 +649,10 @@ SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
 	sock_conn->sockaddr.sin_family = sock->sa_family;
 	sock_conn->sockaddr_len = addrlen;
 	sock_conn->internal_port = get_internal_port(node_id, sock->local_port);
-	pr_crit("connect assigned internal local port %d fit port %d\n", 
+	sock_debug("connect assigned internal local port %d fit port %d\n", 
 			sock->local_port, sock_conn->internal_port);
 
-	pr_crit("%s: dest node %d port %d\n", __func__, node_id, sock->peer_internal_port);
+	sock_debug("%s: dest node %d port %d\n", __func__, node_id, sock->peer_internal_port);
 	/* 
 	 * valid connection, 
 	 * send special notice to target node
@@ -638,15 +660,15 @@ SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
 	ret = ibapi_sock_send_message(node_id, sockaddr.sin_port, 0, sock_conn, sizeof(struct lego_sock_conn), 30, 0);
 	if (ret == 0) {
 		sock->status = SOCK_CONNECT_REQUESTED;
-		pr_crit("%s: sock connect requested\n", __func__);
+		sock_debug("%s: sock connect requested\n", __func__);
 		/*
 		 * waiting for peer to accept the connection request
 		 */
 		ret = ibapi_sock_receive_message(&sender_id, sock->local_internal_port, 
 				(void *)&handshake_header, sizeof(struct sock_conn_handshake_metadata), 0, 0);
 		if (sender_id == node_id && ret > 0 && handshake_header.status == SOCK_CONNECT_ACCEPTED) {
-			pr_crit("%s: sock connect accepted\n", __func__);
 			sock->peer_internal_port = handshake_header.peer_port;
+			sock_debug("%s: sock connect accepted peer port %d\n", __func__, sock->peer_internal_port);
 			/*
 			 * send ack to peer
 			 * finishing 3-way handshake
@@ -657,7 +679,7 @@ SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
 					&handshake_header, sizeof(struct sock_conn_handshake_metadata), 30, 0);
 			if (ret == 0) {
 				sock->status = SOCK_CONNECTED;
-				pr_crit("%s: sock connected to node %d port %d\n", 
+				sock_debug("%s: sock connected to node %d port %d\n", 
 						__func__, sock->peer_node_id, sock->peer_internal_port);
 			}
 		}
@@ -683,8 +705,10 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 	struct lego_sock_conn *header;
 	struct sock_conn_handshake_metadata handshake_header;
 	int sender_id;
+	int ret_size = 0, receive_size;
+	struct lego_sock_conn *sock_conn;
 
-	pr_crit("%s: fd %d f %p\n", __func__, fd, f);
+	sock_debug("%s: fd %d f %p\n", __func__, fd, f);
 	if (!f)
 		return -ENFILE;
 
@@ -698,6 +722,33 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 	sock = (struct lego_socket *)f->private_data;
 	if (!sock)
 		return -ENFILE;
+	sock->type |= f->f_flags;
+
+	sock_debug("%s: sock type %x curr_num_conn %d\n", __func__, sock->type, sock->curr_num_conn);
+	/* nonblocking socket, when we get here, we need another ib receive */
+	if (sock->type & O_NONBLOCK && sock->curr_num_conn == 0) {
+
+		sock_conn = (struct lego_sock_conn *)kmalloc(sizeof(struct lego_sock_conn), GFP_KERNEL);
+		BUG_ON(!sock_conn);
+		receive_size = sizeof(struct lego_sock_conn);
+
+		/* need a blocking receive when we get here */
+		ret_size= ibapi_sock_receive_message(&sender_id, sock->local_internal_port, (void *)sock_conn, receive_size, 0, 1);
+		if (ret_size > 0)
+			sock->curr_num_conn++;
+
+		sock_debug("%s: retsize %d socktype %x\n", __func__, ret_size, sock->type);
+		if (ret_size != sizeof(struct lego_sock_conn)) {
+			pr_crit("BUG: [%s] received wrong sock data, smaller than sock header %d\n", __func__, ret_size);
+		}
+		if (sock_conn->op_code != SOCK_BUILD_CONN) { /* peer_fit_node_id field reused as OP code when sending */
+			sock_debug("Error: got message to port %d from node %d other than connection request\n",
+					sock->local_port, sender_id);
+			return -EINVAL;
+		}
+		/* we now assume only one thread calling socket listen, so no need to lock the list */
+		list_add(&sock_conn->list, &sock->recvd_conn_list.list);
+	}
 
 	new_sock = (struct lego_socket *)kzalloc(sizeof(struct lego_socket), GFP_KERNEL);
 	BUG_ON(!new_sock);
@@ -705,19 +756,20 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 	new_f = fdget(new_fd);
 	if (!f || !new_f)
 		return -ENFILE;
-	pr_crit("%s: new_fd %d new_f %p\n", __func__, new_fd, new_f);
+	sock_debug("%s: new_fd %d new_f %p\n", __func__, new_fd, new_f);
 	new_f->private_data = (void *)new_sock;
 
 	new_sock->fd = new_fd;
 	memcpy(&new_sock->sockaddr, &sock->sockaddr, sock->addr_len);
 	new_sock->addr_len = sock->addr_len;
-	new_sock->local_internal_port = sock->local_internal_port;
-	new_sock->local_port = sock->local_port;
 	new_sock->sa_family = sock->sa_family;
 	new_sock->type = sock->type;
+	new_sock->file = new_f;
 
-	if (list_empty(&sock->recvd_conn_list.list))
+	if (list_empty(&sock->recvd_conn_list.list)) {
+		sock_debug("%s: no incoming connection\n", __func__);
 		return -EINVAL;
+	}
 	
 	header = list_first_entry(&sock->recvd_conn_list.list, struct lego_sock_conn, list);
 	list_del(&header->list);
@@ -726,6 +778,10 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 	new_sock->peer_addr_len = header->sockaddr_len;
 	new_sock->peer_internal_port = header->internal_port;
 	new_sock->peer_node_id = header->fit_node_id;
+	new_sock->local_port = get_and_insert_new_local_port(new_sock->peer_node_id);
+	new_sock->local_internal_port = get_internal_port(new_sock->peer_node_id, new_sock->local_port);
+	sock_debug("%s: got connection request fro mnode %d, assigned local port %d internalport %d\n",
+			__func__, new_sock->peer_node_id, new_sock->local_port, new_sock->local_internal_port);
 	
 	if (upeer_addrlen != NULL) {
 		ret = copy_to_user(upeer_sockaddr, &header->sockaddr, header->sockaddr_len);
@@ -753,10 +809,10 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 		return -EINVAL;
 	}
 
-	ret = ibapi_sock_receive_message(&sender_id, sock->local_internal_port, 
+	ret = ibapi_sock_receive_message(&sender_id, new_sock->local_internal_port, 
 			(void *)&handshake_header, sizeof(struct sock_conn_handshake_metadata), 0, 0);
 	if (ret > 0 && handshake_header.status == SOCK_CONNECT_ACKED) {
-		pr_crit("%s succesfully connected to node %d port %d!\n", 
+		sock_debug("%s succesfully connected to node %d port %d!\n", 
 				__func__, new_sock->peer_node_id, new_sock->peer_internal_port);
 		new_sock->status = SOCK_CONNECTED;
 	}
@@ -980,7 +1036,7 @@ SYSCALL_DEFINE3(recvmsg, int, fd, struct user_msghdr __user *, msg,
 			total_received_size += ret;
 			remain_size -= ret;
 			buf += ret;
-			pr_crit("%s: received size %d remain_size %d iov %d\n",
+			sock_debug("%s: received size %d remain_size %d iov %d\n",
 					__func__, ret, remain_size, i);
 		}
 	}
@@ -988,7 +1044,7 @@ SYSCALL_DEFINE3(recvmsg, int, fd, struct user_msghdr __user *, msg,
 out_freeiov:
 	kfree(iov);
 
-	pr_crit("%s: exit received size %d\n", __func__, total_received_size);
+	sock_debug("%s: exit received size %d\n", __func__, total_received_size);
 	return total_received_size;
 }
 
@@ -1013,7 +1069,7 @@ SYSCALL_DEFINE2(shutdown, int, fd, int, how)
 
 static int sock_open(struct file *f)
 {
-	pr_crit("%s\n", __func__);
+	sock_debug("%s\n", __func__);
 	return 0;
 }
 
@@ -1022,7 +1078,7 @@ static ssize_t sock_read(struct file *f, char __user *buf,
 {
 	struct lego_socket *sock;
 
-	pr_crit("%s\n", __func__);
+	sock_debug("%s\n", __func__);
 
 	sock = (struct lego_socket *)f->private_data;
 	return socket_receive_data(sock, buf, count, sock->type & O_NONBLOCK);
@@ -1031,8 +1087,18 @@ static ssize_t sock_read(struct file *f, char __user *buf,
 static ssize_t sock_write(struct file *f, const char __user *buf,
 			size_t count, loff_t *off)
 {
-	pr_crit("%s\n", __func__);
+	sock_debug("%s\n", __func__);
 	return socket_send_data((struct lego_socket *)f->private_data, (char __user *)buf, count);
+}
+
+/* currently only used in epoll */
+static unsigned int sock_poll(struct file *file)
+{
+	struct lego_socket *sock;
+
+	sock = file->private_data;
+
+	return sock->ready_state;
 }
 
 /* File callbacks that implement the socket fd behaviour */
@@ -1040,7 +1106,146 @@ static const struct file_operations socket_fops = {
 	.open		= sock_open,
 	.read		= sock_read,
 	.write		= sock_write,
+	.poll		= sock_poll,
 };
+
+#if (CONFIG_EPOLL | CONFIG_POLL)
+/* 
+ * Find file using target node ID and FIT internal port number
+ * For INADDR_ANY, target_node is not used for any matching
+ * WARN: still need to take care of socket reuse addr and port
+ */
+struct lego_socket *find_socket_from_node_port(int target_node, int port)
+{
+	struct lego_socket *sock;
+
+	//sock_debug("%s finding target_node %d port %d\n", __func__, target_node, port);
+	spin_lock(&global_sock_list_lock);
+	list_for_each_entry(sock, &global_socket_list, list) {
+		if (sock->local_internal_port == port) {
+			if (sock->peer_node_id == -1 || sock->peer_node_id == target_node) {
+					break;
+			}
+		}
+	}
+	spin_unlock(&global_sock_list_lock);
+
+	//sock_debug("%s: node %d port %d sock %p\n", __func__, target_node, port, sock);
+
+	return sock;
+}
+
+int sock_set_read_ready(int target_node, int port, int size)
+{
+	struct lego_socket *sock;
+
+	sock = find_socket_from_node_port(target_node, port);
+	if (!sock) {
+		printk(KERN_CRIT "Error: couldn't find socket for node %d port %d\n",
+				target_node, port);
+		return -EINVAL;
+	}
+
+	sock->file->ready_size += size;
+	sock->ready_state |= POLLIN;
+	sock->file->ready_state |= POLLIN;
+
+	sock_debug("%s: node %d port %d sock %p file %p read ready size %d\n", 
+			__func__, target_node, port, sock, sock->file, sock->file->ready_size);
+
+	return 0;
+}
+
+int sock_unset_read_ready(int target_node, int port, int size)
+{
+	struct lego_socket *sock;
+
+	sock = find_socket_from_node_port(target_node, port);
+	if (!sock) {
+		printk(KERN_CRIT "Error: couldn't find socket for node %d port %d\n",
+				target_node, port);
+		return -EINVAL;
+	}
+
+	sock->file->ready_size -= size;
+	if (sock->file->ready_size <= 0) {
+		sock->ready_state &= !POLLIN;
+		sock->file->ready_state &= !POLLIN;
+	}
+
+	sock_debug("%s: node %d port %d sock %p file %p read not ready readysize %d\n", 
+			__func__, target_node, port, sock, sock->file, sock->file->ready_size);
+
+	return 0;
+}
+
+int sock_set_write_ready(int target_node, int port)
+{
+	struct lego_socket *sock;
+
+	sock = find_socket_from_node_port(target_node, port);
+	if (!sock) {
+		printk(KERN_CRIT "Error: couldn't find socket file for node %d port %d\n",
+				target_node, port);
+		return -EINVAL;
+	}
+
+	sock->ready_state |= POLLOUT;
+	sock->file->ready_state |= POLLOUT;
+
+	sock_debug("%s: node %d port %d sock %p write ready\n", __func__, target_node, port, sock);
+
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_EPOLL
+int sock_epoll_callback(int target_node, int port)
+{
+	struct lego_socket *sock;
+	struct file *f;
+
+	sock = find_socket_from_node_port(target_node, port);
+	if (!sock) {
+		printk(KERN_CRIT "Error: couldn't find socket file for node %d port %d\n",
+				target_node, port);
+		return -EINVAL;
+	}
+
+	f = sock->file;
+
+	sock_debug("%s: node %d port %d file %p sock %p ready state %x\n", 
+			__func__, target_node, port, f, sock, sock->ready_state);
+
+	lego_epoll_callback(f, (void *)sock->ready_state);
+
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_POLL
+int sock_poll_callback(int target_node, int port)
+{
+	struct lego_socket *sock;
+	struct file *f;
+
+	sock = find_socket_from_node_port(target_node, port);
+	if (!sock) {
+		printk(KERN_CRIT "Error: couldn't find socket file for node %d port %d\n",
+				target_node, port);
+		return -EINVAL;
+	}
+
+	f = sock->file;
+
+	sock_debug("%s: node %d port %d file %p sock %p ready state %x\n", 
+			__func__, target_node, port, f, sock, sock->ready_state);
+
+	lego_poll_callback(f);
+
+	return 0;
+}
+#endif
 
 /*
  * Callback for syscall open()
@@ -1054,8 +1259,22 @@ int socket_file_open(struct file *filp)
 
 /* testing socket server */
 #define SERV_PORT 3000
+#define MAXEVENTS 100
+
+typedef union epoll_data {
+	void    *ptr;
+	int      fd;
+	uint32_t u32;
+	uint64_t u64;
+} epoll_data_t;
+
+struct user_epoll_event {
+	uint32_t     events;    /* Epoll events */
+	epoll_data_t data;      /* User data variable */
+};
 
 #ifdef CONFIG_SOCKET_SERVER
+
 static void test_socket_server(void)
 {
 	int listenfd, connfd;
@@ -1067,10 +1286,18 @@ static void test_socket_server(void)
 	char buf1[16];
 	char buf2[8];
 	char buf3[32];
+	int efd, s;
+	struct user_epoll_event event;  
+	struct user_epoll_event *events;  
+	int count;
 
-	pr_crit("%s\n", __func__);
+	/* Buffer where events are returned */  
+	events = kzalloc(MAXEVENTS * sizeof(struct epoll_event), GFP_KERNEL);
+  
+	sock_debug("%s\n", __func__);
+
 	listenfd = sys_socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-	pr_crit("%s got fd %d\n", __func__, listenfd);
+	sock_debug("%s got fd %d\n", __func__, listenfd);
 
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -1080,19 +1307,70 @@ static void test_socket_server(void)
 
 	sys_listen(listenfd, 1);
 
-	printk(KERN_CRIT "socket server listening on port %d\n", SERV_PORT);
+	sock_debug("socket server listening on port %d\n", SERV_PORT);
+
+	efd = sys_epoll_create1(0); 
+	BUG_ON(efd <= 0);
+
+	event.data.fd = listenfd; 
+	event.events = POLLIN | EPOLLET;
+	s = sys_epoll_ctl(efd, EPOLL_CTL_ADD, listenfd, &event);
+	BUG_ON(s);
 
 	while (1) {
-		connfd = sys_accept(listenfd, (struct sockaddr *)&cliaddr, &clilen);
-		if (connfd > 0) {
-			printk(KERN_CRIT "received connection request connected on fd %d\n", connfd);
+		n = sys_epoll_wait(efd, events, MAXEVENTS, -1); /* -1 never time out */
+		for (i = 0; i < n; i++) {
+			if ((events[i].events & POLLERR) ||  
+					(events[i].events & POLLHUP) ||  
+					(!(events[i].events & POLLIN)))  
+			{  
+				/* An error has occured on this fd, or the socket is not 
+				   ready for reading (why were we notified then?) */  
+				printk(KERN_CRIT "epoll error %x\n", events[i].events);  
+				continue;  
+			}
+			else if (events[i].data.fd == listenfd) {
+				sock_debug("received on listening conn %d\n", listenfd);
+				while (1) {
+					connfd = sys_accept(listenfd, (struct sockaddr *)&cliaddr, &clilen);
+					if (connfd > 0) {
+						sock_debug("received connection request connected on fd %d\n", connfd);
+					}
+
+					event.data.fd = connfd;
+					event.events = POLLIN | EPOLLET;  
+					s = sys_epoll_ctl(efd, EPOLL_CTL_ADD, connfd, &event);  
+
+					break;
+				}
+			}
+			else {
+				sock_debug("received on conn %d\n", events[i].data.fd);
+				count = sys_read(events[i].data.fd, buf, 4096);  
+				if (count > 0) {			
+					sock_debug("received buffer size %d %c\n", count, buf[0]);
+					buf[0] = 'b';
+					sys_send(events[i].data.fd, buf, 4096, 0);
+				}
+				
+				struct pollfd fds[2];
+				fds[0].fd = events[i].data.fd;
+				fds[0].events = POLLIN;
+				n = sys_poll(fds, 1, 60000);
+				if (n > 0) {
+					sock_debug("poll got %d events\n", n);
+					count = sys_read(fds[0].fd, buf, 4096);
+					sock_debug("received poll buffer size %d %c\n", count, buf[0]);
+				}
+			}
 		}
-		break;
 	}
 
+
+/*
 	n = sys_recv(connfd, buf, 4096, 0);
 	if (n > 0) {
-		pr_crit("received buffer size %d %c\n", n, buf[0]);
+		sock_debug("received buffer size %d %c\n", n, buf[0]);
 		buf[0] = 'b';
 		sys_send(connfd, buf, 4096, 0);
 	}
@@ -1110,8 +1388,9 @@ static void test_socket_server(void)
 	for (i = 0; i < CONFIG_FIT_INITIAL_SLEEP_TIMEOUT * 1000; i++) 
 		udelay(1000);
 	n = sys_recvmsg(connfd, &msg, 0);
-	pr_crit("received %d total data, buf1 %s buf2 %s buf3 %s\n",
+	sock_debug("received %d total data, buf1 %s buf2 %s buf3 %s\n",
 			n, buf1, buf2, buf3);
+*/
 }
 #endif
 
@@ -1128,7 +1407,15 @@ static void test_socket_client(void)
 	struct iovec iov[2];
 	char buf1[16] = "abcdefghijklmnop";
 	char buf2[16] = "1234567890uvwxyz";
+	struct user_epoll_event event;  
+	struct user_epoll_event *events;  
+	int efd, s;
 
+	/* Buffer where events are returned */  
+	events = kzalloc(MAXEVENTS * sizeof(struct epoll_event), GFP_KERNEL);
+
+	efd = sys_epoll_create1(0); 
+	BUG_ON(efd <= 0);
 
 	for (i = 0; i < CONFIG_FIT_INITIAL_SLEEP_TIMEOUT * 1000; i++) {
 		udelay(1000);
@@ -1137,11 +1424,16 @@ static void test_socket_client(void)
 		printk(KERN_CRIT "error in creating socket\n");
 		return;
 	}
-	pr_crit("%s: fd %d\n", __func__, sockfd);
+	sock_debug("%s: fd %d\n", __func__, sockfd);
+
+	event.data.fd = sockfd; 
+	event.events = POLLIN | EPOLLET;
+	s = sys_epoll_ctl(efd, EPOLL_CTL_ADD, sockfd, &event);
+	BUG_ON(s);
 
 	memset(&servaddr, 0, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
-	servaddr.sin_addr.s_addr = 0x91732e80; //inet_addr("128.46.115.145");
+	servaddr.sin_addr.s_addr = 0x14732e80; //0x91732e80; //inet_addr("128.46.115.145");
 	servaddr.sin_port = htons(SERV_PORT);
 
 	if (sys_connect(sockfd, (struct sockaddr *) &servaddr, sizeof (servaddr)) < 0) {
@@ -1150,8 +1442,10 @@ static void test_socket_client(void)
 
 	buf[0] = 'a';
 	ret = sys_send(sockfd, buf, 4096, 0);
+	n = sys_epoll_wait(efd, events, MAXEVENTS, -1); /* -1 never time out */
+	sock_debug("received on conn %d\n", events[i].data.fd);
 	ret = sys_recv(sockfd, buf, 4096, 0);
-	pr_crit("received buffer size %d %c\n", ret, buf[0]);
+	sock_debug("received buffer size %d %c\n", ret, buf[0]);
 
 	memset(&msg, 0, sizeof(msg));
 	msg.msg_iov = iov;
@@ -1160,9 +1454,10 @@ static void test_socket_client(void)
 	iov[0].iov_len = 16;
 	iov[1].iov_base = buf2;
 	iov[1].iov_len = 16;
+	buf1[0] = 'z';
 
 	n = sys_sendmsg(sockfd, &msg, 0);
-	pr_crit("received %d total data, buf1 %s buf2 %s\n",
+	sock_debug("sent %d total data, buf1 %s buf2 %s\n",
 			n, buf1, buf2);
 }
 #endif

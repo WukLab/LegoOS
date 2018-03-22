@@ -88,6 +88,7 @@ struct file_operations {
 	ssize_t (*read)(struct file *, char __user *, size_t, loff_t *);
 	ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *);
 	int	(*release) (struct file *);
+	unsigned int	(*poll)(struct file *);
 };
 
 #define FILENAME_LEN_DEFAULT	128
@@ -99,6 +100,16 @@ struct file {
 	loff_t			f_pos;
 	char			f_name[FILENAME_LEN_DEFAULT];
 	const struct file_operations *f_op;
+#ifdef CONFIG_EPOLL
+	struct list_head	f_epi_links;
+#endif
+#ifdef CONFIG_POLL
+	struct list_head	f_poll_links;
+#endif
+#if (CONFIG_EPOLL || CONFIG_POLL)
+	int			ready_state;
+	int			ready_size;
+#endif
 	void			*private_data;
 };
 

@@ -102,6 +102,45 @@ config SOCKET_CLIENT
 
 	  If unsure, say N.
 
+config DEBUG_SOCKET
+	bool "debugging socket system call"
+	default n
+	depends on SOCKET_SYSCALL
+	help
+	  Turn on to show socket syscall implementation debugging msgs
+
+config EPOLL
+	bool "epoll system call support"
+	default n
+	depends on SOCKET_SYSCALL
+	help
+	  Enable to use epoll on socket. Only processor components that have socket
+	  support should enable this config. Epoll for other file types are not 
+	  supported now.
+
+config DEBUG_EPOLL
+	bool "debugging epoll"
+	default n
+	depends on EPOLL
+	help
+	  Turn on to show epoll debugging msgs
+
+config POLL
+	bool "poll system call support"
+	default n
+	depends on SOCKET_SYSCALL
+	help
+	  Enable to use poll on socket. Only processor components that have socket
+	  support should enable this config. Poll for other file types are not 
+	  supported now.
+
+config DEBUG_POLL
+	bool "debugging poll"
+	default n
+	depends on POLL
+	help
+	  Turn on to show poll debugging msgs
+
 endif # INFINIBAND
 
 endmenu # Networking
