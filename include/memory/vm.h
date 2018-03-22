@@ -15,6 +15,7 @@
 #include <lego/pgfault.h>
 #include <lego/comp_memory.h>
 #include <memory/vm-pgtable.h>
+#include <memory/distvm.h>
 
 /*
  * Optimisation macro.  It is equivalent to:
@@ -136,6 +137,12 @@ vm_unmapped_area(struct lego_task_struct *p, struct vm_unmapped_area_info *info)
 
 pgprot_t vm_get_page_prot(unsigned long vm_flags);
 
+/* For distributed vma, make some mmap API public */
+void vma_gap_update(struct vm_area_struct *vma);
+unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
+	unsigned long addr, unsigned long len, unsigned long prot,
+	unsigned long flags, vm_flags_t vm_flags, unsigned long pgoff);
+
 /* arch-hook for loader */
 void arch_pick_mmap_layout(struct lego_mm_struct *mm);
 
@@ -166,6 +173,7 @@ void unmap_vmas(struct vm_area_struct *vma, unsigned long start_addr,
  * Look up the first VMA which intersects the interval start_addr..end_addr-1,
  * NULL if none.  Assume start_addr < end_addr.
  */
+
 static inline struct vm_area_struct *
 find_vma_intersection(struct lego_mm_struct * mm,
 		      unsigned long start_addr, unsigned long end_addr)
@@ -192,6 +200,11 @@ static inline int vma_adjust(struct vm_area_struct *vma, unsigned long start,
 	return __vma_adjust(vma, start, end, pgoff, insert, NULL);
 }
 
+int vma_expandable(struct lego_task_struct *tsk,
+		   struct vm_area_struct *vma, unsigned long delta);
+struct vm_area_struct *
+vma_to_resize(unsigned long addr, unsigned long old_len,
+	      unsigned long new_len, struct lego_task_struct *tsk);
 unsigned long move_vma(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 		unsigned long old_addr, unsigned long old_len,
 		unsigned long new_len, unsigned long new_addr);

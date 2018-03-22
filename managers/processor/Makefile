@@ -5,8 +5,9 @@
 obj-y := core.o
 obj-y += fork.o
 obj-y += exec.o
-obj-y += mmap.o
 obj-y += pgtable.o
+obj-$(CONFIG_GPM_HANDLER) += gpm_handler.o
+obj-y += mmap/
 obj-y += wait.o
 obj-y += p2gsm.o
 obj-y += pcache/

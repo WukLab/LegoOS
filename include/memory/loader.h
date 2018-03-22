@@ -59,7 +59,11 @@ int setup_arg_pages(struct lego_task_struct *tsk, struct lego_binprm *bprm,
 extern int exec_loader(struct lego_task_struct *tsk, const char *filename,
 		       u32 argc, const char **argv, unsigned long *argv_len,
 		       u32 envc, const char **envp, unsigned long *envp_len,
-		       u64 *new_ip, u64 *new_sp);
+		       u64 *new_ip, u64 *new_sp
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+		      ,struct vmr_map_reply *reply
+#endif
+		       );
 
 extern struct lego_binfmt elf_format;
 

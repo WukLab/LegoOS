@@ -15,8 +15,13 @@
 #include <lego/kthread.h>
 #include <lego/syscalls.h>
 #include <processor/processor.h>
+/* for unit test */
+#include <processor/distvm.h>
+
+#include <monitor/gpm_handler.h>
 
 #include "processor.h"
+
 
 #define MAX_INIT_ARGS	CONFIG_INIT_ENV_ARG_LIMIT
 #define MAX_INIT_ENVS	CONFIG_INIT_ENV_ARG_LIMIT
@@ -79,12 +84,25 @@ static inline void checkpoint_init(void) { }
  */
 void __init processor_manager_init(void)
 {
+	struct task_struct *ret __maybe_unused;
+	
 	pcache_post_init();
+
+#ifdef CONFIG_VMA_PROCESSOR_UNITTEST
+	prcsr_vma_unit_test();
+#endif
 
 #ifndef CONFIG_FIT
 	pr_info("Network is not compiled. Halt.");
 	while (1)
 		hlt();
+
+	/* gpm_handler listening thread */
+#ifdef CONFIG_GPM_HANDLER
+	ret = kthread_run(gpm_handler, NULL, "gpm_handler");
+#endif
+	if (IS_ERR(ret))
+		panic("Fail to create mc thread");
 #endif
 
 	/* Create checkpointing restore thread */
@@ -95,7 +113,6 @@ void __init processor_manager_init(void)
 	 */
 	run_global_thread();
 
-	manager_state = MANAGER_UP;
 	pr_info("Processor manager is running.\n");
 }
 

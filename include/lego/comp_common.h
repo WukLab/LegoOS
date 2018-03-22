@@ -14,6 +14,7 @@
 #ifndef _LEGO_COMP_COMMON_H_
 #define _LEGO_COMP_COMMON_H_
 
+#include <lego/distvm.h>
 #include <processor/pcache.h>
 
 #define DEF_MEM_HOMENODE	CONFIG_DEFAULT_MEM_NODE
@@ -78,6 +79,17 @@ static inline void check_pinned_status(void) { }
 #define P2S_STATFS	((__u32)__NR_statfs)
 #define P2S_GETDENTS	((__u32)__NR_getdents)
 #define P2S_READLINK	((__u32)__NR_readlink)
+
+/* Homenode Memory to other Memory */
+#define M2M_BASE 		((__u32)0x40000000)
+#define M2M_MMAP		(M2M_BASE + 1)
+#define M2M_MUNMAP		(M2M_BASE + 2)
+#define M2M_MREMAP_GROW		(M2M_BASE + 3)
+#define M2M_MREMAP_MOVE		(M2M_BASE + 4)
+#define M2M_MREMAP_MOVE_SPLIT	(M2M_BASE + 5)
+#define M2M_FINDVMA		(M2M_BASE + 6)
+#define M2M_MSYNC		(M2M_BASE + 7)
+#define M2M_MOVEDATA		(M2M_BASE + 8)
 
 /* Memory to Storage */
 #define M2S_READ	P2M_READ		/* Reuse the same nr */
@@ -257,6 +269,9 @@ struct m2p_execve_struct {
 	__u32	status;
 	__u64	new_ip;
 	__u64	new_sp;
+#ifdef CONFIG_DISTRIBUTED_VMA
+	struct vmr_map_reply map;
+#endif
 };
 int handle_p2m_execve(struct p2m_execve_struct *, u64, struct common_header *);
 
@@ -273,6 +288,9 @@ struct p2m_mmap_struct {
 struct p2m_mmap_reply_struct {
 	__u32	ret;
 	__u64	ret_addr;
+#ifdef CONFIG_DISTRIBUTED_VMA
+	struct vmr_map_reply map;
+#endif
 };
 int handle_p2m_mmap(struct p2m_mmap_struct *, u64, struct common_header *);
 
@@ -293,11 +311,13 @@ struct p2m_mremap_struct {
 	__u64	flags;
 	__u64	new_addr;
 };
-
 struct p2m_mremap_reply_struct {
 	__u32	status;
 	__u32	line;			/* which line fails... */
 	__u64	new_addr;
+#ifdef CONFIG_DISTRIBUTED_VMA
+	struct vmr_map_reply map;
+#endif
 };
 int handle_p2m_mremap(struct p2m_mremap_struct *, u64, struct common_header *);
 
@@ -314,6 +334,12 @@ int handle_p2m_mprotect(struct p2m_mprotect_struct *, u64, struct common_header 
 struct p2m_brk_struct {
 	__u32	pid;
 	__u64	brk;
+};
+struct p2m_brk_reply_struct {
+	__u64 	ret_brk;
+#ifdef CONFIG_DISTRIBUTED_VMA
+	struct vmr_map_reply map;
+#endif
 };
 int handle_p2m_brk(struct p2m_brk_struct *, u64, struct common_header *);
 
@@ -357,6 +383,102 @@ struct p2m_flush_payload {
 	char		pcacheline[PCACHE_LINE_SIZE];
 };
 int handle_p2m_flush_one(struct p2m_flush_payload *, u64, struct common_header *);
+
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
+/* M2M_MMAP */
+struct m2m_mmap_struct {
+	__u32	pid;
+	__u64	new_range;
+	__u64	addr;
+	__u64	len;
+	__u64	prot;
+	__u64	flags;
+	__u64	vm_flags;
+	__u64	pgoff;
+	char	f_name[MAX_FILENAME_LENGTH];
+};
+struct m2m_mmap_reply_struct {
+	__u64 addr;
+	__u64 max_gap;
+};
+int handle_m2m_mmap(struct m2m_mmap_struct *, u64, struct common_header *);
+
+/* M2M_MUMMAP */
+struct m2m_munmap_struct {
+	__u32 pid;
+	__u64 begin;
+	__u64 len;
+};
+struct m2m_munmap_reply_struct {
+	int status;
+	__u64 max_gap;
+};
+int handle_m2m_munmap(struct m2m_munmap_struct *, u64, struct common_header *);
+
+/* M2M_MREMAP_GROW */
+struct m2m_mremap_grow_struct {
+	__u32	pid;
+	__u64	addr;
+	__u64	old_len;
+	__u64	new_len;
+};
+struct m2m_mremap_grow_reply_struct {
+	int status;
+	__u64 max_gap;
+};
+int handle_m2m_mremap_grow(struct m2m_mremap_grow_struct *, u64, struct common_header *);
+
+/* M2M_MREMAP_MOVE */
+struct m2m_mremap_move_struct {
+	__u32	pid;
+	__u64	old_addr;
+	__u64	old_len;
+	__u64	new_len;
+	__u64	new_range;
+};
+struct m2m_mremap_move_reply_struct {
+	__u64 new_addr;
+	__u64 old_max_gap;
+	__u64 new_max_gap;
+};
+int handle_m2m_mremap_move(struct m2m_mremap_move_struct *, u64, struct common_header *);
+
+/* M2M_MREMAP_MOVE_SPLIT */
+struct m2m_mremap_move_split_struct {
+	__u32	pid;
+	__u64	old_addr;
+	__u64	old_len;
+	__u64	new_addr;
+	__u64	new_len;
+};
+struct m2m_mremap_move_split_reply_struct {
+	__u64 new_addr;
+	__u64 old_max_gap;
+	__u64 new_max_gap;
+};
+int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *, 
+				 u64, struct common_header *);
+
+/* M2M_FINDVMA */
+struct m2m_findvma_struct {
+	__u32 pid;
+	__u64 begin;
+	__u64 end;
+};
+struct m2m_findvma_reply_struct {
+	int vma_exist;
+};
+int handle_m2m_findvma(struct m2m_findvma_struct *, u64, struct common_header *);
+
+/* M2M_MSYNC */
+struct m2m_msync_struct {
+	__u32	pid;
+	__u64	start;
+	__u64	len;
+	__u32	flags;
+};
+int handle_m2m_msync(struct m2m_msync_struct *, u64, struct common_header *);
+#endif
 
 struct p2s_access_struct {
 	char filename[MAX_FILENAME_LENGTH];

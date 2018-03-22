@@ -20,6 +20,7 @@
 #include <lego/signalfd.h>
 #include <lego/timekeeping.h>
 #include <processor/processor.h>
+#include <processor/distvm.h>
 
 #include <asm/pgalloc.h>
 #include <asm/fpu/internal.h>
@@ -174,6 +175,9 @@ static void check_mm(struct mm_struct *mm)
 void __mmdrop(struct mm_struct *mm)
 {
 	BUG_ON(mm == &init_mm);
+#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
+	distvm_exit(mm);
+#endif
 	mm_free_pgd(mm);
 	check_mm(mm);
 	kfree(mm);
@@ -337,6 +341,15 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 		kfree(mm);
 		return NULL;
 	}
+
+#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
+	if (unlikely(distvm_init(mm, get_memory_home_node(p)))) {
+		pgd_free(mm, mm->pgd);
+		kfree(mm);
+		return NULL;
+	}
+#endif
+
 	return mm;
 }
 

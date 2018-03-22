@@ -23,6 +23,7 @@
 
 #include <processor/fs.h>
 #include <processor/processor.h>
+#include <processor/distvm.h>
 
 static int exec_mmap(void)
 {
@@ -446,6 +447,11 @@ int do_execve(const char __user *filename,
 	ret = flush_old_exec();
 	if (ret)
 		goto out;
+
+#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
+	map_mnode_from_reply(current->mm, 
+			   &((struct m2p_execve_struct *)reply)->map);
+#endif
 
 	/*
 	 * Use the f_name saved in payload

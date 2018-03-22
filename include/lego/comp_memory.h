@@ -81,6 +81,30 @@ struct vm_area_struct {
 	struct lego_file *vm_file;	/* File we map to (can be NULL )*/
 };
 
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
+/* the node id is acquired by array index, so node id field is not necessary */
+struct distvm_node {
+	unsigned int count;		/* # of range assigned */
+	struct list_head list;		/* list of rangeinfo */
+};
+
+struct vma_tree {
+	struct rb_root vm_rb;
+	struct vm_area_struct *mmap;
+	unsigned long begin;		/* vm range limit start */
+	unsigned long end;		/* vm range limit end */
+	unsigned long highest_vm_end;	/* same as vma struct */
+	unsigned long flag;		/* FIXED or not, this field is to
+					   help vmrange allocation to identify
+					   potential grow of MAP_FIXED request
+					   like brk */
+	/* fields below mainly serves lego_mm_struct.node_map */
+	__u64 max_gap;			/* max gap of corresponding range */
+	__u64 mnode;
+	struct list_head list;
+};
+#endif
+
 struct lego_mm_struct {
 	struct vm_area_struct *mmap;
 	struct rb_root mm_rb;
@@ -119,6 +143,28 @@ struct lego_mm_struct {
 
 	struct rw_semaphore mmap_sem;
 	struct lego_task_struct *task;
+
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	/*
+	 * distributed vma range limit management array. Unlike processor side, size of 
+	 * each entry is a pointer size. These structures share the semaphore above.
+	 */
+	struct vma_tree ** vmrange_map;	/* array of pointers or memory 
+					 * node ids to vma tree roots 
+					 * corresponding to same field in 
+					 * mm_struct */
+	struct distvm_node ** node_map;	/* array of pointers to memory node involved
+					 * in distributed vma */
+	struct rb_root vmpool_rb;	/* vm free pool rb tree, used for find free vm
+					   range */
+	/* 
+	 * A pointer point to buffer from handle request, set the pointer at the beginning 
+	 * of any vma relevant request (including do_execve) and perform subsequent 
+	 * operation, this pointer helps keeping existing API. A good practice is setting
+	 * it back to NULL before request handler return.
+	 */
+	struct vmr_map_reply * reply;	
+#endif 
 };
 
 struct lego_task_struct {
@@ -132,13 +178,29 @@ struct lego_task_struct {
 	unsigned int pid;		/* User-level pid, or kernel-level tgid */
 	unsigned int parent_pid;
 
+	int home_node;			/* process home node id */
+
 	char comm[LEGO_TASK_COMM_LEN];	/* executable name excluding path
 					 * - access with [gs]et_task_comm (which lock
 					 *   it with task_lock())
 					 * - initialized normally by setup_new_exec
 					 */
+
 	spinlock_t task_lock;
 };
+#define is_homenode(tsk) ({			\
+	tsk->home_node == MY_NODE_ID;		\
+	})
+
+#define mem_get_memory_home_node(tsk) ({	\
+		tsk->home_node;			\
+	})
+
+#define mem_set_memory_home_node(tsk, new)	\
+	do {					\
+		tsk->home_node = new;		\
+	} while (0)
+
 
 static inline void lego_task_lock(struct lego_task_struct *p)
 {
@@ -173,7 +235,7 @@ struct lego_file_operations {
 	int (*mmap)(struct lego_task_struct *, struct lego_file *, struct vm_area_struct *);
 };
 
-#define MAX_FILENAME_LEN 128
+#define MAX_FILENAME_LEN 	MAX_FILENAME_LENGTH
 struct lego_file {
 	atomic_t			f_count;
 	char				filename[MAX_FILENAME_LEN];

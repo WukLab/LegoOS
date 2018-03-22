@@ -137,7 +137,11 @@ err:
  * flags, permissions, and offset, so we use temporary values.  We'll update
  * them later in setup_arg_pages().
  */
-static int bprm_mm_init(struct lego_task_struct *tsk, struct lego_binprm *bprm)
+static int bprm_mm_init(struct lego_task_struct *tsk, struct lego_binprm *bprm
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+			,struct vmr_map_reply *reply
+#endif
+			)
 {
 	struct lego_mm_struct *mm = NULL;
 	int err = -ENOMEM;
@@ -145,6 +149,10 @@ static int bprm_mm_init(struct lego_task_struct *tsk, struct lego_binprm *bprm)
 	bprm->mm = mm = lego_mm_alloc(tsk, NULL);
 	if (!mm)
 		goto err;
+
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	load_reply_buffer(mm, reply);
+#endif
 
 	err = __bprm_mm_init(bprm);
 	if (err)
@@ -251,7 +259,11 @@ out:
 int exec_loader(struct lego_task_struct *tsk, const char *filename,
 		u32 argc, const char **argv, unsigned long *argv_len,
 		u32 envc, const char **envp, unsigned long *envp_len,
-		u64 *new_ip, u64 *new_sp)
+		u64 *new_ip, u64 *new_sp
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+		,struct vmr_map_reply *reply
+#endif
+	       )
 {
 	struct lego_binprm *bprm;
 	struct lego_file *file;
@@ -277,7 +289,11 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 	bprm->file = file;
 
 	/* Prepare a temporary stack vma */
-	retval = bprm_mm_init(tsk, bprm);
+	retval = bprm_mm_init(tsk, bprm
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+			  ,reply
+#endif
+			  );
 	if (retval)
 		goto out_free;
 
@@ -309,6 +325,10 @@ int exec_loader(struct lego_task_struct *tsk, const char *filename,
 					    argv_len, envp_len);
 	if (retval)
 		goto out;
+
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	remove_reply_buffer(tsk->mm);
+#endif
 
 	kfree(bprm);
 
