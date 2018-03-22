@@ -176,6 +176,13 @@ struct p2m_munmap_struct {
 	__u64	addr;
 	__u64	len;
 };
+struct p2m_munmap_reply_struct {
+	__u32	ret;
+#ifdef CONFIG_DISTRIBUTED_VMA
+	struct vmr_map_reply map;
+#endif
+};
+
 int handle_p2m_munmap(struct p2m_munmap_struct *, u64, struct common_header *);
 
 /*

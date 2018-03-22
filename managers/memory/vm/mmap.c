@@ -65,12 +65,20 @@ arch_get_unmapped_area(struct lego_task_struct *p, struct lego_file *filp,
 		return addr;
 
 	begin = mm->mmap_legacy_base;
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	end = mm->mmap_base;
+#else
 	end = TASK_SIZE;
+#endif
 
 	if (len > end)
 		return -ENOMEM;
 
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	if (addr && VMR_ALIGN(addr) != addr) {
+#else
 	if (addr) {
+#endif
 		addr = PAGE_ALIGN(addr);
 		vma = find_vma(mm, addr);
 		if (end - len >= addr &&
@@ -108,7 +116,11 @@ arch_get_unmapped_area_topdown(struct lego_task_struct *p, struct lego_file *fil
 		return addr;
 
 	/* requesting a specific address */
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	if (addr && VMR_ALIGN(addr) != addr) {
+#else
 	if (addr) {
+#endif
 		addr = PAGE_ALIGN(addr);
 		vma = find_vma(mm, addr);
 		if (TASK_SIZE - len >= addr &&
@@ -118,7 +130,11 @@ arch_get_unmapped_area_topdown(struct lego_task_struct *p, struct lego_file *fil
 
 	info.flags = VM_UNMAPPED_AREA_TOPDOWN;
 	info.length = len;
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	info.low_limit = mm->mmap_legacy_base;
+#else
 	info.low_limit = PAGE_SIZE;
+#endif
 	info.high_limit = mm->mmap_base;
 	info.align_mask = 0;
 	info.align_offset = pgoff << PAGE_SHIFT;
@@ -178,7 +194,7 @@ static long vma_compute_subtree_gap(struct vm_area_struct *vma)
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 	else {
 		struct vma_tree **map = vma->vm_mm->vmrange_map;
-		u64 idx = vmr_idx(VMR_OFFSET(vma->vm_start));
+		unsigned long idx = vmr_idx(VMR_OFFSET(vma->vm_start));
 		max -= map[idx]->begin;
 	}
 #endif
@@ -420,14 +436,13 @@ struct vm_area_struct *find_vma(struct lego_mm_struct *mm, unsigned long addr)
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
 	struct vma_tree *root = mm->vmrange_map[vmr_idx(addr)];
 
-	if (!root)
+	if (!root || !is_local(root->mnode))
 		return NULL;
-	VMA_BUG_ON(!is_local(root->mnode));
+
 	rb_node = root->vm_rb.rb_node;
 #else
 	rb_node = mm->mm_rb.rb_node;
 #endif
-
 	while (rb_node) {
 		struct vm_area_struct *tmp;
 
@@ -435,11 +450,13 @@ struct vm_area_struct *find_vma(struct lego_mm_struct *mm, unsigned long addr)
 
 		if (tmp->vm_end > addr) {
 			vma = tmp;
-			if (tmp->vm_start <= addr)
+			if (tmp->vm_start <= addr) {
 				break;
+			}
 			rb_node = rb_node->rb_left;
-		} else
+		} else {
 			rb_node = rb_node->rb_right;
+		}
 	}
 
 	return vma;
@@ -581,7 +598,7 @@ int insert_vm_struct(struct lego_mm_struct *mm, struct vm_area_struct *vma)
 	if (IS_ERR((void*)addr))
 		return addr;
 
-	if (map_vmatrees(mm, MY_NODE_ID, addr, TASK_SIZE - addr, 0))
+	if (map_vmatrees(mm, LEGO_LOCAL_NID, addr, TASK_SIZE - addr, 0))
 		return -ENOMEM;
 
 	root = mm->vmrange_map[vmr_idx(addr)];
@@ -1047,7 +1064,7 @@ static int __split_vma(struct lego_mm_struct *mm, struct vm_area_struct *vma,
 	struct vm_area_struct *new;
 	int err = 0;
 
-	vma_debug("%s, addr: %lx\n", __func__, addr);
+	vma_debug("%s, addr: %lx, new_below: %d\n", __func__, addr, new_below);
 	new = kmalloc(sizeof(*new), GFP_KERNEL);
 	if (!new)
 		return -ENOMEM;
@@ -1208,6 +1225,9 @@ int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len)
 		if (error)
 			return error;
 		prev = vma;
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+		save_vma_context(mm, mm->vmrange_map[vmr_idx(start)]);
+#endif
 	}
 
 	/* Does it split the last one? */
@@ -1864,7 +1884,12 @@ unsigned long vm_mmap(struct lego_task_struct *p, struct lego_file *file,
 	if (unlikely(offset_in_page(offset)))
 		return -EINVAL;
 
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	return distvm_mmap_homenode_noconsult(p->mm, file, addr, len, prot, 
+				    		flag, offset >> PAGE_SHIFT);
+#else
 	return vm_mmap_pgoff(p, file, addr, len, prot, flag, offset >> PAGE_SHIFT);
+#endif
 }
 
 /*
@@ -1993,7 +2018,7 @@ lego_mm_init(struct lego_mm_struct *mm, struct lego_task_struct *p)
 	spin_lock_init(&mm->page_table_lock);
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 	if (is_homenode(p))
-		distvm_init_homenode(mm);
+		distvm_init_homenode(mm, false);
 	else
 		distvm_init(mm);
 #endif

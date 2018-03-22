@@ -37,9 +37,9 @@ void processor_distvm_exit(struct mm_struct *mm)
 /*
  * Callback for pcache, to get the corresponding memory node
  */
-int get_memory_node(struct task_struct *p, u64 addr)
+int get_memory_node(struct task_struct *p, unsigned long addr)
 {
-	u64 idx = vmr_idx(addr);
+	unsigned long idx = vmr_idx(addr);
 	struct mm_struct *mm = p->mm;
 	vmr16 *map = mm->vmrange_map;
 	vmr16 node;
@@ -53,18 +53,19 @@ int get_memory_node(struct task_struct *p, u64 addr)
 	return (int)node;
 }
 
-int get_replica_node_by_addr(struct task_struct *p, u64 addr)
+int get_replica_node_by_addr(struct task_struct *p, unsigned long addr)
 {
 	panic("Implement me.");
 	return 0;
 }
 
-void set_memory_node(struct mm_struct *mm, u64 addr, u64 len, vmr16 node)
+void set_memory_node(struct mm_struct *mm, unsigned long addr, 
+		     unsigned long len, vmr16 node)
 {
 	vmr16 *map = mm->vmrange_map;
-	u64 idx = vmr_idx(addr);
-	u64 end = vmr_idx(VMR_ALIGN(addr + len));
-	u64 cpylen = end - idx;
+	unsigned long idx = vmr_idx(addr);
+	unsigned long end = vmr_idx(VMR_ALIGN(addr + len));
+	unsigned long cpylen = end - idx;
 
 	VMA_BUG_ON(idx >= VMR_COUNT);
 	VMA_BUG_ON(end > VMR_COUNT);
@@ -87,4 +88,16 @@ void map_mnode_from_reply(struct mm_struct *mm, struct vmr_map_reply *reply)
 
 		map_mnode(mm, entry[i].start, entry[i].len, entry[i].mnode);
 	}
+}
+
+int processor_fork_dup_distvm(struct task_struct *tsk, struct mm_struct *mm,
+			      struct mm_struct *oldmm)
+{
+	int ret;
+	ret = processor_distvm_init(mm, get_memory_home_node(tsk));
+	if (ret)
+		return ret;
+
+	memcpy(mm->vmrange_map, oldmm->vmrange_map, VMR_COUNT);
+	return 0;
 }

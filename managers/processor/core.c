@@ -47,7 +47,7 @@ static int procmgmt(void *unused)
 	 * Use the correct name if a real storage node is used.
 	 * If CONFIG_USE_RAMFS is set, then filename does not matter anyway.
 	 */
-	init_filename = "/root/ys/LegoOS/usr/exe.o";
+	init_filename = "/root/yutong/lego/usr/exe.o";
 	argv_init[0] = init_filename;
 
 	/*
@@ -124,8 +124,8 @@ void __init processor_manager_init(void)
 #ifdef CONFIG_VMA_PROCESSOR_UNITTEST
 	prcsr_vma_unit_test();
 #endif
-
-	init_gpm_handler();
+	
+	gpm_handler_init();
 
 	/* Create checkpointing restore thread */
 	checkpoint_init();

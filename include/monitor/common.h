@@ -10,23 +10,7 @@
 #ifndef _LEGO_MONITOR_COMMON_H
 #define _LEGO_MONITOR_COMMON_H
 
-/*
- * communication type enum
- *
- * Prefix Rules:
- * 	PM2P:	processor monitor -> processor
- * 	P2PM:	processor -> processor monitor
- * 	PM2UM:	processor monitor -> user monitor
- * 	UM2PM:	user monitor -> processor monitor
- * 	M2MM:   memory -> memory monitor
- *
- */
-
-#define MONITOR_BASE			((__u32)0x10000000)
-#define PM2P_START_PROC			(MONITOR_BASE + 1)
-#define P2PM_EXIT_PROC			(MONITOR_BASE + 2)
-#define M2MM_CONSULT	 		(MONITOR_BASE + 3) 
-#define MM2M_CONSULT_REPLY		(MONITOR_BASE + 4)	/* only used during reply */
+#include <lego/rpc/opcode.h>
 
 /*
  * PM2P_START_PROC
@@ -37,9 +21,9 @@ struct pm2p_start_proc_struct {
 	int homenode;			/* memory home node id */
 };
 
-#define start_proc_msg_size(hdr) \
+#define max_cmd_len \
 ({ \
-	(int)(hdr->length - sizeof(struct common_header) \
+	(int)(MAX_RXBUF_SIZE - sizeof(struct common_header) \
 		- sizeof(struct pm2p_start_proc_struct)); \
 })
 
@@ -57,49 +41,35 @@ struct p2pm_exit_proc_struct {
  * consult memory monitor for memory allocation
  */
 struct consult_info {
-	__u32 len;
+	unsigned long len;
 };
 
 /*
- * MM2M_CONSULT_REPLY
  * consult memory monitor for memory allocation
  */
-struct consult_reply {
-	__u32 count;
-};
-
-/*
- * the msg buffer above has to be a chain
- * of the struct alloc_scheme
- */
 struct alloc_scheme {
-	__u32 nid;
-	__u64 len;
+	int nid;
+	unsigned long len;
 };
 
-#define alloc_scheme_msg_size(reply) \
-({ \
- 	(((struct common_header *)reply)->length - \
-			sizeof(struct common_header) - \
-			sizeof(struct consult_reply)); \
-})
+/* 
+ * this looks not clean but becuase linux module don't have
+ * CONFIG_MEM_NR_NODES, so we have to define it in 
+ * linux module header
+ */
+struct consult_reply {
+	int count;
+	struct alloc_scheme scheme[CONFIG_MEM_NR_NODES];
+};
 
-#define is_reply_valid(length, count) \
-({ \
- 	(count && length == count * sizeof(struct alloc_scheme)); \
-})
-
-#define consult_reply_entry(reply)	\
-({ \
-	(struct consult_reply *)(reply + \
-			sizeof(struct common_header)); \
-})
-
-#define alloc_scheme_entry(reply)	\
-({ \
-	(struct alloc_scheme *)(reply + \
-			sizeof(struct common_header) + \
-			sizeof(struct consult_reply));  \
-})
+/* 
+ * M2MM_MNODE_STATUS 
+ * we don't need any struct when sending request,
+ * only necessary when receive request
+ */
+struct m2mm_mnode_status_reply {
+	unsigned long totalram;
+	unsigned long freeram;
+};
 
 #endif /* _LEGO_MONITOR_COMMON_H */

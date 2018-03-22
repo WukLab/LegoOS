@@ -15,6 +15,7 @@
 #ifndef _LEGO_PROCESSOR_NODE_H_
 #define _LEGO_PROCESSOR_NODE_H_
 
+#include <lego/comp_common.h>
 #include <lego/sched.h>
 
 #ifdef CONFIG_COMP_PROCESSOR
@@ -158,7 +159,6 @@ static inline int current_storage_home_node(void)
 	return default_storage_home_node(current);
 }
 #endif /* CONFIG_GSM */
-
 
 #else
 /*

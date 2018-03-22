@@ -34,22 +34,27 @@
 int processor_distvm_init(struct mm_struct *mm, int homenode);
 void processor_distvm_exit(struct mm_struct *mm);
 
-int get_memory_node(struct task_struct *p, u64 addr);
-int get_replica_node_by_addr(struct task_struct *p, u64 addr);
+int get_replica_node_by_addr(struct task_struct *p, unsigned long addr);
+int get_memory_node(struct task_struct *p, unsigned long addr);
+void set_memory_node(struct mm_struct *mm, unsigned long addr, 
+		     unsigned long len, vmr16 node);
 
-void set_memory_node(struct mm_struct *mm, u64 addr, u64 len, vmr16 node);
-
-static inline void map_mnode(struct mm_struct *mm, u64 addr, u64 len, vmr16 node)
+static inline void 
+map_mnode(struct mm_struct *mm, unsigned long addr, unsigned long len, vmr16 node)
 {
 	set_memory_node(mm, addr, len, node);
 }
 
-static inline void unmap_mnode(struct mm_struct *mm, u64 addr, u64 len)
+static inline void 
+unmap_mnode(struct mm_struct *mm, unsigned long addr, unsigned long len)
 {
 	set_memory_node(mm, addr, len, (vmr16)current_memory_home_node());
 }
 
 void map_mnode_from_reply(struct mm_struct *mm, struct vmr_map_reply *reply);
+
+int processor_fork_dup_distvm(struct task_struct *tsk, struct mm_struct *mm,
+			 struct mm_struct *oldmm);
 
 #ifdef CONFIG_VMA_PROCESSOR_UNITTEST
 /* unit test wrap up function */
@@ -65,7 +70,6 @@ void prcsr_vma_unit_test(void);
 static inline void processor_distvm_exit(struct mm_struct *mm)
 {
 }
-
 static inline int processor_distvm_init(struct mm_struct *mm, int homenode)
 {
 	return 0;
@@ -74,9 +78,13 @@ static inline int processor_distvm_init(struct mm_struct *mm, int homenode)
 /*
  * Always send everything to memory home node
  */
-static inline int get_memory_node(struct task_struct *p, u64 addr)
+static inline int get_memory_node(struct task_struct *p, unsigned long addr)
 {
+#ifdef CONFIG_COMP_PROCESSOR
 	return get_memory_home_node(p);
+#else
+	return CONFIG_DEFAULT_MEM_NODE;
+#endif 
 }
 
 /*
@@ -91,10 +99,16 @@ static inline int get_replica_node_by_addr(struct task_struct *p, u64 addr)
  * No need to set anything
  * It is all determined by home_node and replica_node, and can not be changed.
  */
-static inline void set_memory_node(struct mm_struct *mm, u64 addr, u64 len, vmr16 node)
+static inline void set_memory_node(struct mm_struct *mm, unsigned long addr, 
+				  unsigned long len, vmr16 node) 
 {
-
 }
-#endif /* CONFIG_DISTRIBUTED_VMA */
+static inline int processor_fork_dup_distvm(struct task_struct *tsk, 
+			 struct mm_struct *mm, struct mm_struct *oldmm)
+{
+	return 0;
+}
+
+#endif /* CONFIG_DISTRIBUTED_VMA_PROCESSOR */
 
 #endif /* _LEGO_PROCESSOR_MMAP_H_ */

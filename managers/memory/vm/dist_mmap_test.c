@@ -9,37 +9,24 @@
 
 #include <lego/slab.h>
 #include <lego/comp_memory.h>
+#include <lego/jiffies.h>
 #include <memory/distvm.h> 
 
-#define DEBUG_MACRO 0
-#define DEBUG_FREEPOOL_RBTREE 0
-#define DEBUG_GAP_LIST 0
-#define CONTEXT_SWITCH_TEST 0
-#define COMPREHENSIVE_TEST 1
+/* comprehensive test shouldn't run together with other tests */
+#define COMPREHENSIVE_TEST	1
+#define DEBUG_MACRO 		!COMPREHENSIVE_TEST
+#define DEBUG_FREEPOOL_RBTREE	!COMPREHENSIVE_TEST
+#define DEBUG_GAP_LIST		!COMPREHENSIVE_TEST
+#define CONTEXT_SWITCH_TEST	!COMPREHENSIVE_TEST
 
 static u16 cases;
 
-static void freepool_rbtree_print(struct lego_mm_struct *mm)
-{
-	struct rb_node *pos;
-
-	if (RB_EMPTY_ROOT(&mm->vmpool_rb)) {
-		vma_debug("[VMA TREE]: tree is empty\n");
-		return;
-	}
-	for (pos = rb_first(&mm->vmpool_rb); pos; pos = rb_next(pos)) {
-		struct vm_pool_struct *ent = rb_entry(pos, 
-					struct vm_pool_struct, vmr_rb);
-		vma_debug("[VMA TREE]: begin: %Lx, end: %Lx\n", 
-					ent->pool_start, ent->pool_end);
-	}
-}
-
 #if DEBUG_FREEPOOL_RBTREE 
 static int 
-freepool_alloc_testmsg(struct rb_root *root, u64 addr, u64 len, u64 flag, u16 cases)
+freepool_alloc_testmsg(struct rb_root *root, unsigned long addr, 
+		       unsigned long len, unsigned long flag)
 {
-	u64 ret;
+	int ret;
 
 	vma_debug("CASE %u: addr: %Lx, len: %Lx\n", cases, addr, len);
 	ret = vmpool_alloc(root, addr, len, flag);
@@ -52,9 +39,9 @@ freepool_alloc_testmsg(struct rb_root *root, u64 addr, u64 len, u64 flag, u16 ca
 }
 
 static int 
-freepool_retrieve_testmsg(struct rb_root *root, u64 addr, u64 end, u16 cases)
+freepool_retrieve_testmsg(struct rb_root *root, unsigned long addr, unsigned long end)
 {
-	u64 ret;
+	int ret;
 
 	vma_debug("CASE %u: addr: %Lx, end: %Lx\n", cases, addr, end);
 	ret = vmpool_retrieve(root, addr, end);
@@ -65,131 +52,134 @@ freepool_retrieve_testmsg(struct rb_root *root, u64 addr, u64 end, u16 cases)
 	vma_debug("CASE %u: success!\n", cases);
 	return 0;
 }
+#endif /* DEBUG_FREEPOOL_RBTREE */
 
 static int freepool_rbtree_test(struct lego_mm_struct *mm)
 {
+#if DEBUG_FREEPOOL_RBTREE 
 	struct rb_root root = mm->vmpool_rb;
-	u64 addr, len, end;
-	u64 flag = 0;
+	unsigned long addr, len, end;
+	unsigned long flag = 0;
 	/* 1 */
 	vma_debug("************ testing allocation ************\n");
 	vma_debug("CASE %u: allocated 1G w/o addr\n", ++cases);
 	addr = 0;
 	len = VM_GRANULARITY;
-	if (freepool_alloc_testmsg(&root, addr, len, flag, cases))
+	if (freepool_alloc_testmsg(&root, addr, len, flag))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 2 */
 	vma_debug("CASE %u: allocated 1G w/ addr\n", ++cases);
 	flag = MAP_FIXED;
 	addr = 0x7fff40000000;
 	len = VM_GRANULARITY;
-	if (freepool_alloc_testmsg(&root, addr, len, flag, cases))
+	if (freepool_alloc_testmsg(&root, addr, len, flag))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 3 */
 	vma_debug("CASE %u: allocated less than 1G w/ addr, not aligned\n", ++cases);
 	flag = MAP_FIXED;
 	addr = 0x7ffec0079340;
 	len = VM_GRANULARITY >> 1;
-	if (freepool_alloc_testmsg(&root, addr, len, flag, cases))
+	if (freepool_alloc_testmsg(&root, addr, len, flag))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 4 */
 	vma_debug("CASE %u: allocated less than 1G w/ addr, not aligned, cross bound\n",
 									++cases);
 	flag = MAP_FIXED;
 	addr = 0x7ffe30079340;
 	len = VM_GRANULARITY >> 1;
-	if (freepool_alloc_testmsg(&root, addr, len, flag, cases))
+	if (freepool_alloc_testmsg(&root, addr, len, flag))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 5 */
 	vma_debug("CASE %u: allocated 2G of pool w/o addr\n", ++cases);
 	flag = 0;
 	addr = 0;
 	len = VM_GRANULARITY << 1;
-	if (freepool_alloc_testmsg(&root, addr, len, flag, cases))
+	if (freepool_alloc_testmsg(&root, addr, len, flag))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 6 */
 	vma_debug("CASE %u: allocated w/ addr, not aligned, from 0\n", ++cases);
 	flag = MAP_FIXED;
 	addr = 0;
 	len = (VM_GRANULARITY << 1) + 0x87593fe;
-	if (freepool_alloc_testmsg(&root, addr, len, flag, cases))
+	if (freepool_alloc_testmsg(&root, addr, len, flag))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 7 */
 	vma_debug("CASE %u: allocated w/ addr, not aligned, with overlap at start\n", ++cases);
 	flag = MAP_FIXED;
 	addr = VM_GRANULARITY;
 	len = (VM_GRANULARITY << 2) + 0x87593fe;
-	if (freepool_alloc_testmsg(&root, addr, len, flag, cases))
+	if (freepool_alloc_testmsg(&root, addr, len, flag))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 8 */
 	vma_debug("CASE %u: allocated w/ addr, not aligned, with overlap at end\n", ++cases);
 	flag = MAP_FIXED;
 	addr = 0x7ffd70000000;
 	len = VM_GRANULARITY + 0x87593fe;
-	if (freepool_alloc_testmsg(&root, addr, len, flag, cases))
+	if (freepool_alloc_testmsg(&root, addr, len, flag))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 9 */
 	vma_debug("CASE %u: allocated w/ addr, not aligned, with overlap at end\n", ++cases);
 	flag = MAP_FIXED;
 	addr = 0x7ffd30000000;
 	len = 0x7fff60000000 - addr;
-	if (freepool_alloc_testmsg(&root, addr, len, flag, cases))
+	if (freepool_alloc_testmsg(&root, addr, len, flag))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 10 */
 	vma_debug("************ testing retrieve ************\n");
 	vma_debug("CASE %u: retrieve align to start\n", ++cases);
 	addr = 0x140000000;
 	end = 0x180000000;
-	if (freepool_retrieve_testmsg(&root, addr, end, cases))
+	if (freepool_retrieve_testmsg(&root, addr, end))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 11 */
 	vma_debug("CASE %u: retrieve from 0 and not aligned\n", ++cases);
 	addr = 0;
 	end = 0x40000000;
-	if (freepool_retrieve_testmsg(&root, addr, end, cases))
+	if (freepool_retrieve_testmsg(&root, addr, end))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 12 */
 	vma_debug("CASE %u: retrieve not aligned, create a hole\n", ++cases);
 	addr = 0x80000000;
 	end = 0x100000000;
-	if (freepool_retrieve_testmsg(&root, addr, end, cases))
+	if (freepool_retrieve_testmsg(&root, addr, end))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 13 */
 	vma_debug("CASE %u: retrieve aligned to both\n", ++cases);
 	addr = 0x100000000;
 	end = 0x140000000;
-	if (freepool_retrieve_testmsg(&root, addr, end, cases))
+	if (freepool_retrieve_testmsg(&root, addr, end))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 	/* 14 */
 	vma_debug("CASE %u: retrieve aligned to end\n", ++cases);
 	addr = 0x7ffd00000000;
 	end = 0x7fff00000000;
-	if (freepool_retrieve_testmsg(&root, addr, end, cases))
+	if (freepool_retrieve_testmsg(&root, addr, end))
 		return -1;
-	freepool_rbtree_print(mm);
+	dump_vmpool(mm);
 
+#endif /* DEBUG_FREEPOOL_RBTREE */
 	return 0;
 }
-#endif /* DEBUG_FREEPOOL_RBTREE */
 
 static void basic_macro_test(void)
 {
 #if DEBUG_MACRO
-	u64 addr=jiffies;
+	unsigned long addr=jiffies;
 	int node;
+	vma_debug("************ basic macro test start ************\n");
 	vma_debug("VM_GRANULARITY_ORDER: %d\n", CONFIG_VM_GRANULARITY_ORDER);
 	vma_debug("VM_GRANULARITY: %lx\n", VM_GRANULARITY);
 	vma_debug("VMR_SHIFT: %d\n", VMR_SHIFT);
@@ -207,28 +197,20 @@ static void basic_macro_test(void)
 	vma_debug("node: %d, valid: %d\n", node, is_node_valid(node));
 	node = 100000000;
 	vma_debug("node: %d, valid: %d\n", node, is_node_valid(node));
-	node = MY_NODE_ID;
-	vma_debug("MY_NODE_ID: %d, node: %d, local: %d\n",
-			MY_NODE_ID, node, is_local(node));
-	node = MY_NODE_ID + 2;
-	vma_debug("MY_NODE_ID: %d, node: %d, local: %d\n",
-			MY_NODE_ID, node, is_local(node));
-	vma_debug("\n");
+	node = LEGO_LOCAL_NID;
+	vma_debug("LEGO_LOCAL_NID: %d, node: %d, local: %d\n",
+			LEGO_LOCAL_NID, node, is_local(node));
+	node = LEGO_LOCAL_NID + 2;
+	vma_debug("LEGO_LOCAL_NID: %d, node: %d, local: %d\n",
+			LEGO_LOCAL_NID, node, is_local(node));
+	vma_debug("************ basic macro test done ************\n");
 #endif
-}
-
-#if DEBUG_GAP_LIST
-static void dump_gaps_onenode(struct distvm_node *node)
-{
-	struct list_head *head = &node->list;
-	struct vma_tree *pos;
-	list_for_each_entry(pos, head, list)
-		vma_debug("[GAP LIST]: max_gap: %Lu\n", pos->max_gap);
 }
 
 static void gaps_sort_test(struct lego_mm_struct *mm)
 {	
-	u64 mnode = 3;
+#if DEBUG_GAP_LIST
+	unsigned long mnode = 3;
 	struct distvm_node **node = &mm->node_map[mnode];
 	struct vma_tree rt1, rt2, rt3;
 
@@ -271,10 +253,10 @@ static void gaps_sort_test(struct lego_mm_struct *mm)
 	rt3.max_gap = 500;
 	sort_node_gaps(mm, &rt3);
 	dump_gaps_onenode(*node);
-}
 #endif
+}
 
-static void test_context_switch(struct lego_mm_struct *mm)
+static void context_switch_test(struct lego_mm_struct *mm)
 {
 #if CONTEXT_SWITCH_TEST
 	struct vma_tree tree;
@@ -309,57 +291,125 @@ static void test_context_switch(struct lego_mm_struct *mm)
 #endif
 }
 
+unsigned long consult_fake_gmm(unsigned long request, struct consult_reply* reply)
+{
+	static int which_node = 0;
+
+	if (CONFIG_MEM_NR_NODES == 1) {
+		reply->count = 1;
+		reply->scheme[0].nid = LEGO_LOCAL_NID;
+		reply->scheme[0].len = request;
+		return 0;
+	}
+
+	which_node = which_node == 1 ? 0 : 1;
+	if (CONFIG_MEM_NR_NODES > 1) {
+		if (request <= VM_GRANULARITY) {
+			reply->count = 1;
+			reply->scheme[0].nid = which_node;
+			reply->scheme[0].len = request;
+			return 0;
+		}
+
+		reply->count = 2;
+		reply->scheme[0].nid = 0;
+		reply->scheme[0].len = VM_GRANULARITY;
+		reply->scheme[1].nid = 1;
+		reply->scheme[1].len = request - VM_GRANULARITY;
+	}
+	return 0;
+}
+
+static void comprehensive_test(struct lego_task_struct *tsk)
+{
+#if COMPREHENSIVE_TEST
+	int ret;
+	unsigned long flag;
+	vma_debug("************ comprehensive test start ************\n");
+	ret = distvm_brk_homenode(tsk->mm, 0x663000, 0x3125000);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	ret = distvm_brk_homenode(tsk->mm, 0x3788000, VM_GRANULARITY);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	ret = distvm_brk_homenode(tsk->mm, 0x3788000 + VM_GRANULARITY, VM_GRANULARITY * 2);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	ret = distvm_brk_homenode(tsk->mm, 0x3788000 + VM_GRANULARITY * 3, 0x25000);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+
+	flag = MAP_PRIVATE | MAP_FIXED;
+	ret = (int)distvm_mmap_homenode(tsk->mm, NULL, 0x473f739000, 0x8c7000, 0, flag, 0);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	ret = (int)distvm_mmap_homenode(tsk->mm, NULL, 0x4740000000, 0x8c7000, 0, flag, 0);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	ret = (int)distvm_mmap_homenode(tsk->mm, NULL, 0x673f739000, 0x8c7000, 0, flag, 0);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	ret = (int)distvm_mmap_homenode(tsk->mm, NULL, 0x6740000000, 0x8c7000, 0, flag, 0);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	ret = (int)distvm_mmap_homenode(tsk->mm, NULL, 0x2713739000, 0x670000, 0, flag, 0);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+
+	flag = MAP_PRIVATE;
+	ret = (int)distvm_mmap_homenode(tsk->mm, NULL, 0, PAGE_SIZE, 0, flag, 0);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	ret = (int)distvm_mmap_homenode(tsk->mm, NULL, 0, VM_GRANULARITY * 2, 0, flag, 0);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+
+	flag = MREMAP_MAYMOVE;
+	/* cross node expand */
+	ret = (int)distvm_mremap_homenode(tsk->mm, 0x473f739000, 0x118e000, 0x1190000, flag, -1);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	/* cross node shrink */
+	ret = (int)distvm_mremap_homenode(tsk->mm, 0x473f739000, 0x1190000, 0x700000, flag, -1);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	/* cross range expand */
+	ret = (int)distvm_mremap_homenode(tsk->mm, 0x473f739000, 0x700000, 0x1000000, flag, -1);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	/* within node expand */
+	ret = (int)distvm_mremap_homenode(tsk->mm, 0x2713739000, 0x670000, 0x1000000, flag, -1);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	/* cross node move */
+	ret = (int)distvm_mremap_homenode(tsk->mm, 0x673f739000, 0x1180000, 0x1190000, flag, -1);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	/* within node move */
+	ret = (int)distvm_mremap_homenode(tsk->mm, 0x2713739000, 0x600000, 0x1000000, flag, -1);
+	memset(tsk->mm->reply, 0, sizeof(struct vmr_map_reply));
+	vma_debug("************ comprehensive test end ************\n");
+#endif
+}
+
 void mem_vma_unittest(void)
 {
 	/* fake a task struct */
 	struct lego_task_struct *tsk;
-	int ret;
-	u64 flag;
 	cases = 0;
 
 	/* initial setup */
 	tsk = kmalloc(sizeof(struct lego_task_struct), GFP_KERNEL); 
-	mem_set_memory_home_node(tsk, MY_NODE_ID);
+	mem_set_memory_home_node(tsk, LEGO_LOCAL_NID);
 	tsk->mm = lego_mm_alloc(tsk, NULL);
 	if (!tsk->mm) {
 		vma_debug("distributed vma initialization failed!\n");
 		return;
 	}
+	tsk->mm->reply = kzalloc(sizeof(struct vmr_map_reply), GFP_KERNEL);
+	if (!tsk->mm->reply) {
+		vma_debug("distributed vma initialization failed!\n");
+		return;
+	}
+	tsk->pid = 45678; /* some fake pid */
 	vma_debug("distributed vma initialization success!\n");
 	arch_pick_mmap_layout(tsk->mm);
-	freepool_rbtree_print(tsk->mm);
+	dump_vmpool(tsk->mm);
 
 	basic_macro_test();
-	test_context_switch(tsk->mm);
-
-#if DEBUG_FREEPOOL_RBTREE
+	context_switch_test(tsk->mm);
 	freepool_rbtree_test(tsk->mm);
-#endif
-#if DEBUG_GAP_LIST
 	gaps_sort_test(tsk->mm);
-#endif
-#if COMPREHENSIVE_TEST
-	vma_debug("************ comprehensive test ************\n");
-	flag = MAP_PRIVATE | MAP_FIXED;
-	ret = (int)distvm_mmap_homenode(tsk->mm, NULL, 0, 0x655840, 0, flag, 0);
-	vma_debug("mmap return: %d\n", ret);
-	dump_vmas_onetree(tsk->mm->vmrange_map[vmr_idx(0)]);
-
-	flag = MAP_PRIVATE | MAP_FIXED;
-	ret = (int)distvm_mmap_homenode(tsk->mm, NULL, 0x677000, 0x670840, 0, flag, 0);
-	vma_debug("mmap return: %d\n", ret);
-	dump_vmas_onetree(tsk->mm->vmrange_map[vmr_idx(0x65000)]);
-
-	flag = MAP_PRIVATE;
-	ret = (int)distvm_mmap_homenode(tsk->mm, NULL, 0, PAGE_SIZE, 0, flag, 0);
-	vma_debug("mmap return: %d\n", ret);
-	dump_vmas_onetree(tsk->mm->vmrange_map[VMR_COUNT - 1]);
-#endif
+	comprehensive_test(tsk);
 
 	/* free */
 	vma_debug("distributed vma struct free\n");
 	distvm_exit_homenode(tsk->mm);
-	freepool_rbtree_print(tsk->mm);
+	dump_vmpool(tsk->mm);
 	kfree(tsk->mm);
 	kfree(tsk);
 }

@@ -96,8 +96,8 @@ struct vma_tree {
 					   potential grow of MAP_FIXED request
 					   like brk */
 	/* fields below mainly serves lego_mm_struct.node_map */
-	__u64 max_gap;			/* max gap of corresponding range */
-	__u64 mnode;
+	unsigned long max_gap;		/* max gap of corresponding range */
+	int mnode;
 	struct list_head list;
 };
 #endif

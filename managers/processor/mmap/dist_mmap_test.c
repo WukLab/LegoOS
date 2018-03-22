@@ -14,10 +14,11 @@
 #include <lego/slab.h>
 #include <processor/distvm.h>
 
-static void test_map_find(struct mm_struct *mm, u64 addr, u64 len, int node)
+static void test_map_find(struct mm_struct *mm, unsigned long addr, 
+			  unsigned long len, int node)
 {
 	static int cases = 0;
-	u64 end = addr + len;
+	unsigned long end = addr + len;
 
 	cases++;
 	map_mnode(mm, addr, len, node);

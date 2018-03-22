@@ -16,7 +16,6 @@
 
 #include <memory/task.h>
 #include <memory/vm-pgtable.h>
-#include <memory/distvm.h>
 
 /*
  * Optimisation macro.  It is equivalent to:

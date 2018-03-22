@@ -29,7 +29,9 @@ static int do_swap_page(struct vm_area_struct *vma, unsigned long address,
 static int do_wp_page(struct vm_area_struct *vma, unsigned long address,
 		      unsigned int flags, pte_t *ptep, pmd_t *pmd, pte_t entry)
 {
-	BUG();
+	pr_debug("%s, address: %lx, flags: %x\n", __func__, address, flags);
+	WARN_ON(1);
+	//BUG();
 	return 0;
 }
 

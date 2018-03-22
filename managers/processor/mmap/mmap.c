@@ -61,7 +61,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 			&payload, sizeof(payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
 
-	mmap_debug("ret_brk: %#lx", reply.ret_brk);
+	mmap_debug("ret_brk: %#Lx", reply.ret_brk);
 	if (likely(ret_len == sizeof(reply))) {
 		if (WARN_ON(reply.ret_brk == RET_ESRCH 
 			 || reply.ret_brk == RET_EINTR))
@@ -140,7 +140,8 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 {
 	struct p2m_munmap_struct payload;
-	long retlen, retbuf;
+	struct p2m_munmap_reply_struct retbuf;
+	long retlen;
 
 	munmap_debug("release: [%#lx - %#lx]", addr, addr + len);
 
@@ -160,22 +161,22 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 			false, DEF_NET_TIMEOUT);
 
 	if (unlikely(retlen != sizeof(retbuf))) {
-		retbuf = -EIO;
+		retbuf.ret = -EIO;
 		goto out;
 	}
 
 #ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
-	unmap_mnode(current->mm, addr, len);
+	map_mnode_from_reply(current->mm, &retbuf.map);
 #endif
 
 	/* Unmap emulated pgtable */
-	if (likely(retbuf == 0))
+	if (likely(retbuf.ret == 0))
 		release_pgtable(current, addr, addr + len);
 	else
-		pr_err("munmap() fail: %s\n", ret_to_string(retbuf));
+		pr_err("munmap() fail: %s\n", ret_to_string(retbuf.ret));
 
 out:
-	return retbuf;
+	return retbuf.ret;
 }
 
 /*

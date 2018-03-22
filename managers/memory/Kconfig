@@ -206,6 +206,22 @@ config DEBUG_PAGE_CACHE
 	  If unsure say N.
 endif # MEM_PAGE_CACHE
 
+config GMM
+	bool "Global memory monitor"
+	default n
+	help
+	  Enable this to use Global memory monitor
+
+if GMM
+config GMM_NODEID
+	int "GMM IB node ID"
+	default 3
+	help
+	  if running a multiple monitor on same machine, IB node
+	  ID can be same as Storage node, GPM and GSM's
+
+endif #if GMM
+
 endif # if COMP_MEMORY
 
 endmenu

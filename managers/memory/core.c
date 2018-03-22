@@ -239,7 +239,7 @@ static void __thpool_worker(struct thpool_worker *worker,
 		break;
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-/* DISTRIBUTED MMAP */
+/* DISTRIBUTED VMA */
 	case M2M_MMAP:
 		handle_m2m_mmap(payload, desc, hdr);
 		break;
@@ -262,6 +262,16 @@ static void __thpool_worker(struct thpool_worker *worker,
 
 	case M2M_MREMAP_MOVE_SPLIT:
 		handle_m2m_mremap_move_split(payload, desc, hdr);
+		break;
+
+	case M2M_FORK:
+		handle_m2m_fork(payload, desc, hdr);
+		break;
+#endif
+
+#ifdef CONFIG_GMM
+	case M2MM_STATUS_REPORT:
+		handle_m2mm_status_report(desc, hdr);
 		break;
 #endif
 

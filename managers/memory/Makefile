@@ -29,3 +29,6 @@ obj-y += loader/
 obj-$(CONFIG_MEM_PAGE_CACHE) += pgcache/
 
 obj-y += ramfs/
+
+# Monitor
+obj-y += monitor/

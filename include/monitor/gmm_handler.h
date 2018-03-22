@@ -7,14 +7,17 @@
  * (at your option) any later version.
  */
 
-#ifndef _LINUX_MODULE_FIT_CONFIG_H_
-#define _LINUX_MODULE_FIT_CONFIG_H_
+#ifndef _GMM_HANDLER_H
+#define _GMM_HANDLER_H
 
-/* Lego cluster config */
-#define CONFIG_FIT_LOCAL_ID	3
-#define CONFIG_FIT_NR_NODES	5
-#define MAX_NODE		CONFIG_FIT_NR_NODES
+#ifdef CONFIG_GMM
+#include <monitor/common.h>
 
-//#define CONFIG_SOCKET_O_IB
+/* 
+ * M2MM_STATUS_REPORT
+ */
+int handle_m2mm_status_report(u64, struct common_header *);
 
-#endif /* _LINUX_MODULE_FIT_CONFIG_H_ */
+#endif /* CONFIG_GMM */
+
+#endif /* _GMM_HANDLER_H */

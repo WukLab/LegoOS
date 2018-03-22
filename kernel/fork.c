@@ -394,6 +394,10 @@ static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 	if (err)
 		goto out;
 
+	err = processor_fork_dup_distvm(tsk, mm, oldmm);
+	if (err)
+		goto out;
+
 	return mm;
 
 out:

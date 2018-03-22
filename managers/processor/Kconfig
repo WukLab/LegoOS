@@ -75,12 +75,21 @@ config CHECKPOINT
 
 	  If unsure, say N.
 
-config GPM_HANDLER
-	bool "Enable gpm handler"
+config GPM
+	bool "Global processor monitor"
 	default n
-	depends on GPM
 	help
-	  gpm message receiver and handler
+	  Enable this to use Global processor monitor
+
+if GPM
+config GPM_NODEID
+	int "GMM IB node ID"
+	default 3
+	help
+	  if running a multiple monitor on same machine, IB node
+	  ID can be same as Storage node, GMM, and GSM's
+
+endif #if GPM
 
 source "managers/processor/pcache/Kconfig"
 source "managers/processor/fs/Kconfig"

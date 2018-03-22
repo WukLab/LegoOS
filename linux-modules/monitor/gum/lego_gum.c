@@ -7,6 +7,8 @@
 * (at your option) any later version.
 */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/parser.h>
@@ -20,10 +22,8 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 
-#include "lego.h"
-
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Wuklab@Purdue");
+#include <common.h>
+#include <gpm.h>
 
 /* Log file and device console */
 const char *fname = "/root/lego-msg.log";
@@ -76,12 +76,12 @@ static ssize_t write_to_console(const char *buf, int count)
 		return -EFAULT;
 	}
 	
-	printk(KERN_INFO "Writing to console.\n");
+	pr_info("Writing to console.\n");
 	
 	confp->f_pos = 0;
 
 	if (!confp->f_op->write) {
-		printk(KERN_INFO "Err writing to console.\n");
+		pr_info("Err writing to console.\n");
 		mutex_lock(&confp_lock);
 			kernel_write(confp, buf, strlen(buf), confp->f_pos); 
 		mutex_unlock(&confp_lock);
@@ -119,11 +119,11 @@ void log_msg_bytes(size_t nr_bytes)
 enum {
 	OP_NODE, // manager node id
 	OP_GPID, // global unique process id
-	OP_STATUS // status information
+	OP_STATUS, // status information
+	OP_START_PROC // start a process
 /*
 * OP_START_NODE, // start a node
 * OP_STOP_NODE, // stop a node
-* OP_START_PROC, // start a process
 * OP_STOP_PROC, // terminate a process
 * OP_FILE // file name to start
 */
@@ -132,7 +132,8 @@ enum {
 static const match_table_t tokens = {
 	{ OP_NODE, "node=%u"},
 	{ OP_GPID, "gpid=%u"},
-	{ OP_STATUS, "status"}
+	{ OP_STATUS, "status"},
+	{ OP_START_PROC, "exec=%s"}
 };
 
 #define MAX_OPT_ARGS	4
@@ -156,16 +157,18 @@ static ssize_t lego_proc_write(struct file *file, const char __user *buf,
 				size_t count, loff_t *offs)
 {
 #define MAX_NR_BYTES	64
+	int len;
 	int option;
 	char *p;
 	char *options;
+	char *command;
 	substring_t args[MAX_OPT_ARGS];
 
 	unsigned long node = 0, gpid = 0;
 
 	bool status = false;
 
-	printk(KERN_INFO "lego_proc_write: Started.\n");
+	pr_info("lego_proc_write: Started.\n");
 	
 	if (count > MAX_NR_BYTES)
 		return -EINVAL;
@@ -179,7 +182,7 @@ static ssize_t lego_proc_write(struct file *file, const char __user *buf,
 		return -EFAULT;
 	}
 
-	printk(KERN_INFO "lego_proc_write: Parsing...\n");
+	pr_info("lego_proc_write: Parsing...\n");
 
 	if (options[count - 1] == '\n')
 		options[count - 1] = '\0';
@@ -205,6 +208,14 @@ static ssize_t lego_proc_write(struct file *file, const char __user *buf,
 			case OP_STATUS:
 				status = true;
 				break;
+			case OP_START_PROC:
+				command = args[0].from;
+				len = strlen(command);
+				if (len < 0)
+					goto bad;
+				if (lego_proc_create(command, len) < 0)
+					goto bad;
+				break;
 			default:
 				pr_err("unknown option: '%s'", p);
 				goto free;
@@ -216,13 +227,13 @@ static ssize_t lego_proc_write(struct file *file, const char __user *buf,
 			// send request to node for the status information
 			// write the response to the file and to the output
 			
-			printk(KERN_INFO "lego_proc_write: Node %lu status requested.\n", node);
+			pr_info("lego_proc_write: Node %lu status requested.\n", node);
 		}
 		if (gpid > 0) {
 			// get the node id of the corresponding gpid from the global table 
 			// send_request_to_node
 			// write the response back to the log file
-			printk(KERN_INFO "lego_proc_write: gpid %lu status requested.\n", gpid);
+			pr_info("lego_proc_write: gpid %lu status requested.\n", gpid);
 		}
 	}
 	
@@ -253,7 +264,7 @@ static const struct file_operations lego_proc_fops = {
 int create_lego_proc_file(void)
 {
 	proc_create("lego", 0644, NULL, &lego_proc_fops);
-	printk(KERN_INFO "called create_lego_proc_file\n");
+	pr_info("called create_lego_proc_file\n");
 	open_status_log_file();
 	return 0;
 }
@@ -262,19 +273,23 @@ void remove_lego_proc_file(void)
 {
 	remove_proc_entry("lego", NULL);
 	close_status_log_file();
-	printk(KERN_INFO "lego module removed.\n");
+	pr_info("lego module removed.\n");
 }
 
-static void lego_module_init(void)
+static int __init lego_gum_module_init(void)
 {
-	printk(KERN_INFO "lego module init called.\n");
-	create_lego_proc_file();
+	int ret;
+	pr_info("lego user monitor module init called.\n");
+	ret = create_lego_proc_file();
+	return ret;
 }
 
-static void lego_module_exit(void)
+static void __exit lego_gum_module_exit(void)
 {
 	remove_lego_proc_file();
 }
 
-module_init(lego_module_init);
-module_exit(lego_module_exit);
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Wuklab@Purdue");
+module_init(lego_gum_module_init);
+module_exit(lego_gum_module_exit);

@@ -15,83 +15,89 @@
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
 /* M2M_MMAP */
 struct m2m_mmap_struct {
-	__u32	pid;
-	__u64	new_range;
-	__u64	addr;
-	__u64	len;
-	__u64	prot;
-	__u64	flags;
-	__u64	vm_flags;
-	__u64	pgoff;
-	char	f_name[MAX_FILENAME_LENGTH];
+	u32		pid;
+	u32		prcsr_nid;
+	unsigned long	new_range;
+	unsigned long	addr;
+	unsigned long	len;
+	unsigned long	prot;
+	unsigned long	flags;
+	vm_flags_t	vm_flags;
+	unsigned long	pgoff;
+	char		f_name[MAX_FILENAME_LENGTH];
 };
 struct m2m_mmap_reply_struct {
-	__u64 addr;
-	__u64 max_gap;
+	unsigned long	addr;
+	unsigned long	max_gap;
 };
 int handle_m2m_mmap(struct m2m_mmap_struct *, u64, struct common_header *);
 
 /* M2M_MUMMAP */
 struct m2m_munmap_struct {
-	__u32 pid;
-	__u64 begin;
-	__u64 len;
+	u32		pid;
+	u32		prcsr_nid;
+	unsigned long	begin;
+	unsigned long	len;
 };
 struct m2m_munmap_reply_struct {
 	int status;
-	__u64 max_gap;
+	unsigned long	max_gap;
 };
 int handle_m2m_munmap(struct m2m_munmap_struct *, u64, struct common_header *);
 
 /* M2M_MREMAP_GROW */
 struct m2m_mremap_grow_struct {
-	__u32	pid;
-	__u64	addr;
-	__u64	old_len;
-	__u64	new_len;
+	u32		pid;
+	u32		prcsr_nid;
+	unsigned long	addr;
+	unsigned long	old_len;
+	unsigned long	new_len;
 };
 struct m2m_mremap_grow_reply_struct {
 	int status;
-	__u64 max_gap;
+	unsigned long max_gap;
 };
 int handle_m2m_mremap_grow(struct m2m_mremap_grow_struct *, u64, struct common_header *);
 
 /* M2M_MREMAP_MOVE */
 struct m2m_mremap_move_struct {
-	__u32	pid;
-	__u64	old_addr;
-	__u64	old_len;
-	__u64	new_len;
-	__u64	new_range;
+	u32		pid;
+	u32		prcsr_nid;
+	unsigned long	old_addr;
+	unsigned long	old_len;
+	unsigned long	new_len;
+	unsigned long	new_range;
 };
 struct m2m_mremap_move_reply_struct {
-	__u64 new_addr;
-	__u64 old_max_gap;
-	__u64 new_max_gap;
+	unsigned long	new_addr;
+	unsigned long	old_max_gap;
+	unsigned long	new_max_gap;
 };
 int handle_m2m_mremap_move(struct m2m_mremap_move_struct *, u64, struct common_header *);
 
 /* M2M_MREMAP_MOVE_SPLIT */
 struct m2m_mremap_move_split_struct {
-	__u32	pid;
-	__u64	old_addr;
-	__u64	old_len;
-	__u64	new_addr;
-	__u64	new_len;
+	u32		pid;
+	u32		prcsr_nid;
+	unsigned long	old_addr;
+	unsigned long	old_len;
+	unsigned long	new_addr;
+	unsigned long	new_len;
 };
 struct m2m_mremap_move_split_reply_struct {
-	__u64 new_addr;
-	__u64 old_max_gap;
-	__u64 new_max_gap;
+	unsigned long	new_addr;
+	unsigned long	old_max_gap;
+	unsigned long	new_max_gap;
 };
 int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *, 
 				 u64, struct common_header *);
 
 /* M2M_FINDVMA */
 struct m2m_findvma_struct {
-	__u32 pid;
-	__u64 begin;
-	__u64 end;
+	u32		pid;
+	u32		prcsr_nid;
+	unsigned long	begin;
+	unsigned long	end;
 };
 struct m2m_findvma_reply_struct {
 	int vma_exist;
@@ -100,12 +106,22 @@ int handle_m2m_findvma(struct m2m_findvma_struct *, u64, struct common_header *)
 
 /* M2M_MSYNC */
 struct m2m_msync_struct {
-	__u32	pid;
-	__u64	start;
-	__u64	len;
-	__u32	flags;
+	u32		pid;
+	u32		prcsr_nid;
+	unsigned long	start;
+	unsigned long	len;
+	unsigned long	flags;
 };
 int handle_m2m_msync(struct m2m_msync_struct *, u64, struct common_header *);
+
+/* M2M_FORK */
+struct m2m_fork_struct {
+	u32		pid;
+	u32		tgid;
+	u32		prcsr_nid;
+};
+int handle_m2m_fork(struct m2m_fork_struct *, u64, struct common_header *);
+
 #endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */
 
 #endif /* _LEGO_RPC_STRUCT_M2M_H_ */

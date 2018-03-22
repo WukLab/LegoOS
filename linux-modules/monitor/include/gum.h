@@ -7,17 +7,12 @@
  * (at your option) any later version.
  */
 
-#ifndef _GPM_HANDLER_H
-#define _GPM_HANDLER_H
+#ifndef _LEGO_GUM_H
+#define _LEGO_GUM_H
 
-#define MAX_RXBUF_SIZE   (PAGE_SIZE * 20)
+#include <common.h>
 
-#ifdef CONFIG_GPM
-void gpm_handler_init(void);
-void report_proc_exit(int ret_val);
-#else
-static inline void gpm_handler_init(void) {};
-static inline void report_proc_exit(int ret_val) {};
-#endif
+int create_lego_proc_file(void);
+void remove_lego_proc_file(void);
 
-#endif /* _GPM_HANDLER_H */
+#endif /* _LEGO_GUM_H */

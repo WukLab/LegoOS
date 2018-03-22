@@ -7,17 +7,18 @@
  * (at your option) any later version.
  */
 
-#ifndef _GPM_HANDLER_H
-#define _GPM_HANDLER_H
+#ifndef _LEGO_GMM_H
+#define _LEGO_GMM_H
 
-#define MAX_RXBUF_SIZE   (PAGE_SIZE * 20)
+/* information of each memory component */
+struct mnode_struct {
+	__u32 nid;
+	unsigned long totalram;
+	unsigned long freeram;
+	struct list_head list;
+};
 
-#ifdef CONFIG_GPM
-void gpm_handler_init(void);
-void report_proc_exit(int ret_val);
-#else
-static inline void gpm_handler_init(void) {};
-static inline void report_proc_exit(int ret_val) {};
-#endif
+extern int choose_homenode(void);
+extern int handle_m2mm_consult(struct consult_info *, u64, struct common_header *);
 
-#endif /* _GPM_HANDLER_H */
+#endif /* _LEGO_GMM_H */

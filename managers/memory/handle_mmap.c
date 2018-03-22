@@ -130,19 +130,19 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 addr = payload->addr;
-	u64 len = payload->len;
-	u64 prot = payload->prot;
-	u64 flags = payload->flags;
-	u64 pgoff = payload->pgoff;
+	unsigned long addr = payload->addr;
+	unsigned long len = payload->len;
+	unsigned long prot = payload->prot;
+	unsigned long flags = payload->flags;
+	unsigned long pgoff = payload->pgoff;
 	char *f_name = payload->f_name;
 	struct lego_task_struct *tsk;
 	struct lego_file *file = NULL;
 	struct p2m_mmap_reply_struct reply;
 	s64 ret;
 
-	mmap_debug("src_nid:%u,pid:%u,addr:%#Lx,len:%#Lx,prot:%#Lx,flags:%#Lx"
-		   "pgoff:%#Lx,f_name:[%s]", nid, pid, addr, len, prot,
+	mmap_debug("src_nid:%u,pid:%u,addr:%#lx,len:%#lx,prot:%#lx,flags:%#lx"
+		   "pgoff:%#lx,f_name:[%s]", nid, pid, addr, len, prot,
 		   flags, pgoff, f_name);
 
 	tsk = find_lego_task_by_pid(nid, pid);
@@ -183,7 +183,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	}
 
 	reply.ret = RET_OKAY;
-	reply.ret_addr = (u64)ret;
+	reply.ret_addr = (unsigned long)ret;
 #ifdef CONFIG_DEBUG_VMA
 	dump_reply(&reply.map);
 #endif
@@ -199,43 +199,46 @@ int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 addr = payload->addr;
-	u64 len = payload->len;
+	unsigned long addr = payload->addr;
+	unsigned long len = payload->len;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
-	u64 ret;
+	struct p2m_munmap_reply_struct reply;
 
-	mmap_debug("src_nid:%u, pid:%u, addr:%#Lx, len:%#Lx",
+	mmap_debug("src_nid:%u, pid:%u, addr:%#lx, len:%#lx",
 		   nid, pid, addr, len);
 
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
-		ret = RET_ESRCH;
+		reply.ret = RET_ESRCH;
 		goto out;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
 	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
-		ret = RET_EINTR;
+		reply.ret = RET_EINTR;
 		goto out;
 	}
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-	ret = distvm_munmap_homenode(mm, addr, len);
+	load_reply_buffer(tsk->mm, &reply.map);
+	reply.ret = distvm_munmap_homenode(mm, addr, len);
+	remove_reply_buffer(tsk->mm);
 #else
-	ret = do_munmap(mm, addr, len);
+	reply.ret = do_munmap(mm, addr, len);
 #endif
 	up_write(&mm->mmap_sem);
 
 out:
-	ibapi_reply_message(&ret, sizeof(ret), desc);
+	ibapi_reply_message(&reply, sizeof(reply), desc);
 
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
 
-static int do_msync(struct lego_mm_struct *mm, u64 start, u64 end, u64 flags)
+static int do_msync(struct lego_mm_struct *mm, unsigned long start, 
+		    unsigned long end, unsigned long flags)
 {
 	int ret = 0, unmapped_error = 0;
 	struct vm_area_struct *vma;
@@ -300,13 +303,15 @@ out:
 }
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-static int distribute_msync(struct lego_task_struct *tsk, u64 start, u64 len,
-			  u64 flags, u64 mnode)
+static int 
+distribute_msync(struct lego_task_struct *tsk, unsigned long start, 
+		 unsigned long len, unsigned long flags, int mnode)
 {
 	int ret, reply;
 	struct m2m_msync_struct info;
 
 	info.pid = tsk->pid;
+	info.prcsr_nid = tsk->node;
 	info.start = start;
 	info.len = len;
 	info.flags = flags;
@@ -315,7 +320,7 @@ static int distribute_msync(struct lego_task_struct *tsk, u64 start, u64 len,
 			sizeof(struct m2m_msync_struct), (void *)&reply,
 			sizeof(int), false, FIT_MAX_TIMEOUT_SEC);
 
-	if (ret)
+	if (ret < 0)
 		return ret;
 
 	return reply;
@@ -326,16 +331,17 @@ int handle_m2m_msync(struct m2m_msync_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 start = payload->start;
-	u64 len = payload->len;
-	u64 flags = payload->flags;
+	u32 prcsr_nid = payload->prcsr_nid;
+	unsigned long start = payload->start;
+	unsigned long len = payload->len;
+	unsigned long flags = payload->flags;
 	struct lego_task_struct *tsk;
 	u32 ret;
 
-	mmap_debug("src_nid:%u,pid:%u,start:%#Lx,len:%#Lx,flags:%#Lx",
+	mmap_debug("src_nid:%u,pid:%u,start:%#lx,len:%#lx,flags:%#lx",
 		   nid, pid, start, len, flags);
 
-	tsk = find_lego_task_by_pid(nid, pid);
+	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!tsk)) {
 		ret = RET_ESRCH;
 		goto out;
@@ -357,13 +363,13 @@ int handle_p2m_msync(struct p2m_msync_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 start = payload->start;
-	u64 len = payload->len;
-	u64 flags = payload->flags;
+	unsigned long start = payload->start;
+	unsigned long len = payload->len;
+	unsigned long flags = payload->flags;
 	struct lego_task_struct *tsk;
 	u32 ret = 0;
 
-	mmap_debug("src_nid:%u,pid:%u,start:%#Lx,len:%#Lx,flags:%#Lx",
+	mmap_debug("src_nid:%u,pid:%u,start:%#lx,len:%#lx,flags:%#lx",
 		   nid, pid, start, len, flags);
 
 	tsk = find_lego_task_by_pid(nid, pid);
@@ -376,10 +382,10 @@ int handle_p2m_msync(struct p2m_msync_struct *payload, u64 desc,
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 	while (len) {
 		struct vma_tree *root;
-		u64 end, delta = 0;
+		unsigned long end, delta = 0;
 
 		root = tsk->mm->vmrange_map[vmr_idx(start)];
-		end = min((u64)root->end, (u64)(start + len));
+		end = min((unsigned long)root->end, start + len);
 		delta = end - start;
 
 		if (is_local(root->mnode))
@@ -408,16 +414,16 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 old_addr = payload->old_addr;
-	u64 old_len = payload->old_len;
-	u64 new_len = payload->new_len;
-	u64 flags = payload->flags;
-	u64 new_addr = payload->new_addr;
+	unsigned long old_addr = payload->old_addr;
+	unsigned long old_len = payload->old_len;
+	unsigned long new_len = payload->new_len;
+	unsigned long flags = payload->flags;
+	unsigned long new_addr = payload->new_addr;
 	struct lego_task_struct *tsk;
 	struct p2m_mremap_reply_struct reply;
 
-	mmap_debug("nid:%u,pid:%u,old_addr:%#Lx,old_len:%#Lx,new_len:%#Lx,"
-		   "flags:%#Lx,new_addr:%#Lx", nid, pid, old_addr, old_len,
+	mmap_debug("nid:%u,pid:%u,old_addr:%#lx,old_len:%#lx,new_len:%#lx,"
+		   "flags:%#lx,new_addr:%#lx", nid, pid, old_addr, old_len,
 		   new_len, flags, new_addr);
 
 	tsk = find_lego_task_by_pid(nid, pid);
@@ -544,18 +550,18 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 old_addr = payload->old_addr;
-	u64 old_len = payload->old_len;
-	u64 new_len = payload->new_len;
-	u64 flags = payload->flags;
-	u64 new_addr = payload->new_addr;
+	unsigned long old_addr = payload->old_addr;
+	unsigned long old_len = payload->old_len;
+	unsigned long new_len = payload->new_len;
+	unsigned long flags = payload->flags;
+	unsigned long new_addr = payload->new_addr;
 	struct lego_task_struct *tsk;
 	struct vm_area_struct *vma;
 	struct p2m_mremap_reply_struct reply;
 	unsigned long ret;
 
-	mmap_debug("nid:%u,pid:%u,old_addr:%#Lx,old_len:%#Lx,new_len:%#Lx,"
-		   "flags:%#Lx,new_addr:%#Lx", nid, pid, old_addr, old_len,
+	mmap_debug("nid:%u,pid:%u,old_addr:%#lx,old_len:%#lx,new_len:%#lx,"
+		   "flags:%#lx,new_addr:%#lx", nid, pid, old_addr, old_len,
 		   new_len, flags, new_addr);
 
 	tsk = find_lego_task_by_pid(nid, pid);
@@ -662,7 +668,7 @@ out:
 	up_write(&tsk->mm->mmap_sem);
 
 out_nolock:
-	mmap_debug("status: %s, new_addr: %#Lx, line: %u",
+	mmap_debug("status: %s, new_addr: %#lx, line: %u",
 		   ret_to_string(reply.status), reply.new_addr,
 		   (reply.status != RET_OKAY) ? reply.line : 0);
 
@@ -764,37 +770,38 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 new_range = payload->new_range;
-	u64 addr = payload->addr;
-	u64 len = payload->len;
-	u64 prot = payload->prot;
-	u64 flags = payload->flags;
+	u32 prcsr_nid = payload->prcsr_nid;
+	unsigned long new_range = payload->new_range;
+	unsigned long addr = payload->addr;
+	unsigned long len = payload->len;
+	unsigned long prot = payload->prot;
+	unsigned long flags = payload->flags;
 	vm_flags_t vm_flags = payload->vm_flags;
-	u64 pgoff = payload->pgoff;
+	unsigned long pgoff = payload->pgoff;
 	char *f_name = payload->f_name;
 	struct lego_task_struct *tsk;
 	struct lego_file *file = NULL;
 	struct m2m_mmap_reply_struct reply;
 
-	mmap_debug("src_nid:%u,pid:%u,addr:%#Lx,len:%#Lx,prot:%#Lx,flags:%#Lx"
-		   "pgoff:%#Lx,f_name:[%s]", nid, pid, addr, len, prot,
-		   flags, pgoff, f_name);
+	mmap_debug("src_nid:%u, pid:%u, addr: %lx, len: %lx, prot:%lx, flags:%lx, "
+		   "vm_flags: %lx, pgoff:%#lx, f_name:[%s]", nid, pid, addr, len, 
+		   prot, flags, vm_flags, pgoff, f_name);
 
 	/*
 	 * since it's not homenode, won't be able to find task struct
 	 * for the first mmap to this node
 	 */
-	tsk = find_lego_task_by_pid(nid, pid);
+	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (!tsk) {
-		tsk = kzalloc(sizeof(*tsk), GFP_KERNEL);
+		tsk = alloc_lego_task_struct();
 		if (unlikely(!tsk)) {
 			reply.addr = -ENOMEM;
 			goto reply;
 		}
 
 		tsk->pid = pid;
+		tsk->node = prcsr_nid;
 		mem_set_memory_home_node(tsk, nid);
-		spin_lock_init(&tsk->task_lock);
 
 		tsk->mm = lego_mm_alloc(tsk, NULL);
 		if (!tsk->mm) {
@@ -806,13 +813,16 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 		reply.addr = ht_insert_lego_task(tsk);
 		if (reply.addr) {
 			lego_mmput(tsk->mm);
-			kfree(tsk);
+			free_lego_task_struct(tsk);
 
 			/* Same process? */
 			if (likely(reply.addr == -EEXIST))
 				reply.addr = 0;
 			goto reply;
 		}
+		
+		/* virtual memory map layout */
+		arch_pick_mmap_layout(tsk->mm);
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
@@ -829,11 +839,12 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 	}
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	reply.addr = do_dist_mmap(tsk->mm, file, MY_NODE_ID, new_range, addr, len,
+	reply.addr = do_dist_mmap(tsk->mm, file, LEGO_LOCAL_NID, new_range, addr, len,
 				  prot, flags, vm_flags, pgoff, &reply.max_gap);
 
 reply:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
+	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -843,16 +854,17 @@ int handle_m2m_munmap(struct m2m_munmap_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 begin = payload->begin;
-	u64 len = payload->len;
+	u32 prcsr_nid = payload->prcsr_nid;
+	unsigned long begin = payload->begin;
+	unsigned long len = payload->len;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
 	struct m2m_munmap_reply_struct reply;
 
-	mmap_debug("src_nid:%u, pid:%u, begin:%#Lx, len:%#Lx",
+	mmap_debug("src_nid:%u, pid:%u, begin:%#lx, len:%#lx",
 		   nid, pid, begin, len);
 
-	tsk = find_lego_task_by_pid(nid, pid);
+	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!tsk)) {
 		reply.status = RET_ESRCH;
 		goto out;
@@ -869,7 +881,10 @@ int handle_m2m_munmap(struct m2m_munmap_struct *payload, u64 desc,
 	up_write(&mm->mmap_sem);
 
 out:
+	vma_debug("%s, reply status: %x, max_gap: %lx\n", 
+			__func__, reply.status, reply.max_gap);
 	ibapi_reply_message(&reply, sizeof(reply), desc);
+	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -879,17 +894,18 @@ int handle_m2m_findvma(struct m2m_findvma_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 begin = payload->begin;
-	u64 end = payload->end;
+	u32 prcsr_nid = payload->prcsr_nid;
+	unsigned long begin = payload->begin;
+	unsigned long end = payload->end;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
 	struct m2m_findvma_reply_struct reply;
 	struct vma_tree *root;
 
-	mmap_debug("src_nid:%u, pid:%u, begin:%#Lx, end:%#Lx",
+	mmap_debug("src_nid:%u, pid:%u, begin:%#lx, end:%#lx",
 		   nid, pid, begin, end);
 
-	tsk = find_lego_task_by_pid(nid, pid);
+	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!tsk)) {
 		reply.vma_exist = RET_ESRCH;
 		goto out;
@@ -912,6 +928,7 @@ int handle_m2m_findvma(struct m2m_findvma_struct *payload, u64 desc,
 
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
+	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -921,17 +938,18 @@ int handle_m2m_mremap_grow(struct m2m_mremap_grow_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 addr = payload->addr;
-	u64 old_len = payload->old_len;
-	u64 new_len = payload->new_len;
+	u32 prcsr_nid = payload->prcsr_nid;
+	unsigned long addr = payload->addr;
+	unsigned long old_len = payload->old_len;
+	unsigned long new_len = payload->new_len;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
 	struct m2m_mremap_grow_reply_struct reply;
 
-	mmap_debug("src_nid:%u, pid:%u, addr:%#Lx, old_len:%#Lx, new_len:%#Lx",
+	mmap_debug("src_nid:%u, pid:%u, addr:%#lx, old_len:%#lx, new_len:%#lx",
 		   nid, pid, addr, old_len, new_len);
 
-	tsk = find_lego_task_by_pid(nid, pid);
+	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!tsk)) {
 		reply.status = RET_ESRCH;
 		goto out;
@@ -951,6 +969,7 @@ int handle_m2m_mremap_grow(struct m2m_mremap_grow_struct *payload, u64 desc,
 
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
+	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -960,19 +979,20 @@ int handle_m2m_mremap_move(struct m2m_mremap_move_struct *payload, u64 desc,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 old_addr = payload->old_addr;
-	u64 old_len = payload->old_len;
-	u64 new_len = payload->new_len;
-	u64 new_range = payload->new_range;
+	u32 prcsr_nid = payload->prcsr_nid;
+	unsigned long old_addr = payload->old_addr;
+	unsigned long old_len = payload->old_len;
+	unsigned long new_len = payload->new_len;
+	unsigned long new_range = payload->new_range;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
 	struct m2m_mremap_move_reply_struct reply;
 
-	mmap_debug("src_nid:%u, pid:%u, old_addr:%#Lx, old_len:%#Lx, "
-		   "new_len:%#Lx, new_range:%#Lx",
+	mmap_debug("src_nid:%u, pid:%u, old_addr:%#lx, old_len:%#lx, "
+		   "new_len:%#lx, new_range:%#lx",
 		   nid, pid, old_addr, old_len, new_len, new_range);
 
-	tsk = find_lego_task_by_pid(nid, pid);
+	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!tsk)) {
 		reply.new_addr = RET_ESRCH;
 		goto out;
@@ -985,13 +1005,14 @@ int handle_m2m_mremap_move(struct m2m_mremap_move_struct *payload, u64 desc,
 		goto out;
 	}
 
-	reply.new_addr = do_dist_mremap_move(mm, MY_NODE_ID, old_addr, old_len,
+	reply.new_addr = do_dist_mremap_move(mm, LEGO_LOCAL_NID, old_addr, old_len,
 					new_len, new_range, &reply.old_max_gap,
 					&reply.new_max_gap);
 	up_write(&mm->mmap_sem);
 
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
+	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -1001,19 +1022,20 @@ int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *payload,
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
-	u64 old_addr = payload->old_addr;
-	u64 old_len = payload->old_len;
-	u64 new_addr = payload->new_addr;
-	u64 new_len = payload->new_len;
+	u32 prcsr_nid = payload->prcsr_nid;
+	unsigned long old_addr = payload->old_addr;
+	unsigned long old_len = payload->old_len;
+	unsigned long new_addr = payload->new_addr;
+	unsigned long new_len = payload->new_len;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
 	struct m2m_mremap_move_split_reply_struct reply;
 
-	mmap_debug("src_nid:%u, pid:%u, old_addr:%#Lx, new_addr:&%Lx, "
-		   "old_len:%#Lx, new_len:%#Lx",
+	mmap_debug("src_nid:%u, pid:%u, old_addr:%#lx, new_addr:&%lx, "
+		   "old_len:%#lx, new_len:%#lx",
 		   nid, pid, old_addr, new_addr, old_len, new_len);
 
-	tsk = find_lego_task_by_pid(nid, pid);
+	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!tsk)) {
 		reply.new_addr = RET_ESRCH;
 		goto out;
@@ -1034,6 +1056,7 @@ int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *payload,
 
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
+	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }

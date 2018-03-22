@@ -20,6 +20,9 @@
  *	P2S:	processor <--> storage
  *	M2S:	memory    <--> storage
  *	P2GSM:	processor <--> global storage monitor
+ * 	PM2P:	processor monitor -> processor
+ * 	P2PM:	processor -> processor monitor
+ * 	M2MM:   memory -> memory monitor
  *
  * 2) System calls related:
  *	Follow the original SYSCALL number
@@ -69,7 +72,14 @@
 #define M2M_MREMAP_MOVE_SPLIT	(M2M_BASE + 5)
 #define M2M_FINDVMA		(M2M_BASE + 6)
 #define M2M_MSYNC		(M2M_BASE + 7)
-#define M2M_MOVEDATA		(M2M_BASE + 8)
+#define M2M_FORK		(M2M_BASE + 8)
+
+/* Monitor relevant opcode */
+#define MONITOR_BASE			((__u32)0x50000000)
+#define PM2P_START_PROC			(MONITOR_BASE + 1)
+#define P2PM_EXIT_PROC			(MONITOR_BASE + 2)
+#define M2MM_CONSULT	 		(MONITOR_BASE + 3) 
+#define M2MM_STATUS_REPORT		(MONITOR_BASE + 4)
 
 /* Memory to Storage */
 #define M2S_READ		P2M_READ		/* Reuse the same nr */

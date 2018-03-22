@@ -10,8 +10,6 @@
 #ifndef _LEGO_DISTRIBUTED_VM_H_
 #define _LEGO_DISTRIBUTED_VM_H_
 
-
-//#define MAX_RXBUF_SIZE   (PAGE_SIZE * 7)
 /*
 * vma debug options
 */
@@ -31,6 +29,7 @@
 #define vma_debug(...)			do { } while (0)
 
 #endif /* CONFIG_DEBUG_VMA */
+
 
 /*
 * this type def restrict the maximal possible
@@ -58,21 +57,27 @@ struct vmr_map_reply {
 	vmr16 nr_entry;
 	struct vmr_map_struct map[MAX_VMA_REPLY_ENTRY];
 };
-#endif /* CONFIG_DISTRIBUTED_VMA */
 
 #ifdef CONFIG_VM_GRANULARITY_ORDER
 #define VM_GRANULARITY		(1UL << CONFIG_VM_GRANULARITY_ORDER)
 #else
 #define VM_GRANULARITY		(1UL << 30)
 #endif
-#define VMR_SHIFT		CONFIG_VM_GRANULARITY_ORDER
-#define vmr_idx(addr)		((typeof(addr))(addr) >> VMR_SHIFT)
+#define VMR_SHIFT 		CONFIG_VM_GRANULARITY_ORDER
 /* to align the pointer to the (next) VM_GRANULARITY boundary */
 #define VMR_ALIGN(addr)		ALIGN((addr), VM_GRANULARITY)
 /* to align the pointer to the (current) VM_GRANULARITY boundary */
 #define VMR_OFFSET(addr)	((addr) & ~(VM_GRANULARITY - 1))
+
+#define vmr_idx(addr) \
+({ \
+	VMA_BUG_ON((unsigned long)(addr) > VMR_ALIGN(TASK_SIZE)); \
+ 	((typeof(addr))(addr) >> VMR_SHIFT); \
+})
 #define VMR_COUNT		vmr_idx(VMR_ALIGN(TASK_SIZE))
 /* index pointer to last valid vm range base on end addr */
 #define last_vmr_idx(end)	(vmr_idx(end) - (typeof(end))(VMR_ALIGN(end) == (end)))
+
+#endif /* CONFIG_DISTRIBUTED_VMA */
 
 #endif /* _LEGO_DISTRIBUTED_VM_H_ */
