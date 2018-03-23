@@ -110,8 +110,6 @@ void trace_syscall_exit(void)
 
 		pr_err("Current corrupted pt_regs:\n");
 		show_regs(curr);
-		panic("Catched buggy SYSCALL: %pS",
-			sys_call_table[nr]);
 	}
 
 	if (WARN_ON(!irqs_disabled()))

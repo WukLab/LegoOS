@@ -193,6 +193,21 @@ start_thread_common(struct pt_regs *regs, unsigned long new_ip,
 	regs->cs		= _cs;
 	regs->ss		= _ss;
 	regs->flags		= X86_EFLAGS_IF;
+
+	regs->bx		= 0;
+	regs->cx		= 0;
+	regs->dx		= 0;
+	regs->si		= 0;
+	regs->di		= 0;
+	regs->bp		= 0;
+	regs->r8		= 0;
+	regs->r9		= 0;
+	regs->r10		= 0;
+	regs->r11		= 0;
+	regs->r12		= 0;
+	regs->r13		= 0;
+	regs->r14		= 0;
+	regs->r15		= 0;
 	force_iret();
 }
 

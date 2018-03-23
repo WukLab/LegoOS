@@ -904,7 +904,7 @@ struct ib_mad_send_buf * ib_create_send_mad(struct ib_mad_agent *mad_agent,
 {
 	struct ib_mad_agent_private *mad_agent_priv;
 	struct ib_mad_send_wr_private *mad_send_wr;
-	int pad, message_size, ret, size;
+	int pad, message_size, size;
 	void *buf;
 
 	mad_agent_priv = container_of(mad_agent, struct ib_mad_agent_private,
@@ -946,7 +946,7 @@ struct ib_mad_send_buf * ib_create_send_mad(struct ib_mad_agent *mad_agent,
 	mad_send_wr->send_wr.wr.ud.pkey_index = pkey_index;
 
 	if (rmpp_active) {
-		pr_info("%s need rmpp back\n");
+		pr_info("%s need rmpp back\n", __func__);
 #if 0
 		ret = alloc_send_rmpp_list(mad_send_wr, gfp_mask);
 		if (ret) {
@@ -1733,9 +1733,9 @@ static inline int rcv_has_same_gid(struct ib_mad_agent_private *mad_agent_priv,
 	struct ib_ah_attr attr;
 	u8 send_resp, rcv_resp;
 	union ib_gid sgid;
-	struct ib_device *device = mad_agent_priv->agent.device;
-	u8 port_num = mad_agent_priv->agent.port_num;
 	u8 lmc;
+	//struct ib_device *device = mad_agent_priv->agent.device;
+	//u8 port_num = mad_agent_priv->agent.port_num;
 
 	send_resp = ib_response_mad((struct ib_mad *)wr->send_buf.mad);
 	rcv_resp = ib_response_mad(rwc->recv_buf.mad);
@@ -2292,43 +2292,46 @@ static void mad_error_handler(struct ib_mad_port_private *port_priv,
 }
 
 int mad_got_one;
+
 /*
  * IB MAD completion callback
  */
-static void ib_mad_completion_handler(struct ib_mad_port_private *port_priv)
-//static void ib_mad_completion_handler(struct work_struct *work)
+static int ib_mad_completion_handler(void *_data)
 {
 	//struct ib_mad_port_private *port_priv;
 	struct ib_wc wc;
+	struct ib_mad_port_private *port_priv = _data;
 
-	//pr_info("%s\n", __func__);
 /* TODO: changing to busy poll before we have interrupt */
 //	port_priv = container_of(work, struct ib_mad_port_private, work);
 //	ib_req_notify_cq(port_priv->cq, IB_CQ_NEXT_COMP);
 
-	mad_got_one = 0;
+	pr_info("%s(): running on CPU %d\n", __func__, smp_processor_id());
 
+	mad_got_one = 0;
 	while (1) {
-again:
 		while (ib_poll_cq(port_priv->cq, 1, &wc) == 1) {
-			//pr_info("%s got cq\n", __func__);
 			if (wc.status == IB_WC_SUCCESS) {
 				switch (wc.opcode) {
 				case IB_WC_SEND:
-					//pr_info("%s got successful send cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
+					//pr_info("%s %d got successful send cq op %d mad_got_one %d\n",
+					//	__func__, __LINE__, wc.opcode, mad_got_one);
 					ib_mad_send_done_handler(port_priv, &wc);
 					break;
 				case IB_WC_RECV:
 					mad_got_one++;
-					//pr_info("%s got successful recv cq op %d mad_got_one %d\n", __func__, wc.opcode, mad_got_one);
+					//pr_info("%s %d got successful recv cq op %d mad_got_one %d\n",
+					//	__func__, __LINE__, wc.opcode, mad_got_one);
 					ib_mad_recv_done_handler(port_priv, &wc);
 					break;
 				default:
 					BUG_ON(1);
 					break;
 				}
-			} else
+			} else {
+				pr_info("%s(): %d mad_error\n", __func__, __LINE__);
 				mad_error_handler(port_priv, &wc);
+			}
 
 			/*
 			 * TODO:
@@ -2338,22 +2341,15 @@ again:
 			 *
 			 * Quit this thread is processor or memory manager is up running.
 			 */
-			if (manager_state == MANAGER_UP)
-				return;
-
-			//f (mad_got_one >= 12) 
-				schedule();
-			//else
-			//	cpu_relax();
+			if (manager_state == MANAGER_UP) {
+				pr_info("%s(): exit\n", __func__);
+				return 0 ;
+			}
+			schedule();
 		}
-
-		//pr_info("%s calling sched\n", __func__);
-		//if (mad_got_one < 12)
-		//	goto again;
-		//if (mad_got_one >= 12) 
-
 		schedule();
 	}
+	return 0;
 }
 
 static void cancel_mads(struct ib_mad_agent_private *mad_agent_priv)
@@ -2626,7 +2622,7 @@ static void timeout_sends(struct work_struct *work)
 	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 }
 
-static void ib_mad_thread_completion_handler(struct ib_cq *cq, void *arg)
+__maybe_unused static void ib_mad_thread_completion_handler(struct ib_cq *cq, void *arg)
 {
 	struct ib_mad_port_private *port_priv = cq->cq_context;
 	unsigned long flags;
@@ -2996,7 +2992,7 @@ error9:
 	spin_unlock_irqrestore(&ib_mad_port_list_lock, flags);
 
 //	destroy_workqueue(port_priv->wq);
-error8:
+//error8:
 	destroy_mad_qp(&port_priv->qp_info[1]);
 error7:
 	destroy_mad_qp(&port_priv->qp_info[0]);

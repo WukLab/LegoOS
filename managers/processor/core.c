@@ -42,9 +42,8 @@ static int procmgmt(void *unused)
 	 * Use the correct name if a real storage node is used.
 	 * If CONFIG_USE_RAMFS is set, then filename does not matter anyway.
 	 */
-	init_filename = "/root/ys/phoenix/phoenix-2.0/tests/word_count/word_count-pthread";
+	init_filename = "/root/ys/LegoOS/usr/exe.o";
 	argv_init[0] = init_filename;
-	argv_init[1] = "/root/ys/phoenix/phoenix-2.0/tests/word_count/word_count_datafiles/word_2GB.txt";
 
 	return do_execve(init_filename,
 		(const char *const *)argv_init,

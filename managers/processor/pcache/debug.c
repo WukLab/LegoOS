@@ -143,3 +143,23 @@ void dump_pcache_line(struct pcache_meta *pcm, const char *reason)
 	print_hex_dump_bytes(csum_s, DUMP_PREFIX_OFFSET,
 		pcache_meta_to_kva(pcm), PCACHE_LINE_SIZE);
 }
+
+/*
+ * Use with caution.
+ * Make sure no pcache activities are in progress.
+ */
+void dump_valid_pcache(void)
+{
+	struct pcache_meta *pcm;
+	struct pcache_set *pset;
+	int way_idx, set_idx;
+
+	pcache_for_each_set(pset, set_idx) {
+		pcache_for_each_way_set(pcm, pset, way_idx) {
+			if (PcacheValid(pcm)) {
+				dump_pcache_meta(pcm, NULL);
+				dump_pcache_rmaps(pcm);
+			}
+		}
+	}
+}

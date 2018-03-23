@@ -30,7 +30,6 @@ SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 	long ret = 0;
 
 	syscall_enter("fd: %u, cmd: %u, arg: %lu\n", fd, cmd, arg);
-	pr_warn("IOCTL is faked implementation.\n");
 
 	/* std files */
 	if (fd <= 2) {

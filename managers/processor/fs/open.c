@@ -185,8 +185,6 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 put:
 	put_file(f);
 out:
-	pr_info("%s() CPU%d PID:%d f_name: %s, flags: %x, mode: %x fd: %d\n",
-		__func__, smp_processor_id(), current->pid, kname, flags, mode, fd);
 	return fd;
 }
 
@@ -245,6 +243,10 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 		f = files->fd_array[fd];
 		BUG_ON(!f);
 
+		pr_info("%s() CPU%d PID:%d [fd: %d] -> [%s]\n",
+			__func__, smp_processor_id(), current->pid,
+			fd, f ? f->f_name : "-EBADF");
+
 		if (f->f_op->release)
 			f->f_op->release(f);
 		put_file(f);
@@ -256,10 +258,6 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 		ret = -EBADF;
 	}
 	spin_unlock(&files->file_lock);
-
-	pr_info("%s() CPU%d PID:%d [fd: %d] -> [%s]\n",
-		__func__, smp_processor_id(), current->pid,
-		fd, f ? f->f_name : "-EBADF");
 
 	syscall_exit(ret);
 	return ret;
