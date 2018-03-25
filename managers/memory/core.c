@@ -17,6 +17,7 @@
 #include <memory/vm.h>
 #include <memory/pid.h>
 #include <memory/loader.h>
+#include <memory/distvm.h>
 
 #ifdef CONFIG_DEBUG_MEMORY_CORE
 #define mm_debug(fmt, ...)	\
@@ -218,6 +219,33 @@ static int mc_dispatcher(void *passed)
 		handle_p2m_checkpint(payload, desc, hdr);
 		break;
 
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
+/* DISTRIBUTED MMAP */
+	case M2M_MMAP:
+		handle_m2m_mmap(payload, desc, hdr);
+		break;
+	
+	case M2M_MUNMAP:
+		handle_m2m_munmap(payload, desc, hdr);
+		break;
+
+	case M2M_FINDVMA:
+		handle_m2m_findvma(payload, desc, hdr);
+		break;
+
+	case M2M_MREMAP_GROW:
+		handle_m2m_mremap_grow(payload, desc, hdr);
+		break;
+
+	case M2M_MREMAP_MOVE:
+		handle_m2m_mremap_move(payload, desc, hdr);
+		break;
+	
+	case M2M_MREMAP_MOVE_SPLIT:
+		handle_m2m_mremap_move_split(payload, desc, hdr);
+		break;
+#endif
+
 /* TEST */
 	case P2M_TEST:
 		handle_p2m_test(payload, desc, hdr);
@@ -283,6 +311,10 @@ void __init memory_component_init(void)
 
 	/* Register exec binary handlers */
 	exec_init();
+
+#ifdef CONFIG_VMA_MEMORY_UNITTEST
+	mem_vma_unittest();
+#endif 
 
 #ifdef CONFIG_FIT
 	ret = kthread_run(mc_manager, NULL, "mc-manager");

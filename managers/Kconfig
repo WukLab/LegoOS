@@ -58,6 +58,38 @@ config RAMFS_OBJECT_FILE
 	help
 	  Please give the full pathname.
 
+config GPM
+	bool "Global processor monitor"
+	default n
+	help
+	  Enable this to use Global processor monitor
+
+if GPM
+config GPM_NODEID
+	int "GMM IB node ID"
+	default 3
+	help
+	  if running a multiple monitor on same machine, IB node
+	  ID can be same as Storage node, GMM, and GSM's
+
+endif #if GPM
+
+config GMM
+	bool "Global memory monitor"
+	default n
+	help
+	  Enable this to use Global memory monitor
+
+if GMM
+config GMM_NODEID
+	int "GMM IB node ID"
+	default 3
+	help
+	  if running a multiple monitor on same machine, IB node
+	  ID can be same as Storage node, GPM and GSM's
+
+endif #if GMM
+
 config GSM
 	bool "Contact GSM for locating page_cache/storage homenode"
 	default n
@@ -78,3 +110,69 @@ endmenu # General Manager Config/Debug
 # Co-locate with net info to ease .config modification
 #
 source "net/Kconfig"
+
+# 
+# VMA relevant config, put here because it relates to both 
+# processor side and memory side
+#
+menu "vma relevant configuration, debug, and test"
+
+config DISTRIBUTED_VMA
+	bool "Config Lego distributed vma"
+	default n
+	help
+	  Enable Lego distributed vma, affect both processor side and memory side
+
+if DISTRIBUTED_VMA 
+
+config VM_GRANULARITY_ORDER
+	int "Default granularity is 1G"
+	default 30
+	help
+	  Static virtual memory range granularity (in byte, default is 2^30)
+
+config MEM_NR_NODES
+	int "how many nodes are memory nodes"
+	default 1
+	help
+	  this config helps determine the size of reply of vma request 
+
+config DEBUG_VMA
+	bool "Debug vma"
+	default n
+	depends on DEBUG_KERNEL
+	help
+	  Enable VMA debug
+
+config DISTRIBUTED_VMA_PROCESSOR
+	bool "distributed vma, processor side"
+	default y
+	depends on COMP_PROCESSOR
+	help
+	  Enable processor side distributed vma
+
+config VMA_PROCESSOR_UNITTEST
+	bool "Run VMA processor side unit test"
+	default n
+	depends on COMP_PROCESSOR && DEBUG_VMA
+	help
+	  Enable vma unit test
+
+config DISTRIBUTED_VMA_MEMORY
+	bool "distributed vma, memory side"
+	default y
+	depends on COMP_MEMORY
+	help
+	  Enable memory side distributed vma
+
+config VMA_MEMORY_UNITTEST
+	bool "Run VMA memory side unit test"
+	default n
+	depends on COMP_MEMORY && DEBUG_VMA
+	help
+	  Enable vma unit test
+	
+endif	# if DISTRIBUTED_VMA
+
+endmenu
+

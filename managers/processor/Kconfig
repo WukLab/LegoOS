@@ -65,6 +65,25 @@ config PROCESSOR_MEMMAP_MEMBLOCK_RESERVED
 
 	  If unsure, say y.
 
+config CHECKPOINT
+	bool "Enable checkpoint feature"
+	default n
+	---help---
+	  Say Y if you want periodic checkpointing at processor component.
+	  This may slow down application throughput, but could greatly improve
+	  the reliability of your system.
+
+	  If unsure, say N.
+
+config GPM_HANDLER
+	bool "Enable gpm handler"
+	default n
+	depends on GPM
+	help
+	  gpm message receiver and handler
+
+
+
 source "managers/processor/pcache/Kconfig"
 source "managers/processor/fs/Kconfig"
 source "managers/processor/checkpoint/Kconfig"
@@ -156,8 +175,6 @@ config DEBUG_FILE
 	depends on DEBUG_KERNEL
 	help
 	  Enable to debug file related calls
-
-	  If unsure, say N.
 
 config DEBUG_SYSCALL
 	bool "Debug all SYSCALL enter/exit"

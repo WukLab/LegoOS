@@ -92,6 +92,16 @@ extern size_t strcspn(const char *,const char *);
 #ifndef __HAVE_ARCH_MEMSET
 extern void * memset(void *,int,size_t);
 #endif
+#ifndef __HAVE_ARCH_MEMSET16
+extern void *memset16(uint16_t *, uint16_t, size_t);
+#endif
+#ifndef __HAVE_ARCH_MEMSET32
+extern void *memset32(uint32_t *, uint32_t, size_t);
+#endif
+#ifndef __HAVE_ARCH_MEMSET64
+extern void *memset64(uint64_t *, uint64_t, size_t);
+#endif
+
 #ifndef __HAVE_ARCH_MEMCPY
 extern void * memcpy(void *,const void *,size_t);
 #endif
@@ -100,6 +110,9 @@ extern void * memmove(void *,const void *,size_t);
 #endif
 #ifndef __HAVE_ARCH_MEMCMP
 extern int memcmp(const void *,const void *,size_t);
+#endif
+#ifndef __HAVE_ARCH_STRSEP
+extern char * strsep(char **,const char *);
 #endif
 
 /**

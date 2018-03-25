@@ -20,6 +20,7 @@
 #include <processor/fs.h>
 #include <processor/pgtable.h>
 #include <processor/processor.h>
+#include <processor/distvm.h>
 
 #ifdef CONFIG_DEBUG_MMAP
 #define mmap_debug(fmt, ...)						\
@@ -48,7 +49,8 @@ static inline void mremap_debug(const char *fmt, ...) { }
 SYSCALL_DEFINE1(brk, unsigned long, brk)
 {
 	struct p2m_brk_struct payload;
-	unsigned long ret_len, ret_brk;
+	struct p2m_brk_reply_struct reply;
+	unsigned long ret_len;
 
 	syscall_enter("brk: %#lx\n", brk);
 
@@ -56,14 +58,19 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	payload.brk = brk;
 
 	ret_len = net_send_reply_timeout(current_memory_home_node(), P2M_BRK,
-			&payload, sizeof(payload), &ret_brk, sizeof(ret_brk),
+			&payload, sizeof(payload), &reply, sizeof(reply),
 			false, DEF_NET_TIMEOUT);
 
-	mmap_debug("ret_brk: %#lx", ret_brk);
-	if (likely(ret_len == sizeof(ret_brk))) {
-		if (WARN_ON(ret_brk == RET_ESRCH || ret_brk == RET_EINTR))
+	mmap_debug("ret_brk: %#lx", reply.ret_brk);
+	if (likely(ret_len == sizeof(reply))) {
+		if (WARN_ON(reply.ret_brk == RET_ESRCH 
+			 || reply.ret_brk == RET_EINTR))
 			return -EINTR;
-		return ret_brk;
+
+#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
+		map_mnode_from_reply(current->mm, &reply.map);
+#endif
+		return reply.ret_brk;
 	}
 	return -EIO;
 }
@@ -121,6 +128,10 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	} else
 		ret_addr = -EIO;
 
+#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
+	map_mnode_from_reply(current->mm, &reply.map);
+#endif
+
 	if (f)
 		put_file(f);
 	return ret_addr;
@@ -152,6 +163,10 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 		retbuf = -EIO;
 		goto out;
 	}
+
+#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
+	unmap_mnode(current->mm, addr, len);
+#endif
 
 	/* Unmap emulated pgtable */
 	if (likely(retbuf == 0))
@@ -225,6 +240,10 @@ SYSCALL_DEFINE5(mremap, unsigned long, old_addr, unsigned long, old_len,
 
 	/* Succeed */
 	ret = reply.new_addr;
+
+#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
+	map_mnode_from_reply(current->mm, &reply.map);
+#endif
 
 	/*
 	 * Update emulated pgtable
@@ -327,3 +346,4 @@ SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
 
 	return 0;
 }
+

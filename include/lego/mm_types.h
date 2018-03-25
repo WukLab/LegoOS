@@ -17,7 +17,7 @@
 #include <lego/rbtree.h>
 #include <lego/cpumask.h>
 #include <lego/spinlock.h>
-
+#include <lego/distvm.h>
 /*
  * Options to control if use per-pte, per-pmd locks.
  * The spinlock is embedded within 'struct page'.
@@ -45,6 +45,7 @@
  * allows the use of atomic double word operations on the flags/mapping
  * and lru list pointers also.
  */
+
 struct page {
 	unsigned long flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
@@ -110,6 +111,13 @@ struct mm_struct {
 
 	struct vm_area_struct * mmap_cache;     /* last find_vma result */
 	struct rb_root mm_rb;
+
+#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
+	vmr16 *vmrange_map;			/* allocation of vm ranges on each node 
+						 * corresponding to same name in
+						 * lego_mm_struct */
+	spinlock_t vmr_lock;			/* protect vma_roots array */
+#endif /* CONFIG_DISTRIBUTED_VMA_PROCESSOR */ 
 
 	int gpid;
 	struct list_head list;

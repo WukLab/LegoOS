@@ -207,6 +207,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	tsk->pid = tgid;
 	tsk->parent_pid = parent_tgid;
 	tsk->node = nid;
+	mem_set_memory_home_node(tsk, MY_NODE_ID);
 	spin_lock_init(&tsk->task_lock);
 	lego_set_task_comm(tsk, payload->comm);
 

@@ -16,6 +16,7 @@
 #include <memory/vm.h>
 #include <memory/pid.h>
 #include <memory/loader.h>
+#include <memory/distvm.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_EXECVE
 #define execve_debug(fmt, ...)	\
@@ -108,7 +109,12 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 	 */
 	ret = exec_loader(tsk, filename, argc, argv, argv_len,
 			  envc, envp, envp_len,
-			  &new_ip, &new_sp);
+			  &new_ip, &new_sp
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+			  ,&reply.map
+#endif
+			  );
+
 	if (ret) {
 		reply.status = RET_EPERM;
 		goto out;
@@ -126,6 +132,9 @@ out_reply:
 	execve_debug("reply_status: %s, new_ip: %#Lx, new_sp: %#Lx",
 		ret_to_string(reply.status), reply.new_ip, reply.new_sp);
 
+#ifdef CONFIG_DEBUG_VMA
+	dump_reply(&reply.map);
+#endif
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 	return 0;
 }

@@ -17,6 +17,7 @@
 
 #include <processor/pcache.h>
 #include <processor/processor.h>
+#include <monitor/gpm_handler.h>
 
 #ifdef CONFIG_DEBUG_EXIT
 #define debug_exit(fmt, ...)					\
@@ -472,6 +473,9 @@ void __noreturn do_exit(long code)
 	if (group_dead) {
 		/* Cancel timers etc. */
 		exit_itimers(tsk->signal);
+#ifdef CONFIG_GPM
+		report_proc_exit(code);
+#endif
 	}
 
 	tsk->exit_code = code;
