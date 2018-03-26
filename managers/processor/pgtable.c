@@ -337,12 +337,16 @@ pcache_copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	spinlock_t *src_ptl, *dst_ptl;
 	int ret;
 
-	dst_pte = pte_alloc_lock(dst_mm, dst_pmd, addr, &dst_ptl);
+	dst_pte = pte_alloc(dst_mm, dst_pmd, addr);
 	if (!dst_pte)
 		return -ENOMEM;
+	dst_ptl = pte_lockptr(dst_mm, dst_pmd);
+	spin_lock(dst_ptl);
 
 	src_pte = pte_offset(src_pmd, addr);
 	src_ptl = pte_lockptr(src_mm, src_pmd);
+
+	/* Will this have potential deadlock issue? */
 	if (src_ptl != dst_ptl)
 		spin_lock(src_ptl);
 

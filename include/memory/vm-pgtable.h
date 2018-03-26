@@ -78,6 +78,11 @@ static inline spinlock_t *lego_pte_lockptr(struct lego_mm_struct *mm, pmd_t *pmd
 	__pte;						\
 })
 
+/*
+ * XXX:
+ * If per-pte is used, modify this code! 
+ * Lock is wrong.
+ */
 #define lego_pte_alloc_lock(mm, pmd, address, ptlp)	\
 ({							\
 	spinlock_t *__ptl = lego_pte_lockptr(mm, pmd);	\

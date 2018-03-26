@@ -534,17 +534,6 @@ static inline spinlock_t *pmd_lock(struct mm_struct *mm, pmd_t *pmd)
 	__pte;						\
 })
 
-#define pte_alloc_lock(mm, pmd, address, ptlp)		\
-({							\
-	spinlock_t *__ptl = pte_lockptr(mm, pmd);	\
-	pte_t *__pte = pte_alloc(mm, pmd, address);	\
-	if (__pte) {					\
-		*(ptlp) = __ptl;			\
-		spin_lock(__ptl);			\
-	}						\
-	__pte;						\
-})
-
 #define pte_unlock(pte, ptl)				\
 do {							\
 	spin_unlock(ptl);				\
