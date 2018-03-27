@@ -53,10 +53,10 @@ config USE_RAMFS
 
 config RAMFS_OBJECT_FILE
 	string "The static-linked image embedded into Lego"
-	default "managers/memory/ramfs/bin/word_count-seq"
+	default "usr/general.o"
 	depends on COMP_MEMORY && USE_RAMFS
 	help
-	  Please give the full pathname.
+	  Please give the full pathname of the staticlly-linked EFL image.
 
 config GPM
 	bool "Global processor monitor"

@@ -122,9 +122,8 @@ static inline int page_to_nid(const struct page *page)
 static inline struct zone *page_zone(const struct page *page)
 {
 	enum zone_type type = page_to_zonetype(page);
-	int nid = page_to_nid(page);
 
-	return &NODE_DATA(nid)->node_zones[type];
+	return &NODE_DATA(page_to_nid(page))->node_zones[type];
 }
 
 static inline pg_data_t *page_pgdat(const struct page *page)

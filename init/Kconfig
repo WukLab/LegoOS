@@ -271,6 +271,7 @@ menu "Lego Kernel Syscall Tracer"
 config STRACE
 	bool "syscall trace"
 	default n
+	depends on !COMP_MEMORY
 	help
 	  This enables kernel version syscall tracer.
 	  If unsrue, say N

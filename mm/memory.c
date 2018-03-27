@@ -20,7 +20,7 @@
 
 #include <lego/comp_common.h>
 
-#ifdef CONFIG_FLATMEM
+#ifndef CONFIG_NUMA
 struct pglist_data contig_page_data;
 struct page *mem_map;
 #endif

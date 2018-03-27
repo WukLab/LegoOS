@@ -342,12 +342,32 @@ config NUMA
 
 	  Otherwise, you should say N.
 
+config NUMA_USE_ONE_SOCKET
+	bool "Only use the first socket even more than one sockets present"
+	depends on NUMA
+	depends on !COMP_MEMORY
+	depends on COMP_PROCESSOR
+	default y if COMP_PROCESSOR
+	default n if COMP_MEMORY
+	---help---
+	If this option is on, Lego will use only boot one socket and register
+	the memory from that socket, even if there are more than one sockets
+	present in the system.
+
+	This should be used by Processor Component. We don't want some sockets
+	affinity to affect runtime performance. Besides, the pcache memory is
+	all co-located in one socket (assume the memmap is given to the right
+	place....)
+
+	If unsure, say N.
+
 config NODES_SHIFT
 	int "Maximum NUMA Nodes (as a power of 2)" if !MAXSMP
 	range 1 10
 	default "10" if MAXSMP
 	default "6" if X86_64
 	default "3"
+	depends on NUMA
 	---help---
 	  Specify the maximum number of NUMA Nodes available on the target
 	  system.  Increases memory reserved to accommodate various tables.

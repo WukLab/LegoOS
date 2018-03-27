@@ -60,7 +60,16 @@ void __init smp_init(void)
 	init_idle_threads();
 
 	for_each_present_cpu(cpu) {
-		if (!cpu_online(cpu))
+		bool boot_this_node;
+
+		if (IS_ENABLED(CONFIG_NUMA_USE_ONE_SOCKET)) {
+			if (cpu_to_node(cpu) == 0)
+				boot_this_node = true;
+			else
+				boot_this_node = false;
+		}
+
+		if (!cpu_online(cpu) && boot_this_node)
 			cpu_up(cpu, per_cpu(idle_threads, cpu));
 	}
 	smp_announce();
