@@ -29,12 +29,8 @@ static struct task_struct *sweep_thread;
 
 static int kevict_sweepd(void *unused)
 {
-	int cpu = get_cpu();
-
-	set_cpus_allowed_ptr(current, get_cpu_mask(cpu));
-	set_cpu_active(cpu, false);
-	pr_info("%s() running on CPU%d\n", __func__, cpu);
-	put_cpu();
+	if (pin_current_thread_core())
+		panic("Fail to pin evict sweepd");
 
 	kevict_sweepd_lru();
 	return 0;

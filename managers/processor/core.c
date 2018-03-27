@@ -87,21 +87,20 @@ void __init processor_manager_init(void)
 	
 	pcache_post_init();
 
-#ifdef CONFIG_VMA_PROCESSOR_UNITTEST
-	prcsr_vma_unit_test();
-#endif
-
 #ifndef CONFIG_FIT
 	pr_info("Network is not compiled. Halt.");
 	while (1)
 		hlt();
+#endif
 
-	/* gpm_handler listening thread */
 #ifdef CONFIG_GPM_HANDLER
 	ret = kthread_run(gpm_handler, NULL, "gpm_handler");
-#endif
 	if (IS_ERR(ret))
-		panic("Fail to create mc thread");
+		panic("Fail to create gpm handler thread");
+#endif
+
+#ifdef CONFIG_VMA_PROCESSOR_UNITTEST
+	prcsr_vma_unit_test();
 #endif
 
 	/* Create checkpointing restore thread */
