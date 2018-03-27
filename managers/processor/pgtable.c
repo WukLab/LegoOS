@@ -509,12 +509,22 @@ retry:
 			continue;
 
 		ret = pcache_move_pte(mm, old_pte, new_pte, old_addr, new_addr, old_ptl);
-		if (likely(!ret))
+		switch (ret) {
+		case 0:
 			continue;
-		else if (ret == -EAGAIN) {
+
+		/* pte changed after it released lock */
+		case -EAGAIN:
 			goto retry;
-		} else
+
+		/* pcache alloc failed */
+		case -ENOMEM:
 			WARN_ON_ONCE(1);
+			goto retry;
+
+		default:
+			BUG();
+		};
 	}
 
 	if (new_ptl != old_ptl)

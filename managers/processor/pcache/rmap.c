@@ -703,6 +703,7 @@ static int pcache_move_pte_slowpath(struct mm_struct *mm,
 	 */
 	put_pcache(old_pcm);
 
+	ret = 0;
 out:
 	return ret;
 }
