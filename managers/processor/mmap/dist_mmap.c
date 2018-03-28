@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
 #include <lego/spinlock.h>
 #include <processor/distvm.h>
 
-int distvm_init(struct mm_struct *mm, int homenode)
+int processor_distvm_init(struct mm_struct *mm, int homenode)
 {
 	spin_lock_init(&mm->vmr_lock);
 	mm->vmrange_map = kmalloc(PROCESSOR_VMR_SIZE, GFP_KERNEL);
@@ -26,6 +26,12 @@ int distvm_init(struct mm_struct *mm, int homenode)
 
 	memset16(mm->vmrange_map, (vmr16)homenode, VMR_COUNT);
 	return 0;
+}
+
+void processor_distvm_exit(struct mm_struct *mm)
+{
+	kfree(mm->vmrange_map);
+	mm->vmrange_map = NULL;
 }
 
 /* 

@@ -175,9 +175,10 @@ static void check_mm(struct mm_struct *mm)
 void __mmdrop(struct mm_struct *mm)
 {
 	BUG_ON(mm == &init_mm);
-#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
-	distvm_exit(mm);
-#endif
+
+	/* Processor: Free distributed VMA resource */
+	processor_distvm_exit(mm);
+
 	mm_free_pgd(mm);
 	check_mm(mm);
 	kfree(mm);
@@ -342,13 +343,12 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 		return NULL;
 	}
 
-#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
-	if (unlikely(distvm_init(mm, get_memory_home_node(p)))) {
+	/* Processor: init distributed VMA resource */
+	if (processor_distvm_init(mm, get_memory_home_node(p))) {
 		pgd_free(mm, mm->pgd);
 		kfree(mm);
 		return NULL;
 	}
-#endif
 
 	return mm;
 }
