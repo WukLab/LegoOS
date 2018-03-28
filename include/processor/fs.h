@@ -59,4 +59,8 @@ static inline int normal_file_open(struct file *f, char *f_name)
 
 void do_close_on_exec(struct files_struct *files);
 
+/* common llseeks */
+loff_t dev_llseek(struct file *file, loff_t offset, int whence);
+loff_t no_llseek(struct file *file, loff_t offset, int whence);
+
 #endif /* _LEGO_PROCESSOR_FS_H_ */

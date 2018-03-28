@@ -32,6 +32,7 @@ static ssize_t null_write(struct file *f, const char __user *buf,
 }
 
 struct file_operations null_file_ops = {
+	.llseek = dev_llseek,
 	.open = null_open,
 	.read = null_read,
 	.write = null_write,

@@ -50,6 +50,7 @@ out:
 }
 
 const struct file_operations stdio_file_op = {
+	.llseek		= no_llseek,
 	.open		= stdio_file_open,
 	.read		= stdio_file_read,
 	.write		= stdio_file_write,

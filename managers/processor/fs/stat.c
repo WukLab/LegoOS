@@ -35,6 +35,72 @@ static void dummy_fillstat(struct kstat *stat)
 	stat->blocks = 0;
 }
 
+static inline void __pipe_fillstat(struct kstat *stat)
+{
+	stat->mode |= S_IFIFO;
+	stat->blksize = 4096;
+}
+
+/*
+ * XXX:
+ * currently our dev files are all char devices
+ * Change when you have some block devices
+ */
+static inline void __dev_fillstat(struct kstat *stat)
+{
+	stat->mode |= S_IFCHR;
+}
+
+static inline void __sock_fillstat(struct kstat *stat)
+{
+	stat->mode |= S_IFSOCK;
+}
+
+static inline void __proc_fillstat(struct kstat *stat)
+{
+	WARN(1, "TODO: stat proc file would not happen in general cases.\n");
+}
+
+static inline void __sys_fillstat(struct kstat *stat)
+{
+	WARN(1, "TODO: stat sys file would not happen in general cases.\n");
+}
+
+/*
+ * Handle stat on special files
+ * - pipe
+ * - socket
+ * - /dev
+ * - /proc
+ * - /sys
+ *
+ * Return true if @kname is a special file and we've already
+ * filled @stat. Otherwise return false.
+ */
+static bool special_fillstat(char *kname, struct kstat *stat)
+{
+	bool is_special;
+
+	BUG_ON(!kname || !stat);
+	dummy_fillstat(stat);
+
+	is_special = true;
+	if (dev_file(kname))
+		__dev_fillstat(stat);
+	else if (pipe_file(kname))
+		__pipe_fillstat(stat);
+	else if (socket_file(kname))
+		__sock_fillstat(stat);
+	else if (sys_file(kname))
+		__sys_fillstat(stat);
+	else if (proc_file(kname))
+		__proc_fillstat(stat);
+	else
+		is_special = false;
+
+	return is_special;
+}
+
 static int cp_new_stat(struct kstat *stat, struct stat __user *statbuf)
 {
 	struct stat tmp;
@@ -61,15 +127,6 @@ static int cp_new_stat(struct kstat *stat, struct stat __user *statbuf)
 	tmp.st_blocks = stat->blocks;
 	tmp.st_blksize = stat->blksize;
 	return copy_to_user(statbuf, &tmp, sizeof(tmp)) ? -EFAULT : 0;
-}
-
-static int handle_special_stat(char *f_name)
-{
-	if (f_name_equal(f_name,
-		"/etc/sysconfig/64bit_strstr_via_64bit_strstr_sse2_unaligned"))
-		return -ENOENT;
-	else
-		return 0;
 }
 
 #ifndef CONFIG_USE_RAMFS
@@ -133,32 +190,42 @@ free_msg:
 SYSCALL_DEFINE2(newstat, const char __user *, filename,
 		struct stat __user *, statbuf)
 {
-	char buf[FILENAME_LEN_DEFAULT];
+	char kname[FILENAME_LEN_DEFAULT];
 	struct kstat stat;
 	long ret;
 
-	if (strncpy_from_user(buf, filename, FILENAME_LEN_DEFAULT) < 0) {
+	if (strncpy_from_user(kname, filename, FILENAME_LEN_DEFAULT) < 0) {
 		ret = -EFAULT;
 		goto out;
 	}
 
-	syscall_enter("filename: %s, statbuf: %p\n", buf, statbuf);
+	syscall_enter("filename: %s, statbuf: %p\n", kname, statbuf);
 
-	ret = handle_special_stat(buf);
-	if (ret)
+	/* Some library workaround */
+	if (f_name_equal(kname,
+		"/etc/sysconfig/64bit_strstr_via_64bit_strstr_sse2_unaligned")) {
+		ret = -ENOENT;
 		goto out;
+	}
 
+	ret = special_fillstat(kname, &stat);
+	if (ret)
+		goto fill;
+
+	/*
+	 * If it is not a special file, then we need to
+	 * ask remote storage for it.
+	 */
 #ifdef CONFIG_USE_RAMFS
-	dummy_fillstat(&stat);
 	stat.mode |= S_IFREG;
 #else
-	ret = get_kstat_from_storage(buf, &stat, 0);
+	ret = get_kstat_from_storage(kname, &stat, 0);
 	if (ret)
 		goto out;
 #endif
 
+fill:
 	ret = cp_new_stat(&stat, statbuf);
-
 out:
 	syscall_exit(ret);
 	return ret;
@@ -167,28 +234,31 @@ out:
 SYSCALL_DEFINE2(newlstat, const char __user *, filename,
 		struct stat __user *, statbuf)
 {
-	char buf[FILENAME_LEN_DEFAULT];
+	char kname[FILENAME_LEN_DEFAULT];
 	struct kstat stat;
 	long ret;
 
-	if (strncpy_from_user(buf, filename, FILENAME_LEN_DEFAULT) < 0) {
+	if (strncpy_from_user(kname, filename, FILENAME_LEN_DEFAULT) < 0) {
 		ret = -EFAULT;
 		goto out;
 	}
 
-	syscall_enter("filename: %s, statbuf: %p\n", buf, statbuf);
+	syscall_enter("filename: %s, statbuf: %p\n", kname, statbuf);
+
+	ret = special_fillstat(kname, &stat);
+	if (ret)
+		goto fill;
 
 #ifdef CONFIG_USE_RAMFS
-	dummy_fillstat(&stat);
 	stat.mode |= S_IFREG;
 #else
-	ret = get_kstat_from_storage(buf, &stat, AT_SYMLINK_NOFOLLOW);
+	ret = get_kstat_from_storage(kname, &stat, AT_SYMLINK_NOFOLLOW);
 	if (ret) 
 		goto out;
 #endif
 
+fill:
 	ret = cp_new_stat(&stat, statbuf);
-
 out:
 	syscall_exit(ret);
 	return ret;
@@ -207,26 +277,19 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 		ret = -EBADF;
 		goto out;
 	}
+	
+	ret = special_fillstat(f->f_name, &stat);
+	if (ret)
+		goto fill;
 
-	dummy_fillstat(&stat);
-	if (fd <= 2) {
-		/*
-		 * /dev/tty
-		 * STDIN, STDOUT, STDERR
-		 */
-		stat.mode |= S_IFCHR;
-		stat.ino = 3;
-	} else {
-		stat.mode |= S_IFCHR;
-		stat.size = 1*1024;
 #ifndef CONFIG_USE_RAMFS
-		ret = get_kstat_from_storage(f->f_name, &stat, 0);
-		if (ret)
-			goto out;
+	ret = get_kstat_from_storage(f->f_name, &stat, 0);
+	if (ret)
+		goto out;
 #endif
-	}
-	ret = cp_new_stat(&stat, statbuf);
 
+fill:
+	ret = cp_new_stat(&stat, statbuf);
 out:
 	syscall_exit(ret);
 	return ret;
@@ -245,12 +308,11 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 
 	syscall_enter("filename: %s, statbuf: %p\n", kname, statbuf);
 
-	ret = handle_special_stat(kname);
+	ret = special_fillstat(kname, &stat);
 	if (ret)
-		goto out;
+		goto fill;
 
 #ifdef CONFIG_USE_RAMFS
-	dummy_fillstat(&stat);
 	stat.mode |= S_IFREG;
 #else
 	ret = get_kstat_from_storage(kname, &stat, flag);
@@ -258,8 +320,8 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 		goto out;
 #endif
 
+fill:
 	ret = cp_new_stat(&stat, statbuf);
-
 out:
 	syscall_exit(ret);
 	return ret;

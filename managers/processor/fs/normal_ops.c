@@ -212,7 +212,39 @@ out:
 	return retval;
 }
 
+static loff_t default_llseek(struct file *file, loff_t offset, int whence)
+{
+	long ret = -EINVAL;
+
+	switch (whence) {
+	case SEEK_END:
+		WARN(1, "default SEEK_END is not implemented yet.\n");
+		break;
+	case SEEK_CUR:
+		ret = file->f_pos + offset;
+		break;
+	case SEEK_SET:
+		ret = offset;
+		break;
+	case SEEK_DATA:
+		WARN(1, "default SEEK_DATA is not implemented yet.\n");
+		break;
+	case SEEK_HOLE:
+		WARN(1, "default SEEK_HOLE is not implemented yet.\n");
+		break;
+
+	default:
+		WARN_ON(1);
+	}
+
+	if (ret >= 0 && ret != file->f_pos)
+		file->f_pos = ret;
+
+	return ret;
+}
+
 struct file_operations normal_p2s_f_ops = {
+	.llseek = default_llseek,
 	.open	= normal_p2s_open,
 	.read	= normal_p2m_read,
 	.write	= normal_p2m_write,

@@ -351,10 +351,11 @@ static int pipe_release(struct file *filp)
 }
 
 const struct file_operations pipefifo_fops = {
-	.open = fifo_open,
-	.read = pipe_read,
-	.write = pipe_write,
-	.release = pipe_release,
+	.llseek		= no_llseek,
+	.open		= fifo_open,
+	.read		= pipe_read,
+	.write		= pipe_write,
+	.release	= pipe_release,
 };
 
 /*

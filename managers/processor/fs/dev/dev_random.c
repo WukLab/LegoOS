@@ -51,6 +51,7 @@ static ssize_t random_write(struct file *f, const char __user *buf,
 }
 
 struct file_operations random_file_ops = {
+	.llseek	= dev_llseek,
 	.open	= random_open,
 	.read	= random_read,
 	.write	= random_write,
@@ -91,6 +92,7 @@ static ssize_t urandom_write(struct file *f, const char __user *buf,
 }
 
 struct file_operations urandom_file_ops = {
+	.llseek	= dev_llseek,
 	.open	= urandom_open,
 	.read	= urandom_read,
 	.write	= urandom_write,

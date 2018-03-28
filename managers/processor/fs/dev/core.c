@@ -69,3 +69,23 @@ int dev_file_open(struct file *f, char *f_name)
 
 	return ret;
 }
+
+loff_t dev_llseek(struct file *file, loff_t offset, int whence)
+{
+	long ret = -EINVAL;
+
+	switch (whence) {
+	case SEEK_END:
+		break;
+	case SEEK_SET:
+	case SEEK_CUR:
+		if (offset == 0)
+			ret = 0;
+		break;
+
+	default:
+		WARN_ON(1);
+	}
+
+	return ret;
+}

@@ -13,6 +13,7 @@ obj-y += truncate.o
 obj-y += namei.o
 obj-y += statfs.o
 obj-y += pipe.o
+obj-y += lseek.o
 
 #
 # To maintain compability with linux

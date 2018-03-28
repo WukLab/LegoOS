@@ -84,6 +84,7 @@
 struct file;
 
 struct file_operations {
+	loff_t		(*llseek)(struct file *, loff_t, int);
 	int		(*open)(struct file *);
 	ssize_t 	(*read)(struct file *, char __user *, size_t, loff_t *);
 	ssize_t 	(*write)(struct file *, const char __user *, size_t, loff_t *);
