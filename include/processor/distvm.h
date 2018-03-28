@@ -32,7 +32,7 @@
 
 int processor_distvm_init(struct mm_struct *mm, int homenode);
 void processor_distvm_exit(struct mm_struct *mm);
-int get_memory_node(struct mm_struct *mm, u64 addr);
+int get_memory_node(struct task_struct *p, u64 addr);
 void set_memory_node(struct mm_struct *mm, u64 addr, u64 len, vmr16 node);
 
 static inline void map_mnode(struct mm_struct *mm, u64 addr, u64 len, vmr16 node)
@@ -65,6 +65,15 @@ static inline int processor_distvm_init(struct mm_struct *mm, int homenode)
 	return 0;
 }
 
+static inline int get_memory_node(struct task_struct *p, u64 addr)
+{
+	return get_memory_home_node(p);
+}
+
+static inline void set_memory_node(struct mm_struct *mm, u64 addr, u64 len, vmr16 node)
+{
+
+}
 #endif /* CONFIG_DISTRIBUTED_VMA_PROCESSOR */
 
 #endif /* _LEGO_PROCESSOR_MMAP_H_ */

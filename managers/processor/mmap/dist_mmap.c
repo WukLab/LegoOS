@@ -34,15 +34,16 @@ void processor_distvm_exit(struct mm_struct *mm)
 	mm->vmrange_map = NULL;
 }
 
-/* 
- * used for page fault find
+/*
+ * Callback for pcache, to get the corresponding memory node
  */
-int get_memory_node(struct mm_struct *mm, u64 addr)
+int get_memory_node(struct task_struct *p, u64 addr)
 {
-	vmr16 node;
-	vmr16 *map = mm->vmrange_map;
 	u64 idx = vmr_idx(addr);
-	
+	struct mm_struct *mm = p->mm;
+	vmr16 *map = mm->vmrange_map;
+	vmr16 node;
+
 	VMA_BUG_ON(idx >= VMR_COUNT);
 
 	spin_lock(&mm->vmr_lock);

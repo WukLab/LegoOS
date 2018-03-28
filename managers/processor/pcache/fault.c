@@ -168,16 +168,9 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
 
-#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
-	len = net_send_reply_timeout(get_memory_node(current->mm, address), 
+	len = net_send_reply_timeout(get_memory_node(current, address),
 			P2M_PCACHE_MISS, &payload, sizeof(payload),
 			pa_cache, PCACHE_LINE_SIZE, true, DEF_NET_TIMEOUT);
-#else
-	len = net_send_reply_timeout(get_memory_home_node(current), P2M_PCACHE_MISS,
-			&payload, sizeof(payload),
-			pa_cache, PCACHE_LINE_SIZE, true, DEF_NET_TIMEOUT);
-#endif
-
 	if (unlikely(len < (int)PCACHE_LINE_SIZE)) {
 		if (likely(len == sizeof(int))) {
 			/* remote reported error */
@@ -228,10 +221,9 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx",
 		current->pid, current->tgid, address, flags);
 
-	len = net_send_reply_timeout(get_memory_home_node(current), P2M_PCACHE_MISS,
-			&payload, sizeof(payload),
+	len = net_send_reply_timeout(get_memory_node(current, address),
+			P2M_PCACHE_MISS, &payload, sizeof(payload),
 			reply, sizeof(*reply), false, DEF_NET_TIMEOUT);
-
 	if (len != sizeof(*reply)){
 		ret = -EFAULT;
 		goto out;
