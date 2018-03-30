@@ -23,6 +23,13 @@
 #endif
 
 #ifdef CONFIG_FIT
+
+/* for multicast and maybe other address ranges */
+struct fit_sglist {
+	void *addr;
+	int len;
+};
+
 int ibapi_establish_conn(int ib_port, int mynodeid);
 void ibapi_free_recv_buf(void *input_buf);
 
@@ -42,6 +49,9 @@ int ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_ad
 int ibapi_send_reply_timeout_w_private_bits(int target_node, void *addr, int size, void *ret_addr,
 			     int max_ret_size, int *private_bits, int if_use_ret_phys_addr,
 			     unsigned long timeout_sec);
+int ibapi_multicast_send_reply_timeout(int num_nodes, int *target_node, 
+				struct fit_sglist *sglist, struct fit_sglist *output_msg,
+				int max_ret_size, int if_use_ret_phys_addr, unsigned long timeout_sec);
 
 int ibapi_get_node_id(void);
 int ibapi_num_connected_nodes(void);
@@ -55,7 +65,18 @@ int ibapi_sock_receive_message(int *target_node, int port, uintptr_t *ret_addr, 
 
 int get_internal_port(int target_node, int port);
 
+/* Shared by poll, and epoll if configured */
+int sock_set_write_ready(int target_node, int port);
+int sock_set_read_ready(int target_node, int port, int size);
+int sock_unset_read_ready(int target_node, int port, int size);
+
+int sock_poll_callback(int target_node, int port);
+
+#ifdef CONFIG_EPOLL
+int sock_epoll_callback(int target_node, int port);
 #endif
+
+#endif /* CONFIG_SOCKET_O_IB */
 
 #else
 
@@ -69,6 +90,16 @@ static inline int ibapi_send_reply_imm(int target_node, void *addr, int size,
 static inline int ibapi_send_reply_timeout(int target_node, void *addr, int size,
 				       void *ret_addr, int max_ret_size, bool if_use_ret_phys_addr,
 				       unsigned long timeout_sec)
+{ return -EIO; }
+
+int ibapi_send_reply_timeout_w_private_bits(int target_node, void *addr, int size, void *ret_addr,
+			     int max_ret_size, int *private_bits, int if_use_ret_phys_addr,
+			     unsigned long timeout_sec);
+{ return -EIO; }
+
+int ibapi_multicast_send_reply_timeout(int num_nodes, int *target_node, 
+				struct fit_sglist *sglist, struct fit_sglist *output_msg,
+				int max_ret_size, int if_use_ret_phys_addr, unsigned long timeout_sec)
 { return -EIO; }
 
 static inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr,

@@ -143,6 +143,17 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 	f->f_mode = mode;
 
 	/*
+	 * poll and epoll init
+	 * XXX: should be done inside socket_file_open()
+	 */
+#ifdef CONFIG_EPOLL
+	INIT_LIST_HEAD(&f->f_epi_links);
+#endif
+	INIT_LIST_HEAD(&f->f_poll_links);
+	f->ready_size = 0;
+	f->ready_state = 0;
+
+	/*
 	 * Ugh.. Just a dirty workaround for the
 	 * 	Everything is a file philosophy.
 	 * We currently emulate:

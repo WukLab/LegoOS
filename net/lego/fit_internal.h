@@ -41,6 +41,8 @@ int fit_cleanup_module(void);
 //The below functions in ibapi are required to modify based on these four
 //int fit_query_port(ppc *ctx, int target_node, int desigend_port, int requery_flag);
 
+struct fit_sglist;
+
 int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
 				int size, void *ret_addr, int max_ret_size, int userspace_flag,
 				int if_use_ret_phys_addr, unsigned long timeout_sec, void *caller);
@@ -48,6 +50,10 @@ int fit_send_reply_with_rdma_write_with_imm_reply_extra_bits(ppc *ctx, int targe
 					       int size, void *ret_addr, int max_ret_size, int *ret_private_bits,
 					       int userspace_flag, int if_use_ret_phys_addr,
 					       unsigned long timeout_sec, void *caller);
+int fit_multicast_send_reply(ppc *ctx, int num_nodes, int *target_node,
+						struct fit_sglist *sglist, struct fit_sglist *output_msg,
+						int max_ret_size, int userspace_flag, int if_use_ret_phys_addr,
+						unsigned long timeout_sec, void *caller);
 
 int fit_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag);
 int fit_reply_message_w_extra_bits(ppc *ctx, void *addr, int size, int private_bits, uintptr_t descriptor, int userspace_flag);

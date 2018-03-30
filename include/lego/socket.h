@@ -142,6 +142,7 @@ struct sock_options {
 
 struct lego_socket {
 	int			fd;
+	struct file 		*file;
 	struct sockaddr_in	sockaddr;
 	int			addr_len;
 	struct sockaddr_in	peer_sockaddr;
@@ -155,6 +156,7 @@ struct lego_socket {
 	int			peer_node_id;
 	int			max_num_conn;
 	int			curr_num_conn;
+	int			ready_state;
 	struct lego_sock_conn	recvd_conn_list; /* we now assume only one thread calling socket listen, so no need to lock the list */
 	struct list_head	list;
 	struct sock_options	sk_opt;
@@ -270,8 +272,35 @@ struct user_msghdr {
 #endif /* ARCH_HAS_SOCKET_TYPES */
 
 /*
+ * defines related to poll
+ */
+
+/* These are specified by iBCS2 */
+#define POLLIN		0x0001
+#define POLLPRI		0x0002
+#define POLLOUT		0x0004
+#define POLLERR		0x0008
+#define POLLHUP		0x0010
+#define POLLNVAL	0x0020
+
+#define POLLFREE	0x4000	/* currently only for epoll */
+
+#define POLL_BUSY_LOOP	0x8000
+
+struct pollfd {
+	int fd;
+	short events;
+	short revents;
+};
+
+int lego_poll_callback(struct file *f);
+
+/*
  * defines related to epoll
  */
+#ifdef CONFIG_EPOLL
+
+int lego_epoll_callback(struct file *f, void *key);
 
 /* Flags for epoll_create1.  */
 #define EPOLL_CLOEXEC O_CLOEXEC
@@ -316,7 +345,7 @@ struct epoll_event {
 	__u64 data;
 } EPOLL_PACKED;
 
-/* end of epoll defines */
+#endif /* end of epoll defines */
 
 /* Supported address families. */
 #define AF_UNSPEC	0

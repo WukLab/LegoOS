@@ -26,6 +26,8 @@
 #include <generated/unistd_64.h>
 
 struct lego_dirent;
+struct epoll_event;
+struct pollfd;
 
 #ifdef CONFIG_DEBUG_SYSCALL
 #define debug_syscall_print()			\
@@ -234,4 +236,13 @@ asmlinkage long sys_accept(int, struct sockaddr __user *, int __user *);
 asmlinkage long sys_listen(int, int);
 asmlinkage long sys_select(int n, fd_set __user *inp, fd_set __user *outp,
 			fd_set __user *exp, struct timeval __user *tvp);
+
+asmlinkage long sys_epoll_create(int);			
+asmlinkage long sys_epoll_create1(int);			
+asmlinkage long sys_epoll_ctl(int epfd, int op, int fd, 
+				struct epoll_event __user *event);
+asmlinkage long sys_epoll_wait(int epfd, struct epoll_event __user *events,
+				int maxevents, int timeout);
+asmlinkage long sys_poll(struct pollfd __user *ufds, unsigned int nfds,
+			long timeout_msecs);
 #endif /* _LEGO_SYSCALLS_H_ */
