@@ -13,12 +13,7 @@
 #include <linux/spinlock.h>
 #include <linux/atomic.h>
 
-/* Lego cluster config */
-#define CONFIG_FIT_LOCAL_ID	2
-#define CONFIG_FIT_NR_NODES	3
-#define MAX_NODE		CONFIG_FIT_NR_NODES
-
-//#define CONFIG_SOCKET_O_IB
+#include "fit_config.h"
 
 #define MAX_FIT_NUM 4
 

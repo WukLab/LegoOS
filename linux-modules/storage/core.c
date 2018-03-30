@@ -7,8 +7,6 @@
  * (at your option) any later version.
  */
 
-#include "storage.h"
-#include "common.h"
 #include <linux/fs.h>
 #include <linux/printk.h>
 #include <linux/string.h>
@@ -21,6 +19,10 @@
 #include <linux/dcache.h>
 #include <linux/mutex.h>
 #include <linux/mm.h>
+
+#include "../fit/fit_config.h"
+#include "storage.h"
+#include "common.h"
 
 #define MAX_RXBUF_SIZE	(129 * PAGE_SIZE)
 
