@@ -195,8 +195,10 @@ pipe_read(struct file *filp, char __user *buf,
 				break;
 			}
 
-			break;			
+			break;
 		}
+		if (!pipe->writers)
+			break;
 		/* 
 		 * if buffer is already empty, wakeup writers before sleep
 		 */
@@ -329,14 +331,16 @@ static int pipe_release(struct file *filp)
 	/* if any reference, pipe_info should not be empty*/
 	BUG_ON(!pipe);
 	pipe_lock(pipe);
-	if (filp->f_mode & FMODE_READ)
+
+	if ((filp->f_mode & FMODE_READ) && (pipe->readers > 0))
 		pipe->readers--;
-	if (filp->f_mode & FMODE_WRITE)
+
+	if ((filp->f_mode & FMODE_WRITE) && (pipe->writers > 0))
 		pipe->writers--;
-	
+
 	if (pipe->readers || pipe->writers)
 		wake_up_interruptible(&pipe->wait);
-	
+
 	pipe_debug("CPU:%d, PID:%d, nr_readers:%u, nr_writers:%u",
 		smp_processor_id(), current->pid, pipe->readers, pipe->writers);
 	pipe_unlock(pipe);
