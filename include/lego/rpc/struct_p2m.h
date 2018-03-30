@@ -44,6 +44,14 @@ struct p2m_flush_payload {
 };
 int handle_p2m_flush_one(struct p2m_flush_payload *, u64, struct common_header *);
 
+struct p2m_replica_msg {
+	struct common_header	header;
+	unsigned int		pid;
+	unsigned long		user_va;
+	char			pcacheline[PCACHE_LINE_SIZE];
+};
+void handle_p2m_replica(void *, u64);
+
 /*
  * P2M_READ
  * P2M_WRITE
@@ -95,6 +103,7 @@ struct p2m_fork_struct {
 	__u32	clone_flags;
 	char	comm[LEGO_TASK_COMM_LEN];
 };
+struct task_struct;
 int p2m_fork(struct task_struct *p, unsigned long clone_flags);
 int handle_p2m_fork(struct p2m_fork_struct *, u64, struct common_header *);
 

@@ -21,7 +21,7 @@
 #define _LEGO_MEMORY_VM_PGTABLE_H_
 
 #include <asm/pgtable.h>
-#include <lego/comp_memory.h>
+#include <memory/task.h>
 
 #define lego_pgd_offset(mm, address) ((mm)->pgd + pgd_index((address)))
 

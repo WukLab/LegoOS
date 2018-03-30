@@ -24,6 +24,9 @@ void __init processor_manager_early_init(void);
 void __init processor_manager_init(void);
 int __init pcache_range_register(u64 start, u64 size);
 
+/* Callback for fork() to initialize processor_manager data */
+void fork_processor_data(struct task_struct *, struct task_struct *, unsigned long clone_flags);
+
 int pcache_handle_fault(struct mm_struct *mm,
 			unsigned long address, unsigned long flags);
 
@@ -34,7 +37,7 @@ void pcache_thread_exit(struct task_struct *tsk);
 int checkpoint_thread(struct task_struct *);
 #else
 static inline int checkpoint_thread(struct task_struct *tsk) { return 0; }
-#endif /* CONFIG_CHECKPOINT */
+#endif
 
 int do_execve(const char *filename,
 	      const char * const *argv,
@@ -53,6 +56,8 @@ static inline void pcache_thread_exit(struct task_struct *tsk) { }
 
 static inline void processor_manager_init(void) { }
 static inline void processor_manager_early_init(void) { }
+static inline void fork_processor_data(struct task_struct *s, struct task_struct *t, unsigned long f) { }
+
 static inline int pcache_range_register(u64 start, u64 size)
 {
 	return 0;

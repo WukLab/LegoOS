@@ -13,7 +13,8 @@
 #include <lego/bug.h>
 #include <lego/mmap.h>
 #include <lego/pgfault.h>
-#include <lego/comp_memory.h>
+
+#include <memory/task.h>
 #include <memory/vm-pgtable.h>
 #include <memory/distvm.h>
 

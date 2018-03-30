@@ -11,6 +11,7 @@
 #include <lego/kernel.h>
 #include <lego/tracepoint.h>
 #include <memory/vm.h>
+#include <memory/file_types.h>
 
 #define __def_vmaflag_names						\
 	{VM_READ,			"read"		},		\

@@ -10,6 +10,8 @@
 #ifndef _LEGO_PROCESSOR_PCACHE_CONFIG_H_
 #define _LEGO_PROCESSOR_PCACHE_CONFIG_H_
 
+#include <lego/const.h>
+
 /*
  * This file should only be included by Processor and Memory managers.
  */

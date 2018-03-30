@@ -7,6 +7,11 @@
  * (at your option) any later version.
  */
 
+/*
+ * This file is included by sched.h
+ * So we can not put anything other than self-contained definitions here.
+ */
+
 #ifndef _LEGO_PROCESSOR_PROCESSOR_TYPES_H_
 #define _LEGO_PROCESSOR_PROCESSOR_TYPES_H_
 
@@ -20,7 +25,22 @@
  * need to be initlizaed in the init_task.c
  */
 struct processor_manager {
+	/*
+	 * The memory home node. This is the node
+	 * where loading happens and serves mmap related syscalls.
+	 */
 	int		home_node;
+
+	/*
+	 * The replica memory node. This is the node
+	 * where serves memory replication of this process.
+	 *
+	 * If distributed vma is configured, this node will
+	 * not be used. Instead, it will be stored in the mnode
+	 * array. Each VMA_GRANULARITRY has its own replica node.
+	 */
+	int		replica_node;
+
 #ifdef CONFIG_CHECKPOINT
 	atomic_t	process_barrier;
 #endif
@@ -31,6 +51,8 @@ struct processor_manager {
 #endif
 };
 
+#define UNSET_HOME_NODE		(INT_MAX)
+#define UNSET_REPLICA_NODE	(INT_MAX)
 #define UNSET_PGCACHE_NODE	(INT_MAX)
 #define UNSET_STORAGE_NODE	(INT_MAX)
 

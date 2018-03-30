@@ -12,12 +12,12 @@
 #include <lego/kernel.h>
 #include <lego/uaccess.h>
 #include <lego/fit_ibapi.h>
-#include <lego/comp_memory.h>
-#include <lego/comp_common.h>
 #include <lego/comp_storage.h>
 
+#include <memory/task.h>
 #include <memory/pid.h>
 #include <memory/vm.h>
+#include <memory/file_types.h>
 
 #ifdef CONFIG_DEBUG_M2S_READ_WRITE
 #define m2s_debug(fmt, ...)					\

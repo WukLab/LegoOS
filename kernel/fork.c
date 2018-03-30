@@ -761,6 +761,13 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	if (retval)
 		goto out_cleanup_sighand;
 
+	/*
+	 * copy_mm may use the memory home node of p
+	 * to setup a new dist_vma. So initialzie
+	 * the processor_data first.
+	 */
+	fork_processor_data(p, current, clone_flags);
+
 	retval = copy_mm(clone_flags, p);
 	if (retval)
 		goto out_cleanup_signal;
@@ -788,10 +795,6 @@ struct task_struct *copy_process(unsigned long clone_flags,
 
 #ifdef CONFIG_TRACE_SYSCALL
 	p->strace = NULL;
-#endif
-
-#ifdef CONFIG_COMP_PROCESSOR
-	set_memory_home_node(p, current_memory_home_node());
 #endif
 
 	/*
@@ -933,10 +936,10 @@ pid_t do_fork(unsigned long clone_flags,
 	if (clone_flags & CLONE_GLOBAL_THREAD) {
 		int ret;
 
-		set_memory_home_node(p, DEF_MEM_HOMENODE);
 		ret = p2m_fork(p, clone_flags);
 		if (ret) {
-			/* TODO: free task_struct */
+			/* TODO: cleanup */
+			WARN_ON_ONCE(1);
 			return ret;
 		}
 	}

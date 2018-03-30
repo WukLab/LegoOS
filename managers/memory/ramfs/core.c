@@ -7,12 +7,14 @@
  * (at your option) any later version.
  */
 
+#include <lego/mm.h>
 #include <lego/kernel.h>
 #include <lego/comp_memory.h>
 #include <lego/comp_storage.h>
+#include <lego/fit_ibapi.h>
+
 #include <memory/vm.h>
 #include <memory/file_ops.h>
-#include <lego/fit_ibapi.h>
 
 extern char __ramfs_start[], __ramfs_end[];
 

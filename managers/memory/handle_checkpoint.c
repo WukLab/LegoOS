@@ -8,7 +8,7 @@
  */
 
 #include <lego/kernel.h>
-#include <lego/comp_memory.h>
+#include <lego/comp_common.h>
 
 int handle_p2m_checkpint(void *payload, u64 desc,
 			struct common_header *hdr)

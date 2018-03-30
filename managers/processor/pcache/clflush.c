@@ -16,6 +16,7 @@
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
 #include <lego/jiffies.h>
+#include <lego/fit_ibapi.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 #include <processor/distvm.h>
@@ -26,6 +27,44 @@
 #else
 static inline void clflush_debug(const char *fmt, ...) { }
 #endif
+
+static int replicate_one(struct task_struct *tsk, unsigned long user_va,
+			 void *cache_addr, void *caller)
+{
+	struct p2m_replica_msg *msg;
+	int ret_len, reply;
+	int retval;
+	int replica_mnode_id;
+
+	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	fill_common_header(msg, P2M_PCACHE_REPLICA);
+	msg->pid = tsk->tgid;
+	msg->user_va = user_va & PCACHE_LINE_MASK;
+	memcpy(msg->pcacheline, cache_addr, PCACHE_LINE_SIZE);
+
+	replica_mnode_id = get_replica_node_by_addr(tsk, user_va);
+
+	ret_len = ibapi_send_reply_timeout(replica_mnode_id, msg, sizeof(*msg),
+					   &reply, sizeof(reply), false, DEF_NET_TIMEOUT);
+	if (ret_len != sizeof(reply)) {
+		retval = -EIO;
+		goto out;
+	}
+
+	if (unlikely(reply)) {
+		pr_err("%s(): %s tsk: %d user_va: %#lx\n", FUNC, perror(reply), tsk->pid, user_va);
+		retval = reply;
+		goto out;
+	}
+
+	retval = 0;
+out:
+	kfree(msg);
+	return retval;
+}
 
 static int __clflush_one(struct task_struct *tsk, unsigned long user_va,
 			 void *cache_addr, void *caller)
@@ -80,9 +119,13 @@ out:
 int clflush_one(struct task_struct *tsk, unsigned long user_va,
 		void *cache_addr)
 {
+	int ret;
+
 	inc_pcache_event(PCACHE_CLFLUSH);
-	return __clflush_one(tsk, user_va, cache_addr,
-			__builtin_return_address(0));
+	ret = __clflush_one(tsk, user_va, cache_addr, __builtin_return_address(0));
+	ret = replicate_one(tsk, user_va, cache_addr, __builtin_return_address(0));
+
+	return ret;
 }
 
 static int __pcache_flush_one(struct pcache_meta *pcm,

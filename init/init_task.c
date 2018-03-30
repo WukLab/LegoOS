@@ -138,6 +138,8 @@ static struct sighand_struct init_sighand = INIT_SIGHAND(init_sighand);
 
 #ifdef CONFIG_COMP_PROCESSOR
 static struct processor_manager	init_pm_data = {
+	.home_node		= UNSET_HOME_NODE,
+	.replica_node		= UNSET_REPLICA_NODE,
 #ifdef CONFIG_GSM
 	.pgcache_node		= UNSET_PGCACHE_NODE,
 	.storage_node		= UNSET_STORAGE_NODE,

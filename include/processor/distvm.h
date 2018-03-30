@@ -17,6 +17,7 @@
  * processor_distvm_init: Called when a new mm_struct is created
  * processor_distvm_exit: Called when a mm_struct has no users, to be freed
  * get_memory_node:
+ * get_replica_node_by_addr:
  * set_memory_node:
  */
 
@@ -32,7 +33,10 @@
 
 int processor_distvm_init(struct mm_struct *mm, int homenode);
 void processor_distvm_exit(struct mm_struct *mm);
+
 int get_memory_node(struct task_struct *p, u64 addr);
+int get_replica_node_by_addr(struct task_struct *p, u64 addr);
+
 void set_memory_node(struct mm_struct *mm, u64 addr, u64 len, vmr16 node);
 
 static inline void map_mnode(struct mm_struct *mm, u64 addr, u64 len, vmr16 node)
@@ -53,9 +57,11 @@ void prcsr_vma_unit_test(void);
 #endif
 
 #else
+
 /*
  * No distributed VMA
  */
+
 static inline void processor_distvm_exit(struct mm_struct *mm)
 {
 }
@@ -65,15 +71,30 @@ static inline int processor_distvm_init(struct mm_struct *mm, int homenode)
 	return 0;
 }
 
+/*
+ * Always send everything to memory home node
+ */
 static inline int get_memory_node(struct task_struct *p, u64 addr)
 {
 	return get_memory_home_node(p);
 }
 
+/*
+ * Always send replicas to one memory node
+ */
+static inline int get_replica_node_by_addr(struct task_struct *p, u64 addr)
+{
+	return get_replica_node(p);
+}
+
+/*
+ * No need to set anything
+ * It is all determined by home_node and replica_node, and can not be changed.
+ */
 static inline void set_memory_node(struct mm_struct *mm, u64 addr, u64 len, vmr16 node)
 {
 
 }
-#endif /* CONFIG_DISTRIBUTED_VMA_PROCESSOR */
+#endif /* CONFIG_DISTRIBUTED_VMA */
 
 #endif /* _LEGO_PROCESSOR_MMAP_H_ */

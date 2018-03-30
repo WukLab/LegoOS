@@ -15,6 +15,7 @@
 
 #include <memory/vm.h>
 #include <memory/pid.h>
+#include <memory/task.h>
 
 #define PID_ARRAY_HASH_BITS	10
 
@@ -45,10 +46,44 @@ int __must_check ht_insert_lego_task(struct lego_task_struct *tsk)
 			return -EEXIST;
 		}
 	}
-	hash_add(node_pid_hash, &tsk->link, key);  
+	hash_add(node_pid_hash, &tsk->link, key);
 	spin_unlock(&hashtable_lock);
 
 	return 0;
+}
+
+/*
+ * Allocate @tsk and its replica log
+ */
+struct lego_task_struct *alloc_lego_task_struct(void)
+{
+	struct lego_task_struct *tsk;
+	int ret;
+
+	tsk = kzalloc(sizeof(*tsk), GFP_KERNEL);
+	if (!tsk)
+		return NULL;
+
+	ret = alloc_lego_task_struct_replica(tsk);
+	if (ret) {
+		kfree(tsk);
+		return NULL;
+	}
+
+	spin_lock_init(&tsk->task_lock);
+	return tsk;
+}
+
+/*
+ * Free @tsk and its associated replica log
+ * @tsk is not queued into hashtable when called.
+ */
+void free_lego_task_struct(struct lego_task_struct *tsk)
+{
+	BUG_ON(hash_hashed(&tsk->link));
+
+	free_lego_task_struct_replica(tsk);
+	kfree(tsk);
 }
 
 void free_lego_task(struct lego_task_struct *tsk)
@@ -57,6 +92,7 @@ void free_lego_task(struct lego_task_struct *tsk)
 	struct lego_task_struct *p;
 
 	BUG_ON(!tsk);
+	BUG_ON(!hash_hashed(&tsk->link));
 
 	node = tsk->node;
 	pid = tsk->pid;
@@ -89,7 +125,7 @@ find_lego_task_by_pid(unsigned int node, unsigned int pid)
 	hash_for_each_possible(node_pid_hash, tsk, link, key) {
 		if (likely(tsk->pid == pid && tsk->node == node)) {
 			spin_unlock(&hashtable_lock);
-			return tsk;        
+			return tsk;
 		}
         }
         spin_unlock(&hashtable_lock);

@@ -94,7 +94,6 @@ static ssize_t normal_p2m_read(struct file *f, char __user *buf,
 	hdr = msg;
 	hdr->opcode = P2M_READ;
 	hdr->src_nid = LEGO_LOCAL_NID;
-	hdr->length = len_msg;
 
 	payload = msg + sizeof(*hdr);
 	payload->pid = current->pid;
@@ -173,7 +172,6 @@ static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
 	hdr = (struct common_header *)msg;
 	hdr->opcode = P2M_WRITE;
 	hdr->src_nid = LEGO_LOCAL_NID;
-	hdr->length = len_msg;
 
 	payload = (struct p2m_read_write_payload *)(msg + sizeof(*hdr));
 	payload->pid = current->pid;

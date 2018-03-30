@@ -10,7 +10,8 @@
 #ifndef _LEGO_MEMORY_LOADER_H_
 #define _LEGO_MEMORY_LOADER_H_
 
-#include <lego/comp_memory.h>
+#include <lego/kernel.h>
+#include <memory/task.h>
 
 #ifdef CONFIG_DEBUG_LOADER
 #define loader_debug(fmt, ...)	\

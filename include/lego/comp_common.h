@@ -16,13 +16,6 @@
 
 #include <lego/distvm.h>
 
-#include <lego/rpc/opcode.h>
-#include <lego/rpc/struct_common.h>
-#include <lego/rpc/struct_p2m.h>
-#include <lego/rpc/struct_p2s.h>
-#include <lego/rpc/struct_m2m.h>
-#include <lego/rpc/struct_m2s.h>
-
 #define DEF_MEM_HOMENODE	CONFIG_DEFAULT_MEM_NODE
 #define STORAGE_NODE		CONFIG_DEFAULT_STORAGE_NODE
 
@@ -48,9 +41,15 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 			   void *retbuf, u32 max_len_retbuf, bool retbuf_is_phys,
 			   u32 timeout);
 
-struct gsm2p_ret_struct {
-	int mid;
-	int sid;
-};
+/*
+ * Put those header files at last because they may need
+ * to use some generic macros, variables defined above.
+ */
+#include <lego/rpc/opcode.h>
+#include <lego/rpc/struct_common.h>
+#include <lego/rpc/struct_p2m.h>
+#include <lego/rpc/struct_p2s.h>
+#include <lego/rpc/struct_m2m.h>
+#include <lego/rpc/struct_m2s.h>
 
 #endif /* _LEGO_COMP_COMMON_H_ */

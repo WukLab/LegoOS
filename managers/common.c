@@ -54,7 +54,6 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 	hdr = to_common_header(msg);
 	hdr->opcode = opcode;
 	hdr->src_nid = LEGO_LOCAL_NID;
-	hdr->length = sizeof(*hdr) + len_payload;
 
 	payload_msg = to_payload(msg);
 	memcpy(payload_msg, payload, len_payload);

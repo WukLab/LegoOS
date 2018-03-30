@@ -13,11 +13,11 @@
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
 
 #include <lego/rbtree.h>
-#include <lego/fit_ibapi.h>
 #include <lego/string.h>
-#include <memory/vm.h>
 #include <lego/distvm.h>
-#include <lego/comp_memory.h>
+#include <lego/fit_ibapi.h>
+
+#include <memory/task.h>
 
 /*
  * this struct keeps track of unmap vm area in with granularity of 

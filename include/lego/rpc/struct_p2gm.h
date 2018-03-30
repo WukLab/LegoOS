@@ -7,13 +7,12 @@
  * (at your option) any later version.
  */
 
-#ifndef _LEGO_COMP_MEMORY_H_
-#define _LEGO_COMP_MEMORY_H_
+#ifndef _LEGO_RPC_STRUCT_P2GM_H_
+#define _LEGO_RPC_STRUCT_P2GM_H_
 
-#ifdef CONFIG_COMP_MEMORY
-void __init memory_component_init(void);
-#else
-static inline void memory_component_init(void) { }
-#endif
+struct gsm2p_ret_struct {
+	int mid;
+	int sid;
+};
 
-#endif /* _LEGO_COMP_MEMORY_H_ */
+#endif /* _LEGO_RPC_STRUCT_P2GM_H_ */

@@ -10,14 +10,16 @@
 #ifndef _LEGO_RPC_OPCODE_H_
 #define _LEGO_RPC_OPCODE_H_
 
+#include <generated/unistd_64.h>
+
 /*
  * Rules about our message opcodes:
  *
  * 1) Prefix:
- *	P2M: processor -> memory
- *	M2P: memory -> processor
- *	M2S: memory -> storage
- *	S2M: storage -> memory
+ *	P2M:	processor <--> memory
+ *	P2S:	processor <--> storage
+ *	M2S:	memory    <--> storage
+ *	P2GSM:	processor <--> global storage monitor
  *
  * 2) System calls related:
  *	Follow the original SYSCALL number
@@ -26,6 +28,7 @@
 #define P2M_HEARTBEAT		((__u32)0x10000000)
 #define P2M_PCACHE_MISS		((__u32)0x20000000)
 #define P2M_PCACHE_FLUSH	((__u32)0x30000000)
+#define P2M_PCACHE_REPLICA	((__u32)0x30000001)
 
 #define P2M_READ		((__u32)__NR_read)
 #define P2M_WRITE		((__u32)__NR_write)

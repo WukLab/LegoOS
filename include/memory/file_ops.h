@@ -10,7 +10,8 @@
 #ifndef _LEGO_MEMORY_FILE_OPS_H_
 #define _LEGO_MEMORY_FILE_OPS_H_
 
-#include <lego/comp_memory.h>
+#include <memory/task.h>
+#include <memory/file_types.h>
 
 extern struct lego_file_operations ramfs_file_ops;
 extern struct lego_file_operations storage_file_ops;

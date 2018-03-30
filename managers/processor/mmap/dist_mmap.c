@@ -53,6 +53,12 @@ int get_memory_node(struct task_struct *p, u64 addr)
 	return (int)node;
 }
 
+int get_replica_node_by_addr(struct task_struct *p, u64 addr)
+{
+	panic("Implement me.");
+	return 0;
+}
+
 void set_memory_node(struct mm_struct *mm, u64 addr, u64 len, vmr16 node)
 {
 	vmr16 *map = mm->vmrange_map;

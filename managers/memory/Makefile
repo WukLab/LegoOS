@@ -3,7 +3,8 @@
 #
 
 obj-y := core.o
-obj-y += gpid.o
+obj-y += task.o
+obj-y += replica.o
 obj-y += handle_fork.o
 obj-y += handle_execve.o
 obj-y += handle_mmap.o

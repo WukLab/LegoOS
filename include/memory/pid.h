@@ -10,7 +10,7 @@
 #ifndef _LEGO_MEMORY_PID_H_
 #define _LEGO_MEMORY_PID_H_
 
-#include <lego/comp_memory.h>
+#include <memory/task.h>
 
 void free_lego_task(struct lego_task_struct *tsk);
 

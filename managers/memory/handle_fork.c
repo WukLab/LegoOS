@@ -9,10 +9,11 @@
 
 #include <lego/slab.h>
 #include <lego/fit_ibapi.h>
-#include <lego/comp_memory.h>
 
 #include <memory/vm.h>
 #include <memory/pid.h>
+#include <memory/task.h>
+#include <memory/file_types.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_FORK
 #define fork_debug(fmt, ...)	\
@@ -190,8 +191,8 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	if (!parent && parent_tgid != 1)
 		WARN_ONCE(1, "From processor-daemon?");
 
-	tsk = kzalloc(sizeof(*tsk), GFP_KERNEL);
-	if (unlikely(!tsk)) {
+	tsk = alloc_lego_task_struct();
+	if (!tsk) {
 		retbuf = -ENOMEM;
 		goto reply;
 	}
@@ -207,8 +208,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	tsk->pid = tgid;
 	tsk->parent_pid = parent_tgid;
 	tsk->node = nid;
-	mem_set_memory_home_node(tsk, MY_NODE_ID);
-	spin_lock_init(&tsk->task_lock);
+	mem_set_memory_home_node(tsk, LEGO_LOCAL_NID);
 	lego_set_task_comm(tsk, payload->comm);
 
 	/* Duplicate the mmap from parent */
@@ -222,7 +222,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	retbuf = ht_insert_lego_task(tsk);
 	if (retbuf) {
 		lego_mmput(tsk->mm);
-		kfree(tsk);
+		free_lego_task_struct(tsk);
 
 		/* Same process? */
 		if (likely(retbuf == -EEXIST))

@@ -11,11 +11,11 @@
 #include <lego/kernel.h>
 #include <lego/kthread.h>
 #include <lego/fit_ibapi.h>
-#include <lego/comp_memory.h>
 #include <lego/comp_storage.h>
 
 #include <memory/vm.h>
 #include <memory/pid.h>
+#include <memory/task.h>
 #include <memory/loader.h>
 #include <memory/distvm.h>
 
@@ -168,6 +168,11 @@ static int mc_dispatcher(void *passed)
 		break;
 	case P2M_PCACHE_FLUSH:
 		handle_p2m_flush_one(payload, desc, hdr);
+		break;
+
+/* clflush REPLICA */
+	case P2M_PCACHE_REPLICA:
+		handle_p2m_replica(msg, desc);
 		break;
 
 /* SYSCALL */

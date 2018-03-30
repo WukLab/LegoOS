@@ -75,6 +75,29 @@ void __init checkpoint_init(void);
 static inline void checkpoint_init(void) { }
 #endif
 
+#ifdef CONFIG_GPM_HANDLER
+static inline void init_gpm_handler(void)
+{
+	struct task_struct *ret;
+
+	ret = kthread_run(gpm_handler, NULL, "gpm_handler");
+	if (IS_ERR_OR_NULL(ret))
+		panic("Fail to create gpm handler thread");
+}
+#else
+static inline void init_gpm_handler(void) { }
+#endif
+
+static inline void common_header_check(void)
+{
+#define CHK(type, member)	\
+	BUILD_BUG_ON((offsetof(type, member) % COMMON_HEADER_ALIGNMENT) != 0)
+
+	CHK(struct p2m_replica_msg, pid);
+
+#undef CHK
+}
+
 /**
  * processor_manager_init
  *
@@ -83,8 +106,7 @@ static inline void checkpoint_init(void) { }
  */
 void __init processor_manager_init(void)
 {
-	struct task_struct *ret __maybe_unused;
-	
+	common_header_check();
 	pcache_post_init();
 
 #ifndef CONFIG_FIT
@@ -93,15 +115,11 @@ void __init processor_manager_init(void)
 		hlt();
 #endif
 
-#ifdef CONFIG_GPM_HANDLER
-	ret = kthread_run(gpm_handler, NULL, "gpm_handler");
-	if (IS_ERR(ret))
-		panic("Fail to create gpm handler thread");
-#endif
-
 #ifdef CONFIG_VMA_PROCESSOR_UNITTEST
 	prcsr_vma_unit_test();
 #endif
+
+	init_gpm_handler();
 
 	/* Create checkpointing restore thread */
 	checkpoint_init();

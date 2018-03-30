@@ -20,11 +20,17 @@
 
 #define MAX_FILENAME_LENGTH	128
 
+#define COMMON_HEADER_ALIGNMENT (8)
+
 struct common_header {
 	unsigned int opcode;
 	unsigned int src_nid;		/* source nid */
-	unsigned int length;		/* of the whole message */
-};
+
+	/*
+	 * XXX: Useless. Rmove me.
+	 */
+	unsigned int length;
+} __aligned(COMMON_HEADER_ALIGNMENT);
 
 static inline struct common_header *to_common_header(void *msg)
 {
@@ -34,6 +40,19 @@ static inline struct common_header *to_common_header(void *msg)
 static inline void *to_payload(void *msg)
 {
 	return (void *)(msg + sizeof(struct common_header));
+}
+
+/*
+ * Fill the common_header part of the given @msg
+ * @msg must have the common_header at the top of its struct.
+ */
+static __always_inline void fill_common_header(void *msg, unsigned int opcode)
+{
+	struct common_header *hdr;
+
+	hdr = to_common_header(msg);
+	hdr->opcode = opcode;
+	hdr->src_nid = LEGO_LOCAL_NID;
 }
 
 #endif /* _LEGO_RPC_STRUCT_COMMON_H_ */
