@@ -91,6 +91,8 @@ static u32 mlx4_buddy_alloc(struct mlx4_buddy *buddy, int order)
 		}
 
 	spin_unlock(&buddy->lock);
+	printk(KERN_CRIT "%s ERROR: Couldn't allocate mr order %d\n", 
+			__func__, order);
 	return -1;
 
  found:
@@ -185,11 +187,14 @@ static u32 mlx4_alloc_mtt_range(struct mlx4_dev *dev, int order)
 	u32 seg;
 
 	seg = mlx4_buddy_alloc(&mr_table->mtt_buddy, order);
-	if (seg == -1)
+	if (seg == -1) {
+		printk(KERN_CRIT "ERROR: mlx4_buddy_alloc failed\n");
 		return -1;
+	}
 
 	if (mlx4_table_get_range(dev, &mr_table->mtt_table, seg,
 				 seg + (1 << order) - 1)) {
+		printk(KERN_CRIT "ERROR: mlx4_table_get_range failed\n");
 		mlx4_buddy_free(&mr_table->mtt_buddy, seg, order);
 		return -1;
 	}
@@ -279,8 +284,10 @@ int mlx4_mr_alloc(struct mlx4_dev *dev, u32 pd, u64 iova, u64 size, u32 access,
 	mr->key	       = hw_index_to_key(index);
 
 	err = mlx4_mtt_init(dev, npages, page_shift, &mr->mtt);
-	if (err)
+	if (err) {
+		printk(KERN_CRIT "ERROR: mlx4_mtt_init failed\n");
 		mlx4_bitmap_free(&priv->mr_table.mpt_bitmap, index);
+	}
 
 	return err;
 }
@@ -353,7 +360,8 @@ int mlx4_mr_enable(struct mlx4_dev *dev, struct mlx4_mr *mr)
 	err = mlx4_SW2HW_MPT(dev, mailbox,
 			     key_to_hw_index(mr->key) & (dev->caps.num_mpts - 1));
 	if (err) {
-		mlx4_warn(dev, "SW2HW_MPT failed (%d)\n", err);
+		mlx4_warn(dev, "%s SW2HW_MPT failed (%d) mrkey %d mptkey %di index %d\n", 
+				__func__, err, mr->key, mpt_entry->key, key_to_hw_index(mr->key));
 		goto err_cmd;
 	}
 

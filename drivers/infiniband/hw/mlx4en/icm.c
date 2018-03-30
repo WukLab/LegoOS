@@ -201,6 +201,7 @@ struct mlx4_icm *mlx4_alloc_icm(struct mlx4_dev *dev, int npages,
 	return icm;
 
 fail:
+	printk(KERN_CRIT "%s Error: couldn't allocate %d pages\n", __func__, npages);
 	mlx4_free_icm(dev, icm, coherent);
 	return NULL;
 }

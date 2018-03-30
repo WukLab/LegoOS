@@ -298,15 +298,21 @@ static struct ib_client ibv_client = {
 	.remove = ibv_remove_one
 };
 
+//#define FIT_TESTING
+
 static void lego_ib_test(void)
 {
 #ifdef FIT_TESTING
 	int ret, i;
 	char *buf = kmalloc(4096, GFP_KERNEL);
+	char *buf2 = kmalloc(4096, GFP_KERNEL);
 	char *retb = kmalloc(4096, GFP_KERNEL);
+	char *retb2 = kmalloc(4096, GFP_KERNEL);
 	uintptr_t desc;
+	struct fit_sglist send_sglist[2], reply_sglist[2];
+	int nodes[2];
 
-	pr_info("testing IB\n");
+	pr_info("testing multicast IB mynode %d\n", MY_NODE_ID);
 	if (MY_NODE_ID == 1) {
 		for (i = 0; i < 10; i++) {
 			ret = ibapi_receive_message(0, buf, 4096, &desc);
@@ -316,14 +322,37 @@ static void lego_ib_test(void)
 			retb[2] = '\0';
 			ret = ibapi_reply_message(retb, 4096, desc);
 		}
+	} else if (MY_NODE_ID == 2) {
+		for (i = 0; i < 10; i++) {
+			ret = ibapi_receive_message(0, buf, 4096, &desc);
+			pr_info("received message: [%c%c%c%c]\n", buf[0], buf[1], buf[2], buf[3]);
+			retb[0] = '6';
+			retb[1] = '7';
+			retb[2] = '\0';
+			ret = ibapi_reply_message(retb, 4096, desc);
+		}
 	} else {
 		buf[0] = 'a';
 		buf[1] = 'b';
 		buf[2] = '\0';
-		struct page *p = alloc_page();
+		buf2[0] = 'x';
+		buf2[1] = 'y';
+		buf2[2] = '\0';
+		//struct page *p = alloc_page();
+		send_sglist[0].addr = buf;
+		send_sglist[0].len = 4096;
+		send_sglist[1].addr = buf2;
+		send_sglist[1].len = 4096;
+		reply_sglist[0].addr = retb;
+		reply_sglist[0].len = 4096;
+		reply_sglist[1].addr = retb2;
+		reply_sglist[1].len = 4096;
+		nodes[0] = 1;
+		nodes[1] = 2;
+
 		for (i = 0; i < 10; i++) {
-		ret = ibapi_send_reply_imm(1, buf, 4096, page_to_phys(p), 4096, 1);
-			pr_info("%s(%2d) retbuffer: %s\n", __func__, i, page_to_virt(p));
+		ret = ibapi_multicast_send_reply_timeout(2, nodes, send_sglist, reply_sglist, 4096, 0, 360);
+			pr_info("%s(%2d) retbuf1: %s retbuf2: %s\n", __func__, i, retb, retb2);
 		}
 	}
 #endif

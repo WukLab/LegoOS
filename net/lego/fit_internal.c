@@ -260,6 +260,9 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	ctx->send_state = (enum s_state *)kmalloc(num_total_connections * sizeof(enum s_state), GFP_KERNEL);	
 	ctx->recv_state = (enum r_state *)kmalloc(num_total_connections * sizeof(enum r_state), GFP_KERNEL);
 
+	if (!ctx->proc) {
+		printk(KERN_CRIT "ERROR! cannot create IB context, something wrong with get_dma_mr\n");
+	}
 	fit_debug("proc lkey %d rkey %d\n", ctx->proc->lkey, ctx->proc->rkey);
 
 	//Customized part
@@ -331,7 +334,8 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	{
 #ifdef CONFIG_SOCKET_O_IB
 		rem_node_id = i/(NUM_PARALLEL_CONNECTION+1);
-		fit_debug("mynodeid %d i %d connecting node %d\n", ctx->node_id, i, rem_node_id);
+		fit_debug("sock enabled mynodeid %d i %d connecting node %d NUM_PARALLEL_CONNECTION %d \n", 
+				ctx->node_id, i, rem_node_id, NUM_PARALLEL_CONNECTION);
 		if (rem_node_id == ctx->node_id)
 			continue;
 		/* last one for every remote node is a socket qp */
@@ -370,6 +374,7 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 			.sq_sig_type = IB_SIGNAL_REQ_WR
 		};
 
+		fit_debug("init_attr cq %d %p\n", i%NUM_POLLING_THREADS, init_attr.recv_cq);
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
 		if(!ctx->qp[i])
 		{
