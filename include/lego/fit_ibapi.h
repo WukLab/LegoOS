@@ -65,18 +65,15 @@ int ibapi_sock_receive_message(int *target_node, int port, uintptr_t *ret_addr, 
 
 int get_internal_port(int target_node, int port);
 
-#if (CONFIG_EPOLL || CONFIG_POLL)
+/* Shared by poll, and epoll if configured */
 int sock_set_write_ready(int target_node, int port);
 int sock_set_read_ready(int target_node, int port, int size);
 int sock_unset_read_ready(int target_node, int port, int size);
-#endif
+
+int sock_poll_callback(int target_node, int port);
 
 #ifdef CONFIG_EPOLL
 int sock_epoll_callback(int target_node, int port);
-#endif
-
-#ifdef CONFIG_POLL
-int sock_poll_callback(int target_node, int port);
 #endif
 
 #endif /* CONFIG_SOCKET_O_IB */

@@ -274,7 +274,6 @@ struct user_msghdr {
 /*
  * defines related to poll
  */
-#ifdef CONFIG_POLL
 
 /* These are specified by iBCS2 */
 #define POLLIN		0x0001
@@ -295,8 +294,6 @@ struct pollfd {
 };
 
 int lego_poll_callback(struct file *f);
-
-#endif
 
 /*
  * defines related to epoll

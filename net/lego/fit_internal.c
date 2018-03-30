@@ -1266,21 +1266,16 @@ get_next_request:
 			offset = new_request->offset;
 			fit_debug("got new req offset %d sourcenode %d size %d\n", 
 					offset, node_id, get_size);
-			if(get_size > receive_size)
-			{
+			if (get_size > receive_size) {
 				new_request->size -= receive_size;
 				new_request->offset += receive_size;
 				get_size = receive_size;
-				#if (CONFIG_EPOLL || CONFIG_POLL)
 				sock_unset_read_ready(node_id, port, receive_size);
-				#endif
-			}
-			else {
+			} else {
 				list_del(&new_request->list);	
-				#if (CONFIG_EPOLL || CONFIG_POLL)
 				sock_unset_read_ready(node_id, port, get_size);
-				#endif
 			}
+
 			break;
 		}
 		spin_unlock(&ctx->sock_imm_waitqueue_perport_lock[port]);
@@ -2500,7 +2495,7 @@ int fit_multicast_send_reply(ppc *ctx, int num_nodes, int *target_node,
 	unsigned long start_time;
         int ret = 0;
 
-        int i,j;
+        int i;
 	//struct ib_device *ibd = (struct ib_device *)ctx->context;
 
         if(!sglist || !target_node || !output_msg || !num_nodes)

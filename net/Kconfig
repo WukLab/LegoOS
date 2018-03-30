@@ -125,15 +125,6 @@ config DEBUG_EPOLL
 	help
 	  Turn on to show epoll debugging msgs
 
-config POLL
-	bool "poll system call support"
-	default n
-	depends on SOCKET_SYSCALL
-	help
-	  Enable to use poll on socket. Only processor components that have socket
-	  support should enable this config. Poll for other file types are not 
-	  supported now.
-
 config DEBUG_POLL
 	bool "debugging poll"
 	default n

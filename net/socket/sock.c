@@ -1109,7 +1109,6 @@ static const struct file_operations socket_fops = {
 	.poll		= sock_poll,
 };
 
-#if (CONFIG_EPOLL | CONFIG_POLL)
 /* 
  * Find file using target node ID and FIT internal port number
  * For INADDR_ANY, target_node is not used for any matching
@@ -1197,7 +1196,6 @@ int sock_set_write_ready(int target_node, int port)
 
 	return 0;
 }
-#endif
 
 #ifdef CONFIG_EPOLL
 int sock_epoll_callback(int target_node, int port)
@@ -1223,7 +1221,6 @@ int sock_epoll_callback(int target_node, int port)
 }
 #endif
 
-#ifdef CONFIG_POLL
 int sock_poll_callback(int target_node, int port)
 {
 	struct lego_socket *sock;
@@ -1245,7 +1242,6 @@ int sock_poll_callback(int target_node, int port)
 
 	return 0;
 }
-#endif
 
 /*
  * Callback for syscall open()

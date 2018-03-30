@@ -657,4 +657,33 @@ SYSCALL_DEFINE2(shutdown, int, fd, int, how)
 	BUG();
 }
 
+asmlinkage long sys_poll(struct pollfd __user *ufds, unsigned int nfds,
+			long timeout_msecs)
+{
+	BUG();
+}
 #endif /* Socket SYSCALL */
+
+#ifndef CONFIG_EPOLL
+SYSCALL_DEFINE1(epoll_create1, int, flags)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE1(epoll_create, int, size)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
+		struct epoll_event __user *, event)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
+		int, maxevents, int, timeout)
+{
+	BUG();
+}
+#endif /* CONFIG_EPOLL */

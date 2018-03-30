@@ -26,6 +26,8 @@
 #include <generated/unistd_64.h>
 
 struct lego_dirent;
+struct epoll_event;
+struct pollfd;
 
 #ifdef CONFIG_DEBUG_SYSCALL
 #define debug_syscall_print()			\

@@ -41,6 +41,8 @@ int fit_cleanup_module(void);
 //The below functions in ibapi are required to modify based on these four
 //int fit_query_port(ppc *ctx, int target_node, int desigend_port, int requery_flag);
 
+struct fit_sglist;
+
 int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
 				int size, void *ret_addr, int max_ret_size, int userspace_flag,
 				int if_use_ret_phys_addr, unsigned long timeout_sec, void *caller);

@@ -100,16 +100,18 @@ struct file {
 	loff_t			f_pos;
 	char			f_name[FILENAME_LEN_DEFAULT];
 	const struct file_operations *f_op;
+
 #ifdef CONFIG_EPOLL
 	struct list_head	f_epi_links;
 #endif
-#ifdef CONFIG_POLL
+
+	/* for poll */
 	struct list_head	f_poll_links;
-#endif
-#if (CONFIG_EPOLL || CONFIG_POLL)
+
+	/* shared by poll, and epoll if configured */
 	int			ready_state;
 	int			ready_size;
-#endif
+
 	void			*private_data;
 };
 
