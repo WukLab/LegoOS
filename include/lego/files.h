@@ -84,10 +84,10 @@
 struct file;
 
 struct file_operations {
-	int	(*open)(struct file *);
-	ssize_t (*read)(struct file *, char __user *, size_t, loff_t *);
-	ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *);
-	int	(*release) (struct file *);
+	int		(*open)(struct file *);
+	ssize_t 	(*read)(struct file *, char __user *, size_t, loff_t *);
+	ssize_t 	(*write)(struct file *, const char __user *, size_t, loff_t *);
+	int		(*release) (struct file *);
 	unsigned int	(*poll)(struct file *);
 };
 
@@ -167,22 +167,6 @@ static inline void put_file(struct file *filp)
 }
 
 int get_absolute_pathname(int dfd, char *k_pathname, const char __user *pathname);
-
-/* statfs.c */
-struct kstatfs {
-	long f_type;
-	long f_bsize;
-	u64 f_blocks;
-	u64 f_bfree;
-	u64 f_bavail;
-	u64 f_files;
-	u64 f_ffree;
-	__kernel_fsid_t f_fsid;
-	long f_namelen;
-	long f_frsize;
-	long f_flags;
-	long f_spare[4];
-};
 
 /*
  * arch dependent, long for x86_64

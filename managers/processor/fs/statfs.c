@@ -24,7 +24,7 @@
  * by caller
  * return value: 0 on success, -errno on fail
  */
-static long do_p2s_kstatfs(const char *kpathname, struct kstatfs *kbuf)
+static long do_p2s_kstatfs(const char *kpathname, struct lego_kstatfs *kbuf)
 {
 	long ret;
 	void *msg;
@@ -69,7 +69,7 @@ SYSCALL_DEFINE2(statfs, const char __user *, pathname, struct statfs __user *, b
 {
 	long ret;
 	char k_name_buf[FILENAME_LEN_DEFAULT];
-	struct kstatfs k_statfs_buf;
+	struct lego_kstatfs k_statfs_buf;
 
 	ret = get_absolute_pathname(AT_FDCWD, k_name_buf, pathname);
 	if (ret)

@@ -19,7 +19,9 @@
 #include <lego/fit_ibapi.h>
 #include <lego/signalfd.h>
 #include <lego/timekeeping.h>
+
 #include <processor/processor.h>
+#include <processor/pcache.h>
 #include <processor/distvm.h>
 
 #include <asm/pgalloc.h>

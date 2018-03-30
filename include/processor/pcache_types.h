@@ -15,17 +15,11 @@
 #include <lego/bitops.h>
 #include <lego/spinlock.h>
 
+#include <processor/pcache_config.h>
+
 struct pcache_meta;
 
-#define PCACHE_LINE_SIZE_SHIFT		(CONFIG_PCACHE_LINE_SIZE_SHIFT)
-#define PCACHE_ASSOCIATIVITY_SHIFT	(CONFIG_PCACHE_ASSOCIATIVITY_SHIFT)
-
-#define PCACHE_LINE_SIZE		(_AC(1,UL) << PCACHE_LINE_SIZE_SHIFT)
-#define PCACHE_LINE_MASK		(~(PCACHE_LINE_SIZE-1))
-#define PCACHE_ASSOCIATIVITY		(_AC(1,UL) << PCACHE_ASSOCIATIVITY_SHIFT)
 #define PCACHE_META_SIZE		(sizeof(struct pcache_meta))
-
-#define PCACHE_LINE_NR_PAGES		(PCACHE_LINE_SIZE / PAGE_SIZE)
 
 enum pcache_set_stat_item {
 	PSET_ALLOC,

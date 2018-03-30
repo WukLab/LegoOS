@@ -96,6 +96,24 @@ retry:
 #define current_storage_home_node()	STORAGE_NODE
 #endif /* CONFIG_GSM */
 
+
+#else /* !CONFIG_COMP_PROCESSOR */
+
+static inline int get_memory_home_node(struct task_struct *p)
+{
+	BUG();
+}
+
+static inline void set_memory_home_node(struct task_struct *tsk, int node)
+{
+	BUG();
+}
+
+static inline int current_memory_home_node(void)
+{
+	BUG();
+}
+
 #endif /* CONFIG_COMP_PROCESSOR */
 
 #endif /* _LEGO_PROCESSOR_NODE_H_ */

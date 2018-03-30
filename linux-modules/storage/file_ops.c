@@ -196,7 +196,7 @@ long do_unlink(const char *pathname)
 	struct dentry *dentry;
 	struct inode *dir;
 	struct path path;
-	struct inode *tmp;
+	//struct inode *tmp;
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
 
 	error = kern_path(pathname, lookup_flags, &path);
@@ -275,16 +275,28 @@ long do_rmdir(const char *pathname)
  * @statfsbuf: kernel virtual address of a buffer to be filled
  * return value: 0 on sucess, -errno on fail
  */
-long do_kstatfs(const char *pathname, struct kstatfs *statfsbuf)
+long do_kstatfs(const char *pathname, struct lego_kstatfs *statfsbuf)
 {
 	long error;
 	struct path path;
 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;
+	struct kstatfs *linux_kstatfs;
+
+	/*
+	 * We lego renamed this structure because the header file
+	 * is shared between Lego kernel and linux module. To avoid
+	 * redefition, we add lego_ prefix.
+	 *
+	 * But the size of these two must match!
+	 */
+	BUILD_BUG_ON(sizeof(struct lego_kstatfs) != sizeof(struct kstatfs));
+
+	linux_kstatfs = (struct kstatfs *)statfsbuf;
 
 retry:
 	error = kern_path(pathname, lookup_flags, &path);
 	if (!error) {
-		error = vfs_statfs(&path, statfsbuf);
+		error = vfs_statfs(&path, linux_kstatfs);
 		path_put(&path);
 		if (retry_estale(error, lookup_flags)) {
 			lookup_flags |= LOOKUP_REVAL;

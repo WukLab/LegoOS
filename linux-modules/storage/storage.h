@@ -13,8 +13,11 @@
 #include <linux/fs.h>
 #include <linux/mutex.h>
 #include <linux/stat.h>
+
 #include <asm/uaccess.h>
 #include <asm/mman.h>
+
+#include "common.h"
 
 #define OP_SUCCESS		1
 #define OP_FAILURE		0
@@ -74,7 +77,7 @@ int faccessat_root(const char __user *, int);
 long do_unlink(const char *pathname);
 long do_mkdir(const char *pathname, umode_t mode);
 long do_rmdir(const char *pathname);
-long do_kstatfs(const char *pathname, struct kstatfs *statfsbuf);
+long do_kstatfs(const char *pathname, struct lego_kstatfs *statfsbuf);
 long do_getdents(const char *pathname, struct linux_dirent *dirent,
 		loff_t *pos, unsigned int count);
 long do_readlink(const char *pathname, char *buf, int bufsiz);
