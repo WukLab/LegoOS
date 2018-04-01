@@ -111,7 +111,7 @@ static void local_qemu_test(void)
 }
 #endif
 
-#define MAX_RXBUF_SIZE	(PAGE_SIZE * 7)
+#define MAX_RXBUF_SIZE	(PAGE_SIZE * 20)
 
 #ifdef CONFIG_FIT
 struct info_struct {

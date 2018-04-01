@@ -83,70 +83,21 @@ err_reply:
 	return 0;
 }
 
-static ssize_t m2s_write(void *p2m_void_payload, struct lego_task_struct *tsk)
-{
-#if 0
-	struct p2m_read_write_payload *payload = 
-		(struct p2m_read_write_payload *) p2m_void_payload;
-	void *msg;
-	u32 len_msg;
-	ssize_t retval = 0;
-
-	__u32 *opcode;
-	struct m2s_read_write_payload *payload;
-	char *content;
-
-	/* msg = opcode + payload + content */
-	len_msg = sizeof(__u32) +  sizeof(struct m2s_read_write_payload)
-	       	+ payload->len;
-
-	msg = kmalloc(len_msg, GFP_KERNEL);
-	if (unlikely(!msg)) {
-		return -ENOMEM;		
-	}
-	
-	opcode = (__u32 *) msg;
-	payload = (struct m2s_read_write_payload *) (msg + sizeof(__u32));
-	content = (char *) (msg + sizeof(__u32) + 
-			sizeof(struct m2s_read_write_payload));
-
-	*opcode = M2S_WRITE;
-
-	payload->uid = payload->uid;
-	strcpy(payload->filename, payload->filename);
-	payload->flags = payload->flags;
-	payload->len = payload->len;
-	payload->offset = payload->offset;
-
-#ifdef DEBUG_STORAGE
-	pr_info("m2s_write : payload info : \n");
-	pr_info("filename : %s\n", payload->filename);
-	pr_info("uid : %d, flags : %d, len : %zu, offset : %lld\n",
-			payload->uid, payload->flags, payload->len, payload->offset);
-#endif
-
-	memcpy(content, p2m_void_payload + sizeof(struct p2m_read_write_payload),
-		       	payload->len); 
-
-	ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg, &retval,
-			sizeof(retval), false);
-
-	kfree(msg);
-	return retval;
-#endif
-	BUG();
-	return 0;
-}
-
 /*
  * OPCODE: P2M_WRITE
  * Handle a write() syscall request from processor
+ * ib_rx_buf:
+ * [struct common_header][struct p2m_read_write_payload][write content]
+ * |<-hdr                |<-payload                     |<-content
+ * retrun 0 on success, -errno on fail
  */
 int handle_p2m_write(struct p2m_read_write_payload *payload, u64 desc,
 		     struct common_header *hdr)
 {
 	struct lego_task_struct *tsk;
 	ssize_t retval;
+	loff_t offset = payload->offset;
+	void *content = (void *)payload + sizeof(*payload);
 
 	file_debug("pid: %u tgid: %u buf: %p len: %zu, f_name: %s",
 		payload->pid, payload->tgid, payload->buf, payload->len,
@@ -158,7 +109,8 @@ int handle_p2m_write(struct p2m_read_write_payload *payload, u64 desc,
 		goto out_reply;
 	}
 
-	retval = m2s_write(payload, tsk);
+	retval = __storage_write(tsk, payload->filename,
+				content, payload->len, &offset);
 
 out_reply:
 	ibapi_reply_message(&retval, sizeof(retval), desc);

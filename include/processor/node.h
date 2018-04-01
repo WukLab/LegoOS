@@ -58,6 +58,21 @@ static inline int current_vnode_id(void)
 	return 0;
 }
 
+/* 
+ *	- default_pgcache_home_node = get_memory_home_node
+ *	- default_storage_home_node = STORAGE_NODE
+ *	- used in UNSET case
+ */
+static inline int default_pgcache_home_node(struct task_struct *tsk)
+{
+	return get_memory_home_node(tsk);
+}
+
+static inline int default_storage_home_node(struct task_struct *tsk)
+{
+	return STORAGE_NODE;
+}
+
 #ifdef CONFIG_GSM
 int get_info_from_gsm(int my_vnode_id);
 
@@ -117,7 +132,7 @@ retry:
 
 static inline int get_pgcache_home_node(struct task_struct *tsk)
 {
-	return UNSET_PGCACHE_NODE;
+	return default_pgcache_home_node(tsk);
 }
 
 static inline void set_pgcache_home_node(struct task_struct *tsk, int node)
@@ -126,7 +141,7 @@ static inline void set_pgcache_home_node(struct task_struct *tsk, int node)
 
 static inline int get_storage_home_node(struct task_struct *tsk)
 {
-	return UNSET_STORAGE_NODE;
+	return default_storage_home_node(tsk);
 }
 
 static inline void set_storage_home_node(struct task_struct *tsk, int node)
@@ -135,12 +150,12 @@ static inline void set_storage_home_node(struct task_struct *tsk, int node)
 
 static inline int current_pgcache_home_node(void)
 {
-	return UNSET_PGCACHE_NODE;
+	return default_pgcache_home_node(current);
 }
 
 static inline int current_storage_home_node(void)
 {
-	return UNSET_STORAGE_NODE;
+	return default_storage_home_node(current);
 }
 #endif /* CONFIG_GSM */
 

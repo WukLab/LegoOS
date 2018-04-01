@@ -11,7 +11,7 @@
 #define _LEGO_DISTRIBUTED_VM_H_
 
 
-#define MAX_RXBUF_SIZE   (PAGE_SIZE * 7)
+//#define MAX_RXBUF_SIZE   (PAGE_SIZE * 7)
 /*
 * vma debug options
 */

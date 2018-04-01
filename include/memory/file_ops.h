@@ -34,4 +34,7 @@ ssize_t storage_read(struct lego_task_struct *tsk,
 ssize_t __storage_read(struct lego_task_struct *tsk, char *f_name,
 		       char __user *buf, size_t count, loff_t *pos);
 
+ssize_t __storage_write(struct lego_task_struct *tsk, char *f_name,
+			const char *buf, size_t count, loff_t *pos);
+
 #endif /* _LEGO_MEMORY_FILE_OPS_H_ */

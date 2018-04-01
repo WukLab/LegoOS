@@ -91,10 +91,65 @@ ssize_t storage_read(struct lego_task_struct *tsk,
 	return __storage_read(tsk, file->filename, buf, count, pos);
 }
 
+/*
+ * perform m2s write
+ * @tsk: unused
+ * @f_name: filename to write to
+ * @count: nrbytes of write
+ * @pos: offset where nrbytes write start
+ * return value: nrbytes no success, -errno on fail
+ */
+ssize_t __storage_write(struct lego_task_struct *tsk, char *f_name,
+			const char *buf, size_t count, loff_t *pos)
+{
+	u32 len_msg, *opcode;
+	void *msg, *content;
+	ssize_t retval;
+	struct m2s_read_write_payload *payload;
+	int retlen;
+
+	/* msg = opcode + payload + send_buffer */
+	len_msg = sizeof(*opcode) + sizeof(*payload) + count;
+	msg = kmalloc(len_msg, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	opcode = msg;
+	*opcode = M2S_WRITE;
+
+	payload = msg + sizeof(*opcode);
+	payload->uid = current_uid();
+	payload->flags = O_WRONLY;
+	payload->len = count;
+	payload->offset = *pos;
+	strncpy(payload->filename, f_name, MAX_FILENAME_LENGTH);
+
+	content = msg + sizeof(*opcode) + sizeof(*payload);
+
+	//lego_copy_from_user(tsk, content, buf, count);
+	memcpy(content, buf, count);
+
+	m2s_debug("f_name:[%s] len:%#lx offset:%#Lx",
+		payload->filename, payload->len, payload->offset);
+
+	retlen = ibapi_send_reply_imm(STORAGE_NODE, msg, len_msg,
+				&retval, sizeof(retval), false);
+
+	if (unlikely(retlen != sizeof(retval)))
+		retval = -EIO;
+
+	m2s_debug("2 retval: %zu", retval);
+
+	kfree(msg);
+	return retval;	
+
+}
+
 static ssize_t storage_write(struct lego_task_struct *tsk, struct lego_file *file,
 		const char *buf, size_t count, loff_t *pos)
 {
-	return -EINVAL;
+	BUG_ON(!file->filename);
+	return __storage_write(tsk, file->filename, buf, count, pos);
 }
 
 static int storage_vma_fault(struct vm_area_struct *vma, struct vm_fault *vmf)

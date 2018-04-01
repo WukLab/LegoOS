@@ -17,6 +17,7 @@
 #include <lego/seq_file.h>
 #include <lego/timer.h>
 #include <lego/fit_ibapi.h>
+#include <lego/kernel.h>
 #include <processor/fs.h>
 #include <processor/processor.h>
 
@@ -153,7 +154,7 @@ out:
 	return retval;
 }
 
-static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
+static ssize_t __normal_p2m_write(struct file *f, const char __user *buf,
 				size_t count, loff_t *off)
 {
 	ssize_t retval, retlen;
@@ -207,6 +208,40 @@ static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
 out:
 	file_debug("retval: %zu", retval);
 	kfree(msg);
+	return retval;
+}
+
+/*
+ * XXX: chunk write size is limited by memory side rxbuf size
+ *      later we may make it flexiable by consulting with memory node
+ */
+#define MAX_WRITE_SIZE	(16 * PAGE_SIZE)
+
+static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
+				size_t count, loff_t *off)
+{
+	ssize_t retval = 0;
+	size_t remaining = count;
+	const char __user *curr = buf;
+
+	if (likely(count <= MAX_WRITE_SIZE))
+		return __normal_p2m_write(f, buf, count, off);
+	
+	while (remaining) {
+		ssize_t ret;
+		size_t len = min(remaining, MAX_WRITE_SIZE);
+
+		/* offset would automatic incr after write */
+		ret = __normal_p2m_write(f, curr, len, off);
+		if (ret < 0) {
+			retval = ret;
+			goto out;
+		}
+		retval += ret;
+		curr += ret;
+		remaining -= ret;
+	}
+out:
 	return retval;
 }
 
