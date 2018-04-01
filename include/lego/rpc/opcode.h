@@ -52,6 +52,7 @@
 #define P2S_STATFS		((__u32)__NR_statfs)
 #define P2S_GETDENTS		((__u32)__NR_getdents)
 #define P2S_READLINK		((__u32)__NR_readlink)
+#define P2S_RENAME		((__u32)__NR_rename)
 
 /* Homenode Memory to other Memory */
 #define M2M_BASE 		((__u32)0x40000000)

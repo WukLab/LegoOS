@@ -77,4 +77,9 @@ struct p2s_readlink_struct {
 	int bufsiz;	
 };
 
+struct p2s_rename_struct {
+	char oldname[MAX_FILENAME_LENGTH];
+	char newname[MAX_FILENAME_LENGTH];
+};
+
 #endif /* _LEGO_RPC_STRUCT_P2S_H */

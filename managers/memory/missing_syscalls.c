@@ -262,3 +262,9 @@ SYSCALL_DEFINE1(pipe, int __user *, flides)
 {
 	BUG();
 }
+
+SYSCALL_DEFINE2(rename, const char __user *, oldname,
+		const char __user *, newname)
+{
+	BUG();
+}
