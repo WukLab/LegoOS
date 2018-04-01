@@ -417,3 +417,90 @@ retry:
 	}
 	return error;
 }
+
+/*
+ * do_link: create a hard link for newname that link to oldname
+ * @oldname: full path name to be linked to
+ * @newname: new created pathname that links to oldname.
+ * @flags: normally it is 0. do_link allows two flags:
+ *	- AT_EMPTY_PATH:	allow oldname to be empty
+ *	- AT_SYMLINK_FOLLOW:	allow oldname to be symbolic link
+ * return value: 0 on success, -errno on fail.
+ */
+static long do_link(const char *oldname, const char *newname, int flags)
+{
+	struct dentry *new_dentry;
+	struct path old_path, new_path;
+	int how = 0;
+	long error;
+
+	if ((flags & ~(AT_SYMLINK_FOLLOW | AT_EMPTY_PATH)) != 0)
+		return -EINVAL;
+	/*
+	 * To use null names we require CAP_DAC_READ_SEARCH
+	 * This ensures that not everyone will be able to create
+	 * handlink using the passed filedescriptor.
+	 */
+	if (flags & AT_EMPTY_PATH) {
+		if (!capable(CAP_DAC_READ_SEARCH))
+			return -ENOENT;
+		how = LOOKUP_EMPTY;
+	}
+
+	if (flags & AT_SYMLINK_FOLLOW)
+		how |= LOOKUP_FOLLOW;
+retry:
+	error = kern_path(oldname, how, &old_path);
+	if (error)
+		return error;
+
+	new_dentry = kern_path_create(AT_FDCWD, newname, &new_path,
+					(how & LOOKUP_REVAL));
+	error = PTR_ERR(new_dentry);
+	if (IS_ERR(new_dentry))
+		goto out;
+
+	error = -EXDEV;
+	if (old_path.mnt != new_path.mnt)
+		goto out_dput;
+	
+	error = vfs_link(old_path.dentry, new_path.dentry->d_inode, new_dentry);
+	//error = vfs_link(old_path.dentry, new_path.dentry->d_inode, new_dentry, NULL);
+out_dput:
+	done_path_create(&new_path, new_dentry);
+	if (retry_estale(error, how)) {
+		how |= LOOKUP_REVAL;
+		goto retry;
+	}
+out:
+	path_put(&old_path);
+
+	return error;
+}
+
+/*
+ * do_rename: rename a old path to a new path
+ * @oldname: full pathname of old file/dir
+ * @newname: full pathname
+ *
+ * do_rename is logically transfered into three steps
+ *	- unlink newname
+ *	- link newname to oldname
+ *	- unlink oldname
+ * return value 0 on success, -errno on fail
+ */
+long do_rename(char *oldname, char *newname)
+{
+	long error;
+
+	error = do_unlink(newname);
+	if (error && (error != -ENOENT))
+		goto out;
+	error = do_link(oldname, newname, 0);
+	if (error)
+		goto out;
+	error = do_unlink(oldname);
+
+out:
+	return error;
+}

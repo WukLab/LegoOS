@@ -81,6 +81,7 @@ long do_kstatfs(const char *pathname, struct lego_kstatfs *statfsbuf);
 long do_getdents(const char *pathname, struct linux_dirent *dirent,
 		loff_t *pos, unsigned int count);
 long do_readlink(const char *pathname, char *buf, int bufsiz);
+long do_rename(char *oldname, char *newname);
 
 /* handler.c */
 int handle_open_request(void *, uintptr_t);
@@ -95,5 +96,6 @@ long handle_rmdir_request(void *, uintptr_t);
 long handle_statfs_request(void *payload, uintptr_t desc);
 long handle_getdents_request(void *payload, uintptr_t desc);
 long handle_readlink_request(void *payload, uintptr_t desc);
+long handle_rename_request(void *payload, uintptr_t desc);
 
 #endif /* _LEGO_STORAGE_STORAGE_H_ */

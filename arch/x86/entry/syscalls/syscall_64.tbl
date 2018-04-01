@@ -64,6 +64,7 @@
 77	common	ftruncate		sys_ftruncate
 78	common	getdents		sys_getdents
 79	common	getcwd			sys_getcwd
+82	common	rename			sys_rename
 83	common	mkdir			sys_mkdir
 84	common	rmdir			sys_rmdir
 85	common	creat			sys_creat

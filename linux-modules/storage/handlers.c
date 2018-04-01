@@ -177,7 +177,8 @@ int handle_stat_request(void *payload, uintptr_t desc)
 	
 	ret_msg = kmalloc(ret_len, GFP_KERNEL);
 	if (unlikely(!ret_msg)) {
-		panic("NO MEM for allocating return message.\n");
+		res = -ENOMEM;
+		goto enomem;
 	}
 	retval_in_msg = ret_msg;
 	stat_in_msg = ret_msg + sizeof(int);
@@ -191,6 +192,9 @@ int handle_stat_request(void *payload, uintptr_t desc)
 	ibapi_reply_message(ret_msg, ret_len, desc);
 
 	kfree(ret_msg);
+	return res;
+enomem:
+	ibapi_reply_message(&res, sizeof(res), desc);
 	return res;
 }
 
@@ -339,6 +343,17 @@ long handle_readlink_request(void *payload, uintptr_t desc)
 	return ret;
 
 enomem:
+	ibapi_reply_message(&ret, sizeof(ret), desc);
+	return ret;
+}
+
+long handle_rename_request(void *payload, uintptr_t desc)
+{
+	struct p2s_rename_struct *__payload = payload;
+	long ret;
+
+	ret = do_rename(__payload->oldname, __payload->newname);
+
 	ibapi_reply_message(&ret, sizeof(ret), desc);
 	return ret;
 }

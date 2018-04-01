@@ -91,6 +91,9 @@ static void storage_dispatch(void *msg, uintptr_t desc)
 	case P2S_READLINK:
 		handle_readlink_request(payload, desc);
 		break;
+	case P2S_RENAME:
+		handle_rename_request(payload, desc);
+		break;
 
 	default:
 		handle_bad_request(*opcode, desc);
