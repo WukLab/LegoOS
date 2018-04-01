@@ -3,7 +3,7 @@ storage-y := core.o handlers.o file_ops.o
 
 LEGO_INCLUDE := -I$(M)/../../include
 
-EXTRA_CFLAGS += -g $(LEGO_INCLUDE)
+EXTRA_CFLAGS += -g $(LEGO_INCLUDE) -D_LEGO_STORAGE_SOURCE_
 KBUILD_EXTRA_SYMBOLS += $(shell pwd)/../fit/Module.symvers
 export KBUILD_EXTRA_SYMBOLS
 

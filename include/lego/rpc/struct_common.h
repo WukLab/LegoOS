@@ -42,6 +42,7 @@ static inline void *to_payload(void *msg)
 	return (void *)(msg + sizeof(struct common_header));
 }
 
+#ifndef _LEGO_STORAGE_SOURCE_
 /*
  * Fill the common_header part of the given @msg
  * @msg must have the common_header at the top of its struct.
@@ -54,5 +55,6 @@ static __always_inline void fill_common_header(void *msg, unsigned int opcode)
 	hdr->opcode = opcode;
 	hdr->src_nid = LEGO_LOCAL_NID;
 }
+#endif
 
 #endif /* _LEGO_RPC_STRUCT_COMMON_H_ */
