@@ -214,7 +214,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	/* Duplicate the mmap from parent */
 	retbuf = dup_lego_mm(tsk, parent);
 	if (retbuf) {
-		kfree(tsk);
+		free_lego_task_struct(tsk);
 		goto reply;
 	}
 

@@ -93,7 +93,7 @@ static inline void common_header_check(void)
 #define CHK(type, member)	\
 	BUILD_BUG_ON((offsetof(type, member) % COMMON_HEADER_ALIGNMENT) != 0)
 
-	CHK(struct p2m_replica_msg, pid);
+	CHK(struct p2m_replica_msg, log);
 
 #undef CHK
 }

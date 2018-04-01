@@ -19,42 +19,67 @@
 
 #define REPLICA_HASH_TABLE_SIZE_BIT	(10)
 
-struct replica_log_data {
-	char	data[PCACHE_LINE_SIZE];
-} __attribute__((packed));
-
 struct replica_log_meta {
-	unsigned int	flags;
-	/*
-	 * Starts from 0
-	 * marks the @idx'th entry of @pid's log
-	 */
-	unsigned int	idx;
 	unsigned int	pid;
-	unsigned long	user_vaddr;
-	unsigned int	csum;
-	unsigned int	nid_processor;
+	unsigned int	vnode_id;
+
 	unsigned int	nid_memory;
+	unsigned int	nid_processor;
+
+	unsigned long	user_va;
+
+	unsigned int	flags;
+	unsigned int	csum;
 } __attribute__((packed)) __attribute__((aligned(8)));
 
 struct replica_log {
-	struct replica_log_data		data;
 	struct replica_log_meta		meta;
+	char				data[PCACHE_LINE_SIZE];
 } __attribute__((packed));
 
-/* Log meta flags */
-#define REPLICA_LOG_CSUM	0x1
-
-static inline bool replica_log_has_csum(struct replica_log *log)
+static inline int replica_get_hash_key(unsigned int pid, unsigned int vnode_id)
 {
-	if (log->meta.flags & REPLICA_LOG_CSUM)
-		return true;
-	return false;
+	return pid * 100 + vnode_id * 1000;
 }
 
-static inline void set_replica_log_has_csum(struct replica_log *log)
-{
-	log->meta.flags |= REPLICA_LOG_CSUM;
+/*
+ * valid: this log has been filled
+ * csum: this log has csum computed and attached in meta
+ */
+enum replica_log_meta_flags {
+	REPLICA_LOG_META_valid,
+	REPLICA_LOG_META_csum,
+
+	NR_REPLICA_LOG_META_FLAGS,
+};
+
+#define TEST_REPLICA_LOG_META_FLAGS(uname, lname)			\
+static inline int ReplicaLog##uname(const struct replica_log *p)	\
+{									\
+	return test_bit(REPLICA_LOG_META_##lname,			\
+			(unsigned long *)&(p->meta.flags));		\
 }
+
+#define SET_REPLICA_LOG_META_FLAGS(uname, lname)			\
+static inline void SetReplicaLog##uname(struct replica_log *p)		\
+{									\
+	set_bit(REPLICA_LOG_META_##lname,				\
+			(unsigned long *)&(p->meta.flags));		\
+}
+
+#define CLEAR_REPLICA_LOG_META_FLAGS(uname, lname)			\
+static inline void ClearReplicaLog##uname(struct replica_log *p)	\
+{									\
+	clear_bit(REPLICA_LOG_META_##lname,				\
+			(unsigned long *)&(p->meta.flags));		\
+}
+
+#define REPLICA_LOG_META_FLAGS(uname, lname)				\
+	TEST_REPLICA_LOG_META_FLAGS(uname, lname)			\
+	SET_REPLICA_LOG_META_FLAGS(uname, lname)			\
+	CLEAR_REPLICA_LOG_META_FLAGS(uname, lname)
+
+REPLICA_LOG_META_FLAGS(Valid, valid)
+REPLICA_LOG_META_FLAGS(Csum, csum)
 
 #endif /* _LEGO_MEMORY_REPLICA_TYPES_H_ */

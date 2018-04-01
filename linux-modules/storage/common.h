@@ -15,15 +15,18 @@
 #include <linux/string.h>
 #include <linux/statfs.h>
 
-#include "../../include/lego/rpc/struct_common.h"
-#include "../../include/lego/rpc/struct_p2s.h"
-#include "../../include/lego/rpc/struct_m2s.h"
+#include <lego/rpc/opcode.h>
+#include <lego/rpc/struct_common.h>
+#include <lego/rpc/struct_p2s.h>
+#include <lego/rpc/struct_m2s.h>
 
-#define BLK_SIZE 5*4096
+#define BLK_SIZE	(5 * 4096)
 
 /* fit module */
-int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int if_use_ret_phys_addr);
-int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor);
+int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr,
+			 int max_ret_size, int if_use_ret_phys_addr);
+int ibapi_receive_message(unsigned int designed_port, void *ret_addr,
+			  int receive_size, uintptr_t *descriptor);
 int ibapi_reply_message(void *addr, int size, uintptr_t descriptor);
 
 /* getdents */

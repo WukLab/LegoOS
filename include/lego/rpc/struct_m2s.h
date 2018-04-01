@@ -11,15 +11,34 @@
 #define _LEGO_RPC_STRUCT_M2S_H_
 
 #include <lego/rpc/struct_common.h>
+#include <memory/replica_types.h>
+
+/*
+ * BIG FAT NOTE:
+ * Storage recevier only expect the opcode at top.
+ * No struct common_header should be used here.
+ *
+ * It is not consistent with the rest of system,
+ * should be changed!
+ */
 
 /* M2S_READ */
 /* M2S_WRITE */
-struct m2s_read_write_payload{
+struct m2s_read_write_payload {
 	int	uid;
 	char	filename[MAX_FILENAME_LENGTH];
 	int	flags;
 	size_t	len;
 	loff_t	offset;
+};
+
+/* M2S_REPLICA_FLUSH */
+struct m2s_replica_flush_msg {
+	unsigned int		opcode;
+	unsigned int		nr_log;
+
+	/* variable length buffer */
+	char			log[0];
 };
 
 #endif /* _LEGO_RPC_STRUCT_M2S_H_ */

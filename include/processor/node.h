@@ -49,7 +49,10 @@ static inline int current_replica_node(void)
 	return get_replica_node(current);
 }
 
-/* TODO */
+static inline int get_vnode_id(struct task_struct *tsk)
+{
+	return 0;
+}
 static inline int current_vnode_id(void)
 {
 	return 0;

@@ -16,7 +16,6 @@
 #include <lego/comp_common.h>
 
 #include <memory/mm.h>
-#include <memory/replica.h>
 
 struct _task_padding {
 	char x[0];
@@ -41,10 +40,7 @@ struct lego_task_struct {
 					 * - initialized normally by setup_new_exec
 					 */
 
-	LEGO_TASK_PADDING(_pad1_);
-	struct replica_struct replica;
-
-	LEGO_TASK_PADDING(_pad2_)
+	LEGO_TASK_PADDING(_pad1_)
 	spinlock_t task_lock;
 
         struct hlist_node link;

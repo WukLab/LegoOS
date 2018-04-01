@@ -52,37 +52,24 @@ int __must_check ht_insert_lego_task(struct lego_task_struct *tsk)
 	return 0;
 }
 
-/*
- * Allocate @tsk and its replica log
- */
 struct lego_task_struct *alloc_lego_task_struct(void)
 {
 	struct lego_task_struct *tsk;
-	int ret;
 
 	tsk = kzalloc(sizeof(*tsk), GFP_KERNEL);
-	if (!tsk)
-		return NULL;
-
-	ret = alloc_lego_task_struct_replica(tsk);
-	if (ret) {
-		kfree(tsk);
-		return NULL;
+	if (tsk) {
+		spin_lock_init(&tsk->task_lock);
 	}
-
-	spin_lock_init(&tsk->task_lock);
 	return tsk;
 }
 
 /*
- * Free @tsk and its associated replica log
+ * Free @tsk
  * @tsk is not queued into hashtable when called.
  */
 void free_lego_task_struct(struct lego_task_struct *tsk)
 {
 	BUG_ON(hash_hashed(&tsk->link));
-
-	free_lego_task_struct_replica(tsk);
 	kfree(tsk);
 }
 

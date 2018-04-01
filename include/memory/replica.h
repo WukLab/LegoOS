@@ -17,18 +17,118 @@
 
 struct lego_task_struct;
 
+struct _replica_padding {
+	char x[0];
+} ____cacheline_aligned;
+#define REPLICA_PADDING(name)	struct _replica_padding name;
+
 struct replica_struct {
+	/*
+	 * User level pid
+	 * vNode ID
+	 * Memory ID which serves the Processor
+	 * Processor ID which sent the replication request
+	 */
+	unsigned int			pid;
+	unsigned int			vnode_id;
+	unsigned int			nid_memory;
+	unsigned int			nid_processor;
+	unsigned int			hash_key;
+
+	/* Flags defined below */
+	unsigned long			flags;
+
+	/*
+	 * HEAD points to the first available log slot.
+	 * It ranges: [0, nr_log-1]. Protected by @lock.
+	 */
 	unsigned int			nr_log;
 	struct replica_log		*log;
+
+	REPLICA_PADDING(_pad1_);
+
+	unsigned int			HEAD;
+	spinlock_t			lock;
+
+	REPLICA_PADDING(_pad2_);
+
+	atomic_t			_refcount;
 
 	/* How many batch flush to storage happened */
 	atomic_t			nr_batch_flush;
 
 	/* How many logs has been created */
 	atomic_t			nr_created;
+
+	struct hlist_node		hlist;
 } ____cacheline_aligned;
 
-int __must_check alloc_lego_task_struct_replica(struct lego_task_struct *p);
-void free_lego_task_struct_replica(struct lego_task_struct *p);
+/*
+ * replica_struct->flags
+ */
+
+enum replica_struct_flags {
+	REPLICA_STRUCT_flushing,
+
+	NR_REPLICA_STRUCT_FLAGS,
+};
+
+#define TEST_REPLICA_STRUCT_FLAGS(uname, lname)				\
+static inline int Replica##uname(const struct replica_struct *p)	\
+{									\
+	return test_bit(REPLICA_STRUCT_##lname, &p->flags);		\
+}
+
+#define SET_REPLICA_STRUCT_FLAGS(uname, lname)				\
+static inline void SetReplica##uname(struct replica_struct *p)		\
+{									\
+	set_bit(REPLICA_STRUCT_##lname, &p->flags);			\
+}
+
+#define CLEAR_REPLICA_STRUCT_FLAGS(uname, lname)			\
+static inline void ClearReplica##uname(struct replica_struct *p)	\
+{									\
+	clear_bit(REPLICA_STRUCT_##lname, &p->flags);			\
+}
+
+#define REPLICA_STRUCT_FLAGS(uname, lname)				\
+	TEST_REPLICA_STRUCT_FLAGS(uname, lname)				\
+	SET_REPLICA_STRUCT_FLAGS(uname, lname)				\
+	CLEAR_REPLICA_STRUCT_FLAGS(uname, lname)
+
+REPLICA_STRUCT_FLAGS(Flushing, flushing)
+
+void __put_replica_struct(struct replica_struct *r);
+
+/*
+ * refcount helpers
+ */
+
+static inline void init_replica_refcount(struct replica_struct *r)
+{
+	atomic_set(&r->_refcount, 1);
+}
+
+static inline void get_replica(struct replica_struct *r)
+{
+	atomic_inc(&r->_refcount);
+}
+
+static inline int put_replica_testzero(struct replica_struct *r)
+{
+	return atomic_dec_and_test(&r->_refcount);
+}
+
+static inline void put_replica(struct replica_struct *r)
+{
+	if (put_replica_testzero(r))
+		__put_replica_struct(r);
+}
+
+int flush_replica_struct(struct replica_struct *r);
+
+void dump_replica_log(struct replica_log *log, int idx);
+void dump_replica_struct(struct replica_struct *r);
+void dump_all_replica(void);
 
 #endif /* _LEGO_MEMORY_REPLICA_H_ */

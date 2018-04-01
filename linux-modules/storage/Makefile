@@ -1,5 +1,5 @@
 obj-m := storage.o
-storage-y := core.o handlers.o file_ops.o
+storage-y := core.o handlers.o file_ops.o replica.o
 
 LEGO_INCLUDE := -I$(M)/../../include
 

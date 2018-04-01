@@ -4,7 +4,6 @@
 
 obj-y := core.o
 obj-y += task.o
-obj-y += replica.o
 obj-y += handle_fork.o
 obj-y += handle_execve.o
 obj-y += handle_mmap.o
@@ -16,6 +15,9 @@ obj-y += m2s_read_write.o
 
 # Pcache
 obj-y += handle_pcache/
+
+# Replication
+obj-y += replica/
 
 # Virtual Memory Subsystem
 obj-y += vm/

@@ -71,6 +71,7 @@
 /* Memory to Storage */
 #define M2S_READ		P2M_READ		/* Reuse the same nr */
 #define M2S_WRITE		P2M_WRITE		/* Reuse the same nr */
+#define M2S_REPLICA_FLUSH	P2M_PCACHE_REPLICA
 
 /* Processor to GSM */
 #define P2GSM_COMMON		P2S_OPEN		/* Resue the open nr */

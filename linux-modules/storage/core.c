@@ -55,6 +55,11 @@ static void storage_dispatch(void *msg, uintptr_t desc)
 #endif
 
 	switch (*opcode) {
+/* replica log batch flush */
+	case M2S_REPLICA_FLUSH:
+		handle_replica_flush(msg, desc);
+		break;
+
 	case M2S_READ:
 		handle_read_request(payload, desc);
 		break;

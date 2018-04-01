@@ -10,6 +10,7 @@
 #ifndef _LEGO_RPC_STRUCT_P2M_H
 #define _LEGO_RPC_STRUCT_P2M_H
 
+#include <memory/replica_types.h>
 #include <processor/pcache_config.h>
 #include <lego/rpc/struct_common.h>
 
@@ -46,10 +47,8 @@ int handle_p2m_flush_one(struct p2m_flush_payload *, u64, struct common_header *
 
 struct p2m_replica_msg {
 	struct common_header	header;
-	unsigned int		pid;
-	unsigned long		user_va;
-	char			pcacheline[PCACHE_LINE_SIZE];
-};
+	struct replica_log	log;
+} __packed;
 void handle_p2m_replica(void *, u64);
 
 /*
