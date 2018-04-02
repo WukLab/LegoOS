@@ -209,13 +209,15 @@ int init_workqueues(void);
 static inline bool queue_work_on(int cpu, struct workqueue_struct *wq,
 				 struct work_struct *work)
 {
-	BUG();
+	WARN_ON_ONCE(1);
+	return false;
 }
 
 static inline struct workqueue_struct *
 __alloc_workqueue(unsigned int flags, int max_active)
 {
-	BUG();
+	WARN_ON_ONCE(1);
+	return NULL;
 }
 
 static inline int init_workqueues(void) { return 0; }
