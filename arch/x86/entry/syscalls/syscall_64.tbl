@@ -41,6 +41,7 @@
 38	common	setitimer		sys_setitimer
 39	common	getpid			sys_getpid
 41	common	socket			sys_socket
+42	common	connect			sys_connect
 43	common	accept			sys_accept
 44	common	sendto			sys_sendto
 45	64	recvfrom		sys_recvfrom

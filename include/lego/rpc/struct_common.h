@@ -18,7 +18,7 @@
 
 #include <lego/rpc/opcode.h>
 
-#define MAX_FILENAME_LENGTH	128
+#define MAX_FILENAME_LENGTH	256
 
 #define COMMON_HEADER_ALIGNMENT (8)
 

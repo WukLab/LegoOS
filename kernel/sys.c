@@ -15,6 +15,7 @@
 #include <lego/syscalls.h>
 #include <lego/waitpid.h>
 #include <processor/pcache.h>
+#include <processor/fs.h>
 
 #include <asm/numa.h>
 
@@ -444,7 +445,7 @@ SYSCALL_DEFINE3(execve,
 
 SYSCALL_DEFINE1(brk, unsigned long, brk)
 {
-	BUG();	
+	BUG();
 }
 
 SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
@@ -517,7 +518,7 @@ SYSCALL_DEFINE1(dup, unsigned int, fildes)
 }
 
 SYSCALL_DEFINE3(fcntl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
-{	
+{
 	BUG();
 }
 
@@ -564,10 +565,76 @@ SYSCALL_DEFINE4(wait4, pid_t, upid, int __user *, stat_addr,
  * Just to make the kernel compile
  */
 #ifndef CONFIG_SOCKET_SYSCALL
+
+/*
+ * Temporary fix:
+ * Now we can opt-out socket syscall from processor.
+ * Later on, if socket is supported by default, we should
+ * remove the following code.
+ */
+#ifdef CONFIG_COMP_PROCESSOR
+static int dummy_sock_open(struct file *f)
+{
+	return 0;
+}
+
+static ssize_t dummy_sock_read(struct file *f, char __user *buf,
+			       size_t count, loff_t *off)
+{
+	return 0;
+}
+
+static ssize_t dummy_sock_write(struct file *f, const char __user *buf,
+				size_t count, loff_t *off)
+{
+	return 0;
+}
+
+struct file_operations dummy_sock_ops = {
+	.open	= dummy_sock_open,
+	.read	= dummy_sock_read,
+	.write	= dummy_sock_write,
+};
+
+SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
+{
+	int sockfd;
+	struct file *dummy_file;
+
+	pr_info("Dummy socket()!\n");
+	sockfd = alloc_fd(current->files, "/sock/dummy");
+	if (sockfd < 0)
+		return sockfd;
+
+	dummy_file = fdget(sockfd);
+	dummy_file->f_mode = FMODE_READ;
+	dummy_file->f_flags = O_RDONLY;
+	dummy_file->f_op = &dummy_sock_ops;
+
+	put_file(dummy_file);
+
+	return sockfd;
+}
+
+SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
+		int, addrlen)
+{
+	pr_info("Dummy connect(): %d\n", fd);
+	return -ENOENT;
+}
+#else
 SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 {
 	BUG();
 }
+
+SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
+		int, addrlen)
+{
+	BUG();
+}
+#endif	/* CONFIG_COMP_PROCESSOR */
+
 SYSCALL_DEFINE5(setsockopt, int, fd, int, level, int, optname,
 		char __user *, optval, int, optlen)
 {
@@ -592,12 +659,6 @@ SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, addr, int, addr_len)
 }
 
 SYSCALL_DEFINE2(listen, int, fd, int, backlog)
-{
-	BUG();
-}
-
-SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
-		int, addrlen)
 {
 	BUG();
 }
@@ -627,7 +688,7 @@ SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
 	BUG();
 }
 
-SYSCALL_DEFINE3(sendmsg, int, fd, struct user_msghdr __user *, msg, 
+SYSCALL_DEFINE3(sendmsg, int, fd, struct user_msghdr __user *, msg,
 		unsigned int, flags)
 {
 	BUG();
@@ -646,7 +707,7 @@ SYSCALL_DEFINE4(recv, int, fd, void __user *, buff, size_t, len,
 	BUG();
 }
 
-SYSCALL_DEFINE3(recvmsg, int, fd, struct user_msghdr __user *, msg, 
+SYSCALL_DEFINE3(recvmsg, int, fd, struct user_msghdr __user *, msg,
 		unsigned int, flags)
 {
 	BUG();

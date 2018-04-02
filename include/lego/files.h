@@ -92,7 +92,7 @@ struct file_operations {
 	unsigned int	(*poll)(struct file *);
 };
 
-#define FILENAME_LEN_DEFAULT	128
+#define FILENAME_LEN_DEFAULT	256
 struct file {
 	fmode_t			f_mode;
 	atomic_t		f_count;
