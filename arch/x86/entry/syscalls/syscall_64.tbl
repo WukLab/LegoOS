@@ -88,6 +88,7 @@
 130	common	rt_sigsuspend		sys_rt_sigsuspend
 131	64	sigaltstack		sys_sigaltstack
 137	common	statfs			sys_statfs
+157	common	prctl			sys_prctl
 158	common	arch_prctl		sys_arch_prctl
 160	common	setrlimit		sys_setrlimit
 162	common	sync			sys_sync

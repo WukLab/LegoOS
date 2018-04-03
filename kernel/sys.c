@@ -559,6 +559,12 @@ SYSCALL_DEFINE4(wait4, pid_t, upid, int __user *, stat_addr,
 {
 	BUG();
 }
+
+SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
+		unsigned long, arg4, unsigned long, arg5)
+{
+	BUG();
+}
 #endif
 
 /*

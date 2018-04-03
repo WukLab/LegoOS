@@ -268,3 +268,9 @@ SYSCALL_DEFINE2(rename, const char __user *, oldname,
 {
 	BUG();
 }
+
+SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
+		unsigned long, arg4, unsigned long, arg5)
+{
+	BUG();
+}

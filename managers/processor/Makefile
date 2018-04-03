@@ -7,6 +7,7 @@ obj-y += fork.o
 obj-y += exec.o
 obj-y += pgtable.o
 obj-y += wait.o
+obj-y += prctl.o
 obj-y += mmap/
 obj-y += pcache/
 obj-y += fs/

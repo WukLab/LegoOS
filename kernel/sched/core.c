@@ -1841,6 +1841,15 @@ void set_task_comm(struct task_struct *tsk, const char *buf)
 	task_unlock(tsk);
 }
 
+char *get_task_comm(char *buf, struct task_struct *tsk)
+{
+	/* buf must be at least sizeof(tsk->comm) in size */
+	task_lock(tsk);
+	strncpy(buf, tsk->comm, sizeof(tsk->comm));
+	task_unlock(tsk);
+	return buf;
+}
+
 /**
  * sched_init_idle - set up an idle thread for a given CPU
  * @idle: task in question

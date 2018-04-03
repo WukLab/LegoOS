@@ -870,6 +870,7 @@ static inline void task_unlock(struct task_struct *p)
 }
 
 void set_task_comm(struct task_struct *tsk, const char *buf);
+char *get_task_comm(char *buf, struct task_struct *tsk);
 
 #ifdef CONFIG_SMP
 void kick_process(struct task_struct *tsk);
