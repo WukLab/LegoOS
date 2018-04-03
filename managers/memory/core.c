@@ -23,7 +23,7 @@
 #define mm_debug(fmt, ...)	\
 	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
 #else
-static inline void mm_debug(const char *fmt, ...) { } 
+static inline void mm_debug(const char *fmt, ...) { }
 #endif
 
 #ifndef CONFIG_FIT
@@ -224,12 +224,12 @@ static int mc_dispatcher(void *passed)
 		handle_p2m_checkpint(payload, desc, hdr);
 		break;
 
-#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 /* DISTRIBUTED MMAP */
 	case M2M_MMAP:
 		handle_m2m_mmap(payload, desc, hdr);
 		break;
-	
+
 	case M2M_MUNMAP:
 		handle_m2m_munmap(payload, desc, hdr);
 		break;
@@ -245,7 +245,7 @@ static int mc_dispatcher(void *passed)
 	case M2M_MREMAP_MOVE:
 		handle_m2m_mremap_move(payload, desc, hdr);
 		break;
-	
+
 	case M2M_MREMAP_MOVE_SPLIT:
 		handle_m2m_mremap_move_split(payload, desc, hdr);
 		break;
@@ -319,7 +319,7 @@ void __init memory_component_init(void)
 
 #ifdef CONFIG_VMA_MEMORY_UNITTEST
 	mem_vma_unittest();
-#endif 
+#endif
 
 #ifdef CONFIG_FIT
 	ret = kthread_run(mc_manager, NULL, "mc-manager");

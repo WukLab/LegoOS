@@ -21,7 +21,7 @@
 #define VMA_BUG_ON(cond)		BUG_ON(cond)
 #define VMA_WARN_ON(cond)		WARN_ON(cond)
 #define VMA_WARN(cond, format...)	WARN(cond, format)
-#define vma_debug(...) 			pr_debug("VMA: " __VA_ARGS__)
+#define vma_debug(...)			pr_debug("VMA: " __VA_ARGS__)
 
 #else
 
@@ -47,8 +47,8 @@ struct vmr_map_struct {
 	unsigned long len;
 };
 
-/* 
- * since reply needs a fixed size, maximum entry restrict to number 
+/*
+ * since reply needs a fixed size, maximum entry restrict to number
  * of memory node * 2 (remap can possibly have two continuous ranges
  * changed for one node). nr_entry represent the real number of entries
  * that are valid
@@ -65,8 +65,8 @@ struct vmr_map_reply {
 #else
 #define VM_GRANULARITY		(1UL << 30)
 #endif
-#define VMR_SHIFT 		CONFIG_VM_GRANULARITY_ORDER
-#define vmr_idx(addr) 		((typeof(addr))(addr) >> VMR_SHIFT)
+#define VMR_SHIFT		CONFIG_VM_GRANULARITY_ORDER
+#define vmr_idx(addr)		((typeof(addr))(addr) >> VMR_SHIFT)
 /* to align the pointer to the (next) VM_GRANULARITY boundary */
 #define VMR_ALIGN(addr)		ALIGN((addr), VM_GRANULARITY)
 /* to align the pointer to the (current) VM_GRANULARITY boundary */

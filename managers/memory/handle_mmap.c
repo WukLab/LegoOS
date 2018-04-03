@@ -94,7 +94,7 @@ int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
 			goto set_brk;
 		goto out;
 	}
-	
+
 	if (find_vma_intersection(mm, oldbrk, newbrk+PAGE_SIZE))
 		goto out;
 
@@ -222,7 +222,7 @@ int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 	}
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-	ret = distvm_munmap_homenode(mm, addr, len); 
+	ret = distvm_munmap_homenode(mm, addr, len);
 #else
 	ret = do_munmap(mm, addr, len);
 #endif
@@ -311,8 +311,8 @@ static int distribute_msync(struct lego_task_struct *tsk, u64 start, u64 len,
 	info.len = len;
 	info.flags = flags;
 
-	ret = net_send_reply_timeout(mnode, M2M_MSYNC, (void *)&info, 
-			sizeof(struct m2m_msync_struct), (void *)&reply, 
+	ret = net_send_reply_timeout(mnode, M2M_MSYNC, (void *)&info,
+			sizeof(struct m2m_msync_struct), (void *)&reply,
 			sizeof(int), false, FIT_MAX_TIMEOUT_SEC);
 
 	if (ret)
@@ -381,11 +381,11 @@ int handle_p2m_msync(struct p2m_msync_struct *payload, u64 desc,
 		root = tsk->mm->vmrange_map[vmr_idx(start)];
 		end = min((u64)root->end, (u64)(start + len));
 		delta = end - start;
-		
+
 		if (is_local(root->mnode))
 			ret |= do_msync(tsk->mm, start, end, flags);
 		else
-			ret |= distribute_msync(tsk, start, end, 
+			ret |= distribute_msync(tsk, start, end,
 						flags, root->mnode);
 
 		len -= delta;
@@ -489,7 +489,7 @@ static void mremap_to(unsigned long addr, unsigned long old_len,
 
 	/*
 	 * Try to shrink the old length to new length
-	 * 	old_len <= new_len
+	 *	old_len <= new_len
 	 * Hence, it is either 1) remap whole region with
 	 * the length, or 2) remap whole region with extended length
 	 */
@@ -505,7 +505,7 @@ static void mremap_to(unsigned long addr, unsigned long old_len,
 	}
 
 	/* Try to find a doable vma */
-	vma = vma_to_resize(addr, old_len, new_len, tsk); 
+	vma = vma_to_resize(addr, old_len, new_len, tsk);
 	if (IS_ERR(vma)) {
 		ret = PTR_ERR(vma);
 		reply->status = ERR_TO_LEGO_RET(ret);
@@ -518,8 +518,8 @@ static void mremap_to(unsigned long addr, unsigned long old_len,
 		map_flags |= MAP_SHARED;
 
 	/* Try to allocate this new virtual address range */
-	ret = get_unmapped_area(tsk, vma->vm_file, new_addr, new_len, 
-			vma->vm_pgoff + ((addr - vma->vm_start) >> PAGE_SHIFT), 
+	ret = get_unmapped_area(tsk, vma->vm_file, new_addr, new_len,
+			vma->vm_pgoff + ((addr - vma->vm_start) >> PAGE_SHIFT),
 			map_flags);
 	if (offset_in_page(ret)) {
 		reply->status = RET_ENOMEM;
@@ -679,7 +679,7 @@ int handle_p2m_mprotect(struct p2m_mprotect_struct *payload, u64 desc,
 	return 0;
 }
 
-#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
 		   struct common_header *hdr)
 {
@@ -724,7 +724,7 @@ int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
 
 	/* Shrink the brk */
 	if (brk <= mm->brk) {
-		ret = distvm_munmap_homenode(mm, newbrk, oldbrk - newbrk); 
+		ret = distvm_munmap_homenode(mm, newbrk, oldbrk - newbrk);
 		if (likely(!ret))
 			goto set_brk;
 		goto out;
@@ -780,8 +780,8 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 		   "pgoff:%#Lx,f_name:[%s]", nid, pid, addr, len, prot,
 		   flags, pgoff, f_name);
 
-	/* 
-	 * since it's not homenode, won't be able to find task struct 
+	/*
+	 * since it's not homenode, won't be able to find task struct
 	 * for the first mmap to this node
 	 */
 	tsk = find_lego_task_by_pid(nid, pid);
@@ -807,7 +807,7 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 		if (reply.addr) {
 			lego_mmput(tsk->mm);
 			kfree(tsk);
-	
+
 			/* Same process? */
 			if (likely(reply.addr == -EEXIST))
 				reply.addr = 0;
@@ -829,7 +829,7 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 	}
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	reply.addr = do_dist_mmap(tsk->mm, file, MY_NODE_ID, new_range, addr, len, 
+	reply.addr = do_dist_mmap(tsk->mm, file, MY_NODE_ID, new_range, addr, len,
 				  prot, flags, vm_flags, pgoff, &reply.max_gap);
 
 reply:
@@ -916,7 +916,7 @@ out:
 	return 0;
 }
 
-int handle_m2m_mremap_grow(struct m2m_mremap_grow_struct *payload, u64 desc, 
+int handle_m2m_mremap_grow(struct m2m_mremap_grow_struct *payload, u64 desc,
 			   struct common_header *hdr)
 {
 	u32 nid = hdr->src_nid;
@@ -955,7 +955,7 @@ out:
 	return 0;
 }
 
-int handle_m2m_mremap_move(struct m2m_mremap_move_struct *payload, u64 desc, 
+int handle_m2m_mremap_move(struct m2m_mremap_move_struct *payload, u64 desc,
 			   struct common_header *hdr)
 {
 	u32 nid = hdr->src_nid;
@@ -985,8 +985,8 @@ int handle_m2m_mremap_move(struct m2m_mremap_move_struct *payload, u64 desc,
 		goto out;
 	}
 
-	reply.new_addr = do_dist_mremap_move(mm, MY_NODE_ID, old_addr, old_len, 
-					new_len, new_range, &reply.old_max_gap, 
+	reply.new_addr = do_dist_mremap_move(mm, MY_NODE_ID, old_addr, old_len,
+					new_len, new_range, &reply.old_max_gap,
 					&reply.new_max_gap);
 	up_write(&mm->mmap_sem);
 
@@ -996,7 +996,7 @@ out:
 	return 0;
 }
 
-int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *payload, 
+int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *payload,
 				u64 desc, struct common_header *hdr)
 {
 	u32 nid = hdr->src_nid;
@@ -1026,8 +1026,8 @@ int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *payload,
 		goto out;
 	}
 
-	reply.new_addr = do_dist_mremap_move_split(mm, old_addr, old_len, 
-				new_addr, new_len, &reply.old_max_gap, 
+	reply.new_addr = do_dist_mremap_move_split(mm, old_addr, old_len,
+				new_addr, new_len, &reply.old_max_gap,
 				&reply.new_max_gap);
 
 	up_write(&mm->mmap_sem);

@@ -449,7 +449,7 @@ int do_execve(const char __user *filename,
 		goto out;
 
 #ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
-	map_mnode_from_reply(current->mm, 
+	map_mnode_from_reply(current->mm,
 			   &((struct m2p_execve_struct *)reply)->map);
 #endif
 

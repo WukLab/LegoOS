@@ -58,7 +58,7 @@ static inline int current_vnode_id(void)
 	return 0;
 }
 
-/* 
+/*
  *	- default_pgcache_home_node = get_memory_home_node
  *	- default_storage_home_node = STORAGE_NODE
  *	- used in UNSET case

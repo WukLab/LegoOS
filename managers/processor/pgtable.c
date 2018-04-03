@@ -12,9 +12,9 @@
  * used to emulate pcache. Those functions work on user pgtable ranges.
  *
  * There major pte functions:
- * 	- zap		pcache_zap_pte
- * 	- copy		pcache_copy_one_pte
- * 	- move		pcache_move_pte
+ *	- zap		pcache_zap_pte
+ *	- copy		pcache_copy_one_pte
+ *	- move		pcache_move_pte
  */
 
 #include <lego/mm.h>
@@ -146,7 +146,7 @@ retry:
 			 * does not have corresponding rmap points back.
 			 *
 			 * If we clear pte first, there is a small
-			 * time frame where the rmap that pcm has still 
+			 * time frame where the rmap that pcm has still
 			 * points back to this pte, but this pte is 0.
 			 *
 			 * Both create in-consistent view.
@@ -538,7 +538,7 @@ retry:
 
 /*
  * Shift emulated pgtable mapping from
- * 	[old_addr, old_addr + len) ---> [new_addr, new_addr + len)
+ *	[old_addr, old_addr + len) ---> [new_addr, new_addr + len)
  * The original mapping for old_addr will be cleared. And the
  * TLB will be flushed at last.
  *
@@ -560,7 +560,7 @@ unsigned long move_page_tables(struct task_struct *tsk,
 
 	for (; old_addr < old_end; old_addr += extent, new_addr += extent) {
 		next = (old_addr + PMD_SIZE) & PMD_MASK;
-		
+
 		/* even if next overflowed, extent below will be ok */
 		extent = next - old_addr;
 		if (extent > old_end - old_addr)
@@ -569,11 +569,11 @@ unsigned long move_page_tables(struct task_struct *tsk,
 		old_pmd = get_old_pmd(mm, old_addr);
 		if (!old_pmd)
 			continue;
-		
+
 		new_pmd = alloc_new_pmd(mm, new_addr);
 		if (WARN_ON_ONCE(!new_pmd))
 			break;
-	
+
 		if (WARN_ON_ONCE(!pte_alloc(mm, new_pmd, new_addr)))
 			break;
 

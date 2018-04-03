@@ -80,7 +80,7 @@ ssize_t __storage_read(struct lego_task_struct *tsk, char *f_name,
 
 	kfree(msg);
 	kfree(retbuf);
-	return retval;	
+	return retval;
 }
 
 ssize_t storage_read(struct lego_task_struct *tsk,
@@ -141,7 +141,7 @@ ssize_t __storage_write(struct lego_task_struct *tsk, char *f_name,
 	m2s_debug("2 retval: %zu", retval);
 
 	kfree(msg);
-	return retval;	
+	return retval;
 
 }
 

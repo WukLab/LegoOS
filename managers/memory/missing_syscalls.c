@@ -154,7 +154,7 @@ SYSCALL_DEFINE1(dup, unsigned int, fildes)
 }
 
 SYSCALL_DEFINE3(fcntl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
-{	
+{
 	BUG();
 }
 

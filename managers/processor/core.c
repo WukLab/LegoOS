@@ -38,7 +38,7 @@ const char *envp_init[MAX_INIT_ENVS+2] =
 	"PWD=/",
 	NULL,
 };
- 
+
 static int procmgmt(void *unused)
 {
 	const char *init_filename;
@@ -64,7 +64,7 @@ static void run_global_thread(void)
 	 * because that one will call do_exit inside. So do_execve
 	 * will not have any effect.
 	 */
-	pid = kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD); 
+	pid = kernel_thread(procmgmt, NULL, CLONE_GLOBAL_THREAD);
 	if (pid < 0)
 		panic("Fail to run the initial user process.");
 }

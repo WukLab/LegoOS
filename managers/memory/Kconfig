@@ -76,7 +76,7 @@ config DEBUG_HANDLE_FORK
 	depends on DEBUG_KERNEL
 	help
 	  Enable to have a detailed log of what memory-manager's fork handler has did.
-	  
+
 	  If unsure, say N.
 
 config DEBUG_HANDLE_EXECVE
@@ -86,7 +86,7 @@ config DEBUG_HANDLE_EXECVE
 	depends on DEBUG_KERNEL
 	help
 	  Enable to have a detailed dump of mmap after execve() call.
-	  
+
 	  If unsure, say N.
 
 config DEBUG_LOADER
