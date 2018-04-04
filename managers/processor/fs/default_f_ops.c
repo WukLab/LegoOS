@@ -32,7 +32,7 @@ static inline void file_debug(const char *fmt, ...) { }
  * p2s_open:
  * Send request to storage directly.
  */
-static int normal_p2s_open(struct file *f)
+static int p2s_open(struct file *f)
 {
 	int retval = 0;
 	void *msg;
@@ -57,8 +57,11 @@ static int normal_p2s_open(struct file *f)
 
 	ibapi_send_reply_imm(current_storage_home_node(), msg, len_msg,
 			     &retval, sizeof(retval), false);
+
+#ifdef CONFIG_DEBUG_FILE
 	if (retval < 0)
 		pr_debug("%s: %s\n", FUNC, ret_to_string(ERR_TO_LEGO_RET((long)retval)));
+#endif
 
 	kfree(msg);
 	return retval;
@@ -68,8 +71,8 @@ static int normal_p2s_open(struct file *f)
  * p2m_read
  * Send request to memory manager
  */
-static ssize_t normal_p2m_read(struct file *f, char __user *buf,
-			       size_t count, loff_t *off)
+static ssize_t p2m_read(struct file *f, char __user *buf, size_t count,
+			loff_t *off)
 {
 	ssize_t retval, retlen;
 	ssize_t *retval_ptr;
@@ -154,7 +157,7 @@ out:
 	return retval;
 }
 
-static ssize_t __normal_p2m_write(struct file *f, const char __user *buf,
+static ssize_t __p2m_write(struct file *f, const char __user *buf,
 				size_t count, loff_t *off)
 {
 	ssize_t retval, retlen;
@@ -181,7 +184,7 @@ static ssize_t __normal_p2m_write(struct file *f, const char __user *buf,
 	payload->uid = current_uid();
 	payload->flags = f->f_flags;
 	payload->len = count;
-	
+
 	payload->offset = (*off);
 	strncpy(payload->filename, f->f_name, MAX_FILENAME_LENGTH);
 
@@ -217,22 +220,22 @@ out:
  */
 #define MAX_WRITE_SIZE	(16 * PAGE_SIZE)
 
-static ssize_t normal_p2m_write(struct file *f, const char __user *buf,
-				size_t count, loff_t *off)
+static ssize_t p2m_write(struct file *f, const char __user *buf,
+			 size_t count, loff_t *off)
 {
 	ssize_t retval = 0;
 	size_t remaining = count;
 	const char __user *curr = buf;
 
 	if (likely(count <= MAX_WRITE_SIZE))
-		return __normal_p2m_write(f, buf, count, off);
-	
+		return __p2m_write(f, buf, count, off);
+
 	while (remaining) {
 		ssize_t ret;
 		size_t len = min(remaining, MAX_WRITE_SIZE);
 
 		/* offset would automatic incr after write */
-		ret = __normal_p2m_write(f, curr, len, off);
+		ret = __p2m_write(f, curr, len, off);
 		if (ret < 0) {
 			retval = ret;
 			goto out;
@@ -276,9 +279,9 @@ static loff_t default_llseek(struct file *file, loff_t offset, int whence)
 	return ret;
 }
 
-struct file_operations normal_p2s_f_ops = {
+struct file_operations default_p2s_f_ops = {
 	.llseek = default_llseek,
-	.open	= normal_p2s_open,
-	.read	= normal_p2m_read,
-	.write	= normal_p2m_write,
+	.open	= p2s_open,
+	.read	= p2m_read,
+	.write	= p2m_write,
 };

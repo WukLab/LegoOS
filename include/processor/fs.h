@@ -49,11 +49,11 @@ int proc_file_open(struct file *, char *f_name);
 int sys_file_open(struct file *, char *f_name);
 int dev_file_open(struct file *, char *f_name);
 
-extern struct file_operations normal_p2s_f_ops;
+extern struct file_operations default_p2s_f_ops;
 
-static inline int normal_file_open(struct file *f, char *f_name)
+static inline int default_file_open(struct file *f, char *f_name)
 {
-	f->f_op = &normal_p2s_f_ops;
+	f->f_op = &default_p2s_f_ops;
 	return 0;
 }
 

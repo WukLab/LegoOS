@@ -8,12 +8,12 @@ obj-y += stat.o
 obj-y += fcntl.o
 obj-y += ioctl.o
 obj-y += stdio.o
-obj-y += normal_ops.o
 obj-y += truncate.o
 obj-y += namei.o
 obj-y += statfs.o
 obj-y += pipe.o
 obj-y += lseek.o
+obj-y += default_f_ops.o
 
 #
 # To maintain compability with linux

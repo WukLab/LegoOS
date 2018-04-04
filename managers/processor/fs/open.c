@@ -175,7 +175,7 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 		f->f_op = &debug_ramfs_f_ops;
 		ret = 0;
 #else
-		ret = normal_file_open(f, kname);
+		ret = default_file_open(f, kname);
 #endif
 	}
 
@@ -254,9 +254,11 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 		f = files->fd_array[fd];
 		BUG_ON(!f);
 
+#ifdef CONFIG_DEBUG_SYSCALL
 		pr_info("%s() CPU%d PID:%d [fd: %d] -> [%s]\n",
 			__func__, smp_processor_id(), current->pid,
 			fd, f ? f->f_name : "-EBADF");
+#endif
 
 		if (f->f_op->release)
 			f->f_op->release(f);
