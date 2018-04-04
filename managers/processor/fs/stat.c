@@ -56,14 +56,16 @@ static inline void __sock_fillstat(struct kstat *stat)
 	stat->mode |= S_IFSOCK;
 }
 
+/* /proc is regular files */
 static inline void __proc_fillstat(struct kstat *stat)
 {
-	WARN(1, "TODO: stat proc file would not happen in general cases.\n");
+	stat->mode |= S_IFREG;
 }
 
+/* /sys is regular files */
 static inline void __sys_fillstat(struct kstat *stat)
 {
-	WARN(1, "TODO: stat sys file would not happen in general cases.\n");
+	stat->mode |= S_IFREG;
 }
 
 /*

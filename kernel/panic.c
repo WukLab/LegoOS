@@ -115,7 +115,7 @@ void panic(const char *fmt, ...)
 
 	/* Print short info on all tasks */
 	if (scheduler_state == SCHED_UP)
-		show_state_filter(0, false);
+		show_state_filter(0, true);
 
 	if (manager_state == MANAGER_UP)
 		print_pcache_events();
