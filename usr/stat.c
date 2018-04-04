@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static int __fstat(int fd)
+static int stat_fd(int fd, char *f_name)
 {
     struct stat sb;
 
@@ -13,7 +13,7 @@ static int __fstat(int fd)
         exit(EXIT_FAILURE);
     }
 
-    printf("fd: %d\n", fd);
+    printf("fd: %d %s\n", fd, f_name ? f_name: " ");
     printf("File type:                ");
 
     switch (sb.st_mode & S_IFMT) {
@@ -46,14 +46,42 @@ static int __fstat(int fd)
     printf("Last status change:       %s", ctime(&sb.st_ctime));
     printf("Last file access:         %s", ctime(&sb.st_atime));
     printf("Last file modification:   %s", ctime(&sb.st_mtime));
+    printf("\n\n");
 }
+
+static char *files[] = {
+	"/proc/stat",
+	"/proc/meminfo",
+	"/dev/tty",
+	"/sys/devices/system/cpu/online",
+};
+
+static void stat_f_name(char *f_name)
+{
+	int fd;
+
+	fd = open(f_name, 0);
+	if (fd < 0) {
+		perror("open");
+		printf("Fail to open: %s\n", f_name);
+		return;
+	}
+
+	stat_fd(fd, f_name);
+	close(fd);
+}
+
+#define ARRAY_SIZE(x)		(sizeof(x) / sizeof((x)[0]))
 
 int main(int argc, char *argv[])
 {
 	int i;
 
 	for (i = 0; i < 3; i++)
-		__fstat(i);
+		stat_fd(i, NULL);
+
+	for (i = 0; i < ARRAY_SIZE(files); i++)
+		stat_f_name(files[i]);
 
 	return 0;
 }
