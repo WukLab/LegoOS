@@ -7,4 +7,3 @@ obj-y += common.o
 obj-y += vsyscall/
 
 obj-$(CONFIG_IA32_EMULATION) += entry_64_compat.o
-obj-$(CONFIG_TRACE_SYSCALL) += strace.o

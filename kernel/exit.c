@@ -473,6 +473,10 @@ void __noreturn do_exit(long code)
 	if (group_dead) {
 		/* Cancel timers etc. */
 		exit_itimers(tsk->signal);
+
+		/* Free strace buffers */
+		exit_processor_strace(tsk);
+
 #ifdef CONFIG_GPM
 		report_proc_exit(code);
 #endif

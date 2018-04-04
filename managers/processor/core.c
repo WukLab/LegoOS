@@ -50,6 +50,12 @@ static int procmgmt(void *unused)
 	init_filename = "/root/ys/LegoOS/usr/exe.o";
 	argv_init[0] = init_filename;
 
+	/*
+	 * It's strace has not been established yet
+	 * Because previously it has PF_KTHREAD set
+	 */
+	__fork_processor_strace(current);
+
 	return do_execve(init_filename,
 		(const char *const *)argv_init,
 		(const char *const *)envp_init);

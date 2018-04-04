@@ -793,10 +793,6 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	p->robust_list = NULL;
 #endif
 
-#ifdef CONFIG_TRACE_SYSCALL
-	p->strace = NULL;
-#endif
-
 	/*
 	 * sigaltstack should be cleared when sharing the same VM
 	 */
@@ -878,11 +874,23 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	spin_unlock(&current->sighand->siglock);
 	spin_unlock_irqrestore(&tasklist_lock, flags);
 
+	/*
+	 * Okay, this new thread has been setup fully.
+	 * Now we callback to strace.
+	 */
+	retval = fork_processor_strace(p);
+	if (retval) {
+		/* need decent cleanup here */
+		WARN_ON(1);
+		goto out_cleanup_thread;
+	}
+
 	return p;
 
 out:
 	spin_unlock(&current->sighand->siglock);
 	spin_unlock_irqrestore(&tasklist_lock, flags);
+
 out_cleanup_thread:
 	exit_thread(p);
 out_cleanup_mm:

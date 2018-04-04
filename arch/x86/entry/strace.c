@@ -14,6 +14,19 @@
 #include <lego/syscalls.h>
 #include <generated/asm-offsets.h>
 
+/*
+ * This code used to detect buggy syscalls by comparing
+ * the pt_regs before syscall invoked, and the pt_regs
+ * after syscall finished.
+ *
+ * But I don't think we need to this to verify this.
+ * Besides, some syscalls like execve(), sigreturn will
+ * change the pt_regs.
+ *
+ * Well. I do not want to remove it.
+ * 	- ys
+ */
+
 /* Ugly */
 static struct strace *get_current_strace(void)
 {

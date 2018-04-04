@@ -209,17 +209,6 @@ config DEBUG_KERNEL
 	  Say Y here if you are developing or trying to debug and
 	  identify kernel problems.
 
-config TRACE_SYSCALL
-	bool "Kernel-version strace"
-	default n
-	depends on DEBUG_KERNEL
-	help
-	  This option will help us debug syscall. Currently it is whole
-	  feature is to detect possible pt_regs corruption during syscall
-	  exit. To note that it can be extended to a full-hourse strace.
-
-	  If unsure, say N.
-
 config DEBUG_EXIT
 	bool "Debug all thread exit activities"
 	default n
@@ -266,16 +255,5 @@ config PROFILING_BOOT
 	  If unsure, say N.
 
 endmenu #Lego Kernel Profiling
-
-menu "Lego Kernel Syscall Tracer"
-config STRACE
-	bool "syscall trace"
-	default n
-	depends on !COMP_MEMORY
-	help
-	  This enables kernel version syscall tracer.
-	  If unsrue, say N
-
-endmenu #STRACE
 
 endmenu

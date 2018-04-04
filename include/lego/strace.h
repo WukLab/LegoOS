@@ -16,60 +16,26 @@
 struct pt_regs;
 
 #ifdef CONFIG_STRACE
-void strace_enter(struct pt_regs *regs);
-void strace_exit(struct pt_regs *regs);
+void strace_syscall_enter(struct pt_regs *regs);
+void strace_syscall_exit(struct pt_regs *regs);
+
+/* Hook for fork() and exit() */
+int __fork_processor_strace(struct task_struct *p);
+int fork_processor_strace(struct task_struct *p);
+void exit_processor_strace(struct task_struct *p);
 #else
-static inline void strace_enter(struct pt_regs *regs) { }
-static inline void strace_exit(struct pt_regs *regs) { }
-#endif
+static inline void strace_syscall_enter(struct pt_regs *regs) { }
+static inline void strace_syscall_exit(struct pt_regs *regs) { }
 
-typedef void (*strace_call_ptr_t)(unsigned long,
-				  unsigned long, unsigned long,
-				  unsigned long, unsigned long,
-				  unsigned long, unsigned long);
+static inline int fork_processor_strace(struct task_struct *p)
+{
+	return 0;
+}
 
-#define STRACE_DEFINE0(sname)					\
-	void strace_##sname(void)
+static inline void exit_processor_strace(struct task_struct *p)
+{
 
-#define STRACE_DEFINE1(name, ...) STRACE_DEFINEx(1, __##name, __VA_ARGS__)
-#define STRACE_DEFINE2(name, ...) STRACE_DEFINEx(2, __##name, __VA_ARGS__)
-#define STRACE_DEFINE3(name, ...) STRACE_DEFINEx(3, __##name, __VA_ARGS__)
-#define STRACE_DEFINE4(name, ...) STRACE_DEFINEx(4, __##name, __VA_ARGS__)
-#define STRACE_DEFINE5(name, ...) STRACE_DEFINEx(5, __##name, __VA_ARGS__)
-#define STRACE_DEFINE6(name, ...) STRACE_DEFINEx(6, __##name, __VA_ARGS__)
-
-#define STRACE_DEFINEx(x, sname, ...)				\
-	__STRACE_DEFINEx(x, sname, __VA_ARGS__)
-
-#define __STRACE_DEFINEx(x, name, ...)				\
-	static inline void strace##name(unsigned long nr, __MAP(x,__SC_DECL,__VA_ARGS__))
-
-struct strace_flag {
-	unsigned long	val;
-	const char	*str;
-};
-
-void strace_printflags(struct strace_flag *sf, unsigned long flags, unsigned char *buf);
-
-#define SF(val)		{ (unsigned long)val, #val }
-#define SEND		{ 0, NULL }
-
-
-
-
-/* TODO: Legacy code: to be removed */
-struct strace {
-	struct pt_regs	regs;
-	pid_t		pid;
-	int		enter_cpu;
-};
-
-#ifdef CONFIG_TRACE_SYSCALL
-void trace_syscall_enter(void);
-void trace_syscall_exit(void);
-#else
-static inline void trace_syscall_enter(void) { }
-static inline void trace_syscall_exit(void) { }
-#endif
+}
+#endif /* CONFIG_STRACE */
 
 #endif /* _LEGO_STRACE_H_ */

@@ -82,11 +82,39 @@ config GPM_HANDLER
 	help
 	  gpm message receiver and handler
 
-
-
 source "managers/processor/pcache/Kconfig"
 source "managers/processor/fs/Kconfig"
 source "managers/processor/checkpoint/Kconfig"
+
+menu "Processor Syscall Trace Options"
+config STRACE
+	bool "syscall trace"
+	default n
+	depends on DEBUG_KERNEL
+	depends on COMP_PROCESSOR
+	help
+	  This enables kernel version syscall tracer.
+	  Each thread has its own set of counters to record number of
+	  syscalls happened during process lifetime.
+
+	  NOTE!!! The stat printed are accumulated from all threads
+	  within a group.
+
+config STRACE_PRINT_ON_ENTER
+	bool "print strace on syscall enter"
+	default n
+	depends on STRACE
+
+config STRACE_PRINT_ON_LEAVE
+	bool "print strace on syscall leave"
+	default n
+	depends on STRACE
+
+config STRACE_PRINT_ON_SPECIFIC
+	bool "print only specfic syscalls"
+	default n
+	depends on STRACE
+endmenu
 
 menu "Processor DEBUG Options"
 config DEBUG_PCACHE

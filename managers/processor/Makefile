@@ -12,4 +12,6 @@ obj-y += mmap/
 obj-y += pcache/
 obj-y += fs/
 obj-y += monitor/
+
 obj-$(CONFIG_CHECKPOINT) += checkpoint/
+obj-$(CONFIG_STRACE) += strace/

@@ -15,18 +15,12 @@
 #include <lego/syscalls.h>
 #include <lego/waitpid.h>
 #include <lego/files.h>
+#include <lego/sched.h>
 #include <processor/fs.h>
 #include <generated/asm-offsets.h>
 #include <generated/unistd_64.h>
 
-#define sp(fmt, ...)	\
-	pr_info("%s cpu%d " fmt "\n", __func__, smp_processor_id(), __VA_ARGS__)
-
-void strace_enter_default(unsigned long nr, unsigned long a1, unsigned long a2,
-			  unsigned long a3, unsigned long a4, unsigned long a5, unsigned long a6)
-{
-	pr_info("CPU%d PID%d %pS\n", smp_processor_id(), current->pid, sys_call_table[nr]);
-}
+#include "internal.h"
 
 static struct strace_flag sf_clone[] = {
 	SF(CLONE_VM),
@@ -66,8 +60,14 @@ STRACE_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 
 	memset(buf, 0, 128);
 	strace_printflags(sf_clone, clone_flags, buf);
+
 	sp("flags(%#lx)=%s, newsp=%#lx, parent_tidptr=%p, child_tidptr=%p, tls=%#lx",
 		clone_flags, buf, newsp, parent_tidptr, child_tidptr, tls);
+}
+
+STRACE_DEFINE0(fork)
+{
+	sp("current: pid=%d tgid=%d comm=%s", current->pid, current->tgid, current->comm);
 }
 
 static struct strace_flag sf_waitid_which[] = {
@@ -122,107 +122,7 @@ STRACE_DEFINE0(getpid)
 	sp("current: %d, tgid: %d", current->pid, current->tgid);
 }
 
-static struct strace_flag sf_mmap_prot[] = {
-	SF(PROT_READ),
-	SF(PROT_WRITE),
-	SF(PROT_EXEC),
-	SF(PROT_SEM),
-	SF(PROT_NONE),
-	SEND,
-};
-
-static struct strace_flag sf_mmap_flags[] = {
-	SF(MAP_SHARED),
-	SF(MAP_PRIVATE),
-	SF(MAP_FIXED),
-	SF(MAP_ANONYMOUS),
-	SF(MAP_GROWSDOWN),
-	SF(MAP_DENYWRITE),
-	SF(MAP_EXECUTABLE),
-	SF(MAP_LOCKED),
-	SEND,
-};
-
-STRACE_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
-	       unsigned long, prot, unsigned long, flags,
-	       unsigned long, fd, unsigned long, off)
+STRACE_DEFINE1(set_tid_address, int __user *, tidptr)
 {
-	unsigned char buf_prot[128];
-	unsigned char buf_flags[128];
-	struct file *f = NULL;
-
-	memset(buf_prot, 0, 128);
-	memset(buf_flags, 0, 128);
-	strace_printflags(sf_mmap_prot, prot, buf_prot);
-	strace_printflags(sf_mmap_flags, flags, buf_flags);
-
-	if (!(flags & MAP_ANONYMOUS))
-		f = fdget(fd);
-
-	sp("addr=%#lx, len=%#lx, prot(%#lx)=%s, flags(%#lx)=%s, fd=%lu(%s), off=%#lx",
-		addr, len, prot, buf_prot, flags, buf_flags, fd, f ? f->f_name : " ", off);
-
-	if (f)
-		put_file(f);
-}
-
-STRACE_DEFINE3(mprotect, unsigned long, start, size_t, len,
-	       unsigned long, prot)
-{
-	unsigned char buf_prot[128];
-
-	memset(buf_prot, 0, 128);
-	strace_printflags(sf_mmap_prot, prot, buf_prot);
-
-	sp("start=%#lx, len=%#lx, prot(%#lx)=%s",
-		start, len, prot, buf_prot);
-}
-
-void strace_printflags(struct strace_flag *sf, unsigned long flags, unsigned char *buf)
-{
-	int n = 0;
-	int offset;
-
-	if (WARN_ON(!sf || !buf))
-		return;
-
-	for (; (flags || !n) && sf->str; ++sf) {
-		if ((flags == sf->val) ||
-		    (sf->val && (flags & sf->val) == sf->val)) {
-			offset = sprintf(buf, "%s%s", (n++ ? "|" : ""), sf->str);
-			buf += offset;
-
-			flags &= ~sf->val;
-		}
-		if (!flags)
-			break;
-	}
-}
-
-const strace_call_ptr_t strace_call_table[__NR_syscall_max+1] = {
-	[0 ... __NR_syscall_max]	= &strace_enter_default,
-
-	[__NR_clone]			= (strace_call_ptr_t)&strace__clone,
-	[__NR_wait4]			= (strace_call_ptr_t)&strace__wait4,
-	[__NR_waitid]			= (strace_call_ptr_t)&strace__waitid,
-	[__NR_mmap]			= (strace_call_ptr_t)&strace__mmap,
-	[__NR_mprotect]			= (strace_call_ptr_t)&strace__mprotect,
-};
-
-void strace_enter(struct pt_regs *regs)
-{
-	unsigned long nr = regs->orig_ax;
-	unsigned long a1 = regs->di;
-	unsigned long a2 = regs->si;
-	unsigned long a3 = regs->dx;
-	unsigned long a4 = regs->r10;
-	unsigned long a5 = regs->r8;
-	unsigned long a6 = regs->r9;
-
-	if (likely(nr < NR_syscalls))
-		strace_call_table[nr](nr, a1, a2, a3, a4, a5, a6);
-}
-
-void strace_exit(struct pt_regs *regs)
-{
+	sp("tidptr=%p", tidptr);
 }

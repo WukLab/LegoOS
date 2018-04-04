@@ -1734,6 +1734,11 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 					{
 						length = wc[i].byte_len;
 						reply_indicator_index = wc[i].ex.imm_data & IMM_GET_REPLY_INDICATOR_INDEX;
+						if (reply_indicator_index < 0 || reply_indicator_index > IMM_NUM_OF_SEMAPHORE) {
+							printk(KERN_CRIT "%s got wrong reply index %d\n", 
+									__func__, reply_indicator_index);
+							continue; //BUG_ON(1);
+						}
 						//printk(KERN_CRIT "%s: case 2 reply_indicator_index-%d len-%d\n", __func__, reply_indicator_index, wc[i].byte_len);
 
 						fit_debug("got reply reply_indicator_index-%d len-%d reply_indicator_addr %lx\n",

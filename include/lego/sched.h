@@ -493,9 +493,7 @@ struct task_struct {
 	struct processor_manager pm_data;
 #endif
 
-#ifdef CONFIG_TRACE_SYSCALL
-	struct strace *strace;
-#endif
+	void *private_strace;
 
 	/* CPU-specific state of this task */
 	struct thread_struct thread;
