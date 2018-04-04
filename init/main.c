@@ -161,6 +161,7 @@ static int kernel_init(void *unused)
 #elif defined(CONFIG_COMP_MEMORY)
 	memory_component_init();
 #endif
+	manager_state = MANAGER_UP;
 
 	/* Print scheduablable CPUs */
 	dump_cpumasks();

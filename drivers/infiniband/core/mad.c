@@ -2298,56 +2298,56 @@ int mad_got_one;
  */
 static int ib_mad_completion_handler(void *_data)
 {
-	//struct ib_mad_port_private *port_priv;
 	struct ib_wc wc;
 	struct ib_mad_port_private *port_priv = _data;
-
-/* TODO: changing to busy poll before we have interrupt */
-//	port_priv = container_of(work, struct ib_mad_port_private, work);
-//	ib_req_notify_cq(port_priv->cq, IB_CQ_NEXT_COMP);
+	int nr_got;
 
 	pr_info("%s(): running on CPU %d\n", __func__, smp_processor_id());
 
-	mad_got_one = 0;
 	while (1) {
-		while (ib_poll_cq(port_priv->cq, 1, &wc) == 1) {
-			if (wc.status == IB_WC_SUCCESS) {
-				switch (wc.opcode) {
-				case IB_WC_SEND:
-					//pr_info("%s %d got successful send cq op %d mad_got_one %d\n",
-					//	__func__, __LINE__, wc.opcode, mad_got_one);
-					ib_mad_send_done_handler(port_priv, &wc);
-					break;
-				case IB_WC_RECV:
-					mad_got_one++;
-					//pr_info("%s %d got successful recv cq op %d mad_got_one %d\n",
-					//	__func__, __LINE__, wc.opcode, mad_got_one);
-					ib_mad_recv_done_handler(port_priv, &wc);
-					break;
-				default:
-					BUG_ON(1);
-					break;
-				}
-			} else {
-				pr_info("%s(): %d mad_error\n", __func__, __LINE__);
-				mad_error_handler(port_priv, &wc);
-			}
-
-			/*
-			 * TODO:
-			 * This function is used to talk with subnet manager.
-			 * If we don't need to add new nodes after lego initialized,
-			 * then we don't this thread to keep running.
-			 *
-			 * Quit this thread is processor or memory manager is up running.
-			 */
-			if (manager_state == MANAGER_UP) {
-				pr_info("%s(): exit\n", __func__);
-				return 0 ;
-			}
-			schedule();
+#if 0
+		/* Exit if P/M manager is up running */
+		if (manager_state == MANAGER_UP) {
+			pr_info("%s(): exit\n", __func__);
+			return 0;
 		}
-		schedule();
+#endif
+
+		nr_got = ib_poll_cq(port_priv->cq, 1, &wc);
+
+		if (!nr_got) {
+			schedule();
+			continue;
+		}
+
+		/* We are not prepared to get more than one */
+		if (nr_got != 1) {
+			pr_info("%s(): WARNING nr_got: %d\n", __func__, nr_got);
+			continue;
+		}
+
+		if (wc.status != IB_WC_SUCCESS) {
+			pr_info("%s(): WARNING mad_error\n", __func__);
+			mad_error_handler(port_priv, &wc);
+			continue;
+		}
+
+		switch (wc.opcode) {
+		case IB_WC_SEND:
+			pr_info("%s %d got successful send cq op %d mad_got_one %d\n",
+				__func__, __LINE__, wc.opcode, mad_got_one);
+			ib_mad_send_done_handler(port_priv, &wc);
+			break;
+		case IB_WC_RECV:
+			mad_got_one++;
+			pr_info("%s %d got successful recv cq op %d mad_got_one %d\n",
+				__func__, __LINE__, wc.opcode, mad_got_one);
+			ib_mad_recv_done_handler(port_priv, &wc);
+			break;
+		default:
+			BUG();
+			break;
+		}
 	}
 	return 0;
 }
