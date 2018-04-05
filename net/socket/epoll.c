@@ -29,6 +29,7 @@
 #include <lego/delay.h>
 #include <lego/time.h>
 #include <lego/timer.h>
+#include <lego/jiffies.h>
 
 #ifdef CONFIG_DEBUG_EPOLL
 #define epoll_debug(fmt, ...) \
