@@ -1142,6 +1142,7 @@ int fit_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive
 	//printk(KERN_CRIT "%s got new req offset %d sourcenode %d\n", __func__, offset, node_id);
 	//free list
 	// XXX kmem_cache_free(imm_header_from_cq_to_port_cache, new_request);
+	kfree(new_request);
 
 	//get buffer from hash table based on node and port
 	
@@ -1218,6 +1219,7 @@ int fit_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int 
 			tmp->reply_addr, addr, size, 0, tmp->reply_indicator_index | IMM_SEND_REPLY_RECV, 
 			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
 	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);
+	kfree(tmp);
 
 	return 0;
 }
@@ -1236,6 +1238,7 @@ int fit_reply_message_w_extra_bits(ppc *ctx, void *addr, int size, int private_b
 			tmp->reply_addr, addr, size, 0, imm_data, 
 			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
 	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);
+	kfree(tmp);
 
 	return 0;
 }
