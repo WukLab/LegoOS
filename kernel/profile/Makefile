@@ -1,0 +1,3 @@
+obj-$(CONFIG_PROFILING_BOOT) += boot.o
+obj-$(CONFIG_PROFILING_KERNEL_HEATMAP) += heatmap.o
+obj-$(CONFIG_PROFILING_FUNCTIONS) += func.o

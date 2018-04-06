@@ -25,8 +25,8 @@ obj-y += coredump.o
 obj-y += madvise.o
 obj-y += stop_machine.o
 obj-y += smpboot.o
-obj-y += profile.o
 obj-y += itimer.o
 
 obj-$(CONFIG_FUTEX) += futex.o
 obj-$(CONFIG_WORK_QUEUE) += workqueue.o
+obj-$(CONFIG_PROFILING) += profile/

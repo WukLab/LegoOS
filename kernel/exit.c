@@ -13,6 +13,7 @@
 #include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/syscalls.h>
+#include <lego/profile.h>
 #include <lego/debug_locks.h>
 
 #include <processor/pcache.h>
@@ -474,8 +475,16 @@ void __noreturn do_exit(long code)
 		/* Cancel timers etc. */
 		exit_itimers(tsk->signal);
 
-		/* Free strace buffers */
+		/*
+		 * Free strace buffers
+		 * and print strace stat table
+		 */
 		exit_processor_strace(tsk);
+
+		/*
+		 * Print kernel text heatmap
+		 */
+		print_profile_heatmap_nr(10);
 
 #ifdef CONFIG_GPM
 		report_proc_exit(code);

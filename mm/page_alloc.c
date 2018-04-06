@@ -949,8 +949,10 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 		return NULL;
 
 	page = get_page_from_freelist(gfp_mask, order, zonelist, nodemask);
-	if (unlikely(!page))
+	if (unlikely(!page)) {
+		pr_info("order: %u\n", order);
 		panic("Out Of Memory");
+	}
 	return page;
 }
 

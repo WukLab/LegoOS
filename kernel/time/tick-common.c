@@ -16,6 +16,7 @@
 #include <lego/cpumask.h>
 #include <lego/irqdesc.h>
 #include <lego/percpu.h>
+#include <lego/profile.h>
 #include <lego/jiffies.h>
 #include <lego/clockevent.h>
 #include <lego/clocksource.h>
@@ -275,4 +276,7 @@ void tick_handle_periodic(struct clock_event_device *dev)
 	account_process_tick(current, user_tick);
 	run_local_timers();
 	scheduler_tick();
+
+	/* Oh, sweet profile heatmap */
+	profile_tick(CPU_PROFILING);
 }

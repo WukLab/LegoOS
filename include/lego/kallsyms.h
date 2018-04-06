@@ -16,7 +16,7 @@
 #define KSYM_SYMBOL_LEN (sizeof("%s+%#lx/%#lx [%s]") + (KSYM_NAME_LEN - 1) + \
 			 2*(BITS_PER_LONG*3/10) + 1)
 
-
+unsigned long get_symbol_start_addr(unsigned long addr);
 int sprint_symbol(char *buffer, unsigned long address);
 int sprint_symbol_no_offset(char *buffer, unsigned long address);
 int sprint_backtrace(char *buffer, unsigned long address);

@@ -341,6 +341,7 @@ asmlinkage void __init start_kernel(void)
 	system_state = SYSTEM_RUNNING;
 
 	boot_time_profile();
+	profile_heatmap_init();
 
 	/* STOP! WE ARE ALIVE NOW */
 	rest_init();

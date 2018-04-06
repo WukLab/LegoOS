@@ -91,6 +91,35 @@ static unsigned long kallsyms_sym_address(int idx)
 	return kallsyms_relative_base - 1 - kallsyms_offsets[idx];
 }
 
+unsigned long get_symbol_start_addr(unsigned long addr)
+{
+	unsigned long symbol_start = 0;
+	unsigned long low, high, mid;
+
+	/* Do a binary search on the sorted kallsyms_addresses array. */
+	low = 0;
+	high = kallsyms_num_syms;
+
+	while (high - low > 1) {
+		mid = low + (high - low) / 2;
+		if (kallsyms_sym_address(mid) <= addr)
+			low = mid;
+		else
+			high = mid;
+	}
+
+	/*
+	 * Search for the first aliased symbol. Aliased
+	 * symbols are symbols with the same address.
+	 */
+	while (low && kallsyms_sym_address(low-1) == kallsyms_sym_address(low))
+		--low;
+
+	symbol_start = kallsyms_sym_address(low);
+
+	return symbol_start;
+}
+
 static unsigned long get_symbol_pos(unsigned long addr,
 				    unsigned long *symbolsize,
 				    unsigned long *offset)
