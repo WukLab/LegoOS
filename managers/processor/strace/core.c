@@ -166,13 +166,19 @@ void strace_syscall_exit(struct pt_regs *regs)
 				      a1, a2, a3, a4, a5, a6);
 }
 
-static int strace_compare(const void *a, const void *b)
+static int strace_compare_time(const void *a, const void *b)
 {
 	const struct strace_syscall_info *sa = a, *sb = b;
 
-	if (atomic_read(&sa->nr_called) < atomic_read(&sb->nr_called))
+	if (sa->time_ns < sb->time_ns)
 		return 1;
 	return -1;
+}
+
+static inline void sort_strace_by_time(struct strace_info *si)
+{
+	sort(&si->info, NR_syscalls, sizeof(struct strace_syscall_info),
+		strace_compare_time, NULL);
 }
 
 void print_strace_info(struct strace_info *si)
@@ -183,8 +189,7 @@ void print_strace_info(struct strace_info *si)
 	u64 p_i, p_re;
 	struct timespec ts;
 
-	/* Sort based on nr_called by descending order */
-	sort(&si->info, NR_syscalls, sizeof(*ssi), strace_compare, NULL);
+	sort_strace_by_time(si);
 
 	/* Get total runtime first */
 	total_time_ns = 0;
