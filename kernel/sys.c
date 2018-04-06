@@ -13,9 +13,12 @@
 #include <lego/getcpu.h>
 #include <lego/utsname.h>
 #include <lego/syscalls.h>
+#include <lego/sysinfo.h>
 #include <lego/waitpid.h>
+#include <lego/timekeeping.h>
 #include <processor/pcache.h>
 #include <processor/fs.h>
+#include <uapi/sysinfo.h>
 
 #include <asm/numa.h>
 
@@ -380,6 +383,47 @@ SYSCALL_DEFINE2(getrusage, int, who, struct rusage __user *, ru)
 	    who != RUSAGE_THREAD)
 		return -EINVAL;
 	return getrusage(current, who, ru);
+}
+
+/**
+ * do_sysinfo - fill in sysinfo struct
+ * @info: pointer to buffer to fill
+ */
+static int do_sysinfo(struct sysinfo *info)
+{
+	struct manager_sysinfo val;
+	struct timespec tp;
+
+	memset(info, 0, sizeof(struct sysinfo));
+
+	get_monotonic_boottime(&tp);
+	info->uptime = tp.tv_sec + (tp.tv_nsec ? 1 : 0);
+
+	info->procs = nr_threads;
+
+	manager_meminfo(&val);
+
+	info->uptime = val.uptime;
+	info->loads[0] = val.loads[0];
+	info->loads[1] = val.loads[1];
+	info->loads[2] = val.loads[2];
+	info->totalram = val.totalram;
+	info->freeram = val.freeram;
+	info->mem_unit = val.mem_unit;
+
+	return 0;	
+}
+
+SYSCALL_DEFINE1(sysinfo, struct sysinfo __user *, info)
+{
+	struct sysinfo k_info;
+
+	do_sysinfo(&k_info);
+
+	if (copy_to_user(info, &k_info, sizeof(struct sysinfo)))
+		return -EFAULT;
+	
+	return 0;
 }
 
 #ifndef CONFIG_FUTEX

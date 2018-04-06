@@ -17,6 +17,5 @@ SYSCALL_DEFINE6(mbind, unsigned long, start, unsigned long, len,
 		unsigned long, mode, const unsigned long __user *, nmask,
 		unsigned long, maxnode, unsigned, flags)
 {
-	pr_warn("%s(): faked implementation.\n", __func__);
 	return 0;
 }
