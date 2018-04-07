@@ -57,6 +57,12 @@
 #define POST_RECEIVE_CACHE_SIZE 256
 #define SERVER_ID 0
 
+#ifdef CONFIG_FIT_MAX_OUTSTANDING_SEND
+# define MAX_OUTSTANDING_SEND	CONFIG_FIT_MAX_OUTSTANDING_SEND
+#else
+# error "Please config a number."
+#endif
+
 #define FIT_LINUX_PAGE_OFFSET 0x00000fff
 
 #define HIGH_PRIORITY 4
@@ -388,6 +394,7 @@ struct lego_context {
 	struct ib_mr *proc;
 	int node_id;
 
+	atomic_t		*send_cq_queued_sends;
 	int *recv_num;
 	atomic_t *atomic_request_num;
 	atomic_t parallel_thread_num;

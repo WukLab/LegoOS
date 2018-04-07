@@ -12,6 +12,12 @@ config FIT
 	default y
 	depends on INFINIBAND
 
+config FIT_MAX_OUTSTANDING_SEND
+	int "Max outstanding send requests"
+	range 1 24
+	default 24
+	depends on FIT
+
 config FIT_DEBUG
 	bool "Enable fit_debug"
 	default n

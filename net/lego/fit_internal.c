@@ -272,6 +272,10 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	for(i = 0; i < ctx->num_node; i++)
 		atomic_set(&ctx->num_alive_connection[i], 0);
 
+	ctx->send_cq_queued_sends = (atomic_t *)kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
+	for(i = 0; i < ctx->num_node; i++)
+		atomic_set(&ctx->send_cq_queued_sends[i], 0);
+
 	ctx->recv_num = (int *)kmalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
 	memset(ctx->recv_num, 0, ctx->num_connections*sizeof(int));
 
@@ -365,7 +369,7 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 				 * and we remove it from cpu_active_mask, which
 				 * means scheduler won't schedule to it.
 				 */
-				.max_send_wr = 1,
+				.max_send_wr = MAX_OUTSTANDING_SEND,
 				.max_recv_wr = rx_depth,
 				.max_send_sge = 16,
 				.max_recv_sge = 16
@@ -965,7 +969,7 @@ inline int fit_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 	return -1;
 }
 
-int fit_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check)
+int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, int *check)
 {
 #ifdef SEPARATE_SEND_POLL_THREAD
 	/* 
@@ -975,6 +979,40 @@ int fit_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check
 	{
 		cpu_relax();
 	}
+	return 0;
+#else
+
+#if 0
+	/*
+	 * use same send thread to poll send cq
+	 * but only poll once every MAX_OUTSTANDING_SEND/2 sends
+	 */
+	atomic_inc(&ctx->send_cq_queued_sends[connection_id]);
+	if (atomic_read(&ctx->send_cq_queued_sends[connection_id]) < MAX_OUTSTANDING_SEND/2)
+		return 0;
+
+	int ne, i;
+	struct ib_wc wc[MAX_OUTSTANDING_SEND/2];
+
+	do{
+		ne = ib_poll_cq(tar_cq, MAX_OUTSTANDING_SEND/2, wc);
+		if(ne < 0)
+		{
+			printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
+			return 1;
+		}
+	}while(ne<1);
+	for(i=0;i<ne;i++)
+	{
+		if(wc[i].status!=IB_WC_SUCCESS)
+		{
+			printk(KERN_ALERT "send request failed at connection %d as %d\n", connection_id, wc[i].status);
+			return 2;
+		}
+		else
+			break;
+	}
+	atomic_sub(ne, &ctx->send_cq_queued_sends[connection_id]);
 	return 0;
 #else
 	/*
@@ -1004,6 +1042,8 @@ int fit_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check
 	}
 	return 0;
 #endif
+
+#endif /* SEPARATE_SEND_POLL_THREAD */
 }
 
 int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_id, uint32_t input_mr_rkey, 
@@ -1086,7 +1126,7 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 	
 	if(!ret)
 	{
-		fit_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
+		fit_internal_poll_sendcq(ctx, ctx->send_cq[connection_id], connection_id, &poll_status);
 	}
 	else
 	{
@@ -2142,7 +2182,7 @@ int fit_send_request(ppc *ctx, int connection_id, enum mode s_mode, struct fit_i
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
 	if(!ret)
 	{
-		fit_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
+		fit_internal_poll_sendcq(ctx, ctx->send_cq[connection_id], connection_id, &poll_status);
 	}
 	else
 	{
