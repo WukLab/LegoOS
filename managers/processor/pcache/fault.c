@@ -30,6 +30,7 @@
 #include <lego/syscalls.h>
 #include <lego/ratelimit.h>
 #include <lego/checksum.h>
+#include <lego/profile.h>
 
 #include <asm/io.h>
 #include <asm/tlbflush.h>
@@ -147,6 +148,8 @@ static inline void pcache_fill_update_stat(struct pcache_meta *pcm)
 	inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY);
 }
 
+DEFINE_PROFILE_POINT(pcache_cache_miss)
+
 /*
  * Callback for common fill code
  * Fill the pcache line from remote memory.
@@ -159,6 +162,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	int ret, len;
 	void *pa_cache = pcache_meta_to_pa(pcm);
 	struct p2m_pcache_miss_struct payload;
+	PROFILE_POINT_TIME(pcache_cache_miss)
 
 	payload.pid = current->pid;
 	payload.tgid = current->tgid;
@@ -168,9 +172,12 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
 
+	profile_point_start(pcache_cache_miss);
 	len = net_send_reply_timeout(get_memory_node(current, address),
 			P2M_PCACHE_MISS, &payload, sizeof(payload),
 			pa_cache, PCACHE_LINE_SIZE, true, DEF_NET_TIMEOUT);
+	profile_point_leave(pcache_cache_miss);
+
 	if (unlikely(len < (int)PCACHE_LINE_SIZE)) {
 		if (likely(len == sizeof(int))) {
 			/* remote reported error */
@@ -208,6 +215,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	struct p2m_pcache_miss_reply_struct *reply;
 	void *va_pcache;
 	__wsum csum;
+	PROFILE_POINT_TIME(pcache_cache_miss)
 
 	reply = kmalloc(sizeof(*reply), GFP_KERNEL);
 	if (!reply)
@@ -221,9 +229,12 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx",
 		current->pid, current->tgid, address, flags);
 
+	profile_point_start(pcache_cache_miss);
 	len = net_send_reply_timeout(get_memory_node(current, address),
 			P2M_PCACHE_MISS, &payload, sizeof(payload),
 			reply, sizeof(*reply), false, DEF_NET_TIMEOUT);
+	profile_point_leave(pcache_cache_miss);
+
 	if (len != sizeof(*reply)){
 		ret = -EFAULT;
 		goto out;

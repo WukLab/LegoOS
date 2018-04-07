@@ -164,6 +164,13 @@ SECTIONS {
 		__x86_cpu_vendor_end = .;
 	}
 
+	. = ALIGN(L1_CACHE_BYTES);
+	.profile.point : AT(ADDR(.profile.point) - LOAD_OFFSET) {
+		__sprofilepoint = .;
+		*(.profile.point)
+		__eprofilepoint = .;
+	}
+
 	/*
 	 * struct alt_inst entries. From the header (alternative.h):
 	 * "Alternative instructions for different CPU types or capabilities"

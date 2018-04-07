@@ -257,9 +257,8 @@ config PROFILING_KERNEL_HEATMAP
 
 	  If unsure, say N.
 
-
-config PROFILING_FUNCTIONS
-	bool "Profile specific functions"
+config PROFILING_POINTS
+	bool "Profile specific functions/points"
 	default n
 	depends on PROFILING
 	help

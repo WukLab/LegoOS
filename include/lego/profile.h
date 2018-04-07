@@ -11,6 +11,7 @@
 #define _LEGO_PROFILE_H_
 
 #include <lego/sched.h>
+#include <lego/profile_point.h>
 
 /*
  * Idea about this Lego profiling: it should consist of two parts

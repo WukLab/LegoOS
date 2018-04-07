@@ -11,6 +11,7 @@
 #include <lego/smp.h>
 #include <lego/sched.h>
 #include <lego/cpumask.h>
+#include <lego/profile.h>
 #include <asm/tlbflush.h>
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate) = {
@@ -120,10 +121,13 @@ static void flush_tlb_func(void *info)
 	}
 }
 
+DEFINE_PROFILE_POINT(flush_tlb_others)
+
 void flush_tlb_others(const struct cpumask *cpumask, struct mm_struct *mm,
 		      unsigned long start, unsigned long end)
 {
 	struct flush_tlb_info info;
+	PROFILE_POINT_TIME(flush_tlb_others)
 
 	if (end == 0)
 		end = start + PAGE_SIZE;
@@ -131,7 +135,9 @@ void flush_tlb_others(const struct cpumask *cpumask, struct mm_struct *mm,
 	info.flush_start = start;
 	info.flush_end = end;
 
+	profile_point_start(flush_tlb_others);
 	smp_call_function_many(cpumask, flush_tlb_func, &info, 1);
+	profile_point_leave(flush_tlb_others);
 }
 
 void flush_tlb_current_task(void)

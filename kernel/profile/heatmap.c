@@ -159,11 +159,12 @@ void print_profile_heatmap_nr(int nr)
 
 	pr_info("\n");
 	pr_info("Kernel Heatmap (top #%lu)\n", min((unsigned long)nr, prof_len));
-	pr_info("         Address              Function          NR    Percent\n");
+	pr_info("         Address              Function          NR          %%\n");
 	pr_info("----------------  --------------------  ----------  ---------\n");
 	for (i = 0; i < nr && i < prof_len; i++) {
 		u64 p_i, p_re;
 		char p_re_buf[8];
+		char p_sym[20];
 
 		p = &profile[i];
 		if (!p->nr)
@@ -171,9 +172,10 @@ void print_profile_heatmap_nr(int nr)
 
 		p_i = div64_u64_rem(p->nr * 100UL, total_nr, &p_re);
 		scnprintf(p_re_buf, 3, "%Lu", p_re);
+		scnprintf(p_sym, 20, "%pf", (void *)p->addr);
 
-		printk("%lx  %20pf  %10d  %6Ld.%s\n",
-			p->addr, (void *)p->addr, p->nr, p_i, p_re_buf);
+		printk("%lx  %20s  %10d  %6Ld.%s\n",
+			p->addr, p_sym, p->nr, p_i, p_re_buf);
 	}
 	pr_info("----------------  --------------------  ----------  ---------\n");
 	pr_info("                                        %10Lu     100.00\n", total_nr);

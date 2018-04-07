@@ -486,6 +486,11 @@ void __noreturn do_exit(long code)
 		 */
 		print_profile_heatmap_nr(10);
 
+		/*
+		 * Print profile points
+		 */
+		print_profile_points();
+
 #ifdef CONFIG_GPM
 		report_proc_exit(code);
 #endif
