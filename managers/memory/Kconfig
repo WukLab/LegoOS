@@ -175,6 +175,29 @@ config MEM_PREFETCH
 	help
 	  Enable to prefetch pages from storage for page fault
 
+config MEM_THREAD_POOL
+	bool "Use thread pool handle incoming requests"
+	default n
+	help
+	  Enable to allow mem using thread pool handling requests
+
+if MEM_THREAD_POOL
+
+config NR_GENERIC_WORKERS
+	int "Number of generic worker threads in thread pool"
+	default 1
+	help
+	  Number of worker threads handle pcache_misses, and non-IO syscalls
+
+config NR_IO_WORKERS
+	int "Number of IO worker threads handle IO syscalls"
+	default 1
+	help
+	  Number of worker threads IO syscalls
+	  
+
+endif # if MEM_THREAD_POOL
+
 endif # if COMP_MEMORY
 
 endmenu

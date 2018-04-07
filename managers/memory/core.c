@@ -16,6 +16,7 @@
 #include <memory/vm.h>
 #include <memory/pid.h>
 #include <memory/task.h>
+#include <memory/thread_pool.h>
 #include <memory/loader.h>
 #include <memory/distvm.h>
 
@@ -111,19 +112,13 @@ static void local_qemu_test(void)
 }
 #endif
 
-#define MAX_RXBUF_SIZE	(PAGE_SIZE * 20)
-
 #ifdef CONFIG_FIT
-struct info_struct {
-	unsigned long desc;
-	char msg[MAX_RXBUF_SIZE];
-};
 
 /*
  * Memory manager is only meaningful when FIT is configured.
  */
 
-static void handle_bad_request(struct common_header *hdr, u64 desc)
+void handle_bad_request(struct common_header *hdr, u64 desc)
 {
 	u32 retbuf;
 
@@ -134,7 +129,7 @@ static void handle_bad_request(struct common_header *hdr, u64 desc)
 	ibapi_reply_message(&retbuf, 4, desc);
 }
 
-static void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
+void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
 {
 	int retbuf = RET_OKAY;
 
@@ -142,6 +137,7 @@ static void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
 	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
 }
 
+#ifndef CONFIG_MEM_THREAD_POOL
 static int mc_dispatcher(void *passed)
 {
 	struct info_struct *info = (struct info_struct *)passed;
@@ -263,6 +259,31 @@ static int mc_dispatcher(void *passed)
 	/* Our responsibility to free it */
 	return 0;
 }
+#else
+static int mc_dispatcher(void *passed, struct mem_worker_struct *curr_generic_worker,
+			struct mem_worker_struct *io_worker)
+{
+	struct info_struct *info = (struct info_struct *)passed;
+	struct common_header *hdr;
+
+	hdr = to_common_header(info->msg);
+
+	/*
+	 * if IO-request, enqueue in_worker
+	 * otherwise, enqueue generic_worker
+	 */
+	switch (hdr->opcode) {
+	case P2M_READ:
+	case P2M_WRITE:
+		enqueue_thread(io_worker, info);
+		break;
+	default:
+		enqueue_thread(curr_generic_worker, info);
+	}
+
+	return 0;
+}
+#endif /* CONFIG_MEM_THREAD_POOL */
 
 #ifdef CONFIG_DEBUG_MEMORY_CORE
 static unsigned long nr_requests = 0;
@@ -275,6 +296,7 @@ static inline void req_counting(struct info_struct *info) { }
 #endif
 
 /* Memory Manager Daemon */
+#ifndef CONFIG_MEM_THREAD_POOL
 static int mc_manager(void *unused)
 {
 	struct info_struct *info;
@@ -308,6 +330,77 @@ static int mc_manager(void *unused)
 
 	return 0;
 }
+#else
+static int mc_manager(void *unused)
+{
+	struct info_struct *info, *curr;
+	struct mem_worker_struct *workers, *io_worker, *curr_generic_worker;
+	int port = 0;
+	int retlen;
+	int i;
+
+	pr_info("Memory-component manager is up and running.\n");
+
+	info = kmalloc(MAX_NR_RXBUFS * sizeof(*info), GFP_KERNEL);
+	if (unlikely(!info)) {
+		WARN_ON(1);
+		do_exit(-1);
+	}
+	__init_info(info, MAX_NR_RXBUFS);
+	curr = info;
+
+	workers = kmalloc(NR_WORKERS * sizeof(*workers), GFP_KERNEL);
+	if (unlikely(!workers)) {
+		kfree(info);
+		WARN_ON(1);
+		do_exit(-1);
+	}
+	__init_worker_structs(workers, NR_WORKERS);
+	curr_generic_worker = workers;
+	/*
+	 * the last mem_worker is io_worker
+	 */
+	io_worker = workers + NR_GENERIC_WORKERS;
+
+	/* create workers threads */
+	for (i = 0; i < NR_GENERIC_WORKERS; i++) {
+		kthread_run(generic_worker_func, workers + i, "generic-%d", i);
+	}
+	kthread_run(io_worker_func, io_worker, "io_worker");
+
+	while (1) {
+		/*
+		 * blocked on full rxbuf entries
+		 */
+		while (atomic_read(&curr->used)) {
+			/* trying to find another one */
+			curr = next_info_entry(curr);
+		}
+
+		__clear_info_msg(curr);
+		/*
+		 * This function is blocking,
+		 * will return until FIT gets a messages:
+		 */
+		retlen = ibapi_receive_message(port,
+				curr->msg, MAX_RXBUF_SIZE,
+				&curr->desc);
+
+		if (unlikely(retlen >= MAX_RXBUF_SIZE))
+			panic("retlen: %d,maxlen: %lu", retlen, MAX_RXBUF_SIZE);
+
+		req_counting(curr);
+		mc_dispatcher(curr, curr_generic_worker, io_worker);
+
+		/* simple round-robin */
+		curr = next_info_entry(curr);
+		curr_generic_worker = next_generic_worker(curr_generic_worker);
+	}
+
+	return 0;
+}
+#endif /* CONFIG_MEM_THREAD_POOL */
+
 #endif /* CONFIG_FIT */
 
 void __init memory_component_init(void)
