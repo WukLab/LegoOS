@@ -13,16 +13,20 @@
 #include <lego/tty.h>
 #include <lego/mutex.h>
 
-/* ttyS0 */
-#define __DEFAULT_SERIAL_PORT_0 0x3f8
+#ifdef CONFIG_TTY_SERIAL_BAUD9600
+# define DEFAULT_BAUD	9600
+#elif defined(CONFIG_TTY_SERIAL_BAUD115200)
+# define DEFAULT_BAUD	115200
+#endif
 
-/* ttyS1 */
-#define __DEFAULT_SERIAL_PORT_1 0x2f8
+#ifdef CONFIG_TTY_SERIAL_TTYS0
+# define DEFAULT_SERIAL_PORT	0x3f8
+#elif defined(CONFIG_TTY_SERIAL_TTYS1)
+# define DEFAULT_SERIAL_PORT	0x2f8
+#endif
 
-#define DEFAULT_SERIAL_PORT __DEFAULT_SERIAL_PORT_1
 static unsigned long serial_base = DEFAULT_SERIAL_PORT;
 
-#define DEFAULT_BAUD	9600
 #define DLAB		0x80
 #define XMTRDY          0x20
 
@@ -96,8 +100,14 @@ void __init serial_init(void)
 	serial_init_hw(DEFAULT_SERIAL_PORT, DEFAULT_BAUD);
 
 	serial_tty_struct.termios = tty_std_termios;
+
+#ifdef CONFIG_TTY_SERIAL_BAUD9600
 	serial_tty_struct.termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
-	serial_tty_struct.termios.c_ispeed = 9600;
-	serial_tty_struct.termios.c_ospeed = 9600;
+#elif defined(CONFIG_TTY_SERIAL_BAUD115200)
+	serial_tty_struct.termios.c_cflag = B115200 | CS8 | CREAD | HUPCL | CLOCAL;
+#endif
+
+	serial_tty_struct.termios.c_ispeed = DEFAULT_BAUD;
+	serial_tty_struct.termios.c_ospeed = DEFAULT_BAUD;
 }
 
