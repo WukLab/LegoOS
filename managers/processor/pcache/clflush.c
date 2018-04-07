@@ -14,6 +14,7 @@
 #include <lego/hash.h>
 #include <lego/kernel.h>
 #include <lego/pgfault.h>
+#include <lego/profile.h>
 #include <lego/syscalls.h>
 #include <lego/jiffies.h>
 #include <lego/fit_ibapi.h>
@@ -82,12 +83,15 @@ out:
 	return retval;
 }
 
+DEFINE_PROFILE_POINT(pcache_flush)
+
 static int __clflush_one(struct task_struct *tsk, unsigned long user_va,
 			 void *cache_addr, void *caller)
 {
 	struct p2m_flush_payload *payload;
 	int ret_len, reply;
 	int retval;
+	PROFILE_POINT_TIME(pcache_flush)
 
 	payload = kmalloc(sizeof(*payload), GFP_KERNEL);
 	if (!payload)
@@ -100,9 +104,11 @@ static int __clflush_one(struct task_struct *tsk, unsigned long user_va,
 	clflush_debug("I tgid:%u user_va:%#lx cache_kva:%p caller: %pS",
 		payload->pid, payload->user_va, cache_addr, caller);
 
+	profile_point_start(pcache_flush);
 	ret_len = net_send_reply_timeout(get_memory_node(tsk, user_va),
 			P2M_PCACHE_FLUSH, payload, sizeof(*payload),
 			&reply, sizeof(reply), false, DEF_NET_TIMEOUT);
+	profile_point_leave(pcache_flush);
 
 	clflush_debug("O tgid:%u user_va:%#lx cache_kva:%p reply:%d %s",
 		payload->pid, payload->user_va, cache_addr, reply, perror(reply));

@@ -647,6 +647,8 @@ static inline int ptep_clear_flush_young(pte_t *ptep)
 	return ptep_test_and_clear_young(ptep);
 }
 
+#define flush_tlb_fix_spurious_fault(vma, address) do { } while (0)
+
 void ptdump_walk_pgd_level(pgd_t *pgd);
 int __init pt_dump_init(void);
 

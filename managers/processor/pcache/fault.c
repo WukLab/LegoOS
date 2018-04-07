@@ -148,13 +148,14 @@ static inline void pcache_fill_update_stat(struct pcache_meta *pcm)
 	inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY);
 }
 
-DEFINE_PROFILE_POINT(pcache_cache_miss)
-
 /*
  * Callback for common fill code
  * Fill the pcache line from remote memory.
  */
 #ifndef CONFIG_DEBUG_PCACHE
+
+DEFINE_PROFILE_POINT(pcache_miss)
+
 static int
 __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		      struct pcache_meta *pcm, void *unused)
@@ -162,7 +163,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	int ret, len;
 	void *pa_cache = pcache_meta_to_pa(pcm);
 	struct p2m_pcache_miss_struct payload;
-	PROFILE_POINT_TIME(pcache_cache_miss)
+	PROFILE_POINT_TIME(pcache_miss)
 
 	payload.pid = current->pid;
 	payload.tgid = current->tgid;
@@ -172,11 +173,11 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
 		current->pid, current->tgid, address, flags, pa_cache);
 
-	profile_point_start(pcache_cache_miss);
+	profile_point_start(pcache_miss);
 	len = net_send_reply_timeout(get_memory_node(current, address),
 			P2M_PCACHE_MISS, &payload, sizeof(payload),
 			pa_cache, PCACHE_LINE_SIZE, true, DEF_NET_TIMEOUT);
-	profile_point_leave(pcache_cache_miss);
+	profile_point_leave(pcache_miss);
 
 	if (unlikely(len < (int)PCACHE_LINE_SIZE)) {
 		if (likely(len == sizeof(int))) {
@@ -206,6 +207,9 @@ out:
 	return ret;
 }
 #else
+
+DEFINE_PROFILE_POINT(pcache_miss_debug)
+
 static int
 __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		      struct pcache_meta *pcm, void *unused)
@@ -215,7 +219,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	struct p2m_pcache_miss_reply_struct *reply;
 	void *va_pcache;
 	__wsum csum;
-	PROFILE_POINT_TIME(pcache_cache_miss)
+	PROFILE_POINT_TIME(pcache_miss_debug)
 
 	reply = kmalloc(sizeof(*reply), GFP_KERNEL);
 	if (!reply)
@@ -229,11 +233,11 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx",
 		current->pid, current->tgid, address, flags);
 
-	profile_point_start(pcache_cache_miss);
+	profile_point_start(pcache_miss_debug);
 	len = net_send_reply_timeout(get_memory_node(current, address),
 			P2M_PCACHE_MISS, &payload, sizeof(payload),
 			reply, sizeof(*reply), false, DEF_NET_TIMEOUT);
-	profile_point_leave(pcache_cache_miss);
+	profile_point_leave(pcache_miss_debug);
 
 	if (len != sizeof(*reply)){
 		ret = -EFAULT;
@@ -424,6 +428,15 @@ unlock_pte:
 	return ret;
 }
 
+/*
+ * Hack!!! Page fault may caused by many reasons. Besides, by the time we reach
+ * here, the condition that caused this fault, may already been changed by
+ * another CPU that has the same fault. Keep in mind that we are in a SMP system.
+ *
+ * pte lock can gurantee a lot things. We can check if the pte has been chanegd
+ * after we acquire the lock. But pte lock can not gurantee us spurious TLB fault:
+ * the case where TLB entries have different permission from page table entries.
+ */
 static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 				   pte_t *pte, pmd_t *pmd, unsigned long flags)
 {
@@ -479,14 +492,21 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 	if (flags & FAULT_FLAG_WRITE) {
 		if (likely(!pte_write(entry)))
 			return pcache_do_wp_page(mm, address, pte, pmd, ptl, entry);
-		entry = pte_mkdirty(entry);
-	}
-
-	/* May due to stale tlb entries */
-	entry = pte_mkyoung(entry);
-	if (!pte_same(*pte, entry) && (flags & FAULT_FLAG_WRITE)) {
-		dump_pte(pte, __func__);
-		*pte = entry;
+		else {
+			/*
+			 * This will happen due to stale TLB entries. The page table
+			 * entries are upgraded by remote CPUs. But they have not flush
+			 * this CPU's TLB yet. This is a very small time window. But
+			 * we've seen this during real testing.
+			 *
+			 * In x86, this is an empty function. I think this is valid.
+			 * Because whenever permission upgrade happen, there will be
+			 * TLB shootdown follows. We should just let this thread retry.
+			 *
+			 * Checkout https://lkml.org/lkml/2012/11/22/952
+			 */
+			flush_tlb_fix_spurious_fault(vma, address);
+		}
 	}
 
 unlock:

@@ -13,6 +13,7 @@
 #include <lego/slab.h>
 #include <lego/init.h>
 #include <lego/list.h>
+#include <lego/profile.h>
 
 /*
  * slob_block has a field 'units', which indicates size of block if +ve,
@@ -354,18 +355,23 @@ out:
  * End of slob allocator proper. Begin kmem_cache_alloc and kmalloc frontend.
  */
 
+DEFINE_PROFILE_POINT(__do_kmalloc_node)
+
 static __always_inline void *
 __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 {
 	unsigned int *m;
 	int align = max_t(size_t, ARCH_KMALLOC_MINALIGN, ARCH_SLAB_MINALIGN);
 	void *ret;
+	PROFILE_POINT_TIME(__do_kmalloc_node)
 
 	if (size < PAGE_SIZE - align) {
 		if (!size)
 			return ZERO_SIZE_PTR;
 
+		profile_point_start(__do_kmalloc_node);
 		m = slob_alloc(size + align, gfp, align, node);
+		profile_point_leave(__do_kmalloc_node);
 
 		if (!m)
 			return NULL;
@@ -374,8 +380,9 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 	} else {
 		unsigned int order = get_order(size);
 
+		profile_point_start(__do_kmalloc_node);
 		ret = slob_new_pages(gfp, order, node);
-
+		profile_point_leave(__do_kmalloc_node);
 	}
 	return ret;
 }
