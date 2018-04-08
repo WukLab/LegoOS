@@ -167,7 +167,7 @@ static int mc_dispatcher(void *passed)
 		handle_p2m_pcache_miss(msg, desc);
 		break;
 	case P2M_PCACHE_FLUSH:
-		handle_p2m_flush_one(payload, desc, hdr);
+		handle_p2m_flush_one(msg, desc);
 		break;
 
 /* clflush REPLICA */

@@ -88,30 +88,32 @@ DEFINE_PROFILE_POINT(pcache_flush)
 static int __clflush_one(struct task_struct *tsk, unsigned long user_va,
 			 void *cache_addr, void *caller)
 {
-	struct p2m_flush_payload *payload;
+	struct p2m_flush_msg *msg;
 	int ret_len, reply;
 	int retval;
+	int dst_nid;
 	PROFILE_POINT_TIME(pcache_flush)
 
-	payload = kmalloc(sizeof(*payload), GFP_KERNEL);
-	if (!payload)
+	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
+	if (!msg)
 		return -ENOMEM;
 
-	payload->pid = tsk->tgid;
-	payload->user_va = user_va & PCACHE_LINE_MASK;
-	memcpy(payload->pcacheline, cache_addr, PCACHE_LINE_SIZE);
+	fill_common_header(msg, P2M_PCACHE_FLUSH);
+	msg->pid = tsk->tgid;
+	msg->user_va = user_va & PCACHE_LINE_MASK;
+	memcpy(msg->pcacheline, cache_addr, PCACHE_LINE_SIZE);
+	dst_nid = get_memory_node(tsk, user_va);
 
-	clflush_debug("I tgid:%u user_va:%#lx cache_kva:%p caller: %pS",
-		payload->pid, payload->user_va, cache_addr, caller);
+	clflush_debug("I dst_nid:%d tgid:%u user_va:%#lx cache_kva:%p caller: %pS",
+		dst_nid, msg->pid, msg->user_va, cache_addr, caller);
 
 	profile_point_start(pcache_flush);
-	ret_len = net_send_reply_timeout(get_memory_node(tsk, user_va),
-			P2M_PCACHE_FLUSH, payload, sizeof(*payload),
+	ret_len = ibapi_send_reply_timeout(dst_nid, msg, sizeof(*msg),
 			&reply, sizeof(reply), false, DEF_NET_TIMEOUT);
 	profile_point_leave(pcache_flush);
 
 	clflush_debug("O tgid:%u user_va:%#lx cache_kva:%p reply:%d %s",
-		payload->pid, payload->user_va, cache_addr, reply, perror(reply));
+		msg->pid, msg->user_va, cache_addr, reply, perror(reply));
 
 	if (unlikely(ret_len < sizeof(reply))) {
 		retval = -EFAULT;
@@ -126,7 +128,7 @@ static int __clflush_one(struct task_struct *tsk, unsigned long user_va,
 
 	retval = 0;
 out:
-	kfree(payload);
+	kfree(msg);
 	return retval;
 }
 
@@ -145,7 +147,7 @@ int clflush_one(struct task_struct *tsk, unsigned long user_va,
 
 	inc_pcache_event(PCACHE_CLFLUSH);
 	ret = __clflush_one(tsk, user_va, cache_addr, __builtin_return_address(0));
-	ret = replicate_one(tsk, user_va, cache_addr, __builtin_return_address(0));
+	//ret = replicate_one(tsk, user_va, cache_addr, __builtin_return_address(0));
 
 	return ret;
 }

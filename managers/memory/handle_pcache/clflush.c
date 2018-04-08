@@ -49,32 +49,32 @@ void verify_checksum(struct lego_task_struct *tsk, void *user_va)
 	kfree(buf);
 }
 
-int handle_p2m_flush_one(struct p2m_flush_payload *payload, u64 desc,
-			 struct common_header *hdr)
+int handle_p2m_flush_one(struct p2m_flush_msg *msg, u64 desc)
 {
 	int reply;
+	unsigned int src_nid;
 	pid_t pid;
 	void *user_va;
 	struct lego_task_struct *tsk;
 
-	pid = payload->pid;
-	user_va = (void *)payload->user_va;
+	src_nid = to_common_header(msg)->src_nid;
+	pid = msg->pid;
+	user_va = (void *)msg->user_va;
 
-	clflush_debug("I nid:%u tgid:%u user_va:%p",
-		hdr->src_nid, pid, user_va);
+	clflush_debug("I nid:%u tgid:%u user_va:%p", src_nid, pid, user_va);
 
 	if (offset_in_page(user_va)) {
 		reply = -EINVAL;
 		goto out_reply;
 	}
 
-	tsk = find_lego_task_by_pid(hdr->src_nid, pid);
+	tsk = find_lego_task_by_pid(src_nid, pid);
 	if (!tsk) {
 		reply = -ESRCH;
 		goto out_reply;
 	}
 
-	if (!lego_copy_to_user(tsk, user_va, payload->pcacheline,
+	if (!lego_copy_to_user(tsk, user_va, msg->pcacheline,
 				PCACHE_LINE_SIZE)) {
 		reply = -EFAULT;
 		goto out_reply;
@@ -84,7 +84,7 @@ int handle_p2m_flush_one(struct p2m_flush_payload *payload, u64 desc,
 
 out_reply:
 	clflush_debug("O nid:%u tgid:%u user_va:%p reply: %d %s",
-		hdr->src_nid, pid, user_va, reply, perror(reply));
+		src_nid, pid, user_va, reply, perror(reply));
 
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 	return 0;
