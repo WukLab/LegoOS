@@ -48,7 +48,7 @@ debug_argv_envp_array(u32 argc, const char **argv, unsigned long *argv_len,
 int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 		      struct common_header *hdr)
 {
-	struct m2p_execve_struct reply;
+	struct m2p_execve_struct *reply;
 	__u32 argc, envc;
 	size_t len;
 	unsigned long *argv_len, *envp_len;
@@ -67,22 +67,24 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 	execve_debug("pid:%u,argc:%u,envc:%u,file:%s",
 		pid, argc, envc, filename);
 
+	reply = kmalloc(sizeof(*reply), GFP_KERNEL);
+
 	tsk = find_lego_task_by_pid(hdr->src_nid, pid);
 	if (!tsk) {
-		reply.status = RET_ESRCH;
+		reply->status = RET_ESRCH;
 		goto out_reply;
 	}
 
 	argv = kzalloc(sizeof(*argv) * (argc + envc), GFP_KERNEL);
 	if (!argv) {
-		reply.status = RET_ENOMEM;
+		reply->status = RET_ENOMEM;
 		goto out_reply;
 	}
 
 	argv_len = kzalloc(sizeof(*argv_len) * (argc + envc), GFP_KERNEL);
 	if (!argv_len) {
 		kfree(argv);
-		reply.status = RET_ENOMEM;
+		reply->status = RET_ENOMEM;
 		goto out_reply;
 	}
 
@@ -111,18 +113,18 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 			  envc, envp, envp_len,
 			  &new_ip, &new_sp
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-			  ,&reply.map
+			  ,&reply->map
 #endif
 			  );
 
 	if (ret) {
-		reply.status = RET_EPERM;
+		reply->status = RET_EPERM;
 		goto out;
 	}
 
-	reply.status = RET_OKAY;
-	reply.new_ip = new_ip;
-	reply.new_sp = new_sp;
+	reply->status = RET_OKAY;
+	reply->new_ip = new_ip;
+	reply->new_sp = new_sp;
 
 out:
 	kfree(argv);
@@ -130,11 +132,11 @@ out:
 
 out_reply:
 	execve_debug("reply_status: %s, new_ip: %#Lx, new_sp: %#Lx",
-		ret_to_string(reply.status), reply.new_ip, reply.new_sp);
+		ret_to_string(reply->status), reply->new_ip, reply->new_sp);
 
 #ifdef CONFIG_DEBUG_VMA
-	dump_reply(&reply.map);
+	dump_reply(&reply->map);
 #endif
-	ibapi_reply_message(&reply, sizeof(reply), desc);
+	ibapi_reply_message(reply, sizeof(*reply), desc);
 	return 0;
 }
