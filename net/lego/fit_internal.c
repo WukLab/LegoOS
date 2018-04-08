@@ -272,9 +272,9 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	for(i = 0; i < ctx->num_node; i++)
 		atomic_set(&ctx->num_alive_connection[i], 0);
 
-	ctx->send_cq_queued_sends = (atomic_t *)kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
-	for(i = 0; i < ctx->num_node; i++)
-		atomic_set(&ctx->send_cq_queued_sends[i], 0);
+	ctx->send_cq_queued_sends = (int *)kmalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
+	for(i = 0; i < ctx->num_connections; i++)
+		ctx->send_cq_queued_sends[i] = 0;
 
 	ctx->recv_num = (int *)kmalloc(ctx->num_connections*sizeof(int), GFP_KERNEL);
 	memset(ctx->recv_num, 0, ctx->num_connections*sizeof(int));
@@ -969,7 +969,7 @@ inline int fit_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 	return -1;
 }
 
-int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, int *check)
+int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, int *check, int if_poll_now)
 {
 #ifdef SEPARATE_SEND_POLL_THREAD
 	/* 
@@ -981,30 +981,40 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 	}
 	return 0;
 #else
-
-#if 0
+#ifdef CONFIG_COMP_MEMORY
 	/*
 	 * use same send thread to poll send cq
 	 * but only poll once every MAX_OUTSTANDING_SEND/2 sends
 	 */
-	atomic_inc(&ctx->send_cq_queued_sends[connection_id]);
-	if (atomic_read(&ctx->send_cq_queued_sends[connection_id]) < MAX_OUTSTANDING_SEND/2)
+	ctx->send_cq_queued_sends[connection_id]++;
+	fit_debug("poll send cq conn %d queued sends %d\n", 
+			connection_id, ctx->send_cq_queued_sends[connection_id]);
+	//pr_info("poll send cq conn %d queued sends %d\n", 
+	//		connection_id, ctx->send_cq_queued_sends[connection_id]);
+	if (!if_poll_now && ctx->send_cq_queued_sends[connection_id] < MAX_OUTSTANDING_SEND/2)
 		return 0;
 
 	int ne, i;
-	struct ib_wc wc[MAX_OUTSTANDING_SEND/2];
+	struct ib_wc wc[MAX_OUTSTANDING_SEND];
 
 	do{
-		ne = ib_poll_cq(tar_cq, MAX_OUTSTANDING_SEND/2, wc);
+		if (if_poll_now)
+			ne = ib_poll_cq(tar_cq, MAX_OUTSTANDING_SEND, wc); /* poll everything until the latest (current) send */
+		else
+			ne = ib_poll_cq(tar_cq, MAX_OUTSTANDING_SEND/2, wc);
 		if(ne < 0)
 		{
 			printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
 			return 1;
 		}
-	}while(ne<1);
-	for(i=0;i<ne;i++)
+	} while(ne<1);
+
+	fit_debug("got pollcq %d\n", ne);
+	//pr_info("got pollcq %d\n", ne);
+
+	for (i = 0; i < ne; i++)
 	{
-		if(wc[i].status!=IB_WC_SUCCESS)
+		if (wc[i].status != IB_WC_SUCCESS)
 		{
 			printk(KERN_ALERT "send request failed at connection %d as %d\n", connection_id, wc[i].status);
 			return 2;
@@ -1012,7 +1022,12 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 		else
 			break;
 	}
-	atomic_sub(ne, &ctx->send_cq_queued_sends[connection_id]);
+	ctx->send_cq_queued_sends[connection_id] -= ne;
+
+	fit_debug("new queued sends %d on conn %d\n", 
+			ctx->send_cq_queued_sends[connection_id], connection_id);
+	//pr_info("new queued sends %d on conn %d\n", 
+	//		ctx->send_cq_queued_sends[connection_id], connection_id);
 	return 0;
 #else
 	/*
@@ -1048,7 +1063,7 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 
 int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_id, uint32_t input_mr_rkey, 
 		uintptr_t input_mr_addr, void *addr, int size, int offset, uint32_t imm, enum mode s_mode, 
-		struct imm_message_metadata *header, int userspace_flag)
+		struct imm_message_metadata *header, int userspace_flag, int if_poll_now)
 {
 	struct ib_send_wr wr, *bad_wr = NULL;
 	struct ib_sge sge[2];
@@ -1099,6 +1114,10 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 
 		wr.ex.imm_data = imm;
 		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
+		fit_debug("temp_addr: %#lx\n", temp_addr);
+		//pr_info("reply temp_addr: %#lx length %d\n", temp_addr, size);
+		//if (size == 20)
+		//	pr_info("val status %d ip 0x%x sp 0x%x\n", *((__u32 *)addr), *((__u64 *)(addr+4)), *((__u64 *)(addr+12)));
 		sge[0].addr = temp_addr;
 		sge[0].length = size;
 		sge[0].lkey = ctx->proc->lkey;
@@ -1120,13 +1139,13 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 	}
 
 	spin_lock(&connection_lock[connection_id]);
-	fit_debug("%s about to post send conn %d wr_id %d num_sge %d\n",
-			__func__, connection_id, wr.wr_id, wr.num_sge);
+	fit_debug("about to post send conn %d wr_id %d num_sge %d\n",
+			connection_id, wr.wr_id, wr.num_sge);
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
 	
 	if(!ret)
 	{
-		fit_internal_poll_sendcq(ctx, ctx->send_cq[connection_id], connection_id, &poll_status);
+		fit_internal_poll_sendcq(ctx, ctx->send_cq[connection_id], connection_id, &poll_status, if_poll_now);
 	}
 	else
 	{
@@ -1247,7 +1266,7 @@ int fit_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive
 	return get_size;
 }
 
-int fit_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag)
+int fit_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag, int if_poll_now)
 {
 	struct imm_message_metadata *tmp = (struct imm_message_metadata *)descriptor;
 	int re_connection_id = fit_get_connection_by_atomic_number(ctx, tmp->source_node_id, LOW_PRIORITY);
@@ -1255,16 +1274,17 @@ int fit_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int 
 	fit_debug("re_connection_id: %d, tmp->source_node_id: %d\n",
 		re_connection_id, tmp->source_node_id);
 
+	/* Notice: if if_poll_now is 0, the message sent out here will not be polled and no guarantee of delivery */
 	fit_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->reply_rkey, 
 			tmp->reply_addr, addr, size, 0, tmp->reply_indicator_index | IMM_SEND_REPLY_RECV, 
-			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG, if_poll_now);
 	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);
 	kfree(tmp);
 
 	return 0;
 }
 
-int fit_reply_message_w_extra_bits(ppc *ctx, void *addr, int size, int private_bits, uintptr_t descriptor, int userspace_flag)
+int fit_reply_message_w_extra_bits(ppc *ctx, void *addr, int size, int private_bits, uintptr_t descriptor, int userspace_flag, int if_poll_now)
 {
 	int imm_data;
 	struct imm_message_metadata *tmp = (struct imm_message_metadata *)descriptor;
@@ -1274,9 +1294,10 @@ int fit_reply_message_w_extra_bits(ppc *ctx, void *addr, int size, int private_b
 		re_connection_id, tmp->source_node_id);
 
 	imm_data = tmp->reply_indicator_index | IMM_SET_PRIVATE_BITS(private_bits) | IMM_REPLY_W_EXTRA_BITS;
+	/* Notice: if if_poll_now is 0, the message sent out here will not be polled and no guarantee of delivery */
 	fit_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->reply_rkey, 
 			tmp->reply_addr, addr, size, 0, imm_data, 
-			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG, if_poll_now);
 	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);
 	kfree(tmp);
 
@@ -2060,10 +2081,10 @@ int waiting_queue_handler(void *in)
 					//printk(KERN_CRIT "%s sending ack offset %d targetnode %d imm %x\n", __func__, offset, target_node, imm_data);
 #ifdef CONFIG_SOCKET_O_IB					
 					fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * (NUM_PARALLEL_CONNECTION + 1), 
-							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG, 0);
 #else					
 					fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * NUM_PARALLEL_CONNECTION, 
-							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
+							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG, 0);
 #endif					
 					break;
 				}
@@ -2147,7 +2168,9 @@ int fit_send_cq_poller(ppc *ctx)
 	return 0;
 }
 
-int fit_send_request(ppc *ctx, int connection_id, enum mode s_mode, struct fit_ibv_mr *input_mr, void *addr, int size, int offset, int userspace_flag)
+int fit_send_request(ppc *ctx, int connection_id, enum mode s_mode, 
+			struct fit_ibv_mr *input_mr, void *addr, 
+			int size, int offset, int userspace_flag, int if_poll_now)
 {
 	struct ib_send_wr wr, *bad_wr = NULL;
 	struct ib_sge sge;
@@ -2182,7 +2205,7 @@ int fit_send_request(ppc *ctx, int connection_id, enum mode s_mode, struct fit_i
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
 	if(!ret)
 	{
-		fit_internal_poll_sendcq(ctx, ctx->send_cq[connection_id], connection_id, &poll_status);
+		fit_internal_poll_sendcq(ctx, ctx->send_cq[connection_id], connection_id, &poll_status, if_poll_now);
 	}
 	else
 	{
@@ -2293,9 +2316,10 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 	ctx->thread_waiting_for_reply[reply_indicator_index] = get_current();
 	set_current_state(TASK_INTERRUPTIBLE);
 #endif
+	/* for send reply, no need to poll the send now, since we have reply already */
 	fit_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, 
 			(uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, 
-			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, FIT_KERNELSPACE_FLAG);
+			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, FIT_KERNELSPACE_FLAG, 0);
 
 #ifdef SCHEDULE_MODEL
 	schedule();
@@ -2446,9 +2470,10 @@ int fit_send_reply_with_rdma_write_with_imm_reply_extra_bits(ppc *ctx, int targe
 	ctx->thread_waiting_for_reply[reply_indicator_index] = get_current();
 	set_current_state(TASK_INTERRUPTIBLE);
 #endif
+	/* for send reply, no need to poll the send now, since we have reply already */
 	fit_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, 
 			(uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, 
-			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, FIT_KERNELSPACE_FLAG);
+			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, FIT_KERNELSPACE_FLAG, 0);
 
 #ifdef SCHEDULE_MODEL
 	schedule();
@@ -2615,9 +2640,10 @@ int fit_multicast_send_reply(ppc *ctx, int num_nodes, int *target_node,
 		
 		fit_debug("send imm-%x addr-%lx rkey-%x addr-%lx rkey-%x\n", 
 				imm_data, (unsigned long)remote_addr, remote_rkey, (unsigned long)msg_header[i].reply_addr, msg_header[i].reply_rkey);
+		/* for send reply, no need to poll the send now, since we have reply already */
 		fit_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, 
 				(uintptr_t)remote_addr, sglist[i].addr, sglist[i].len, tar_offset_start, imm_data, 
-				FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header[i], FIT_KERNELSPACE_FLAG);
+				FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header[i], FIT_KERNELSPACE_FLAG, 0);
 	}
 
 	/* Caller does not specify an timeout, use the maximum */

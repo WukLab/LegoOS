@@ -36,6 +36,8 @@ void ibapi_free_recv_buf(void *input_buf);
 /* IMM related */
 inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor);
 inline int ibapi_reply_message_w_extra_bits(void *addr, int size, int bits, uintptr_t descriptor);
+inline int ibapi_reply_message_nowait(void *addr, int size, uintptr_t descriptor);
+inline int ibapi_reply_message_w_extra_bits_nowait(void *addr, int size, int bits, uintptr_t descriptor);
 int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor);
 
 int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr,

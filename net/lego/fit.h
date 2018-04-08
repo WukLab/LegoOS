@@ -394,7 +394,7 @@ struct lego_context {
 	struct ib_mr *proc;
 	int node_id;
 
-	atomic_t		*send_cq_queued_sends;
+	int			*send_cq_queued_sends;
 	int *recv_num;
 	atomic_t *atomic_request_num;
 	atomic_t parallel_thread_num;

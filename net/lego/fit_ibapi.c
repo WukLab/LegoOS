@@ -165,13 +165,25 @@ inline int ibapi_receive_message(unsigned int designed_port,
 inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
 {
 	ppc *ctx = FIT_ctx;
-	return fit_reply_message(ctx, addr, size, descriptor, 0);
+	return fit_reply_message(ctx, addr, size, descriptor, 0, 1);
 }
 
 inline int ibapi_reply_message_w_extra_bits(void *addr, int size, int bits, uintptr_t descriptor)
 {
 	ppc *ctx = FIT_ctx;
-	return fit_reply_message_w_extra_bits(ctx, addr, size, bits, descriptor, 0);
+	return fit_reply_message_w_extra_bits(ctx, addr, size, bits, descriptor, 0, 1);
+}
+
+inline int ibapi_reply_message_nowait(void *addr, int size, uintptr_t descriptor)
+{
+	ppc *ctx = FIT_ctx;
+	return fit_reply_message(ctx, addr, size, descriptor, 0, 0);
+}
+
+inline int ibapi_reply_message_w_extra_bits_no_wait(void *addr, int size, int bits, uintptr_t descriptor)
+{
+	ppc *ctx = FIT_ctx;
+	return fit_reply_message_w_extra_bits(ctx, addr, size, bits, descriptor, 0, 0);
 }
 
 #ifdef CONFIG_SOCKET_O_IB
