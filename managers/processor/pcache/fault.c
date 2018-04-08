@@ -31,6 +31,7 @@
 #include <lego/ratelimit.h>
 #include <lego/checksum.h>
 #include <lego/profile.h>
+#include <lego/fit_ibapi.h>
 
 #include <asm/io.h>
 #include <asm/tlbflush.h>
@@ -160,23 +161,25 @@ static int
 __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		      struct pcache_meta *pcm, void *unused)
 {
-	int ret, len;
-	void *pa_cache = pcache_meta_to_pa(pcm);
-	struct p2m_pcache_miss_struct payload;
 	PROFILE_POINT_TIME(pcache_miss)
+	int ret, len, dst_nid;
+	void *pa_cache = pcache_meta_to_pa(pcm);
+	struct p2m_pcache_miss_msg msg;
 
-	payload.pid = current->pid;
-	payload.tgid = current->tgid;
-	payload.flags = flags;
-	payload.missing_vaddr = address;
+	fill_common_header(&msg, P2M_PCACHE_MISS);
+	msg.pid = current->pid;
+	msg.tgid = current->tgid;
+	msg.flags = flags;
+	msg.missing_vaddr = address;
+	dst_nid = get_memory_node(current, address);
 
-	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
-		current->pid, current->tgid, address, flags, pa_cache);
+	pcache_fill_debug("I dst_nid:%d pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
+		dst_nid, current->pid, current->tgid, address, flags, pa_cache);
 
 	profile_point_start(pcache_miss);
-	len = net_send_reply_timeout(get_memory_node(current, address),
-			P2M_PCACHE_MISS, &payload, sizeof(payload),
-			pa_cache, PCACHE_LINE_SIZE, true, DEF_NET_TIMEOUT);
+	len = ibapi_send_reply_timeout(dst_nid, &msg, sizeof(msg),
+				       pa_cache, PCACHE_LINE_SIZE, true,
+				       DEF_NET_TIMEOUT);
 	profile_point_leave(pcache_miss);
 
 	if (unlikely(len < (int)PCACHE_LINE_SIZE)) {
@@ -214,29 +217,31 @@ static int
 __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		      struct pcache_meta *pcm, void *unused)
 {
-	int ret, len;
-	struct p2m_pcache_miss_struct payload;
+	PROFILE_POINT_TIME(pcache_miss_debug)
 	struct p2m_pcache_miss_reply_struct *reply;
+	struct p2m_pcache_miss_msg msg;
+	int ret, len, dst_nid;
 	void *va_pcache;
 	__wsum csum;
-	PROFILE_POINT_TIME(pcache_miss_debug)
 
 	reply = kmalloc(sizeof(*reply), GFP_KERNEL);
 	if (!reply)
 		return -ENOMEM;
 
-	payload.pid = current->pid;
-	payload.tgid = current->tgid;
-	payload.flags = flags;
-	payload.missing_vaddr = address;
+	fill_common_header(&msg, P2M_PCACHE_MISS);
+	msg.pid = current->pid;
+	msg.tgid = current->tgid;
+	msg.flags = flags;
+	msg.missing_vaddr = address;
+	dst_nid = get_memory_node(current, address);
 
-	pcache_fill_debug("I pid:%u tgid:%u address:%#lx flags:%#lx",
-		current->pid, current->tgid, address, flags);
+	pcache_fill_debug("I dst_nid:%d pid:%u tgid:%u address:%#lx flags:%#lx",
+		dst_nid, current->pid, current->tgid, address, flags);
 
 	profile_point_start(pcache_miss_debug);
-	len = net_send_reply_timeout(get_memory_node(current, address),
-			P2M_PCACHE_MISS, &payload, sizeof(payload),
-			reply, sizeof(*reply), false, DEF_NET_TIMEOUT);
+	len = ibapi_send_reply_timeout(dst_nid, &msg, sizeof(msg),
+				       reply, sizeof(*reply), false,
+				       DEF_NET_TIMEOUT);
 	profile_point_leave(pcache_miss_debug);
 
 	if (len != sizeof(*reply)){

@@ -164,7 +164,7 @@ static int mc_dispatcher(void *passed)
 	switch (hdr->opcode) {
 /* PCACHE */
 	case P2M_PCACHE_MISS:
-		handle_p2m_pcache_miss(payload, desc, hdr);
+		handle_p2m_pcache_miss(msg, desc);
 		break;
 	case P2M_PCACHE_FLUSH:
 		handle_p2m_flush_one(payload, desc, hdr);

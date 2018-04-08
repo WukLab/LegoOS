@@ -18,24 +18,25 @@
  * P2M_MISS
  */
 
-struct p2m_pcache_miss_struct {
-	__u32	pid;
-	__u32	tgid;
-	__u32	flags;
-	__u64	missing_vaddr;
+struct p2m_pcache_miss_msg {
+	struct common_header	header;
+	__u32			pid;
+	__u32			tgid;
+	__u32			flags;
+	__u64			missing_vaddr;
 };
 
 #define PCACHE_MAPPING_ANON	0x1
 #define PCACHE_MAPPING_FILE	0x2
 
+/* For debug only */
 struct p2m_pcache_miss_reply_struct {
 	__u32	mapping_flags;
 	__wsum	csum;
 	char	data[PCACHE_LINE_SIZE];
 };
 
-int handle_p2m_pcache_miss(struct p2m_pcache_miss_struct *, u64,
-			struct common_header *);
+int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *, u64);
 
 /* P2M_PCACHE_FLUSH */
 struct p2m_flush_payload {

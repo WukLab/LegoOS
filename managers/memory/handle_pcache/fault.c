@@ -180,23 +180,22 @@ static int fault_in_kernel_space(unsigned long address)
 	return address >= TASK_SIZE_MAX;
 }
 
-int handle_p2m_pcache_miss(struct p2m_pcache_miss_struct *payload, u64 desc,
-			struct common_header *hdr)
+int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc)
 {
-	u32 tgid, pid, nid, flags;
+	u32 tgid, flags;
 	u64 vaddr;
+	unsigned int src_nid;
 	struct lego_task_struct *p;
 
-	nid    = hdr->src_nid;
-	pid    = payload->pid;
-	tgid   = payload->tgid;
-	flags  = payload->flags;
-	vaddr  = payload->missing_vaddr;
+	src_nid = to_common_header(msg)->src_nid;
+	tgid   = msg->tgid;
+	flags  = msg->flags;
+	vaddr  = msg->missing_vaddr;
 
 	handle_pcache_debug("I nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
-		nid, pid, tgid, flags, vaddr);
+		src_nid, msg->pid, tgid, flags, vaddr);
 
-	p = find_lego_task_by_pid(hdr->src_nid, tgid);
+	p = find_lego_task_by_pid(src_nid, tgid);
 	if (unlikely(!p)) {
 		pcache_miss_error(RET_ESRCH, desc, p, vaddr);
 		return 0;
@@ -211,6 +210,6 @@ int handle_p2m_pcache_miss(struct p2m_pcache_miss_struct *payload, u64 desc,
 	do_mmap_prefetch(p, vaddr, flags, 1 << PREFETCH_ORDER);
 
 	handle_pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
-		nid, pid, tgid, flags, vaddr);
+		src_nid, msg->pid, tgid, flags, vaddr);
 	return 0;
 }
