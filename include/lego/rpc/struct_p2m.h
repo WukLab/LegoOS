@@ -244,4 +244,27 @@ int handle_p2m_msync(struct p2m_msync_struct *, u64, struct common_header *);
  */
 int handle_p2m_checkpint(void *, u64, struct common_header *);
 
+#ifdef CONFIG_MEM_PAGE_CACHE
+struct p2m_lseek_struct {
+	char filename[MAX_FILENAME_LENGTH];
+	__u32 storage_node;
+};
+int handle_p2m_lseek(struct p2m_lseek_struct*, u64, struct common_header *);
+
+struct p2m_rename_struct {
+	char oldname[MAX_FILENAME_LENGTH];
+	char newname[MAX_FILENAME_LENGTH];
+	__u32 storage_node;
+};
+
+int handle_p2m_rename(struct p2m_rename_struct *, u64,struct common_header *);
+
+struct p2m_stat_struct {
+	char filename[MAX_FILENAME_LENGTH];
+	int flag;
+	__u32 storage_node;
+};
+int handle_p2m_stat(struct p2m_stat_struct *, u64, struct common_header *);
+#endif /* CONFIG_MEM_PAGE_CACHE */
+
 #endif /* _LEGO_RPC_STRUCT_P2M_H */

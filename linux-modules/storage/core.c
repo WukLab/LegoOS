@@ -87,6 +87,9 @@ static void storage_dispatch(void *msg, uintptr_t desc)
 	case P2S_RMDIR:
 		handle_rmdir_request(payload, desc);
 		break;
+	case M2S_LSEEK:
+		handle_lseek_request(payload, desc);
+		break;
 	case P2S_STATFS:
 		handle_statfs_request(payload, desc);
 		break;

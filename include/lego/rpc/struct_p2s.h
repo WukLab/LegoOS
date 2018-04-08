@@ -11,6 +11,7 @@
 #define _LEGO_RPC_STRUCT_P2S_H
 
 #include <lego/rpc/struct_common.h>
+#include <lego/stat.h>
 #include <processor/statfs.h>
 
 struct p2s_open_struct{
@@ -28,6 +29,11 @@ struct p2s_access_struct {
 struct p2s_stat_struct {
 	char filename[MAX_FILENAME_LENGTH];
 	int flag;
+};
+
+struct p2s_stat_ret_struct {
+	int retval;
+	struct kstat statbuf;
 };
 
 struct p2s_truncate_struct {
@@ -48,9 +54,6 @@ struct p2s_rmdir_struct {
 	char filename[MAX_FILENAME_LENGTH];
 };
 
-struct m2s_lseek_struct {
-	char filename[MAX_FILENAME_LENGTH];
-};
 
 struct p2s_statfs_struct {
 	char filename[MAX_FILENAME_LENGTH];

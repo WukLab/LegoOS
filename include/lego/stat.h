@@ -10,6 +10,8 @@
 #ifndef _LEGO_STAT_H_
 #define _LEGO_STAT_H_
 
+#ifndef _LEGO_STORAGE_SOURCE_
+
 #include <asm/stat.h>
 #include <lego/time.h>
 #include <lego/types.h>
@@ -73,5 +75,7 @@ struct kstat {
 	unsigned long	blksize;
 	unsigned long long	blocks;
 };
+
+#endif /* _LEGO_STORAGE_SOURCE_ */
 
 #endif /* _LEGO_STAT_H_ */

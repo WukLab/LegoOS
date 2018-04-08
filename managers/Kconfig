@@ -191,5 +191,12 @@ config VMA_MEMORY_UNITTEST
 	
 endif	# if DISTRIBUTED_VMA
 
+config MEM_PAGE_CACHE
+	bool "Use memory component as page cache"
+	default n
+	help
+	  Enable memory component to serve as page cache
+
+
 endmenu
 

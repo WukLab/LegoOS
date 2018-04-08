@@ -25,6 +25,7 @@
 #include <memory/loader.h>
 #include <memory/distvm.h>
 #include <memory/thread_pool.h>
+#include <memory/pgcache.h>
 
 #ifdef CONFIG_DEBUG_THPOOL_PRINT
 #define thpool_debug(fmt, ...)	\
@@ -182,6 +183,20 @@ static void __thpool_worker(struct thpool_worker *worker,
 	case P2M_WRITE:
 		handle_p2m_write(payload, desc, hdr);
 		break;
+
+#ifdef CONFIG_MEM_PAGE_CACHE
+	case P2M_LSEEK:
+		handle_p2m_lseek(payload, desc, hdr);
+		break;
+	
+	case P2M_RENAME:
+		handle_p2m_rename(payload, desc, hdr);
+		break;
+
+	case P2M_STAT:
+		handle_p2m_stat(payload, desc, hdr);
+		break;
+#endif
 
 	case P2M_CLOSE:
 		handle_p2m_close(payload, desc, hdr);

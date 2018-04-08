@@ -25,4 +25,7 @@ obj-y += vm/
 # Loader
 obj-y += loader/
 
+# Lego Page Cache
+obj-$(CONFIG_MEM_PAGE_CACHE) += pgcache/
+
 obj-y += ramfs/

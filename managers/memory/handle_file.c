@@ -16,10 +16,12 @@
 #include <lego/spinlock.h>
 #include <lego/comp_memory.h>
 #include <lego/fit_ibapi.h>
+#include <lego/files.h>
 
 #include <memory/vm.h>
 #include <memory/pid.h>
 #include <memory/file_ops.h>
+#include <memory/pgcache.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_FILE
 #define file_debug(fmt, ...)	\
@@ -58,7 +60,13 @@ int handle_p2m_read(struct p2m_read_write_payload *payload, u64 desc,
 	}
 
 	buf = retbuf + sizeof(retval);
+
+#ifndef CONFIG_MEM_PAGE_CACHE
 	retval = __storage_read(tsk, payload->filename, buf, count, &pos);
+#else
+	retval = lego_pgcache_read(NULL, payload->filename, STORAGE_NODE, buf, count, &pos);
+#endif
+
 	if (retval < 0) {
 		kfree(retbuf);
 		goto err_reply;
@@ -109,8 +117,13 @@ int handle_p2m_write(struct p2m_read_write_payload *payload, u64 desc,
 		goto out_reply;
 	}
 
+#ifndef CONFIG_MEM_PAGE_CACHE
 	retval = __storage_write(tsk, payload->filename,
 				content, payload->len, &offset);
+#else
+	retval = lego_pgcache_write(NULL, payload->filename, STORAGE_NODE, content,
+			payload->len, &offset);
+#endif
 
 out_reply:
 	ibapi_reply_message(&retval, sizeof(retval), desc);

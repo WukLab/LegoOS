@@ -132,6 +132,8 @@ static int cp_new_stat(struct kstat *stat, struct stat __user *statbuf)
 }
 
 #ifndef CONFIG_USE_RAMFS
+
+#ifndef CONFIG_MEM_PAGE_CACHE
 /*
  * get_kstat_from_storage: get corresponding stats specific path
  * @filepath: full pathname on storage side
@@ -143,11 +145,10 @@ static int cp_new_stat(struct kstat *stat, struct stat __user *statbuf)
 static int get_kstat_from_storage(char *filepath, struct kstat *stat, int flag)
 {
 	u32 *opcode;
-	void *msg, *retbuf;
-	int len_ret, len_msg;
-	int ret, *retval_in_retbuf;
+	void *msg;
+	int len_msg, ret;
 	struct p2s_stat_struct *payload;
-	struct kstat *kstat_in_retbuf;
+	struct p2s_stat_ret_struct retbuf;
 
 	len_msg = sizeof(*opcode) + sizeof(*payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
@@ -161,33 +162,83 @@ static int get_kstat_from_storage(char *filepath, struct kstat *stat, int flag)
 	strncpy(payload->filename, filepath, MAX_FILENAME_LENGTH);
 	payload->flag = flag;
 
-	len_ret = sizeof(int) + sizeof(struct kstat);
-	retbuf = kmalloc(len_ret, GFP_KERNEL);
-	if (!retbuf) {
-		ret = -ENOMEM;
-		goto free_msg;
-	}
-
 	ret = ibapi_send_reply_imm(current_storage_home_node(), msg, len_msg,
-				   retbuf, len_ret, false);
-	if (ret != len_ret) {
+				   &retbuf, sizeof(retbuf), false);
+	if (ret != sizeof(retbuf)) {
 		ret = -EIO;
 		goto free;
 	}
 
-	retval_in_retbuf = retbuf;
-	kstat_in_retbuf = retbuf + sizeof(int);
-
-	*stat = *kstat_in_retbuf;
-	ret = *retval_in_retbuf;
+	*stat = retbuf.statbuf;
+	ret = retbuf.retval;
 
 free:
-	kfree(retbuf);
-free_msg:
 	kfree(msg);
 	return ret;
 }
-#endif
+
+static inline int
+do_default_kstat(char *filepath, struct kstat *stat, int flag)
+{
+	return get_kstat_from_storage(filepath, stat, flag);
+}
+
+#else
+/*
+ * get_kstat_from_memory: get corresponding stats specific path
+ * @filepath: full pathname on storage side
+ * @stat: address of a struct kstat to be filled with
+ * @flag: flag passed to storage side for fstatat request
+ * return value: 0 on success, -errno on fail
+ */
+
+static int get_kstat_from_memory(char *filepath, struct kstat *stat, int flag)
+{
+	struct common_header *hdr;
+	void *msg;
+	int len_msg, ret;
+	struct p2m_stat_struct *payload;
+	struct p2s_stat_ret_struct retbuf;
+
+	len_msg = sizeof(*hdr) + sizeof(*payload);
+	msg = kmalloc(len_msg, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	hdr = msg;
+	hdr->opcode = P2M_STAT;
+	hdr->src_nid = LEGO_LOCAL_NID;
+	hdr->length = len_msg;
+
+	payload = msg + sizeof(*hdr);
+	strncpy(payload->filename, filepath, MAX_FILENAME_LENGTH);
+	payload->flag = flag;
+	payload->storage_node = current_storage_home_node();
+
+	ret = ibapi_send_reply_imm(current_pgcache_home_node(), msg, len_msg,
+				   &retbuf, sizeof(retbuf), false);
+	if (ret != sizeof(retbuf)) {
+		ret = -EIO;
+		goto free;
+	}
+
+	*stat = retbuf.statbuf;
+	ret = retbuf.retval;
+
+free:
+	kfree(msg);
+	return ret;
+}
+
+static inline int
+do_default_kstat(char *filepath, struct kstat *stat, int flag)
+{
+	return get_kstat_from_memory(filepath, stat, flag);
+}
+
+#endif /* CONFIG_MEM_PAGE_CACHE */
+
+#endif /* CONFIG_USE_RAMFS */
 
 SYSCALL_DEFINE2(newstat, const char __user *, filename,
 		struct stat __user *, statbuf)
@@ -221,7 +272,7 @@ SYSCALL_DEFINE2(newstat, const char __user *, filename,
 #ifdef CONFIG_USE_RAMFS
 	stat.mode |= S_IFREG;
 #else
-	ret = get_kstat_from_storage(kname, &stat, 0);
+	ret = do_default_kstat(kname, &stat, 0);
 	if (ret)
 		goto out;
 #endif
@@ -254,7 +305,7 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
 #ifdef CONFIG_USE_RAMFS
 	stat.mode |= S_IFREG;
 #else
-	ret = get_kstat_from_storage(kname, &stat, AT_SYMLINK_NOFOLLOW);
+	ret = do_default_kstat(kname, &stat, AT_SYMLINK_NOFOLLOW);
 	if (ret) 
 		goto out;
 #endif
@@ -285,7 +336,7 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 		goto fill;
 
 #ifndef CONFIG_USE_RAMFS
-	ret = get_kstat_from_storage(f->f_name, &stat, 0);
+	ret = do_default_kstat(f->f_name, &stat, 0);
 	if (ret)
 		goto out;
 #endif
@@ -317,10 +368,10 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 #ifdef CONFIG_USE_RAMFS
 	stat.mode |= S_IFREG;
 #else
-	ret = get_kstat_from_storage(kname, &stat, flag);
+	ret = do_default_kstat(kname, &stat, flag);
 	if (ret)
 		goto out;
-#endif
+#endif /* CONFIG_USE_RAMFS */
 
 fill:
 	ret = cp_new_stat(&stat, statbuf);

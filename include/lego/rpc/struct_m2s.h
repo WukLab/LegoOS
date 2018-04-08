@@ -32,6 +32,10 @@ struct m2s_read_write_payload {
 	loff_t	offset;
 };
 
+struct m2s_lseek_struct {
+	char filename[MAX_FILENAME_LENGTH];
+};
+
 /* M2S_REPLICA_FLUSH */
 struct m2s_replica_flush_msg {
 	unsigned int		opcode;

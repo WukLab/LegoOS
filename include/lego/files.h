@@ -169,6 +169,10 @@ static inline void put_file(struct file *filp)
 
 int get_absolute_pathname(int dfd, char *k_pathname, const char __user *pathname);
 
+#ifdef CONFIG_MEM_PAGE_CACHE
+ssize_t get_file_size(const char *pathname);
+#endif
+
 /*
  * arch dependent, long for x86_64
  */

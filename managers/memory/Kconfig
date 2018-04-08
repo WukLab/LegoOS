@@ -196,6 +196,16 @@ config DEBUG_THPOOL_PRINT
 
 endmenu # Memory DEBUG Options
 
+if MEM_PAGE_CACHE
+config DEBUG_PAGE_CACHE
+	bool "Bebug page cache operations"
+	default n
+	help
+	  Enable to debug all memory/pgcache files
+
+	  If unsure say N.
+endif # MEM_PAGE_CACHE
+
 endif # if COMP_MEMORY
 
 endmenu

@@ -43,6 +43,8 @@
 #define P2M_EXECVE		((__u32)__NR_execve)
 #define P2M_CHECKPOINT		((__u32)__NR_checkpoint_process)
 #define P2M_TEST		((__u32)0x0fffffff)
+#define P2M_RENAME		((__u32)__NR_rename)
+#define P2M_STAT		((__u32)__NR_stat)
 
 /* Processor to Storage directly */
 #define P2S_OPEN		((__u32)__NR_open)	/* open() goes to storage directly */
@@ -56,6 +58,7 @@
 #define P2S_GETDENTS		((__u32)__NR_getdents)
 #define P2S_READLINK		((__u32)__NR_readlink)
 #define P2S_RENAME		((__u32)__NR_rename)
+#define P2M_LSEEK		((__u32)__NR_lseek)
 
 /* Homenode Memory to other Memory */
 #define M2M_BASE 		((__u32)0x40000000)
@@ -71,6 +74,7 @@
 /* Memory to Storage */
 #define M2S_READ		P2M_READ		/* Reuse the same nr */
 #define M2S_WRITE		P2M_WRITE		/* Reuse the same nr */
+#define M2S_LSEEK		P2M_LSEEK		/* Reuse the same nr */
 #define M2S_REPLICA_FLUSH	P2M_PCACHE_REPLICA
 
 /* Processor to GSM */

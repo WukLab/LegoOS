@@ -10,6 +10,7 @@ obj-y += ioctl.o
 obj-y += stdio.o
 obj-y += truncate.o
 obj-y += namei.o
+obj-$(CONFIG_MEM_PAGE_CACHE) += file_size.o
 obj-y += statfs.o
 obj-y += pipe.o
 obj-y += lseek.o

@@ -97,6 +97,7 @@ long handle_statfs_request(void *payload, uintptr_t desc);
 long handle_getdents_request(void *payload, uintptr_t desc);
 long handle_readlink_request(void *payload, uintptr_t desc);
 long handle_rename_request(void *payload, uintptr_t desc);
+ssize_t handle_lseek_request(void *payload, uintptr_t desc);
 
 /* m2s replica flush */
 void handle_replica_flush(void *_msg, u64 desc);

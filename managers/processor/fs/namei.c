@@ -355,12 +355,12 @@ out:
 	return ret;
 }
 
+#ifndef CONFIG_MEM_PAGE_CACHE
 /*
- * do_p2s_rename: send rename request side directly
- * if we are using page cache from memory component
- * we cannot send rename request directly to storage
+ * do_rename: send rename request side directly
+ * if NO CONFIG_MEM_PAGE_CACHE, P->S directly
  */
-static long do_p2s_rename(const char __user *oldname, const char __user *newname)
+static long do_rename(const char __user *oldname, const char __user *newname)
 {
 	long ret;
 	void *msg;
@@ -398,9 +398,58 @@ static long do_p2s_rename(const char __user *oldname, const char __user *newname
 out:
 	return ret;
 }
+#else
+/*
+ * do_rename: send rename request side directly
+ * if we are using page cache from memory component
+ * we cannot send rename request directly to storage
+ */
+static long do_rename(const char __user *oldname, const char __user *newname)
+{
+	long ret;
+	void *msg;
+	struct common_header *hdr;
+	struct p2m_rename_struct *payload;
+	u32 len_msg = sizeof(*hdr) + sizeof(*payload);
+	
+	msg = kmalloc(len_msg, GFP_KERNEL);
+	if (unlikely(!msg)) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	
+	hdr = msg;
+	hdr->opcode = P2S_RENAME;
+	hdr->src_nid = LEGO_LOCAL_NID;
+	hdr->length = len_msg;
+
+	payload = msg + sizeof(*hdr);
+	payload->storage_node = current_storage_home_node();
+
+	ret = get_absolute_pathname(AT_FDCWD, payload->oldname, oldname);
+	if (ret) {
+		kfree(msg);
+		goto out;
+	}
+	
+	ret = get_absolute_pathname(AT_FDCWD, payload->newname, newname);
+	if (ret) {
+		kfree(msg);
+		goto out;
+	}
+
+	ibapi_send_reply_imm(current_pgcache_home_node(), msg, len_msg,
+				&ret, sizeof(ret), false);
+	
+	kfree(msg);
+
+out:
+	return ret;
+}
+#endif /* CONFIG_MEM_PAGE_CACHE */
 
 SYSCALL_DEFINE2(rename, const char __user *, oldname,
 		const char __user *, newname)
 {
-	return do_p2s_rename(oldname, newname);
+	return do_rename(oldname, newname);
 }

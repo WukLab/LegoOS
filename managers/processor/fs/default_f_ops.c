@@ -254,7 +254,9 @@ static loff_t default_llseek(struct file *file, loff_t offset, int whence)
 
 	switch (whence) {
 	case SEEK_END:
-		WARN(1, "default SEEK_END is not implemented yet.\n");
+#ifdef CONFIG_MEM_PAGE_CACHE
+		ret = get_file_size(file->f_name);
+#endif
 		break;
 	case SEEK_CUR:
 		ret = file->f_pos + offset;

@@ -168,33 +168,13 @@ out_reply:
 int handle_stat_request(void *payload, uintptr_t desc)
 {
 	struct p2s_stat_struct *stat_rq = payload;
-	struct kstat stat;
-	void *ret_msg;
-	int *retval_in_msg;
-	struct kstat *stat_in_msg;
+	struct p2s_stat_ret_struct retbuf;
 	int res;
-	int ret_len = sizeof(int) + sizeof(struct kstat);
-	
-	ret_msg = kmalloc(ret_len, GFP_KERNEL);
-	if (unlikely(!ret_msg)) {
-		res = -ENOMEM;
-		goto enomem;
-	}
-	retval_in_msg = ret_msg;
-	stat_in_msg = ret_msg + sizeof(int);
 
-	res = kernel_fs_stat(stat_rq->filename, &stat, stat_rq->flag);
+	res = kernel_fs_stat(stat_rq->filename, &retbuf.statbuf, stat_rq->flag);
+	retbuf.retval = res;
 
-	/* ib return msg format, retval + stat */
-	*retval_in_msg = res;
-	*stat_in_msg = stat;
-
-	ibapi_reply_message(ret_msg, ret_len, desc);
-
-	kfree(ret_msg);
-	return res;
-enomem:
-	ibapi_reply_message(&res, sizeof(res), desc);
+	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
 	return res;
 }
 
@@ -270,6 +250,29 @@ long handle_rmdir_request(void *payload, uintptr_t desc)
 
 	ret = do_rmdir(rmdir->filename);
 
+	ibapi_reply_message(&ret, sizeof(ret), desc);
+	return ret;
+}
+
+ssize_t handle_lseek_request(void *payload, uintptr_t desc)
+{
+	struct m2s_lseek_struct *lseek = payload;
+	ssize_t ret;
+	const char *pathname = lseek->filename;
+	unsigned int lookup_flags = LOOKUP_FOLLOW;
+	struct path path;
+	struct dentry *dentry;
+
+	ret = kern_path(pathname, lookup_flags, &path);
+	if (ret)
+		goto reply;
+	
+	dentry = path.dentry;
+	ret = i_size_read(dentry->d_inode);
+
+	path_put(&path);
+
+reply:
 	ibapi_reply_message(&ret, sizeof(ret), desc);
 	return ret;
 }
