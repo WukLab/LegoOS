@@ -27,6 +27,11 @@ void exit_processor_strace(struct task_struct *p);
 static inline void strace_syscall_enter(struct pt_regs *regs) { }
 static inline void strace_syscall_exit(struct pt_regs *regs) { }
 
+static inline int __fork_processor_strace(struct task_struct *p)
+{
+	return 0;
+}
+
 static inline int fork_processor_strace(struct task_struct *p)
 {
 	return 0;
