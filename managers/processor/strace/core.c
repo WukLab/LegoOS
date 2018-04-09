@@ -45,6 +45,7 @@ const strace_call_ptr_t strace_call_table[__NR_syscall_max+1] = {
 	[__NR_wait4]			= (strace_call_ptr_t)&strace__wait4,
 	[__NR_waitid]			= (strace_call_ptr_t)&strace__waitid,
 	[__NR_mmap]			= (strace_call_ptr_t)&strace__mmap,
+	[__NR_munmap]			= (strace_call_ptr_t)&strace__munmap,
 	[__NR_mprotect]			= (strace_call_ptr_t)&strace__mprotect,
 };
 
@@ -57,7 +58,7 @@ static bool strace_printable_nr[__NR_syscall_max+1] = {
 
 	[__NR_fork]			= true,
 	[__NR_clone]			= true,
-	[__NR_mmap]			= true,
+	[__NR_munmap]			= true,
 };
 #endif
 

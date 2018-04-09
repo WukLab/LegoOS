@@ -66,6 +66,11 @@ STRACE_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 		put_file(f);
 }
 
+STRACE_DEFINE2(munmap, unsigned long, addr, size_t, len)
+{
+	sp("[%#lx - %#lx], %zu", addr, addr + len, len);
+}
+
 STRACE_DEFINE3(mprotect, unsigned long, start, size_t, len,
 	       unsigned long, prot)
 {

@@ -173,6 +173,8 @@ STRACE_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	       unsigned long, prot, unsigned long, flags,
 	       unsigned long, fd, unsigned long, off);
 
+STRACE_DEFINE2(munmap, unsigned long, addr, size_t, len);
+
 STRACE_DEFINE3(mprotect, unsigned long, start, size_t, len,
 	       unsigned long, prot);
 
