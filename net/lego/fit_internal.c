@@ -1180,20 +1180,19 @@ int fit_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive
 	int last_ack;
 	int ack_flag=0;
 
-	//printk(KERN_CRIT "%s port %d\n", __func__, port);
-	while(1)
-	{
+	/*
+	 * Busy polling incoming message
+	 */
+	while(1) {
 		spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
-		if(!list_empty(&(ctx->imm_waitqueue_perport[port].list)))
-		{
-			//printk(KERN_CRIT "%s port %d got req\n", __func__, port);
-			new_request = list_entry(ctx->imm_waitqueue_perport[port].list.next, struct imm_header_from_cq_to_port, list);
+		if (likely(!list_empty(&(ctx->imm_waitqueue_perport[port].list)))) {
+			new_request = list_entry(ctx->imm_waitqueue_perport[port].list.next,
+						 struct imm_header_from_cq_to_port, list);
 			list_del(&new_request->list);	
 			spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
 			break;
 		}
 		spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
-		schedule();
 	}
 
 	offset = new_request->offset;
