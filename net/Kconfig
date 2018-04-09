@@ -15,8 +15,18 @@ config FIT
 config FIT_MAX_OUTSTANDING_SEND
 	int "Max outstanding send requests"
 	range 1 24
-	default 24
+	default 1  if COMP_PROCESSOR
+	default 24 if COMP_MEMORY
 	depends on FIT
+	help
+	  This determines the maximum number of concurrent outstanding
+	  reply SEND. (reply is also a SEND.)
+	  
+	  For processor, 1 is good enough. Because it is major doing SEND.
+	  For memory, we tune it to be the number of cores. Our machine
+	  has 24 cores, so 24 it is.
+
+	  If unsure, follow default.
 
 config FIT_DEBUG
 	bool "Enable fit_debug"
