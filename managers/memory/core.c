@@ -27,6 +27,8 @@
 #include <memory/thread_pool.h>
 #include <memory/pgcache.h>
 
+#include <monitor/gmm_handler.h>
+
 #ifdef CONFIG_DEBUG_THPOOL_PRINT
 #define thpool_debug(fmt, ...)	\
 	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)

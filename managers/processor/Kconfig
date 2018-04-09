@@ -89,6 +89,26 @@ config GPM_NODEID
 	  if running a multiple monitor on same machine, IB node
 	  ID can be same as Storage node, GMM, and GSM's
 
+config VNODE
+	bool "Virtual node"
+	default n
+	help
+	  Enable virtual node namespace
+
+config VNODE_TABLE_ORDER
+	int "Virtual node hash table order"
+	default 8
+	depends on VNODE
+	help
+	  order of vnode hashable used for transfering IP to vnode_struct
+
+config VNODE_MAP_ORDER
+	int "Virtual node array order"
+	default 8
+	depends on VNODE
+	help
+	  order of vnode array used for transfering vnode id to vnode_struct
+
 endif #if GPM
 
 source "managers/processor/pcache/Kconfig"

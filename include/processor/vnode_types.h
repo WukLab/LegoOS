@@ -7,14 +7,18 @@
  * (at your option) any later version.
  */
 
-#ifndef _LINUX_MODULE_FIT_CONFIG_H_
-#define _LINUX_MODULE_FIT_CONFIG_H_
+#ifndef _LEGO_PROCESSOR_VNODE_TYPES_H_
+#define _LEGO_PROCESSOR_VNODE_TYPES_H_
 
-/* Lego cluster config */
-#define CONFIG_FIT_LOCAL_ID	2
-#define CONFIG_FIT_NR_NODES	3
-#define MAX_NODE		CONFIG_FIT_NR_NODES
+#ifdef CONFIG_VNODE
 
-//#define CONFIG_SOCKET_O_IB
+struct vnode_struct {
+	int p_nid;
+	int vid;
+	int ip;
+	struct hlist_node node;
+} ____cacheline_aligned;
 
-#endif /* _LINUX_MODULE_FIT_CONFIG_H_ */
+#endif /* CONFIG_VNODE */
+
+#endif /* _LEGO_PROCESSOR_VNODE_TYPES_H_ */

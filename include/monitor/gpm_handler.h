@@ -13,11 +13,15 @@
 #define MAX_RXBUF_SIZE   (PAGE_SIZE * 20)
 
 #ifdef CONFIG_GPM
+
 void gpm_handler_init(void);
 void report_proc_exit(int ret_val);
+
 #else
-static inline void gpm_handler_init(void) {};
-static inline void report_proc_exit(int ret_val) {};
+
+static inline void gpm_handler_init(void) {}
+static inline void report_proc_exit(int ret_val) {}
+
 #endif
 
 #endif /* _GPM_HANDLER_H */

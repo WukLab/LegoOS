@@ -6,12 +6,19 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
+/*
+ * for any sending message struct, if no reply struct defined, 
+ * just reply the status using int
+ */
 
 #ifndef _LEGO_MONITOR_COMMON_H
 #define _LEGO_MONITOR_COMMON_H
 
-#include <lego/rpc/opcode.h>
+#include <lego/rpc/struct_common.h>
 
+#ifndef CONFIG_MEM_NR_NODES
+#define CONFIG_MEM_NR_NODES	0
+#endif
 /*
  * PM2P_START_PROC
  * start a new process
@@ -70,6 +77,30 @@ struct consult_reply {
 struct m2mm_mnode_status_reply {
 	unsigned long totalram;
 	unsigned long freeram;
+};
+
+/*
+ * P2PM_REQUEST_VNODE
+ */
+struct p2pm_request_vnode_struct {
+	struct common_header hdr;
+};
+
+struct p2pm_request_vnode_reply_struct {
+	int status;
+	int p_nid;
+	int vid;
+	int ip;
+};
+
+/*
+ * PM2P_BROADCAST_VNODE
+ */
+struct pm2p_broadcast_vnode_struct {
+	struct common_header *hdr;
+	int p_nid;
+	int vid;
+	int ip;
 };
 
 #endif /* _LEGO_MONITOR_COMMON_H */

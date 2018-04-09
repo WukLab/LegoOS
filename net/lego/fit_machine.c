@@ -56,9 +56,9 @@ static struct fit_machine_info WUKLAB_CLUSTER[] = {
 };
 #else
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	= 	"wuklab09",
-	[1]	= 	"wuklab06",
-	[2]	= 	"wuklab04",
+	[0]	= 	"wuklab00",
+	[1]	= 	"wuklab01",
+	[2]	= 	"wuklab03",
 };
 
 static struct fit_machine_info WUKLAB_CLUSTER[] = {

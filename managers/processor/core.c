@@ -17,6 +17,8 @@
 #include <processor/zerofill.h>
 #include <processor/processor.h>
 #include <processor/distvm.h>
+#include <processor/vnode.h>
+
 #include <monitor/gpm_handler.h>
 
 #include "processor.h"
@@ -40,6 +42,7 @@ const char *envp_init[MAX_INIT_ENVS+2] =
 static int procmgmt(void *unused)
 {
 	const char *init_filename;
+	int vid;
 
 	/*
 	 * Use the correct name if a real storage node is used.
@@ -47,6 +50,13 @@ static int procmgmt(void *unused)
 	 */
 	init_filename = "/root/yutong/lego/usr/exe.o";
 	argv_init[0] = init_filename;
+
+	/* 
+	 * request vid
+	 */
+	vid = request_vnode();
+	WARN_ON(vid < 0);
+	current->pm_data.virtual_node = vid_find_vnode(vid);
 
 	/*
 	 * It's strace has not been established yet

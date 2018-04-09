@@ -17,6 +17,7 @@
 
 #include <lego/types.h>
 #include <lego/atomic.h>
+#include <processor/vnode_types.h>
 
 #ifdef CONFIG_COMP_PROCESSOR
 
@@ -48,6 +49,10 @@ struct processor_manager {
 #ifdef CONFIG_GSM
 	int		pgcache_node;
 	int		storage_node;
+#endif
+
+#ifdef CONFIG_VNODE
+	struct vnode_struct *virtual_node;
 #endif
 };
 

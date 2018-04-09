@@ -19,6 +19,7 @@
 #include <gmm.h>
 
 static LIST_HEAD(pnodes);
+static struct vnode_struct vnode_map[VNODE_MAP_SIZE];
 
 /*
  * functions serve PM2P_START_PROC
@@ -185,6 +186,90 @@ reply:
 }
 EXPORT_SYMBOL(handle_p2pm_exit_proc);
 		
+/*
+ * functions for P2PM_REQUEST_VNODE
+ */
+
+static struct pm2p_broadcast_vnode_struct *
+prepare_broadcast_payload(int p_nid, int vid, int ip)
+{
+	struct pm2p_broadcast_vnode_struct *send;
+	send = kmalloc(sizeof(struct pm2p_broadcast_vnode_struct), GFP_KERNEL);
+	if (!send)
+		return NULL;
+
+	fill_common_header(send, PM2P_BROADCAST_VNODE);
+	send->p_nid = p_nid;
+	send->vid = vid;
+	send->ip = ip;
+
+	return send;
+}
+
+static int pm2p_broadcast_vnode(int p_nid, int vid, int ip)
+{
+	int ret = 0, reply = 0;
+	struct pnode_struct *pos;
+	struct pm2p_broadcast_vnode_struct *send;
+	
+	send = prepare_broadcast_payload(p_nid, vid, ip);
+	if (!send)
+		return -ENOMEM;
+
+	list_for_each_entry(pos, &pnodes, list) {
+		/* no need to send to the requesting processor node */
+		if (pos->nid == p_nid)
+			continue;
+
+#if USE_IBAPI
+		ret = ibapi_send_reply_imm(pos->nid, &send, sizeof(send), 
+					   &reply, sizeof(reply), 0);
+#endif
+		if (ret < 0 || reply) {
+			pr_info("couldn't broadcast vnode update to node %d\n",
+				pos->nid);
+			break;
+		}
+	}
+
+	kfree(send);
+	return ret ? ret : reply;
+}
+
+/*
+ * TODO: current vnode id is same as nid and IP address is
+ * merely IP base address plus vid, need to change this later
+ */
+int handle_p2pm_request_vnode(struct p2pm_request_vnode_struct *req, uintptr_t desc)
+{
+	int nid  = req->hdr.src_nid;
+	int vid = nid;
+	int ip = IP_ADDRESS_BASE + vid;
+	struct p2pm_request_vnode_reply_struct reply;
+
+	vnode_map[vid].p_nid = nid;
+	vnode_map[vid].vid = vid;
+	vnode_map[vid].ip = ip;
+	
+	reply.status = 0;
+	reply.p_nid = nid;
+	reply.vid = vid;
+	reply.ip = ip;
+
+	reply.status = pm2p_broadcast_vnode(nid, vid, ip);
+#if USE_IBAPI
+	ibapi_reply_message(&reply, sizeof(reply), desc);
+#endif
+
+	pr_info("New vnode updated, p_nid: %d, vid: %d, ip: %x\n",
+		nid, vid, ip);
+
+	WARN_ON(vid >= VNODE_MAP_SIZE);
+
+	return reply.status;
+}
+EXPORT_SYMBOL(handle_p2pm_request_vnode);
+
 /*
  * lego global processor monitor initialization
  */

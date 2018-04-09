@@ -15,6 +15,7 @@
 #ifndef _LEGO_MEMORY_REPLICA_TYPES_H_
 #define _LEGO_MEMORY_REPLICA_TYPES_H_
 
+#include <asm/bitops.h>
 #include <processor/pcache_config.h>
 
 #define REPLICA_HASH_TABLE_SIZE_BIT	(10)

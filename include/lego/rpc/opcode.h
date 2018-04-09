@@ -81,6 +81,8 @@
 #define P2PM_EXIT_PROC			(MONITOR_BASE + 2)
 #define M2MM_CONSULT	 		(MONITOR_BASE + 3) 
 #define M2MM_STATUS_REPORT		(MONITOR_BASE + 4)
+#define P2PM_REQUEST_VNODE		(MONITOR_BASE + 5)
+#define PM2P_BROADCAST_VNODE		(MONITOR_BASE + 6)
 
 /* Memory to Storage */
 #define M2S_READ		P2M_READ		/* Reuse the same nr */

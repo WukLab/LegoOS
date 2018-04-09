@@ -12,6 +12,7 @@ obj-y += mmap/
 obj-y += fs/
 obj-y += monitor/
 
+obj-$(CONFIG_VNODE) += vnode.o
 obj-$(CONFIG_CHECKPOINT) += checkpoint/
 obj-$(CONFIG_STRACE) += strace/
 

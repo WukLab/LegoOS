@@ -12,6 +12,17 @@
 
 #include <common.h>
 
+#define VNODE_MAP_SIZE			(1 << VNODE_MAP_ORDER)
+
+/*
+ * vnode struct 
+ */
+struct vnode_struct {
+	int p_nid;
+	int vid;
+	int ip;
+};
+
 /*
  * process information structs, holding information of all processes
  */
@@ -52,5 +63,6 @@ struct pnode_struct {
 int lego_proc_create(char*, int);
 extern int handle_p2pm_exit_proc(struct p2pm_exit_proc_struct *payload, 
 				 uintptr_t desc, struct common_header *hdr);
+extern int handle_p2pm_request_vnode(struct p2pm_request_vnode_struct *req, uintptr_t desc);
 
 #endif /* _LEGO_GPM_H */

@@ -36,9 +36,7 @@
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
 	[0]	= 	"wuklab00",
 	[1]	= 	"wuklab01",
-	[2]	= 	"wuklab02",
-	[3]	= 	"wuklab03",
-	[4]	= 	"wuklab11",
+	[2]	= 	"wuklab03",
 };
 
 /* Built based on node id */

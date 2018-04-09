@@ -62,6 +62,10 @@ static int req_dispatcher(void)
 		handle_m2mm_consult(payload, desc, hdr);
 		break;
 
+	case P2PM_REQUEST_VNODE:
+		handle_p2pm_request_vnode((void *)rcvbuf, desc);
+		break;
+
 	default:
 		handle_bad_request(hdr, desc);
 	}

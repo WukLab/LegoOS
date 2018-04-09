@@ -14,6 +14,7 @@
 #include <lego/fit_ibapi.h>
 #include <lego/kthread.h>
 #include <processor/processor.h>
+#include <processor/vnode.h>
 #include <monitor/common.h>
 #include <monitor/gpm_handler.h>
 
@@ -126,6 +127,13 @@ static int gm_dispatcher(struct info_struct *info)
 	case PM2P_START_PROC:
 		handle_start_proc(payload, desc, hdr);
 		break;
+
+#ifdef CONFIG_VNODE
+	case PM2P_BROADCAST_VNODE:
+		handle_pm2p_broadcast_vnode((void *)info->msg, desc);
+		break;
+#endif
+
 	default:
 		handle_bad_request(hdr, desc);
 	}
