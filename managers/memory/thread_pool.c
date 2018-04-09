@@ -49,10 +49,10 @@ int generic_worker_func(void *passed)
 			switch (hdr->opcode) {
 /* PCACHE */
 			case P2M_PCACHE_MISS:
-				handle_p2m_pcache_miss(payload, desc, hdr);
+				handle_p2m_pcache_miss(msg, desc);
 				break;
 			case P2M_PCACHE_FLUSH:
-				handle_p2m_flush_one(payload, desc, hdr);
+				handle_p2m_flush_one(msg, desc);
 				break;
 
 /* clflush REPLICA */
@@ -183,7 +183,7 @@ int io_worker_func(void *passed)
 				WARN(1, "This opcode should not be handled by me.\n");
 				handle_bad_request(hdr, desc);
 			}
-			
+
 			/* mark buffer is not busy now */
 			atomic_set(&info->used, 0);
 			spin_lock(&worker->lock);

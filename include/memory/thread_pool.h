@@ -11,129 +11,125 @@
 #define _MEM_THREAD_POOL_H_
 
 #include <lego/list.h>
+#include <lego/sched.h>
 #include <lego/spinlock.h>
 #include <lego/comp_common.h>
 
 #define MAX_RXBUF_SIZE	(PAGE_SIZE * 20)
 
-void handle_bad_request(struct common_header *hdr, u64 desc);
-void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr);
+#define THPOOL_RX_SIZE	(PAGE_SIZE * 32)
+#define THPOOL_TX_SIZE	(PAGE_SIZE * 32)
 
-#ifndef CONFIG_MEM_THREAD_POOL
-struct info_struct {
-	unsigned long 		desc;
-	char msg[MAX_RXBUF_SIZE];
-};
-#else
-/* MEM_THREAD_POOL is turned on */
-struct _info_padding {
-	char _x[0];
-} __aligned(PAGE_SIZE);
+/* TODO: use IB macro */
+#define NR_THPOOL_BUFFER	(4*24)
 
-#define INFO_PADDING(name)	struct _info_padding name
+#define NR_THPOOL_WORKERS	CONFIG_THPOOL_NR_WORKERS
 
-struct info_struct {
-	unsigned long		desc;
-	unsigned long 		numbuf;	/* the buffer number id */
-	atomic_t		used;	/* the buffer is in used */
-	struct list_head	queue;	/* list_head on a thread waiting queue */
-	INFO_PADDING(_PAD_1);		/* padding for one page */
-	char msg[MAX_RXBUF_SIZE];
-};
-
-#define MAX_NR_RXBUFS		16
-
-#define NR_GENERIC_WORKERS	CONFIG_NR_GENERIC_WORKERS
-#define NR_IO_WORKERS		CONFIG_NR_IO_WORKERS
-#define NR_WORKERS		(NR_GENERIC_WORKERS + NR_IO_WORKERS)
-
-struct mem_worker_struct {
-	struct list_head	head;		/* head of thread waiting queue */
-	spinlock_t		lock;		/* lock to protect this thead waiting queue */
-	unsigned long		num_worker;	/* the worker number id */
+/*
+ * This structure describes a worker thread.
+ * @nr_queued: how many work have been queued
+ * @work: the list of work to do
+ * @lock: protect list operations
+ */
+struct thpool_worker {
+	/*
+	 * This counter is updated while the list
+	 * is updated. And they are updated under @lock.
+	 * Thus a simple int will do.
+	 */
+	int			nr_queued;
+	struct list_head	work_head;
+	spinlock_t		lock;
+	struct task_struct	*task;
 } ____cacheline_aligned;
 
-static inline void
-enqueue_thread(struct mem_worker_struct *worker, struct info_struct *info)
+static inline int nr_queued_thpool_worker(struct thpool_worker *tw)
 {
-	atomic_set(&info->used, 1);
-	spin_lock(&worker->lock);
-	list_add_tail(&info->queue, &worker->head);
-	spin_unlock(&worker->lock);
+	return tw->nr_queued;
 }
 
-static inline struct info_struct *
-next_info_entry(struct info_struct *info)
+static inline void inc_queued_thpool_worker(struct thpool_worker *tw)
 {
-	struct info_struct *next;
-
-	BUG_ON(info->numbuf >= MAX_NR_RXBUFS);
-	
-	if (likely(info->numbuf < MAX_NR_RXBUFS - 1))
-		next = info + 1;
-	else
-		next = info - (MAX_NR_RXBUFS - 1);
-	
-	return next;
+	tw->nr_queued++;
 }
 
-static inline void __clear_info_msg(struct info_struct *info)
+static inline void dec_queued_thpool_worker(struct thpool_worker *tw)
 {
-	memset(&info->msg, 0, MAX_RXBUF_SIZE);
+	tw->nr_queued--;
 }
 
-static inline void __init_info(struct info_struct *info, unsigned nr_info)
-{
-	struct info_struct *curr = info;
-	unsigned nr_remaining = nr_info;
+struct thpool_padding {
+	char x[0];
+} __aligned(PAGE_SIZE);
+#define THPOOL_PADDING(name)	struct thpool_padding name
 
-	while (nr_remaining) {
-		__clear_info_msg(curr);
-		curr->numbuf= nr_info - nr_remaining;
-		atomic_set(&curr->used, 0);
-		INIT_LIST_HEAD(&curr->queue);
-		curr++;
-		nr_remaining--;
-	}
+struct thpool_buffer {
+	unsigned long		desc;
+	unsigned long		flags;
+	struct list_head	next;
+
+	THPOOL_PADDING(_pad1);
+
+	char			rx[THPOOL_RX_SIZE];
+	char			tx[THPOOL_TX_SIZE];
+};
+
+enum thpool_buffer_flags {
+	THPOOL_BUFFER_used,
+
+	NR_THPOOL_BUFFER_FLAGS,
+};
+
+#define TEST_THPOOL_BUFFER_FLAGS(uname, lname)				\
+static inline int ThpoolBuffer##uname(const struct thpool_buffer *p)	\
+{									\
+	return test_bit(THPOOL_BUFFER_##lname, &p->flags);		\
 }
 
-static inline void __init_mem_worker_struct(struct mem_worker_struct *worker)
-{
-	INIT_LIST_HEAD(&worker->head);
-	spin_lock_init(&worker->lock);
+#define SET_THPOOL_BUFFER_FLAGS(uname, lname)				\
+static inline void SetThpoolBuffer##uname(struct thpool_buffer *p)	\
+{									\
+	set_bit(THPOOL_BUFFER_##lname, &p->flags);			\
 }
 
-static inline void
-__init_worker_structs(struct mem_worker_struct *workers, unsigned nr_workers)
-{
-	struct mem_worker_struct *curr = workers;
-	unsigned nr_remaining = nr_workers;
-
-	while (nr_remaining) {
-		__init_mem_worker_struct(curr);
-		curr->num_worker = nr_workers - nr_remaining;
-		curr++;
-		nr_remaining--;
-	}
+#define __SET_THPOOL_BUFFER_FLAGS(uname, lname)				\
+static inline void __SetThpoolBuffer##uname(struct thpool_buffer *p)	\
+{									\
+	__set_bit(THPOOL_BUFFER_##lname, &p->flags);			\
 }
 
-static inline struct mem_worker_struct *
-next_generic_worker(struct mem_worker_struct *curr_generic_worker)
-{
-	struct mem_worker_struct *next;
-
-	BUG_ON(curr_generic_worker->num_worker >= NR_GENERIC_WORKERS);
-	
-	if (curr_generic_worker->num_worker < NR_GENERIC_WORKERS - 1)
-		next = curr_generic_worker + 1;
-	else
-		next = curr_generic_worker - (NR_GENERIC_WORKERS - 1);
-	
-	return next;
+#define CLEAR_THPOOL_BUFFER_FLAGS(uname, lname)				\
+static inline void ClearThpoolBuffer##uname(struct thpool_buffer *p)	\
+{									\
+	clear_bit(THPOOL_BUFFER_##lname, &p->flags);			\
 }
 
-int generic_worker_func(void *passed);
-int io_worker_func(void *passed);
-#endif /* CONFIG_MEM_THREAD_POOL */
+#define __CLEAR_THPOOL_BUFFER_FLAGS(uname, lname)			\
+static inline void __ClearThpoolBuffer##uname(struct thpool_buffer *p)	\
+{									\
+	__clear_bit(THPOOL_BUFFER_##lname, &p->flags);			\
+}
+
+#define THPOOL_BUFFER_FLAGS(uname, lname)				\
+	TEST_THPOOL_BUFFER_FLAGS(uname, lname)				\
+	SET_THPOOL_BUFFER_FLAGS(uname, lname)				\
+	CLEAR_THPOOL_BUFFER_FLAGS(uname, lname)				\
+	__SET_THPOOL_BUFFER_FLAGS(uname, lname)				\
+	__CLEAR_THPOOL_BUFFER_FLAGS(uname, lname)
+
+THPOOL_BUFFER_FLAGS(Used, used)
+
+static inline void *thpool_buffer_rx(struct thpool_buffer *tb)
+{
+	return tb->rx;
+}
+
+static inline void *thpool_buffer_tx(struct thpool_buffer *tb)
+{
+	return tb->tx;
+}
+
+void handle_bad_request(struct common_header *hdr, u64 desc);
+void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr);
 
 #endif /* _MEM_THREAD_POOL_H_ */

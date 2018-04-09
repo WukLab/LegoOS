@@ -8,6 +8,22 @@ config COMP_MEMORY
 	  controller of Lego OS.
 
 if COMP_MEMORY
+
+config MEM_PREFETCH
+	bool "Use Prefetch for handle file backed page fault"
+	default n
+	help
+	  Enable to prefetch pages from storage for page fault
+
+config THPOOL_NR_WORKERS
+	int "Thread poll number of workers"
+	range 1 16
+	default 4
+	help
+	  Determines how many workers threads memory manager has.
+	  Each worker thread is pinned a CPU core. So, it should
+	  be smaller than number of cores.
+
 menu "Memory DEBUG Options"
 config DEBUG_MEMORY_CORE
 	bool "Debug core.c"
@@ -167,36 +183,17 @@ config DEBUG_VM_RB
 
 	  If unsure, say N.
 
+config DEBUG_THPOOL
+	bool "Debug thread pool"
+	default n
+	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
+	help
+	  Enable to debug thread pool.
+
+	  If unsure, say N.
+
 endmenu # Memory DEBUG Options
-
-config MEM_PREFETCH
-	bool "Use Prefetch for handle file backed page fault"
-	default n
-	help
-	  Enable to prefetch pages from storage for page fault
-
-config MEM_THREAD_POOL
-	bool "Use thread pool handle incoming requests"
-	default n
-	help
-	  Enable to allow mem using thread pool handling requests
-
-if MEM_THREAD_POOL
-
-config NR_GENERIC_WORKERS
-	int "Number of generic worker threads in thread pool"
-	default 1
-	help
-	  Number of worker threads handle pcache_misses, and non-IO syscalls
-
-config NR_IO_WORKERS
-	int "Number of IO worker threads handle IO syscalls"
-	default 1
-	help
-	  Number of worker threads IO syscalls
-	  
-
-endif # if MEM_THREAD_POOL
 
 endif # if COMP_MEMORY
 

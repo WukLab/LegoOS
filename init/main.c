@@ -266,8 +266,13 @@ asmlinkage void __init start_kernel(void)
 
 	futex_init();
 
-	/* Processor need large contiguous memory */
+	/*
+	 * Processor and memory manager both need
+	 * large chunk of contiguous physical memory.
+	 * Do this prior buddy is up.
+	 */
 	processor_manager_early_init();
+	memory_manager_early_init();
 
 	/*
 	 * JUST A NOTE:

@@ -8,17 +8,21 @@
  */
 
 #include <lego/slab.h>
+#include <lego/delay.h>
 #include <lego/kernel.h>
+#include <lego/printk.h>
 #include <lego/kthread.h>
+#include <lego/memblock.h>
 #include <lego/fit_ibapi.h>
+#include <lego/completion.h>
 #include <lego/comp_storage.h>
 
 #include <memory/vm.h>
 #include <memory/pid.h>
 #include <memory/task.h>
-#include <memory/thread_pool.h>
 #include <memory/loader.h>
 #include <memory/distvm.h>
+#include <memory/thread_pool.h>
 
 #ifdef CONFIG_DEBUG_MEMORY_CORE
 #define mm_debug(fmt, ...)	\
@@ -26,97 +30,6 @@
 #else
 static inline void mm_debug(const char *fmt, ...) { }
 #endif
-
-#ifndef CONFIG_FIT
-static void local_qemu_test(void)
-{
-	struct common_header hdr;
-	struct p2m_fork_struct fork;
-	struct p2m_execve_struct *execve;
-	struct p2m_pcache_miss_struct miss;
-	struct lego_task_struct *tsk;
-	const char *str;
-	unsigned int nid, pid;
-	unsigned long pages[3];
-	struct p2m_brk_struct brk;
-	struct p2m_mmap_struct mmap;
-	struct p2m_munmap_struct munmap;
-
-	nid = 88;
-	pid = 6666;
-
-	hdr.src_nid = nid;
-
-/* Test Fork */
-	fork.pid = pid;
-	strcpy(fork.comm, "hotpot");
-	handle_p2m_fork(&fork, 0, &hdr);
-	tsk = find_lego_task_by_pid(nid, pid);
-	BUG_ON(!tsk);
-	pr_info("%u:%u/%s\n", tsk->node, tsk->pid, tsk->comm);
-
-/* Test EXECVE */
-	execve = kmalloc(4096, GFP_KERNEL);
-	BUG_ON(!execve);
-	execve->pid = pid;
-	strcpy(execve->filename, "/bin/getpid");
-	execve->argc = 3;
-	execve->envc = 2;
-	str = "/bin/getpid\0argc2\0argc3\0envp1\0envp2";
-	memcpy(&execve->array, str, 40);
-	handle_p2m_execve(execve, 0, &hdr);
-	dump_lego_mm(tsk->mm);
-	dump_all_vmas_simple(tsk->mm);
-
-/* Test LLC miss */
-	miss.pid = pid;
-	miss.flags = FAULT_FLAG_WRITE;
-	miss.missing_vaddr = 0x400000ULL;
-	handle_p2m_pcache_miss(&miss, 0, &hdr);
-
-/* last page of stack, see argc etc info */
-	get_user_pages(tsk, 0x7fffffffe000, 1, 0, pages, NULL);
-	print_hex_dump_bytes("to_user: ", DUMP_PREFIX_ADDRESS,
-		(void *)pages[0] + 3072, 1024);
-
-/* Test brk */
-	pr_info("test brk..\n");
-	brk.pid = pid;
-	brk.brk = 0x800000ULL;
-	handle_p2m_brk(&brk, 0, &hdr);
-	dump_lego_mm(tsk->mm);
-	dump_all_vmas_simple(tsk->mm);
-	brk.brk = 0x700000ULL;
-	handle_p2m_brk(&brk, 0, &hdr);
-	dump_lego_mm(tsk->mm);
-	dump_all_vmas_simple(tsk->mm);
-
-/* mmap */
-	pr_info("mmap..\n");
-	mmap.pid = pid;
-	mmap.addr = 0;
-	mmap.len = PAGE_SIZE * 0x10;
-	mmap.prot = PROT_READ | PROT_WRITE;
-	mmap.flags = MAP_ANONYMOUS | MAP_PRIVATE;
-	mmap.pgoff = 0;
-	handle_p2m_mmap(&mmap, 0, &hdr);
-	dump_all_vmas_simple(tsk->mm);
-
-/* munmap */
-	pr_info("munmap..\n");
-	munmap.pid = pid;
-	munmap.addr = 0x7ffff7ff0000;
-	munmap.len = PAGE_SIZE * 0x5;
-	handle_p2m_munmap(&munmap, 9, &hdr);
-	dump_all_vmas_simple(tsk->mm);
-}
-#endif
-
-#ifdef CONFIG_FIT
-
-/*
- * Memory manager is only meaningful when FIT is configured.
- */
 
 void handle_bad_request(struct common_header *hdr, u64 desc)
 {
@@ -137,17 +50,100 @@ void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
 	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
 }
 
-#ifndef CONFIG_MEM_THREAD_POOL
-static int mc_dispatcher(void *passed)
+static int TW_HEAD __cacheline_aligned;
+static struct thpool_worker thpool_worker_map[NR_THPOOL_WORKERS];
+static DEFINE_COMPLETION(thpool_init_completion);
+
+/*
+ * Pre-allocated thpool buffer
+ * TB_HEAD points the current available buffer
+ */
+static int TB_HEAD __cacheline_aligned;
+static struct thpool_buffer *thpool_buffer_map __read_mostly;
+
+static inline int thpool_worker_id(struct thpool_worker *worker)
 {
-	struct info_struct *info = (struct info_struct *)passed;
+	return worker - thpool_worker_map;
+}
+
+static inline void
+enqueue_tail_thpool_worker(struct thpool_worker *worker, struct thpool_buffer *buffer)
+{
+	spin_lock(&worker->lock);
+	list_add_tail(&buffer->next, &worker->work_head);
+	/*
+	 * This is not necessary but will do no harm.
+	 * Since we are running on x86 TSO.
+	 *
+	 * We want to make sure the update of above list
+	 * fields can be _seen_ by others before the counter
+	 * is seen by others. Because the worker thread check
+	 * the counter first, then check/dequeue list.
+	 */
+	smp_wmb();
+	inc_queued_thpool_worker(worker);
+	spin_unlock(&worker->lock);
+}
+
+static inline struct thpool_buffer *
+__dequeue_head_thpool_worker(struct thpool_worker *worker)
+{
+	struct thpool_buffer *buffer;
+
+	buffer = list_entry(worker->work_head.next, struct thpool_buffer, next);
+	list_del(&buffer->next);
+	dec_queued_thpool_worker(worker);
+
+	return buffer;
+}
+
+static inline struct thpool_buffer *
+alloc_thpool_buffer(void)
+{
+	struct thpool_buffer *tb;
+	int idx;
+
+	idx = TB_HEAD % NR_THPOOL_BUFFER;
+	tb = thpool_buffer_map + idx;
+	TB_HEAD++;
+
+	/*
+	 * Buffer allocation is a simple ring.
+	 * If the warning is triggered, it basically means:
+	 * - buffer is not big enough
+	 * - handler are too slow
+	 */
+	WARN_ON(ThpoolBufferUsed(tb));
+
+	__SetThpoolBufferUsed(tb);
+	return tb;
+}
+
+/*
+ * Choose a worker based on request types
+ */
+static inline struct thpool_worker *
+select_thpool_worker(struct thpool_buffer *r)
+{
+	struct thpool_worker *tw;
+	int idx;
+
+	idx = TW_HEAD % NR_THPOOL_WORKERS;
+	tw = thpool_worker_map + idx;
+	TW_HEAD++;
+	return tw;
+}
+
+static void __thpool_worker(struct thpool_worker *worker,
+			    struct thpool_buffer *buffer)
+{
 	unsigned long desc;
 	void *msg;
 	void *payload;
 	struct common_header *hdr;
 
-	desc = info->desc;
-	msg = info->msg;
+	desc = buffer->desc;
+	msg = buffer->rx;
 	hdr = to_common_header(msg);
 	payload = to_payload(msg);
 
@@ -255,171 +251,151 @@ static int mc_dispatcher(void *passed)
 	default:
 		handle_bad_request(hdr, desc);
 	}
-
-	/* Our responsibility to free it */
-	return 0;
 }
-#else
-static int mc_dispatcher(void *passed, struct mem_worker_struct *curr_generic_worker,
-			struct mem_worker_struct *io_worker)
+
+/*
+ * The worker thread.
+ * We do what master told us to do.
+ */
+static int thpool_worker_func(void *_worker)
 {
-	struct info_struct *info = (struct info_struct *)passed;
-	struct common_header *hdr;
+	struct thpool_worker *worker = _worker;
+	struct thpool_buffer *buffer;
 
-	hdr = to_common_header(info->msg);
-
-	/*
-	 * if IO-request, enqueue in_worker
-	 * otherwise, enqueue generic_worker
-	 */
-	switch (hdr->opcode) {
-	case P2M_READ:
-	case P2M_WRITE:
-		enqueue_thread(io_worker, info);
-		break;
-	default:
-		enqueue_thread(curr_generic_worker, info);
-	}
-
-	return 0;
-}
-#endif /* CONFIG_MEM_THREAD_POOL */
-
-#ifdef CONFIG_DEBUG_MEMORY_CORE
-static unsigned long nr_requests = 0;
-static void req_counting(struct info_struct *info)
-{
-	mm_debug("nr_reqs: %ld desc: %#lx\n", nr_requests++, info->desc);
-}
-#else
-static inline void req_counting(struct info_struct *info) { }
-#endif
-
-/* Memory Manager Daemon */
-#ifndef CONFIG_MEM_THREAD_POOL
-static int mc_manager(void *unused)
-{
-	struct info_struct *info;
-	int port = 0;
-	int retlen;
-
-	pr_info("Memory-component manager is up and running.\n");
-
-	info = kmalloc(sizeof(*info), GFP_KERNEL);
-	if (unlikely(!info)) {
-		WARN_ON(1);
-		do_exit(-1);
-	}
+	pr_info("thpool: CPU%2d %s worker_id: %d UP\n",
+		smp_processor_id(), current->comm, thpool_worker_id(worker));
+	complete(&thpool_init_completion);
 
 	while (1) {
-		/*
-		 * This function is blocking,
-		 * will return until FIT gets a messages:
-		 */
-		memset(info, 0, sizeof(*info));
-		retlen = ibapi_receive_message(port,
-				info->msg, MAX_RXBUF_SIZE,
-				&info->desc);
+		/* Check comments on enqueue */
+		while (!nr_queued_thpool_worker(worker))
+			cpu_relax();
 
-		if (unlikely(retlen >= MAX_RXBUF_SIZE))
-			panic("retlen: %d,maxlen: %lu", retlen, MAX_RXBUF_SIZE);
+		spin_lock(&worker->lock);
+		while (!list_empty(&worker->work_head)) {
+			buffer = __dequeue_head_thpool_worker(worker);
+			spin_unlock(&worker->lock);
 
-		req_counting(info);
-		mc_dispatcher(info);
-	}
+			__thpool_worker(worker, buffer);
+			__ClearThpoolBufferUsed(buffer);
 
-	return 0;
-}
-#else
-static int mc_manager(void *unused)
-{
-	struct info_struct *info, *curr;
-	struct mem_worker_struct *workers, *io_worker, *curr_generic_worker;
-	int port = 0;
-	int retlen;
-	int i;
-
-	pr_info("Memory-component manager is up and running.\n");
-
-	info = kmalloc(MAX_NR_RXBUFS * sizeof(*info), GFP_KERNEL);
-	if (unlikely(!info)) {
-		WARN_ON(1);
-		do_exit(-1);
-	}
-	__init_info(info, MAX_NR_RXBUFS);
-	curr = info;
-
-	workers = kmalloc(NR_WORKERS * sizeof(*workers), GFP_KERNEL);
-	if (unlikely(!workers)) {
-		kfree(info);
-		WARN_ON(1);
-		do_exit(-1);
-	}
-	__init_worker_structs(workers, NR_WORKERS);
-	curr_generic_worker = workers;
-	/*
-	 * the last mem_worker is io_worker
-	 */
-	io_worker = workers + NR_GENERIC_WORKERS;
-
-	/* create workers threads */
-	for (i = 0; i < NR_GENERIC_WORKERS; i++) {
-		kthread_run(generic_worker_func, workers + i, "generic-%d", i);
-	}
-	kthread_run(io_worker_func, io_worker, "io_worker");
-
-	while (1) {
-		/*
-		 * blocked on full rxbuf entries
-		 */
-		while (atomic_read(&curr->used)) {
-			/* trying to find another one */
-			curr = next_info_entry(curr);
+			spin_lock(&worker->lock);
 		}
-
-		__clear_info_msg(curr);
-		/*
-		 * This function is blocking,
-		 * will return until FIT gets a messages:
-		 */
-		retlen = ibapi_receive_message(port,
-				curr->msg, MAX_RXBUF_SIZE,
-				&curr->desc);
-
-		if (unlikely(retlen >= MAX_RXBUF_SIZE))
-			panic("retlen: %d,maxlen: %lu", retlen, MAX_RXBUF_SIZE);
-
-		req_counting(curr);
-		mc_dispatcher(curr, curr_generic_worker, io_worker);
-
-		/* simple round-robin */
-		curr = next_info_entry(curr);
-		curr_generic_worker = next_generic_worker(curr_generic_worker);
+		spin_unlock(&worker->lock);
 	}
-
+	BUG();
 	return 0;
 }
-#endif /* CONFIG_MEM_THREAD_POOL */
 
-#endif /* CONFIG_FIT */
+#define THPOOL_IB_PORT	(0)
+
+/*
+ * The thread pool polling thread. This is the only thread that is
+ * doing ibapi_receive_message. We do not do any handling here.
+ * All requests are offloaded to workers. Good to be a master, huh?
+ */
+static int thpool_polling(void *unused)
+{
+	struct thpool_buffer *buffer;
+	struct thpool_worker *worker;
+	int retlen;
+
+	pr_info("thpool: CPU%2d %s UP\n",
+		smp_processor_id(), current->comm);
+	complete(&thpool_init_completion);
+
+	while (1) {
+		buffer = alloc_thpool_buffer();
+
+		/* Wait until message comes in */
+		retlen = ibapi_receive_message(THPOOL_IB_PORT,
+				buffer->rx, THPOOL_RX_SIZE, &buffer->desc);
+
+		if (retlen >= THPOOL_RX_SIZE)
+			panic("%d %lu", retlen, THPOOL_RX_SIZE);
+
+		worker = select_thpool_worker(buffer);
+		enqueue_tail_thpool_worker(worker, buffer);
+	}
+	BUG();
+	return 0;
+}
+
+/* Create worker and polling threads */
+void __init thpool_init(void)
+{
+	int i;
+	struct task_struct *p;
+	struct thpool_worker *worker;
+
+	TW_HEAD = 0;
+	for (i = 0; i < NR_THPOOL_WORKERS; i++) {
+		worker = &thpool_worker_map[i];
+
+		worker->nr_queued = 0;
+		INIT_LIST_HEAD(&worker->work_head);
+		spin_lock_init(&worker->lock);
+
+		init_completion(&thpool_init_completion);
+
+		p = kthread_run(thpool_worker_func, worker, "thpool-worker%d", i);
+		if (IS_ERR(p))
+			panic("fail to create thpool-workder%d", i);
+
+		wait_for_completion(&thpool_init_completion);
+		worker->task = p;
+	}
+
+	init_completion(&thpool_init_completion);
+	p = kthread_run(thpool_polling, NULL, "thpool-polling");
+	if (IS_ERR(p))
+		panic("Fail to create mc thread");
+	wait_for_completion(&thpool_init_completion);
+}
 
 void __init memory_component_init(void)
 {
-	struct task_struct *ret __maybe_unused;
+#ifndef CONFIG_FIT
+	pr_info("Network is not compiled. Halt.");
+	while (1)
+		hlt();
+#endif
 
 	/* Register exec binary handlers */
 	exec_init();
+	thpool_init();
 
 #ifdef CONFIG_VMA_MEMORY_UNITTEST
 	mem_vma_unittest();
 #endif
+	pr_info("Memory: manager is up and running.\n");
+}
 
-#ifdef CONFIG_FIT
-	ret = kthread_run(mc_manager, NULL, "mc-manager");
-	if (IS_ERR(ret))
-		panic("Fail to create mc thread");
-#else
-	local_qemu_test();
-	pr_warn("require CONFIG_FIT to be set.\n");
-#endif
+/*
+ * Allocate the thread pool buffer array
+ * before buddy allocator is up.
+ */
+void __init memory_manager_early_init(void)
+{
+	u64 size;
+	int i;
+
+	size = NR_THPOOL_BUFFER * sizeof(struct thpool_buffer);
+
+	thpool_buffer_map = memblock_virt_alloc(size, PAGE_SIZE);
+	if (!thpool_buffer_map)
+		panic("Unable to allocate thpool buffer array!");
+
+	TB_HEAD = 0;
+	memset(thpool_buffer_map, 0, size);
+	for (i = 0; i < NR_THPOOL_BUFFER; i++) {
+		struct thpool_buffer *tb;
+
+		tb = thpool_buffer_map + i;
+		INIT_LIST_HEAD(&tb->next);
+	}
+
+	pr_debug("Memory: thpool_buffer [%p - %#Lx] %Lx bytes nr:%d size:%zu\n",
+		thpool_buffer_map, (unsigned long)(thpool_buffer_map) + size, size,
+		NR_THPOOL_BUFFER, sizeof(struct thpool_buffer));
 }

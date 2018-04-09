@@ -11,8 +11,10 @@
 #define _LEGO_COMP_MEMORY_H_
 
 #ifdef CONFIG_COMP_MEMORY
+void __init memory_manager_early_init(void);
 void __init memory_component_init(void);
 #else
+static inline void memory_manager_early_init(void) { }
 static inline void memory_component_init(void) { }
 #endif
 

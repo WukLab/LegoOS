@@ -12,7 +12,6 @@ obj-y += handle_checkpoint.o
 obj-y += file_ops.o
 obj-y += missing_syscalls.o
 obj-y += m2s_read_write.o
-obj-$(CONFIG_MEM_THREAD_POOL) += thread_pool.o
 
 # Pcache
 obj-y += handle_pcache/
