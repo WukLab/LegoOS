@@ -43,6 +43,7 @@ struct thpool_worker {
 	 * updated together, so aggregate them into one
 	 * standalone cache line.
 	 */
+	int			cpu;
 	int			nr_queued;
 	spinlock_t		lock;
 	struct list_head	work_head;
@@ -104,14 +105,24 @@ wip_buffer_thpool_worker(struct thpool_worker *tw)
 static inline int thpool_worker_in_handler(struct thpool_worker *tw) { return 0; }
 static inline void set_in_handler_thpool_worker(struct thpool_worker *tw) { }
 static inline void clear_in_handler_thpool_worker(struct thpool_worker *tw) { }
-static inline int max_queued_thpool_worker(struct thpool_worker *tw)
+static inline int max_queued_thpool_worker(struct thpool_worker *tw) { return 0; }
 static inline void update_max_queued_thpool_worker(struct thpool_worker *tw) { }
 static inline void
 set_wip_buffer_thpool_worker(struct thpool_worker *tw, struct thpool_buffer *tb) { }
 static inline void clear_wip_buffer_thpool_worker(struct thpool_worker *tw) { }
 static inline struct thpool_buffer *
-wip_buffer_thpool_worker(struct thpool_worker *tw) { }
+wip_buffer_thpool_worker(struct thpool_worker *tw) { return NULL; }
 #endif /* CONFIG_DEBUG_THPOOL */
+
+static inline void set_cpu_thpool_worker(struct thpool_worker *tw, int cpu)
+{
+	tw->cpu = cpu;
+}
+
+static inline int cpu_thpool_worker(struct thpool_worker *tw)
+{
+	return tw->cpu;
+}
 
 static inline int nr_queued_thpool_worker(struct thpool_worker *tw)
 {

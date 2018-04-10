@@ -36,6 +36,38 @@ reboot_interrupt(struct pt_regs *regs)
 		hlt();
 }
 
+#ifdef CONFIG_DEBUG_KERNEL
+/*
+ * If debug_kernel option is ON, we save the pt_regs
+ * for some handlers that may want to dump the pt_regs.
+ *
+ * Otherwise, no generic users should use pt_regs.
+ */
+asmlinkage __visible void
+call_function_single_interrupt(struct pt_regs *regs)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
+	smp_debug();
+
+	ack_APIC_irq();
+	generic_smp_call_function_single_interrupt();
+
+	set_irq_regs(old_regs);
+}
+
+asmlinkage __visible void
+call_function_interrupt(struct pt_regs *regs)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
+	smp_debug();
+
+	ack_APIC_irq();
+	generic_smp_call_function_single_interrupt();
+	set_irq_regs(old_regs);
+}
+#else
 asmlinkage __visible void
 call_function_single_interrupt(struct pt_regs *regs)
 {
@@ -53,6 +85,7 @@ call_function_interrupt(struct pt_regs *regs)
 	ack_APIC_irq();
 	generic_smp_call_function_single_interrupt();
 }
+#endif /* CONFIG_DEBUG_KERNEL */
 
 /* Handler for RESCHEDULE_VECTOR */
 asmlinkage __visible void

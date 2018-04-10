@@ -43,6 +43,8 @@ void __init self_hb_init(void);
 static inline void __init self_hb_init(void) { }
 #endif
 
+void cpu_dumpstack(int cpu);
+
 int net_send_reply_timeout(u32 node, u32 opcode,
 			   void *payload, u32 len_payload,
 			   void *retbuf, u32 max_len_retbuf, bool retbuf_is_phys,

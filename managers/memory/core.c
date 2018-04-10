@@ -7,6 +7,7 @@
  * (at your option) any later version.
  */
 
+#include <lego/smp.h>
 #include <lego/slab.h>
 #include <lego/delay.h>
 #include <lego/kernel.h>
@@ -271,6 +272,7 @@ static int thpool_worker_func(void *_worker)
 	pr_info("thpool: CPU%2d %s worker_id: %d UP\n",
 		smp_processor_id(), current->comm, thpool_worker_id(worker));
 	complete(&thpool_init_completion);
+	set_cpu_thpool_worker(worker, smp_processor_id());
 
 	while (1) {
 		/* Check comments on enqueue */
@@ -425,18 +427,22 @@ static inline void report_stucked_worker(int idx, struct thpool_worker *tw)
 	void *rx;
 	struct common_header *hdr;
 	struct thpool_buffer *wip_buffer;
+	int cpu;
 
+	cpu = cpu_thpool_worker(tw);
 	wip_buffer = wip_buffer_thpool_worker(tw);
 	rx = thpool_buffer_rx(wip_buffer);
 	hdr = rx;
 
-	pr_info("hb: worker[%d] stucked\n", idx);
+	pr_info("hb: worker[%d] CPU%2d stucked\n", idx, cpu);
 	pr_info("hb:  common_header [op=%#x src_nid:%d]\n", hdr->opcode, hdr->src_nid);
 
 	if (hdr->opcode == P2M_PCACHE_MISS) {
 		struct p2m_pcache_miss_msg *msg = rx;
+
 		pr_info("hb:  msg [pid=%u,tgid=%u,flags=%#x,vaddr=%#Lx]\n",
 			msg->pid, msg->tgid, msg->flags, msg->missing_vaddr);
+		cpu_dumpstack(cpu);
 	}
 }
 
