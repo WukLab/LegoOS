@@ -106,6 +106,57 @@ static void storage_dispatch(void *msg, uintptr_t desc)
 	return;
 }
 
+#if 0
+static bool in_handler;
+
+static inline void set_in_handler(void)
+{
+	in_handler = true;
+}
+
+static inline void clear_in_handler(void)
+{
+	in_handler = false;
+}
+
+static int storage_self_monitor(void *unused)
+{
+	long interval_sec;
+
+	interval_sec = 2;
+	while (1) {
+		pr_info("%s(): in_handler=%d\n", __func__, in_handler);
+
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		schedule_timeout(interval_sec * HZ);
+	}
+	return 0;
+}
+
+static int init_self_monitor(void)
+{
+	struct task_struct *tsk;
+
+	tsk = kthread_run(storage_self_monitor, NULL, "lego-self-monitor");
+	if (IS_ERR(tsk)) {
+		pr_err("ERROR: Fail to create self monitoring daemon");
+		return PTR_ERR(tsk);
+	}
+	return 0;
+}
+#else
+static inline void set_in_handler(void)
+{
+}
+static inline void clear_in_handler(void)
+{
+}
+static inline int init_self_monitor(void)
+{
+	return 0;
+}
+#endif
+
 static int storage_manager(void *unused)
 {
 	int retlen;
@@ -125,7 +176,9 @@ static int storage_manager(void *unused)
 			break;
 		}
 
+		set_in_handler();
 		storage_dispatch(msg, desc);
+		clear_in_handler();
 	}
 	return 0;	
 }
@@ -133,14 +186,16 @@ static int storage_manager(void *unused)
 static int __init init_storage_server(void)
 {
 	struct task_struct *tsk;
+	int ret;
 
-	tsk = kthread_run(storage_manager, NULL, "lego_storaged");
-	if (IS_ERR(tsk)){
+	tsk = kthread_run(storage_manager, NULL, "lego-storaged");
+	if (IS_ERR(tsk)) {
 		pr_err("ERROR: Fail to create lego_storaged\n");
 		return PTR_ERR(tsk);
 	}
 
-	return 0;
+	ret = init_self_monitor();
+	return ret;
 }
 
 static void __exit stop_storage_server(void) {
