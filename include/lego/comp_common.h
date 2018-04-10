@@ -28,12 +28,19 @@ enum {
 extern int manager_state;
 extern unsigned int LEGO_LOCAL_NID;
 
+void __init manager_init(void);
 void print_pinned_threads(void);
 int pin_current_thread_core(void);
 #ifdef CONFIG_CHECK_PINNED_THREADS
 void check_pinned_status(void);
 #else
 static inline void check_pinned_status(void) { }
+#endif
+
+#ifdef CONFIG_MANAGER_SELF_HEARTBEAT
+void __init self_hb_init(void);
+#else
+static inline void __init self_hb_init(void) { }
 #endif
 
 int net_send_reply_timeout(u32 node, u32 opcode,

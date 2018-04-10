@@ -100,16 +100,6 @@ static void inline setup_nr_cpu_ids(void)
 
 static __initdata DEFINE_COMPLETION(kthreadd_done);
 
-static void dump_cpumasks(void)
-{
-	char buf[64];
-
-	sprintf(buf, "Online CPU: %*pbl\n", nr_cpu_ids, cpu_online_mask);
-	pr_debug("%s", buf);
-	sprintf(buf, "Active CPU: %*pbl\n", nr_cpu_ids, cpu_active_mask);
-	pr_debug("%s", buf);
-}
-
 /*
  * This is our first kernel thread (pid 1),
  */
@@ -156,16 +146,7 @@ static int kernel_init(void *unused)
 #endif
 
 	/* Final step towards a running component.. */
-#ifdef CONFIG_COMP_PROCESSOR
-	processor_manager_init();
-#elif defined(CONFIG_COMP_MEMORY)
-	memory_component_init();
-#endif
-	manager_state = MANAGER_UP;
-
-	/* Print scheduablable CPUs */
-	dump_cpumasks();
-	print_pinned_threads();
+	manager_init();
 
 	while (1) {
 		set_current_state(TASK_INTERRUPTIBLE);

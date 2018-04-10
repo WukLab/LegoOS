@@ -22,6 +22,23 @@ config PCACHE_ASSOCIATIVITY_SHIFT
 endmenu
 
 menu "General Manager Config/Debug Options"
+config MANAGER_SELF_HEARTBEAT
+	bool "Periodic heartbeat printing"
+	default n
+	depends on DEBUG_KERNEL
+	depends on COMP_MEMORY || COMP_PROCESSOR
+	help
+	  Create a daemon thread, which print current
+	  system status periodically. Used to debug.
+
+	  If unsure, say N.
+
+config MANAGER_SELF_HEARTBEAT_INTERVAL_SEC
+	int "Periodic print interval in sec"
+	range 1 60
+	default 2
+	depends on MANAGER_SELF_HEARTBEAT
+
 config DEFAULT_MEM_NODE
 	int "Default memory homenode ID"
 	depends on COMP_PROCESSOR || COMP_MEMORY

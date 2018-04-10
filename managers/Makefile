@@ -12,3 +12,4 @@ obj-y				+= lib/
 
 obj-y				+= common.o
 obj-y				+= pin.o
+obj-$(CONFIG_MANAGER_SELF_HEARTBEAT) += self_hb.o

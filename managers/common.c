@@ -69,3 +69,30 @@ int net_send_reply_timeout(u32 node, u32 opcode,
 	kfree(msg);
 	return ret;
 }
+
+static void dump_cpumasks(void)
+{
+	char buf[64];
+
+	sprintf(buf, "Online CPU: %*pbl\n", nr_cpu_ids, cpu_online_mask);
+	pr_debug("%s", buf);
+	sprintf(buf, "Active CPU: %*pbl\n", nr_cpu_ids, cpu_active_mask);
+	pr_debug("%s", buf);
+}
+
+void __init manager_init(void)
+{
+#ifdef CONFIG_COMP_PROCESSOR
+	processor_manager_init();
+#elif defined(CONFIG_COMP_MEMORY)
+	memory_component_init();
+#endif
+	manager_state = MANAGER_UP;
+
+	/* Create hb thread */
+	self_hb_init();
+
+	/* Print scheduablable CPUs */
+	dump_cpumasks();
+	print_pinned_threads();
+}
