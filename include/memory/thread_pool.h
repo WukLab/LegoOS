@@ -25,23 +25,34 @@
 
 #define NR_THPOOL_WORKERS	CONFIG_THPOOL_NR_WORKERS
 
-/*
- * This structure describes a worker thread.
- * @nr_queued: how many work have been queued
- * @work: the list of work to do
- * @lock: protect list operations
- */
+struct thpool_buffer;
+
+struct tw_padding {
+	char x[0];
+} ____cacheline_aligned;
+#define TW_PADDING(name)	struct tw_padding name
+
+/* This structure describes a worker thread */
 struct thpool_worker {
 	/*
 	 * This counter is updated while the list
 	 * is updated. And they are updated under @lock.
 	 * Thus a simple int will do.
+	 *
+	 * Besides, the top three fields will always be
+	 * updated together, so aggregate them into one
+	 * standalone cache line.
 	 */
 	int			nr_queued;
-	unsigned long		flags;
-	struct list_head	work_head;
 	spinlock_t		lock;
+	struct list_head	work_head;
 	struct task_struct	*task;
+	TW_PADDING(_pad1);
+
+	/* for debug usage */
+	int			max_nr_queued;
+	unsigned long		flags;
+	struct thpool_buffer	*wip_buffer;
 } ____cacheline_aligned;
 
 #ifdef CONFIG_DEBUG_THPOOL
@@ -52,19 +63,54 @@ static inline int thpool_worker_in_handler(struct thpool_worker *tw)
 	return tw->flags & THPOOL_WORKER_INHANDLER;
 }
 
-static inline void set_thpool_worker_in_handler(struct thpool_worker *tw)
+static inline void set_in_handler_thpool_worker(struct thpool_worker *tw)
 {
 	tw->flags |= THPOOL_WORKER_INHANDLER;
 }
 
-static inline void clear_thpool_worker_in_handler(struct thpool_worker *tw)
+static inline void clear_in_handler_thpool_worker(struct thpool_worker *tw)
 {
 	tw->flags &= ~THPOOL_WORKER_INHANDLER;
 }
+
+static inline int max_queued_thpool_worker(struct thpool_worker *tw)
+{
+	return tw->max_nr_queued;
+}
+
+static inline void update_max_queued_thpool_worker(struct thpool_worker *tw)
+{
+	if (tw->nr_queued > tw->max_nr_queued)
+		tw->max_nr_queued = tw->nr_queued;
+}
+
+static inline void
+set_wip_buffer_thpool_worker(struct thpool_worker *tw, struct thpool_buffer *tb)
+{
+	tw->wip_buffer = tb;
+}
+
+static inline void clear_wip_buffer_thpool_worker(struct thpool_worker *tw)
+{
+	tw->wip_buffer = NULL;
+}
+
+static inline struct thpool_buffer *
+wip_buffer_thpool_worker(struct thpool_worker *tw)
+{
+	return tw->wip_buffer;
+}
 #else
 static inline int thpool_worker_in_handler(struct thpool_worker *tw) { return 0; }
-static inline void set_thpool_worker_in_handler(struct thpool_worker *tw) { }
-static inline void clear_thpool_worker_in_handler(struct thpool_worker *tw) { }
+static inline void set_in_handler_thpool_worker(struct thpool_worker *tw) { }
+static inline void clear_in_handler_thpool_worker(struct thpool_worker *tw) { }
+static inline int max_queued_thpool_worker(struct thpool_worker *tw)
+static inline void update_max_queued_thpool_worker(struct thpool_worker *tw) { }
+static inline void
+set_wip_buffer_thpool_worker(struct thpool_worker *tw, struct thpool_buffer *tb) { }
+static inline void clear_wip_buffer_thpool_worker(struct thpool_worker *tw) { }
+static inline struct thpool_buffer *
+wip_buffer_thpool_worker(struct thpool_worker *tw) { }
 #endif /* CONFIG_DEBUG_THPOOL */
 
 static inline int nr_queued_thpool_worker(struct thpool_worker *tw)
@@ -82,10 +128,10 @@ static inline void dec_queued_thpool_worker(struct thpool_worker *tw)
 	tw->nr_queued--;
 }
 
-struct thpool_padding {
+struct tb_padding {
 	char x[0];
 } __aligned(PAGE_SIZE);
-#define THPOOL_PADDING(name)	struct thpool_padding name
+#define THPOOL_PADDING(name)	struct tb_padding name
 
 struct thpool_buffer {
 	unsigned long		desc;

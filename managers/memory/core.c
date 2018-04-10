@@ -11,6 +11,7 @@
 #include <lego/delay.h>
 #include <lego/kernel.h>
 #include <lego/printk.h>
+#include <lego/jiffies.h>
 #include <lego/kthread.h>
 #include <lego/memblock.h>
 #include <lego/fit_ibapi.h>
@@ -66,6 +67,10 @@ static inline int thpool_worker_id(struct thpool_worker *worker)
 	return worker - thpool_worker_map;
 }
 
+static inline int thpool_buffer_ix(struct thpool_buffer *buffer)
+{
+	return buffer - thpool_buffer_map;
+}
 static inline void
 enqueue_tail_thpool_worker(struct thpool_worker *worker, struct thpool_buffer *buffer)
 {
@@ -82,6 +87,7 @@ enqueue_tail_thpool_worker(struct thpool_worker *worker, struct thpool_buffer *b
 	 */
 	smp_wmb();
 	inc_queued_thpool_worker(worker);
+	update_max_queued_thpool_worker(worker);
 	spin_unlock(&worker->lock);
 }
 
@@ -276,9 +282,11 @@ static int thpool_worker_func(void *_worker)
 			buffer = __dequeue_head_thpool_worker(worker);
 			spin_unlock(&worker->lock);
 
-			set_thpool_worker_in_handler(worker);
+			set_in_handler_thpool_worker(worker);
+			set_wip_buffer_thpool_worker(worker, buffer);
 			__thpool_worker(worker, buffer);
-			clear_thpool_worker_in_handler(worker);
+			clear_wip_buffer_thpool_worker(worker);
+			clear_in_handler_thpool_worker(worker);
 
 			__ClearThpoolBufferUsed(buffer);
 
@@ -336,6 +344,8 @@ void __init thpool_init(void)
 		worker = &thpool_worker_map[i];
 
 		worker->nr_queued = 0;
+		worker->max_nr_queued = 0;
+		worker->flags = 0;
 		INIT_LIST_HEAD(&worker->work_head);
 		spin_lock_init(&worker->lock);
 
@@ -401,4 +411,65 @@ void __init memory_manager_early_init(void)
 	pr_debug("Memory: thpool_buffer [%p - %#Lx] %Lx bytes nr:%d size:%zu\n",
 		thpool_buffer_map, (unsigned long)(thpool_buffer_map) + size, size,
 		NR_THPOOL_BUFFER, sizeof(struct thpool_buffer));
+}
+
+struct hb_cached {
+	struct thpool_buffer *wip_buffer;
+	unsigned long last_updated_jiffies;
+};
+
+static struct hb_cached hb_cached_data[NR_THPOOL_WORKERS];
+
+static inline void report_stucked_worker(int idx, struct thpool_worker *tw)
+{
+	void *rx;
+	struct common_header *hdr;
+	struct thpool_buffer *wip_buffer;
+
+	wip_buffer = wip_buffer_thpool_worker(tw);
+	rx = thpool_buffer_rx(wip_buffer);
+	hdr = rx;
+
+	pr_info("hb: worker[%d] stucked\n", idx);
+	pr_info("hb:  common_header [op=%#x src_nid:%d]\n", hdr->opcode, hdr->src_nid);
+
+	if (hdr->opcode == P2M_PCACHE_MISS) {
+		struct p2m_pcache_miss_msg *msg = rx;
+		pr_info("hb:  msg [pid=%u,tgid=%u,flags=%#x,vaddr=%#Lx]\n",
+			msg->pid, msg->tgid, msg->flags, msg->missing_vaddr);
+	}
+}
+
+static inline void ht_check_worker(int i, struct thpool_worker *tw, struct hb_cached *cached)
+{
+	if (!max_queued_thpool_worker(tw)) {
+		cached->wip_buffer = NULL;
+		cached->last_updated_jiffies = jiffies;
+		return;
+	}
+
+	if (wip_buffer_thpool_worker(tw) != cached->wip_buffer) {
+		cached->wip_buffer = wip_buffer_thpool_worker(tw);
+		cached->last_updated_jiffies = jiffies;
+	} else {
+		if ((jiffies - cached->last_updated_jiffies) < 20 * HZ)
+			return;
+
+		report_stucked_worker(i, tw);
+	}
+}
+
+void hb_print(void)
+{
+	int i;
+	struct thpool_worker *tw;
+
+	for (i = 0; i < NR_THPOOL_WORKERS; i++) {
+		tw = thpool_worker_map + i;
+		pr_info("hb: worker[%d] max_nr_queued=%d nr_queued=%d in_handler=%s\n",
+			i, max_queued_thpool_worker(tw), tw->nr_queued,
+			thpool_worker_in_handler(tw) ? "yes" : "no");
+
+		ht_check_worker(i, tw, &hb_cached_data[i]);
+	}
 }

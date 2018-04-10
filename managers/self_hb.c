@@ -20,10 +20,7 @@
 #include <lego/jiffies.h>
 #include <processor/processor.h>
 
-static void hb_print(void)
-{
-
-}
+extern void hb_print(void);
 
 static long hb_interval_sec = CONFIG_MANAGER_SELF_HEARTBEAT_INTERVAL_SEC;
 

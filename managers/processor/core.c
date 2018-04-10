@@ -154,3 +154,8 @@ SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
 	return -ENOSYS;
 }
 #endif
+
+void hb_print(void)
+{
+
+}
