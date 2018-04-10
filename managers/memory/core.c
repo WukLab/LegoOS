@@ -24,11 +24,11 @@
 #include <memory/distvm.h>
 #include <memory/thread_pool.h>
 
-#ifdef CONFIG_DEBUG_MEMORY_CORE
-#define mm_debug(fmt, ...)	\
+#ifdef CONFIG_DEBUG_THPOOL_PRINT
+#define thpool_debug(fmt, ...)	\
 	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
 #else
-static inline void mm_debug(const char *fmt, ...) { }
+static inline void thpool_debug(const char *fmt, ...) { }
 #endif
 
 void handle_bad_request(struct common_header *hdr, u64 desc)
@@ -50,8 +50,8 @@ void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
 	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
 }
 
+struct thpool_worker thpool_worker_map[NR_THPOOL_WORKERS];
 static int TW_HEAD __cacheline_aligned;
-static struct thpool_worker thpool_worker_map[NR_THPOOL_WORKERS];
 static DEFINE_COMPLETION(thpool_init_completion);
 
 /*
@@ -276,7 +276,10 @@ static int thpool_worker_func(void *_worker)
 			buffer = __dequeue_head_thpool_worker(worker);
 			spin_unlock(&worker->lock);
 
+			set_thpool_worker_in_handler(worker);
 			__thpool_worker(worker, buffer);
+			clear_thpool_worker_in_handler(worker);
+
 			__ClearThpoolBufferUsed(buffer);
 
 			spin_lock(&worker->lock);

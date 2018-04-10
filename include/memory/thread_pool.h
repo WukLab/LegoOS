@@ -38,10 +38,34 @@ struct thpool_worker {
 	 * Thus a simple int will do.
 	 */
 	int			nr_queued;
+	unsigned long		flags;
 	struct list_head	work_head;
 	spinlock_t		lock;
 	struct task_struct	*task;
 } ____cacheline_aligned;
+
+#ifdef CONFIG_DEBUG_THPOOL
+#define THPOOL_WORKER_INHANDLER		0x1UL
+
+static inline int thpool_worker_in_handler(struct thpool_worker *tw)
+{
+	return tw->flags & THPOOL_WORKER_INHANDLER;
+}
+
+static inline void set_thpool_worker_in_handler(struct thpool_worker *tw)
+{
+	tw->flags |= THPOOL_WORKER_INHANDLER;
+}
+
+static inline void clear_thpool_worker_in_handler(struct thpool_worker *tw)
+{
+	tw->flags &= ~THPOOL_WORKER_INHANDLER;
+}
+#else
+static inline int thpool_worker_in_handler(struct thpool_worker *tw) { return 0; }
+static inline void set_thpool_worker_in_handler(struct thpool_worker *tw) { }
+static inline void clear_thpool_worker_in_handler(struct thpool_worker *tw) { }
+#endif /* CONFIG_DEBUG_THPOOL */
 
 static inline int nr_queued_thpool_worker(struct thpool_worker *tw)
 {

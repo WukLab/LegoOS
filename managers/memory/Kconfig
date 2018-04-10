@@ -25,17 +25,6 @@ config THPOOL_NR_WORKERS
 	  be smaller than number of cores.
 
 menu "Memory DEBUG Options"
-config DEBUG_MEMORY_CORE
-	bool "Debug core.c"
-	default n
-	depends on COMP_MEMORY
-	depends on DEBUG_KERNEL
-	help
-	  Enable if you want to debug memory/core.c. Basically, to hava
-	  a detailed log about imcoming requests.
-
-	  If unsure, say N.
-
 config DEBUG_HANDLE_PCACHE
 	bool "Debug pcache"
 	default n
@@ -184,12 +173,24 @@ config DEBUG_VM_RB
 	  If unsure, say N.
 
 config DEBUG_THPOOL
-	bool "Debug thread pool"
+	bool "Debug thread pool internal"
 	default n
 	depends on COMP_MEMORY
 	depends on DEBUG_KERNEL
 	help
-	  Enable to debug thread pool.
+	  Enable to add more runtime checking and bookkeeping.
+	  This will add extra overhead. Useful while developing.
+
+	  If unsure, say N.
+
+config DEBUG_THPOOL_PRINT
+	bool "print thread pool activities"
+	default n
+	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
+	help
+	  Enable to print thpool internal activities.
+	  This option only control output message.
 
 	  If unsure, say N.
 
