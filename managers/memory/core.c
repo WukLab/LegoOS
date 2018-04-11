@@ -486,6 +486,8 @@ static inline void ht_check_worker(int i, struct thpool_worker *tw, struct hb_ca
 		if ((jiffies - cached->last_updated_jiffies) < 20 * HZ)
 			return;
 
+		if (!wip_buffer_thpool_worker(tw))
+			return;
 		report_stucked_worker(i, tw);
 	}
 }
