@@ -23,7 +23,7 @@ choice
 	prompt "TTY Port"
 	depends on TTY_SERIAL
 	default TTY_SERIAL_TTYS1
-	default TTY_SERIAL_BAUD9600
+	default TTY_SERIAL_BAUD115200
 
 config TTY_SERIAL_TTYS0
 	bool "ttyS0"
