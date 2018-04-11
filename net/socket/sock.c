@@ -125,7 +125,7 @@ int get_FIT_node_id_from_saddr(u32 saddr)
 {	
 	struct vnode_struct *vnode;
 	vnode = ip_find_vnode(saddr);
-	return vnode.nid;
+	return vnode->p_nid;
 }
 
 u32 get_saddr_from_fit_node_id(int node_id)
@@ -133,7 +133,7 @@ u32 get_saddr_from_fit_node_id(int node_id)
 	/* at this stage, node_id and vid is the same */
 	struct vnode_struct *vnode;
 	vnode = vid_find_vnode(node_id);
-	return (u32)vnode.ip;
+	return (u32)vnode->ip;
 }
 #else
 int get_FIT_node_id_from_saddr(u32 saddr)

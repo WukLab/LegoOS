@@ -33,10 +33,11 @@
  */
 #define IP_ADDRESS_BASE			0x0A000000
 #define VNODE_MAP_ORDER			8
-#define PROCESSOR_NODE_COUNT 		1
+#define PROCESSOR_NODE_COUNT 		2
 const static int pnode_nids[PROCESSOR_NODE_COUNT] =
 {
 	0,
+	1,
 };
 
 /* 
@@ -55,7 +56,7 @@ const static int pnode_nids[PROCESSOR_NODE_COUNT] =
 #define MEMORY_NODE_COUNT 		1
 const static int mnode_nids[MEMORY_NODE_COUNT] =
 {
-	1,
+	2,
 };
 
 #endif /* _LEGO_MONITOR_CONFIG_H */
