@@ -108,6 +108,16 @@ static inline int pte_special(pte_t pte)
 	return pte_flags(pte) & _PAGE_SPECIAL;
 }
 
+static inline int pte_zerofill(pte_t pte)
+{
+	return pte_flags(pte) & _PAGE_ZEROFILL;
+}
+
+static inline int pte_zerofill_locked(pte_t pte)
+{
+	return pte_flags(pte) & _PAGE_ZEROFILL_LOCKED;
+}
+
 static inline unsigned long pte_pfn(pte_t pte)
 {
 	return (pte_val(pte) & PTE_PFN_MASK) >> PAGE_SHIFT;
@@ -266,6 +276,16 @@ static inline pte_t pte_clrglobal(pte_t pte)
 static inline pte_t pte_mkspecial(pte_t pte)
 {
 	return pte_set_flags(pte, _PAGE_SPECIAL);
+}
+
+static inline pte_t pte_mkzerofill(pte_t pte)
+{
+	return pte_set_flags(pte, _PAGE_ZEROFILL);
+}
+
+static inline pte_t pte_mkzerofill_locked(pte_t pte)
+{
+	return pte_set_flags(pte, _PAGE_ZEROFILL_LOCKED);
 }
 
 static inline pmd_t pmd_set_flags(pmd_t pmd, pmdval_t set)
@@ -603,6 +623,26 @@ static inline int pmd_none_or_clear_bad(pmd_t *pmd)
 		return 1;
 	}
 	return 0;
+}
+
+static inline void ptep_clear_zerofill_locked(pte_t *ptep)
+{
+	clear_bit(_PAGE_BIT_ZEROFILL_LOCKED, (unsigned long *)&ptep->pte);
+}
+
+static inline void ptep_clear_zerofill(pte_t *ptep)
+{
+	clear_bit(_PAGE_BIT_ZEROFILL, (unsigned long *)&ptep->pte);
+}
+
+static inline void ptep_set_zerofill_locked(pte_t *ptep)
+{
+	set_bit(_PAGE_BIT_ZEROFILL_LOCKED, (unsigned long *)&ptep->pte);
+}
+
+static inline void ptep_set_zerofill(pte_t *ptep)
+{
+	set_bit(_PAGE_BIT_ZEROFILL, (unsigned long *)&ptep->pte);
 }
 
 static inline void ptep_set_wrprotect(pte_t *ptep)

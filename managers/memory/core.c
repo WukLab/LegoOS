@@ -172,6 +172,9 @@ static void __thpool_worker(struct thpool_worker *worker,
 	case P2M_PCACHE_FLUSH:
 		handle_p2m_flush_one(msg, desc);
 		break;
+	case P2M_PCACHE_ZEROFILL:
+		handle_p2m_zerofill(msg, desc);
+		break;
 
 /* clflush REPLICA */
 	case P2M_PCACHE_REPLICA:

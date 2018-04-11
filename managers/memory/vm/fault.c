@@ -228,9 +228,10 @@ int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 
 	/*
 	 * Return the kernel virtual address of the new
-	 * allocated page:
+	 * allocated page. Only if called asked.
 	 */
-	*ret_va = pte_val(*pte) & PTE_VFN_MASK;
+	if (ret_va)
+		*ret_va = pte_val(*pte) & PTE_VFN_MASK;
 
 	return 0;
 }

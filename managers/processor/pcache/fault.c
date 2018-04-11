@@ -38,6 +38,7 @@
 
 #include <processor/pcache.h>
 #include <processor/processor.h>
+#include <processor/zerofill.h>
 #include <processor/distvm.h>
 
 #ifdef CONFIG_DEBUG_PCACHE_FILL
@@ -79,11 +80,12 @@ static void print_bad_pte(struct mm_struct *mm, unsigned long addr, pte_t pte,
  * But the specific fill_func may differ:
  *   1) fill from remote memory
  *   2) fill from victim cache
+ *   3) zerofill, async req to remote memory.
  *
  * Return 0 on success, otherwise VM_FAULT_XXX on failures.
  */
 int common_do_fill_page(struct mm_struct *mm, unsigned long address,
-			pte_t *page_table, pmd_t *pmd,
+			pte_t *page_table, pte_t orig_pte, pmd_t *pmd,
 			unsigned long flags, fill_func_t fill_func, void *arg)
 {
 	struct pcache_meta *pcm;
@@ -98,9 +100,12 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 	/* TODO: Need right permission bits */
 	entry = pcache_mk_pte(pcm, PAGE_SHARED_EXEC);
 
-	/* Concurrent faults are serialized by this lock */
+	/*
+	 * Concurrent faults are serialized by this lock
+	 * Once acquired lock, check if orig_pte is still the way we remembered.
+	 */
 	page_table = pte_offset_lock(mm, pmd, address, &ptl);
-	if (unlikely(!pte_none(*page_table))) {
+	if (unlikely(!pte_same(*page_table, orig_pte))) {
 		ret = 0;
 		goto out;
 	}
@@ -282,11 +287,70 @@ out:
  */
 static inline int
 pcache_do_fill_page(struct mm_struct *mm, unsigned long address,
-		    pte_t *page_table, pmd_t *pmd, unsigned long flags)
+		    pte_t *page_table, pte_t orig_pte, pmd_t *pmd, unsigned long flags)
 {
-	return common_do_fill_page(mm, address, page_table, pmd, flags,
+	return common_do_fill_page(mm, address, page_table, orig_pte, pmd, flags,
 			__pcache_do_fill_page, NULL);
 }
+
+#ifdef CONFIG_PCACHE_ZEROFILL
+DEFINE_PROFILE_POINT(__pcache_zerofill)
+
+static int
+__pcache_do_zerofill_page(unsigned long address, unsigned long flags,
+			  struct pcache_meta *pcm, void *unused)
+{
+	void *pcache_kva;
+	PROFILE_POINT_TIME(__pcache_zerofill)
+
+	profile_point_start(__pcache_zerofill);
+
+	pcache_kva = pcache_meta_to_kva(pcm);
+	memset(pcache_kva, 0, PCACHE_LINE_SIZE);
+
+	/*
+	 * Notify remote memory about this zerofill.
+	 * This is disabled by default. Because it is not
+	 * necessary to notify remote memory.
+	 * Check PCACHE_ZEROFILL_NOTIFY_MEMORY Kconfig.
+	 */
+	submit_zerofill_notify_work(current, address, flags);
+	profile_point_leave(__pcache_zerofill);
+
+	inc_pcache_event(PCACHE_FAULT_FILL_ZEROFILL);
+	return 0;
+}
+
+/*
+ * This function handles Anonymous Zero Fill page.
+ * - Clear the pcache line
+ * - Async send pcache miss request to remote memory
+ */
+static inline int
+pcache_do_zerofill_page(struct mm_struct *mm, unsigned long address,
+		    pte_t *page_table, pte_t orig_pte, pmd_t *pmd, unsigned long flags)
+{
+	if (unlikely(!pte_zerofill(orig_pte))) {
+		dump_pte(page_table, "bad pte");
+		print_bad_pte(mm, address, orig_pte, NULL);
+		return VM_FAULT_SIGBUS;
+	}
+	return common_do_fill_page(mm, address, page_table, orig_pte, pmd, flags,
+			__pcache_do_zerofill_page, NULL);
+}
+#else
+/*
+ * If ZeroFill is not configured, Lego will not fill any extra information into PTE.
+ * Thus anything falls in here will be BUG indeed.
+ */
+static inline int
+pcache_do_zerofill_page(struct mm_struct *mm, unsigned long address,
+		    pte_t *page_table, pte_t orig_pte, pmd_t *pmd, unsigned long flags)
+{
+	BUG();
+	return 0;
+}
+#endif
 
 static inline void cow_pcache(struct pcache_meta *dst_pcm, struct pcache_meta *src_pcm)
 {
@@ -450,7 +514,7 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 
 	entry = *pte;
 	if (likely(!pte_present(entry))) {
-		if (likely(pte_none(entry))) {
+		if (pte_none(entry)) {
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
 			/*
 			 * Check per-set's current eviction list.
@@ -481,12 +545,9 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 			 *
 			 * All of them fall-back and merge into this:
 			 */
-			return pcache_do_fill_page(mm, address, pte, pmd, flags);
+			return pcache_do_fill_page(mm, address, pte, entry, pmd, flags);
 		}
-
-		/* Lego does not fill any extra info into PTE */
-		print_bad_pte(mm, address, entry, NULL);
-		BUG();
+		return pcache_do_zerofill_page(mm, address, pte, entry, pmd, flags);
 	}
 
 	ptl = pte_lockptr(mm, pmd);

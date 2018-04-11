@@ -24,10 +24,10 @@
 #ifndef _LEGO_PROCESSOR_DISTRIBUTED_VM_H_
 #define _LEGO_PROCESSOR_DISTRIBUTED_VM_H_
 
-#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
-
 #include <processor/node.h>
 #include <lego/distvm.h>
+
+#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
 
 #define PROCESSOR_VMR_SIZE 	(VMR_COUNT * sizeof(vmr16))
 

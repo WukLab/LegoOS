@@ -21,6 +21,7 @@
 #include <processor/pgtable.h>
 #include <processor/processor.h>
 #include <processor/distvm.h>
+#include <processor/zerofill.h>
 
 #ifdef CONFIG_DEBUG_MMAP
 #define mmap_debug(fmt, ...)						\
@@ -128,9 +129,17 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 	} else
 		ret_addr = -EIO;
 
+	/*
+	 * If mmap() succeed, we setup additional
+	 * vma array, anon_bitmap, prot_bitmap, and zerofill_bitmap
+	 */
+	if (likely(ret_addr > 0)) {
 #ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
-	map_mnode_from_reply(current->mm, &reply.map);
+		map_mnode_from_reply(current->mm, &reply.map);
 #endif
+		if (flags & MAP_ANONYMOUS)
+			zerofill_set_range(current, ret_addr, len);
+	}
 
 	if (f)
 		put_file(f);
@@ -165,14 +174,13 @@ SYSCALL_DEFINE2(munmap, unsigned long, addr, size_t, len)
 		goto out;
 	}
 
-#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
-	map_mnode_from_reply(current->mm, &retbuf.map);
-#endif
-
 	/* Unmap emulated pgtable */
-	if (likely(retbuf.ret == 0))
+	if (likely(retbuf.ret == 0)) {
 		release_pgtable(current, addr, addr + len);
-	else
+#ifdef CONFIG_DISTRIBUTED_VMA_PROCESSOR
+		map_mnode_from_reply(current->mm, &retbuf.map);
+#endif
+	} else
 		pr_err("munmap() fail: %s\n", ret_to_string(retbuf.ret));
 
 out:

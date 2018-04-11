@@ -37,6 +37,14 @@ static DEFINE_RATELIMIT_STATE(handle_pcache_debug_rs,
 static inline void handle_pcache_debug(const char *fmt, ...) { }
 #endif
 
+#ifdef CONFIG_DEBUG_HANDLE_ZEROFILL
+#define handle_zerofill_debug(fmt, ...)				\
+	pr_debug("%s() cpu%2d " fmt "\n",			\
+		__func__, smp_processor_id(), __VA_ARGS__)
+#else
+static inline void handle_zerofill_debug(const char *fmt, ...) { }
+#endif
+
 /*
  * Processor manager rely on the length of replied
  * message to know if us succeed or failed.
@@ -48,117 +56,112 @@ static void pcache_miss_error(u32 retval, u64 desc,
 	ibapi_reply_message(&retval, 4, desc);
 }
 
-static void bad_area(struct lego_task_struct *p, u64 vaddr, u64 desc)
-{
-	int retval = RET_ESIGSEGV;
-	WARN(1, "src_nid:%u,pid:%u,vaddr:%#Lx\n", p->node, p->pid, vaddr);
-	ibapi_reply_message(&retval, 4, desc);
-}
-
-#ifndef CONFIG_DEBUG_HANDLE_PCACHE
-static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
-				   u64 vaddr, u32 flags, u64 desc)
+/*
+ * A common shared routine to handle all pcache misses
+ * - normal pcache miss
+ * - zerofill request
+ *
+ * Both of them are valid page fault in traditional concept.
+ * We need to establish mapping (e.g. page table) here in memory component.
+ */
+static int common_handle_p2m_miss(struct lego_task_struct *p,
+				  u64 vaddr, u32 flags, u64 desc,
+				  unsigned long *new_page)
 {
 	struct vm_area_struct *vma;
 	struct lego_mm_struct *mm = p->mm;
-	unsigned long new_page;
 	int ret;
 
 	down_read(&mm->mmap_sem);
 
 	vma = find_vma(mm, vaddr);
-	if (unlikely(!vma))
+	if (unlikely(!vma)) {
+		ret = VM_FAULT_SIGSEGV;
 		goto unlock;
+	}
 
 	/* VMAs except stack */
 	if (likely(vma->vm_start <= vaddr))
 		goto good_area;
 
 	/* stack? */
-	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN)))
+	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN))) {
+		ret = VM_FAULT_SIGSEGV;
 		goto unlock;
+	}
 
-	if (unlikely(expand_stack(vma, vaddr)))
+	if (unlikely(expand_stack(vma, vaddr))) {
+		ret = VM_FAULT_SIGSEGV;
 		goto unlock;
+	}
 
 	/*
-	 * Ok, we have a good vm_area for this memory access,
-	 * go for it...
+	 * Okay, now we have a good vma, which means this is a valid
+	 * missing address. Now, calling back to underlying handler
+	 * to establish mapping. The underlying hook can have its
+	 * own choice of mapping: pgtable, segment etc.
 	 */
 good_area:
-	ret = handle_lego_mm_fault(vma, vaddr, flags, &new_page, NULL);
+	ret = handle_lego_mm_fault(vma, vaddr, flags, new_page, NULL);
+unlock:
+	up_read(&mm->mmap_sem);
+	return ret;
+}
+
+static void do_handle_p2m_zerofill_miss(struct lego_task_struct *p,
+					u64 vaddr, u32 flags, u64 desc)
+{
+	int reply;
+	int ret;
+
+	ret = common_handle_p2m_miss(p, vaddr, flags, desc, NULL);
+	if (unlikely(ret & VM_FAULT_ERROR))
+		reply = -EFAULT;
+	else
+		reply = 0;
+	ibapi_reply_message(&reply, sizeof(reply), desc);
+}
+
+#ifndef CONFIG_DEBUG_HANDLE_PCACHE
+static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
+				      u64 vaddr, u32 flags, u64 desc)
+{
+	int ret;
+	unsigned long new_page;
+
+	ret = common_handle_p2m_miss(p, vaddr, flags, desc, &new_page);
 	if (unlikely(ret & VM_FAULT_ERROR)) {
 		if (ret & VM_FAULT_OOM)
 			ret = RET_ENOMEM;
 		else if (ret & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV))
 			ret = RET_ESIGSEGV;
 
-		up_read(&mm->mmap_sem);
 		pcache_miss_error(ret, desc, p, vaddr);
 		return;
 	}
-
-	up_read(&mm->mmap_sem);
-
 	ibapi_reply_message((void *)new_page, PCACHE_LINE_SIZE, desc);
-
-	return;
-
-unlock:
-	up_read(&mm->mmap_sem);
-	bad_area(p, vaddr, desc);
 }
 #else
 static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 				   u64 vaddr, u32 flags, u64 desc)
 {
-	struct vm_area_struct *vma;
-	struct lego_mm_struct *mm = p->mm;
 	struct p2m_pcache_miss_reply_struct *reply;
 	unsigned long new_page;
 	unsigned long mapping_flags = 0;
 	int ret;
 
-	down_read(&mm->mmap_sem);
-
-	vma = find_vma(mm, vaddr);
-	if (unlikely(!vma))
-		goto unlock;
-
-	/* VMAs except stack */
-	if (likely(vma->vm_start <= vaddr))
-		goto good_area;
-
-	/* stack? */
-	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN)))
-		goto unlock;
-
-	if (unlikely(expand_stack(vma, vaddr)))
-		goto unlock;
-
-	/*
-	 * Ok, we have a good vm_area for this memory access,
-	 * go for it...
-	 */
-good_area:
-	ret = handle_lego_mm_fault(vma, vaddr, flags, &new_page, &mapping_flags);
+	ret = common_handle_p2m_miss(p, vaddr, flags, desc, &new_page);
 	if (unlikely(ret & VM_FAULT_ERROR)) {
 		if (ret & VM_FAULT_OOM)
 			ret = RET_ENOMEM;
 		else if (ret & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV))
 			ret = RET_ESIGSEGV;
 
-		up_read(&mm->mmap_sem);
 		pcache_miss_error(ret, desc, p, vaddr);
 		return;
 	}
 
-	up_read(&mm->mmap_sem);
-
 	reply = kmalloc(sizeof(*reply), GFP_KERNEL);
-	if (!reply)
-		goto unlock;
-
 	reply->csum = csum_partial((void *)new_page, PCACHE_LINE_SIZE, 0);
 	reply->mapping_flags = mapping_flags;
 	memcpy(reply->data, (void *)new_page, PCACHE_LINE_SIZE);
@@ -166,12 +169,6 @@ good_area:
 	ibapi_reply_message(reply, sizeof(*reply), desc);
 
 	kfree(reply);
-
-	return;
-
-unlock:
-	up_read(&mm->mmap_sem);
-	bad_area(p, vaddr, desc);
 }
 #endif
 
@@ -212,4 +209,36 @@ int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc)
 	handle_pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
 		src_nid, msg->pid, tgid, flags, vaddr);
 	return 0;
+}
+
+void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc)
+{
+	u32 tgid, flags;
+	u64 vaddr;
+	unsigned int src_nid;
+	struct lego_task_struct *p;
+
+	src_nid = to_common_header(msg)->src_nid;
+	tgid   = msg->tgid;
+	flags  = msg->flags;
+	vaddr  = msg->missing_vaddr;
+
+	handle_zerofill_debug("I nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
+		src_nid, msg->pid, tgid, flags, vaddr);
+
+	p = find_lego_task_by_pid(src_nid, tgid);
+	if (unlikely(!p)) {
+		pcache_miss_error(RET_ESRCH, desc, p, vaddr);
+		return;
+	}
+
+	if (unlikely(fault_in_kernel_space(vaddr))) {
+		pcache_miss_error(RET_EFAULT, desc, p, vaddr);
+		return;
+	}
+
+	do_handle_p2m_zerofill_miss(p, vaddr, flags, desc);
+
+	handle_zerofill_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
+		src_nid, msg->pid, tgid, flags, vaddr);
 }

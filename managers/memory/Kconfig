@@ -73,6 +73,11 @@ config DEBUG_HANDLE_REPLICA
 
 	  If unsure, say N.
 
+config DEBUG_HANDLE_ZEROFILL
+	bool "Debug pcache zerofill"
+	default n
+	depends on COMP_MEMORY
+	depends on DEBUG_KERNEL
 
 config DEBUG_HANDLE_FORK
 	bool "Debug handle_fork.c"

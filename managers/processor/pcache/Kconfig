@@ -2,6 +2,44 @@
 # Pcache Kconfig Options
 #
 
+config PCACHE_ZEROFILL
+	bool "pcache zerofill opt"
+	default y
+	depends on COMP_PROCESSOR
+	help
+         This option will optimize anonymous cache miss.
+         We save extra information in the PTE entry. If a cache line is
+         anonymous and is all-zero, we can do the following locally
+         - Allocate pcache, clear and return.
+
+         If unsure, say Y.
+
+config PCACHE_ZEROFILL_NOTIFY_MEMORY
+	bool "pcache zerofill notify memory"
+	default n
+	depends on COMP_PROCESSOR
+	depends on PCACHE_ZEROFILL
+	help
+	  In addition to PCACHE_ZEROFILL, enable this option will
+	  notify remote memory component about zerofill activities.
+	  
+	  Note!!! It is not necessary to notify remote memory.
+	  Because if the line is evicted, the flush handler will
+	  check if the mapping exist or not. If the mapping does
+	  not exist, the flush handler will establish one, and do
+	  the local copy.
+
+	  Thus we delay the physical memory allocation further than
+	  demand paging, it is delayed until pcache flush time.
+
+	  Besides, by doing zerofill on only _anonymous data_ pages,
+	  we will not affect code pages, which implies we will not
+	  impact the normal code execution flow.
+
+	  In all, avoiding the notification to memory is correct.
+
+	  If unsure, you should say N.
+
 #
 # Eviction Algorithm
 #

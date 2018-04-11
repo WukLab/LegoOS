@@ -682,7 +682,7 @@ victim_fill_pcache(struct mm_struct *mm, unsigned long address,
 		   pte_t *page_table, pmd_t *pmd, unsigned long flags,
 		   struct pcache_victim_meta *victim)
 {
-	return common_do_fill_page(mm, address, page_table, pmd, flags,
+	return common_do_fill_page(mm, address, page_table, *page_table, pmd, flags,
 			__victim_fill_pcache, victim);
 }
 

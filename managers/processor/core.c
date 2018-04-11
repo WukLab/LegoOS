@@ -14,14 +14,12 @@
 #include <lego/kernel.h>
 #include <lego/kthread.h>
 #include <lego/syscalls.h>
+#include <processor/zerofill.h>
 #include <processor/processor.h>
-/* for unit test */
 #include <processor/distvm.h>
-
 #include <monitor/gpm_handler.h>
 
 #include "processor.h"
-
 
 #define MAX_INIT_ARGS	CONFIG_INIT_ENV_ARG_LIMIT
 #define MAX_INIT_ENVS	CONFIG_INIT_ENV_ARG_LIMIT
@@ -114,6 +112,7 @@ void __init processor_manager_init(void)
 {
 	common_header_check();
 	pcache_post_init();
+	pcache_zerofill_notify_init();
 
 #ifndef CONFIG_FIT
 	pr_info("Network is not compiled. Halt.");

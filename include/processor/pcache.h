@@ -629,7 +629,7 @@ int pcache_free_reserved_rmap(struct pcache_meta *pcm);
 typedef int (*fill_func_t)(unsigned long, unsigned long, struct pcache_meta *, void *);
 
 int common_do_fill_page(struct mm_struct *mm, unsigned long address,
-			pte_t *page_table, pmd_t *pmd,
+			pte_t *page_table, pte_t orig_pte, pmd_t *pmd,
 			unsigned long flags, fill_func_t fill_func, void *arg);
 
 #include <processor/pcache_victim.h>

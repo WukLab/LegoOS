@@ -24,6 +24,7 @@
 #include <lego/memblock.h>
 #include <processor/pcache.h>
 #include <processor/pgtable.h>
+#include <processor/zerofill.h>
 
 #include <asm/io.h>
 #include <asm/page.h>
@@ -273,15 +274,6 @@ pcache_copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	struct pcache_meta *pcm;
 
 	/*
-	 * PTE contains position in swap or file?
-	 * Lego does not have any swap now, so skip.
-	 */
-	if (unlikely(!pte_present(pte))) {
-		WARN_ON(1);
-		goto pte_set;
-	}
-
-	/*
 	 * If it's a COW mapping, write protect it both
 	 * in the parent and the child
 	 */
@@ -302,9 +294,8 @@ pcache_copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	 */
 	if (vm_flags & VM_SHARED)
 		pte = pte_mkclean(pte);
-	pte = pte_mkold(pte);
 
-pte_set:
+	pte = pte_mkold(pte);
 	pte_set(dst_pte, pte);
 
 	/*
@@ -357,6 +348,37 @@ pcache_copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	do {
 		if (pte_none(*src_pte))
 			continue;
+
+		if (!pte_present(*src_pte)) {
+#ifdef CONFIG_PCACHE_ZEROFILL
+			/*
+			 * If zerofill is configured, chances are we will
+			 * see PTE entries with ZEROFILL bit set. But we
+			 * only deal with non-present PTE here. Present ones
+			 * need to callback to pcache, which will copy the bit as well.
+			 */
+			pte_t pte;
+
+			pte = ptep_get_and_clear(addr, src_pte);
+			if (unlikely(!pte_zerofill(pte))) {
+				dump_pte(src_pte, "corrupted");
+				WARN_ON_ONCE(1);
+				continue;
+			}
+
+			pte_set(dst_pte, pte);
+			continue;
+#else
+			/*
+			 * Otherwise, we do not have any extra info
+			 * filled within PTE entries. Must be corrupted.
+			 */
+			dump_pte(src_pte, "corrupted");
+			WARN_ON_ONCE(1);
+			continue;
+#endif
+		}
+
 		if (pcache_copy_one_pte(dst_mm, src_mm, dst_pte, src_pte, addr, vm_flags, dst_task)) {
 			ret = -ENOMEM;
 			break;
@@ -508,6 +530,36 @@ retry:
 		if (pte_none(*old_pte))
 			continue;
 
+		if (!pte_present(*old_pte)) {
+#ifdef CONFIG_PCACHE_ZEROFILL
+			/*
+			 * If zerofill is configured, chances are we will
+			 * see PTE entries with ZEROFILL bit set. But we
+			 * only deal with non-present PTE here. Present ones
+			 * need to callback to pcache, which will move the bit as well.
+			 */
+			pte_t pte;
+
+			pte = ptep_get_and_clear(old_addr, old_pte);
+			if (unlikely(!pte_zerofill(pte))) {
+				dump_pte(old_pte, "corrupted");
+				WARN_ON_ONCE(1);
+				continue;
+			}
+
+			pte_set(new_pte, pte);
+			continue;
+#else
+			/*
+			 * Otherwise, we do not have any extra info
+			 * filled within PTE entries. Must be corrupted.
+			 */
+			dump_pte(old_pte, "corrupted");
+			WARN_ON_ONCE(1);
+			continue;
+#endif
+		}
+
 		ret = pcache_move_pte(mm, old_pte, new_pte, old_addr, new_addr, old_ptl);
 		switch (ret) {
 		case 0:
@@ -589,3 +641,114 @@ unsigned long move_page_tables(struct task_struct *tsk,
 
 	return len + old_addr - old_end;	/* how much done */
 }
+
+#ifdef CONFIG_PCACHE_ZEROFILL
+
+#ifdef CONFIG_DEBUG_PCACHE_ZEROFILL
+#define zerofill_debug(fmt, ...)				\
+	pr_debug("%s() cpu%2d " fmt "\n",			\
+		__func__, smp_processor_id(), __VA_ARGS__)
+#else
+static inline void zerofill_debug(const char *fmt, ...) { }
+#endif
+
+static inline unsigned long
+zerofill_set_pte_range(struct mm_struct *mm, pmd_t *pmd,
+		       unsigned long addr, unsigned long end)
+{
+	spinlock_t *ptl;
+	pte_t *ptep;
+
+	ptep = pte_alloc(mm, pmd, addr);
+	ptl = pte_lockptr(mm, pmd);
+
+	spin_lock(ptl);
+	do {
+		ptep_set_zerofill(ptep);
+
+		zerofill_debug(" uvaddr: %#18lx", addr);
+	} while (ptep++, addr += PAGE_SIZE, addr != end);
+	spin_unlock(ptl);
+
+	return addr;
+}
+
+static inline unsigned long
+zerofill_set_pmd_range(struct mm_struct *mm, pud_t *pud,
+		       unsigned long addr, unsigned long end)
+{
+	pmd_t *pmd;
+	unsigned long next;
+
+	pmd = pmd_alloc(mm, pud, addr);
+	if (unlikely(!pmd))
+		return -ENOMEM;
+
+	do {
+		next = pmd_addr_end(addr, end);
+		next = zerofill_set_pte_range(mm, pmd, addr, next);
+		if (unlikely(next == -ENOMEM))
+			return -ENOMEM;
+	} while (pmd++, addr = next, addr != end);
+
+	return addr;
+}
+
+static inline unsigned long
+zerofill_set_pud_range(struct mm_struct *mm, pgd_t *pgd,
+		       unsigned long addr, unsigned long end)
+{
+	pud_t *pud;
+	unsigned long next;
+
+	pud = pud_alloc(mm, pgd, addr);
+	if (unlikely(!pud))
+		return -ENOMEM;
+
+	do {
+		next = pud_addr_end(addr, end);
+		next = zerofill_set_pmd_range(mm, pud, addr, next);
+		if (unlikely(next == -ENOMEM))
+			return -ENOMEM;
+	} while (pud++, addr = next, addr != end);
+
+	return addr;
+}
+
+/*
+ * Set the _PAGE_ZEROFILL bit of all PTE entries in range [start, start+len).
+ * Page table will be allocated even if the pages will not accessed in the future.
+ */
+int zerofill_set_range(struct task_struct *p,
+		       unsigned long __user start, unsigned long len)
+{
+	pgd_t *pgd;
+	unsigned long end, next;
+	struct mm_struct *mm = p->mm;
+
+	end = PAGE_ALIGN(start + len);
+	BUG_ON(start >= end);
+
+	zerofill_debug("[%#lx-%#lx] len=%#lx", start, end, len);
+
+	pgd = pgd_offset(mm, start);
+	do {
+		next = pgd_addr_end(start, end);
+		next = zerofill_set_pud_range(mm, pgd, start, next);
+		if (unlikely(next == -ENOMEM))
+			return -ENOMEM;
+	} while (pgd++, start = next, start != end);
+
+	return 0;
+}
+
+/*
+ * Clear the _PAGE_ZEROFILL bit of all PTE entries in range [start, start+len).
+ * Page table is not freed by this function.
+ */
+int zerofill_clear_range(struct task_struct *p,
+			 unsigned long __user start, unsigned long len)
+{
+	return 0;
+}
+#endif

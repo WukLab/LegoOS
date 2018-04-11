@@ -195,6 +195,18 @@ config DEBUG_PCACHE_RMAP
 	  Enable this option to trace pcache reverse mapping operations.
 	  If unsure say N.
 
+config DEBUG_PCACHE_ZEROFILL
+	bool "Debug zerofill"
+	default n
+	depends on COMP_PROCESSOR
+	depends on DEBUG_KERNEL
+	depends on PCACHE_ZEROFILL
+	help
+	  Enable this will tell you what PTEs have been set/cleared,
+	  in terms of the Zerofill bit.
+
+	  In unsure, say N.
+
 config DEBUG_FORK
 	bool "Debug processor-to-memory fork()"
 	default n

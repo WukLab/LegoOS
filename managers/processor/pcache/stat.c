@@ -24,6 +24,7 @@ static const char *const pcache_event_text[] = {
 
 	"nr_pgfault_due_to_concurrent_eviction",	/* perset list specific */
 
+	"nr_pcache_fill_zerofill",
 	"nr_pcache_fill_from_memory",
 	"nr_pcache_fill_from_victim",			/* victim cache specific */
 

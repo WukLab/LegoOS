@@ -15,6 +15,18 @@
 #include <lego/rpc/struct_common.h>
 
 /*
+ * P2M_ZEROFILL
+ */
+struct p2m_zerofill_msg {
+	struct common_header	header;
+	__u32			pid;
+	__u32			tgid;
+	__u32			flags;
+	__u64			missing_vaddr;
+};
+void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc);
+
+/*
  * P2M_MISS
  */
 

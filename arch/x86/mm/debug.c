@@ -23,8 +23,8 @@
 	{1UL << _PAGE_BIT_PAT,		"pat"		},	\
 	{1UL << _PAGE_BIT_GLOBAL,	"global"	},	\
 	{1UL << _PAGE_BIT_SOFTW1,	"softw1"	},	\
-	{1UL << _PAGE_BIT_SOFTW2,	"softw2"	},	\
-	{1UL << _PAGE_BIT_SOFTW3,	"softw3"	},	\
+	{1UL << _PAGE_BIT_SOFTW2,	"softw2_zfill"	},	\
+	{1UL << _PAGE_BIT_SOFTW3,	"softw3_zfill_locked"	},	\
 	{1UL << _PAGE_BIT_PAT_LARGE,	"pat_large"	},	\
 	{1UL << _PAGE_BIT_SOFTW4,	"softw4"	},	\
 	{1UL << _PAGE_BIT_PKEY_BIT0,	"pkey0"		},	\

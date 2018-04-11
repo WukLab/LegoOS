@@ -32,6 +32,7 @@
 #define P2M_PCACHE_MISS		((__u32)0x20000000)
 #define P2M_PCACHE_FLUSH	((__u32)0x30000000)
 #define P2M_PCACHE_REPLICA	((__u32)0x30000001)
+#define P2M_PCACHE_ZEROFILL	((__u32)0x30000002)
 
 #define P2M_READ		((__u32)__NR_read)
 #define P2M_WRITE		((__u32)__NR_write)
