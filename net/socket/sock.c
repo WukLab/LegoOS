@@ -29,6 +29,7 @@
 #include <lego/delay.h>
 #include <lego/time.h>
 #include <lego/timer.h>
+#include <processor/vnode.h>
 
 #ifdef CONFIG_DEBUG_SOCKET
 #define sock_debug(fmt, ...) \
@@ -119,6 +120,22 @@ void init_sock_ips(void) {
 	ipid2nodeid[19] = -1;
 }
 
+#ifdef CONFIG_VNODE
+int get_FIT_node_id_from_saddr(u32 saddr)
+{	
+	struct vnode_struct *vnode;
+	vnode = ip_find_vnode(saddr);
+	return vnode.nid;
+}
+
+u32 get_saddr_from_fit_node_id(int node_id)
+{
+	/* at this stage, node_id and vid is the same */
+	struct vnode_struct *vnode;
+	vnode = vid_find_vnode(node_id);
+	return (u32)vnode.ip;
+}
+#else
 int get_FIT_node_id_from_saddr(u32 saddr)
 {
 	int i;
@@ -150,6 +167,7 @@ u32 get_saddr_from_fit_node_id(int node_id)
 
 	return -1;
 }
+#endif
 
 int get_and_insert_new_local_port(int target_node)
 {
