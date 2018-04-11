@@ -4,8 +4,6 @@
 
 #include "boot.h"
 
-#define DEFAULT_SERIAL_PORT 0x3f8 /* ttyS0 */
-
 #define DLAB		0x80
 
 #define TXR             0       /*  Transmit register (WRITE) */
@@ -20,7 +18,17 @@
 #define DLL             0       /*  Divisor Latch Low         */
 #define DLH             1       /*  Divisor latch High        */
 
-#define DEFAULT_BAUD 9600
+#ifdef CONFIG_TTY_SERIAL_BAUD9600
+# define DEFAULT_BAUD	9600
+#elif defined(CONFIG_TTY_SERIAL_BAUD115200)
+# define DEFAULT_BAUD	115200
+#endif
+
+#ifdef CONFIG_TTY_SERIAL_TTYS0
+# define DEFAULT_SERIAL_PORT	0x3f8
+#elif defined(CONFIG_TTY_SERIAL_TTYS1)
+# define DEFAULT_SERIAL_PORT	0x2f8
+#endif
 
 static void early_serial_init(int port, int baud)
 {
