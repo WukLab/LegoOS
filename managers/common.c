@@ -89,8 +89,7 @@ void __init manager_init(void)
 #endif
 	manager_state = MANAGER_UP;
 
-	/* Create hb thread */
-	self_hb_init();
+	soft_watchdog_init();
 
 	/* Print scheduablable CPUs */
 	dump_cpumasks();

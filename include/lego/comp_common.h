@@ -37,10 +37,10 @@ void check_pinned_status(void);
 static inline void check_pinned_status(void) { }
 #endif
 
-#ifdef CONFIG_MANAGER_SELF_HEARTBEAT
-void __init self_hb_init(void);
+#ifdef CONFIG_SOFT_WATCHDOG
+void __init soft_watchdog_init(void);
 #else
-static inline void __init self_hb_init(void) { }
+static inline void __init soft_watchdog_init(void) { }
 #endif
 
 void cpu_dumpstack(int cpu);

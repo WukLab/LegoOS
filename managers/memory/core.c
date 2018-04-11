@@ -465,7 +465,7 @@ static inline void ht_check_worker(int i, struct thpool_worker *tw, struct hb_ca
 	}
 }
 
-void hb_print(void)
+void watchdog_print(void)
 {
 	int i;
 	struct thpool_worker *tw;

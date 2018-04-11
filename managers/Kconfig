@@ -22,8 +22,8 @@ config PCACHE_ASSOCIATIVITY_SHIFT
 endmenu
 
 menu "General Manager Config/Debug Options"
-config MANAGER_SELF_HEARTBEAT
-	bool "Periodic heartbeat printing"
+config SOFT_WATCHDOG
+	bool "Software watchdog"
 	default n
 	depends on DEBUG_KERNEL
 	depends on COMP_MEMORY || COMP_PROCESSOR
@@ -33,11 +33,11 @@ config MANAGER_SELF_HEARTBEAT
 
 	  If unsure, say N.
 
-config MANAGER_SELF_HEARTBEAT_INTERVAL_SEC
+config SOFT_WATCHDOG_INTERVAL_SEC
 	int "Periodic print interval in sec"
 	range 1 60
 	default 2
-	depends on MANAGER_SELF_HEARTBEAT
+	depends on SOFT_WATCHDOG
 
 config DEFAULT_MEM_NODE
 	int "Default memory homenode ID"

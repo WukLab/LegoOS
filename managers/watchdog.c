@@ -20,19 +20,19 @@
 #include <lego/jiffies.h>
 #include <processor/processor.h>
 
-extern void hb_print(void);
+extern void watchdog_print(void);
 
-static long hb_interval_sec = CONFIG_MANAGER_SELF_HEARTBEAT_INTERVAL_SEC;
+static long watchdog_interval_sec = CONFIG_SOFT_WATCHDOG_INTERVAL_SEC;
 
-static int hb(void *_unused)
+static int watchdog(void *_unused)
 {
 	if (pin_current_thread_core())
 		pr_err("Fail to pin self_hb.\n");
 
 	while (1) {
-		hb_print();
+		watchdog_print();
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		schedule_timeout(hb_interval_sec * HZ);
+		schedule_timeout(watchdog_interval_sec * HZ);
 
 		if (kthread_should_stop())
 			break;
@@ -40,11 +40,11 @@ static int hb(void *_unused)
 	return 0;
 }
 
-void __init self_hb_init(void)
+void __init soft_watchdog_init(void)
 {
 	struct task_struct *ret;
 
-	ret = kthread_run(hb, NULL, "self_hb");
+	ret = kthread_run(watchdog, NULL, "watchdog");
 	if (IS_ERR(ret)) {
 		pr_info("Fail to create self_hb.\n");
 	}

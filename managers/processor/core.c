@@ -155,7 +155,7 @@ SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
 }
 #endif
 
-void hb_print(void)
+void watchdog_print(void)
 {
 
 }
