@@ -192,11 +192,17 @@ config VMA_MEMORY_UNITTEST
 endif	# if DISTRIBUTED_VMA
 
 config MEM_PAGE_CACHE
-	bool "Use memory component as page cache"
+	bool "P/M supports pgcache"
 	default n
 	help
-	  Enable memory component to serve as page cache
+	  Either enable this M to support page cache.
+	  Or, make this P know remote M supports page cache.
 
+	  The P semantic should not be included here. It is semantically
+	  not a correct combination.
 
+	  A more flexible solution: P's process should check if some
+	  requests (e.g. rename) should be sent over to M, instead of S.
+
+	  If unsure, say N.
 endmenu
-
