@@ -386,6 +386,14 @@ void mlx4_cmd_cleanup(struct mlx4_dev *dev)
  */
 int mlx4_cmd_use_events(struct mlx4_dev *dev)
 {
+/*
+ * NOTE!!!
+ * Lego does not use interruptes. Lego uses polling.
+ *
+ * This function will introduce unnecessary semaphore deadlock, because
+ * our __mlx4_cmd does not use mlx4_cmd_wait().
+ */
+#if 0
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	int i;
 
@@ -415,6 +423,7 @@ int mlx4_cmd_use_events(struct mlx4_dev *dev)
 	priv->cmd.use_events = 1;
 
 	down(&priv->cmd.poll_sem);
+#endif
 
 	return 0;
 }
