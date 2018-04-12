@@ -229,7 +229,7 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	unsigned long end;
 
 	//pr_debug("%s in_modifier %d %x\n", __func__, in_modifier, in_modifier);
-	//down(&priv->cmd.poll_sem);
+	down(&priv->cmd.poll_sem);
 
 	err = mlx4_cmd_post(dev, in_param, out_param ? *out_param : 0,
 			    in_modifier, op_modifier, op, CMD_POLL_TOKEN, 0);
@@ -261,7 +261,7 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 
 	//pr_debug("%s return %d\n", __func__, err);
 out:
-	//up(&priv->cmd.poll_sem);
+	up(&priv->cmd.poll_sem);
 	return err;
 }
 
@@ -289,7 +289,7 @@ static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	struct mlx4_cmd_context *context;
 	int err = 0;
 
-//	down(&cmd->event_sem);
+	down(&cmd->event_sem);
 
 	spin_lock(&cmd->context_lock);
 	BUG_ON(cmd->free_head < 0);
@@ -321,7 +321,7 @@ out:
 	cmd->free_head = context - cmd->context;
 	spin_unlock(&cmd->context_lock);
 
-//	up(&cmd->event_sem);
+	up(&cmd->event_sem);
 	return err;
 }
 
@@ -346,7 +346,7 @@ int mlx4_cmd_init(struct mlx4_dev *dev)
 	//pr_debug("%s enter\n", __func__);
 
 	mutex_init(&priv->cmd.hcr_mutex);
-//	sema_init(&priv->cmd.poll_sem, 1);
+	sema_init(&priv->cmd.poll_sem, 1);
 	priv->cmd.use_events = 0;
 	priv->cmd.toggle     = 1;
 
@@ -403,7 +403,7 @@ int mlx4_cmd_use_events(struct mlx4_dev *dev)
 	priv->cmd.context[priv->cmd.max_cmds - 1].next = -1;
 	priv->cmd.free_head = 0;
 
-// XXX	sema_init(&priv->cmd.event_sem, priv->cmd.max_cmds);
+	sema_init(&priv->cmd.event_sem, priv->cmd.max_cmds);
 	spin_lock_init(&priv->cmd.context_lock);
 
 	for (priv->cmd.token_mask = 1;
@@ -414,7 +414,7 @@ int mlx4_cmd_use_events(struct mlx4_dev *dev)
 
 	priv->cmd.use_events = 1;
 
-// XXX	down(&priv->cmd.poll_sem);
+	down(&priv->cmd.poll_sem);
 
 	return 0;
 }
@@ -429,12 +429,12 @@ void mlx4_cmd_use_polling(struct mlx4_dev *dev)
 
 	priv->cmd.use_events = 0;
 
-// XXX	for (i = 0; i < priv->cmd.max_cmds; ++i)
-//		down(&priv->cmd.event_sem);
+	for (i = 0; i < priv->cmd.max_cmds; ++i)
+		down(&priv->cmd.event_sem);
 
 	kfree(priv->cmd.context);
 
-// XXX	up(&priv->cmd.poll_sem);
+	up(&priv->cmd.poll_sem);
 }
 
 struct mlx4_cmd_mailbox *mlx4_alloc_cmd_mailbox(struct mlx4_dev *dev)

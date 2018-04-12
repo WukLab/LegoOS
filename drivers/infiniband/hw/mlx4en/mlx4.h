@@ -40,8 +40,8 @@
 #include <lego/mutex.h>
 #include <lego/rbtree.h>
 //#include <lego/radix-tree.h>
-//#include <lego/timer.h>
-//#include <lego/semaphore.h>
+#include <lego/timer.h>
+#include <lego/semaphore.h>
 #include <lego/workqueue.h>
 #include <lego/completion.h>
 
@@ -191,8 +191,8 @@ struct mlx4_cmd {
 	struct dma_pool	       *pool;
 	void __iomem	       *hcr;
 	struct mutex		hcr_mutex;
-//	struct semaphore	poll_sem;
-//	struct semaphore	event_sem;
+	struct semaphore	poll_sem;
+	struct semaphore	event_sem;
 	int			max_cmds;
 	spinlock_t		context_lock;
 	int			free_head;
