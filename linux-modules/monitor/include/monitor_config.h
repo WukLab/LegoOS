@@ -33,11 +33,10 @@
  */
 #define IP_ADDRESS_BASE			0x0A000000
 #define VNODE_MAP_ORDER			8
-#define PROCESSOR_NODE_COUNT 		2
+#define PROCESSOR_NODE_COUNT 		1
 const static int pnode_nids[PROCESSOR_NODE_COUNT] =
 {
 	0,
-	1,
 };
 
 /* 
