@@ -28,8 +28,11 @@
 # define USE_SPLIT_PMD_PTLOCKS	(USE_SPLIT_PTE_PTLOCKS && \
 				IS_ENABLED(CONFIG_PROCESSOR_ENABLE_SPLIT_PMD_PTLOCK))
 #else
-# define USE_SPLIT_PTE_PTLOCKS	0
-# define USE_SPLIT_PMD_PTLOCKS	0
+/*
+ * Memory component should always use this option
+ */
+# define USE_SPLIT_PTE_PTLOCKS	1
+# define USE_SPLIT_PMD_PTLOCKS	1
 #endif
 
 /*

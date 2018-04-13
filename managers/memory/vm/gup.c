@@ -48,15 +48,15 @@ unsigned long find_page(struct vm_area_struct *vma, unsigned long address)
 	if (pgd_none(*pgd))
 		return 0;
 
-	pud = pud_offset(pgd, address);
+	pud = lego_pud_offset(pgd, address);
 	if (pud_none(*pud))
 		return 0;
 
-	pmd = pmd_offset(pud, address);
+	pmd = lego_pmd_offset(pud, address);
 	if (pmd_none(*pmd))
 		return 0;
 
-	pte = pte_offset(pmd, address);
+	pte = lego_pte_offset(pmd, address);
 	if (pte_none(*pte))
 		return 0;
 

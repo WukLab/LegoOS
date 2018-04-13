@@ -15,6 +15,22 @@
 
 #define PGALLOC_GFP	(GFP_KERNEL | __GFP_ZERO)
 
+static inline bool lego_pgtable_page_ctor(struct page *page)
+{
+	if (!ptlock_init(page))
+		return false;
+	return true;
+}
+
+static inline void lego_pgtable_page_dtor(struct page *page)
+{
+	pte_lock_deinit(page);
+}
+
+/*
+ * lego_pxd_alloc_one
+ * This set of functions are used to allocate a pgtable page.
+ */
 static inline pud_t *lego_pud_alloc_one(void)
 {
 	return (pud_t *)__get_free_page(PGALLOC_GFP);
@@ -22,14 +38,36 @@ static inline pud_t *lego_pud_alloc_one(void)
 
 static inline pmd_t *lego_pmd_alloc_one(void)
 {
-	return (pmd_t *)__get_free_page(PGALLOC_GFP);
+	struct page *page;
+
+	page = alloc_pages(PGALLOC_GFP, 0);
+	if (!page)
+		return NULL;
+	if (!lego_pgtable_pmd_page_ctor(page)) {
+		__free_pages(page, 0);
+		return NULL;
+	}
+	return (pmd_t *)page_address(page);
 }
 
 static inline pte_t *lego_pte_alloc_one(void)
 {
-	return (pte_t *)__get_free_page(PGALLOC_GFP);
+	struct page *page;
+
+	page = alloc_pages(PGALLOC_GFP, 0);
+	if (!page)
+		return NULL;
+	if (!lego_pgtable_page_ctor(page)) {
+		__free_pages(page, 0);
+		return NULL;
+	}
+	return (pte_t *)page_address(page);
 }
 
+/*
+ * lego_pxd_free
+ * This set functions are used to free the pgtable page
+ */
 static inline void lego_pud_free(pud_t *pud)
 {
 	BUG_ON((unsigned long)pud & (PAGE_SIZE-1));
@@ -39,12 +77,14 @@ static inline void lego_pud_free(pud_t *pud)
 static inline void lego_pmd_free(pmd_t *pmd)
 {
 	BUG_ON((unsigned long)pmd & (PAGE_SIZE-1));
+	lego_pgtable_pmd_page_dtor(virt_to_page(pmd));
 	free_page((unsigned long)pmd);
 }
 
 static inline void lego_pte_free(pte_t *pte)
 {
 	BUG_ON((unsigned long)pte & (PAGE_SIZE-1));
+	lego_pgtable_page_dtor(virt_to_page(pte));
 	free_page((unsigned long)pte);
 }
 
@@ -53,24 +93,34 @@ static inline void __lego_pte_free(struct page *token)
 	__free_page(token);
 }
 
-static inline void lego_pmd_populate(pmd_t *pmd, pte_t *pte)
+/*
+ * lego_pxd_populate
+ * All level page table entries are filled with
+ * _virtual address_ of the next level pgtable page.
+ */
+static inline void lego_pgd_populate(pgd_t *pgd, pud_t *pud)
 {
-	pmd_set(pmd, __pmd(_PAGE_TABLE | __pa(pte)));
+	pgd_set(pgd, __pgd(_PAGE_TABLE | (unsigned long)pud));
 }
 
 static inline void lego_pud_populate(pud_t *pud, pmd_t *pmd)
 {
-	pud_set(pud, __pud(_PAGE_TABLE | __pa(pmd)));
+	pud_set(pud, __pud(_PAGE_TABLE | (unsigned long)pmd));
 }
 
-static inline void lego_pgd_populate(pgd_t *pgd, pud_t *pud)
+static inline void lego_pmd_populate(pmd_t *pmd, pte_t *pte)
 {
-	pgd_set(pgd, __pgd(_PAGE_TABLE | __pa(pud)));
+	pmd_set(pmd, __pmd(_PAGE_TABLE | (unsigned long)pte));
 }
 
 /*
- * Allocate page upper directory.
- * We've already handled the fast-path in-line.
+ * __lego_pxd_alloc
+ * This set of functions will allocate a pgtable page, and populate its
+ * kernel virtual address in the upper layer pgtable entry.
+ *
+ * pgd/pud populate are protected by mm's big page_table_lock.
+ * pmd populate is protected by per PMD pgtable page lock, in the hope of
+ * increase certain amount of parallisim.
  */
 int __lego_pud_alloc(struct lego_mm_struct *mm, pgd_t *pgd, unsigned long address)
 {
@@ -78,7 +128,7 @@ int __lego_pud_alloc(struct lego_mm_struct *mm, pgd_t *pgd, unsigned long addres
 	if (!new)
 		return -ENOMEM;
 
-	barrier();
+	smp_wmb();
 
 	spin_lock(&mm->page_table_lock);
 	if (pgd_present(*pgd))
@@ -96,7 +146,7 @@ int __lego_pmd_alloc(struct lego_mm_struct *mm, pud_t *pud, unsigned long addres
 	if (!new)
 		return -ENOMEM;
 
-	barrier();
+	smp_wmb();
 
 	spin_lock(&mm->page_table_lock);
 	if (pud_present(*pud))
@@ -110,29 +160,28 @@ int __lego_pmd_alloc(struct lego_mm_struct *mm, pud_t *pud, unsigned long addres
 
 int __lego_pte_alloc(struct lego_mm_struct *mm, pmd_t *pmd, unsigned long address)
 {
+	spinlock_t *ptl;
 	pte_t *new = lego_pte_alloc_one();
 	if (!new)
 		return -ENOMEM;
 
-	barrier();
-	spin_lock(&mm->page_table_lock);
-	if (pmd_present(*pmd))
-		 /* Another has populated it */
-		lego_pte_free(new);
-	else {
-		atomic_long_inc(&mm->nr_ptes);
+	smp_wmb();
+
+	ptl = lego_pmd_lock(mm, pmd);
+	if (likely(pmd_none(*pmd))) {
 		lego_pmd_populate(pmd, new);
+		new = NULL;
 	}
-	spin_unlock(&mm->page_table_lock);
+	spin_unlock(ptl);
+	if (new)
+		lego_pte_free(new);
 	return 0;
 }
 
 static void free_pte_range(struct lego_mm_struct *mm,
 			   pmd_t *pmd, unsigned long addr)
 {
-	struct page *token = pmd_pgtable(*pmd);
-
-	atomic_long_dec(&mm->nr_ptes);
+	struct page *token = lego_pmd_page(*pmd);
 
 	pmd_clear(pmd);
 	__lego_pte_free(token);
@@ -147,10 +196,10 @@ static inline void free_pmd_range(struct lego_mm_struct *mm, pud_t *pud,
 	unsigned long start;
 
 	start = addr;
-	pmd = pmd_offset(pud, addr);
+	pmd = lego_pmd_offset(pud, addr);
 	do {
 		next = pmd_addr_end(addr, end);
-		if (pmd_none_or_clear_bad(pmd))
+		if (pmd_none(*pmd))
 			continue;
 		free_pte_range(mm, pmd, addr);
 	} while (pmd++, addr = next, addr != end);
@@ -166,7 +215,7 @@ static inline void free_pmd_range(struct lego_mm_struct *mm, pud_t *pud,
 	if (end - 1 > ceiling - 1)
 		return;
 
-	pmd = pmd_offset(pud, start);
+	pmd = lego_pmd_offset(pud, start);
 	pud_clear(pud);
 	lego_pmd_free(pmd);
 }
@@ -180,10 +229,10 @@ static inline void free_pud_range(struct lego_mm_struct *mm, pgd_t *pgd,
 	unsigned long start;
 
 	start = addr;
-	pud = pud_offset(pgd, addr);
+	pud = lego_pud_offset(pgd, addr);
 	do {
 		next = pud_addr_end(addr, end);
-		if (pud_none_or_clear_bad(pud))
+		if (pud_none(*pud))
 			continue;
 		free_pmd_range(mm, pud, addr, next, floor, ceiling);
 	} while (pud++, addr = next, addr != end);
@@ -199,7 +248,7 @@ static inline void free_pud_range(struct lego_mm_struct *mm, pgd_t *pgd,
 	if (end - 1 > ceiling - 1)
 		return;
 
-	pud = pud_offset(pgd, start);
+	pud = lego_pud_offset(pgd, start);
 	pgd_clear(pgd);
 	lego_pud_free(pud);
 }
@@ -262,7 +311,7 @@ void lego_free_pgd_range(struct lego_mm_struct *mm,
 	pgd = lego_pgd_offset(mm, addr);
 	do {
 		next = pgd_addr_end(addr, end);
-		if (pgd_none_or_clear_bad(pgd))
+		if (pgd_none(*pgd))
 			continue;
 		free_pud_range(mm, pgd, addr, next, floor, ceiling);
 	} while (pgd++, addr = next, addr != end);
@@ -331,12 +380,15 @@ static int lego_copy_pte_range(struct lego_mm_struct *dst_mm,
 	spinlock_t *src_ptl, *dst_ptl;
 	int ret;
 
-	dst_pte = lego_pte_alloc_lock(dst_mm, dst_pmd, addr, &dst_ptl);
+	dst_pte = lego_pte_alloc(dst_mm, dst_pmd, addr);
 	if (!dst_pte)
 		return -ENOMEM;
+	dst_ptl = lego_pte_lockptr(dst_mm, dst_pmd);
+	spin_lock(dst_ptl);
 
-	src_pte = pte_offset(src_pmd, addr);
+	src_pte = lego_pte_offset(src_pmd, addr);
 	src_ptl = lego_pte_lockptr(src_mm, src_pmd);
+
 	if (src_ptl != dst_ptl)
 		spin_lock(src_ptl);
 
@@ -372,10 +424,10 @@ static inline int lego_copy_pmd_range(struct lego_mm_struct *dst_mm,
 	dst_pmd = lego_pmd_alloc(dst_mm, dst_pud, addr);
 	if (!dst_pmd)
 		return -ENOMEM;
-	src_pmd = pmd_offset(src_pud, addr);
+	src_pmd = lego_pmd_offset(src_pud, addr);
 	do {
 		next = pmd_addr_end(addr, end);
-		if (pmd_none_or_clear_bad(src_pmd))
+		if (pmd_none(*src_pmd))
 			continue;
 		if (lego_copy_pte_range(dst_mm, src_mm, dst_pmd, src_pmd,
 						vma, addr, next))
@@ -396,10 +448,10 @@ static inline int lego_copy_pud_range(struct lego_mm_struct *dst_mm,
 	dst_pud = lego_pud_alloc(dst_mm, dst_pgd, addr);
 	if (!dst_pud)
 		return -ENOMEM;
-	src_pud = pud_offset(src_pgd, addr);
+	src_pud = lego_pud_offset(src_pgd, addr);
 	do {
 		next = pud_addr_end(addr, end);
-		if (pud_none_or_clear_bad(src_pud))
+		if (pud_none(*src_pud))
 			continue;
 		if (lego_copy_pmd_range(dst_mm, src_mm, dst_pud, src_pud,
 						vma, addr, next))
@@ -430,7 +482,7 @@ int lego_copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
 	src_pgd = lego_pgd_offset(src, addr);
 	do {
 		next = pgd_addr_end(addr, end);
-		if (pgd_none_or_clear_bad(src_pgd))
+		if (pgd_none(*src_pgd))
 			continue;
 		if (unlikely(lego_copy_pud_range(dst, src, dst_pgd, src_pgd,
 					    vma, addr, next))) {
@@ -488,10 +540,10 @@ zap_pmd_range(struct vm_area_struct *vma, pud_t *pud,
 	pmd_t *pmd;
 	unsigned long next;
 
-	pmd = pmd_offset(pud, addr);
+	pmd = lego_pmd_offset(pud, addr);
 	do {
 		next = pmd_addr_end(addr, end);
-		if (pmd_none_or_clear_bad(pmd))
+		if (pmd_none(*pmd))
 			continue;
 		next = zap_pte_range(vma, pmd, addr, next);
 	} while (pmd++, addr = next, addr != end);
@@ -506,10 +558,10 @@ zap_pud_range(struct vm_area_struct *vma, pgd_t *pgd,
 	pud_t *pud;
 	unsigned long next;
 
-	pud = pud_offset(pgd, addr);
+	pud = lego_pud_offset(pgd, addr);
 	do {
 		next = pud_addr_end(addr, end);
-		if (pud_none_or_clear_bad(pud))
+		if (pud_none(*pud))
 			continue;
 		next = zap_pmd_range(vma, pud, addr, next);
 	} while (pud++, addr = next, addr != end);
@@ -527,7 +579,7 @@ void lego_unmap_page_range(struct vm_area_struct *vma,
 	pgd = lego_pgd_offset(vma->vm_mm, addr);
 	do {
 		next = pgd_addr_end(addr, end);
-		if (pgd_none_or_clear_bad(pgd))
+		if (pgd_none(*pgd))
 			continue;
 		next = zap_pud_range(vma, pgd, addr, next);
 	} while (pgd++, addr = next, addr != end);
@@ -540,14 +592,14 @@ static pmd_t *get_old_pmd(struct lego_mm_struct *mm, unsigned long addr)
 	pmd_t *pmd;
 
 	pgd = lego_pgd_offset(mm, addr);
-	if (pgd_none_or_clear_bad(pgd))
+	if (pgd_none(*pgd))
 		return NULL;
 
-	pud = pud_offset(pgd, addr);
-	if (pud_none_or_clear_bad(pud))
+	pud = lego_pud_offset(pgd, addr);
+	if (pud_none(*pud))
 		return NULL;
 
-	pmd = pmd_offset(pud, addr);
+	pmd = lego_pmd_offset(pud, addr);
 	if (pmd_none(*pmd))
 		return NULL;
 
@@ -588,7 +640,7 @@ static void move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 	 */
 	old_pte = lego_pte_offset_lock(mm, old_pmd, old_addr, &old_ptl);
 
-	new_pte = pte_offset(new_pmd, new_addr);
+	new_pte = lego_pte_offset(new_pmd, new_addr);
 	new_ptl = lego_pte_lockptr(mm, new_pmd);
 	if (new_ptl != old_ptl)
 		spin_lock(new_ptl);

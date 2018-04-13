@@ -485,7 +485,7 @@ static inline void pte_lock_deinit(struct page *page) {}
  * pmd_to_page returns the page that is used as the PMD page
  */
 #if USE_SPLIT_PMD_PTLOCKS
-static struct page *pmd_to_page(pmd_t *pmd)
+static inline struct page *pmd_to_page(pmd_t *pmd)
 {
 	unsigned long mask = ~(PTRS_PER_PMD * sizeof(pmd_t) - 1);
 	return virt_to_page((void *)((unsigned long) pmd & mask));
