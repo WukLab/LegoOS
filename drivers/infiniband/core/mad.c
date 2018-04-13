@@ -1897,21 +1897,21 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 	int port_num;
 
 	mad_list = (struct ib_mad_list_head *)(unsigned long)wc->wr_id;
-	if (!virt_addr_valid(mad_list)) {
+	if (!virt_addr_valid((unsigned long)mad_list)) {
 		pr_info("BUG! mad_list: %p\n", mad_list);
 		WARN_ON_ONCE(1);
 		do_exit(-EFAULT);
 	}
 
 	mad_queue = mad_list->mad_queue;
-	if (!virt_addr_valid(mad_queue)) {
+	if (!virt_addr_valid((unsigned long)mad_queue)) {
 		pr_info("BUG! mad_list: %p mad_queue: %p\n", mad_list, mad_queue);
 		WARN_ON_ONCE(1);
 		do_exit(-EFAULT);
 	}
 
 	qp_info = mad_queue->qp_info;
-	if (!virt_addr_valid(qp_info)) {
+	if (!virt_addr_valid((unsigned long)qp_info)) {
 		pr_info("BUG! mad_list: %p mad_queue: %p qp_info: %p\n",
 			mad_list, mad_queue, qp_info);
 		WARN_ON_ONCE(1);

@@ -167,13 +167,13 @@ static void __thpool_worker(struct thpool_worker *worker,
 	switch (hdr->opcode) {
 /* PCACHE */
 	case P2M_PCACHE_MISS:
-		handle_p2m_pcache_miss(msg, desc);
+		handle_p2m_pcache_miss(msg, desc, tx);
 		break;
 	case P2M_PCACHE_FLUSH:
 		handle_p2m_flush_one(msg, desc);
 		break;
 	case P2M_PCACHE_ZEROFILL:
-		handle_p2m_zerofill(msg, desc);
+		handle_p2m_zerofill(msg, desc, tx);
 		break;
 
 /* clflush REPLICA */

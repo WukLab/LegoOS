@@ -24,7 +24,7 @@ struct p2m_zerofill_msg {
 	__u32			flags;
 	__u64			missing_vaddr;
 };
-void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc);
+void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc, void *tx);
 
 /*
  * P2M_MISS
@@ -48,7 +48,7 @@ struct p2m_pcache_miss_reply_struct {
 	char	data[PCACHE_LINE_SIZE];
 };
 
-int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *, u64);
+int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *, u64, void *);
 
 /* P2M_PCACHE_FLUSH */
 struct p2m_flush_payload {

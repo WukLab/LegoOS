@@ -50,10 +50,14 @@ static inline void handle_zerofill_debug(const char *fmt, ...) { }
  * message to know if us succeed or failed.
  */
 static void pcache_miss_error(u32 retval, u64 desc,
-			   struct lego_task_struct *p, u64 vaddr)
+			   struct lego_task_struct *p, u64 vaddr, void *tx)
 {
+	int *reply = tx;
+
+	*reply = retval;
+	ibapi_reply_message(reply, sizeof(*reply), desc);
+
 	WARN(1, "src_nid:%u,pid:%u,vaddr:%#Lx\n", p->node, p->pid, vaddr);
-	ibapi_reply_message(&retval, 4, desc);
 }
 
 /*
@@ -109,22 +113,22 @@ unlock:
 }
 
 static void do_handle_p2m_zerofill_miss(struct lego_task_struct *p,
-					u64 vaddr, u32 flags, u64 desc)
+					u64 vaddr, u32 flags, u64 desc, void *tx)
 {
-	int reply;
+	int *reply = tx;
 	int ret;
 
 	ret = common_handle_p2m_miss(p, vaddr, flags, desc, NULL);
 	if (unlikely(ret & VM_FAULT_ERROR))
-		reply = -EFAULT;
+		*reply = -EFAULT;
 	else
-		reply = 0;
-	ibapi_reply_message(&reply, sizeof(reply), desc);
+		*reply = 0;
+	ibapi_reply_message(reply, sizeof(*reply), desc);
 }
 
 #ifndef CONFIG_DEBUG_HANDLE_PCACHE
 static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
-				      u64 vaddr, u32 flags, u64 desc)
+				      u64 vaddr, u32 flags, u64 desc, void *tx)
 {
 	int ret;
 	unsigned long new_page;
@@ -136,16 +140,21 @@ static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 		else if (ret & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV))
 			ret = RET_ESIGSEGV;
 
-		pcache_miss_error(ret, desc, p, vaddr);
+		pcache_miss_error(ret, desc, p, vaddr, tx);
 		return;
 	}
+
+	/*
+	 * For normal pcache miss, we do not use the rx buffer.
+	 * We simply use the page itself.
+	 */
 	ibapi_reply_message((void *)new_page, PCACHE_LINE_SIZE, desc);
 }
 #else
 static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
-				   u64 vaddr, u32 flags, u64 desc)
+				   u64 vaddr, u32 flags, u64 desc, void *tx)
 {
-	struct p2m_pcache_miss_reply_struct *reply;
+	struct p2m_pcache_miss_reply_struct *reply = tx;
 	unsigned long new_page;
 	unsigned long mapping_flags = 0;
 	int ret;
@@ -157,18 +166,15 @@ static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 		else if (ret & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV))
 			ret = RET_ESIGSEGV;
 
-		pcache_miss_error(ret, desc, p, vaddr);
+		pcache_miss_error(ret, desc, p, vaddr, tx);
 		return;
 	}
 
-	reply = kmalloc(sizeof(*reply), GFP_KERNEL);
 	reply->csum = csum_partial((void *)new_page, PCACHE_LINE_SIZE, 0);
 	reply->mapping_flags = mapping_flags;
 	memcpy(reply->data, (void *)new_page, PCACHE_LINE_SIZE);
 
 	ibapi_reply_message(reply, sizeof(*reply), desc);
-
-	kfree(reply);
 }
 #endif
 
@@ -177,7 +183,7 @@ static int fault_in_kernel_space(unsigned long address)
 	return address >= TASK_SIZE_MAX;
 }
 
-int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc)
+int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc, void *tx)
 {
 	u32 tgid, flags;
 	u64 vaddr;
@@ -194,16 +200,16 @@ int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc)
 
 	p = find_lego_task_by_pid(src_nid, tgid);
 	if (unlikely(!p)) {
-		pcache_miss_error(RET_ESRCH, desc, p, vaddr);
+		pcache_miss_error(RET_ESRCH, desc, p, vaddr, tx);
 		return 0;
 	}
 
 	if (unlikely(fault_in_kernel_space(vaddr))) {
-		pcache_miss_error(RET_EFAULT, desc, p, vaddr);
+		pcache_miss_error(RET_EFAULT, desc, p, vaddr, tx);
 		return 0;
 	}
 
-	do_handle_p2m_pcache_miss(p, vaddr, flags, desc);
+	do_handle_p2m_pcache_miss(p, vaddr, flags, desc, tx);
 	do_mmap_prefetch(p, vaddr, flags, 1 << PREFETCH_ORDER);
 
 	handle_pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
@@ -211,7 +217,7 @@ int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc)
 	return 0;
 }
 
-void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc)
+void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc, void *tx)
 {
 	u32 tgid, flags;
 	u64 vaddr;
@@ -228,16 +234,16 @@ void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc)
 
 	p = find_lego_task_by_pid(src_nid, tgid);
 	if (unlikely(!p)) {
-		pcache_miss_error(RET_ESRCH, desc, p, vaddr);
+		pcache_miss_error(RET_ESRCH, desc, p, vaddr, tx);
 		return;
 	}
 
 	if (unlikely(fault_in_kernel_space(vaddr))) {
-		pcache_miss_error(RET_EFAULT, desc, p, vaddr);
+		pcache_miss_error(RET_EFAULT, desc, p, vaddr, tx);
 		return;
 	}
 
-	do_handle_p2m_zerofill_miss(p, vaddr, flags, desc);
+	do_handle_p2m_zerofill_miss(p, vaddr, flags, desc, tx);
 
 	handle_zerofill_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
 		src_nid, msg->pid, tgid, flags, vaddr);
