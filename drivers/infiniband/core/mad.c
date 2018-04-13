@@ -1892,11 +1892,32 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 	struct ib_mad_private_header *mad_priv_hdr;
 	struct ib_mad_private *recv, *response = NULL;
 	struct ib_mad_list_head *mad_list;
+	struct ib_mad_queue *mad_queue;
 	struct ib_mad_agent_private *mad_agent;
 	int port_num;
 
 	mad_list = (struct ib_mad_list_head *)(unsigned long)wc->wr_id;
-	qp_info = mad_list->mad_queue->qp_info;
+	if (!virt_addr_valid(mad_list)) {
+		pr_info("BUG! mad_list: %p\n", mad_list);
+		WARN_ON_ONCE(1);
+		do_exit(-EFAULT);
+	}
+
+	mad_queue = mad_list->mad_queue;
+	if (!virt_addr_valid(mad_queue)) {
+		pr_info("BUG! mad_list: %p mad_queue: %p\n", mad_list, mad_queue);
+		WARN_ON_ONCE(1);
+		do_exit(-EFAULT);
+	}
+
+	qp_info = mad_queue->qp_info;
+	if (!virt_addr_valid(qp_info)) {
+		pr_info("BUG! mad_list: %p mad_queue: %p qp_info: %p\n",
+			mad_list, mad_queue, qp_info);
+		WARN_ON_ONCE(1);
+		do_exit(-EFAULT);
+	}
+
 	dequeue_mad(mad_list);
 
 	mad_priv_hdr = container_of(mad_list, struct ib_mad_private_header,
