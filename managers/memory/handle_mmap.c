@@ -120,13 +120,14 @@ out:
 	return 0;
 }
 #endif
+
 /**
  * Returns: the virtual address
  *  ERROR:
  *	RET_ESRCH
  */
 int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
-		    struct common_header *hdr)
+		    struct common_header *hdr, void *tx)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -138,7 +139,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	char *f_name = payload->f_name;
 	struct lego_task_struct *tsk;
 	struct lego_file *file = NULL;
-	struct p2m_mmap_reply_struct reply;
+	struct p2m_mmap_reply_struct *reply = tx;
 	s64 ret;
 
 	mmap_debug("src_nid:%u,pid:%u,addr:%#lx,len:%#lx,prot:%#lx,flags:%#lx"
@@ -147,7 +148,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
-		reply.ret = RET_ESRCH;
+		reply->ret = RET_ESRCH;
 		goto out;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
@@ -159,7 +160,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	if (!(flags & MAP_ANONYMOUS)) {
 		file = file_open(tsk, f_name);
 		if (IS_ERR(file)) {
-			reply.ret = RET_ENOMEM;
+			reply->ret = RET_ENOMEM;
 			goto out;
 		}
 	}
@@ -169,7 +170,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 	/* potential concurrency problem, currently only
 	 * single polling thread so doesn't matter */
-	load_reply_buffer(tsk->mm, &reply.map);
+	load_reply_buffer(tsk->mm, &(reply->map));
 #endif
 	ret = vm_mmap_pgoff(tsk, file, addr, len, prot, flags, pgoff);
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
@@ -178,18 +179,18 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 
 	/* which means vm_mmap_pgoff() returns -ERROR */
 	if (unlikely(ret < 0)) {
-		reply.ret = ERR_TO_LEGO_RET(ret);
+		reply->ret = ERR_TO_LEGO_RET(ret);
 		goto out;
 	}
 
-	reply.ret = RET_OKAY;
-	reply.ret_addr = (unsigned long)ret;
+	reply->ret = RET_OKAY;
+	reply->ret_addr = (unsigned long)ret;
 #ifdef CONFIG_DEBUG_VMA
-	dump_reply(&reply.map);
+	dump_reply(&reply->map);
 #endif
 
 out:
-	ibapi_reply_message(&reply, sizeof(reply), desc);
+	ibapi_reply_message(reply, sizeof(*reply), desc);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }

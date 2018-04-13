@@ -166,7 +166,7 @@ struct p2m_mmap_reply_struct {
 	struct vmr_map_reply map;
 #endif
 };
-int handle_p2m_mmap(struct p2m_mmap_struct *, u64, struct common_header *);
+int handle_p2m_mmap(struct p2m_mmap_struct *, u64, struct common_header *, void *tx);
 
 /*
  * P2M_MUNMAP

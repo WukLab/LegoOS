@@ -73,6 +73,7 @@ static inline int thpool_buffer_ix(struct thpool_buffer *buffer)
 {
 	return buffer - thpool_buffer_map;
 }
+
 static inline void
 enqueue_tail_thpool_worker(struct thpool_worker *worker, struct thpool_buffer *buffer)
 {
@@ -149,9 +150,11 @@ static void __thpool_worker(struct thpool_worker *worker,
 	void *msg;
 	void *payload;
 	struct common_header *hdr;
+	void *tx;
 
+	tx = thpool_buffer_tx(buffer);
+	msg = thpool_buffer_rx(buffer);
 	desc = buffer->desc;
-	msg = buffer->rx;
 	hdr = to_common_header(msg);
 	payload = to_payload(msg);
 
@@ -203,7 +206,7 @@ static void __thpool_worker(struct thpool_worker *worker,
 		break;
 
 	case P2M_MMAP:
-		handle_p2m_mmap(payload, desc, hdr);
+		handle_p2m_mmap(payload, desc, hdr, tx);
 		break;
 
 	case P2M_MPROTECT:
