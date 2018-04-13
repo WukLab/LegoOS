@@ -1226,7 +1226,7 @@ int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len)
 			return error;
 		prev = vma;
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-		save_vma_context(mm, mm->vmrange_map[vmr_idx(start)]);
+		save_update_vma_context(mm, mm->vmrange_map[vmr_idx(start)]);
 #endif
 	}
 
@@ -1259,7 +1259,11 @@ int vm_munmap(struct lego_task_struct *p, unsigned long start, size_t len)
 	if (down_write_killable(&mm->mmap_sem))
 		return -EINTR;
 
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	ret = distvm_munmap_homenode(mm, start, len);
+#else
 	ret = do_munmap(mm, start, len);
+#endif
 	up_write(&mm->mmap_sem);
 
 	return ret;

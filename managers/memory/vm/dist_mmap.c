@@ -256,7 +256,7 @@ int vmpool_retrieve(struct rb_root *root, unsigned long start, unsigned long end
 static struct vm_pool_struct *vmpool_find(struct rb_root *root, unsigned long addr)
 {
 	struct rb_node *node = root->rb_node;
-	struct vm_pool_struct *pool;
+	struct vm_pool_struct *pool = NULL;
 
 	vma_debug("%s, addr: %lx\n", __func__, addr);
 	BUG_ON(VMR_ALIGN(addr) > addr);
