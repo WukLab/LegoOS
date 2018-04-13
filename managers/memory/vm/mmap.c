@@ -1226,7 +1226,7 @@ int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len)
 			return error;
 		prev = vma;
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-		save_update_vma_context(mm, mm->vmrange_map[vmr_idx(start)]);
+		save_vma_context(mm, mm->vmrange_map[vmr_idx(start)]);
 #endif
 	}
 
