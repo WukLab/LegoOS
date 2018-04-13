@@ -49,6 +49,20 @@ cmd_bzImage = $(obj)/tools/build $(obj)/setup.bin $(obj)/vmImage.bin $@
 $(obj)/bzImage: $(obj)/setup.bin $(obj)/vmImage.bin $(obj)/tools/build FORCE
 	$(call if_changed,bzImage)
 	@echo -e '\033[34mLegoOS Kernel: $@ is ready' ' (#'`cat .version`')\033[0m'
+	@echo -e '\033[31mChecklist: '
+	@echo -e '           - Serial'
+	@echo -e '              - TTYS1'
+	@echo -e '              - BOUD115200'
+	@echo -e ''
+	@echo -e '           - FIT'
+	@echo -e '              - CONFIG_FIT_NR_NODES:  matched on all nodes'
+	@echo -e '              - CONFIG_FIT_LOCAL_ID:  unique across nodes'
+	@echo -e '              - CONFIG_SOCKET_O_IB:   same across nodes'
+	@echo -e '              - fit_machine.c:        same across nodes'
+	@echo -e ''
+	@echo -e '            - Program'
+	@echo -e '              - managers/processor/core.c: init_filename[]'
+	@echo -e '\033[0m'
 
 #
 # This vmImage.bin has
