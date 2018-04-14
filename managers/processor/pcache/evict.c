@@ -157,6 +157,7 @@ static inline int
 evict_line_victim(struct pcache_set *pset, struct pcache_meta *pcm)
 {
 	struct pcache_victim_meta *victim;
+	bool dirty;
 
 	victim = victim_prepare_insert(pset, pcm);
 	if (IS_ERR(victim))
@@ -167,10 +168,10 @@ evict_line_victim(struct pcache_set *pset, struct pcache_meta *pcm)
 	 * updates before we do the unmap operations.
 	 */
 	smp_wmb();
-	pcache_try_to_unmap(pcm);
+	dirty = pcache_try_to_unmap_check_dirty(pcm);
 	PCACHE_BUG_ON_PCM(pcache_mapped(pcm), pcm);
 
-	victim_finish_insert(victim);
+	victim_finish_insert(victim, dirty);
 
 	return 0;
 }

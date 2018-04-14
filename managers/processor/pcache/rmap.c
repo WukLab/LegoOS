@@ -862,6 +862,7 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 				   struct pcache_rmap *rmap, void *arg)
 {
 	int ret = PCACHE_RMAP_AGAIN;
+	bool *dirty = arg;
 	spinlock_t *ptl = NULL;
 	pte_t *pte;
 	pte_t pteval;
@@ -874,10 +875,23 @@ static int pcache_try_to_unmap_one(struct pcache_meta *pcm,
 
 	pteval = ptep_get_and_clear(0, pte);
 
-	if (pte_present(pteval))
+	if (likely(pte_present(pteval))) {
+		/*
+		 * Dirty checking is only valid if present.
+		 * Otherwise it is undefined behaviour.
+		 */
+		if (pte_dirty(pteval))
+			*dirty = true;
+
+		/*
+		 * Flush any stale TLB entries.
+		 * After this, pgfault on other cores will
+		 * follow immediately, if they access this page.
+		 */
 		flush_tlb_mm_range(rmap->owner_mm,
 				   rmap->address,
 				   rmap->address + PAGE_SIZE -1);
+	}
 
 	__pcache_remove_rmap(pcm, rmap);
 
@@ -937,9 +951,11 @@ static int pcache_mapcount_is_zero(struct pcache_meta *pcm)
 int pcache_try_to_unmap(struct pcache_meta *pcm)
 {
 	int ret;
+	bool dirty = false;
 	struct rmap_walk_control rwc = {
 		.rmap_one = pcache_try_to_unmap_one,
 		.done = pcache_mapcount_is_zero,
+		.arg = &dirty,
 	};
 
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
@@ -948,6 +964,29 @@ int pcache_try_to_unmap(struct pcache_meta *pcm)
 	if (!pcache_mapcount(pcm))
 		ret = PCACHE_RMAP_SUCCEED;
 	return ret;
+}
+
+/*
+ * Try to remvoe all page table entries. In addition to that,
+ * return true if any of them was dirty, otherwise return false.
+ */
+bool pcache_try_to_unmap_check_dirty(struct pcache_meta *pcm)
+{
+	bool dirty = false;
+	struct rmap_walk_control rwc = {
+		.rmap_one = pcache_try_to_unmap_one,
+		.done = pcache_mapcount_is_zero,
+		.arg = &dirty,
+	};
+
+	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
+
+	/*
+	 * No need to check return value though.
+	 * Caller cares about dirty value more..
+	 */
+	rmap_walk(pcm, &rwc);
+	return dirty;
 }
 
 /**

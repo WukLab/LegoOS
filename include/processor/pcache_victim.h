@@ -240,7 +240,7 @@ static inline void set_victim_usable(struct pcache_victim_meta *victim)
 
 struct pcache_victim_meta *
 victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm);
-void victim_finish_insert(struct pcache_victim_meta *victim);
+void victim_finish_insert(struct pcache_victim_meta *victim, bool dirty);
 
 static inline unsigned int victim_index(struct pcache_victim_meta *victim)
 {
@@ -264,20 +264,20 @@ static inline void *pcache_victim_to_kva(struct pcache_victim_meta *victim)
 	return (void *) (pcache_victim_data_map + index * PCACHE_LINE_SIZE);
 }
 
-int victim_submit_flush(struct pcache_victim_meta *victim, bool wait);
+int victim_submit_flush(struct pcache_victim_meta *victim, bool wait, bool dirty);
 
 /* Submit a flush job to flush thread, return immediately */
 static inline int 
-victim_submit_flush_nowait(struct pcache_victim_meta *victim)
+victim_submit_flush_nowait(struct pcache_victim_meta *victim, bool dirty)
 {
-	return victim_submit_flush(victim, false);
+	return victim_submit_flush(victim, false, dirty);
 }
 
 /* Submit a flush job to flush thread, wait until flushed back */
 static inline int
-victim_submit_flush_wait(struct pcache_victim_meta *victim)
+victim_submit_flush_wait(struct pcache_victim_meta *victim, bool dirty)
 {
-	return victim_submit_flush(victim, true);
+	return victim_submit_flush(victim, true, dirty);
 }
 
 int victim_flush_sync(void);

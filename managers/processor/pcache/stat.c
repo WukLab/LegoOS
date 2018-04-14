@@ -42,8 +42,11 @@ static const char *const pcache_event_text[] = {
 	/* Victim internal debug counter */
 	"nr_victim_prepare_insert",
 	"nr_victim_finish_insert",
-	"nr_victim_flush_submitted",
-	"nr_victim_flush_finished",
+
+	/* Victim flush counters */
+	"nr_victim_flush_submitted_clean",
+	"nr_victim_flush_submitted_dirty",
+	"nr_victim_flush_finished_dirty",
 	"nr_victim_flush_async_run",
 	"nr_victim_flush_sync",
 

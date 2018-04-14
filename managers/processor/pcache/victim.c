@@ -591,9 +591,11 @@ victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
  * Second step of victim insertion
  *
  * This function is called after fisrt step of insertion and unmap.
- * The sole purpose of func is to copy data from pcache and mark Hasdata.
+ * The purpose of func are:
+ *  - copy data from pcache and mark Hasdata.
+ *  - submit flush job if the pcache line was dirty
  */
-void victim_finish_insert(struct pcache_victim_meta *victim)
+void victim_finish_insert(struct pcache_victim_meta *victim, bool dirty)
 {
 	void *src, *dst;
 	struct pcache_meta *pcm = victim->pcm;
@@ -627,7 +629,7 @@ void victim_finish_insert(struct pcache_victim_meta *victim)
 	 * Submit flush job to worker thread
 	 * Don't wait for the slow flush.
 	 */
-	victim_submit_flush_nowait(victim);
+	victim_submit_flush_nowait(victim, dirty);
 }
 
 /* Wait for second step of insertion */

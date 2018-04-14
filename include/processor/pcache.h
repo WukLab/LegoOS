@@ -618,6 +618,7 @@ static inline void pcache_print_info(void) { }
 
 int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc);
 int pcache_try_to_unmap(struct pcache_meta *pcm);
+bool pcache_try_to_unmap_check_dirty(struct pcache_meta *pcm);
 int pcache_wrprotect(struct pcache_meta *pcm);
 int pcache_referenced(struct pcache_meta *pcm);
 void pcache_referenced_trylock(struct pcache_meta *pcm,

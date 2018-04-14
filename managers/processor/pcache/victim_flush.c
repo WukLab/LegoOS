@@ -73,14 +73,27 @@ void wake_up_victim_flushd(void)
 /*
  * Submit a victim cache line to flush queue.
  * @wait: true if you want to wait for completion
+ * @bool: if the pcache line was dirty before unmapped
  */
-int victim_submit_flush(struct pcache_victim_meta *victim, bool wait)
+int victim_submit_flush(struct pcache_victim_meta *victim, bool wait, bool dirty)
 {
 	struct victim_flush_job *job;
 
 	PCACHE_BUG_ON_VICTIM(!VictimHasdata(victim) || !VictimAllocated(victim), victim);
 	PCACHE_BUG_ON_VICTIM(VictimFlushed(victim) || VictimWriteback(victim) ||
 			     VictimWaitflush(victim), victim);
+
+	/*
+	 * If the pcache line was clean, then there is no need to
+	 * flush back to remote memory. But we do need to set
+	 * the Flushed flag, to mark this victim as a candidate.
+	 * Similar to the cleanup if a dirty line was flushed.
+	 */
+	if (!dirty) {
+		SetVictimFlushed(victim);
+		inc_pcache_event(PCACHE_VICTIM_FLUSH_SUBMITTED_CLEAN);
+		return 0;
+	}
 
 	SetVictimWaitflush(victim);
 
@@ -102,7 +115,7 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait)
 	enqueue_victim_flush_job(job);
 
 	/* Update counter */
-	inc_pcache_event(PCACHE_VICTIM_FLUSH_SUBMITTED);
+	inc_pcache_event(PCACHE_VICTIM_FLUSH_SUBMITTED_DIRTY);
 
 	/* flush thread will free job */
 	wake_up_process(victim_flush_thread);
@@ -168,7 +181,7 @@ static void __victim_flush_func(struct victim_flush_job *job)
 	kfree(job);
 
 	/* Update counter */
-	inc_pcache_event(PCACHE_VICTIM_FLUSH_FINISHED);
+	inc_pcache_event(PCACHE_VICTIM_FLUSH_FINISHED_DIRTY);
 }
 
 /*

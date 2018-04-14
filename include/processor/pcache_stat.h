@@ -92,8 +92,13 @@ enum pcache_event_item {
 	 */
 	PCACHE_VICTIM_PREPARE_INSERT,	/* nr of attempt to insert victim */
 	PCACHE_VICTIM_FINISH_INSERT,	/* nr of successful insertion into victim */
-	PCACHE_VICTIM_FLUSH_SUBMITTED,	/* nr of submitted victim flush jobs */
-	PCACHE_VICTIM_FLUSH_FINISHED,	/* nr of finished victim flush jobs */
+
+	/*
+	 * Victim flush counters
+	 */
+	PCACHE_VICTIM_FLUSH_SUBMITTED_CLEAN,	/* nr of submitted clean victim flush jobs */
+	PCACHE_VICTIM_FLUSH_SUBMITTED_DIRTY,	/* nr of submitted dirty victim flush jobs */
+	PCACHE_VICTIM_FLUSH_FINISHED_DIRTY,	/* nr of finished dirty victim flush jobs */
 	PCACHE_VICTIM_FLUSH_ASYNC_RUN,	/* nr of times async victim_flushd got running */
 	PCACHE_VICTIM_FLUSH_SYNC,	/* nr of times sync flush is invoked */
 
