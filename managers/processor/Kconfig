@@ -75,47 +75,11 @@ config CHECKPOINT
 
 	  If unsure, say N.
 
-config GPM
-	bool "Global processor monitor"
-	default n
-	help
-	  Enable this to use Global processor monitor
-
-if GPM
-config GPM_NODEID
-	int "GMM IB node ID"
-	default 3
-	help
-	  if running a multiple monitor on same machine, IB node
-	  ID can be same as Storage node, GMM, and GSM's
-
-config VNODE
-	bool "Virtual node"
-	default n
-	help
-	  Enable virtual node namespace
-
-config VNODE_TABLE_ORDER
-	int "Virtual node hash table order"
-	default 8
-	depends on VNODE
-	help
-	  order of vnode hashable used for transfering IP to vnode_struct
-
-config VNODE_MAP_ORDER
-	int "Virtual node array order"
-	default 8
-	depends on VNODE
-	help
-	  order of vnode array used for transfering vnode id to vnode_struct
-
-endif #if GPM
-
 source "managers/processor/pcache/Kconfig"
 source "managers/processor/fs/Kconfig"
 source "managers/processor/checkpoint/Kconfig"
 
-menu "Processor Syscall Trace Options"
+menu "Processor Side Syscall Trace Options"
 config STRACE
 	bool "syscall trace"
 	default n
@@ -145,7 +109,53 @@ config STRACE_PRINT_ON_SPECIFIC
 	depends on STRACE
 endmenu
 
-menu "Processor DEBUG Options"
+menu "Processor Side Global Monitor Configuration"
+config GPM
+	bool "Global processor monitor"
+	default n
+	help
+	  Enable this if you have a Global Processor Monitor machine
+	  running in the cluster.
+
+	  If unsure, say N
+
+if GPM
+config GPM_NODEID
+	int "GMM IB node ID"
+	default 3
+	help
+	  if running a multiple monitor on same machine, IB node
+	  ID can be same as Storage node, GMM, and GSM's
+
+config VNODE
+	bool "Virtual node"
+	default n
+	help
+	  Enable virtual node namespace
+
+config VNODE_TABLE_ORDER
+	int "Virtual node hash table order"
+	default 10
+	depends on VNODE
+	help
+	  Order of vnode hashable used for transfering IP to vnode_struct
+	  The number of hashtable entries will be (1<<ORDER).
+
+	  If unsure, use default.
+
+config VNODE_MAP_ORDER
+	int "Virtual node array order"
+	default 10
+	depends on VNODE
+	help
+	  Order of vnode array used for transfering vnode id to vnode_struct
+	  The number of the array will be (1<<ORDER)
+
+	  If unsure, use default.
+endif #if GPM
+endmenu
+
+menu "Processor Side DEBUG Options"
 config DEBUG_PCACHE
 	bool "Debug pcache"
 	default n

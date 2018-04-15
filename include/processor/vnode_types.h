@@ -10,15 +10,13 @@
 #ifndef _LEGO_PROCESSOR_VNODE_TYPES_H_
 #define _LEGO_PROCESSOR_VNODE_TYPES_H_
 
-#ifdef CONFIG_VNODE
+#include <lego/types.h>
 
 struct vnode_struct {
-	int p_nid;
-	int vid;
-	int ip;
-	struct hlist_node node;
-} ____cacheline_aligned;
-
-#endif /* CONFIG_VNODE */
+	int			p_nid;
+	int			vid;
+	int			ip;
+	struct hlist_node	node;
+} __attribute__((packed)) __attribute__((aligned(64)));
 
 #endif /* _LEGO_PROCESSOR_VNODE_TYPES_H_ */

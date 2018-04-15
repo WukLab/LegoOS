@@ -2,6 +2,8 @@
 # Pcache Kconfig Options
 #
 
+menu "Processor Side ExCache Configuration"
+
 config PCACHE_ZEROFILL
 	bool "pcache zerofill opt"
 	default y
@@ -146,3 +148,5 @@ config PCACHE_PREFETCH
 	default y
 	help
 	  Say Y if you want prefetch feature.
+
+endmenu

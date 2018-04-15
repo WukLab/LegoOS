@@ -42,7 +42,7 @@ const char *envp_init[MAX_INIT_ENVS+2] =
 static int procmgmt(void *unused)
 {
 	const char *init_filename;
-	int vid;
+	int vid __maybe_unused;
 
 	/*
 	 * Use the correct name if a real storage node is used.
@@ -51,12 +51,16 @@ static int procmgmt(void *unused)
 	init_filename = "/root/yutong/lego/usr/exe.o";
 	argv_init[0] = init_filename;
 
-	/* 
-	 * request vid
+	/*
+	 * If vNode is configured, which implies GPM is also configured,
+	 * we should ask GPM what our vNode information will be:
 	 */
-	vid = request_vnode();
-	WARN_ON(vid < 0);
+#ifdef CONFIG_VNODE
+	vid = p2pm_request_vnode();
+	if (vid < 0)
+		panic("Invalid vNode ID, abort.");
 	current->pm_data.virtual_node = vid_find_vnode(vid);
+#endif
 
 	/*
 	 * It's strace has not been established yet

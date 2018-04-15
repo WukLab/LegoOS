@@ -51,9 +51,7 @@ struct processor_manager {
 	int		storage_node;
 #endif
 
-#ifdef CONFIG_VNODE
 	struct vnode_struct *virtual_node;
-#endif
 };
 
 #define UNSET_HOME_NODE		(INT_MAX)
