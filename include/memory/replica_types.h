@@ -83,4 +83,24 @@ static inline void ClearReplicaLog##uname(struct replica_log *p)	\
 REPLICA_LOG_META_FLAGS(Valid, valid)
 REPLICA_LOG_META_FLAGS(Csum, csum)
 
+/*
+ * Primary Memory VMA Replication
+ */
+enum replica_vma_action {
+	REPLICATE_MMAP = 1,
+	REPLICATE_MUNMAP,
+	REPLICATE_BRK,
+	REPLICATE_MREMAP,
+
+	NR_REPLICATE_TYPES,
+};
+
+struct replica_vma_log {
+	unsigned int		action;
+	unsigned long		new_addr;
+	unsigned long		new_len;
+	unsigned long		old_addr;
+	unsigned long		old_len;
+} __attribute__((packed)) __attribute__((aligned(8)));
+
 #endif /* _LEGO_MEMORY_REPLICA_TYPES_H_ */

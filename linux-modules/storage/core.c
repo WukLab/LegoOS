@@ -55,9 +55,14 @@ static void storage_dispatch(void *msg, uintptr_t desc)
 #endif
 
 	switch (*opcode) {
-/* replica log batch flush */
+/* replica log batch flush from Secondary Memory */
 	case M2S_REPLICA_FLUSH:
 		handle_replica_flush(msg, desc);
+		break;
+
+/* replica VMA info from Primary Memory*/
+	case M2S_REPLICA_VMA:
+		handle_replica_vma(msg, desc);
 		break;
 
 	case M2S_READ:

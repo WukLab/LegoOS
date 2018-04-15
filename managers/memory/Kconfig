@@ -24,7 +24,25 @@ config THPOOL_NR_WORKERS
 	  Each worker thread is pinned a CPU core. So, it should
 	  be smaller than number of cores.
 
-menu "Memory DEBUG Options"
+menu "Memory Side Replication Configuration"
+config REPLICATION_VMA
+	bool "Enable replicating VMA"
+	default n
+	help
+	  Enable this if you want to replica VMA info to Storage.
+	  The VMA info is directly sent by Primary Memory Node
+	  to Storage. It is not sent to Seconadry Memory Node.
+	  Processor will send replicated memory to Secondary Memory Node.
+
+	  This is independent of Processor side REPLICATION_MEMORY.
+
+	  If you want to be able to recover from memory component failure,
+	  you should have both enabled at P and M.
+
+	  If unsure, say N
+endmenu
+
+menu "Memory Side DEBUG Options"
 config DEBUG_HANDLE_PCACHE
 	bool "Debug pcache"
 	default n

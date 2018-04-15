@@ -21,7 +21,8 @@
 #include <processor/pcache.h>
 
 /*
- * TODO sg list
+ * This code runs on Secondary Memory,
+ * used to flush the batched log to Storage.
  */
 
 int flush_replica_struct(struct replica_struct *r)

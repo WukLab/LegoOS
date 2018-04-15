@@ -22,6 +22,7 @@
 #include <memory/vm-pgtable.h>
 #include <memory/file_ops.h>
 #include <memory/distvm.h>
+#include <memory/replica.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_MMAP
 #define mmap_debug(fmt, ...)	\
@@ -116,6 +117,7 @@ out:
 	reply.ret_brk = mm->brk;
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 
+	replicate_vma(tsk, REPLICATE_BRK, newbrk, 0, oldbrk, 0);
 	debug_dump_vm_all(mm, 0);
 	return 0;
 }
@@ -191,6 +193,8 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 
 out:
 	ibapi_reply_message(reply, sizeof(*reply), desc);
+
+	replicate_vma(tsk, REPLICATE_MMAP, reply->ret_addr, len, 0, 0);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -234,6 +238,7 @@ int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 
+	replicate_vma(tsk, REPLICATE_MUNMAP, addr, len, 0, 0);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -674,6 +679,8 @@ out_nolock:
 		   (reply.status != RET_OKAY) ? reply.line : 0);
 
 	ibapi_reply_message(&reply, sizeof(reply), desc);
+
+	replicate_vma(tsk, REPLICATE_MREMAP, reply.new_addr, new_len, old_addr, old_len);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }

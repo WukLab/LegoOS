@@ -7,6 +7,15 @@
  * (at your option) any later version.
  */
 
+/*
+ * This file describes functions for handling memory replication requests
+ * sent from Processor. This set of functions run on Secondary Memory.
+ * We run this service no matter REPLICATION_MEMORY is configured at P or not
+ *
+ * The REPLICATION_VMA are described by vma.c, which run on Primary Memory only.
+ * Memory can be both Secondary and Primary at the same time.
+ */
+
 #include <lego/slab.h>
 #include <lego/kernel.h>
 #include <lego/spinlock.h>

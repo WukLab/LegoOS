@@ -131,4 +131,19 @@ void dump_replica_log(struct replica_log *log, int idx);
 void dump_replica_struct(struct replica_struct *r);
 void dump_all_replica(void);
 
+/*
+ * Primary Memory VMA Replication
+ */
+
+#ifdef CONFIG_REPLICATION_VMA
+void replicate_vma(struct lego_task_struct *p, int action,
+		   unsigned long new_addr, unsigned long new_len,
+		   unsigned long old_addr, unsigned long old_len);
+#else
+static inline void replicate_vma(struct lego_task_struct *p, int action,
+		   unsigned long new_addr, unsigned long new_len,
+		   unsigned long old_addr, unsigned long old_len)
+{ }
+#endif
+
 #endif /* _LEGO_MEMORY_REPLICA_H_ */

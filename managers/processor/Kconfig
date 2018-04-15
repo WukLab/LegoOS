@@ -12,7 +12,7 @@ config COMP_PROCESSOR
 if COMP_PROCESSOR
 
 config CHECKPOINT
-	bool "Enable checkpoint feature"
+	bool "Enable Process Checkpoint"
 	default n
 	---help---
 	  Say Y if you want periodic checkpointing at processor component.
@@ -65,15 +65,21 @@ config PROCESSOR_MEMMAP_MEMBLOCK_RESERVED
 
 	  If unsure, say y.
 
-config CHECKPOINT
-	bool "Enable checkpoint feature"
+menu "Processor Side Replication Configuration"
+config REPLICATION_MEMORY
+	bool "Enable Replicating Memory"
 	default n
-	---help---
-	  Say Y if you want periodic checkpointing at processor component.
-	  This may slow down application throughput, but could greatly improve
-	  the reliability of your system.
+	help
+	  If this option is enabled, every victim cache flush will also be
+	  sent over to a Replica Memory Node, or Secondary Memory Node.
+
+	  This option is independent of M side REPLICATION_VMA.
+
+	  If you want to be able to recover from memory component failure,
+	  you should have both enabled at P and M.
 
 	  If unsure, say N.
+endmenu
 
 source "managers/processor/pcache/Kconfig"
 source "managers/processor/fs/Kconfig"

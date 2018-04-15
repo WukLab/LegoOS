@@ -163,6 +163,9 @@ static int append_replica(struct replica_log_info *r,
 	return 0;
 }
 
+/*
+ * Handle memory replication flush from Secondary Memory
+ */
 void handle_replica_flush(void *_msg, u64 desc)
 {
 	struct m2s_replica_flush_msg *msg = _msg;
@@ -186,5 +189,21 @@ void handle_replica_flush(void *_msg, u64 desc)
 
 	reply = append_replica(r, log_array, nr_log);
 out:
+	ibapi_reply_message(&reply, sizeof(reply), desc);
+}
+
+/*
+ * Handle VMA replication from Primary Memory
+ */
+void handle_replica_vma(void *_msg, u64 desc)
+{
+	struct m2s_replica_vma_msg *msg = _msg;
+	struct replica_vma_log *log = &msg->log;
+	int reply = 0;
+
+	pr_info("action: %d [%#lx-%#lx], [%#lx-%#lx]\n", log->action,
+		log->new_addr, log->new_addr + log->new_len,
+		log->old_addr, log->old_addr + log->old_len);
+
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 }

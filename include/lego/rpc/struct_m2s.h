@@ -45,4 +45,10 @@ struct m2s_replica_flush_msg {
 	char			log[0];
 };
 
+/* M2S_REPLICA_VMA */
+struct m2s_replica_vma_msg {
+	unsigned int		opcode;
+	struct replica_vma_log	log;
+};
+
 #endif /* _LEGO_RPC_STRUCT_M2S_H_ */
