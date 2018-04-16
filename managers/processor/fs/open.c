@@ -103,7 +103,7 @@ void free_fd(struct files_struct *files, int fd)
  */
 void do_close_on_exec(struct files_struct *files)
 {
-	pr_info("%s(): TODO, not implemented.\n", __func__);
+	pr_info_once("%s(): TODO, not implemented.\n", __func__);
 }
 
 #ifdef CONFIG_USE_RAMFS

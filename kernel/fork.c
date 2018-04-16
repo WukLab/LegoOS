@@ -997,7 +997,6 @@ SYSCALL_DEFINE0(fork)
 
 SYSCALL_DEFINE0(vfork)
 {
-	WARN(1, "Check vfork() state");
 	return do_fork(CLONE_GLOBAL_THREAD | CLONE_VFORK | CLONE_VM | SIGCHLD,
 		       0, 0, NULL, NULL, 0);
 }

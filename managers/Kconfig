@@ -36,7 +36,8 @@ config SOFT_WATCHDOG
 config SOFT_WATCHDOG_INTERVAL_SEC
 	int "Periodic print interval in sec"
 	range 1 60
-	default 2
+	default 5 if COMP_MEMORY
+	default 10 if COMP_PROCESSOR
 	depends on SOFT_WATCHDOG
 
 config DEFAULT_MEM_NODE
