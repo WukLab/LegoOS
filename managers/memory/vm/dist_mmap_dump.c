@@ -10,6 +10,7 @@
 /*
  * all distributed vma dump functions are here
  */
+#include <lego/mm.h>
 #include <memory/distvm.h> 
 
 void dump_vmas_onetree(struct vma_tree *root)

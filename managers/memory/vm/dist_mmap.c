@@ -607,6 +607,9 @@ consult_gmm(unsigned long request, unsigned long flag, struct consult_reply *rep
 	int ret = 0;
 
 #ifndef CONFIG_VMA_MEMORY_UNITTEST
+
+#ifdef CONFIG_GMM
+
 	struct consult_info send;
 
 	send.len = request;
@@ -618,7 +621,17 @@ consult_gmm(unsigned long request, unsigned long flag, struct consult_reply *rep
 		ret = 0;
 
 #else
+
+	reply->count = 1;
+	reply->scheme[0].nid = MY_NODE_ID;
+	reply->scheme[0].len = request;
+
+#endif /* CONFIG_GMM */
+
+#else
+
 	ret = consult_fake_gmm(request, reply);
+
 #endif /* CONFIG_VMA_MEMORY_UNITTEST */
 
 	vma_debug("%s, request len: %lx, ret: %d\n", __func__, request, ret);
@@ -1515,14 +1528,12 @@ do_dist_mremap_move_split(struct lego_mm_struct *mm, unsigned long old_addr,
 			  unsigned long *new_max_gap)
 {
 	struct vma_tree **map = mm->vmrange_map;
-	struct vma_tree *oldroot = map[vmr_idx(old_addr)];
 	struct vma_tree *newroot = map[vmr_idx(new_addr)];
 	struct vm_area_struct *vma;
 	
 	vma_debug("%s, old_addr: %lx, old_len: %lx, "
 		  "new_len: %lx, new_addr %lx\n", 
 		  __func__, old_addr, old_len, new_len, new_addr);
-	VMA_BUG_ON(!oldroot);
 
 	if (!newroot) {
 		int ret = map_vmatrees(mm, LEGO_LOCAL_NID, new_addr, new_len, 0);
