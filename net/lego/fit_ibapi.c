@@ -77,6 +77,11 @@ __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr
 	ppc *ctx = FIT_ctx;
 	int ret;
 
+	if (unlikely(target_node >= CONFIG_FIT_NR_NODES)) {
+		pr_info("target_node: %d\n", target_node);
+		BUG();
+	}
+
 	lock_ib();
 	ret = fit_send_reply_with_rdma_write_with_imm(ctx, target_node, addr,
 			size, ret_addr, max_ret_size, 0, if_use_ret_phys_addr,
