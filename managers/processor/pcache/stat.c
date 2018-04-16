@@ -68,7 +68,5 @@ void print_pcache_events(void)
 	for (i = 0; i < NR_PCACHE_EVENT_ITEMS; i++) {
 		pr_info("%s: %lu\n", pcache_event_text[i],
 			atomic_long_read(&pcache_event_stats.event[i]));
-
-		atomic_long_set(&pcache_event_stats.event[i], 0);
 	}
 }

@@ -40,7 +40,8 @@ const struct trace_print_flags pteflag_names[] = {
 
 void dump_pte(pte_t *ptep, const char *reason)
 {
-	pr_debug("pte:%p pfn:%#lx flags:(%pGe)\n", ptep, pte_pfn(*ptep), ptep);
+	pr_debug("pte:%p (%#lx) pfn:%#lx flags:(%pGe)\n",
+		ptep, (unsigned long)(ptep->pte), pte_pfn(*ptep), ptep);
 	if (reason)
 		pr_debug("pte dumped because: %s\n", reason);
 }

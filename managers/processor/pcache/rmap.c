@@ -801,7 +801,12 @@ int pcache_zap_pte(struct mm_struct *mm, unsigned long address,
 	};
 
 	pcm = pte_to_pcache_meta(ptent);
-	BUG_ON(!pcm);
+	if (unlikely(!pcm)) {
+		pr_info("ptent: %#lx address: %#lx\n",
+			(unsigned long)ptent.pte, address);
+		dump_pte(pte, "corrupted");
+		BUG();
+	}
 
 	/*
 	 * We have a strict lock ordering everyone should obey:
