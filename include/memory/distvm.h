@@ -159,7 +159,7 @@ get_available_reply_entry(struct lego_mm_struct *mm)
 static inline void 
 load_vma_context(struct lego_mm_struct *mm, struct vma_tree *root)
 {
-	memcpy(&mm->mm_rb, &root->vm_rb, sizeof(struct rb_root));
+	mm->mm_rb = root->vm_rb;
 	mm->mmap = root->mmap;
 	mm->mmap_legacy_base = root->begin;
 	mm->mmap_base = root->end;
@@ -169,8 +169,8 @@ load_vma_context(struct lego_mm_struct *mm, struct vma_tree *root)
 static inline void 
 save_vma_context(struct lego_mm_struct *mm, struct vma_tree *root)
 {
+	root->vm_rb = mm->mm_rb;
 	root->mmap = mm->mmap;
-	memcpy(&root->vm_rb, &mm->mm_rb, sizeof(struct rb_root));
 	root->highest_vm_end = mm->highest_vm_end;
 }
 static inline void 

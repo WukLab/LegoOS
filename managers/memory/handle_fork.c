@@ -103,20 +103,17 @@ dup_lego_mmap_single_vmatree(struct lego_mm_struct *mm, struct lego_mm_struct *o
 	if (!newroot)
 		return -ENOMEM;
 	
-	newroot->vm_rb = RB_ROOT;
-	newroot->mmap = NULL;
 	newroot->begin = oldroot->begin;
 	newroot->end = oldroot->end;
 	newroot->flag = oldroot->flag;
 	newroot->max_gap = oldroot->max_gap;
-	newroot->mnode =oldroot->mnode;
+	newroot->mnode = oldroot->mnode;
 	INIT_LIST_HEAD(&newroot->list);
 	set_vmrange_map(mm, newroot->begin, newroot->end - newroot->begin, newroot);
 
-	/* copy all vmas under this rbtree */
-	rb_link = &newroot->vm_rb.rb_node;
+	rb_link = &mm->mm_rb.rb_node;
 	rb_parent = NULL;
-	pprev = &newroot->mmap;
+	pprev = &mm->mmap;
 
 	prev = NULL;
 	for (mpnt = oldroot->mmap; mpnt; mpnt = mpnt->vm_next) {
@@ -162,7 +159,11 @@ dup_lego_mmap_single_vmatree(struct lego_mm_struct *mm, struct lego_mm_struct *o
 
 		if (ret)
 			return ret;
+
 	}
+	/* update new vma tree root */
+	save_update_vma_context(mm, newroot);
+
 	return ret;
 }
 

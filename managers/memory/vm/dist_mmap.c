@@ -678,7 +678,7 @@ int find_dist_vma_intersection(struct lego_mm_struct *mm,
 			return 1;
 	}
 
-	/* 
+	/*
 	 * at this point we can either do find_vma locally
 	 * or send request to remote
 	 */

@@ -12,7 +12,7 @@
 
 /* Lego cluster config */
 #define CONFIG_FIT_LOCAL_ID	2
-#define CONFIG_FIT_NR_NODES	4
+#define CONFIG_FIT_NR_NODES	3
 #define MAX_NODE		CONFIG_FIT_NR_NODES
 
 //#define CONFIG_SOCKET_O_IB
