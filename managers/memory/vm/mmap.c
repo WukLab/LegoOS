@@ -1259,7 +1259,11 @@ int vm_munmap(struct lego_task_struct *p, unsigned long start, size_t len)
 	if (down_write_killable(&mm->mmap_sem))
 		return -EINTR;
 
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	ret = distvm_munmap_homenode(mm, start, len);
+#else
 	ret = do_munmap(mm, start, len);
+#endif
 	up_write(&mm->mmap_sem);
 
 	return ret;
@@ -1766,12 +1770,19 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 	vma_debug("%s, addr: %lx, len: %lx, pgoff: %lx, flags: %lx, vm_flags: %lx\n", 
 			__func__, addr, len, pgoff, flags, vm_flags);
 
+#ifndef CONFIG_DISTRIBUTED_VMA_MEMORY
+
+	if (!(flags & MAP_FIXED))
+		addr = round_hint_to_min(addr);
+
 	if (!len)
 		return -EINVAL;
 
-#ifndef CONFIG_DISTRIBUTED_VMA_MEMORY
-	if (!(flags & MAP_FIXED))
-		addr = round_hint_to_min(addr);
+#else 
+
+	if (!len)
+		return 0;
+
 #endif
 
 	/* Careful about overflows.. */

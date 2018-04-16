@@ -10,6 +10,7 @@
 #include <lego/mm.h>
 #include <lego/kernel.h>
 #include <lego/tracepoint.h>
+#include <lego/distvm.h>
 #include <memory/vm.h>
 #include <memory/file_types.h>
 
@@ -109,6 +110,24 @@ void dump_vma(const struct vm_area_struct *vma)
 
 void dump_all_vmas_simple(struct lego_mm_struct *mm)
 {
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	struct vma_tree **map = mm->vmrange_map;
+	int idx = 0;
+	for (idx = 0; idx < VMR_COUNT; idx++) {
+		struct vma_tree *root = map[idx];
+		struct vm_area_struct *vma;
+		if (!root)
+			continue;
+		
+		vma = root->mmap;
+		while (vma) {
+			dump_vma_simple(vma);
+			vma = vma->vm_next;
+		}
+
+		idx = vmr_idx(VMR_ALIGN(root->end)) - 1;
+	}
+#else
 	struct vm_area_struct *vma;
 
 	vma = mm->mmap;
@@ -117,10 +136,29 @@ void dump_all_vmas_simple(struct lego_mm_struct *mm)
 		dump_vma_simple(vma);
 		vma = vma->vm_next;
 	}
+#endif
 }
 
 void dump_all_vmas(struct lego_mm_struct *mm)
 {
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
+	struct vma_tree **map = mm->vmrange_map;
+	int idx = 0;
+	for (idx = 0; idx < VMR_COUNT; idx++) {
+		struct vma_tree *root = map[idx];
+		struct vm_area_struct *vma;
+		if (!root)
+			continue;
+		
+		vma = root->mmap;
+		while (vma) {
+			dump_vma(vma);
+			vma = vma->vm_next;
+		}
+
+		idx = vmr_idx(VMR_ALIGN(root->end)) - 1;
+	}
+#else
 	struct vm_area_struct *vma;
 
 	vma = mm->mmap;
@@ -129,6 +167,7 @@ void dump_all_vmas(struct lego_mm_struct *mm)
 		dump_vma(vma);
 		vma = vma->vm_next;
 	}
+#endif
 }
 
 void dump_lego_mm(const struct lego_mm_struct *mm)

@@ -6,10 +6,12 @@
 
 int main(void)
 {
-        char *fname = "/root/yutong/phoenix/phoenix-2.0/tests/word_count/word_count-seq";
+        char *fname = "/usr/bin/python";
         char * const argv[] = { 
                 fname,
-                "/root/yutong/phoenix/phoenix-2.0/tests/word_count/word_count_datafiles/word_1GB.txt",
+                "/root/yutong/model/models-1.4.0/official/mnist/mnist.py",
+		"--train_epochs",
+		"1",
                 NULL,
         };  
 
