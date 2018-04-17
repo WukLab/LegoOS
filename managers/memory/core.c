@@ -469,13 +469,13 @@ static inline void report_stucked_worker(int idx, struct thpool_worker *tw)
 
 	pr_info("hb: worker[%d] CPU%2d stucked\n", idx, cpu);
 	pr_info("hb:  common_header [op=%#x src_nid:%d]\n", hdr->opcode, hdr->src_nid);
+	cpu_dumpstack(cpu);
 
 	if (hdr->opcode == P2M_PCACHE_MISS) {
 		struct p2m_pcache_miss_msg *msg = rx;
 
 		pr_info("hb:  msg [pid=%u,tgid=%u,flags=%#x,vaddr=%#Lx]\n",
 			msg->pid, msg->tgid, msg->flags, msg->missing_vaddr);
-		cpu_dumpstack(cpu);
 	}
 }
 

@@ -130,13 +130,13 @@ int __lego_pud_alloc(struct lego_mm_struct *mm, pgd_t *pgd, unsigned long addres
 
 	smp_wmb();
 
-	spin_lock(&mm->page_table_lock);
+	spin_lock(&mm->lego_page_table_lock);
 	if (pgd_present(*pgd))
 		 /* Another has populated it */
 		lego_pud_free(new);
 	else
 		lego_pgd_populate(pgd, new);
-	spin_unlock(&mm->page_table_lock);
+	spin_unlock(&mm->lego_page_table_lock);
 	return 0;
 }
 
@@ -148,13 +148,13 @@ int __lego_pmd_alloc(struct lego_mm_struct *mm, pud_t *pud, unsigned long addres
 
 	smp_wmb();
 
-	spin_lock(&mm->page_table_lock);
+	spin_lock(&mm->lego_page_table_lock);
 	if (pud_present(*pud))
 		 /* Another has populated it */
 		lego_pmd_free(new);
 	else
 		lego_pud_populate(pud, new);
-	spin_unlock(&mm->page_table_lock);
+	spin_unlock(&mm->lego_page_table_lock);
 	return 0;
 }
 

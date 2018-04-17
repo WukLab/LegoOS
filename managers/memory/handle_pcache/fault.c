@@ -57,6 +57,7 @@ static void pcache_miss_error(u32 retval, u64 desc,
 	*reply = retval;
 	ibapi_reply_message(reply, sizeof(*reply), desc);
 
+	dump_all_vmas_simple(p->mm);
 	WARN(1, "src_nid:%u,pid:%u,vaddr:%#Lx\n", p->node, p->pid, vaddr);
 }
 
@@ -80,6 +81,7 @@ static int common_handle_p2m_miss(struct lego_task_struct *p,
 
 	vma = find_vma(mm, vaddr);
 	if (unlikely(!vma)) {
+		pr_info("fail to find vma\n");
 		ret = VM_FAULT_SIGSEGV;
 		goto unlock;
 	}
@@ -90,11 +92,13 @@ static int common_handle_p2m_miss(struct lego_task_struct *p,
 
 	/* stack? */
 	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN))) {
+		pr_info("not stack \n");
 		ret = VM_FAULT_SIGSEGV;
 		goto unlock;
 	}
 
 	if (unlikely(expand_stack(vma, vaddr))) {
+		pr_info("fail to expand not stack \n");
 		ret = VM_FAULT_SIGSEGV;
 		goto unlock;
 	}

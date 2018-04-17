@@ -158,9 +158,9 @@ static inline void lego_pte_lock_deinit(struct page *page)
 /*
  * We use mm->page_table_lock to guard all pagetable pages of the mm.
  */
-static inline spinlock_t *lego_pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
+static inline spinlock_t *lego_pte_lockptr(struct lego_mm_struct *mm, pmd_t *pmd)
 {
-	return &mm->page_table_lock;
+	return &mm->lego_page_table_lock;
 }
 static inline bool lego_ptlock_init(struct page *page) { return true; }
 static inline void lego_pte_lock_deinit(struct page *page) {}
@@ -196,7 +196,7 @@ static inline void lego_pgtable_pmd_page_dtor(struct page *page)
  */
 static inline spinlock_t *lego_pmd_lockptr(struct lego_mm_struct *mm, pmd_t *pmd)
 {
-	return &mm->page_table_lock;
+	return &mm->lego_page_table_lock;
 }
 static inline bool lego_pgtable_pmd_page_ctor(struct page *page) { return true; }
 static inline void lego_pgtable_pmd_page_dtor(struct page *page) {}

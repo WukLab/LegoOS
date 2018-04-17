@@ -239,14 +239,14 @@ static int browse_rb(struct lego_mm_struct *mm)
 				  vma->vm_start, vma->vm_end);
 			bug = 1;
 		}
-		spin_lock(&mm->page_table_lock);
+		spin_lock(&mm->lego_page_table_lock);
 		if (vma->rb_subtree_gap != vma_compute_subtree_gap(vma)) {
 			pr_emerg("free gap %lx, correct %lx\n",
 			       vma->rb_subtree_gap,
 			       vma_compute_subtree_gap(vma));
 			bug = 1;
 		}
-		spin_unlock(&mm->page_table_lock);
+		spin_unlock(&mm->lego_page_table_lock);
 		i++;
 		pn = nd;
 		prev = vma->vm_start;
@@ -1812,7 +1812,8 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 	if (file) {
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
-			WARN(1, "MAP_SHARED used for file-backed mmap!");
+			WARN(1, "MAP_SHARED used for file-backed mmap! Permission: %s\n",
+				(vm_flags & (VM_MAYWRITE|VM_WRITE)) ? "RW" : "RO");
 
 			vm_flags |= VM_SHARED | VM_MAYSHARE;
 			/* fall through */
@@ -1835,7 +1836,8 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 				return -EINVAL;
 			}
 
-			WARN(1, "MAP_SHARED used for anonymous mmap!");
+			WARN(1, "MAP_SHARED used for anonymous mmap! Permission: %s\n",
+				(vm_flags & (VM_MAYWRITE|VM_WRITE)) ? "RW" : "RO");
 
 			/*
 			 * Ignore pgoff.
@@ -2026,7 +2028,7 @@ lego_mm_init(struct lego_mm_struct *mm, struct lego_task_struct *p)
 	atomic_set(&mm->mm_users, 1);
 	atomic_set(&mm->mm_count, 1);
 	init_rwsem(&mm->mmap_sem);
-	spin_lock_init(&mm->page_table_lock);
+	spin_lock_init(&mm->lego_page_table_lock);
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 	if (is_homenode(p))
 		distvm_init_homenode(mm, false);
@@ -2170,12 +2172,12 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 			 * So, we reuse mm->page_table_lock to guard
 			 * against concurrent vma expansions.
 			 */
-			spin_lock(&mm->page_table_lock);
+			spin_lock(&mm->lego_page_table_lock);
 			vm_stat_account(mm, vma->vm_flags, grow);
 			vma->vm_start = address;
 			vma->vm_pgoff -= grow;
 			vma_gap_update(vma);
-			spin_unlock(&mm->page_table_lock);
+			spin_unlock(&mm->lego_page_table_lock);
 		}
 	}
 out:
