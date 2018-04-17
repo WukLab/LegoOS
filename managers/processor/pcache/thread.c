@@ -56,7 +56,6 @@ void pcache_process_exit(struct task_struct *tsk)
 {
 	/* will also free rmap */
 	release_pgtable(tsk, PAGE_SIZE, TASK_SIZE);
-	print_pcache_events();
 }
 
 /*

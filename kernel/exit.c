@@ -475,21 +475,12 @@ void __noreturn do_exit(long code)
 		/* Cancel timers etc. */
 		exit_itimers(tsk->signal);
 
-		/*
-		 * Free strace buffers
-		 * and print strace stat table
-		 */
+#if 1
 		exit_processor_strace(tsk);
-
-		/*
-		 * Print kernel text heatmap
-		 */
 		print_profile_heatmap_nr(10);
-
-		/*
-		 * Print profile points
-		 */
 		print_profile_points();
+		print_pcache_events();
+#endif
 
 #ifdef CONFIG_GPM
 		report_proc_exit(code);
