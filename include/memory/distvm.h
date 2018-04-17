@@ -17,7 +17,6 @@
 #include <lego/distvm.h>
 #include <lego/fit_ibapi.h>
 
-#include <memory/task.h>
 #include <memory/vm.h>
 
 #include <monitor/common.h>
@@ -56,19 +55,29 @@ set_vmrange_map(struct lego_mm_struct *mm, unsigned long addr,
 	memset64((uint64_t *)&map[idx], (uint64_t)vma_tree, count);
 }
 
+static inline struct vma_tree *
+get_vmatree_by_idx(struct lego_mm_struct *mm, unsigned long idx)
+{
+#ifdef CONFIG_DEBUG_VMA
+	VM_BUG_ON_MM(idx >= VMR_COUNT, mm);
+	VM_BUG_ON_MM(!mm->vmrange_map, mm);
+#endif
+	return mm->vmrange_map[idx];
+}
+
+static inline struct vma_tree *
+get_vmatree_by_addr(struct lego_mm_struct *mm, unsigned long addr)
+{
+#ifdef CONFIG_DEBUG_VMA
+	VM_BUG_ON_MM(addr > VMR_ALIGN(TASK_SIZE), mm);
+#endif
+	return get_vmatree_by_idx(mm, vmr_idx(addr));
+}
+
 int distvm_init(struct lego_mm_struct *mm);
 int distvm_init_homenode(struct lego_mm_struct *mm, bool is_copy);
 void distvm_exit(struct lego_mm_struct *mm);
 void distvm_exit_homenode(struct lego_mm_struct *mm);
-
-/* debugging functions */
-void dump_vmas_onetree(struct vma_tree *root);
-void dump_vmas_onenode(struct lego_mm_struct *mm);
-void dump_gaps_onenode(struct distvm_node *node);
-void dump_new_context(struct lego_mm_struct *mm);
-void dump_vmpool(struct lego_mm_struct *mm);
-void dump_reply(struct vmr_map_reply *reply);
-void dump_alloc_schemes(int count, struct alloc_scheme *scheme);
 
 /* vm pool API */
 int vmpool_retrieve(struct rb_root *root, unsigned long start, unsigned long end);
@@ -164,7 +173,9 @@ load_vma_context(struct lego_mm_struct *mm, struct vma_tree *root)
 	mm->mmap_legacy_base = root->begin;
 	mm->mmap_base = root->end;
 	mm->highest_vm_end = root->highest_vm_end;
+#ifdef CONFIG_DEBUG_VMA_TRACE
 	dump_new_context(mm);
+#endif
 }
 static inline void 
 save_vma_context(struct lego_mm_struct *mm, struct vma_tree *root)

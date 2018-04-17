@@ -79,13 +79,7 @@ static int dup_lego_mmap_freepool(struct lego_mm_struct *mm,
 		new->pool_end = pos->pool_end;
 		insert_freepool(mm, new);
 	}
-#ifdef CONFIG_DEBUG_VMA_DUMP
-	vma_debug("[VMPOOL] ************** old mm vmpool ***************\n");
-	dump_vmpool(oldmm);
-	vma_debug("[VMPOOL] ************** new mm vmpool ***************\n");
-	dump_vmpool(mm);
-	vma_debug("[VMPOOL] ************* done dump vmpool *************\n");
-#endif
+
 	return 0;
 }
 
@@ -264,14 +258,6 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc, struct common_hea
 	/* task struct is prepared, start duplication */
 	reply = dup_lego_mmap_local_vmatree(tsk->mm, parent->mm);
 
-#ifdef CONFIG_DEBUG_VMA_DUMP
-	vma_debug("[VMAS] ************** old mm vmas ***************\n");
-	dump_vmas_onenode(parent->mm);
-	vma_debug("[VMAS] ************** new mm vmas ***************\n");
-	dump_vmas_onenode(tsk->mm);
-	vma_debug("[VMAS] ************* done dump vmas *************\n");
-#endif
-
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 	return 0;
@@ -319,13 +305,7 @@ static int dup_lego_mmap(struct lego_mm_struct *mm, struct lego_mm_struct *oldmm
 out:
 	up_write(&mm->mmap_sem);
 	up_write(&oldmm->mmap_sem);
-#ifdef CONFIG_DEBUG_VMA_DUMP
-	vma_debug("[VMAS] ************** old mm vmas ***************\n");
-	dump_vmas_onenode(oldmm);
-	vma_debug("[VMAS] ************** new mm vmas ***************\n");
-	dump_vmas_onenode(mm);
-	vma_debug("[VMAS] ************* done dump vmas *************\n");
-#endif
+
 	return ret;
 }
 #else 

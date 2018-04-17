@@ -16,17 +16,24 @@
 #ifdef CONFIG_DEBUG_VMA
 
 #define VMA_DEBUG
+#define vma_debug(...)			pr_debug("VMA: " __VA_ARGS__)
 #define VMA_BUG_ON(cond)		BUG_ON(cond)
 #define VMA_WARN_ON(cond)		WARN_ON(cond)
 #define VMA_WARN(cond, format...)	WARN(cond, format)
-#define vma_debug(...)			pr_debug("VMA: " __VA_ARGS__)
+
+#ifdef CONFIG_DEBUG_VMA_TRACE
+#define vma_trace(...)			pr_debug("VMA: " __VA_ARGS__)
+#else
+#define vma_trace(...)			do { } while (0)
+#endif
 
 #else
 
+#define vma_debug(...)			do { } while (0)
+#define vma_trace(...)			do { } while (0)
 #define VMA_BUG_ON(cond)		do { } while (0)
 #define VMA_WARN_ON(cond)		do { } while (0)
 #define VMA_WARN(cond, format...)	do { } while (0)
-#define vma_debug(...)			do { } while (0)
 
 #endif /* CONFIG_DEBUG_VMA */
 
@@ -68,12 +75,7 @@ struct vmr_map_reply {
 #define VMR_ALIGN(addr)		ALIGN((addr), VM_GRANULARITY)
 /* to align the pointer to the (current) VM_GRANULARITY boundary */
 #define VMR_OFFSET(addr)	((addr) & ~(VM_GRANULARITY - 1))
-
-#define vmr_idx(addr) \
-({ \
-	VMA_BUG_ON((unsigned long)(addr) > VMR_ALIGN(TASK_SIZE)); \
- 	((typeof(addr))(addr) >> VMR_SHIFT); \
-})
+#define vmr_idx(addr)		((unsigned long)((addr) >> VMR_SHIFT))
 #define VMR_COUNT		vmr_idx(VMR_ALIGN(TASK_SIZE))
 /* index pointer to last valid vm range base on end addr */
 #define last_vmr_idx(end)	(vmr_idx(end) - (typeof(end))(VMR_ALIGN(end) == (end)))

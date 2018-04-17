@@ -463,7 +463,9 @@ out:
 	mmap_debug("status: %s, new_addr: %#Lx, line: %u",
 		   ret_to_string(reply.status), reply.new_addr,
 		   (reply.status != RET_OKAY) ? reply.line : 0);
+#ifdef CONFIG_DEBUG_VMA
 	dump_reply(&reply.map);
+#endif
 
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 	debug_dump_vm_all(tsk->mm, 0);
@@ -852,7 +854,6 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 
 reply:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
-	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -892,7 +893,6 @@ out:
 	vma_debug("%s, reply status: %x, max_gap: %lx\n", 
 			__func__, reply.status, reply.max_gap);
 	ibapi_reply_message(&reply, sizeof(reply), desc);
-	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -936,7 +936,6 @@ int handle_m2m_findvma(struct m2m_findvma_struct *payload, u64 desc,
 
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
-	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -977,7 +976,6 @@ int handle_m2m_mremap_grow(struct m2m_mremap_grow_struct *payload, u64 desc,
 
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
-	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -1020,7 +1018,6 @@ int handle_m2m_mremap_move(struct m2m_mremap_move_struct *payload, u64 desc,
 
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
-	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
@@ -1064,7 +1061,6 @@ int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *payload,
 
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
-	dump_vmas_onenode(tsk->mm);
 	debug_dump_vm_all(tsk->mm, 0);
 	return 0;
 }
