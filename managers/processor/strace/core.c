@@ -56,10 +56,14 @@ const strace_call_ptr_t strace_call_table[__NR_syscall_max+1] = {
 static bool strace_printable_nr[__NR_syscall_max+1] = {
 	[0 ... __NR_syscall_max]	= false,
 
-	//[__NR_fork]			= true,
-	//[__NR_vfork]			= true,
+	/* threads group */
+	[__NR_fork]			= true,
+	[__NR_vfork]			= true,
+	[__NR_clone]			= true,
 	[__NR_execve]			= true,
-	//[__NR_clone]			= true,
+
+	/* mm group */
+	//[__NR_mmap]			= true,
 	//[__NR_munmap]			= true,
 };
 #endif

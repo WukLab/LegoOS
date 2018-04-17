@@ -346,10 +346,12 @@ pcache_copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 
 	ret = 0;
 	do {
-		if (pte_none(*src_pte))
+		pte_t ptecont = *src_pte;
+
+		if (pte_none(ptecont))
 			continue;
 
-		if (!pte_present(*src_pte)) {
+		if (!pte_present(ptecont)) {
 #ifdef CONFIG_PCACHE_ZEROFILL
 			/*
 			 * If zerofill is configured, chances are we will
@@ -357,16 +359,14 @@ pcache_copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 			 * only deal with non-present PTE here. Present ones
 			 * need to callback to pcache, which will copy the bit as well.
 			 */
-			pte_t pte;
-
-			pte = ptep_get_and_clear(addr, src_pte);
-			if (unlikely(!pte_zerofill(pte))) {
+			if (unlikely(!pte_zerofill(ptecont))) {
+				pr_info("addr: %#lx, ptecont: %#lx\n", addr, ptecont.pte);
 				dump_pte(src_pte, "corrupted");
 				WARN_ON_ONCE(1);
 				continue;
 			}
 
-			pte_set(dst_pte, pte);
+			pte_set(dst_pte, ptecont);
 			continue;
 #else
 			/*

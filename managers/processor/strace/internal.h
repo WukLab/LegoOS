@@ -93,14 +93,16 @@ enum strace_actions {
 do {									\
 	if (IS_ENABLED(CONFIG_STRACE_PRINT_ON_ENTER) &&			\
 	    syscall_action == STRACE_ENTER)				\
-		pr_info("CPU%d PID%d %s(" fmt ")\n",			\
-			smp_processor_id(), current->pid, __func__,	\
+		pr_info("CPU%d PID%d-%s %s(" fmt ")\n",			\
+			smp_processor_id(), current->pid,		\
+			current->comm, __func__,			\
 			__VA_ARGS__);					\
 									\
 	if (IS_ENABLED(CONFIG_STRACE_PRINT_ON_LEAVE) &&			\
 	    syscall_action == STRACE_LEAVE)				\
-		pr_info("CPU%d PID%d %s(" fmt ") = %d, %#lx\n",		\
-			smp_processor_id(), current->pid, __func__,	\
+		pr_info("CPU%d PID%d-%s %s(" fmt ") = %d, %#lx\n",	\
+			smp_processor_id(), current->pid,		\
+			current->comm, __func__,			\
 			__VA_ARGS__, (int)syscall_ret, syscall_ret);	\
 } while (0)
 
@@ -108,14 +110,16 @@ do {									\
 do {									\
 	if (IS_ENABLED(CONFIG_STRACE_PRINT_ON_ENTER) &&			\
 	    syscall_action == STRACE_ENTER)				\
-		pr_info("CPU%d PID%d " fmt "\n",			\
-			smp_processor_id(), current->pid, 		\
+		pr_info("CPU%d PID%d-%s " fmt "\n",			\
+			smp_processor_id(), current->pid,		\
+			current->comm,					\
 			__VA_ARGS__);					\
 									\
 	if (IS_ENABLED(CONFIG_STRACE_PRINT_ON_LEAVE) &&			\
 	    syscall_action == STRACE_LEAVE)				\
-		pr_info("CPU%d PID%d " fmt " = %d, %#lx\n",		\
+		pr_info("CPU%d PID%d-%s " fmt " = %d, %#lx\n",		\
 			smp_processor_id(), current->pid,		\
+			current->comm,					\
 			__VA_ARGS__, (int)syscall_ret, syscall_ret);	\
 } while (0)
 

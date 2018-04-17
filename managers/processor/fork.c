@@ -89,6 +89,10 @@ static inline int choose_replica_mnode(struct task_struct *new,
 /*
  * Called during fork() before setting the new mm
  * We should initialize all the node ids.
+ *
+ * NOTE:
+ * This is called before @new's pid was setup.
+ * So, at this stage, new->pid==parent->pid.
  */
 void fork_processor_data(struct task_struct *new, struct task_struct *parent,
 			 unsigned long clone_flags)
@@ -127,8 +131,6 @@ void fork_processor_data(struct task_struct *new, struct task_struct *parent,
 			nid = choose_replica_mnode(new, parent);
 			set_replica_node(new, nid);
 		}
-
-		printk("newpid: %d home:%d replica: %d\n", new->pid, get_memory_home_node(new), get_replica_node(new));
 	} else {
 		/*
 		 * Otherwise, two extra cases:
