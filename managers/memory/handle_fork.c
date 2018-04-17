@@ -208,7 +208,8 @@ static int distribute_m2m_fork(struct lego_task_struct *tsk,
 	return ret < 0 ? ret : reply;
 }
 
-int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc, struct common_header *hdr)
+int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc, 
+		    struct common_header *hdr, void *tx)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -216,20 +217,20 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc, struct common_hea
 	u32 prcsr_nid = payload->prcsr_nid;
 	struct lego_task_struct *parent;
 	struct lego_task_struct *tsk;
-	int reply;
+	u32 *reply = tx;
 	
 	vma_debug("%s, nid: %d, pid: %d, tgid: %d, prcsr_nid: %d",
 		   __func__, nid, pid, tgid, prcsr_nid);
 
 	parent = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!parent)) {
-		reply = -ESRCH;
+		*reply = -ESRCH;
 		goto out;
 	}
 
 	tsk = alloc_lego_task_struct();
 	if (unlikely(!tsk)) {
-		reply = -ENOMEM;
+		*reply = -ENOMEM;
 		goto out;
 	}
 
@@ -239,27 +240,27 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc, struct common_hea
 
 	tsk->mm = lego_mm_alloc(tsk, NULL);
 	if (!tsk->mm) {
-		reply = -ENOMEM;
+		*reply = -ENOMEM;
 		goto out;
 	}
 
 	/* All done, insert into hashtable */
-	reply = ht_insert_lego_task(tsk);
-	if (reply) {
+	*reply = ht_insert_lego_task(tsk);
+	if (*reply) {
 		lego_mmput(tsk->mm);
 		free_lego_task_struct(tsk);
 
 		/* Same process? */
-		if (likely(reply == -EEXIST))
-			reply = 0;
+		if (likely(*reply == -EEXIST))
+			*reply = 0;
 		goto out;
 	}
 
 	/* task struct is prepared, start duplication */
-	reply = dup_lego_mmap_local_vmatree(tsk->mm, parent->mm);
+	*reply = dup_lego_mmap_local_vmatree(tsk->mm, parent->mm);
 
 out:
-	ibapi_reply_message(&reply, sizeof(reply), desc);
+	ibapi_reply_message(reply, sizeof(u32), desc);
 	return 0;
 }
 
@@ -446,13 +447,13 @@ out:
 }
 
 int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
-		    struct common_header *hdr)
+		    struct common_header *hdr, void *tx)
 {
 	unsigned int nid = hdr->src_nid;
 	unsigned int tgid = payload->tgid;
 	unsigned int parent_tgid = payload->parent_tgid;
 	struct lego_task_struct *tsk, *parent;
-	u32 retbuf;
+	u32 *retbuf = tx;
 
 	fork_debug("nid:%u,pid:%u,tgid:%u,parent_tgid:%u",
 		nid, payload->pid, tgid, parent_tgid);
@@ -463,7 +464,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 
 	tsk = alloc_lego_task_struct();
 	if (!tsk) {
-		retbuf = -ENOMEM;
+		*retbuf = -ENOMEM;
 		goto reply;
 	}
 
@@ -482,27 +483,27 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	lego_set_task_comm(tsk, payload->comm);
 
 	/* Duplicate the mmap from parent */
-	retbuf = dup_lego_mm(tsk, parent);
-	if (retbuf) {
+	*retbuf = dup_lego_mm(tsk, parent);
+	if (*retbuf) {
 		free_lego_task_struct(tsk);
 		goto reply;
 	}
 
 	/* All done, insert into hashtable */
-	retbuf = ht_insert_lego_task(tsk);
-	if (retbuf) {
+	*retbuf = ht_insert_lego_task(tsk);
+	if (*retbuf) {
 		lego_mmput(tsk->mm);
 		free_lego_task_struct(tsk);
 
 		/* Same process? */
-		if (likely(retbuf == -EEXIST))
-			retbuf = 0;
+		if (likely(*retbuf == -EEXIST))
+			*retbuf = 0;
 		goto reply;
 	}
 
-	retbuf = 0;
+	*retbuf = 0;
 reply:
-	fork_debug("reply: %d:%s", retbuf, perror(retbuf));
-	ibapi_reply_message(&retbuf, 4, desc);
+	fork_debug("reply: %d:%s", *retbuf, perror(*retbuf));
+	ibapi_reply_message(retbuf, 4, desc);
 	return 0;
 }

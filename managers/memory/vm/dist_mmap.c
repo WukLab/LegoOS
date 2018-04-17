@@ -1273,9 +1273,7 @@ distvm_mmap_homenode_noconsult(struct lego_mm_struct *mm, struct lego_file *file
 	kfree(reply);
 
 	vma_trace("%s, return: %lx\n", __func__, ret);
-#ifdef CONFIG_DEBUG_VMA
 	mmap_brk_validate(mm, ret, len);
-#endif
 	return ret;
 }
 
@@ -1323,9 +1321,7 @@ out:
 	kfree(reply);
 
 	vma_trace("%s, return: %lx\n", __func__, ret);
-#ifdef CONFIG_DEBUG_VMA
 	mmap_brk_validate(mm, ret, len);
-#endif
 	return ret;
 }
 
@@ -1363,9 +1359,7 @@ out:
 	kfree(reply);
 
 	vma_trace("%s, return: %lx\n", __func__, ret);
-#ifdef CONFIG_DEBUG_VMA
 	mmap_brk_validate(mm, addr, len);
-#endif
 	return ret;
 }
 

@@ -122,7 +122,7 @@ struct p2m_fork_struct {
 };
 struct task_struct;
 int p2m_fork(struct task_struct *p, unsigned long clone_flags);
-int handle_p2m_fork(struct p2m_fork_struct *, u64, struct common_header *);
+int handle_p2m_fork(struct p2m_fork_struct *, u64, struct common_header *, void *);
 
 /*
  * P2M_EXECVE
@@ -157,7 +157,7 @@ struct m2p_execve_struct {
 	struct vmr_map_reply map;
 #endif
 };
-int handle_p2m_execve(struct p2m_execve_struct *, u64, struct common_header *);
+int handle_p2m_execve(struct p2m_execve_struct *, u64, struct common_header *, void *);
 
 /*
  * P2M_MMAP
@@ -195,7 +195,7 @@ struct p2m_munmap_reply_struct {
 #endif
 };
 
-int handle_p2m_munmap(struct p2m_munmap_struct *, u64, struct common_header *);
+int handle_p2m_munmap(struct p2m_munmap_struct *, u64, struct common_header *, void *);
 
 /*
  * P2M_MREMAP
@@ -216,7 +216,7 @@ struct p2m_mremap_reply_struct {
 	struct vmr_map_reply map;
 #endif
 };
-int handle_p2m_mremap(struct p2m_mremap_struct *, u64, struct common_header *);
+int handle_p2m_mremap(struct p2m_mremap_struct *, u64, struct common_header *, void *);
 
 /*
  * P2M_MPROTECT
@@ -227,7 +227,7 @@ struct p2m_mprotect_struct {
 	__u64	len;
 	__u32	prot;
 };
-int handle_p2m_mprotect(struct p2m_mprotect_struct *, u64, struct common_header *);
+int handle_p2m_mprotect(struct p2m_mprotect_struct *, u64, struct common_header *, void *);
 
 /*
  * P2M_BRK
@@ -242,7 +242,7 @@ struct p2m_brk_reply_struct {
 	struct vmr_map_reply map;
 #endif
 };
-int handle_p2m_brk(struct p2m_brk_struct *, u64, struct common_header *);
+int handle_p2m_brk(struct p2m_brk_struct *, u64, struct common_header *, void *);
 
 /*
  * P2M_MSYNC
@@ -256,7 +256,7 @@ struct p2m_msync_struct {
 	__u64	len;
 	__u32	flags;
 };
-int handle_p2m_msync(struct p2m_msync_struct *, u64, struct common_header *);
+int handle_p2m_msync(struct p2m_msync_struct *, u64, struct common_header *, void *);
 
 /*
  * P2M_CHECKPOINT

@@ -319,6 +319,16 @@ void dump_lego_mm(const struct lego_mm_struct *mm);
 			BUG();						\
 		}							\
 	} while (0)
+
+static inline void dump_vmas_onetree(struct vma_tree *root) {}
+static inline void dump_vmas_onenode(struct lego_mm_struct *mm) {}
+static inline void dump_gaps_onenode(struct lego_mm_struct *mm, unsigned long id) {}
+static inline void dump_new_context(struct lego_mm_struct *mm) {}
+static inline void dump_vmpool(struct lego_mm_struct *mm) {}
+static inline void dump_reply(struct vmr_map_reply *reply) {}
+static inline void dump_alloc_schemes(int count, struct alloc_scheme *scheme) {}
+static inline void mmap_brk_validate(struct lego_mm_struct *mm, unsigned long addr, 
+		       unsigned long len) {}
 #else
 /* dist_mmap_dump.c */
 void dump_vmas_onetree(struct vma_tree *root);

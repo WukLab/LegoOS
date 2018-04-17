@@ -13,20 +13,20 @@
 #include <lego/fit_ibapi.h>
 #include <monitor/gmm_handler.h>
 
-int handle_m2mm_status_report(u64 desc, struct common_header *hdr)
+int handle_m2mm_status_report(u64 desc, struct common_header *hdr, void *tx)
 {
 	u32 nid = hdr->src_nid;
-	struct m2mm_mnode_status_reply reply;
+	struct m2mm_mnode_status_reply *reply = tx;
 	struct manager_sysinfo info;
 
 	pr_info("[STATUS REPORT]\n");
 	WARN_ON(nid != CONFIG_GMM_NODEID);
 
 	manager_meminfo(&info);
-	reply.totalram = info.totalram;
-	reply.freeram = info.freeram;
+	reply->totalram = info.totalram;
+	reply->freeram = info.freeram;
 
-	ibapi_reply_message(&reply, sizeof(reply), desc);
+	ibapi_reply_message(reply, sizeof(*reply), desc);
 	return 0;
 }
 

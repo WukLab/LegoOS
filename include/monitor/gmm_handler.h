@@ -16,7 +16,7 @@
 /* 
  * M2MM_STATUS_REPORT
  */
-int handle_m2mm_status_report(u64, struct common_header *);
+int handle_m2mm_status_report(u64, struct common_header *, void *);
 
 #endif /* CONFIG_GMM */
 

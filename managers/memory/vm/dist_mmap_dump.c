@@ -84,6 +84,7 @@ void dump_gaps_onenode(struct lego_mm_struct *mm, unsigned long id)
 
 void dump_reply(struct vmr_map_reply *reply)
 {
+#ifdef CONFIG_DEBUG_VMA_TRACE
 	int i;
 	struct vmr_map_struct *entry;
 	if (!reply) {
@@ -102,6 +103,7 @@ void dump_reply(struct vmr_map_reply *reply)
 			entry[i].mnode, entry[i].start, entry[i].len);
 	}
 	vma_debug("[REPLY] ************** reply print done ***************\n");
+#endif
 }
 
 void dump_alloc_schemes(int count, struct alloc_scheme *scheme)
