@@ -651,7 +651,6 @@ SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 	int sockfd;
 	struct file *dummy_file;
 
-	pr_info("Dummy socket()!\n");
 	sockfd = alloc_fd(current->files, "/sock/dummy");
 	if (sockfd < 0)
 		return sockfd;
@@ -663,14 +662,17 @@ SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 
 	put_file(dummy_file);
 
+	pr_info("CPU%d PID%d-%s Dummy Socket: %d\n",
+		smp_processor_id(), current->pid, current->comm, sockfd);
 	return sockfd;
 }
 
 SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
 		int, addrlen)
 {
-	pr_info("Dummy connect(): %d\n", fd);
-	return -ENOENT;
+	pr_info("CPU%d PID%d-%s Dummy Connect: %d\n",
+		smp_processor_id(), current->pid, current->comm, fd);
+	return -ECONNREFUSED;
 }
 #else
 SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
