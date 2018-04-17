@@ -290,6 +290,10 @@ __timespec_to_jiffies(unsigned long sec, long nsec)
 	return __timespec64_to_jiffies((u64)sec, nsec);
 }
 
+unsigned long timespec_to_jiffies(const struct timespec *value)
+{
+	return __timespec_to_jiffies(value->tv_sec, value->tv_nsec);
+}
 
 /*
  * We could use a similar algorithm to timespec_to_jiffies (with a

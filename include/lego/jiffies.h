@@ -180,5 +180,6 @@ unsigned int jiffies_to_usecs(const unsigned long j);
 unsigned long msecs_to_jiffies(const unsigned int m);
 
 unsigned long timeval_to_jiffies(const struct timeval *value);
+unsigned long timespec_to_jiffies(const struct timespec *value);
 
 #endif /* _LEGO_JIFFIES_H_ */

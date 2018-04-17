@@ -1095,9 +1095,6 @@ SYSCALL_DEFINE2(nanosleep, struct timespec __user *, rqtp,
 	if (!timespec_valid(&tu))
 		return -EINVAL;
 
-	syscall_enter("WARNING: Not implemented! tu.sec: %lld, tu.nsec: %ld\n",
-		tu.tv_sec, tu.tv_nsec);
-
-	/* TODO We are not able to have nanosleep granularity. Only timer() */
+	schedule_timeout(timespec_to_jiffies(&tu));
 	return 0;
 }
