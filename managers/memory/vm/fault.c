@@ -18,21 +18,15 @@
 #include <memory/file_ops.h>
 #include <memory/vm-pgtable.h>
 
-static int do_swap_page(struct vm_area_struct *vma, unsigned long address,
-			unsigned int flags, pte_t *ptep, pmd_t *pmd,
-			pte_t entry)
-{
-	BUG();
-	return 0;
-}
-
 static int do_wp_page(struct vm_area_struct *vma, unsigned long address,
 		      unsigned int flags, pte_t *ptep, pmd_t *pmd, pte_t entry)
 {
-	pr_debug("%s, address: %lx, flags: %x\n", __func__, address, flags);
+	dump_vma(vma);
+	dump_pte(ptep, NULL);
+	pr_debug("%s address: %lx, flags: %x\n", __func__, address, flags);
+
 	WARN_ON(1);
-	//BUG();
-	return 0;
+	return VM_FAULT_SIGBUS;
 }
 
 /* TODO:
@@ -133,7 +127,7 @@ static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
 	struct lego_mm_struct *mm = vma->vm_mm;
 
 	entry = *pte;
-	if (!pte_present(entry)) {
+	if (likely(!pte_present(entry))) {
 		if (pte_none(entry)) {
 			if (vma->vm_ops && vma->vm_ops->fault)
 				return do_linear_fault(vma, address, flags,
@@ -142,11 +136,19 @@ static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
 				return do_anonymous_page(vma, address, flags,
 							 pte, pmd, mapping_flags);
 		}
-		return do_swap_page(vma, address, flags, pte, pmd, entry);
+
+		/*
+		 * Lego does not fill extra info into PTE at Memory side.
+		 * We only fill Zerofill bit at Processor side.
+		 */
+		dump_pte(pte, NULL);
+		BUG();
 	}
 
 	ptl = lego_pte_lockptr(mm, pmd);
 	spin_lock(ptl);
+
+	/* Has someone changed the PTE meanwhile? */
 	if (unlikely(!pte_same(*pte, entry)))
 		goto unlock;
 
@@ -159,13 +161,18 @@ static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
 	 * in which case, all pcache misses will walk here. Shall we do this?
 	 */
 	if (flags & FAULT_FLAG_WRITE) {
-		if (!pte_write(entry))
+		if (likely(!pte_write(entry)))
 			return do_wp_page(vma, address, flags, pte, pmd, entry);
-
-		/* Update pte */
-		entry = pte_mkdirty(entry);
-		if (!pte_same(*pte, entry))
-			*pte = entry;
+		else {
+			/*
+			 * In a real environment equipped with TLB,
+			 * stale TLB entries may lead to here. Like
+			 * what we have described in the P side pgfault handler.
+			 *
+			 * Some part of lego uses faultin_page to several times.
+			 * It will land here for several times. So, do nothing is safe.
+			 */
+		}
 	}
 
 unlock:

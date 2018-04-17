@@ -335,6 +335,8 @@ static int thpool_worker_func(void *_worker)
 
 #define THPOOL_IB_PORT	(0)
 
+unsigned long nr_thpool_reqs;
+
 /*
  * The thread pool polling thread. This is the only thread that is
  * doing ibapi_receive_message. We do not do any handling here.
@@ -362,6 +364,8 @@ static int thpool_polling(void *unused)
 
 		worker = select_thpool_worker(buffer);
 		enqueue_tail_thpool_worker(worker, buffer);
+
+		nr_thpool_reqs++;
 	}
 	BUG();
 	return 0;
@@ -507,9 +511,9 @@ void watchdog_print(void)
 
 	for (i = 0; i < NR_THPOOL_WORKERS; i++) {
 		tw = thpool_worker_map + i;
-		pr_info("hb: worker[%d] max_nr_queued=%d nr_queued=%d in_handler=%s\n",
+		pr_info("hb: worker[%d] max_nr_queued=%d nr_queued=%d in_handler=%s nr_reqs=%lu\n",
 			i, max_queued_thpool_worker(tw), tw->nr_queued,
-			thpool_worker_in_handler(tw) ? "yes" : "no");
+			thpool_worker_in_handler(tw) ? "yes" : "no", nr_thpool_reqs);
 
 		ht_check_worker(i, tw, &hb_cached_data[i]);
 	}

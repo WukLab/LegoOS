@@ -1812,7 +1812,8 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 	if (file) {
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
-			WARN(1, "MAP_SHARED used for file-backed mmap! Permission: %s\n",
+			WARN(1, "MAP_SHARED file: %s(%d). Permission: %s\n",
+				file->filename, atomic_read(&file->f_count),
 				(vm_flags & (VM_MAYWRITE|VM_WRITE)) ? "RW" : "RO");
 
 			vm_flags |= VM_SHARED | VM_MAYSHARE;

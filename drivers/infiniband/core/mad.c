@@ -1048,6 +1048,10 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 	qp_info = mad_send_wr->mad_agent_priv->qp_info;
 	mad_send_wr->send_wr.wr_id = (unsigned long)&mad_send_wr->mad_list;
 	mad_send_wr->mad_list.mad_queue = &qp_info->send_queue;
+
+	if (!virt_addr_valid((unsigned long)(mad_send_wr->mad_list.mad_queue)))
+		panic("mad_queue is assigned a wrong value!");
+
 	//pr_info("%s wr_id %x qpn %d\n", __func__, mad_send_wr->send_wr.wr_id, mad_agent->qp->qp_num);
 
 	mad_agent = mad_send_wr->send_buf.mad_agent;
@@ -1885,6 +1889,11 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 	}
 }
 
+#if 0
+atomic_t ib_mad_recv_done_handler_counter;
+atomic_t ib_mad_post_receive_mads_counter;
+#endif
+
 static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 				     struct ib_wc *wc)
 {
@@ -1895,6 +1904,18 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 	struct ib_mad_queue *mad_queue;
 	struct ib_mad_agent_private *mad_agent;
 	int port_num;
+
+	/*
+	 * Yizhou added 0416
+	 */
+#if 0
+	pr_info("%s(): c1: %d c2: %d wc->wr_id: %#lx\n",
+		__func__,
+		atomic_read(&ib_mad_post_receive_mads_counter),
+		atomic_read(&ib_mad_recv_done_handler_counter),
+		(unsigned long)wc->wr_id);
+	atomic_inc(&ib_mad_recv_done_handler_counter);
+#endif
 
 	mad_list = (struct ib_mad_list_head *)(unsigned long)wc->wr_id;
 	if (!virt_addr_valid((unsigned long)mad_list)) {
@@ -2334,6 +2355,7 @@ static int ib_mad_completion_handler(void *_data)
 		}
 #endif
 
+		memset(&wc, 0, sizeof(wc));
 		nr_got = ib_poll_cq(port_priv->cq, 1, &wc);
 
 		if (!nr_got) {
@@ -2700,11 +2722,29 @@ static int ib_mad_post_receive_mads(struct ib_mad_qp_info *qp_info,
 						 sizeof *mad_priv -
 						   sizeof mad_priv->header,
 						 DMA_FROM_DEVICE);
+		
 		//pr_info("%s mad_list %p sg_list.addr %x maddata addr %p header %p mad_priv %p\n", 
 		//		__func__, sg_list.addr, &mad_priv->grh, mad_priv->header, mad_priv);
 		mad_priv->header.mapping = sg_list.addr;
 		recv_wr.wr_id = (unsigned long)&mad_priv->header.mad_list;
 		mad_priv->header.mad_list.mad_queue = recv_queue;
+
+		/*
+		 * Yizhou added 0416
+		 */
+#if 0
+		pr_info("%s(): c1: %d c2: %d recv_wr.wr_id: %#lx recv_queue: %p\n",
+			__func__,
+			atomic_read(&ib_mad_post_receive_mads_counter),
+			atomic_read(&ib_mad_recv_done_handler_counter),
+			(unsigned long)recv_wr.wr_id, recv_queue);
+
+		atomic_inc(&ib_mad_post_receive_mads_counter);
+#endif
+
+		if (!virt_addr_valid((unsigned long)(mad_priv->header.mad_list.mad_queue)))
+			panic("mad_queue is assigned a wrong value!");
+
 
 		/* Post receive WR */
 		spin_lock_irqsave(&recv_queue->lock, flags);
