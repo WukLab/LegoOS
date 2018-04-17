@@ -130,7 +130,6 @@ static void do_handle_p2m_zerofill_miss(struct lego_task_struct *p,
 	ibapi_reply_message(reply, sizeof(*reply), desc);
 }
 
-#ifndef CONFIG_DEBUG_HANDLE_PCACHE
 static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 				      u64 vaddr, u32 flags, u64 desc, void *tx)
 {
@@ -154,33 +153,6 @@ static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 	 */
 	ibapi_reply_message((void *)new_page, PCACHE_LINE_SIZE, desc);
 }
-#else
-static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
-				   u64 vaddr, u32 flags, u64 desc, void *tx)
-{
-	struct p2m_pcache_miss_reply_struct *reply = tx;
-	unsigned long new_page;
-	unsigned long mapping_flags = 0;
-	int ret;
-
-	ret = common_handle_p2m_miss(p, vaddr, flags, desc, &new_page);
-	if (unlikely(ret & VM_FAULT_ERROR)) {
-		if (ret & VM_FAULT_OOM)
-			ret = RET_ENOMEM;
-		else if (ret & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV))
-			ret = RET_ESIGSEGV;
-
-		pcache_miss_error(ret, desc, p, vaddr, tx);
-		return;
-	}
-
-	reply->csum = csum_partial((void *)new_page, PCACHE_LINE_SIZE, 0);
-	reply->mapping_flags = mapping_flags;
-	memcpy(reply->data, (void *)new_page, PCACHE_LINE_SIZE);
-
-	ibapi_reply_message(reply, sizeof(*reply), desc);
-}
-#endif
 
 static int fault_in_kernel_space(unsigned long address)
 {

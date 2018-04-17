@@ -56,7 +56,7 @@ static DEFINE_RATELIMIT_STATE(pcache_fill_debug_rs, 1, 4);
 })
 #endif
 #else
-static inline void pcache_fill_debug(const char *fmt, ...) { }
+#define pcache_fill_debug(fmt, ...)	do { } while (0)
 #endif
 
 static void print_bad_pte(struct mm_struct *mm, unsigned long addr, pte_t pte,
@@ -154,21 +154,19 @@ static inline void pcache_fill_update_stat(struct pcache_meta *pcm)
 	inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY);
 }
 
+DEFINE_PROFILE_POINT(pcache_miss_net)
+
 /*
  * Callback for common fill code
  * Fill the pcache line from remote memory.
  */
-#ifndef CONFIG_DEBUG_PCACHE
-
-DEFINE_PROFILE_POINT(pcache_miss)
-
 static int
 __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		      struct pcache_meta *pcm, void *unused)
 {
-	PROFILE_POINT_TIME(pcache_miss)
+	PROFILE_POINT_TIME(pcache_miss_net)
 	int ret, len, dst_nid;
-	void *pa_cache = pcache_meta_to_pa(pcm);
+	void *va_cache = pcache_meta_to_kva(pcm);
 	struct p2m_pcache_miss_msg msg;
 
 	fill_common_header(&msg, P2M_PCACHE_MISS);
@@ -178,19 +176,19 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	msg.missing_vaddr = address;
 	dst_nid = get_memory_node(current, address);
 
-	pcache_fill_debug("I dst_nid:%d pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p",
-		dst_nid, current->pid, current->tgid, address, flags, pa_cache);
+	pcache_fill_debug("I dst_nid:%d pid:%u tgid:%u address:%#lx flags:%#lx va_cache:%p",
+		dst_nid, current->pid, current->tgid, address, flags, va_cache);
 
-	profile_point_start(pcache_miss);
+	profile_point_start(pcache_miss_net);
 	len = ibapi_send_reply_timeout(dst_nid, &msg, sizeof(msg),
-				       pa_cache, PCACHE_LINE_SIZE, true,
+				       va_cache, PCACHE_LINE_SIZE, false,
 				       DEF_NET_TIMEOUT);
-	profile_point_leave(pcache_miss);
+	profile_point_leave(pcache_miss_net);
 
 	if (unlikely(len < (int)PCACHE_LINE_SIZE)) {
 		if (likely(len == sizeof(int))) {
 			/* remote reported error */
-			ret = -EPERM;
+			ret = -EFAULT;
 			goto out;
 		} else if (len < 0) {
 			/*
@@ -214,72 +212,6 @@ out:
 		current->pid, current->tgid, address, flags, pa_cache, ret, perror(ret));
 	return ret;
 }
-#else
-
-DEFINE_PROFILE_POINT(pcache_miss_debug)
-
-static int
-__pcache_do_fill_page(unsigned long address, unsigned long flags,
-		      struct pcache_meta *pcm, void *unused)
-{
-	PROFILE_POINT_TIME(pcache_miss_debug)
-	struct p2m_pcache_miss_reply_struct *reply;
-	struct p2m_pcache_miss_msg msg;
-	int ret, len, dst_nid;
-	void *va_pcache;
-	__wsum csum;
-
-	reply = kmalloc(sizeof(*reply), GFP_KERNEL);
-	if (!reply)
-		return -ENOMEM;
-
-	fill_common_header(&msg, P2M_PCACHE_MISS);
-	msg.pid = current->pid;
-	msg.tgid = current->tgid;
-	msg.flags = flags;
-	msg.missing_vaddr = address;
-	dst_nid = get_memory_node(current, address);
-
-	pcache_fill_debug("I dst_nid:%d pid:%u tgid:%u address:%#lx flags:%#lx",
-		dst_nid, current->pid, current->tgid, address, flags);
-
-	profile_point_start(pcache_miss_debug);
-	len = ibapi_send_reply_timeout(dst_nid, &msg, sizeof(msg),
-				       reply, sizeof(*reply), false,
-				       DEF_NET_TIMEOUT);
-	profile_point_leave(pcache_miss_debug);
-
-	if (len != sizeof(*reply)){
-		ret = -EFAULT;
-		goto out;
-	}
-
-	csum = csum_partial(reply->data, PCACHE_LINE_SIZE, 0);
-	if (csum != reply->csum) {
-		pr_info("csum: %x, reply->csum: %x\n", csum, reply->csum);
-		dump_pcache_meta(pcm, "csum mismatch");
-		BUG();
-	}
-
-	if (reply->mapping_flags & PCACHE_MAPPING_ANON) {
-		if (csum != 0) {
-			dump_pcache_meta(pcm, "anony csum not 0");
-			WARN_ON_ONCE(1);
-		}
-	}
-
-	va_pcache = pcache_meta_to_kva(pcm);
-	memcpy(va_pcache, reply->data, PCACHE_LINE_SIZE);
-
-	pcache_fill_update_stat(pcm);
-	ret = 0;
-out:
-	kfree(reply);
-	pcache_fill_debug("O pid:%u tgid:%u address:%#lx flags:%#lx ret:%d(%s)",
-		current->pid, current->tgid, address, flags, ret, perror(ret));
-	return ret;
-}
-#endif
 
 /*
  * This function handles normal cache line misses.
@@ -294,16 +226,16 @@ pcache_do_fill_page(struct mm_struct *mm, unsigned long address,
 }
 
 #ifdef CONFIG_PCACHE_ZEROFILL
-DEFINE_PROFILE_POINT(__pcache_zerofill)
+DEFINE_PROFILE_POINT(__pcache_do_zerofill)
 
 static int
 __pcache_do_zerofill_page(unsigned long address, unsigned long flags,
 			  struct pcache_meta *pcm, void *unused)
 {
 	void *pcache_kva;
-	PROFILE_POINT_TIME(__pcache_zerofill)
+	PROFILE_POINT_TIME(__pcache_do_zerofill)
 
-	profile_point_start(__pcache_zerofill);
+	profile_point_start(__pcache_do_zerofill);
 
 	pcache_kva = pcache_meta_to_kva(pcm);
 	memset(pcache_kva, 0, PCACHE_LINE_SIZE);
@@ -315,7 +247,7 @@ __pcache_do_zerofill_page(unsigned long address, unsigned long flags,
 	 * Check PCACHE_ZEROFILL_NOTIFY_MEMORY Kconfig.
 	 */
 	submit_zerofill_notify_work(current, address, flags);
-	profile_point_leave(__pcache_zerofill);
+	profile_point_leave(__pcache_do_zerofill);
 
 	inc_pcache_event(PCACHE_FAULT_FILL_ZEROFILL);
 	return 0;
