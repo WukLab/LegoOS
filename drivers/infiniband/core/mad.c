@@ -2210,11 +2210,30 @@ static void ib_mad_send_done_handler(struct ib_mad_port_private *port_priv,
 	int ret;
 
 	mad_list = (struct ib_mad_list_head *)(unsigned long)wc->wr_id;
+	if (!virt_addr_valid((unsigned long)mad_list)) {
+		pr_info("BUG! mad_list: %p\n", mad_list);
+		WARN_ON_ONCE(1);
+		do_exit(-EFAULT);
+	}
+
 	mad_send_wr = container_of(mad_list, struct ib_mad_send_wr_private,
 				   mad_list);
 	send_queue = mad_list->mad_queue;
+	if (!virt_addr_valid((unsigned long)send_queue)) {
+		pr_info("BUG! mad_list: %p send_queue: %p\n",
+			mad_list, send_queue);
+		WARN_ON_ONCE(1);
+		do_exit(-EFAULT);
+	}
+
 	qp_info = send_queue->qp_info;
-	
+	if (!virt_addr_valid((unsigned long)qp_info)) {
+		pr_info("BUG! mad_list: %p send_queue: %p qp_info: %p\n",
+			mad_list, send_queue, qp_info);
+		WARN_ON_ONCE(1);
+		do_exit(-EFAULT);
+	}
+
 	//pr_info("%s qp %p qpn %d\n", __func__, qp_info->qp, qp_info->qp->qp_num);
 
 retry:
