@@ -359,7 +359,7 @@ static int thpool_polling(void *unused)
 		retlen = ibapi_receive_message(THPOOL_IB_PORT,
 				buffer->rx, THPOOL_RX_SIZE, &buffer->desc);
 
-		nr_reqs++;
+		nr_thpool_reqs++;
 		if (retlen >= THPOOL_RX_SIZE)
 			panic("%d %lu", retlen, THPOOL_RX_SIZE);
 
@@ -512,7 +512,7 @@ void watchdog_print(void)
 
 	for (i = 0; i < NR_THPOOL_WORKERS; i++) {
 		tw = thpool_worker_map + i;
-		pr_info("hb: worker[%d] max_nr_queued=%d nr_queued=%d in_handler=%s nr_reqs=%lu\n",
+		pr_info("hb: worker[%d] max_nr_queued=%d nr_queued=%d in_handler=%s nr_thpool_reqs=%lu\n",
 			i, max_queued_thpool_worker(tw), tw->nr_queued,
 			thpool_worker_in_handler(tw) ? "yes" : "no", nr_thpool_reqs);
 
