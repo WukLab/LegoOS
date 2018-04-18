@@ -47,6 +47,10 @@ const strace_call_ptr_t strace_call_table[__NR_syscall_max+1] = {
 	[__NR_mmap]			= (strace_call_ptr_t)&strace__mmap,
 	[__NR_munmap]			= (strace_call_ptr_t)&strace__munmap,
 	[__NR_mprotect]			= (strace_call_ptr_t)&strace__mprotect,
+	[__NR_pipe2]			= (strace_call_ptr_t)&strace__pipe2,
+	[__NR_pipe]			= (strace_call_ptr_t)&strace__pipe,
+	[__NR_dup2]			= (strace_call_ptr_t)&strace__dup2,
+	[__NR_dup]			= (strace_call_ptr_t)&strace__dup,
 };
 
 /*
@@ -65,6 +69,11 @@ static bool strace_printable_nr[__NR_syscall_max+1] = {
 	/* mm group */
 	//[__NR_mmap]			= true,
 	//[__NR_munmap]			= true,
+
+	[__NR_dup]			= true,
+	[__NR_dup2]			= true,
+	[__NR_pipe]			= true,
+	[__NR_pipe2]			= true,
 };
 #endif
 

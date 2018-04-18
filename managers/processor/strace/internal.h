@@ -182,4 +182,10 @@ STRACE_DEFINE2(munmap, unsigned long, addr, size_t, len);
 STRACE_DEFINE3(mprotect, unsigned long, start, size_t, len,
 	       unsigned long, prot);
 
+STRACE_DEFINE1(pipe, int __user *, flides);
+STRACE_DEFINE2(pipe2, int __user *, flides, int, flags);
+
+STRACE_DEFINE1(dup, unsigned int, fildes);
+STRACE_DEFINE2(dup2, unsigned int, oldfd, unsigned int, newfd);
+
 #endif /* _MANAGER_PROCESSOR_STRACE_INTERNAL_H_ */
