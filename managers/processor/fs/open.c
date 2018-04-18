@@ -69,6 +69,7 @@ int alloc_fd(struct files_struct *files, char *filename)
 		BUG_ON(files->fd_array[fd]);
 		filp = alloc_file(filename);
 		if (likely(filp)) {
+			filp->fd = fd;
 			__set_bit(fd, files->fd_bitmap);
 			files->fd_array[fd] = filp;
 			spin_unlock(&files->file_lock);

@@ -13,21 +13,21 @@
 #include <lego/spinlock.h>
 #include <lego/sched.h>
 #include <processor/processor.h>
+#include <processor/pcache.h>
 #include <processor/fs.h>
 
-/* 2^5 pages pipe buffer */
-#define PIPE_DEF_ORDER	5
-
 #ifdef CONFIG_DEBUG_PIPE
-#define pipe_debug(fmt, ...) 			\
-	pr_debug("%s() "fmt"\n",			\
-			__func__, __VA_ARGS__)
+#define pipe_debug(fmt, ...)					\
+	pr_debug("CPU%d PID%d-%s %s() "fmt"\n",			\
+		smp_processor_id(), current->pid, current->comm,\
+		__func__, __VA_ARGS__)
 #else
-static inline void pipe_debug(const char *fmt, ...) {  }
-#endif /* CONFIG_DEBUG_PIPE */
+#define pipe_debug(fmt, ...)	do { } while (0)
+#endif
 
-/* default pipe size, 32 pages */
-unsigned int pipe_def_size = 131072;
+/* Default pipe size, 32 pages */
+#define PIPE_MAX_ORDER	(5)
+#define PIPE_MAX_SIZE	((1 << PIPE_MAX_ORDER) * PAGE_SIZE)
 
 /*
  * We implement pipe by a 32-pages kernel memory ring buffer
@@ -35,19 +35,19 @@ unsigned int pipe_def_size = 131072;
  * of active readers/writers processes, and would initialized as 1 while
  * sys_pipe() or sys_pipe2() is called to create a new pipe.
  *
- * fifo_open() would increment a counter (depends on the file is 
- * a pipe reader or writer), and filo_open() is called by copy_files(), which is 
+ * pipe_open() would increment a counter (depends on the file is
+ * a pipe reader or writer), and filo_open() is called by copy_files(), which is
  * a fork()'s rountine.
  *
- * head is the pointer for consumers to dequeue from ring buffer
- * tail is the pointer for producers to enqueue into ring buffer
+ * HEAD is the pointer for consumers to dequeue from ring buffer
+ * TAIL is the pointer for producers to enqueue into ring buffer
  *
- * pipe_read() reads n bytes from ring buffer and advances pipe->head, and while buffer
+ * pipe_read() reads n bytes from ring buffer and advances pipe->HEAD, and while buffer
  * has enough room (currently 4-pages), wakes up all waiters (including readers/writers)
  * in order to make consumers work. And pipe_read() sleeps on the ring buffer is completely
  * empty. (It means pipe_read() is not necessary to read same nrbytes as it required).
  *
- * pipe_write() writes n bytes into ring buffer and advances pipe->tail. It first checks if
+ * pipe_write() writes n bytes into ring buffer and advances pipe->TAIL. It first checks if
  * there are still active readers, if not, pipe is broken and SIGPIPE needs to send to current
  * process. Unlike pipe_read(), pipe_write() would wait on ring buffer until it has more than
  * n bytes space. And it wakes up all waiters before each time it goes to sleep to make
@@ -58,54 +58,73 @@ unsigned int pipe_def_size = 131072;
  */
 
 struct pipe_info {
-	spinlock_t lock;
-	wait_queue_head_t wait;
-	unsigned int readers;
-	unsigned int writers;
-	void *head;		/* consumers pointer */
-	void *tail;		/* producers pointer */
-	void *buffer;
-	int len;		/* nbytes in use */
-};
+	spinlock_t		lock;
+	wait_queue_head_t	wait;
+	unsigned int		readers;
+	unsigned int		writers;
+	unsigned long		HEAD;		/* consumers pointer */
+	unsigned long		TAIL;		/* producers pointer */
+	unsigned long		buffer;
+	unsigned long		END;
+	int			len;		/* nbytes in use */
+
+	/*
+	 * How many references are there to this structure?
+	 * Basically, means how many filp->private_data are there.
+	 */
+	atomic_t		_ref;
+} ____cacheline_aligned;
+
+static inline void get_pipe(struct pipe_info *p)
+{
+	BUG_ON(atomic_read(&p->_ref) <= 0);
+	atomic_inc(&p->_ref);
+}
+
+static inline void __put_pipe(struct pipe_info *pipe)
+{
+	pipe_debug("pipe: %p buffer: %#lx", pipe, pipe->buffer);
+
+	BUG_ON(!pipe);
+	BUG_ON(!pipe->buffer);
+
+	kfree((void *)pipe->buffer);
+	pipe->buffer = 0;
+	kfree(pipe);
+}
+
+static inline void put_pipe(struct pipe_info *p)
+{
+	if (atomic_dec_and_test(&p->_ref))
+		__put_pipe(p);
+}
 
 struct pipe_info *alloc_pipe_info(void)
 {
 	void *buffer;
 	struct pipe_info *pipe;
 
-	buffer = (void *)__get_free_pages(GFP_KERNEL, PIPE_DEF_ORDER);
-	if (unlikely(!buffer)) {
+	buffer = kzalloc(PIPE_MAX_SIZE, GFP_KERNEL);
+	if (!buffer)
+		return NULL;
+
+	pipe = kzalloc(sizeof(*pipe), GFP_KERNEL);
+	if (!pipe) {
+		kfree(buffer);
 		return NULL;
 	}
 
-	pipe = kmalloc(sizeof(struct pipe_info), GFP_KERNEL);
-	if (unlikely(!pipe)) {
-		free_pages((unsigned long)buffer, PIPE_DEF_ORDER);	
-		return NULL;
-	}
-
-	spin_lock_init(&pipe->lock);
-	pipe->buffer = pipe->head = pipe->tail = buffer;
+	pipe->buffer = pipe->HEAD = pipe->TAIL = (unsigned long)buffer;
+	pipe->END = pipe->buffer + PIPE_MAX_SIZE;
 	pipe->readers = 1;
 	pipe->writers = 1;
 	pipe->len = 0;
-
-	/* TODO: init wait_queue, ops */
 	init_waitqueue_head(&pipe->wait);
-	
+	spin_lock_init(&pipe->lock);
+	atomic_set(&pipe->_ref, 1);
+
+	pipe_debug("pipe: %p  buffer: %#lx", pipe, pipe->buffer);
 	return pipe;
-}
-
-static inline void free_pipe_info(struct pipe_info *pipe)
-{
-	pipe_debug("CPU:%d, PID:%d",
-		smp_processor_id(), current->pid);
-
-	if (!pipe)
-		return;
-	if (pipe->buffer)
-		free_pages((unsigned long)pipe->buffer, PIPE_DEF_ORDER);
-	kfree(pipe);
 }
 
 static inline void pipe_lock(struct pipe_info *pipe)
@@ -125,8 +144,8 @@ static inline void pipe_wait(struct pipe_info *pipe)
 {
 	DEFINE_WAIT(wait);
 
-	/* 
-	 * We must relase the pipe lock before go into sleep 
+	/*
+	 * We must relase the pipe lock before go into sleep
 	 */
 	pipe_unlock(pipe);
 	prepare_to_wait(&pipe->wait, &wait, TASK_INTERRUPTIBLE);
@@ -135,60 +154,70 @@ static inline void pipe_wait(struct pipe_info *pipe)
 	pipe_lock(pipe);
 }
 
-static ssize_t
-pipe_read(struct file *filp, char __user *buf,
-	size_t count, loff_t *off)
+static ssize_t pipe_read(struct file *filp, char __user *user_buf,
+			 size_t count, loff_t *off)
 {
+	ssize_t ret = 0;
+	int do_wakeup = 0;
 	struct pipe_info *pipe = filp->private_data;
-	ssize_t ret;
-	int do_wakeup;
 
-	if (unlikely(count == 0))
+	BUG_ON(!pipe);
+
+	if (!count)
 		return 0;
-	
-	if (unlikely(!pipe))
-		return -EINVAL;
 
-	do_wakeup = 0;
-	ret = 0;
 	pipe_lock(pipe);
 	for (;;) {
 		if (pipe->len) {
-			/* buffer has items */
 			ret = count;
-			if (ret > pipe->len)
-				ret = pipe->len;
-			
-			if (pipe->head + ret > pipe->buffer + pipe_def_size) {
-				/* chunk into two copy */
-				int nbytes1, nbytes2;
-				nbytes1 = pipe->buffer + pipe_def_size - pipe->head;
-				nbytes2 = ret - nbytes1;
 
-				if (copy_to_user(buf, pipe->head, nbytes1)) {
+			/* Limit to the maximum we have now */
+			if (count > pipe->len)
+				count = pipe->len;
+
+			if (pipe->HEAD + count > pipe->END) {
+				unsigned long rear, front;
+
+				rear = pipe->END - pipe->HEAD;
+				front = count - rear;
+				BUG_ON(front > count);
+
+				if (rear) {
+
+					pipe_debug("buffer: [%#lx-%#lx] HEAD: %#lx rear: %#lx",
+						pipe->buffer, pipe->END, pipe->HEAD, rear);
+					if (copy_to_user(user_buf, (void *)pipe->HEAD, rear)) {
+						ret = -EFAULT;
+						break;
+					}
+				}
+
+				pipe_debug("buffer: [%#lx-%#lx] front: %#lx",
+					pipe->buffer, pipe->END, front);
+				if (copy_to_user(user_buf + rear, (void *)pipe->buffer, front)) {
 					ret = -EFAULT;
 					break;
 				}
-				
-				if (copy_to_user(buf + nbytes1, pipe->buffer, nbytes2)) {
-					ret = -EFAULT;
-					break;
-				}
-				pipe->head = pipe->buffer + nbytes2;
-				pipe->len -= ret;
+
+				pipe->HEAD = pipe->buffer + front;
+				pipe->len -= count;
 			} else {
-				if (copy_to_user(buf, pipe->head, ret))	{
+				pipe_debug("buffer: [%#lx-%#lx] HEAD: %#lx count: %#lx",
+					pipe->buffer, pipe->END, pipe->HEAD, count);
+				if (copy_to_user(user_buf, (void *)pipe->HEAD, count)) {
 					ret = -EFAULT;
 					break;
 				}
-				pipe->head = pipe->head + ret;
-				pipe->len -= ret;
+				pipe->HEAD += count;
+				pipe->len -= count;
 			}
+
 			/*
 			 * I do_wakeup to wakeup writers when more than 4 page left
 			 */
-			if (pipe_def_size - pipe->len >= 4 * PAGE_SIZE)
+			if (PIPE_MAX_SIZE - pipe->len >= 4 * PAGE_SIZE)
 				do_wakeup = 1;
+
 			if (signal_pending(current)) {
 				if (!ret)
 					ret = -ERESTARTSYS;
@@ -197,17 +226,21 @@ pipe_read(struct file *filp, char __user *buf,
 
 			break;
 		}
+
 		if (!pipe->writers)
 			break;
-		/* 
+
+		/*
 		 * if buffer is already empty, wakeup writers before sleep
 		 */
 		wake_up_interruptible(&pipe->wait);
-		pipe_debug("sleep, CPU:%d, PID:%d, nr_readers:%u, nr_writers:%u",
-				smp_processor_id(), current->pid, pipe->readers, pipe->writers);
+		pipe_debug("sleep fd: %d nr_readers:%u, nr_writers:%u",
+				filp->fd,
+				pipe->readers, pipe->writers);
 		pipe_wait(pipe);
-		pipe_debug("woken up, CPU:%d, PID:%d, nr_readers:%u, nr_writers:%u",
-				smp_processor_id(), current->pid, pipe->readers, pipe->writers);
+		pipe_debug("woken up fd: %d nr_readers:%u, nr_writers:%u",
+				filp->fd,
+				pipe->readers, pipe->writers);
 	}
 	pipe_unlock(pipe);
 
@@ -217,62 +250,85 @@ pipe_read(struct file *filp, char __user *buf,
 	return ret;
 }
 
-static ssize_t
-pipe_write(struct file *filp, const char __user *buf,
-	size_t count, loff_t *off)
+static ssize_t pipe_write(struct file *filp, const char __user *user_buf,
+			  size_t count, loff_t *off)
 {
+	ssize_t ret = 0;
+	int do_wakeup = 0;
 	struct pipe_info *pipe = filp->private_data;
-	ssize_t ret;
-	int do_wakeup;
 
-	if (unlikely(count == 0))
+	BUG_ON(!pipe);
+
+	if (!count)
 		return 0;
-	
-	if (unlikely(!pipe))
-		return -EINVAL;
 
-	do_wakeup = 0;
-	ret = 0;
-	pipe_lock(pipe);
-
-	/* send SIGPIPE if there is no more reader */
+	/* Send SIGPIPE if there is no more reader */
 	if (!pipe->readers) {
 		kill_pid_info(SIGPIPE, (struct siginfo *) 0, current->pid);
 		ret = -EPIPE;
 		goto out;
 	}
 
+	pipe_lock(pipe);
 	for (;;) {
-		if (pipe->len + count <= pipe_def_size) {
-			/* buffer is not full */
+		if (pipe->len + count <= PIPE_MAX_SIZE) {
 			ret = count;
-			
-			if (pipe->tail + ret > pipe->buffer + pipe_def_size) {
-				/* chunk into two copy */
-				int nbytes1, nbytes2;
-				nbytes1 = pipe->buffer + pipe_def_size - pipe->tail;
-				nbytes2 = ret - nbytes1;
 
-				if (copy_from_user(pipe->tail, buf, nbytes1)) {
+			/*
+			 *
+			 *   |------------------------------|
+			 *   |           |---------|        |
+			 *   ^  (front)  ^  (len)  ^ (rear) ^
+			 *   ^           ^         ^        ^
+			 * Buffer       HEAD       TAIL     END
+			 *              Reader     Writer
+			 *
+			 * TAIL points to the first writable byte.
+			 * HEAD points to the first readable byte
+			 * END points to (Buffer + PIPE_MAX_SIZE)
+			 */
+			if (pipe->TAIL + count > pipe->END) {
+				unsigned long rear, front;
+
+				/*
+				 * Rear is not enough to hold the new buf
+				 * Divide it into two copy_from_user: rear, front.
+				 */
+				rear = pipe->END - pipe->TAIL;
+				front = count - rear;
+				BUG_ON(front > count);
+
+				/* Rear if it is not zero */
+				if (rear) {
+					pipe_debug("buffer: [%#lx-%#lx] TAIL: %#lx rear: %#lx",
+						pipe->buffer, pipe->END, pipe->TAIL, rear);
+					if (copy_from_user((void *)pipe->TAIL, user_buf, rear)) {
+						ret = -EFAULT;
+						break;
+					}
+				}
+
+				/* Front */
+				pipe_debug("buffer: [%#lx-%#lx] TAIL: %#lx front: %#lx",
+					pipe->buffer, pipe->END, pipe->TAIL, front);
+				if (copy_from_user((void *)pipe->buffer, user_buf + rear, front)) {
 					ret = -EFAULT;
 					break;
 				}
-				
-				if (copy_to_user(pipe->buffer, buf + nbytes1, nbytes2)) {
-					ret = -EFAULT;
-					break;
-				}
-				pipe->tail = pipe->buffer + nbytes2;
-				pipe->len += ret;
+
+				pipe->TAIL = pipe->buffer + front;
+				pipe->len += count;
 			} else {
-				if (copy_to_user(pipe->tail, buf, ret))	{
+				pipe_debug("buffer: [%#lx-%#lx] TAIL: %#lx count: %#lx",
+					pipe->buffer, pipe->END, pipe->TAIL, count);
+				if (copy_from_user((void *)pipe->TAIL, user_buf, count)) {
 					ret = -EFAULT;
 					break;
 				}
-				pipe->tail = pipe->tail + ret;
-				pipe->len += ret;
+				pipe->TAIL += count;
+				pipe->len += count;
 			}
-			
+
 			/* anyway wakeup readers if write success */
 			do_wakeup = 1;
 			if (signal_pending(current)) {
@@ -281,45 +337,53 @@ pipe_write(struct file *filp, const char __user *buf,
 				break;
 			}
 
-			break;			
+			break;
 		}
-		/* 
+
+		/*
 		 * if buffer is almost full, wakeup readers before sleep
 		 */
 		wake_up_interruptible(&pipe->wait);
-		pipe_debug("sleep, CPU:%d, PID:%d, nr_readers:%u, nr_writers:%u",
-				smp_processor_id(), current->pid, pipe->readers, pipe->writers);
+		pipe_debug("sleep fd: %d nr_readers:%u, nr_writers:%u",
+				filp->fd,
+				pipe->readers, pipe->writers);
 		pipe_wait(pipe);
-		pipe_debug("woken up, CPU:%d, PID:%d, nr_readers:%u, nr_writers:%u",
-				smp_processor_id(), current->pid, pipe->readers, pipe->writers);
+		pipe_debug("woken up fd: %d nr_readers:%u, nr_writers:%u",
+				filp->fd,
+				pipe->readers, pipe->writers);
 	}
-out:
 	pipe_unlock(pipe);
+
+out:
 	if (do_wakeup)
 		wake_up_interruptible(&pipe->wait);
-
 	return ret;
 }
 
 /*
- * fifo_open is called when get_file is called
+ * Callback for fork(), when file table is duplicated.
  */
-static int fifo_open(struct file *f)
+static int pipe_open(struct file *f)
 {
 	struct pipe_info *pipe = f->private_data;
 
 	BUG_ON(!pipe);
+
 	pipe_lock(pipe);
-	if (f->f_mode & FMODE_READ)
+	if (f->f_mode & FMODE_READ) {
 		pipe->readers++;
-	if (f->f_mode & FMODE_WRITE)
+		get_pipe(pipe);
+	} else if (f->f_mode & FMODE_WRITE) {
 		pipe->writers++;
-	
+		get_pipe(pipe);
+	} else
+		BUG();
 	if (pipe->readers == 1 || pipe->writers == 1)
 		wake_up_interruptible(&pipe->wait);
 
-	pipe_debug("CPU:%d, PID:%d, nr_readers:%u, nr_writers:%u",
-		smp_processor_id(), current->pid, pipe->readers, pipe->writers);
+	pipe_debug("pipe: %p _ref: %d fd: %d nr_readers:%u, nr_writers:%u",
+		pipe, atomic_read(&pipe->_ref), f->fd, pipe->readers, pipe->writers);
+
 	pipe_unlock(pipe);
 	return 0;
 }
@@ -328,10 +392,9 @@ static int pipe_release(struct file *filp)
 {
 	struct pipe_info *pipe = filp->private_data;
 
-	/* if any reference, pipe_info should not be empty*/
 	BUG_ON(!pipe);
-	pipe_lock(pipe);
 
+	pipe_lock(pipe);
 	if ((filp->f_mode & FMODE_READ) && (pipe->readers > 0))
 		pipe->readers--;
 
@@ -341,18 +404,19 @@ static int pipe_release(struct file *filp)
 	if (pipe->readers || pipe->writers)
 		wake_up_interruptible(&pipe->wait);
 
-	pipe_debug("CPU:%d, PID:%d, nr_readers:%u, nr_writers:%u",
-		smp_processor_id(), current->pid, pipe->readers, pipe->writers);
+	pipe_debug("pipe: %p _ref: %d fd:%d, nr_readers:%u, nr_writers:%u",
+		pipe, atomic_read(&pipe->_ref), filp->fd, pipe->readers, pipe->writers);
+
 	pipe_unlock(pipe);
 
-	if (!pipe->readers && !pipe->writers)
-		free_pipe_info(pipe);
+	/* May lead to a eventual free */
+	put_pipe(pipe);
 	return 0;
 }
 
 const struct file_operations pipefifo_fops = {
 	.llseek		= no_llseek,
-	.open		= fifo_open,
+	.open		= pipe_open,
 	.read		= pipe_read,
 	.write		= pipe_write,
 	.release	= pipe_release,
@@ -369,23 +433,26 @@ static int do_pipe_create(int *flides, int flags)
 	int fds[2];
 	struct pipe_info *pipe;
 
+	if (flags & ~(O_CLOEXEC | O_NONBLOCK | O_DIRECT))
+		return -EINVAL;
+
 	pipe = alloc_pipe_info();
-	if (unlikely(!pipe)) {
+	if (!pipe) {
 		error = -ENOMEM;
 		goto out;
 	}
 
 	fds[0] = alloc_fd(files, "PIPER");
-	if (unlikely(fds[0] < 0)) {
+	if (fds[0] < 0) {
 		error = fds[0];
-		free_pipe_info(pipe);
+		put_pipe(pipe);
 		goto out;
 	}
 
 	fds[1] = alloc_fd(files, "PIPEW");
-	if (unlikely(fds[1] < 0)) {
+	if (fds[1] < 0) {
 		error = fds[1];
-		free_pipe_info(pipe);
+		put_pipe(pipe);
 		free_fd(files, fds[0]);
 		goto out;
 	}
@@ -410,15 +477,15 @@ static int do_pipe_create(int *flides, int flags)
 	put_file(filps[0]);
 	put_file(filps[1]);
 
+	/*
+	 * alloc_pipe_info init the _ref as 1
+	 * Since we set two private_data above, we need to grab one more.
+	 */
+	get_pipe(pipe);
 out:
-	if (likely(!error)) {
-		pipe_debug("CPU:%d, PID:%d, flides[0]:%d, flides[1]:%d",
-			smp_processor_id(), current->pid, flides[0], flides[1]);
-	} else {
-		pipe_debug("CPU:%d, PID:%d, -errno:%d",
-			smp_processor_id(), current->pid, error);
-	}	
-	return error;	
+	pipe_debug("ret: %d flides[0]:%d, flides[1]:%d pipe: %p _ref: %d",
+		error, flides[0], flides[1], pipe, atomic_read(&pipe->_ref));
+	return error;
 }
 
 SYSCALL_DEFINE2(pipe2, int __user *, flides, int, flags)
@@ -426,14 +493,11 @@ SYSCALL_DEFINE2(pipe2, int __user *, flides, int, flags)
 	long ret;
 	int fds[2];
 
-	syscall_enter("flags: %#x\n", flags);
 	ret = do_pipe_create(fds, flags);
 	if (!ret) {
 		if (copy_to_user(flides, fds, sizeof(fds)))
 			ret = -EFAULT;
 	}
-
-	syscall_exit(ret);
 	return ret;
 }
 

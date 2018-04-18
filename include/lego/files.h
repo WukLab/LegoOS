@@ -100,6 +100,7 @@ struct file {
 	spinlock_t		f_pos_lock;
 	loff_t			f_pos;
 	char			f_name[FILENAME_LEN_DEFAULT];
+	int			fd;
 	const struct file_operations *f_op;
 
 #ifdef CONFIG_EPOLL
