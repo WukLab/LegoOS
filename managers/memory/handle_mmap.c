@@ -190,7 +190,10 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 
 	reply->ret = RET_OKAY;
 	reply->ret_addr = (unsigned long)ret;
+
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 	dump_reply(&reply->map);
+#endif
 
 out:
 	ibapi_reply_message(reply, sizeof(*reply), desc);

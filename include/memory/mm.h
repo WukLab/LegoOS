@@ -78,7 +78,6 @@ struct vm_area_struct {
 	struct lego_file *vm_file;	/* File we map to (can be NULL )*/
 };
 
-#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
 /* the node id is acquired by array index, so node id field is not necessary */
 struct distvm_node {
 	unsigned int count;		/* # of range assigned */
@@ -100,7 +99,6 @@ struct vma_tree {
 	int mnode;
 	struct list_head list;
 };
-#endif
 
 struct lego_mm_struct {
 	struct vm_area_struct *mmap;

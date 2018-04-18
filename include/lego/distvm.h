@@ -37,15 +37,13 @@
 
 #endif /* CONFIG_DEBUG_VMA */
 
-
 /*
-* this type def restrict the maximal possible
-* memory node connected
-* unsigned short allow 65536 nodes connect simultaneously
+ * this type def restrict the maximal possible
+ * memory node connected
+ * unsigned short allow 65536 nodes connect simultaneously
 */
 typedef unsigned short vmr16;
 
-#ifdef CONFIG_DISTRIBUTED_VMA
 /* individual reply entry */
 struct vmr_map_struct {
 	vmr16 mnode;
@@ -59,27 +57,34 @@ struct vmr_map_struct {
  * changed for one node). nr_entry represent the real number of entries
  * that are valid
  */
-#define MAX_VMA_REPLY_ENTRY	(CONFIG_MEM_NR_NODES * 2)
+#ifdef CONFIG_MEM_NR_NODES
+# define MAX_VMA_REPLY_ENTRY	(CONFIG_MEM_NR_NODES * 2)
+#else
+# define MAX_VMA_REPLY_ENTRY	(CONFIG_FIT_NR_NODES * 2)
+#endif
+
 struct vmr_map_reply {
 	vmr16 nr_entry;
 	struct vmr_map_struct map[MAX_VMA_REPLY_ENTRY];
 };
 
 #ifdef CONFIG_VM_GRANULARITY_ORDER
-#define VM_GRANULARITY		(1UL << CONFIG_VM_GRANULARITY_ORDER)
+# define VM_GRANULARITY		(1UL << CONFIG_VM_GRANULARITY_ORDER)
 #else
-#define VM_GRANULARITY		(1UL << 30)
+# define VM_GRANULARITY		(1UL << 30)
 #endif
-#define VMR_SHIFT 		CONFIG_VM_GRANULARITY_ORDER
+
+#define VMR_SHIFT 		(CONFIG_VM_GRANULARITY_ORDER)
+
 /* to align the pointer to the (next) VM_GRANULARITY boundary */
 #define VMR_ALIGN(addr)		ALIGN((addr), VM_GRANULARITY)
+
 /* to align the pointer to the (current) VM_GRANULARITY boundary */
 #define VMR_OFFSET(addr)	((addr) & ~(VM_GRANULARITY - 1))
 #define vmr_idx(addr)		((unsigned long)((addr) >> VMR_SHIFT))
 #define VMR_COUNT		vmr_idx(VMR_ALIGN(TASK_SIZE))
+
 /* index pointer to last valid vm range base on end addr */
 #define last_vmr_idx(end)	(vmr_idx(end) - (typeof(end))(VMR_ALIGN(end) == (end)))
-
-#endif /* CONFIG_DISTRIBUTED_VMA */
 
 #endif /* _LEGO_DISTRIBUTED_VM_H_ */
