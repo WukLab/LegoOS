@@ -79,13 +79,7 @@ static int dup_lego_mmap_freepool(struct lego_mm_struct *mm,
 		new->pool_end = pos->pool_end;
 		insert_freepool(mm, new);
 	}
-#ifdef CONFIG_DEBUG_VMA_DUMP
-	vma_debug("[VMPOOL] ************** old mm vmpool ***************\n");
-	dump_vmpool(oldmm);
-	vma_debug("[VMPOOL] ************** new mm vmpool ***************\n");
-	dump_vmpool(mm);
-	vma_debug("[VMPOOL] ************* done dump vmpool *************\n");
-#endif
+
 	return 0;
 }
 
@@ -103,20 +97,17 @@ dup_lego_mmap_single_vmatree(struct lego_mm_struct *mm, struct lego_mm_struct *o
 	if (!newroot)
 		return -ENOMEM;
 	
-	newroot->vm_rb = RB_ROOT;
-	newroot->mmap = NULL;
 	newroot->begin = oldroot->begin;
 	newroot->end = oldroot->end;
 	newroot->flag = oldroot->flag;
 	newroot->max_gap = oldroot->max_gap;
-	newroot->mnode =oldroot->mnode;
+	newroot->mnode = oldroot->mnode;
 	INIT_LIST_HEAD(&newroot->list);
 	set_vmrange_map(mm, newroot->begin, newroot->end - newroot->begin, newroot);
 
-	/* copy all vmas under this rbtree */
-	rb_link = &newroot->vm_rb.rb_node;
+	rb_link = &mm->mm_rb.rb_node;
 	rb_parent = NULL;
-	pprev = &newroot->mmap;
+	pprev = &mm->mmap;
 
 	prev = NULL;
 	for (mpnt = oldroot->mmap; mpnt; mpnt = mpnt->vm_next) {
@@ -162,7 +153,11 @@ dup_lego_mmap_single_vmatree(struct lego_mm_struct *mm, struct lego_mm_struct *o
 
 		if (ret)
 			return ret;
+
 	}
+	/* update new vma tree root */
+	save_update_vma_context(mm, newroot);
+
 	return ret;
 }
 
@@ -213,7 +208,8 @@ static int distribute_m2m_fork(struct lego_task_struct *tsk,
 	return ret < 0 ? ret : reply;
 }
 
-int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc, struct common_header *hdr)
+int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc, 
+		    struct common_header *hdr, void *tx)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -221,20 +217,20 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc, struct common_hea
 	u32 prcsr_nid = payload->prcsr_nid;
 	struct lego_task_struct *parent;
 	struct lego_task_struct *tsk;
-	int reply;
+	u32 *reply = tx;
 	
 	vma_debug("%s, nid: %d, pid: %d, tgid: %d, prcsr_nid: %d",
 		   __func__, nid, pid, tgid, prcsr_nid);
 
 	parent = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!parent)) {
-		reply = -ESRCH;
+		*reply = -ESRCH;
 		goto out;
 	}
 
 	tsk = alloc_lego_task_struct();
 	if (unlikely(!tsk)) {
-		reply = -ENOMEM;
+		*reply = -ENOMEM;
 		goto out;
 	}
 
@@ -244,35 +240,27 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc, struct common_hea
 
 	tsk->mm = lego_mm_alloc(tsk, NULL);
 	if (!tsk->mm) {
-		reply = -ENOMEM;
+		*reply = -ENOMEM;
 		goto out;
 	}
 
 	/* All done, insert into hashtable */
-	reply = ht_insert_lego_task(tsk);
-	if (reply) {
+	*reply = ht_insert_lego_task(tsk);
+	if (*reply) {
 		lego_mmput(tsk->mm);
 		free_lego_task_struct(tsk);
 
 		/* Same process? */
-		if (likely(reply == -EEXIST))
-			reply = 0;
+		if (likely(*reply == -EEXIST))
+			*reply = 0;
 		goto out;
 	}
 
 	/* task struct is prepared, start duplication */
-	reply = dup_lego_mmap_local_vmatree(tsk->mm, parent->mm);
-
-#ifdef CONFIG_DEBUG_VMA_DUMP
-	vma_debug("[VMAS] ************** old mm vmas ***************\n");
-	dump_vmas_onenode(parent->mm);
-	vma_debug("[VMAS] ************** new mm vmas ***************\n");
-	dump_vmas_onenode(tsk->mm);
-	vma_debug("[VMAS] ************* done dump vmas *************\n");
-#endif
+	*reply = dup_lego_mmap_local_vmatree(tsk->mm, parent->mm);
 
 out:
-	ibapi_reply_message(&reply, sizeof(reply), desc);
+	ibapi_reply_message(reply, sizeof(u32), desc);
 	return 0;
 }
 
@@ -318,13 +306,7 @@ static int dup_lego_mmap(struct lego_mm_struct *mm, struct lego_mm_struct *oldmm
 out:
 	up_write(&mm->mmap_sem);
 	up_write(&oldmm->mmap_sem);
-#ifdef CONFIG_DEBUG_VMA_DUMP
-	vma_debug("[VMAS] ************** old mm vmas ***************\n");
-	dump_vmas_onenode(oldmm);
-	vma_debug("[VMAS] ************** new mm vmas ***************\n");
-	dump_vmas_onenode(mm);
-	vma_debug("[VMAS] ************* done dump vmas *************\n");
-#endif
+
 	return ret;
 }
 #else 
@@ -465,13 +447,13 @@ out:
 }
 
 int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
-		    struct common_header *hdr)
+		    struct common_header *hdr, void *tx)
 {
 	unsigned int nid = hdr->src_nid;
 	unsigned int tgid = payload->tgid;
 	unsigned int parent_tgid = payload->parent_tgid;
 	struct lego_task_struct *tsk, *parent;
-	u32 retbuf;
+	u32 *retbuf = tx;
 
 	fork_debug("nid:%u,pid:%u,tgid:%u,parent_tgid:%u",
 		nid, payload->pid, tgid, parent_tgid);
@@ -482,7 +464,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 
 	tsk = alloc_lego_task_struct();
 	if (!tsk) {
-		retbuf = -ENOMEM;
+		*retbuf = -ENOMEM;
 		goto reply;
 	}
 
@@ -501,27 +483,27 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	lego_set_task_comm(tsk, payload->comm);
 
 	/* Duplicate the mmap from parent */
-	retbuf = dup_lego_mm(tsk, parent);
-	if (retbuf) {
+	*retbuf = dup_lego_mm(tsk, parent);
+	if (*retbuf) {
 		free_lego_task_struct(tsk);
 		goto reply;
 	}
 
 	/* All done, insert into hashtable */
-	retbuf = ht_insert_lego_task(tsk);
-	if (retbuf) {
+	*retbuf = ht_insert_lego_task(tsk);
+	if (*retbuf) {
 		lego_mmput(tsk->mm);
 		free_lego_task_struct(tsk);
 
 		/* Same process? */
-		if (likely(retbuf == -EEXIST))
-			retbuf = 0;
+		if (likely(*retbuf == -EEXIST))
+			*retbuf = 0;
 		goto reply;
 	}
 
-	retbuf = 0;
+	*retbuf = 0;
 reply:
-	fork_debug("reply: %d:%s", retbuf, perror(retbuf));
-	ibapi_reply_message(&retbuf, 4, desc);
+	fork_debug("reply: %d:%s", *retbuf, perror(*retbuf));
+	ibapi_reply_message(retbuf, 4, desc);
 	return 0;
 }

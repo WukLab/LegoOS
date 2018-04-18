@@ -17,6 +17,8 @@
 #include <memory/task.h>
 #include <memory/vm-pgtable.h>
 
+#include <monitor/common.h>
+
 /*
  * Optimisation macro.  It is equivalent to:
  *      (x & bit1) ? bit2 : 0
@@ -309,6 +311,7 @@ void dump_lego_mm(const struct lego_mm_struct *mm);
 			BUG();						\
 		}							\
 	} while (0)
+#ifndef CONFIG_DEBUG_VMA
 #define VM_BUG_ON_MM(cond, mm)						\
 	do {								\
 		if (unlikely(cond)) {					\
@@ -316,6 +319,40 @@ void dump_lego_mm(const struct lego_mm_struct *mm);
 			BUG();						\
 		}							\
 	} while (0)
+
+static inline void dump_vmas_onetree(struct vma_tree *root) {}
+static inline void dump_vmas_onenode(struct lego_mm_struct *mm) {}
+static inline void dump_gaps_onenode(struct lego_mm_struct *mm, unsigned long id) {}
+static inline void dump_new_context(struct lego_mm_struct *mm) {}
+static inline void dump_vmpool(struct lego_mm_struct *mm) {}
+static inline void dump_reply(struct vmr_map_reply *reply) {}
+static inline void dump_alloc_schemes(int count, struct alloc_scheme *scheme) {}
+static inline void mmap_brk_validate(struct lego_mm_struct *mm, unsigned long addr, 
+		       unsigned long len) {}
+#else
+/* dist_mmap_dump.c */
+void dump_vmas_onetree(struct vma_tree *root);
+void dump_vmas_onenode(struct lego_mm_struct *mm);
+void dump_gaps_onenode(struct lego_mm_struct *mm, unsigned long id);
+void dump_new_context(struct lego_mm_struct *mm);
+void dump_vmpool(struct lego_mm_struct *mm);
+void dump_reply(struct vmr_map_reply *reply);
+void dump_alloc_schemes(int count, struct alloc_scheme *scheme);
+void mmap_brk_validate(struct lego_mm_struct *mm, unsigned long addr, 
+		       unsigned long len);
+
+#define VM_BUG_ON_MM(cond, mm)						\
+	do {								\
+		if (unlikely(cond)) {					\
+			dump_lego_mm(mm);				\
+			dump_vmpool(mm);				\
+			dump_vmas_onenode(mm);				\
+			dump_gaps_onenode(mm, MY_NODE_ID);		\
+			BUG();						\
+		}							\
+	} while (0)
+#endif
+
 
 /* gup.c */
 #define FOLL_WRITE	0x01	/* check pte is writable */

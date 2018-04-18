@@ -100,7 +100,7 @@ void distvm_exit(struct lego_mm_struct *mm)
 		if (!map[i])
 			continue;
 
-		root = map[i];
+		root = get_vmatree_by_idx(mm, i);
 		i = last_vmr_idx(map[i]->end);
 
 		end = min((unsigned long)root->end, (unsigned long)TASK_SIZE);
@@ -160,7 +160,7 @@ int vmpool_retrieve(struct rb_root *root, unsigned long start, unsigned long end
 	struct rb_node **node = &(root->rb_node), *parent = NULL;
 	struct vm_pool_struct *new;
 
-	vma_debug("%s, start: %lx, end: %lx\n", __func__, start, end);
+	vma_trace("%s, start: %lx, end: %lx\n", __func__, start, end);
 
 	/* TASK_SIZE is not vm range aligned */
 	if (end == TASK_SIZE)
@@ -258,7 +258,7 @@ static struct vm_pool_struct *vmpool_find(struct rb_root *root, unsigned long ad
 	struct rb_node *node = root->rb_node;
 	struct vm_pool_struct *pool = NULL;
 
-	vma_debug("%s, addr: %lx\n", __func__, addr);
+	vma_trace("%s, addr: %lx\n", __func__, addr);
 	BUG_ON(VMR_ALIGN(addr) > addr);
 
 	while(node) {
@@ -307,7 +307,7 @@ unsigned long vmpool_alloc(struct rb_root *root, unsigned long addr,
 	unsigned long chop_begin;
 	len = end - begin;
 	
-	vma_debug("%s, addr: %lx, len: %lx, flag: %lx\n",
+	vma_trace("%s, addr: %lx, len: %lx, flag: %lx\n",
 			__func__, addr, len, flag & MAP_FIXED);
 	VMA_BUG_ON(begin > VMR_ALIGN(TASK_SIZE));
 	VMA_BUG_ON(begin + len > VMR_ALIGN(TASK_SIZE));
@@ -634,7 +634,7 @@ consult_gmm(unsigned long request, unsigned long flag, struct consult_reply *rep
 
 #endif /* CONFIG_VMA_MEMORY_UNITTEST */
 
-	vma_debug("%s, request len: %lx, ret: %d\n", __func__, request, ret);
+	vma_trace("%s, request len: %lx, ret: %d\n", __func__, request, ret);
 
 	return ret;
 }
@@ -650,7 +650,7 @@ int find_dist_vma_intersection(struct lego_mm_struct *mm,
 	unsigned long cur, prev, idx;
 	int ret = 0;
 
-	vma_debug("%s, begin: %lx, end: %lx\n", __func__, begin, end);
+	vma_trace("%s, begin: %lx, end: %lx\n", __func__, begin, end);
 
 	/* get the first mapped range */
 	for (idx = begin_idx; idx < end_idx; idx++) {
@@ -678,11 +678,11 @@ int find_dist_vma_intersection(struct lego_mm_struct *mm,
 			return 1;
 	}
 
-	/* 
+	/*
 	 * at this point we can either do find_vma locally
 	 * or send request to remote
 	 */
-	root = map[last_vmr_idx(end)];
+	root = get_vmatree_by_idx(mm, last_vmr_idx(end));
 	if (is_local(root->mnode)) {
 		load_vma_context(mm, root);
 		if (find_vma_intersection(mm, begin, end))
@@ -781,18 +781,17 @@ free_root:
 static int 
 unmap_vmatrees(struct lego_mm_struct *mm, unsigned long begin, unsigned long len)
 {
-	struct vma_tree **map = mm->vmrange_map;
 	unsigned long end = begin + len;
 	unsigned long idx = vmr_idx(begin);
 	int ret;
 
-	vma_debug("%s, begin: %lx, len: %lx\n", __func__, begin, len);
+	vma_trace("%s, begin: %lx, len: %lx\n", __func__, begin, len);
 	/* 
 	 * look up all the vma_tree in between begin and
 	 * begin + len
 	 */
 	while (idx < vmr_idx(VMR_ALIGN(end))) {
-		struct vma_tree *root = map[idx];
+		struct vma_tree *root = get_vmatree_by_idx(mm, idx);
 		unsigned long chop_begin, chop_end;
 		
 		if (!root) {
@@ -804,10 +803,10 @@ unmap_vmatrees(struct lego_mm_struct *mm, unsigned long begin, unsigned long len
 		chop_end = min((unsigned long)root->end, end);
 		idx = vmr_idx(VMR_ALIGN(chop_end));
 
-		vma_debug("%s, unmap begin: %lx, end: %lx\n",
+		vma_trace("%s, unmap begin: %lx, end: %lx\n",
 			  __func__, chop_begin, chop_end);
 		
-		root = map[vmr_idx(chop_begin)];
+		root = get_vmatree_by_addr(mm, chop_begin);
 		if (is_local(root->mnode)) {
 			struct vm_area_struct *vma;
 
@@ -852,7 +851,7 @@ int map_vmatrees(struct lego_mm_struct *mm, int mnode, unsigned long addr,
 	unsigned long idx = vmr_idx(begin);
 	unsigned long end_idx = vmr_idx(end);
 
-	vma_debug("%s, mm: %p, addr: %lx, len: %lx, mnode: %d, flag: %lx\n", 
+	vma_trace("%s, mm: %p, addr: %lx, len: %lx, mnode: %d, flag: %lx\n", 
 			__func__, mm, addr, len, mnode, flag);
 
 	/* unmap overlap */
@@ -868,11 +867,11 @@ int map_vmatrees(struct lego_mm_struct *mm, int mnode, unsigned long addr,
 	 * range is not totally unmapped, thus, no action for
 	 * these two ranges
 	 */
-	if (map[idx]) {
+	if (get_vmatree_by_idx(mm, idx)) {
 		begin += VM_GRANULARITY;
 		idx = vmr_idx(begin);
 	}
-	if (map[end_idx]) {
+	if (get_vmatree_by_idx(mm, end_idx)) {
 		end = end >= VM_GRANULARITY ? end - VM_GRANULARITY : 0;
 		end_idx = vmr_idx(end);
 	}
@@ -886,7 +885,7 @@ int map_vmatrees(struct lego_mm_struct *mm, int mnode, unsigned long addr,
 	 */
 	if (end_idx + 1 < VMR_COUNT && map[end_idx + 1] && 
 		      map[end_idx + 1]->mnode == mnode) {
-		root = map[end_idx + 1];
+		root = get_vmatree_by_idx(mm, end_idx + 1);
 		root->begin = begin;
 		if (is_local(root->mnode)) {
 			/* 
@@ -905,7 +904,7 @@ int map_vmatrees(struct lego_mm_struct *mm, int mnode, unsigned long addr,
 	}
 
 	if (idx > 0 && map[idx - 1] && map[idx - 1]->mnode == mnode) {
-		root = map[idx - 1];
+		root = get_vmatree_by_idx(mm, idx - 1);
 		root->end = VMR_ALIGN(end);
 
 		if (is_local(root->mnode))
@@ -941,7 +940,7 @@ map_new_addr:
 	entry->len = VMR_ALIGN(end) - begin;
 
 out:
-	vma_debug("%s, begin: %lx, len: %lx, map[%lx]: %p\n", __func__, 
+	vma_trace("%s, begin: %lx, len: %lx, map[%lx]: %p\n", __func__, 
 		  root->begin, root->end - root->begin, 
 		  vmr_idx(root->begin), map[vmr_idx(begin)]);
 	return 0;
@@ -950,14 +949,13 @@ out:
 static void update_nodegaps_freepool(struct lego_mm_struct *mm, 
 			 	     unsigned long begin, unsigned long len)
 {
-	struct vma_tree **map = mm->vmrange_map;
 	unsigned long end = begin + len;
-	unsigned long  idx = vmr_idx(begin);
+	unsigned long idx = vmr_idx(begin);
 
-	vma_debug("%s, begin: %lx, len: %lx\n", __func__, begin, len);
+	vma_trace("%s, begin: %lx, len: %lx\n", __func__, begin, len);
 
 	while (idx < vmr_idx(VMR_ALIGN(end))) {
-		struct vma_tree *root = map[idx];
+		struct vma_tree *root = get_vmatree_by_idx(mm, idx);
 		unsigned long free_begin;
 		unsigned long free_end;
 
@@ -973,7 +971,6 @@ static void update_nodegaps_freepool(struct lego_mm_struct *mm,
 			free_end = root->end;
 			remove_single_vmatree(mm, root);
 			vmpool_retrieve(&mm->vmpool_rb, free_begin, free_end);
-			dump_vmpool(mm);
 		} else {
 			sort_node_gaps(mm, root);
 		}
@@ -996,12 +993,12 @@ get_unmapped_range(struct lego_mm_struct *mm, unsigned long addr,
 	struct distvm_node *node = mm->node_map[mnode];
 	struct vma_tree *pos, *root = NULL;
 
-	vma_debug("%s, addr: %lx, len: %lx, mnode: %d, "
+	vma_trace("%s, addr: %lx, len: %lx, mnode: %d, "
 		  "flag: %lx, nr_split: %x\n", 
 		  __func__, addr, len, mnode, flag, nr_split);
 
 	if (!is_node_valid(mnode)) {
-		vma_debug("memory node invalid, GMM didn't"
+		vma_trace("memory node invalid, GMM didn't"
 			  "provide a correct value\n");
 		/* TODO: Current set to BUG, later, we can 
 		 * change it by ignoring the request */
@@ -1013,7 +1010,7 @@ get_unmapped_range(struct lego_mm_struct *mm, unsigned long addr,
 
 	/* request with advice address */
 	if (addr) {
-		root = mm->vmrange_map[vmr_idx(addr)];
+		root = get_vmatree_by_addr(mm, addr);
 
 		/* 
 		 * only follow address if it's same as 
@@ -1035,7 +1032,6 @@ get_existing_range:
 	 */
 	if (!node)
 		goto get_free_pool;
-	dump_gaps_onenode(mm->node_map[mnode]);
 	list_for_each_entry(pos, &node->list, list) {
 		if (pos->flag & MAP_FIXED)
 			continue;
@@ -1050,7 +1046,6 @@ get_existing_range:
 get_free_pool:
 	addr = vmpool_alloc(&mm->vmpool_rb, addr, len, flag);
 
-	dump_vmpool(mm);
 	return VMR_OFFSET(addr);
 }
 
@@ -1094,10 +1089,9 @@ do_dist_mmap_homenode(struct lego_mm_struct *mm, struct alloc_scheme *scheme,
 	unsigned long counter = 0, iteration_counter = 1;
 	unsigned long ret;
 
-	vma_debug("%s, new_range: %lx, addr: %lx, len: %lx, "
+	vma_trace("%s, new_range: %lx, addr: %lx, len: %lx, "
 		  "flag: %lx, vm_flags: %lx, pgoff: %lx\n", 
 		  __func__, new_range, addr, len, flag, vm_flags, pgoff);
-	dump_alloc_schemes(scheme_count, scheme);
 
 	var_addr = addr;
 	if (!(flag & MAP_FIXED)) {
@@ -1133,7 +1127,7 @@ another_half:
 			request -= end - VMR_OFFSET(end);
 
 		VMA_BUG_ON(PAGE_ALIGN(len) < request);
-		vma_debug("%s, addr: %lx, request: %lx, len: %lx, scheme counter: %lx\n", 
+		vma_trace("%s, addr: %lx, request: %lx, len: %lx, scheme counter: %lx\n", 
 			   __func__, var_addr, request, cur_len, counter);
 
 		/* map vmrange array */
@@ -1142,7 +1136,7 @@ another_half:
 			return ret;
 	
 		/* populate request */
-		root = map[vmr_idx(var_addr)];
+		root = get_vmatree_by_addr(mm, var_addr);
 		if (is_local(nid)) {
 			load_vma_context(mm, root);
 			ret = do_mmap(mm->task, file, var_addr, request, 
@@ -1192,11 +1186,10 @@ do_dist_mmap(struct lego_mm_struct *mm, struct lego_file *file,
 	     unsigned long len, unsigned long prot, unsigned long flag, 
 	     vm_flags_t vm_flags, unsigned long pgoff, unsigned long *max_gap)
 {
-	struct vma_tree **map = mm->vmrange_map;
 	struct vma_tree *root;
 	unsigned long ret;
 
-	vma_debug("%s, new_range: %lx, addr: %lx, len: %lx, "
+	vma_trace("%s, new_range: %lx, addr: %lx, len: %lx, "
 		  "flag: %lx, vm_flags: %lx, pgoff: %lx\n", 
 		  __func__, new_range, addr, len, flag, vm_flags, pgoff);
 
@@ -1214,7 +1207,7 @@ do_dist_mmap(struct lego_mm_struct *mm, struct lego_file *file,
 	if (ret)
 		return ret;
 
-	root = map[vmr_idx(new_range)];
+	root = get_vmatree_by_addr(mm, new_range);
 	if (is_local(mnode)) {
 		load_vma_context(mm, root);
 		ret = do_mmap(mm->task, file, addr, len, 
@@ -1248,7 +1241,7 @@ distvm_mmap_homenode_noconsult(struct lego_mm_struct *mm, struct lego_file *file
 	int scheme_count;
 	unsigned long new_range, ret;
 
-	vma_debug("%s, addr: %lx, len: %lx, pgoff: %lx, flag: %lx\n", 
+	vma_trace("%s, addr: %lx, len: %lx, pgoff: %lx, flag: %lx\n", 
 			__func__, addr, len, pgoff, flag);
 
 	len = PAGE_ALIGN(len);
@@ -1279,8 +1272,8 @@ distvm_mmap_homenode_noconsult(struct lego_mm_struct *mm, struct lego_file *file
 			   	    file, addr, len, prot, flag, 0, pgoff);
 	kfree(reply);
 
-	vma_debug("%s, return: %lx\n", __func__, ret);
-	dump_vmas_onenode(mm);
+	vma_trace("%s, return: %lx\n", __func__, ret);
+	mmap_brk_validate(mm, ret, len);
 	return ret;
 }
 
@@ -1294,7 +1287,7 @@ distvm_mmap_homenode(struct lego_mm_struct *mm, struct lego_file *file,
 	int scheme_count;
 	unsigned long new_range, ret;
 
-	vma_debug("%s, addr: %lx, len: %lx, pgoff: %lx, flag: %lx\n", 
+	vma_trace("%s, addr: %lx, len: %lx, pgoff: %lx, flag: %lx\n", 
 			__func__, addr, len, pgoff, flag);
 
 	len = PAGE_ALIGN(len);
@@ -1327,8 +1320,8 @@ distvm_mmap_homenode(struct lego_mm_struct *mm, struct lego_file *file,
 out:
 	kfree(reply);
 
-	vma_debug("%s, return: %lx\n", __func__, ret);
-	dump_vmas_onenode(mm);
+	vma_trace("%s, return: %lx\n", __func__, ret);
+	mmap_brk_validate(mm, ret, len);
 	return ret;
 }
 
@@ -1342,7 +1335,7 @@ distvm_brk_homenode(struct lego_mm_struct *mm, unsigned long addr, unsigned long
 	unsigned long flag = MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS;
 	unsigned long new_range, ret;
 
-	vma_debug("%s, addr: %lx, len: %lx\n", __func__, addr, len);
+	vma_trace("%s, addr: %lx, len: %lx\n", __func__, addr, len);
 
 	reply = kzalloc(sizeof(struct consult_reply), GFP_KERNEL);	
 	if (!reply)
@@ -1365,8 +1358,8 @@ distvm_brk_homenode(struct lego_mm_struct *mm, unsigned long addr, unsigned long
 out:
 	kfree(reply);
 
-	vma_debug("%s, return: %lx\n", __func__, ret);
-	dump_vmas_onenode(mm);
+	vma_trace("%s, return: %lx\n", __func__, ret);
+	mmap_brk_validate(mm, addr, len);
 	return ret;
 }
 
@@ -1374,17 +1367,16 @@ out:
 int distvm_munmap(struct lego_mm_struct *mm, unsigned long begin, 
 		  unsigned long len, unsigned long *max_gap)
 {
-	struct vma_tree **map = mm->vmrange_map;
 	struct vma_tree *root;
 	int ret;
 
-	vma_debug("%s, begin: %lx, len: %lx\n", __func__, begin, len);
+	vma_trace("%s, begin: %lx, len: %lx\n", __func__, begin, len);
 
 	ret = unmap_vmatrees(mm, begin, len);
 	if (ret)
 		return ret;
 
-	root = map[vmr_idx(begin)];
+	root = get_vmatree_by_addr(mm, begin);
 	if (!root)
 		*max_gap = VMR_ALIGN(begin + len) - VMR_OFFSET(begin);
 	else
@@ -1398,11 +1390,10 @@ distvm_munmap_homenode(struct lego_mm_struct *mm, unsigned long begin, unsigned 
 {
 	int ret;
 
-	vma_debug("%s, begin: %lx, len: %lx\n", __func__, begin, len);
+	vma_trace("%s, begin: %lx, len: %lx\n", __func__, begin, len);
 
 	ret = unmap_vmatrees(mm, begin, len);
 	update_nodegaps_freepool(mm, begin, len);
-	dump_vmas_onenode(mm);
 
 	return ret;
 }
@@ -1414,7 +1405,7 @@ distvm_mremap_grow(struct lego_task_struct *tsk, unsigned long addr,
 	struct vm_area_struct *vma;
 	struct vma_tree *root = tsk->mm->vmrange_map[vmr_idx(addr)];
 
-	vma_debug("%s, addr: %lx, old_len: %lx, new_len: %lx\n", 
+	vma_trace("%s, addr: %lx, old_len: %lx, new_len: %lx\n", 
 		  __func__, addr, old_len, new_len);
 
 	load_vma_context(tsk->mm, root);
@@ -1452,13 +1443,12 @@ do_dist_mremap_move(struct lego_mm_struct *mm, int mnode, unsigned long old_addr
 		    unsigned long new_range, unsigned long *old_max_gap, 
 		    unsigned long *new_max_gap)
 {
-	struct vma_tree **map = mm->vmrange_map;
-	struct vma_tree *oldroot = map[vmr_idx(old_addr)];
-	struct vma_tree *newroot = map[vmr_idx(new_range)];
+	struct vma_tree *oldroot = get_vmatree_by_addr(mm, old_addr);
+	struct vma_tree *newroot = get_vmatree_by_addr(mm, new_range);
 	struct vm_area_struct *vma;
 	unsigned long flag, new_addr;
 	
-	vma_debug("%s, mnode: %d, old_addr: %lx, old_len: %lx, "
+	vma_trace("%s, mnode: %d, old_addr: %lx, old_len: %lx, "
 		  "new_len: %lx, new_range: %lx\n", 
 		  __func__, mnode, old_addr, old_len, new_len, new_range);
 	VMA_BUG_ON(!oldroot);
@@ -1468,7 +1458,7 @@ do_dist_mremap_move(struct lego_mm_struct *mm, int mnode, unsigned long old_addr
 		if (ret)
 			return (unsigned long)ret;
 
-		newroot = map[vmr_idx(new_range)];
+		newroot = get_vmatree_by_addr(mm, new_range);
 	}
 
 	/* remote request */
@@ -1531,11 +1521,10 @@ do_dist_mremap_move_split(struct lego_mm_struct *mm, unsigned long old_addr,
 			  unsigned long new_len, unsigned long *old_max_gap, 
 			  unsigned long *new_max_gap)
 {
-	struct vma_tree **map = mm->vmrange_map;
-	struct vma_tree *newroot = map[vmr_idx(new_addr)];
+	struct vma_tree *newroot = get_vmatree_by_addr(mm, new_addr);
 	struct vm_area_struct *vma;
 	
-	vma_debug("%s, old_addr: %lx, old_len: %lx, "
+	vma_trace("%s, old_addr: %lx, old_len: %lx, "
 		  "new_len: %lx, new_addr %lx\n", 
 		  __func__, old_addr, old_len, new_len, new_addr);
 
@@ -1544,7 +1533,7 @@ do_dist_mremap_move_split(struct lego_mm_struct *mm, unsigned long old_addr,
 		if (ret)
 			return (unsigned long)ret;
 
-		newroot = map[vmr_idx(new_addr)];
+		newroot = get_vmatree_by_addr(mm, new_addr);
 	}
 
 	vma = find_vma(mm, old_addr);
@@ -1573,11 +1562,10 @@ do_dist_mremap_move_split_homenode(struct lego_mm_struct *mm, unsigned long old_
 				   unsigned long old_len, unsigned long new_len, 
 				   unsigned long new_range)
 {
-	struct vma_tree **map = mm->vmrange_map;
-	struct vma_tree *root = map[vmr_idx(old_addr)];
+	struct vma_tree *root = get_vmatree_by_addr(mm, old_addr);
 	unsigned long delta = 0, ret, new_addr;
 
-	vma_debug("%s, old_addr: %lx, old_len: %lx, "
+	vma_trace("%s, old_addr: %lx, old_len: %lx, "
 		  "new_len: %lx, new_range: %lx\n", 
 		  __func__, old_addr, old_len, new_len, new_range);
 
@@ -1588,7 +1576,7 @@ do_dist_mremap_move_split_homenode(struct lego_mm_struct *mm, unsigned long old_
 		struct vma_tree *newroot;
 		unsigned long end, old_req, new_req;
 
-		root = map[vmr_idx(old_addr + delta)];
+		root = get_vmatree_by_addr(mm, old_addr + delta);
 		end = min((unsigned long)root->end, old_addr + old_len);
 		old_req = end - (old_addr + delta);
 		new_req = old_req;
@@ -1599,7 +1587,7 @@ do_dist_mremap_move_split_homenode(struct lego_mm_struct *mm, unsigned long old_
 		if (ret)
 			break;
 
-		newroot = map[vmr_idx(new_addr + delta)];
+		newroot = get_vmatree_by_addr(mm, new_addr + delta);
 		if (is_local(root->mnode)) {
 			unsigned long unused1, unused2;
 			ret = do_dist_mremap_move_split(mm, 
@@ -1639,13 +1627,12 @@ distvm_mremap_homenode(struct lego_mm_struct *mm, unsigned long old_addr,
 		       unsigned long old_len, unsigned long new_len, 
 		       unsigned long flag, unsigned long new_addr)
 {
-	struct vma_tree **map = mm->vmrange_map;
 	struct vma_tree *root;
 	unsigned long ret, begin, new_range;
 	unsigned long idx = 0, delta = 0;
 	int nr_split = 0;
 
-	vma_debug("%s, old_addr: %lx, old_len: %lx, "
+	vma_trace("%s, old_addr: %lx, old_len: %lx, "
 		  "new_len: %lx, flag: %lx, new_addr %lx\n", 
 		  __func__, old_addr, old_len, new_len, flag, new_addr);
 
@@ -1676,7 +1663,7 @@ distvm_mremap_homenode(struct lego_mm_struct *mm, unsigned long old_addr,
 	}
 
 	/* get last range within old_len */
-	root = map[vmr_idx(old_addr + old_len)];
+	root = get_vmatree_by_addr(mm, old_addr + old_len);
 	VMA_BUG_ON(!root);
 
 	/* get how much to grow */
@@ -1707,12 +1694,12 @@ distvm_mremap_homenode(struct lego_mm_struct *mm, unsigned long old_addr,
 	/* last method to remap, create a new one and move */
 	/* count nr of nodes old area across */
 	do {
-		struct vma_tree *pos = map[vmr_idx(old_addr + idx)];
+		struct vma_tree *pos = get_vmatree_by_addr(mm, old_addr + idx);
 		idx = pos->end - old_addr;
 		nr_split++;
 	} while (idx + old_addr < root->end);
 
-	root = map[vmr_idx(old_addr)];
+	root = get_vmatree_by_addr(mm, old_addr);
 	if (nr_split == 1) {
 		unsigned long unused1, unused2;
 		new_range = get_unmapped_range(mm, 0, new_len, 
@@ -1721,7 +1708,7 @@ distvm_mremap_homenode(struct lego_mm_struct *mm, unsigned long old_addr,
 					old_len, new_len, new_range, 
 					&unused1, &unused2);
 		update_nodegaps_freepool(mm, old_addr, old_len);
-		sort_node_gaps(mm, map[vmr_idx(new_range)]);
+		sort_node_gaps(mm, get_vmatree_by_addr(mm, new_range));
 	} else {
 		/* 
 		 * to result no data move across node, new_addr
@@ -1737,7 +1724,6 @@ distvm_mremap_homenode(struct lego_mm_struct *mm, unsigned long old_addr,
 	}
 
 out:
-	dump_vmas_onenode(mm);
-	vma_debug("%s, return: %lx\n", __func__, ret);
+	vma_trace("%s, return: %lx\n", __func__, ret);
 	return ret;
 }

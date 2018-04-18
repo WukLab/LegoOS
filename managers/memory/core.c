@@ -215,31 +215,31 @@ static void __thpool_worker(struct thpool_worker *worker,
 		break;
 
 	case P2M_MPROTECT:
-		handle_p2m_mprotect(payload, desc, hdr);
+		handle_p2m_mprotect(payload, desc, hdr, tx);
 		break;
 
 	case P2M_MUNMAP:
-		handle_p2m_munmap(payload, desc, hdr);
+		handle_p2m_munmap(payload, desc, hdr, tx);
 		break;
 
 	case P2M_MREMAP:
-		handle_p2m_mremap(payload, desc, hdr);
+		handle_p2m_mremap(payload, desc, hdr, tx);
 		break;
 
 	case P2M_BRK:
-		handle_p2m_brk(payload, desc, hdr);
+		handle_p2m_brk(payload, desc, hdr, tx);
 		break;
 
 	case P2M_MSYNC:
-		handle_p2m_msync(payload, desc, hdr);
+		handle_p2m_msync(payload, desc, hdr, tx);
 		break;
 
 	case P2M_FORK:
-		handle_p2m_fork(payload, desc, hdr);
+		handle_p2m_fork(payload, desc, hdr, tx);
 		break;
 
 	case P2M_EXECVE:
-		handle_p2m_execve(payload, desc, hdr);
+		handle_p2m_execve(payload, desc, hdr, tx);
 		break;
 
 	case P2M_CHECKPOINT:
@@ -249,37 +249,37 @@ static void __thpool_worker(struct thpool_worker *worker,
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 /* DISTRIBUTED VMA */
 	case M2M_MMAP:
-		handle_m2m_mmap(payload, desc, hdr);
+		handle_m2m_mmap(payload, desc, hdr, tx);
 		break;
 
 	case M2M_MUNMAP:
-		handle_m2m_munmap(payload, desc, hdr);
+		handle_m2m_munmap(payload, desc, hdr, tx);
 		break;
 
 	case M2M_FINDVMA:
-		handle_m2m_findvma(payload, desc, hdr);
+		handle_m2m_findvma(payload, desc, hdr, tx);
 		break;
 
 	case M2M_MREMAP_GROW:
-		handle_m2m_mremap_grow(payload, desc, hdr);
+		handle_m2m_mremap_grow(payload, desc, hdr, tx);
 		break;
 
 	case M2M_MREMAP_MOVE:
-		handle_m2m_mremap_move(payload, desc, hdr);
+		handle_m2m_mremap_move(payload, desc, hdr, tx);
 		break;
 
 	case M2M_MREMAP_MOVE_SPLIT:
-		handle_m2m_mremap_move_split(payload, desc, hdr);
+		handle_m2m_mremap_move_split(payload, desc, hdr, tx);
 		break;
 
 	case M2M_FORK:
-		handle_m2m_fork(payload, desc, hdr);
+		handle_m2m_fork(payload, desc, hdr, tx);
 		break;
 #endif
 
 #ifdef CONFIG_GMM
 	case M2MM_STATUS_REPORT:
-		handle_m2mm_status_report(desc, hdr);
+		handle_m2mm_status_report(desc, hdr, tx);
 		break;
 #endif
 
@@ -359,6 +359,7 @@ static int thpool_polling(void *unused)
 		retlen = ibapi_receive_message(THPOOL_IB_PORT,
 				buffer->rx, THPOOL_RX_SIZE, &buffer->desc);
 
+		nr_reqs++;
 		if (retlen >= THPOOL_RX_SIZE)
 			panic("%d %lu", retlen, THPOOL_RX_SIZE);
 

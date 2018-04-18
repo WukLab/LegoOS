@@ -144,12 +144,12 @@ config DEBUG_VMA
 	help
 	  Enable VMA debug
 
-config DEBUG_VMA_DUMP
-	bool "Dump all vma relevant data structures"
+config DEBUG_VMA_TRACE
+	bool "print vma relevant function call trace"
 	default y
 	depends on DEBUG_VMA
 	help
-	  Enable VMA data structures dump after each major operation
+	  Enable vma function call trace
 
 config VMA_PROCESSOR_UNITTEST
 	bool "Run VMA processor side unit test"

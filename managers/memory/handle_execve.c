@@ -46,9 +46,9 @@ debug_argv_envp_array(u32 argc, const char **argv, unsigned long *argv_len,
 #endif
 
 int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
-		      struct common_header *hdr)
+		      struct common_header *hdr, void *tx)
 {
-	struct m2p_execve_struct *reply;
+	struct m2p_execve_struct *reply = tx;
 	__u32 argc, envc;
 	size_t len;
 	unsigned long *argv_len, *envp_len;
@@ -66,8 +66,6 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 
 	execve_debug("pid:%u,argc:%u,envc:%u,file:%s",
 		pid, argc, envc, filename);
-
-	reply = kmalloc(sizeof(*reply), GFP_KERNEL);
 
 	tsk = find_lego_task_by_pid(hdr->src_nid, pid);
 	if (!tsk) {

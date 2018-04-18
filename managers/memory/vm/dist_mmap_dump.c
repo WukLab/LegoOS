@@ -11,11 +11,11 @@
  * all distributed vma dump functions are here
  */
 #include <lego/mm.h>
+#include <memory/mm.h>
 #include <memory/distvm.h> 
 
 void dump_vmas_onetree(struct vma_tree *root)
 {
-#ifdef CONFIG_DEBUG_VMA_DUMP
 	struct vm_area_struct *pos;
 	if (!root) {
 		vma_debug("[VMAS] WARN: root given is an empty pointer\n");
@@ -35,12 +35,10 @@ void dump_vmas_onetree(struct vma_tree *root)
 			  pos->vm_start, pos->vm_end, 
 			  pos->rb_subtree_gap, pos->vm_flags);
 	}
-#endif
 }
 
 void dump_vmas_onenode(struct lego_mm_struct *mm)
 {
-#ifdef CONFIG_DEBUG_VMA_DUMP
 	struct vma_tree **map = mm->vmrange_map;
 	int pid = mm->task->pid;
 	int idx = 0;
@@ -54,23 +52,39 @@ void dump_vmas_onenode(struct lego_mm_struct *mm)
 		idx = vmr_idx(VMR_ALIGN(root->end)) - 1;
 	}
 	vma_debug("[VMAS][%d] ************* vma print done ****************\n", pid);
-#endif
 }
 
-void dump_gaps_onenode(struct distvm_node *node)
+void dump_gaps_onenode(struct lego_mm_struct *mm, unsigned long id)
 {
-#ifdef CONFIG_DEBUG_VMA_DUMP
-	struct list_head *head = &node->list;
+	struct distvm_node *node;
+	struct list_head *head;
 	struct vma_tree *pos;
+
+	if (!mm->node_map) {
+		vma_debug("[GAP] node_map isn't allocated\n");
+		return;
+	}
+
+	if (id < NODE_COUNT) {
+		vma_debug("[GAP] node id given is invalid\n");
+		return;
+	}
+
+	node = mm->node_map[id];
+	if (!node) {
+		vma_debug("[GAP] given node doesn't exist\n");
+		return;
+	}
+	
+	head = &node->list;
 	list_for_each_entry(pos, head, list)
 		vma_debug("[GAP] max_gap: %lx, is_fixed: %lx\n", 
 			  pos->max_gap, pos->flag & MAP_FIXED);
-#endif
 }
 
 void dump_reply(struct vmr_map_reply *reply)
 {
-#ifdef CONFIG_DEBUG_VMA_DUMP
+#ifdef CONFIG_DEBUG_VMA_TRACE
 	int i;
 	struct vmr_map_struct *entry;
 	if (!reply) {
@@ -94,7 +108,6 @@ void dump_reply(struct vmr_map_reply *reply)
 
 void dump_alloc_schemes(int count, struct alloc_scheme *scheme)
 {
-#ifdef CONFIG_DEBUG_VMA_DUMP
 	int i;
 	if (!scheme) {
 		vma_debug("[SCHEME] WARN: given scheme is empty, stop printing\n");
@@ -107,23 +120,19 @@ void dump_alloc_schemes(int count, struct alloc_scheme *scheme)
 			  scheme[i].nid, scheme[i].len);
 
 	vma_debug("[SCHEME] ************** scheme print done ***************\n");
-#endif
 }
 
 void dump_new_context(struct lego_mm_struct *mm)
 {
-#ifdef CONFIG_DEBUG_VMA_DUMP
 	vma_debug("[CONTEXT]: mm.mm_rb: %p\n", mm->mm_rb.rb_node);
 	vma_debug("[CONTEXT]: mm.mmap: %p\n", mm->mmap);
 	vma_debug("[CONTEXT]: mm.begin: %lx\n", mm->mmap_legacy_base);
 	vma_debug("[CONTEXT]: mm.end: %lx\n", mm->mmap_base);
 	vma_debug("[CONTEXT]: mm.highest_vm_end: %lx\n", mm->highest_vm_end);
-#endif
 }
 
 void dump_vmpool(struct lego_mm_struct *mm)
 {
-#ifdef CONFIG_DEBUG_VMA_DUMP
 	struct rb_node *pos;
 	int pid = mm->task->pid;
 
@@ -136,6 +145,55 @@ void dump_vmpool(struct lego_mm_struct *mm)
 					struct vm_pool_struct, vmr_rb);
 		vma_debug("[VMPOOL][%d]: begin: %lx, end: %lx\n", 
 				pid, ent->pool_start, ent->pool_end);
+	}
+}
+
+void mmap_brk_validate(struct lego_mm_struct *mm, unsigned long addr, unsigned long len)
+{
+#ifdef CONFIG_DEBUG_VMA
+	const unsigned long end = addr + len;
+	struct vm_area_struct *vma, *prev = NULL;
+	
+	vma_debug("Validate addr: %lx, end: %lx\n", addr, end);
+	
+new_tree:
+	vma = find_vma(mm, addr);
+	if (!vma || vma->vm_start > addr) {
+		vma_debug("Addr: %lx not found\n", addr);
+		dump_all_vmas_simple(mm);
+		BUG();
+	}
+
+	while (vma && vma->vm_end < end) {
+		struct vma_tree *root = mm->vmrange_map[vmr_idx(vma->vm_start)];
+
+		/* if there is prev, check continuity */
+		if (prev && prev->vm_end != vma->vm_start) {
+			vma_debug("Addr: %lx not found\n", prev->vm_end);
+			dump_all_vmas_simple(mm);
+			BUG();
+		}
+
+		/* good, return */
+		if (vma->vm_end >= end)
+			return;
+
+		prev = vma; 
+		if (root->end == vma->vm_end) {
+			/* 
+			 * out of current tree range, 
+			 * proceed to next vma tree
+			 */
+			addr = vma->vm_end;
+			goto new_tree;
+		} else if (root->end < vma->vm_end) {
+			vma_debug("vma exceeds vma tree range, root->end: %lx,"
+			          "vma->vm_end: %lx\n", root->end, vma->vm_end);
+			dump_all_vmas_simple(mm);
+			BUG();
+		} else {
+			vma = vma->vm_next;
+		}
 	}
 #endif
 }

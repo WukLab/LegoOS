@@ -82,6 +82,7 @@ static int common_handle_p2m_miss(struct lego_task_struct *p,
 	vma = find_vma(mm, vaddr);
 	if (unlikely(!vma)) {
 		pr_info("fail to find vma\n");
+		dump_all_vmas_simple(p->mm);
 		ret = VM_FAULT_SIGSEGV;
 		goto unlock;
 	}
@@ -92,13 +93,15 @@ static int common_handle_p2m_miss(struct lego_task_struct *p,
 
 	/* stack? */
 	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN))) {
-		pr_info("not stack \n");
+		pr_info("not a stack\n");
+		dump_all_vmas_simple(p->mm);
 		ret = VM_FAULT_SIGSEGV;
 		goto unlock;
 	}
 
 	if (unlikely(expand_stack(vma, vaddr))) {
-		pr_info("fail to expand not stack \n");
+		pr_info("fail to expand stack\n");
+		dump_all_vmas_simple(p->mm);
 		ret = VM_FAULT_SIGSEGV;
 		goto unlock;
 	}

@@ -58,7 +58,7 @@ arch_get_unmapped_area(struct lego_task_struct *p, struct lego_file *filp,
 	struct vm_unmapped_area_info info;
 	unsigned long begin, end;
 
-	vma_debug("%s, addr: %lx, len: %lx, pgoff: %lx, flag: %lx\n", 
+	vma_trace("%s, addr: %lx, len: %lx, pgoff: %lx, flag: %lx\n", 
 			__func__, addr, len, pgoff, flags);
 
 	if (flags & MAP_FIXED)
@@ -106,7 +106,7 @@ arch_get_unmapped_area_topdown(struct lego_task_struct *p, struct lego_file *fil
 	unsigned long addr = addr0;
 	struct vm_unmapped_area_info info;
 
-	vma_debug("%s, addr: %lx, len: %lx, pgoff: %lx, flag: %lx\n", 
+	vma_trace("%s, addr: %lx, len: %lx, pgoff: %lx, flag: %lx\n", 
 			__func__, addr, len, pgoff, flags);
 
 	if (len > TASK_SIZE)
@@ -193,9 +193,8 @@ static long vma_compute_subtree_gap(struct vm_area_struct *vma)
 		max -= vma->vm_prev->vm_end;
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 	else {
-		struct vma_tree **map = vma->vm_mm->vmrange_map;
-		unsigned long idx = vmr_idx(VMR_OFFSET(vma->vm_start));
-		max -= map[idx]->begin;
+		struct vma_tree *root = get_vmatree_by_addr(vma->vm_mm, vma->vm_start);
+		max -= root->begin;
 	}
 #endif
 	if (vma->vm_rb.rb_left) {
@@ -434,7 +433,7 @@ struct vm_area_struct *find_vma(struct lego_mm_struct *mm, unsigned long addr)
 	struct rb_node *rb_node = NULL;
 	struct vm_area_struct *vma = NULL;
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
-	struct vma_tree *root = mm->vmrange_map[vmr_idx(addr)];
+	struct vma_tree *root = get_vmatree_by_addr(mm, addr);
 
 	if (!root || !is_local(root->mnode))
 		return NULL;
@@ -533,7 +532,7 @@ static int find_vma_links(struct lego_mm_struct *mm, unsigned long addr,
 {
 	struct rb_node **__rb_link, *__rb_parent, *rb_prev;
 
-	vma_debug("%s, addr: %lx, end: %lx\n", __func__, addr, end);
+	vma_trace("%s, addr: %lx, end: %lx\n", __func__, addr, end);
 
 	__rb_link = &mm->mm_rb.rb_node;
 	rb_prev = __rb_parent = NULL;
@@ -594,14 +593,14 @@ int insert_vm_struct(struct lego_mm_struct *mm, struct vm_area_struct *vma)
 	u64 addr = vmpool_alloc(&mm->vmpool_rb, vma->vm_start, 
 				vma->vm_end - vma->vm_start, MAP_FIXED);
 
-	vma_debug("%s, addr: %Lx\n", __func__, addr);
+	vma_trace("%s, addr: %Lx\n", __func__, addr);
 	if (IS_ERR((void*)addr))
 		return addr;
 
 	if (map_vmatrees(mm, LEGO_LOCAL_NID, addr, TASK_SIZE - addr, 0))
 		return -ENOMEM;
 
-	root = mm->vmrange_map[vmr_idx(addr)];
+	root = get_vmatree_by_addr(mm, addr);
 	load_vma_context(mm, root);
 #endif
 
@@ -630,7 +629,6 @@ int insert_vm_struct(struct lego_mm_struct *mm, struct vm_area_struct *vma)
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
 	save_update_vma_context(mm, root);
 	sort_node_gaps(mm, root);
-	dump_all_vmas(mm);
 #endif
 	return 0;
 }
@@ -683,7 +681,7 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 	long adjust_next = 0;
 	int remove_next = 0;
 
-	vma_debug("%s, start: %lx, end: %lx\n", __func__, start, end);
+	vma_trace("%s, start: %lx, end: %lx\n", __func__, start, end);
 	if (next && !insert) {
 		struct vm_area_struct *exporter = NULL, *importer = NULL;
 
@@ -986,7 +984,7 @@ struct vm_area_struct *vma_merge(struct lego_mm_struct *mm,
 	struct vm_area_struct *area, *next;
 	int err;
 
-	vma_debug("%s, addr: %lx, end: %lx\n", __func__, addr, end);
+	vma_trace("%s, addr: %lx, end: %lx\n", __func__, addr, end);
 	/*
 	 * We later require that vma->vm_flags == vm_flags,
 	 * so this tests vma->vm_flags & VM_SPECIAL, too.
@@ -1064,7 +1062,7 @@ static int __split_vma(struct lego_mm_struct *mm, struct vm_area_struct *vma,
 	struct vm_area_struct *new;
 	int err = 0;
 
-	vma_debug("%s, addr: %lx, new_below: %d\n", __func__, addr, new_below);
+	vma_trace("%s, addr: %lx, new_below: %d\n", __func__, addr, new_below);
 	new = kmalloc(sizeof(*new), GFP_KERNEL);
 	if (!new)
 		return -ENOMEM;
@@ -1116,7 +1114,7 @@ static void unmap_region(struct lego_mm_struct *mm,
 {
 	struct vm_area_struct *next = prev ? prev->vm_next : mm->mmap;
 
-	vma_debug("%s, start: %lx, end: %lx\n", __func__, start, end);
+	vma_trace("%s, start: %lx, end: %lx\n", __func__, start, end);
 	unmap_vmas(vma, start, end);
 	lego_free_pgtables(vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
 				next ? next->vm_start : USER_PGTABLES_CEILING);
@@ -1189,7 +1187,7 @@ int do_munmap(struct lego_mm_struct *mm, unsigned long start, size_t len)
 	unsigned long end;
 	struct vm_area_struct *vma, *prev, *last;
 
-	vma_debug("%s, start: %lx, len: %lx\n", __func__, start, len);
+	vma_trace("%s, start: %lx, len: %lx\n", __func__, start, len);
 	if ((offset_in_page(start)) || start > TASK_SIZE || len > TASK_SIZE-start)
 		return -EINVAL;
 
@@ -1291,7 +1289,7 @@ vma_to_resize(unsigned long addr, unsigned long old_len,
 	struct vm_area_struct *vma;
 	unsigned long pgoff;
 
-	vma_debug("%s, addr: %lx, old_len: %lx, new_len: %lx\n", 
+	vma_trace("%s, addr: %lx, old_len: %lx, new_len: %lx\n", 
 			__func__, addr, old_len, new_len);
 
 	vma = find_vma(mm, addr);
@@ -1333,7 +1331,7 @@ static struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 	struct rb_node **rb_link, *rb_parent;
 	bool faulted_in_anon_vma = true;
 
-	vma_debug("%s, addr: %lx, len: %lx, pgoff: %Lx\n", 
+	vma_trace("%s, addr: %lx, len: %lx, pgoff: %Lx\n", 
 			__func__, addr, len, pgoff);
 	/*
 	 * If it is anonymous, pgoff really does not matter
@@ -1399,7 +1397,7 @@ unsigned long move_vma(struct lego_task_struct *tsk, struct vm_area_struct *vma,
 	unsigned long moved_len;
 	int err = 0;
 
-	vma_debug("%s, old_addr: %lx, old_len: %lx, new_addr: %lx, new_len: %lx\n", 
+	vma_trace("%s, old_addr: %lx, old_len: %lx, new_addr: %lx, new_len: %lx\n", 
 			__func__, old_addr, old_len, new_addr, new_len);
 
 	new_pgoff = vma->vm_pgoff + ((old_addr - vma->vm_start) >> PAGE_SHIFT);
@@ -1640,7 +1638,7 @@ get_unmapped_area(struct lego_task_struct *p, struct lego_file *file,
 	unsigned long (*get_area)(struct lego_task_struct *, struct lego_file *, unsigned long,
 				  unsigned long, unsigned long, unsigned long);
 
-	vma_debug("%s, addr: %lx, len: %lx, pgoff: %lx, flags: %lx\n", 
+	vma_trace("%s, addr: %lx, len: %lx, pgoff: %lx, flags: %lx\n", 
 			__func__, addr, len, pgoff, flags);
 
 	/* Careful about overflows.. */
@@ -1674,7 +1672,7 @@ mmap_region(struct lego_task_struct *p, struct lego_file *file,
 	struct rb_node **rb_link, *rb_parent;
 	int error;
 
-	vma_debug("%s, addr: %lx, len: %lx, pgoff: %lx, vm_flags: %lx\n", 
+	vma_trace("%s, addr: %lx, len: %lx, pgoff: %lx, vm_flags: %lx\n", 
 			__func__, addr, len, pgoff, vm_flags);
 
 	/* Clear old maps */
@@ -1767,7 +1765,7 @@ unsigned long do_mmap(struct lego_task_struct *p, struct lego_file *file,
 {
 	struct lego_mm_struct *mm = p->mm;
 
-	vma_debug("%s, addr: %lx, len: %lx, pgoff: %lx, flags: %lx, vm_flags: %lx\n", 
+	vma_trace("%s, addr: %lx, len: %lx, pgoff: %lx, flags: %lx, vm_flags: %lx\n", 
 			__func__, addr, len, pgoff, flags, vm_flags);
 
 #ifndef CONFIG_DISTRIBUTED_VMA_MEMORY
@@ -1923,7 +1921,7 @@ int do_brk(struct lego_task_struct *p, unsigned long addr,
 	pgoff_t pgoff = addr >> PAGE_SHIFT;
 	int error;
 
-	vma_debug("%s, addr: %lx, request: %lx\n", __func__, addr, request);
+	vma_trace("%s, addr: %lx, request: %lx\n", __func__, addr, request);
 
 	len = PAGE_ALIGN(request);
 	if (len < request)
@@ -2112,7 +2110,7 @@ static int acct_stack_growth(struct vm_area_struct *vma, unsigned long size, uns
 {
 	unsigned long actual_size;
 
-	vma_debug("%s, size: %lx, grow: %lx\n", __func__, size, grow);
+	vma_trace("%s, size: %lx, grow: %lx\n", __func__, size, grow);
 
 	/* address space limit tests */
 	if (!may_expand_vm(vma->vm_mm, vma->vm_flags, grow))
@@ -2141,7 +2139,7 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 	unsigned long gap_addr;
 	int error;
 
-	vma_debug("%s, address: %lx\n", __func__, address);
+	vma_trace("%s, address: %lx\n", __func__, address);
 
 	address &= PAGE_MASK;
 
@@ -2194,7 +2192,7 @@ int expand_stack(struct vm_area_struct *vma, unsigned long address)
 {
 	int ret;
 	struct lego_mm_struct *mm = vma->vm_mm;
-	struct vma_tree *root = mm->vmrange_map[vmr_idx(address)];
+	struct vma_tree *root = get_vmatree_by_addr(mm, address);
 	load_vma_context(mm, root);
 	ret = expand_downwards(vma, address);
 	save_update_vma_context(mm, root);
@@ -2248,7 +2246,7 @@ static void unmap_single_vma(struct vm_area_struct *vma, unsigned long start_add
 	unsigned long start;
 	unsigned long end;
 
-	vma_debug("%s, start_addr: %lx, end_addr: %lx\n", 
+	vma_trace("%s, start_addr: %lx, end_addr: %lx\n", 
 			__func__, start_addr, end_addr);
 	start = max(vma->vm_start, start_addr);
 	if (start >= vma->vm_end)
@@ -2282,7 +2280,7 @@ static void unmap_single_vma(struct vm_area_struct *vma, unsigned long start_add
 void unmap_vmas(struct vm_area_struct *vma, unsigned long start_addr,
 		unsigned long end_addr)
 {
-	vma_debug("%s, start_addr: %lx, end_addr: %lx\n", 
+	vma_trace("%s, start_addr: %lx, end_addr: %lx\n", 
 			__func__, start_addr, end_addr);
 	for ( ; vma && vma->vm_start < end_addr; vma = vma->vm_next)
 		unmap_single_vma(vma, start_addr, end_addr);

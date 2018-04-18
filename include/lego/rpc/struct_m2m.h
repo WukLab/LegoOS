@@ -30,7 +30,7 @@ struct m2m_mmap_reply_struct {
 	unsigned long	addr;
 	unsigned long	max_gap;
 };
-int handle_m2m_mmap(struct m2m_mmap_struct *, u64, struct common_header *);
+int handle_m2m_mmap(struct m2m_mmap_struct *, u64, struct common_header *, void *);
 
 /* M2M_MUMMAP */
 struct m2m_munmap_struct {
@@ -43,7 +43,7 @@ struct m2m_munmap_reply_struct {
 	int status;
 	unsigned long	max_gap;
 };
-int handle_m2m_munmap(struct m2m_munmap_struct *, u64, struct common_header *);
+int handle_m2m_munmap(struct m2m_munmap_struct *, u64, struct common_header *, void *);
 
 /* M2M_MREMAP_GROW */
 struct m2m_mremap_grow_struct {
@@ -57,7 +57,7 @@ struct m2m_mremap_grow_reply_struct {
 	int status;
 	unsigned long max_gap;
 };
-int handle_m2m_mremap_grow(struct m2m_mremap_grow_struct *, u64, struct common_header *);
+int handle_m2m_mremap_grow(struct m2m_mremap_grow_struct *, u64, struct common_header *, void *);
 
 /* M2M_MREMAP_MOVE */
 struct m2m_mremap_move_struct {
@@ -73,7 +73,7 @@ struct m2m_mremap_move_reply_struct {
 	unsigned long	old_max_gap;
 	unsigned long	new_max_gap;
 };
-int handle_m2m_mremap_move(struct m2m_mremap_move_struct *, u64, struct common_header *);
+int handle_m2m_mremap_move(struct m2m_mremap_move_struct *, u64, struct common_header *, void *);
 
 /* M2M_MREMAP_MOVE_SPLIT */
 struct m2m_mremap_move_split_struct {
@@ -90,7 +90,7 @@ struct m2m_mremap_move_split_reply_struct {
 	unsigned long	new_max_gap;
 };
 int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *, 
-				 u64, struct common_header *);
+				 u64, struct common_header *, void *);
 
 /* M2M_FINDVMA */
 struct m2m_findvma_struct {
@@ -102,7 +102,7 @@ struct m2m_findvma_struct {
 struct m2m_findvma_reply_struct {
 	int vma_exist;
 };
-int handle_m2m_findvma(struct m2m_findvma_struct *, u64, struct common_header *);
+int handle_m2m_findvma(struct m2m_findvma_struct *, u64, struct common_header *, void *);
 
 /* M2M_MSYNC */
 struct m2m_msync_struct {
@@ -112,7 +112,7 @@ struct m2m_msync_struct {
 	unsigned long	len;
 	unsigned long	flags;
 };
-int handle_m2m_msync(struct m2m_msync_struct *, u64, struct common_header *);
+int handle_m2m_msync(struct m2m_msync_struct *, u64, struct common_header *, void *);
 
 /* M2M_FORK */
 struct m2m_fork_struct {
@@ -120,7 +120,7 @@ struct m2m_fork_struct {
 	u32		tgid;
 	u32		prcsr_nid;
 };
-int handle_m2m_fork(struct m2m_fork_struct *, u64, struct common_header *);
+int handle_m2m_fork(struct m2m_fork_struct *, u64, struct common_header *, void *);
 
 #endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */
 
