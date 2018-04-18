@@ -58,6 +58,9 @@
 #define F_SETPIPE_SZ	(F_LINUX_SPECIFIC_BASE + 7)
 #define F_GETPIPE_SZ	(F_LINUX_SPECIFIC_BASE + 8)
 
+/* for F_[GET|SET]FL */
+#define FD_CLOEXEC	1	/* actually anything with low bit set goes */
+
 #define AT_SYMLINK_NOFOLLOW	0x100   /* Do not follow symbolic links.  */
 #define AT_REMOVEDIR		0x200   /* Remove directory instead of
                                            unlinking file.  */

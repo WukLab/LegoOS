@@ -74,6 +74,7 @@ static bool strace_printable_nr[__NR_syscall_max+1] = {
 	[__NR_dup2]			= true,
 	[__NR_pipe]			= true,
 	[__NR_pipe2]			= true,
+	[__NR_fcntl]			= true,
 };
 #endif
 

@@ -12,6 +12,7 @@
 #include <lego/syscalls.h>
 #include <lego/spinlock.h>
 #include <lego/sched.h>
+#include <lego/files.h>
 #include <processor/processor.h>
 #include <processor/pcache.h>
 #include <processor/fs.h>
@@ -25,8 +26,7 @@
 #define pipe_debug(fmt, ...)	do { } while (0)
 #endif
 
-/* Default pipe size, 32 pages */
-#define PIPE_MAX_ORDER	(5)
+#define PIPE_MAX_ORDER	(8)
 #define PIPE_MAX_SIZE	((1 << PIPE_MAX_ORDER) * PAGE_SIZE)
 
 /*
@@ -455,6 +455,14 @@ static int do_pipe_create(int *flides, int flags)
 		put_pipe(pipe);
 		free_fd(files, fds[0]);
 		goto out;
+	}
+
+	if (flags & O_CLOEXEC) {
+		__set_close_on_exec(fds[0], files);
+		__set_close_on_exec(fds[1], files);
+	} else {
+		__clear_close_on_exec(fds[0], files);
+		__clear_close_on_exec(fds[1], files);
 	}
 
 	/* initialize */

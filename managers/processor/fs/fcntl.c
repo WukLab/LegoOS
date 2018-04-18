@@ -37,23 +37,17 @@ static int setfl(struct file * filp, unsigned long arg)
 	return 0;
 }
 
-static long do_fcntl(int fd, unsigned int cmd, unsigned long arg)
+static long do_fcntl(int fd, unsigned int cmd, unsigned long arg, struct file *fp)
 {
 	long err = -EINVAL;
-	struct file *fp;
-
-	fp = fdget(fd);
-	if (unlikely(!fp)) {
-		err = -EBADF;
-		goto out;
-	}
 
 	switch(cmd) {
 	case F_GETFD:
-		err = 0;
+		err = get_close_on_exec(fd) ? FD_CLOEXEC : 0;
 		break;
 	case F_SETFD:
 		err = 0;
+		set_close_on_exec(fd, arg & FD_CLOEXEC);
 		break;
 	case F_GETFL:
 		err = fp->f_flags;
@@ -78,23 +72,26 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg)
 	case F_NOTIFY:
 	case F_SETPIPE_SZ:
 	case F_GETPIPE_SZ:
-		pr_warn("cmd not implemented: %u\n", cmd);
+		WARN(1, "Cmd not implemented: %u\n", cmd);
 		err = 0;
 		break;
-
 	default:
 		break;
 	}
-
-out:
 	return err;
 }
 
 SYSCALL_DEFINE3(fcntl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
-{	
-	long ret;
-	syscall_enter("fd: %u, cmd: %u, arg: %lu\n", fd, cmd, arg);
-	ret = do_fcntl(fd, cmd, arg);
-	syscall_exit(ret);
-	return ret;
+{
+	long err;
+	struct file *fp;
+
+	fp = fdget(fd);
+	if (!fp)
+		return -EBADF;
+
+	err = do_fcntl(fd, cmd, arg, fp);
+
+	put_file(fp);
+	return err;
 }

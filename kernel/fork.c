@@ -504,6 +504,7 @@ static struct files_struct *dup_fd(struct files_struct *oldf)
 
 	atomic_set(&newf->count, 1);
 	spin_lock_init(&newf->file_lock);
+	bitmap_copy(newf->close_on_exec, oldf->close_on_exec, NR_OPEN_DEFAULT);
 
 	/* Copy fd bitmap and get each open file */
 	spin_lock(&oldf->file_lock);

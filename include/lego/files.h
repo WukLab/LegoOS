@@ -131,9 +131,29 @@ struct files_struct {
 	 *
 	 * Both protected by @file_lock above
 	 */
+	DECLARE_BITMAP(close_on_exec, NR_OPEN_DEFAULT);
 	DECLARE_BITMAP(fd_bitmap, NR_OPEN_DEFAULT);
 	struct file *fd_array[NR_OPEN_DEFAULT];
-};
+} ____cacheline_aligned;
+
+static inline bool close_on_exec(unsigned int fd, struct files_struct *fs)
+{
+	return test_bit(fd, fs->close_on_exec);
+}
+
+bool get_close_on_exec(unsigned int fd);
+void set_close_on_exec(unsigned int fd, int flag);
+
+static inline void __set_close_on_exec(unsigned int fd, struct files_struct *fs)
+{
+	__set_bit(fd, fs->close_on_exec);
+}
+
+static inline void __clear_close_on_exec(unsigned int fd, struct files_struct *fs)
+{
+	if (test_bit(fd, fs->close_on_exec))
+		__clear_bit(fd, fs->close_on_exec);
+}
 
 struct iovec {
 	void __user *iov_base;	/* BSD uses caddr_t (1003.1g requires void *) */

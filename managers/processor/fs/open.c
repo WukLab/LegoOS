@@ -97,14 +97,57 @@ void free_fd(struct files_struct *files, int fd)
 	spin_unlock(&files->file_lock);
 }
 
-/*
- * TODO:
- * Use to close files that has FD_CLEEXEC set, which means
- * close this file if execv is called.
- */
 void do_close_on_exec(struct files_struct *files)
 {
-	pr_info_once("%s(): TODO, not implemented.\n", __func__);
+#if 0
+	unsigned int fd;
+
+	/* Check opened files */
+	spin_lock(&files->file_lock);
+	for_each_set_bit(fd, files->fd_bitmap, NR_OPEN_DEFAULT) {
+		struct file *f = files->fd_array[fd];
+
+		BUG_ON(!f);
+
+		/*
+		 * XXX:
+		 * Do we need to callback to f->op->release?
+		 */
+		if (close_on_exec(fd, files)) {
+			pr_info("%s %d-%s fd: %d f_name: %s\n",
+				__func__, current->pid, current->comm, fd, f->f_name);
+
+			put_file(f);
+			__clear_bit(fd, files->fd_bitmap);
+			files->fd_array[fd] = NULL;
+		}
+	}
+	spin_unlock(&files->file_lock);
+#endif
+}
+
+void set_close_on_exec(unsigned int fd, int flag)
+{
+	struct files_struct *files = current->files;
+
+	spin_lock(&files->file_lock);
+	if (flag)
+		__set_close_on_exec(fd, files);
+	else
+		__clear_close_on_exec(fd, files);
+	spin_unlock(&files->file_lock);
+}
+
+bool get_close_on_exec(unsigned int fd)
+{
+	struct files_struct *files = current->files;
+	long ret;
+
+	spin_lock(&files->file_lock);
+	ret = close_on_exec(fd, files);
+	spin_unlock(&files->file_lock);
+
+	return ret;
 }
 
 #ifdef CONFIG_USE_RAMFS
@@ -194,6 +237,10 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 		}
 	}
 
+	if (flags & O_CLOEXEC)
+		__set_close_on_exec(fd, current->files);
+	else
+		__clear_close_on_exec(fd, current->files);
 put:
 	put_file(f);
 out:
@@ -248,18 +295,10 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 	struct files_struct *files = current->files;
 	int ret;
 
-	syscall_enter("%u\n", fd);
-
 	spin_lock(&files->file_lock);
 	if (likely(test_bit(fd, files->fd_bitmap))) {
 		f = files->fd_array[fd];
 		BUG_ON(!f);
-
-#ifdef CONFIG_DEBUG_SYSCALL
-		pr_info("%s() CPU%d PID:%d [fd: %d] -> [%s]\n",
-			__func__, smp_processor_id(), current->pid,
-			fd, f ? f->f_name : "-EBADF");
-#endif
 
 		if (f->f_op->release)
 			f->f_op->release(f);
@@ -267,13 +306,13 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 		__clear_bit(fd, files->fd_bitmap);
 		files->fd_array[fd] = NULL;
 
+		__clear_close_on_exec(fd, files);
 		ret = 0;
 	} else {
 		ret = -EBADF;
 	}
 	spin_unlock(&files->file_lock);
 
-	syscall_exit(ret);
 	return ret;
 }
 
@@ -283,33 +322,24 @@ SYSCALL_DEFINE2(dup2, unsigned int, oldfd, unsigned int, newfd)
 	struct files_struct *files = current->files;
 	int ret = newfd;
 
-	syscall_enter("oldfd: %u, newfd: %u\n", oldfd, newfd);
+	if (oldfd == newfd)
+		return -EINVAL;
 
-	if (unlikely(oldfd == newfd)) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	if (newfd >= NR_OPEN_DEFAULT) {
-		ret = -EBADF;
-		goto out;
-	}
+	if (newfd >= NR_OPEN_DEFAULT)
+		return -EBADF;
 
 	f = fdget(oldfd);
-	if (unlikely(!f)) {
-		ret = -EBADF;
-		goto out;
-	}
+	if (!f)
+		return -EBADF;
 
 	spin_lock(&files->file_lock);
 	__set_bit(newfd, files->fd_bitmap);
+	__clear_close_on_exec(newfd, files);
 
 	/* pervious fdget already incr file ref */
 	files->fd_array[newfd] = f;
 	spin_unlock(&files->file_lock);
 
-out:
-	syscall_exit(ret);
 	return ret;
 }
 
