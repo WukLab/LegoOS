@@ -772,19 +772,30 @@ static void __free_pages_ok(struct page *page, unsigned int order)
 	local_irq_restore(flags);
 }
 
-void __free_pages(struct page *page, unsigned int order)
+void __free_pages_boot(struct page *page, unsigned int order)
 {
 	if (put_page_testzero(page)) {
 		__free_pages_ok(page, order);
 	}
 }
 
+void __free_pages(struct page *page, unsigned int order)
+{
+#ifndef CONFIG_DEBUG_KMALLOC_USE_BUDDY
+	if (put_page_testzero(page)) {
+		__free_pages_ok(page, order);
+	}
+#endif
+}
+
 void free_pages(unsigned long addr, unsigned int order)
 {
+#ifndef CONFIG_DEBUG_KMALLOC_USE_BUDDY
 	if (addr != 0) {
 		VM_BUG_ON(!virt_addr_valid(addr));
 		__free_pages(virt_to_page((void *)addr), order);
 	}
+#endif
 }
 
 static __always_inline void __clear_page(void *page)
@@ -971,7 +982,7 @@ static void __init __free_pages_boot_core(struct page *page, unsigned int order)
 
 	page_zone(page)->managed_pages += nr_pages;
 	set_page_refcounted(page);
-	__free_pages(page, order);
+	__free_pages_boot(page, order);
 }
 
 /*

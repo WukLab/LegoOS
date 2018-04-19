@@ -86,7 +86,13 @@ __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr
 	ret = fit_send_reply_with_rdma_write_with_imm(ctx, target_node, addr,
 			size, ret_addr, max_ret_size, 0, if_use_ret_phys_addr,
 			timeout_sec, caller);
+
+	if (unlikely(ret > max_ret_size)) {
+		pr_info("ret: %d, max_ret_size: %d\n", ret, max_ret_size);
+		BUG();
+	}
 	unlock_ib();
+
 
 	return ret;
 }
