@@ -150,7 +150,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
-		reply->ret = RET_ESRCH;
+		reply->ret = -ESRCH;
 		goto out;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
@@ -162,7 +162,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	if (!(flags & MAP_ANONYMOUS)) {
 		file = file_open(tsk, f_name);
 		if (IS_ERR(file)) {
-			reply->ret = RET_ENOMEM;
+			reply->ret = -ENOMEM;
 			goto out;
 		}
 	}
@@ -184,11 +184,11 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 
 	/* which means vm_mmap_pgoff() returns -ERROR */
 	if (unlikely(ret < 0)) {
-		reply->ret = ERR_TO_LEGO_RET(ret);
+		reply->ret = ret;
 		goto out;
 	}
 
-	reply->ret = RET_OKAY;
+	reply->ret = 0;
 	reply->ret_addr = (unsigned long)ret;
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
