@@ -19,14 +19,16 @@
 #include <memory/vm-pgtable.h>
 
 static int do_wp_page(struct vm_area_struct *vma, unsigned long address,
-		      unsigned int flags, pte_t *ptep, pmd_t *pmd, pte_t entry)
+		      unsigned int flags, pte_t *ptep, pmd_t *pmd, pte_t entry,
+		      spinlock_t *ptl)
 {
 	dump_vma(vma);
 	dump_pte(ptep, NULL);
 	pr_debug("%s address: %lx, flags: %x\n", __func__, address, flags);
 
 	WARN_ON(1);
-	return VM_FAULT_SIGBUS;
+	spin_unlock(ptl);
+	return 0;
 }
 
 /* TODO:
@@ -162,7 +164,7 @@ static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
 	 */
 	if (flags & FAULT_FLAG_WRITE) {
 		if (likely(!pte_write(entry)))
-			return do_wp_page(vma, address, flags, pte, pmd, entry);
+			return do_wp_page(vma, address, flags, pte, pmd, entry, ptl);
 		else {
 			/*
 			 * In a real environment equipped with TLB,

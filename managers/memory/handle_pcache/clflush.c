@@ -65,6 +65,7 @@ int handle_p2m_flush_one(struct p2m_flush_msg *msg, u64 desc)
 
 	if (offset_in_page(user_va)) {
 		reply = -EINVAL;
+		WARN_ON_ONCE(1);
 		goto out_reply;
 	}
 
