@@ -31,7 +31,7 @@
 
 #define PROCESSOR_VMR_SIZE 	(VMR_COUNT * sizeof(vmr16))
 
-int processor_distvm_init(struct mm_struct *mm, int homenode);
+int processor_distvm_init(struct mm_struct *mm, int homenode, bool is_cpy);
 void processor_distvm_exit(struct mm_struct *mm);
 
 int get_replica_node_by_addr(struct task_struct *p, unsigned long addr);
@@ -70,7 +70,7 @@ void prcsr_vma_unit_test(void);
 static inline void processor_distvm_exit(struct mm_struct *mm)
 {
 }
-static inline int processor_distvm_init(struct mm_struct *mm, int homenode)
+static inline int processor_distvm_init(struct mm_struct *mm, int homenode, bool is_cpy)
 {
 	return 0;
 }

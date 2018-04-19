@@ -346,7 +346,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 	}
 
 	/* Processor: init distributed VMA resource */
-	if (processor_distvm_init(mm, get_memory_home_node(p))) {
+	if (processor_distvm_init(mm, get_memory_home_node(p), false)) {
 		pgd_free(mm, mm->pgd);
 		kfree(mm);
 		return NULL;
