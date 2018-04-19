@@ -918,7 +918,7 @@ int map_vmatrees(struct lego_mm_struct *mm, int mnode, unsigned long addr,
 	
 	root->vm_rb = RB_ROOT;
 	root->mmap = NULL;
-	root->begin = begin;
+	root->begin = max(begin, PAGE_SIZE);
 	root->highest_vm_end = begin;
 	root->end = min((unsigned long)VMR_ALIGN(end), 
 			(unsigned long)PAGE_ALIGN(TASK_SIZE-MIN_GAP));
@@ -1030,8 +1030,10 @@ get_existing_range:
 	 * check if there's still free space within given vm range 
 	 * list is sorted by gaps in reversed order 
 	 */
+	root = NULL;
 	if (!node)
 		goto get_free_pool;
+
 	list_for_each_entry(pos, &node->list, list) {
 		if (pos->flag & MAP_FIXED)
 			continue;
@@ -1040,13 +1042,23 @@ get_existing_range:
 		if (pos->max_gap < len)
 			break;
 	}
-	if (root)
+
+	if (root) {
+		/* check if max_gap is gap reserved for stack */
+		struct rb_node *rb_node = rb_last(&root->vm_rb);
+		struct vm_area_struct *vma;
+		vma = rb_entry_safe(rb_node, struct vm_area_struct, vm_rb);
+		if (vma && vma->vm_flags & VM_GROWSDOWN 
+			&& root->max_gap == vma->rb_subtree_gap)
+			goto get_free_pool;
+
 		return root->begin;
+	}
 
 get_free_pool:
 	addr = vmpool_alloc(&mm->vmpool_rb, addr, len, flag);
 
-	return VMR_OFFSET(addr);
+	return IS_ERR_VALUE(addr) ? addr : VMR_OFFSET(addr);
 }
 
 /*
@@ -1268,6 +1280,10 @@ distvm_mmap_homenode_noconsult(struct lego_mm_struct *mm, struct lego_file *file
 	extract_reply(reply, &scheme_count, &scheme);
 	new_range = get_unmapped_range(mm, addr, len, scheme[0].nid, 
 				       flag, scheme_count);
+	if (IS_ERR_VALUE(new_range)) {
+		return new_range;
+	}
+
 	ret = do_dist_mmap_homenode(mm, scheme, scheme_count, new_range, 
 			   	    file, addr, len, prot, flag, 0, pgoff);
 	kfree(reply);
@@ -1314,6 +1330,11 @@ distvm_mmap_homenode(struct lego_mm_struct *mm, struct lego_file *file,
 	extract_reply(reply, &scheme_count, &scheme);
 	new_range = get_unmapped_range(mm, addr, len, scheme[0].nid, 
 				       flag, scheme_count);
+	if (IS_ERR_VALUE(new_range)) {
+		ret = new_range;
+		goto out;
+	}
+
 	ret = do_dist_mmap_homenode(mm, scheme, scheme_count, new_range, 
 			   	    file, addr, len, prot, flag, 0, pgoff);
 	
@@ -1348,6 +1369,11 @@ distvm_brk_homenode(struct lego_mm_struct *mm, unsigned long addr, unsigned long
 	extract_reply(reply, &scheme_count, &scheme);
 	new_range = get_unmapped_range(mm, addr, len, scheme[0].nid, 
 				       MAP_FIXED, scheme_count);
+	if (IS_ERR_VALUE(new_range)) {
+		ret = new_range;
+		goto out;
+	}
+
 	ret = do_dist_mmap_homenode(mm, scheme, scheme_count, new_range, 
 				    NULL, addr, len, 0, flag, vm_flags, 0);
 

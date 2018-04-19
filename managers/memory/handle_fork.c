@@ -256,8 +256,18 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc,
 		goto out;
 	}
 
+	if (down_write_killable(&parent->mm->mmap_sem)) {
+		*reply = -EINTR;
+		goto out;
+	}
+
+	down_write(&tsk->mm->mmap_sem);
+
 	/* task struct is prepared, start duplication */
 	*reply = dup_lego_mmap_local_vmatree(tsk->mm, parent->mm);
+
+	up_write(&tsk->mm->mmap_sem);
+	up_write(&parent->mm->mmap_sem);
 
 out:
 	ibapi_reply_message(reply, sizeof(u32), desc);

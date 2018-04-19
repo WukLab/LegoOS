@@ -65,7 +65,7 @@ void dump_gaps_onenode(struct lego_mm_struct *mm, unsigned long id)
 		return;
 	}
 
-	if (id < NODE_COUNT) {
+	if (id >= NODE_COUNT) {
 		vma_debug("[GAP] node id given is invalid\n");
 		return;
 	}
