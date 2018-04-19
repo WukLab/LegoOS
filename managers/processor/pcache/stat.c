@@ -16,6 +16,7 @@ static const char *const pcache_event_text[] = {
 	"nr_pgfault",
 
 	"nr_clflush",
+	"nr_clflush_fail",
 
 	/* write-protection fault */
 	"nr_pgfault_wp",

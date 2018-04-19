@@ -129,10 +129,9 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait, bool dirty
  * Return number of succeed clflush
  * It can be 0, if the address belonged area was unmapped
  */
-static int victim_flush_one(struct pcache_victim_meta *victim)
+static void victim_flush_one(struct pcache_victim_meta *victim)
 {
 	void *cache_kva;
-	int ret, nr_flushed = 0;
 	struct pcache_victim_hit_entry *entry;
 
 	cache_kva = pcache_victim_to_kva(victim);
@@ -143,13 +142,9 @@ static int victim_flush_one(struct pcache_victim_meta *victim)
 	 * victim cause Flushed is not set. 2) Insertion only
 	 * happens once and it already happened.
 	 */
-	list_for_each_entry(entry, &victim->hits, next) {
-		ret = clflush_one(entry->owner, entry->address, cache_kva);
-		if (likely(!ret))
-			nr_flushed++;
-	}
-
-	return nr_flushed;
+	list_for_each_entry(entry, &victim->hits, next)
+		__clflush_one(entry->tgid, entry->address,
+			      entry->m_nid, entry->rep_nid, cache_kva);
 }
 
 static void __victim_flush_func(struct victim_flush_job *job)

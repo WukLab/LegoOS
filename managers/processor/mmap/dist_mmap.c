@@ -56,12 +56,6 @@ int get_memory_node(struct task_struct *p, unsigned long addr)
 	return (int)node;
 }
 
-int get_replica_node_by_addr(struct task_struct *p, unsigned long addr)
-{
-	panic("Implement me.");
-	return 0;
-}
-
 void set_memory_node(struct mm_struct *mm, unsigned long addr, 
 		     unsigned long len, vmr16 node)
 {

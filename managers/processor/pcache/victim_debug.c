@@ -51,8 +51,8 @@ void dump_pcache_victim_hits(struct pcache_victim_meta *victim)
 	}
 
 	list_for_each_entry(entry, &victim->hits, next) {
-		vdump("    hit[%d] owner: [%s][%d] addr: %#lx\n",
-			i++, entry->owner->comm, entry->owner->pid,
+		vdump("    hit[%d] owner:%u m_nid:%d rep_nid:%d addr: %#lx\n",
+			i++, entry->tgid, entry->m_nid, entry->rep_nid,
 			entry->address);
 	}
 }

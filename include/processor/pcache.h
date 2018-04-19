@@ -546,10 +546,10 @@ pcache_meta_next_way(struct pcache_meta *pcm)
 /* Allocate one pcache line from the pset @address maps to */
 struct pcache_meta *pcache_alloc(unsigned long address);
 
-/* clflush */
-int clflush_one(struct task_struct *tsk, unsigned long user_va,
-		void *cache_addr);
 int pcache_flush_one(struct pcache_meta *pcm);
+void clflush_one(struct task_struct *tsk, unsigned long user_va, void *cache_addr);
+void __clflush_one(pid_t tgid, unsigned long user_va,
+		   unsigned int m_nid, unsigned int rep_nid, void *cache_addr);
 
 /* eviction */
 int pcache_evict_line(struct pcache_set *pset, unsigned long address);

@@ -32,51 +32,53 @@ static inline void clflush_debug(const char *fmt, ...) { }
 
 DEFINE_PROFILE_POINT(pcache_flush)
 
-static int __clflush_one(struct task_struct *tsk, unsigned long user_va,
-			 void *cache_addr, void *caller)
+/*
+ * Ultimate flush function.
+ * Caller needs to provide all necessary information.
+ * And those information MUST NOT be pointers. Because this function is normally
+ * executed async from the normal code path. Task/mm structure may be freed already.
+ *
+ * Replication is done the at the end, if configured.
+ */
+void __clflush_one(pid_t tgid, unsigned long user_va,
+		   unsigned int m_nid, unsigned int rep_nid, void *cache_addr)
 {
+	int reply;
 	struct p2m_flush_msg *msg;
-	int ret_len, reply;
-	int retval;
-	int dst_nid;
 	PROFILE_POINT_TIME(pcache_flush)
 
 	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
 	if (!msg)
-		return -ENOMEM;
+		return;
 
+	/* Fill message */
 	fill_common_header(msg, P2M_PCACHE_FLUSH);
-	msg->pid = tsk->tgid;
+	msg->pid = tgid;
 	msg->user_va = user_va & PCACHE_LINE_MASK;
 	memcpy(msg->pcacheline, cache_addr, PCACHE_LINE_SIZE);
-	dst_nid = get_memory_node(tsk, user_va);
 
-	clflush_debug("I dst_nid:%d tgid:%u user_va:%#lx cache_kva:%p caller: %pS",
-		dst_nid, msg->pid, msg->user_va, cache_addr, caller);
+	clflush_debug("I m_nid:%d tgid:%u user_va:%#lx cache_kva:%p",
+		m_nid, msg->pid, msg->user_va, cache_addr);
 
+	/* Network */
 	profile_point_start(pcache_flush);
-	ret_len = ibapi_send_reply_timeout(dst_nid, msg, sizeof(*msg),
-			&reply, sizeof(reply), false, DEF_NET_TIMEOUT);
+	ibapi_send_reply_timeout(m_nid, msg, sizeof(*msg),
+				 &reply, sizeof(reply), false, DEF_NET_TIMEOUT);
 	profile_point_leave(pcache_flush);
-
+	kfree(msg);
 	clflush_debug("O tgid:%u user_va:%#lx cache_kva:%p reply:%d %s",
 		msg->pid, msg->user_va, cache_addr, reply, perror(reply));
 
-	if (unlikely(ret_len < sizeof(reply))) {
-		retval = -EFAULT;
-		goto out;
-	}
+	/* Counting */
+	inc_pcache_event(PCACHE_CLFLUSH);
+	if (unlikely(reply))
+		inc_pcache_event(PCACHE_CLFLUSH_FAIL);
 
-	if (unlikely(reply)) {
-		pr_err("%s(): %s tsk: %d user_va: %#lx\n", FUNC, perror(reply), tsk->pid, user_va);
-		retval = reply;
-		goto out;
-	}
-
-	retval = 0;
-out:
-	kfree(msg);
-	return retval;
+	/*
+	 * Replica this dirty cache line to secondary
+	 * memory component. If replication is enabled.
+	 */
+	replicate(tgid, user_va, m_nid, rep_nid, cache_addr);
 }
 
 /*
@@ -85,38 +87,26 @@ out:
  * @cache_addr: the kernel virtual address of the cache line
  *              that is going to be flushed.
  *
- * Return 0 on success, otherwise on failures.
+ * HACK!!! Make sure at the time of calling, tsk and tsk->mm are still alive!
+ * Because this function will be called in ASYNC code path, and we DO NOT have
+ * any further checking against liveness.
  */
-int clflush_one(struct task_struct *tsk, unsigned long user_va,
-		void *cache_addr)
+void clflush_one(struct task_struct *tsk, unsigned long user_va, void *cache_addr)
 {
-	int ret;
+	unsigned int m_nid, rep_nid;
 
-	inc_pcache_event(PCACHE_CLFLUSH);
-	ret = __clflush_one(tsk, user_va, cache_addr, __builtin_return_address(0));
-
-	/*
-	 * Replica this dirty cache line to secondary
-	 * memory component. If replication is enabled.
-	 */
-	replicate(tsk, user_va, cache_addr);
-
-	return ret;
+	m_nid = get_memory_node(tsk, user_va);
+	rep_nid = get_replica_node_by_addr(tsk, user_va);
+	__clflush_one(tsk->tgid, user_va, m_nid, rep_nid, cache_addr);
 }
 
 static int __pcache_flush_one(struct pcache_meta *pcm,
 			      struct pcache_rmap *rmap, void *arg)
 {
 	int *nr_flushed = arg;
-	int ret;
 
-	ret = clflush_one(rmap->owner_process, rmap->address,
-			  pcache_meta_to_kva(pcm));
-	if (ret) {
-		dump_pcache_meta(pcm, FUNC);
-		dump_pcache_rmap(rmap, FUNC);
-		return PCACHE_RMAP_FAILED;
-	}
+	clflush_one(rmap->owner_process, rmap->address,
+		    pcache_meta_to_kva(pcm));
 
 	(*nr_flushed)++;
 	return PCACHE_RMAP_AGAIN;

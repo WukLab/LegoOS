@@ -11,10 +11,11 @@
 #define _LEGO_PROCESSOR_REPLICATION_H_
 
 #ifdef CONFIG_REPLICATION_MEMORY
-void replicate(struct task_struct *, unsigned long, void *);
+void replicate(pid_t tgid, unsigned long user_va,
+	       unsigned int m_nid, unsigned int rep_nid, void *cache_addr);
 #else
-static inline void replicate(struct task_struct *p, unsigned long uva, void *cache_kva)
-{ }
+static inline void replicate(pid_t tgid, unsigned long user_va,
+	       unsigned int m_nid, unsigned int rep_nid, void *cache_addr) { }
 #endif
 
 #endif /* _LEGO_PROCESSOR_REPLICATION_H_ */

@@ -52,7 +52,9 @@ struct pcache_victim_meta {
 
 struct pcache_victim_hit_entry {
 	unsigned long		address;	/* page aligned */
-	struct task_struct	*owner;
+	pid_t			tgid;
+	unsigned int		m_nid;
+	unsigned int		rep_nid;
 	struct list_head	next;
 };
 

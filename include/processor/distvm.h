@@ -34,10 +34,14 @@
 int processor_distvm_init(struct mm_struct *mm, int homenode, bool is_cpy);
 void processor_distvm_exit(struct mm_struct *mm);
 
-int get_replica_node_by_addr(struct task_struct *p, unsigned long addr);
 int get_memory_node(struct task_struct *p, unsigned long addr);
 void set_memory_node(struct mm_struct *mm, unsigned long addr, 
 		     unsigned long len, vmr16 node);
+
+static inline int get_replica_node_by_addr(struct task_struct *p, unsigned long addr)
+{
+	return get_replica_node(p);
+}
 
 static inline void 
 map_mnode(struct mm_struct *mm, unsigned long addr, unsigned long len, vmr16 node)

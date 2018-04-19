@@ -19,6 +19,8 @@
 #include <lego/kthread.h>
 #include <lego/memblock.h>
 #include <lego/completion.h>
+#include <processor/node.h>
+#include <processor/distvm.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
@@ -465,7 +467,7 @@ alloc_victim_hit_entry(void)
 {
 	struct pcache_victim_hit_entry *entry;
 
-	entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 	if (entry) {
 		INIT_LIST_HEAD(&entry->next);
 	}
@@ -512,7 +514,15 @@ static int victim_insert_hit_entry(struct pcache_meta *pcm,
 		return PCACHE_RMAP_FAILED;
 
 	hit->address = rmap->address;
-	hit->owner = rmap->owner_process;
+	hit->tgid = rmap->owner_process->tgid;
+
+	/*
+	 * This rmap belongs the current evicted pcm
+	 * This pcm has been locked, which implies rmap->owner_process
+	 * stay valid even if it is under exit_mm stuff.
+	 */
+	hit->m_nid = get_memory_node(rmap->owner_process, rmap->address);
+	hit->rep_nid = get_replica_node_by_addr(rmap->owner_process, rmap->address);
 
 	spin_lock(&victim->lock);
 	list_add(&hit->next, &victim->hits);
@@ -711,11 +721,11 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
 	spin_lock(&victim->lock);
 	list_for_each_entry(entry, &victim->hits, next) {
 		victim_debug("    v%d[%#lx %d] u[%#lx %d]",
-			victim_index(victim), entry->address, entry->owner->tgid,
+			victim_index(victim), entry->address, entry->tgid,
 			address, tsk->tgid);
 
 		if (entry->address == address &&
-		    same_thread_group(entry->owner, tsk)) {
+		    entry->tgid == tsk->tgid) {
 			/*
 			 * Increment the fill counter
 			 * We are no longer an eviction candidate
