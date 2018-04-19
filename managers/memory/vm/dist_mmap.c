@@ -1033,6 +1033,7 @@ get_existing_range:
 	root = NULL;
 	if (!node)
 		goto get_free_pool;
+
 	list_for_each_entry(pos, &node->list, list) {
 		if (pos->flag & MAP_FIXED)
 			continue;
@@ -1041,8 +1042,18 @@ get_existing_range:
 		if (pos->max_gap < len)
 			break;
 	}
-	if (root)
+
+	if (root) {
+		/* check if max_gap is gap reserved for stack */
+		struct rb_node *rb_node = rb_last(&root->vm_rb);
+		struct vm_area_struct *vma;
+		vma = rb_entry_safe(rb_node, struct vm_area_struct, vm_rb);
+		if (vma && vma->vm_flags & VM_GROWSDOWN 
+			&& root->max_gap == vma->rb_subtree_gap)
+			goto get_free_pool;
+
 		return root->begin;
+	}
 
 get_free_pool:
 	addr = vmpool_alloc(&mm->vmpool_rb, addr, len, flag);
