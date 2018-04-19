@@ -172,7 +172,7 @@ struct p2m_mmap_struct {
 	char	f_name[MAX_FILENAME_LENGTH];
 };
 struct p2m_mmap_reply_struct {
-	__u32	ret;
+	int	ret;
 	__u64	ret_addr;
 #ifdef CONFIG_DISTRIBUTED_VMA
 	struct vmr_map_reply map;
@@ -189,7 +189,7 @@ struct p2m_munmap_struct {
 	__u64	len;
 };
 struct p2m_munmap_reply_struct {
-	__u32	ret;
+	int	ret;
 #ifdef CONFIG_DISTRIBUTED_VMA
 	struct vmr_map_reply map;
 #endif
@@ -209,7 +209,7 @@ struct p2m_mremap_struct {
 	__u64	new_addr;
 };
 struct p2m_mremap_reply_struct {
-	__u32	status;
+	int	status;
 	__u32	line;			/* which line fails... */
 	__u64	new_addr;
 #ifdef CONFIG_DISTRIBUTED_VMA
