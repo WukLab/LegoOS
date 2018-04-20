@@ -520,6 +520,11 @@ static int victim_insert_hit_entry(struct pcache_meta *pcm,
 	 * This rmap belongs the current evicted pcm
 	 * This pcm has been locked, which implies rmap->owner_process
 	 * stay valid even if it is under exit_mm stuff.
+	 *
+	 * XXX
+	 * This is not true. Check log 0419-w15-4. If owner_process, which
+	 * is the thread group leader has been zapped by another thread,
+	 * then ->mm will be NULL.
 	 */
 	hit->m_nid = get_memory_node(rmap->owner_process, rmap->address);
 	hit->rep_nid = get_replica_node_by_addr(rmap->owner_process, rmap->address);

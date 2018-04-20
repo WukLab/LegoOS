@@ -12,6 +12,7 @@
 #include <lego/kernel.h>
 #include <lego/ptrace.h>
 #include <lego/atomic.h>
+#include <lego/profile.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
@@ -117,8 +118,10 @@ void panic(const char *fmt, ...)
 	if (scheduler_state == SCHED_UP)
 		show_state_filter(0, true);
 
-	if (manager_state == MANAGER_UP)
+	if (manager_state == MANAGER_UP) {
 		print_pcache_events();
+		print_profile_points();
+	}
 
 	for (;;)
 		hlt();

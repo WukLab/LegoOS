@@ -67,7 +67,8 @@ static bool strace_printable_nr[__NR_syscall_max+1] = {
 	[__NR_execve]			= true,
 
 	/* mm group */
-	//[__NR_mmap]			= true,
+	[__NR_mmap]			= true,
+	[__NR_mprotect]			= true,
 	//[__NR_munmap]			= true,
 
 	[__NR_dup]			= true,
