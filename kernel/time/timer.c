@@ -1095,6 +1095,8 @@ SYSCALL_DEFINE2(nanosleep, struct timespec __user *, rqtp,
 	if (!timespec_valid(&tu))
 		return -EINVAL;
 
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout(timespec_to_jiffies(&tu));
+	set_current_state(TASK_RUNNING);
 	return 0;
 }
