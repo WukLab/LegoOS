@@ -28,12 +28,14 @@ static int do_wp_page(struct vm_area_struct *vma, unsigned long address,
  * We missed the mprotect() syscall.
  * So the VMA actually has the READ/WRITE permission, so as the PTE.
  */
-/*
+
+#if 0
 	dump_vma(vma);
 	dump_pte(ptep, NULL);
 	pr_debug("%s address: %lx, flags: %x\n", __func__, address, flags);
-	WARN_ON_ONCE(1);
-*/
+
+	WARN_ON(1);
+#endif
 	spin_unlock(ptl);
 	return 0;
 }

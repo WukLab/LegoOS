@@ -1102,8 +1102,8 @@ do_dist_mmap_homenode(struct lego_mm_struct *mm, struct alloc_scheme *scheme,
 	unsigned long ret;
 
 	vma_trace("%s, new_range: %lx, addr: %lx, len: %lx, "
-		  "flag: %lx, vm_flags: %lx, pgoff: %lx\n",
-		  __func__, new_range, addr, len, flag, vm_flags, pgoff);
+		  "flag: %lx, vm_flags: %lx, pgoff: %lx, scheme_count: %d\n", 
+		  __func__, new_range, addr, len, flag, vm_flags, pgoff, scheme_count);
 
 	var_addr = addr;
 	if (!(flag & MAP_FIXED)) {
