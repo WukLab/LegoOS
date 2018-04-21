@@ -119,6 +119,7 @@ void panic(const char *fmt, ...)
 		show_state_filter(0, true);
 
 	if (manager_state == MANAGER_UP) {
+		exit_processor_strace(current);
 		print_pcache_events();
 		print_profile_points();
 	}

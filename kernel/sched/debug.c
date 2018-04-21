@@ -93,10 +93,11 @@ print_task(struct seq_file *m, struct rq *rq, struct task_struct *p)
 		(long long)p->nvcsw, (long long)p->nivcsw,
 		p->prio);
 
-	SEQ_printf_cont(m, "%9Ld.%06ld %9Ld.%06ld %9Ld.%06ld\n",
+	SEQ_printf_cont(m, "%9Ld.%06ld %9Ld.%06ld %9Ld.%06ld %10lu\n",
 		SPLIT_NS(0),
 		SPLIT_NS(p->se.sum_exec_runtime),
-		SPLIT_NS(0));
+		SPLIT_NS(0),
+		p->utime);
 }
 
 static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu)
@@ -108,11 +109,11 @@ static void print_rq(struct seq_file *m, struct rq *rq, int rq_cpu)
 
 	SEQ_printf(m,
 	"            task   PID         tree-key  switches  nvcsw  nivcsw  prio"
-	"        wait-time         sum-exec        sum-sleep\n");
+	"        wait-time         sum-exec        sum-sleep     utime\n");
 
 	SEQ_printf(m,
 	"-----------------------------------------------------------"
-	"--------------------------------------------------------------\n");
+	"------------------------------------------------------------------------\n");
 
 	for_each_process_thread(g, p) {
 		if (task_cpu(p) != rq_cpu)
@@ -250,11 +251,28 @@ static void sched_debug_header(struct seq_file *m)
 	SEQ_printf(m, "\n");
 }
 
+static void dump_cpumasks(void)
+{
+	char buf[64];
+
+	sprintf(buf, "Online CPU: %*pbl\n", nr_cpu_ids, cpu_online_mask);
+	pr_debug("%s", buf);
+	sprintf(buf, "Active CPU: %*pbl\n", nr_cpu_ids, cpu_active_mask);
+	pr_debug("%s", buf);
+}
+
+/*
+ * When this function is called from panic()
+ * All other CPUs have been taken down already.
+ * So use present cpumask instead. But print the online/active
+ * cpumask as well.
+ */
 void sysrq_sched_debug_show(void)
 {
 	int cpu;
 
-	for_each_online_cpu(cpu)
+	dump_cpumasks();
+	for_each_present_cpu(cpu)
 		print_cpu(NULL, cpu);
 
 }

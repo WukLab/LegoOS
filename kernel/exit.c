@@ -475,7 +475,7 @@ void __noreturn do_exit(long code)
 		/* Cancel timers etc. */
 		exit_itimers(tsk->signal);
 
-#if 1
+#if 0
 		exit_processor_strace(tsk);
 		print_profile_heatmap_nr(10);
 		print_profile_points();
