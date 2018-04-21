@@ -1662,7 +1662,7 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	struct imm_header_from_cq_to_port *tmp;
 	int reply_data, private_bits;
 
-	if (pin_current_thread_core())
+	if (pin_current_thread())
 		panic("Fail to pin poll_cq");
 
 	while(1) {
@@ -1686,7 +1686,6 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 			//msleep(1);
 		} while(ne < 1);
 
-		check_pinned_status();
 		for (i = 0; i < ne; i++) {
 			connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
 			if (connection_id == -1) {
@@ -2032,6 +2031,7 @@ int waiting_queue_handler(void *in)
 	//allow_signal(SIGKILL);
 	
 	//printk(KERN_CRIT "%s\n", __func__);
+	pin_current_thread();
 	while(1)
 	{
 		while(list_empty(&(request_list.list)))

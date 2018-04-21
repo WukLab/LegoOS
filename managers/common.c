@@ -92,6 +92,6 @@ void __init manager_init(void)
 	soft_watchdog_init();
 
 	/* Print scheduablable CPUs */
+	pin_registered_threads();
 	dump_cpumasks();
-	print_pinned_threads();
 }

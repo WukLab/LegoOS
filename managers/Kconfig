@@ -49,18 +49,6 @@ config DEFAULT_STORAGE_NODE
 	int "Default storage node ID"
 	depends on COMP_PROCESSOR || COMP_MEMORY
 
-config CHECK_PINNED_THREADS
-	bool "Runtime check of pinned threads integrity"
-	default n
-	depends on COMP_PROCESSOR || COMP_MEMORY
-	help
-	  Runtime check
-	  - if those pinned threads have been migrated to other cores
-	  - if those cores have other threads
-	  Warning will be ejected if any of the above assumption break.
-
-	  This adds additional overhead during runtime, if unsure, say N.
-
 config USE_RAMFS
 	bool "Use RAMFS in P or M"
 	default y

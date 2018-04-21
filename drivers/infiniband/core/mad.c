@@ -2356,6 +2356,8 @@ int mad_got_one;
 
 /*
  * IB MAD completion callback
+ * This function will keep running in background.
+ * This function will share the same core with wq_handler.
  */
 static int ib_mad_completion_handler(void *_data)
 {
@@ -2363,17 +2365,9 @@ static int ib_mad_completion_handler(void *_data)
 	struct ib_mad_port_private *port_priv = _data;
 	int nr_got;
 
-	pr_info("%s(): running on CPU %d\n", __func__, smp_processor_id());
+	pin_current_thread();
 
 	while (1) {
-#if 0
-		/* Exit if P/M manager is up running */
-		if (manager_state == MANAGER_UP) {
-			pr_info("%s(): exit\n", __func__);
-			return 0;
-		}
-#endif
-
 		memset(&wc, 0, sizeof(wc));
 		nr_got = ib_poll_cq(port_priv->cq, 1, &wc);
 

@@ -26,7 +26,7 @@ static long watchdog_interval_sec = CONFIG_SOFT_WATCHDOG_INTERVAL_SEC;
 
 static int watchdog(void *_unused)
 {
-	if (pin_current_thread_core())
+	if (pin_current_thread())
 		pr_err("Fail to pin self_hb.\n");
 
 	while (1) {

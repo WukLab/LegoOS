@@ -12,6 +12,7 @@
 #include <lego/kernel.h>
 #include <lego/string.h>
 #include <lego/fit_ibapi.h>
+#include <lego/cpumask.h>
 #include <lego/comp_memory.h>
 #include <processor/processor.h>
 
@@ -21,85 +22,92 @@ struct pinned_thread_info {
 	struct list_head next;
 };
 
-static cpumask_t cpu_pinned_mask;
 static DEFINE_SPINLOCK(pincpu_lock);
 static LIST_HEAD(pinned_thread_list);
+static int cpu_position = -1;
+static bool stop_pin = false;
 
-#define cpu_pinned(cpu)		cpumask_test_cpu((cpu), &cpu_pinned_mask)
-
-/*
- * Pin the current thread to current running cpu.
- * If this cpu already has an pinned thread, then -EBUSY is returned.
- *
- * After this call, the current thread will run on this cpu exclusively:
- * - will not be migrated
- * - the ONLY thread running on this core
- */
-int pin_current_thread_core(void)
+int get_next_cpu_position(void)
 {
-	int cpu = get_cpu();
-	int ret;
-	struct pinned_thread_info *info;
+	int cpu;
 
 	spin_lock(&pincpu_lock);
-	if (cpu_pinned(cpu)) {
-		ret = -EBUSY;
-		goto unlock;
-	}
+	cpu = cpumask_next(cpu_position, cpu_active_mask);
+	cpu_position = cpu;
+	spin_unlock(&pincpu_lock);
 
-	if (!cpu_active(cpu)) {
-		ret = -ENODEV;
-		goto unlock;
+	return cpu;
+}
+
+int pin_current_thread_to_cpu(int cpu)
+{
+	struct pinned_thread_info *info;
+	struct task_struct *p = current;
+
+	if (stop_pin) {
+		WARN(1, "Too late to pin\n");
+		return -EFAULT;
 	}
 
 	info = kmalloc(sizeof(*info), GFP_KERNEL);
-	if (!info) {
-		ret = -ENOMEM;
-		goto unlock;
-	}
+	if (!info)
+		return -ENOMEM;
 
 	info->cpu = cpu;
-	info->p = current;
-
-	list_add(&info->next, &pinned_thread_list);
-	cpumask_set_cpu(cpu, &cpu_pinned_mask);
-
-	/*
-	 * Remove the cpu from cpu_active_mask,
-	 * so scheduler will not schedule anything to it.
-	 */
-	set_cpus_allowed_ptr(current, get_cpu_mask(cpu));
-	set_cpu_active(cpu, false);
-
-	ret = 0;
-unlock:
-	spin_unlock(&pincpu_lock);
-	put_cpu();
-	return ret;
-}
-
-void print_pinned_threads(void)
-{
-	struct pinned_thread_info *info;
-	int i = 0;
+	info->p = p;
 
 	spin_lock(&pincpu_lock);
+	list_add(&info->next, &pinned_thread_list);
+	spin_unlock(&pincpu_lock);
+
+	set_cpus_allowed_ptr(p, get_cpu_mask(cpu));
+	set_cpu_active(cpu, false);
+
+	pr_info("pin: [%s] running on CPU%d\n", p->comm, cpu);
+	return 0;
+}
+
+/*
+ * Pin the current thread an active CPU.
+ * The CPU is chosen from cpu_acitve_mask
+ *
+ * After this call, the thread will run on that CPU exclusively:
+ * - will not be migrated
+ * - the ONLY thread running on this core
+ *
+ * Return 0 on success.
+ */
+int pin_current_thread(void)
+{
+	int cpu = smp_processor_id();
+	return pin_current_thread_to_cpu(cpu);
+}
+
+void pin_registered_threads(void)
+{
+	struct task_struct *p;
+	struct pinned_thread_info *info;
+	int cpu, i = 0;
+
+	spin_lock(&pincpu_lock);
+
+	if (stop_pin)
+		goto unlock;
+
 	if (list_empty(&pinned_thread_list)) {
-		pr_info(" No pinned threads.\n");
+		pr_info(" No threads registered to pin.\n");
 		goto unlock;
 	}
 
 	list_for_each_entry(info, &pinned_thread_list, next) {
+		p = info->p;
+		cpu = info->cpu;
+
 		pr_info("  [%d] Thread[%s:%d] pinned at CPU %d\n",
-			i++, info->p->comm, info->p->pid, info->cpu);
+			i++, p->comm, p->pid, cpu);
 	}
+
 unlock:
+	stop_pin = true;
 	spin_unlock(&pincpu_lock);
 }
-
-#ifdef CONFIG_CHECK_PINNED_THREADS
-void check_pinned_status(void)
-{
-
-}
-#endif

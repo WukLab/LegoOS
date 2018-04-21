@@ -29,13 +29,8 @@ extern int manager_state;
 extern unsigned int LEGO_LOCAL_NID;
 
 void __init manager_init(void);
-void print_pinned_threads(void);
-int pin_current_thread_core(void);
-#ifdef CONFIG_CHECK_PINNED_THREADS
-void check_pinned_status(void);
-#else
-static inline void check_pinned_status(void) { }
-#endif
+int pin_current_thread(void);
+void pin_registered_threads(void);
 
 #ifdef CONFIG_SOFT_WATCHDOG
 void __init soft_watchdog_init(void);

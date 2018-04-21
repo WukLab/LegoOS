@@ -211,11 +211,10 @@ int victim_flush_sync(void)
 
 static int victim_flush_async(void *unused)
 {
-	if (pin_current_thread_core())
+	if (pin_current_thread())
 		panic("Fail to pin victim flush");
 
 	for (;;) {
-		check_pinned_status();
 		spin_lock(&victim_flush_lock);
 		while (!list_empty(&victim_flush_queue)) {
 			struct victim_flush_job *job;

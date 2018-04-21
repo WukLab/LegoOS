@@ -29,7 +29,7 @@ static struct task_struct *sweep_thread;
 
 static int kevict_sweepd(void *unused)
 {
-	if (pin_current_thread_core())
+	if (pin_current_thread())
 		panic("Fail to pin evict sweepd");
 
 	kevict_sweepd_lru();
