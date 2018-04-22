@@ -214,6 +214,14 @@ static int distribute_m2m_fork(struct lego_task_struct *parent,
 	return reply;
 }
 
+/*
+ * We have three different entry points to create a new task
+ * - p2m fork
+ * - m2m fork
+ * - m2m mmap
+ *
+ * HACK!!! Check all the necessary setup steps.
+ */
 int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc,
 		    struct common_header *hdr, void *tx)
 {
@@ -251,6 +259,8 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc,
 		free_lego_task_struct(child);
 		goto out;
 	}
+	/* virtual memory map layout */
+	arch_pick_mmap_layout(child->mm);
 
 	/* All done, insert into hashtable */
 	*reply = ht_insert_lego_task(child);
