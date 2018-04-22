@@ -856,9 +856,16 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 		}
 	}
 
+	if (down_write_killable(&tsk->mm->mmap_sem)) {
+		reply->addr = -EINTR;
+		goto reply;
+	}
+
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	reply->addr = do_dist_mmap(tsk->mm, file, LEGO_LOCAL_NID, new_range, addr, len,
 				  prot, flags, vm_flags, pgoff, &reply->max_gap);
+
+	up_write(&tsk->mm->mmap_sem);
 
 reply:
 	ibapi_reply_message(reply, sizeof(*reply), desc);

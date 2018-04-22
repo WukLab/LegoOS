@@ -35,9 +35,9 @@ static void handle_bad_request(u32 opcode, uintptr_t desc)
 {
 	int retbuf;
 
-	pr_debug("WARNING: Invalid opcode: %u\n", opcode);
+	pr_info("WARNING: Invalid opcode: %u\n", opcode);
 
-	retbuf = EFAULT;
+	retbuf = -EINVAL;
 	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
 }
 

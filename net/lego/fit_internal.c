@@ -981,7 +981,7 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 	}
 	return 0;
 #else
-#ifdef CONFIG_COMP_MEMORY
+#ifdef CONFIG_FIT_NOWAIT
 	/*
 	 * use same send thread to poll send cq
 	 * but only poll once every MAX_OUTSTANDING_SEND/2 sends
@@ -1056,7 +1056,8 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 			break;
 	}
 	return 0;
-#endif
+
+#endif /* CONFIG_FIT_NOWAIT */
 
 #endif /* SEPARATE_SEND_POLL_THREAD */
 }

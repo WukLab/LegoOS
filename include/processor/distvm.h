@@ -31,7 +31,7 @@
 
 #define PROCESSOR_VMR_SIZE 	(VMR_COUNT * sizeof(vmr16))
 
-int processor_distvm_init(struct mm_struct *mm, int homenode, bool is_cpy);
+int processor_distvm_init(struct mm_struct *mm, int homenode);
 void processor_distvm_exit(struct mm_struct *mm);
 
 int get_memory_node(struct task_struct *p, unsigned long addr);
@@ -57,8 +57,13 @@ unmap_mnode(struct mm_struct *mm, unsigned long addr, unsigned long len)
 
 void map_mnode_from_reply(struct mm_struct *mm, struct vmr_map_reply *reply);
 
-int processor_fork_dup_distvm(struct task_struct *tsk, struct mm_struct *mm,
-			 struct mm_struct *oldmm);
+static inline void processor_fork_dup_distvm(struct task_struct *tsk,
+			 struct mm_struct *mm, struct mm_struct *oldmm)
+{
+	spin_lock(&oldmm->vmr_lock);
+	memcpy(mm->vmrange_map, oldmm->vmrange_map, PROCESSOR_VMR_SIZE);
+	spin_unlock(&oldmm->vmr_lock);
+}
 
 #ifdef CONFIG_VMA_PROCESSOR_UNITTEST
 /* unit test wrap up function */
@@ -74,7 +79,7 @@ void prcsr_vma_unit_test(void);
 static inline void processor_distvm_exit(struct mm_struct *mm)
 {
 }
-static inline int processor_distvm_init(struct mm_struct *mm, int homenode, bool is_cpy)
+static inline int processor_distvm_init(struct mm_struct *mm, int homenode)
 {
 	return 0;
 }
@@ -107,10 +112,9 @@ static inline void set_memory_node(struct mm_struct *mm, unsigned long addr,
 				  unsigned long len, vmr16 node) 
 {
 }
-static inline int processor_fork_dup_distvm(struct task_struct *tsk, 
+static inline void processor_fork_dup_distvm(struct task_struct *tsk,
 			 struct mm_struct *mm, struct mm_struct *oldmm)
 {
-	return 0;
 }
 
 #endif /* CONFIG_DISTRIBUTED_VMA_PROCESSOR */

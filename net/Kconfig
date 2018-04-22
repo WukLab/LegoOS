@@ -72,6 +72,14 @@ config FIT_LOCAL_ID
 	  This is the local node id, which has to be unique across connected FIT nodes.
 	  The raneg of FIT_LOCAL_ID is [0, FIT_NR_NODES - 1).
 
+config FIT_NOWAIT
+	bool "FIT use nowait"
+	default n
+	depends on FIT
+	depends on COMP_MEMORY
+	help
+	  Disable this when encountering some unreasonable package lost
+
 config SAME_MACHINE_VMS 
 	bool "Enable multiple VMs on the same physical machine"
 	default n

@@ -17,15 +17,12 @@
 #include <lego/spinlock.h>
 #include <processor/distvm.h>
 
-int processor_distvm_init(struct mm_struct *mm, int homenode, bool is_cpy)
+int processor_distvm_init(struct mm_struct *mm, int homenode)
 {
 	spin_lock_init(&mm->vmr_lock);
 	mm->vmrange_map = kmalloc(PROCESSOR_VMR_SIZE, GFP_KERNEL);
 	if (unlikely(!mm->vmrange_map))
 		return -ENOMEM;
-
-	if (is_cpy)
-		return 0;
 
 	memset16(mm->vmrange_map, (vmr16)homenode, VMR_COUNT);
 	return 0;
@@ -85,18 +82,4 @@ void map_mnode_from_reply(struct mm_struct *mm, struct vmr_map_reply *reply)
 
 		map_mnode(mm, entry[i].start, entry[i].len, entry[i].mnode);
 	}
-}
-
-int processor_fork_dup_distvm(struct task_struct *tsk, struct mm_struct *mm,
-			      struct mm_struct *oldmm)
-{
-	int ret;
-	ret = processor_distvm_init(mm, get_memory_home_node(tsk), true);
-	if (ret)
-		return ret;
-
-	spin_lock(&oldmm->vmr_lock);
-	memcpy(mm->vmrange_map, oldmm->vmrange_map, PROCESSOR_VMR_SIZE);
-	spin_unlock(&oldmm->vmr_lock);
-	return 0;
 }

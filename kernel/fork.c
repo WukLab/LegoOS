@@ -346,7 +346,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 	}
 
 	/* Processor: init distributed VMA resource */
-	if (processor_distvm_init(mm, get_memory_home_node(p), false)) {
+	if (processor_distvm_init(mm, get_memory_home_node(p))) {
 		pgd_free(mm, mm->pgd);
 		kfree(mm);
 		return NULL;
@@ -394,9 +394,7 @@ static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 	if (err)
 		goto out;
 
-	err = processor_fork_dup_distvm(tsk, mm, oldmm);
-	if (err)
-		goto out;
+	processor_fork_dup_distvm(tsk, mm, oldmm);
 
 	return mm;
 
