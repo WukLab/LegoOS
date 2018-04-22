@@ -53,15 +53,11 @@ struct vmr_map_struct {
 
 /*
  * since reply needs a fixed size, maximum entry restrict to number
- * of memory node * 2 (remap can possibly have two continuous ranges
+ * of fit node * 2 (remap can possibly have two continuous ranges
  * changed for one node). nr_entry represent the real number of entries
  * that are valid
  */
-#ifdef CONFIG_MEM_NR_NODES
-# define MAX_VMA_REPLY_ENTRY	(CONFIG_MEM_NR_NODES * 2)
-#else
-# define MAX_VMA_REPLY_ENTRY	(CONFIG_FIT_NR_NODES * 2)
-#endif
+#define MAX_VMA_REPLY_ENTRY	(CONFIG_FIT_NR_NODES * 2)
 
 struct vmr_map_reply {
 	vmr16 nr_entry;

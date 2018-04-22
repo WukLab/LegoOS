@@ -16,9 +16,6 @@
 
 #include <lego/rpc/struct_common.h>
 
-#ifndef CONFIG_MEM_NR_NODES
-#define CONFIG_MEM_NR_NODES	0
-#endif
 /*
  * PM2P_START_PROC
  * start a new process
@@ -59,14 +56,9 @@ struct alloc_scheme {
 	unsigned long len;
 };
 
-/* 
- * this looks not clean but becuase linux module don't have
- * CONFIG_MEM_NR_NODES, so we have to define it in 
- * linux module header
- */
 struct consult_reply {
 	int count;
-	struct alloc_scheme scheme[CONFIG_MEM_NR_NODES];
+	struct alloc_scheme scheme[CONFIG_FIT_NR_NODES];
 };
 
 /* 

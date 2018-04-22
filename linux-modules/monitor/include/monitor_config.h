@@ -13,6 +13,8 @@
 #ifndef _LEGO_MONITOR_CONFIG_H 
 #define _LEGO_MONITOR_CONFIG_H 
 
+#include "../../fit/fit_config.h"
+
 /* 
  * IB configuration 
  * USE_IBAPI: disable ibapi send reply
@@ -49,7 +51,7 @@ const static int pnode_nids[PROCESSOR_NODE_COUNT] =
  * mnode_nids: memory node id array with size MEMORY_NODE_COUNT
  */
 #define MEMORY_NODE_COUNT 		1
-#define CONFIG_MEM_NR_NODES		MEMORY_NODE_COUNT
+#define CONFIG_MEM_NR_NODES		CONFIG_FIT_NR_NODES
 #define MNODES_STATUS_REQUEST		0
 #define MNODES_STATUS_REQUEST_PERIOD	10
 #define ROUND_ROBIN_CHOOSE		1
