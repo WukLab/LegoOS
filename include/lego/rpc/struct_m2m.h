@@ -116,8 +116,8 @@ int handle_m2m_msync(struct m2m_msync_struct *, u64, struct common_header *, voi
 
 /* M2M_FORK */
 struct m2m_fork_struct {
-	u32		pid;
-	u32		tgid;
+	u32		parent_pid;
+	u32		child_pid;
 	u32		prcsr_nid;
 };
 int handle_m2m_fork(struct m2m_fork_struct *, u64, struct common_header *, void *);
