@@ -822,6 +822,7 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 
 		tsk->mm = lego_mm_alloc(tsk, NULL);
 		if (!tsk->mm) {
+			free_lego_task_struct(tsk);
 			reply->addr = -ENOMEM;
 			goto reply;
 		}
