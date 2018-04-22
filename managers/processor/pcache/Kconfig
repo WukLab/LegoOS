@@ -80,6 +80,13 @@ config PCACHE_EVICT_GENERIC_SWEEP
 
 	  If unsure, say N.
 
+config PCACHE_EVICT_GENERIC_SWEEP_INTERVAL_MSEC
+	int "Pcache: sweep interval in msec"
+	range 10 5000
+	default 1000
+	help
+	  The interval between two sweep, in msec.
+
 #
 # Eviction Mechanism
 #
@@ -138,7 +145,7 @@ endchoice
 config PCACHE_EVICTION_VICTIM_NR_ENTRIES
 	int "Pcache: Number of Victim Cache Entries"
 	default 8
-	range 1 32
+	range 1 128
 	depends on PCACHE_EVICTION_VICTIM
 	help
 	  This value determines how many entries the victim cache will have.

@@ -250,13 +250,13 @@ rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 	ptep = pte_offset(pmd, address);
 
 	if (unlikely(ptep != rmap->page_table)) {
-		report_bad_rmap(pcm, rmap, address, ptep, NULL);
+		//report_bad_rmap(pcm, rmap, address, ptep, NULL);
 		ptep = NULL;
 		goto out;
 	}
 
 	if (unlikely(pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
-		report_bad_rmap(pcm, rmap, address, ptep, NULL);
+		//report_bad_rmap(pcm, rmap, address, ptep, NULL);
 		ptep = NULL;
 		goto out;
 	}
@@ -294,13 +294,11 @@ rmap_get_pte_trylock(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 	ptep = pte_offset(pmd, address);
 
 	if (unlikely(ptep != rmap->page_table)) {
-		report_bad_rmap(pcm, rmap, address, ptep, NULL);
 		ptep = NULL;
 		goto out;
 	}
 
 	if (unlikely(pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
-		report_bad_rmap(pcm, rmap, address, ptep, NULL);
 		ptep = NULL;
 		goto out;
 	}
@@ -1180,6 +1178,10 @@ static int pcache_referenced_trylock_one(struct pcache_meta *pcm,
 	int pte_contention;
 
 	pte = rmap_get_pte_trylock(pcm, rmap, &ptl, &pte_contention);
+	if (!pte) {
+		prc->pte_contention = 1;
+		goto out;
+	}
 
 	/*
 	 * pte lock contention?

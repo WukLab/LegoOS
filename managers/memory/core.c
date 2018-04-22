@@ -359,7 +359,6 @@ static int thpool_polling(void *unused)
 		retlen = ibapi_receive_message(THPOOL_IB_PORT,
 				buffer->rx, THPOOL_RX_SIZE, &buffer->desc);
 
-		nr_thpool_reqs++;
 		if (retlen >= THPOOL_RX_SIZE)
 			panic("%d %lu", retlen, THPOOL_RX_SIZE);
 

@@ -25,7 +25,7 @@ struct profile_point {
 
 #ifdef CONFIG_PROFILING_POINTS
 
-#define _PP_TIME(name)	__profilepoint_##name_start_ns
+#define _PP_TIME(name)	__profilepoint_start_ns_##name
 #define _PP_NAME(name)	__profilepoint_##name
 
 #define DEFINE_PROFILE_POINT(name)							\
@@ -39,7 +39,7 @@ struct profile_point {
  * Stack is per-thread, thus SMP safe.
  */
 #define PROFILE_POINT_TIME(name)							\
-	static unsigned long _PP_TIME(name);
+	unsigned long _PP_TIME(name);
 
 #define profile_point_start(name)							\
 	do {										\
@@ -47,6 +47,21 @@ struct profile_point {
 	} while (0)
 
 #define profile_point_leave(name)							\
+	do {										\
+		unsigned long __PP_end_time;						\
+		unsigned long __PP_diff_time;						\
+		__PP_end_time = sched_clock();						\
+		__PP_diff_time = __PP_end_time - _PP_TIME(name);			\
+		atomic_long_inc(&(_PP_NAME(name).nr));					\
+		atomic_long_add(__PP_diff_time, &(_PP_NAME(name).time_ns));		\
+	} while (0)
+
+#define PROFILE_START(name)								\
+	do {										\
+		_PP_TIME(name) = sched_clock();						\
+	} while (0)
+
+#define PROFILE_LEAVE(name)								\
 	do {										\
 		unsigned long __PP_end_time;						\
 		unsigned long __PP_diff_time;						\

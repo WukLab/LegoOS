@@ -10,8 +10,11 @@
 #include <lego/mm.h>
 #include <lego/wait.h>
 #include <lego/slab.h>
+#include <lego/delay.h>
+#include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/jiffies.h>
+#include <lego/profile.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
@@ -186,7 +189,7 @@ get_sweep_count(struct pcache_set *pset, int *nr_to_sweep, int *nr_goal)
 	 * To be or not to be? How many to sweep is a hard question.
 	 * sweep half? Just a random guess now.
 	 */
-	*nr_to_sweep = PCACHE_ASSOCIATIVITY/2;
+	*nr_to_sweep = PCACHE_ASSOCIATIVITY/4;
 }
 
 /*
@@ -203,7 +206,9 @@ static void sweep_pset(struct pcache_set *pset)
 	if (!nr_to_sweep || !nr_goal)
 		return;
 
-	spin_lock(&pset->lru_lock);
+	if (!spin_trylock(&pset->lru_lock))
+		return;
+
 	list_for_each_entry_safe(pcm, n, &pset->lru_list, lru) {
 		int pte_referenced, pte_contention;
 
@@ -279,32 +284,54 @@ put_pcache:
 	spin_unlock(&pset->lru_lock);
 }
 
+/*
+ * Profile the time to sweep the whole cache,
+ * and the time to sweep each set in average.
+ */
+DEFINE_PROFILE_POINT(evict_lru_sweep)
+DEFINE_PROFILE_POINT(evict_lru_sweep_set)
+
+int sysctl_pcache_evict_interval_msec __read_mostly = CONFIG_PCACHE_EVICT_GENERIC_SWEEP_INTERVAL_MSEC;
+
 void kevict_sweepd_lru(void)
 {
 	int setidx;
 	struct pcache_set *pset;
+	PROFILE_POINT_TIME(evict_lru_sweep)
+	PROFILE_POINT_TIME(evict_lru_sweep_set)
 
 	while (1) {
+		PROFILE_START(evict_lru_sweep);
 		pcache_for_each_set(pset, setidx) {
 			/*
-			 * Probably don't race with normal eviction loops
+			 * Don't race with normal eviction loops
+			 * This bit will be set during pcache_evict_line.
 			 */
 			if (PsetEvicting(pset))
 				continue;
 
 			/*
-			 * If it is not under eviction and set is not full
-			 * we probably don't want to adjust its list
+			 * We skip the set, as long as it is not completely full
+			 * (==PCACHE_ASSOCIATIVITY),
 			 */
 			if ((pset_nr_lru(pset) < PCACHE_ASSOCIATIVITY))
 				continue;
 
 			__SetPsetSweeping(pset);
+			PROFILE_START(evict_lru_sweep_set);
 			sweep_pset(pset);
+			PROFILE_LEAVE(evict_lru_sweep_set);
 			__ClearPsetSweeping(pset);
 
 			inc_pcache_event(PCACHE_SWEEP_NR_PSET);
 		}
+		PROFILE_LEAVE(evict_lru_sweep);
 		inc_pcache_event(PCACHE_SWEEP_RUN);
+
+		/*
+		 * Well.. just to stop being an asshole to other customers.
+		 * The more we sleep/delay, probably the nicer we are. ;-)
+		 */
+		mdelay(sysctl_pcache_evict_interval_msec);
 	}
 }
