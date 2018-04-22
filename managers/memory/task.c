@@ -119,3 +119,18 @@ find_lego_task_by_pid(unsigned int node, unsigned int pid)
 
 	return NULL;
 }
+
+void dump_lego_tasks(void)
+{
+	struct lego_task_struct *p;
+	int i;
+
+	spin_lock(&hashtable_lock);
+	pr_info("----- Start Dump Tasks\n");
+	hash_for_each(node_pid_hash, i, p, link) {
+		pr_info("  node:%u comm: %s pid: %u vnode_id: %u parent_pid:%u home_node: %u\n",
+			p->node, p->comm, p->pid, p->vnode_id, p->parent_pid, p->home_node);
+	}
+	pr_info("----- Finish Dump Tasks\n");
+	spin_unlock(&hashtable_lock);
+}

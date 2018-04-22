@@ -57,8 +57,12 @@ static void pcache_miss_error(u32 retval, u64 desc,
 	*reply = retval;
 	ibapi_reply_message(reply, sizeof(*reply), desc);
 
-	dump_all_vmas_simple(p->mm);
-	WARN(1, "src_nid:%u,pid:%u,vaddr:%#Lx\n", p->node, p->pid, vaddr);
+	dump_lego_tasks();
+	if (p) {
+		pr_info("src_nid:%u,pid:%u,vaddr:%#Lx\n", p->node, p->pid, vaddr);
+		dump_all_vmas_simple(p->mm);
+	}
+	WARN_ON_ONCE(1);
 }
 
 /*
@@ -176,6 +180,7 @@ int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc, void *tx)
 
 	p = find_lego_task_by_pid(src_nid, tgid);
 	if (unlikely(!p)) {
+		pr_info("%s(): src_nid: %d tgid: %d\n", __func__, src_nid, tgid);
 		pcache_miss_error(RET_ESRCH, desc, p, vaddr, tx);
 		return 0;
 	}

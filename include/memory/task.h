@@ -46,6 +46,7 @@ struct lego_task_struct {
         struct hlist_node link;
 } ____cacheline_aligned;
 
+void dump_lego_tasks(void);
 struct lego_task_struct *alloc_lego_task_struct(void);
 void free_lego_task_struct(struct lego_task_struct *tsk);
 
