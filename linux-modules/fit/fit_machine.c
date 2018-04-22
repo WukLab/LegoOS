@@ -63,6 +63,12 @@ static struct fit_machine_info WUKLAB_CLUSTER[] = {
 [17]	= {	.hostname =	"wuklab17",	.lid =	21,	.first_qpn =	0,	},
 [18]	= {	.hostname =	"wuklab18",	.lid =	19,	.first_qpn =	0,	},
 [19]	= {	.hostname =	"wuklab19",	.lid =	18,	.first_qpn =	74,	},
+[20]	= {	.hostname =	"wuklab20",	.lid =	27,	.first_qpn =	0,	},
+[21]	= {	.hostname =	"wuklab21",	.lid =	28,	.first_qpn =	0,	},
+[22]	= {	.hostname =	"wuklab22",	.lid =	29,	.first_qpn =	0,	},
+[23]	= {	.hostname =	"wuklab23",	.lid =	30,	.first_qpn =	0,	},
+[24]	= {	.hostname =	"wuklab24",	.lid =	31,	.first_qpn =	0,	},
+[25]	= {	.hostname =	"wuklab25",	.lid =	26,	.first_qpn =	0,	},
 };
 
 /* Indicate machines that are used by lego */
