@@ -8,6 +8,7 @@
  */
 
 #include <lego/kernel.h>
+#include <lego/fit_ibapi.h>
 #include <processor/pcache.h>
 
 struct pcache_event_stat pcache_event_stats;
@@ -70,4 +71,8 @@ void print_pcache_events(void)
 		pr_info("%s: %lu\n", pcache_event_text[i],
 			atomic_long_read(&pcache_event_stats.event[i]));
 	}
+
+	pr_info("nr_ib_send_reply: %lu\n", atomic_long_read(&nr_ib_send_reply));
+	pr_info("nr_ib_bytes_tx: %lu\n", atomic_long_read(&nr_bytes_tx));
+	pr_info("nr_ib_bytes_rx: %lu\n", atomic_long_read(&nr_bytes_rx));
 }

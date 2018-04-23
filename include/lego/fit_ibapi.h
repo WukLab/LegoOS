@@ -12,6 +12,7 @@
 
 #include <lego/types.h>
 #include <lego/errno.h>
+#include <lego/atomic.h>
 #include <net/arch/cc.h>
 
 #include <uapi/fit.h>
@@ -23,6 +24,10 @@
 #endif
 
 #ifdef CONFIG_FIT
+
+extern atomic_long_t	nr_ib_send_reply;
+extern atomic_long_t	nr_bytes_tx;
+extern atomic_long_t	nr_bytes_rx;
 
 /* for multicast and maybe other address ranges */
 struct fit_sglist {

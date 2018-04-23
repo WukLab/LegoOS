@@ -69,6 +69,10 @@ static inline void lock_ib(void) { }
 static inline void unlock_ib(void) { }
 #endif
 
+atomic_long_t	nr_ib_send_reply;
+atomic_long_t	nr_bytes_tx;
+atomic_long_t	nr_bytes_rx;
+
 static inline int
 __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr,
 			   int max_ret_size, int if_use_ret_phys_addr,
@@ -93,6 +97,9 @@ __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr
 	}
 	unlock_ib();
 
+	atomic_long_inc(&nr_ib_send_reply);
+	atomic_long_add(size, &nr_bytes_tx);
+	atomic_long_add(ret, &nr_bytes_rx);
 
 	return ret;
 }
