@@ -96,6 +96,9 @@ enum replica_vma_action {
 };
 
 struct replica_vma_log {
+	unsigned int	pid;
+	unsigned int	vnode_id;
+
 	unsigned int		action;
 	unsigned long		new_addr;
 	unsigned long		new_len;

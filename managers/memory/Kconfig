@@ -40,6 +40,16 @@ config REPLICATION_VMA
 	  you should have both enabled at P and M.
 
 	  If unsure, say N
+
+config REPLICATION_MEMORY_BATCH_NR
+	int "Number of memory logs to be batch flushed to storage."
+	range 16 500
+	default 256
+	help
+	  Number of logs to form a batch flush.
+	  This is used by Secondary Memory.
+	  The upperlimit depends on FIT maximum message size;
+
 endmenu
 
 menu "Memory Side DEBUG Options"

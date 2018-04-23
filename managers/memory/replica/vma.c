@@ -35,13 +35,15 @@ void replicate_vma(struct lego_task_struct *p, int action,
 
 	msg.opcode = M2S_REPLICA_VMA;
 	log = &msg.log;
+	log->pid = p->pid;
+	log->vnode_id = p->vnode_id;
 	log->action = action;
 	log->new_addr = new_addr;
 	log->new_len = new_len;
 	log->old_addr = old_addr;
 	log->old_len = old_len;
 
-	dst_storage = 2;
+	dst_storage = CONFIG_DEFAULT_STORAGE_NODE;
 	ibapi_send_reply_timeout(dst_storage, &msg, sizeof(msg),
 				 &reply, sizeof(reply), false, DEF_NET_TIMEOUT);
 }

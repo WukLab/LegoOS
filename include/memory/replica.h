@@ -41,7 +41,14 @@ struct replica_struct {
 	/*
 	 * HEAD points to the first available log slot.
 	 * It ranges: [0, nr_log-1]. Protected by @lock.
+	 *
+	 *        4b     4b
+	 *     |opcode|nr_log| .. log ..|
+	 *     ^             ^
+	 *   flush_msg      log
 	 */
+	void 				*flush_msg;
+	size_t				flush_msg_size;
 	unsigned int			nr_log;
 	struct replica_log		*log;
 
@@ -125,10 +132,10 @@ static inline void put_replica(struct replica_struct *r)
 		__put_replica_struct(r);
 }
 
-int flush_replica_struct(struct replica_struct *r);
+void flush_replica_struct(struct replica_struct *r);
 
 void dump_replica_log(struct replica_log *log, int idx);
-void dump_replica_struct(struct replica_struct *r);
+void dump_replica_struct(struct replica_struct *r, char *reason);
 void dump_all_replica(void);
 
 /*

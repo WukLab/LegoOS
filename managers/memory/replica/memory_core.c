@@ -101,12 +101,6 @@ int dequeue_replica_struct(struct replica_struct *ice)
 	return -ENOMEM;
 }
 
-/*
- * This determines how many log entries
- * are allocated for
- */
-unsigned int mem_sysctl_nr_log = 8;
-
 static inline void init_replica_struct(struct replica_struct *r)
 {
 	r->pid = 0;
@@ -128,29 +122,53 @@ static inline void init_replica_struct(struct replica_struct *r)
 }
 
 /*
+ * This determines how many log entries
+ * are allocated for
+ */
+unsigned int mem_sysctl_nr_log = CONFIG_REPLICATION_MEMORY_BATCH_NR;
+
+/*
  * Allocate log buffer and initialize replica_struct.
  */
 static struct replica_struct *alloc_replica_struct(void)
 {
 	struct replica_struct *replica;
 	struct replica_log *log;
+	struct m2s_replica_flush_msg *msg;
 	unsigned int nr_log;
+	size_t size;
 
 	replica = kmalloc(sizeof(*replica), GFP_KERNEL);
 	if (!replica)
 		return NULL;
 	init_replica_struct(replica);
 
-	/* cache locally in case it changed */
+	/*
+	 * We do a little trick here to avoid allocating another
+	 * buffer during flush. We allocate the buffer with
+	 * the additional opcode and nr_log used, so flush routine
+	 * can flush it directly.
+	 */
 	nr_log = mem_sysctl_nr_log;
-	log = kzalloc(nr_log * sizeof(*log), GFP_KERNEL);
-	if (!log) {
+	size = nr_log * sizeof(*log);
+	size += sizeof(msg->opcode);
+	size += sizeof(msg->nr_log);
+
+	msg = kmalloc(size, GFP_KERNEL);
+	if (!msg) {
+		WARN_ON_ONCE("Please tune mem_sysctl_nr_log\n");
 		kfree(replica);
 		return NULL;
 	}
+	msg->opcode = M2S_REPLICA_FLUSH;
+	msg->nr_log = nr_log;
 
+	/* Save context info */
+	replica->flush_msg = msg;
+	replica->flush_msg_size = size;
 	replica->nr_log = nr_log;
-	replica->log = log;
+	replica->log = (void *)msg + sizeof(msg->opcode) + sizeof(msg->nr_log);
+
 	return replica;
 }
 
@@ -191,10 +209,12 @@ find_or_alloc_replica_struct(unsigned int pid, unsigned int vnode_id,
 
 	ret = __enqueue_replica_struct(r);
 	if (ret) {
-		dump_replica_struct(r);
+		dump_replica_struct(r, "fail to enqueue");
 		put_replica(r);
 		r = NULL;
+		goto unlock;
 	}
+	dump_replica_struct(r, "fresh created");
 
 unlock:
 	spin_unlock(&replica_ht_lock);
@@ -276,7 +296,7 @@ retry:
 	if (unlikely(replica_log_full(r))) {
 		if (time_after(jiffies, start + mem_sysctl_replica_alloc_timeout_sec * HZ)) {
 			spin_unlock(&r->lock);
-			dump_replica_struct(r);
+			dump_replica_struct(r, "timeout");
 			WARN_ON_ONCE(1);
 			return NULL;
 		}
@@ -338,7 +358,6 @@ void handle_p2m_replica(void *_msg, u64 desc)
 	}
 
 	reply = append_replica_log(replica, src_log);
-	dump_replica_struct(replica);
 out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 }

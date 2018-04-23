@@ -23,8 +23,9 @@
 #include "../fit/fit_config.h"
 #include "storage.h"
 #include "common.h"
+#include "stat.h"
 
-#define MAX_RXBUF_SIZE	(129 * PAGE_SIZE)
+#define MAX_RXBUF_SIZE	(512 * PAGE_SIZE)
 
 struct info_struct {
 	uintptr_t desc;
@@ -57,18 +58,22 @@ static void storage_dispatch(void *msg, uintptr_t desc)
 	switch (*opcode) {
 /* replica log batch flush from Secondary Memory */
 	case M2S_REPLICA_FLUSH:
+		inc_storage_stat(HANDLE_REPLICA_FLUSH);
 		handle_replica_flush(msg, desc);
 		break;
 
 /* replica VMA info from Primary Memory*/
 	case M2S_REPLICA_VMA:
+		inc_storage_stat(HANDLE_REPLICA_VMA);
 		handle_replica_vma(msg, desc);
 		break;
 
 	case M2S_READ:
+		inc_storage_stat(HANDLE_REPLICA_READ);
 		handle_read_request(payload, desc);
 		break;
 	case M2S_WRITE:
+		inc_storage_stat(HANDLE_REPLICA_WRITE);
 		handle_write_request(payload, desc);
 		break;
 	case P2S_OPEN:
@@ -114,7 +119,7 @@ static void storage_dispatch(void *msg, uintptr_t desc)
 	return;
 }
 
-#if 0
+#if 1
 static bool in_handler;
 
 static inline void set_in_handler(void)
@@ -131,9 +136,10 @@ static int storage_self_monitor(void *unused)
 {
 	long interval_sec;
 
-	interval_sec = 2;
+	interval_sec = 30;
 	while (1) {
 		pr_info("%s(): in_handler=%d\n", __func__, in_handler);
+		print_storage_manager_stats();
 
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout(interval_sec * HZ);
@@ -167,7 +173,7 @@ static inline int init_self_monitor(void)
 
 static int storage_manager(void *unused)
 {
-	int retlen;
+	int retlen, reply;
 	void *msg;
 	uintptr_t desc;
 
@@ -179,9 +185,11 @@ static int storage_manager(void *unused)
 
 	while(1) {
 		retlen = ibapi_receive_message(0, msg, MAX_RXBUF_SIZE, &desc);
+
 		if (unlikely(retlen >= MAX_RXBUF_SIZE)) {
 			WARN(1, "retlen=%d MAX_RETBUF_SIZE=%lu", retlen, MAX_RXBUF_SIZE);
-			break;
+			reply = -EFAULT;
+			ibapi_reply_message(&reply, sizeof(reply), desc);
 		}
 
 		set_in_handler();

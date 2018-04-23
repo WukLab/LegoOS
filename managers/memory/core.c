@@ -22,6 +22,7 @@
 #include <memory/vm.h>
 #include <memory/pid.h>
 #include <memory/task.h>
+#include <memory/stat.h>
 #include <memory/loader.h>
 #include <memory/distvm.h>
 #include <memory/thread_pool.h>
@@ -169,9 +170,11 @@ static void __thpool_worker(struct thpool_worker *worker,
 	switch (hdr->opcode) {
 /* PCACHE */
 	case P2M_PCACHE_MISS:
+		inc_mm_stat(HANDLE_PCACHE_MISS);
 		handle_p2m_pcache_miss(msg, desc, tx);
 		break;
 	case P2M_PCACHE_FLUSH:
+		inc_mm_stat(HANDLE_PCACHE_FLUSH);
 		handle_p2m_flush_one(msg, desc);
 		break;
 	case P2M_PCACHE_ZEROFILL:
@@ -180,6 +183,7 @@ static void __thpool_worker(struct thpool_worker *worker,
 
 /* clflush REPLICA */
 	case P2M_PCACHE_REPLICA:
+		inc_mm_stat(HANDLE_PCACHE_REPLICA);
 		handle_p2m_replica(msg, desc);
 		break;
 
@@ -211,6 +215,7 @@ static void __thpool_worker(struct thpool_worker *worker,
 		break;
 
 	case P2M_MMAP:
+		inc_mm_stat(HANDLE_P2M_MMAP);
 		handle_p2m_mmap(payload, desc, hdr, tx);
 		break;
 
@@ -219,6 +224,7 @@ static void __thpool_worker(struct thpool_worker *worker,
 		break;
 
 	case P2M_MUNMAP:
+		inc_mm_stat(HANDLE_P2M_MUNMAP);
 		handle_p2m_munmap(payload, desc, hdr, tx);
 		break;
 
@@ -227,6 +233,7 @@ static void __thpool_worker(struct thpool_worker *worker,
 		break;
 
 	case P2M_BRK:
+		inc_mm_stat(HANDLE_P2M_BRK);
 		handle_p2m_brk(payload, desc, hdr, tx);
 		break;
 
@@ -249,10 +256,12 @@ static void __thpool_worker(struct thpool_worker *worker,
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 /* DISTRIBUTED VMA */
 	case M2M_MMAP:
+		inc_mm_stat(HANDLE_M2M_MMAP);
 		handle_m2m_mmap(payload, desc, hdr, tx);
 		break;
 
 	case M2M_MUNMAP:
+		inc_mm_stat(HANDLE_M2M_MUNMAP);
 		handle_m2m_munmap(payload, desc, hdr, tx);
 		break;
 
@@ -514,6 +523,7 @@ void watchdog_print(void)
 		pr_info("hb: worker[%d] max_nr_queued=%d nr_queued=%d in_handler=%s nr_thpool_reqs=%lu\n",
 			i, max_queued_thpool_worker(tw), tw->nr_queued,
 			thpool_worker_in_handler(tw) ? "yes" : "no", nr_thpool_reqs);
+		print_memory_manager_stats();
 
 		ht_check_worker(i, tw, &hb_cached_data[i]);
 	}

@@ -30,9 +30,12 @@ struct replica_log_info {
 	unsigned int		vnode_id;
 	unsigned int		hash_key;
 
-	loff_t			HEAD;
-	unsigned char		f_name[REPLICA_LOG_MAX_FILENAME];
-	struct file		*filp;
+	loff_t			HEAD_REPLICA;
+	loff_t			HEAD_MMAP;
+	unsigned char		f_name_replica[REPLICA_LOG_MAX_FILENAME];
+	unsigned char		f_name_mmap[REPLICA_LOG_MAX_FILENAME];
+	struct file		*filp_replica;
+	struct file		*filp_mmap;
 
 	atomic_t		_refcount;
 	spinlock_t		lock;

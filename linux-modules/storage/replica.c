@@ -20,6 +20,7 @@
 #include "storage.h"
 #include "common.h"
 #include "replica.h"
+#include "stat.h"
 
 static DEFINE_HASHTABLE(replica_ht, REPLICA_HASH_TABLE_SIZE_BIT);
 static DEFINE_SPINLOCK(replica_ht_lock);
@@ -59,35 +60,62 @@ static int __enqueue_replica_log_info(struct replica_log_info *new)
 
 static void close_replica_file(struct replica_log_info *r)
 {
-	if (!r->filp)
+	if (!r->filp_replica)
 		return;
-	filp_close(r->filp, NULL);
+	filp_close(r->filp_replica, NULL);
+}
+
+static void close_mmap_file(struct replica_log_info *r)
+{
+	if (!r->filp_mmap)
+		return;
+	filp_close(r->filp_mmap, NULL);
 }
 
 unsigned char replica_base_directory[] = "/root/lego-replica-file-";
+unsigned char mmap_base_directory[] = "/root/lego-mmap-file-";
 
 static inline void init_replica_f_name(struct replica_log_info *r)
 {
-	sprintf(r->f_name, "%sv%d-p%d",
+	sprintf(r->f_name_replica, "%sv%d-p%d",
 		replica_base_directory, r->vnode_id, r->pid);
 }
 
-static int create_replica_file(struct replica_log_info *r)
+static inline void init_mmap_f_name(struct replica_log_info *r)
+{
+	sprintf(r->f_name_mmap, "%sv%d-p%d",
+		mmap_base_directory, r->vnode_id, r->pid);
+}
+
+/*
+ * Create replica and mmap log files
+ * for a freshly created @r.
+ */
+static int create_files(struct replica_log_info *r)
 {
 	struct file *filp;
 
 	init_replica_f_name(r);
+	init_mmap_f_name(r);
 
-	filp = filp_open(r->f_name, O_LARGEFILE | O_CREAT, 0644);
+	filp = filp_open(r->f_name_replica, O_LARGEFILE | O_CREAT, 0644);
 	if (IS_ERR(filp))
 		return PTR_ERR(filp);
+	r->filp_replica = filp;
 
-	r->filp = filp;
+	filp = filp_open(r->f_name_mmap, O_LARGEFILE | O_CREAT, 0644);
+	if (IS_ERR(filp)) {
+		close_replica_file(r);
+		return PTR_ERR(filp);
+	}
+	r->filp_mmap = filp;
+
 	return 0;
 }
 
 void __put_replica_log_info(struct replica_log_info *r)
 {
+	close_mmap_file(r);
 	close_replica_file(r);
 	kfree(r);
 }
@@ -128,7 +156,7 @@ find_or_alloc_replica_log_info(unsigned int pid, unsigned int vnode_id)
 	r->vnode_id = vnode_id;
 	r->hash_key = hash_key;
 
-	ret = create_replica_file(r);
+	ret = create_files(r);
 	if (ret) {
 		put_replica_log_info(r);
 		r = NULL;
@@ -154,14 +182,37 @@ static int append_replica(struct replica_log_info *r,
 	size_t count;
 	ssize_t written;
 
-	f = r->filp;
+	f = r->filp_replica;
 	count = nr_log * (sizeof(*log_array));
 
-	written = local_file_write(f, (char *)log_array, count, &r->HEAD);
+	written = local_file_write(f, (char *)log_array, count, &r->HEAD_REPLICA);
 	if (written != count)
 		return -EFAULT;
 	return 0;
 }
+
+static inline int append_mmap(struct replica_log_info *r,
+			      struct replica_vma_log *log)
+{
+	struct file *f;
+	size_t count;
+	ssize_t written;
+
+	f = r->filp_mmap;
+	count = sizeof(*log);
+
+	written = local_file_write(f, (char *)log, count, &r->HEAD_MMAP);
+	if (written != count)
+		return -EFAULT;
+	return 0;
+}
+
+#if 0
+#define dp(fmt, ...)		\
+	pr_crit("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+#define dp(fmt, ...) do { } while (0)
+#endif
 
 /*
  * Handle memory replication flush from Secondary Memory
@@ -199,11 +250,21 @@ void handle_replica_vma(void *_msg, u64 desc)
 {
 	struct m2s_replica_vma_msg *msg = _msg;
 	struct replica_vma_log *log = &msg->log;
+	struct replica_log_info *r;
 	int reply = 0;
 
-	pr_info("action: %d [%#lx-%#lx], [%#lx-%#lx]\n", log->action,
+	dp("pid: %d vnode_id: %d action: %d [%#lx-%#lx], [%#lx-%#lx]\n",
+		log->pid, log->vnode_id, log->action,
 		log->new_addr, log->new_addr + log->new_len,
 		log->old_addr, log->old_addr + log->old_len);
 
+	r = find_or_alloc_replica_log_info(log->pid, log->vnode_id);
+	if (!r) {
+		reply = -ENOMEM;
+		goto out;
+	}
+
+	reply = append_mmap(r, log);
+out:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 }

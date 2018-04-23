@@ -13,6 +13,7 @@
 #include <lego/checksum.h>
 #include <lego/hashtable.h>
 #include <lego/fit_ibapi.h>
+#include <lego/profile.h>
 
 #include <memory/vm.h>
 #include <memory/pid.h>
@@ -20,46 +21,30 @@
 #include <memory/replica.h>
 #include <processor/pcache.h>
 
+DEFINE_PROFILE_POINT(m2s_replica_flush)
+
 /*
  * This code runs on Secondary Memory,
  * used to flush the batched log to Storage.
  */
 
-int flush_replica_struct(struct replica_struct *r)
+void flush_replica_struct(struct replica_struct *r)
 {
+	size_t msg_size;
+	int reply, storage_node;
 	struct m2s_replica_flush_msg *msg;
-	size_t msg_size, log_size;
-	int reply, retval, ret_len;
-	int storage_node;
+	PROFILE_POINT_TIME(m2s_replica_flush)
 
-	/* opcode + nr_log + ARRAY */
-	log_size = r->nr_log * sizeof(struct replica_log);
-	msg_size = 8 + log_size;
+	/*
+	 * The message is pre-cooked when we create
+	 * the in-memory cached log.
+	 */
+	msg = r->flush_msg;
+	msg_size = r->flush_msg_size;
+	storage_node = CONFIG_DEFAULT_STORAGE_NODE;;
 
-	msg = kmalloc(msg_size, GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-
-	msg->opcode = M2S_REPLICA_FLUSH;
-	msg->nr_log = r->nr_log;
-	memcpy(&msg->log, r->log, log_size);
-
-	storage_node = 2;
-	ret_len = ibapi_send_reply_timeout(storage_node, msg, msg_size,
+	PROFILE_START(m2s_replica_flush);
+	ibapi_send_reply_timeout(storage_node, msg, msg_size,
 				&reply, sizeof(reply), false, DEF_NET_TIMEOUT);
-	if (ret_len != sizeof(reply)) {
-		retval = -EIO;
-		goto out;
-	}
-
-	if (unlikely(reply)) {
-		pr_err("%s() %s\n", __func__, perror(reply));
-		retval = reply;
-		goto out;
-	}
-
-	retval = 0;
-out:
-	kfree(msg);
-	return retval;
+	PROFILE_LEAVE(m2s_replica_flush);
 }
