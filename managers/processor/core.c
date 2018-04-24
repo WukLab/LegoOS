@@ -10,6 +10,7 @@
 #define pr_fmt(fmt) "Processor: " fmt
 
 #include <lego/slab.h>
+#include <lego/math64.h>
 #include <lego/timer.h>
 #include <lego/kernel.h>
 #include <lego/kthread.h>
@@ -18,6 +19,7 @@
 #include <processor/processor.h>
 #include <processor/distvm.h>
 #include <processor/vnode.h>
+#include <processor/pcache.h>
 
 #include <monitor/gpm_handler.h>
 
@@ -173,5 +175,9 @@ SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
 
 void watchdog_print(void)
 {
+	u64 p_i, p_re;
 
+	p_i = div64_u64_rem(atomic_long_read(&nr_used_cachelines) * 100UL,
+			    nr_cachelines, &p_re);
+	pr_info("Cache Utilization %Lu.%Lu%%\n", p_i, p_re);
 }

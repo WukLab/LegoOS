@@ -34,6 +34,8 @@ u64 nr_pages_metadata;
 u64 nr_cachelines __read_mostly;
 u64 nr_cachesets __read_mostly;
 
+atomic_long_t nr_used_cachelines;
+
 /*
  * Original physical and ioremap'd kernel virtual address
  * These are read frequently to calculate offsets between structures:

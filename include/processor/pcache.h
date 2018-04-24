@@ -31,6 +31,8 @@ extern u64 llc_cache_size;
 extern u64 nr_cachelines;
 extern u64 nr_cachesets;
 
+extern atomic_long_t nr_used_cachelines;
+
 /* pages used by cacheline and metadata */
 extern u64 nr_pages_cacheline;
 extern u64 nr_pages_metadata;
