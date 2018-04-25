@@ -177,7 +177,7 @@ void watchdog_print(void)
 {
 	u64 p_i, p_re;
 
-	p_i = div64_u64_rem(atomic_long_read(&nr_used_cachelines) * 100UL,
+	p_i = div64_u64_rem(pcache_used() * 100UL,
 			    nr_cachelines, &p_re);
 	pr_info("Cache Utilization %Lu.%Lu%%\n", p_i, p_re);
 }

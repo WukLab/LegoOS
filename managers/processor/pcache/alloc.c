@@ -100,7 +100,7 @@ void __put_pcache_nolru(struct pcache_meta *pcm)
 {
 	pcache_free_check(pcm);
 	pcache_reset_flags(pcm);
-	atomic_long_dec(&nr_used_cachelines);
+	dec_pcache_used();
 }
 
 /*
@@ -146,7 +146,7 @@ pcache_alloc_fastpath(struct pcache_set *pset)
 			 * pcache subsystems:
 			 */
 			set_pcache_usable(pcm);
-			atomic_long_inc(&nr_used_cachelines);
+			inc_pcache_used();
 			return pcm;
 		}
 	}

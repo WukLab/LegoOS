@@ -15,27 +15,6 @@
 #include <processor/pcache_types.h>
 
 /*
- * pcache set counters
- */
-static inline void mod_pset_event(int i, struct pcache_set *pset,
-				  enum pcache_set_stat_item item)
-{
-	atomic_add(i, &pset->stat[item]);
-}
-
-static inline void inc_pset_event(struct pcache_set *pset,
-				  enum pcache_set_stat_item item)
-{
-	atomic_inc(&pset->stat[item]);
-}
-
-static inline void dec_pset_event(struct pcache_set *pset,
-				 enum pcache_set_stat_item item)
-{
-	atomic_dec(&pset->stat[item]);
-}
-
-/*
  * Counters should only be incremented.
  * Counters are handled completely inline.
  */
@@ -119,16 +98,78 @@ struct pcache_event_stat {
 };
 
 extern struct pcache_event_stat pcache_event_stats;
+extern atomic_long_t nr_used_cachelines;
 
+#ifdef CONFIG_COUNTER_PCACHE
 static inline void inc_pcache_event(enum pcache_event_item item)
 {
 	atomic_long_inc(&pcache_event_stats.event[item]);
+}
+
+static inline void inc_pcache_event_cond(enum pcache_event_item item, bool doit)
+{
+	if (doit)
+		inc_pcache_event(item);
 }
 
 static inline unsigned long pcache_event(enum pcache_event_item item)
 {
 	return atomic_long_read(&pcache_event_stats.event[item]);
 }
+
+/*
+ * pcache set counters
+ */
+static inline void mod_pset_event(int i, struct pcache_set *pset,
+				  enum pcache_set_stat_item item)
+{
+	atomic_add(i, &pset->stat[item]);
+}
+
+static inline void inc_pset_event(struct pcache_set *pset,
+				  enum pcache_set_stat_item item)
+{
+	atomic_inc(&pset->stat[item]);
+}
+
+static inline void dec_pset_event(struct pcache_set *pset,
+				 enum pcache_set_stat_item item)
+{
+	atomic_dec(&pset->stat[item]);
+}
+
+/*
+ * Global Counter
+ */
+static inline void inc_pcache_used(void)
+{
+	atomic_long_inc(&nr_used_cachelines);
+}
+
+static inline void dec_pcache_used(void)
+{
+	atomic_long_dec(&nr_used_cachelines);
+}
+
+static inline long pcache_used(void)
+{
+	return atomic_long_read(&nr_used_cachelines);
+}
+
+#else
+static inline void inc_pcache_event(enum pcache_event_item i) { }
+static inline void inc_pcache_event_cond(enum pcache_event_item item, bool doit) { }
+static inline unsigned long pcache_event(enum pcache_event_item i) { return 0; }
+static inline void mod_pset_event(int i, struct pcache_set *pset,
+				  enum pcache_set_stat_item item) { }
+static inline void inc_pset_event(struct pcache_set *pset,
+				  enum pcache_set_stat_item item) { }
+static inline void dec_pset_event(struct pcache_set *pset,
+				 enum pcache_set_stat_item item) { }
+static inline void inc_pcache_used(void) { }
+static inline void dec_pcache_used(void) { }
+static inline long pcache_used(void) { return 0; }
+#endif /* CONFIG_COUNTER_PCACHE */
 
 #ifdef CONFIG_COMP_PROCESSOR
 void print_pcache_events(void);

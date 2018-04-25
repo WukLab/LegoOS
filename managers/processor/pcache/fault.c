@@ -145,6 +145,7 @@ out:
 	return ret;
 }
 
+#ifdef CONFIG_COUNTER_PCACHE
 static inline void pcache_fill_update_stat(struct pcache_meta *pcm)
 {
 	struct pcache_set *pset;
@@ -153,6 +154,9 @@ static inline void pcache_fill_update_stat(struct pcache_meta *pcm)
 	inc_pset_event(pset, PSET_FILL_MEMORY);
 	inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY);
 }
+#else
+static inline void pcache_fill_update_stat(struct pcache_meta *pcm) { }
+#endif
 
 DEFINE_PROFILE_POINT(pcache_miss_net)
 
@@ -545,8 +549,7 @@ int pcache_handle_fault(struct mm_struct *mm,
 		return VM_FAULT_OOM;
 
 	inc_pcache_event(PCACHE_FAULT);
-	if (flags & FAULT_FLAG_INSTRUCTION)
-		inc_pcache_event(PCACHE_FAULT_CODE);
+	inc_pcache_event_cond(PCACHE_FAULT_CODE, !!(flags & FAULT_FLAG_INSTRUCTION));
 
 	return pcache_handle_pte_fault(mm, address, pte, pmd, flags);
 }

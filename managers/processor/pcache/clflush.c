@@ -71,8 +71,7 @@ void __clflush_one(pid_t tgid, unsigned long user_va,
 
 	/* Counting */
 	inc_pcache_event(PCACHE_CLFLUSH);
-	if (unlikely(reply))
-		inc_pcache_event(PCACHE_CLFLUSH_FAIL);
+	inc_pcache_event_cond(PCACHE_CLFLUSH_FAIL, !!reply);
 
 	/*
 	 * Replica this dirty cache line to secondary
