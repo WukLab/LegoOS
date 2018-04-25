@@ -55,7 +55,7 @@ static inline void die(const char * str, ...)
  * x: end time
  * y: start time
  */
-static inline timeval_sub(struct timeval *result, struct timeval *x,
+static inline int timeval_sub(struct timeval *result, struct timeval *x,
 			  struct timeval *y)
 {
   /* Perform the carry for the later subtraction by updating y. */
@@ -79,6 +79,20 @@ static inline timeval_sub(struct timeval *result, struct timeval *x,
   return x->tv_sec < y->tv_sec;
 }
 
+static inline struct timeval
+timeval_add(struct timeval *a, struct timeval *b)
+{
+	struct timeval result;
+
+	result.tv_sec = a->tv_sec + b->tv_sec;
+	result.tv_usec = a->tv_usec + b->tv_usec;
+	if (result.tv_usec >= 1000000) {
+		result.tv_sec += 1;
+		result.tv_usec -= 1000000;
+	}
+	return result;
+}
+
 static inline pid_t gettid(void)
 {
 	syscall(SYS_gettid);
@@ -93,15 +107,15 @@ static inline void checkpoint_process(pid_t pid)
 		perror("checkpoint");
 }
 
-static inline void pcache_stat(struct pcache_stat *buf)
+static inline int pcache_stat(struct pcache_stat *buf)
 {
 	long ret;
 
 	ret = syscall(__NR_pcache_stat, buf);
 	if (ret < 0) {
 		perror("pcache_stat");
-		die("Not a Lego Kernel?");
 	}
+	return ret;
 }
 
 static inline unsigned short from32to16(unsigned a) 
