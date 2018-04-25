@@ -32,11 +32,16 @@ struct memory_manager_stat {
 
 extern struct memory_manager_stat memory_manager_stats;
 
+#ifdef CONFIG_COUNTER_MEMORY_HANDLER
 static inline void inc_mm_stat(enum memory_manager_stat_item i)
 {
 	atomic_long_inc(&memory_manager_stats.stat[i]);
 }
 
 void print_memory_manager_stats(void);
+#else
+static inline void inc_mm_stat(enum memory_manager_stat_item i) { }
+static inline void print_memory_manager_stats(void) { }
+#endif
 
 #endif /* _LEGO_MEMORY_STAT_H_ */

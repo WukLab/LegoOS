@@ -25,6 +25,7 @@ static const char *const memory_manager_stat_text[] = {
 	"handle_m2m_munmap",
 };
 
+#ifdef CONFIG_COUNTER_MEMORY_HANDLER
 void print_memory_manager_stats(void)
 {
 	int i;
@@ -36,3 +37,4 @@ void print_memory_manager_stats(void)
 			atomic_long_read(&memory_manager_stats.stat[i]));
 	}
 }
+#endif

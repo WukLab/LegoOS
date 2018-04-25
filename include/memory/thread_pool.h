@@ -227,7 +227,7 @@ static inline void add_thpool_worker_total_queuing(struct thpool_worker *tw, uns
 
 static inline void inc_thpool_worker_nr_handled(struct thpool_worker *tw)
 {
-	tw->nr_handled++
+	tw->nr_handled++;
 }
 
 #else
