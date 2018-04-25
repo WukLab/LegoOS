@@ -30,7 +30,7 @@ void print_profile_point(struct profile_point *pp)
 	avg_ns = DIV_ROUND_UP(time_ns, nr);
 
 print:
-	pr_info("%s  %20s  %6Ld.%09Ld  %16ld  %16ld\n",
+	pr_info("%s  %30s  %6Ld.%09Ld  %16ld  %16ld\n",
 		pp->enabled? "     on" : "    off",
 		pp->pp_name,
 		(s64)ts.tv_sec, (s64)ts.tv_nsec,
@@ -45,8 +45,8 @@ void print_profile_points(void)
 
 	pr_info("\n");
 	pr_info("Kernel Profile Points\n");
-	pr_info(" status                  name             total                nr            avg.ns\n");
-	pr_info("-------  --------------------  ----------------  ----------------  ----------------\n");
+	pr_info(" Status                            Name          Total(s)                NR           Avg(ns)\n");
+	pr_info("-------  ------------------------------  ----------------  ----------------  ----------------\n");
 	for (pp = __sprofilepoint; pp < __eprofilepoint; pp++) {
 		print_profile_point(pp);
 		count++;

@@ -12,6 +12,7 @@
  *	pcache line fetch.
  */
 
+#include <lego/profile.h>
 #include <lego/fit_ibapi.h>
 #include <lego/ratelimit.h>
 #include <lego/checksum.h>
@@ -134,11 +135,14 @@ static void do_handle_p2m_zerofill_miss(struct lego_task_struct *p,
 	ibapi_reply_message(reply, sizeof(*reply), desc);
 }
 
+DEFINE_PROFILE_POINT(handle_cache_miss_reply)
+
 static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 				      u64 vaddr, u32 flags, u64 desc, void *tx)
 {
 	int ret;
 	unsigned long new_page;
+	PROFILE_POINT_TIME(handle_cache_miss_reply)
 
 	ret = common_handle_p2m_miss(p, vaddr, flags, desc, &new_page);
 	if (unlikely(ret & VM_FAULT_ERROR)) {
@@ -155,7 +159,9 @@ static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 	 * For normal pcache miss, we do not use the rx buffer.
 	 * We simply use the page itself.
 	 */
+	PROFILE_START(handle_cache_miss_reply);
 	ibapi_reply_message((void *)new_page, PCACHE_LINE_SIZE, desc);
+	PROFILE_LEAVE(handle_cache_miss_reply);
 }
 
 static int fault_in_kernel_space(unsigned long address)
@@ -163,12 +169,15 @@ static int fault_in_kernel_space(unsigned long address)
 	return address >= TASK_SIZE_MAX;
 }
 
+DEFINE_PROFILE_POINT(handle_cache_miss)
+
 int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc, void *tx)
 {
 	u32 tgid, flags;
 	u64 vaddr;
 	unsigned int src_nid;
 	struct lego_task_struct *p;
+	PROFILE_POINT_TIME(handle_cache_miss)
 
 	src_nid = to_common_header(msg)->src_nid;
 	tgid   = msg->tgid;
@@ -190,7 +199,10 @@ int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc, void *tx)
 		return 0;
 	}
 
+	PROFILE_START(handle_cache_miss);
 	do_handle_p2m_pcache_miss(p, vaddr, flags, desc, tx);
+	PROFILE_LEAVE(handle_cache_miss);
+
 	do_mmap_prefetch(p, vaddr, flags, 1 << PREFETCH_ORDER);
 
 	handle_pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",

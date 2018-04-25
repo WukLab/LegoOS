@@ -63,7 +63,6 @@ int pin_current_thread_to_cpu(int cpu)
 	set_cpus_allowed_ptr(p, get_cpu_mask(cpu));
 	set_cpu_active(cpu, false);
 
-	pr_info("pin: [%s] running on CPU%d\n", p->comm, cpu);
 	return 0;
 }
 

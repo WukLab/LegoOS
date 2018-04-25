@@ -118,6 +118,16 @@ config COUNTER_MEMORY_HANDLER
 
 	  If unsure, say N.
 
+config COUNTER_THPOOL
+	bool "Counter: memory thread pool (M)"
+	default n
+	depends on COUNTER
+	depends on COMP_MEMORY
+	help
+	  Say Y if you want to have some thpool internal bookkeeping.
+
+	  If unsure, say N.
+
 endmenu #Lego Kernel Counters
 
 menu "Lego Kernel Profiling"

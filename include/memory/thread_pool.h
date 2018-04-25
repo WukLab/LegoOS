@@ -51,68 +51,12 @@ struct thpool_worker {
 	TW_PADDING(_pad1);
 
 	/* for debug usage */
+	unsigned long		nr_handled;
+	unsigned long		total_queuing_delay_ns;
 	int			max_nr_queued;
 	unsigned long		flags;
 	struct thpool_buffer	*wip_buffer;
 } ____cacheline_aligned;
-
-#ifdef CONFIG_DEBUG_THPOOL
-#define THPOOL_WORKER_INHANDLER		0x1UL
-
-static inline int thpool_worker_in_handler(struct thpool_worker *tw)
-{
-	return tw->flags & THPOOL_WORKER_INHANDLER;
-}
-
-static inline void set_in_handler_thpool_worker(struct thpool_worker *tw)
-{
-	tw->flags |= THPOOL_WORKER_INHANDLER;
-}
-
-static inline void clear_in_handler_thpool_worker(struct thpool_worker *tw)
-{
-	tw->flags &= ~THPOOL_WORKER_INHANDLER;
-}
-
-static inline int max_queued_thpool_worker(struct thpool_worker *tw)
-{
-	return tw->max_nr_queued;
-}
-
-static inline void update_max_queued_thpool_worker(struct thpool_worker *tw)
-{
-	if (tw->nr_queued > tw->max_nr_queued)
-		tw->max_nr_queued = tw->nr_queued;
-}
-
-static inline void
-set_wip_buffer_thpool_worker(struct thpool_worker *tw, struct thpool_buffer *tb)
-{
-	tw->wip_buffer = tb;
-}
-
-static inline void clear_wip_buffer_thpool_worker(struct thpool_worker *tw)
-{
-	tw->wip_buffer = NULL;
-}
-
-static inline struct thpool_buffer *
-wip_buffer_thpool_worker(struct thpool_worker *tw)
-{
-	return tw->wip_buffer;
-}
-#else
-static inline int thpool_worker_in_handler(struct thpool_worker *tw) { return 0; }
-static inline void set_in_handler_thpool_worker(struct thpool_worker *tw) { }
-static inline void clear_in_handler_thpool_worker(struct thpool_worker *tw) { }
-static inline int max_queued_thpool_worker(struct thpool_worker *tw) { return 0; }
-static inline void update_max_queued_thpool_worker(struct thpool_worker *tw) { }
-static inline void
-set_wip_buffer_thpool_worker(struct thpool_worker *tw, struct thpool_buffer *tb) { }
-static inline void clear_wip_buffer_thpool_worker(struct thpool_worker *tw) { }
-static inline struct thpool_buffer *
-wip_buffer_thpool_worker(struct thpool_worker *tw) { return NULL; }
-#endif /* CONFIG_DEBUG_THPOOL */
 
 static inline void set_cpu_thpool_worker(struct thpool_worker *tw, int cpu)
 {
@@ -147,6 +91,8 @@ struct tb_padding {
 struct thpool_buffer {
 	unsigned long		desc;
 	unsigned long		flags;
+	unsigned long		time_enqueue_ns;
+	unsigned long		time_dequeue_ns;
 	struct list_head	next;
 
 	THPOOL_PADDING(_pad1);
@@ -212,5 +158,97 @@ static inline void *thpool_buffer_tx(struct thpool_buffer *tb)
 
 void handle_bad_request(struct common_header *hdr, u64 desc);
 void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr);
+
+#ifdef CONFIG_COUNTER_THPOOL
+#define THPOOL_WORKER_INHANDLER		0x1UL
+static inline int thpool_worker_in_handler(struct thpool_worker *tw)
+{
+	return tw->flags & THPOOL_WORKER_INHANDLER;
+}
+
+static inline void set_in_handler_thpool_worker(struct thpool_worker *tw)
+{
+	tw->flags |= THPOOL_WORKER_INHANDLER;
+}
+
+static inline void clear_in_handler_thpool_worker(struct thpool_worker *tw)
+{
+	tw->flags &= ~THPOOL_WORKER_INHANDLER;
+}
+
+static inline int max_queued_thpool_worker(struct thpool_worker *tw)
+{
+	return tw->max_nr_queued;
+}
+
+static inline void update_max_queued_thpool_worker(struct thpool_worker *tw)
+{
+	if (tw->nr_queued > tw->max_nr_queued)
+		tw->max_nr_queued = tw->nr_queued;
+}
+
+static inline void
+set_wip_buffer_thpool_worker(struct thpool_worker *tw, struct thpool_buffer *tb)
+{
+	tw->wip_buffer = tb;
+}
+
+static inline void clear_wip_buffer_thpool_worker(struct thpool_worker *tw)
+{
+	tw->wip_buffer = NULL;
+}
+
+static inline struct thpool_buffer *
+wip_buffer_thpool_worker(struct thpool_worker *tw)
+{
+	return tw->wip_buffer;
+}
+
+/* Queuing delay */
+static inline void thpool_buffer_enqueue_time(struct thpool_buffer *tb)
+{
+	tb->time_enqueue_ns = sched_clock();
+}
+
+static inline void thpool_buffer_dequeue_time(struct thpool_buffer *tb)
+{
+	tb->time_dequeue_ns = sched_clock();
+}
+
+static inline unsigned long thpool_buffer_queuing_delay(struct thpool_buffer *tb)
+{
+	return tb->time_dequeue_ns - tb->time_enqueue_ns;
+}
+
+static inline void add_thpool_worker_total_queuing(struct thpool_worker *tw, unsigned long diff_ns)
+{
+	tw->total_queuing_delay_ns += diff_ns;
+}
+
+static inline void inc_thpool_worker_nr_handled(struct thpool_worker *tw)
+{
+	tw->nr_handled++
+}
+
+#else
+static inline int thpool_worker_in_handler(struct thpool_worker *tw) { return 0; }
+static inline void set_in_handler_thpool_worker(struct thpool_worker *tw) { }
+static inline void clear_in_handler_thpool_worker(struct thpool_worker *tw) { }
+static inline int max_queued_thpool_worker(struct thpool_worker *tw) { return 0; }
+static inline void update_max_queued_thpool_worker(struct thpool_worker *tw) { }
+static inline void
+set_wip_buffer_thpool_worker(struct thpool_worker *tw, struct thpool_buffer *tb) { }
+static inline void clear_wip_buffer_thpool_worker(struct thpool_worker *tw) { }
+static inline struct thpool_buffer *
+wip_buffer_thpool_worker(struct thpool_worker *tw) { return NULL; }
+
+/* Queuing delay */
+static inline unsigned long thpool_buffer_queuing_delay(struct thpool_buffer *tb) { return 0; }
+static inline void thpool_buffer_dequeue_time(struct thpool_buffer *tb) { }
+static inline void thpool_buffer_enqueue_time(struct thpool_buffer *tb) { }
+static inline void add_thpool_worker_total_queuing(struct thpool_worker *tw, unsigned long diff_ns) { }
+
+static inline void inc_thpool_worker_nr_handled(struct thpool_worker *tw) { }
+#endif /* CONFIG_COUNTER_THPOOL */
 
 #endif /* _MEM_THREAD_POOL_H_ */
