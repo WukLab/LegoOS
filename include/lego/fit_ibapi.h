@@ -25,9 +25,39 @@
 
 #ifdef CONFIG_FIT
 
+#ifdef CONFIG_COUNTER_FIT_IB
 extern atomic_long_t	nr_ib_send_reply;
 extern atomic_long_t	nr_bytes_tx;
 extern atomic_long_t	nr_bytes_rx;
+
+static inline long COUNTER_nr_ib_send_reply(void)
+{
+	return atomic_long_read(&nr_ib_send_reply);
+}
+
+static inline long COUNTER_nr_bytes_tx(void)
+{
+	return atomic_long_read(&nr_bytes_tx);
+}
+
+static inline long COUNTER_nr_bytes_rx(void)
+{
+	return atomic_long_read(&nr_bytes_rx);
+}
+#else
+static inline long COUNTER_nr_ib_send_reply(void)
+{
+	return 0;
+}
+static inline long COUNTER_nr_bytes_tx(void)
+{
+	return 0;
+}
+static inline long COUNTER_nr_bytes_rx(void)
+{
+	return 0;
+}
+#endif
 
 /* for multicast and maybe other address ranges */
 struct fit_sglist {

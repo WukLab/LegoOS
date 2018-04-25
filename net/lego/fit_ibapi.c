@@ -69,9 +69,11 @@ static inline void lock_ib(void) { }
 static inline void unlock_ib(void) { }
 #endif
 
+#ifdef CONFIG_COUNTER_FIT_IB
 atomic_long_t	nr_ib_send_reply;
 atomic_long_t	nr_bytes_tx;
 atomic_long_t	nr_bytes_rx;
+#endif
 
 static inline int
 __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr,
@@ -97,9 +99,11 @@ __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr
 	}
 	unlock_ib();
 
+#ifdef CONFIG_COUNTER_FIT_IB
 	atomic_long_inc(&nr_ib_send_reply);
 	atomic_long_add(size, &nr_bytes_tx);
 	atomic_long_add(ret, &nr_bytes_rx);
+#endif
 
 	return ret;
 }

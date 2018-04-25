@@ -68,7 +68,8 @@ void test(unsigned long wss_t)
 	struct timeval total[NR_WSS];
 	unsigned long s_nr_evictions, nr_evictions[NR_WSS];
 	unsigned long s_nr_pgfault, nr_pgfault[NR_WSS];
-	unsigned long f_nr_evictions, f_nr_pgfault;
+	unsigned long s_nr_pgfault_code, nr_pgfault_code[NR_WSS];
+	unsigned long f_nr_evictions, f_nr_pgfault, f_nr_pgfault_code;
 	struct timeval s_total, s_first_run;
 	struct pcache_stat ps_start, ps_end;
 	char str[32];
@@ -80,14 +81,17 @@ void test(unsigned long wss_t)
 		total[i].tv_usec = 0;
 		nr_evictions[i] = 0;
 		nr_pgfault[i] = 0;
+		nr_pgfault_code[i] = 0;
 	}
 	s_first_run.tv_sec = 0;
 	s_first_run.tv_usec = 0;
 	s_total.tv_sec = 0;
 	s_total.tv_usec = 0;
 	s_nr_pgfault = 0;
+	s_nr_pgfault_code = 0;
 	s_nr_evictions = 0;
 	f_nr_pgfault = 0;
+	f_nr_pgfault_code = 0;
 	f_nr_evictions = 0;
 
 	/*
@@ -144,11 +148,13 @@ void test(unsigned long wss_t)
 
 			if (r == 0) {
 				f_nr_pgfault += (ps_end.nr_pgfault - ps_start.nr_pgfault);
+				f_nr_pgfault_code += (ps_end.nr_pgfault_code - ps_start.nr_pgfault_code);
 				f_nr_evictions += (ps_end.nr_eviction - ps_start.nr_eviction);
 				s_first_run = timeval_add(&s_first_run, &diff);
 			} else {
 				total[i_NR_WSS] = timeval_add(&total[i_NR_WSS], &diff);
 				nr_pgfault[i_NR_WSS] += (ps_end.nr_pgfault - ps_start.nr_pgfault);
+				nr_pgfault_code[i_NR_WSS] += (ps_end.nr_pgfault_code - ps_start.nr_pgfault_code);
 				nr_evictions[i_NR_WSS] += (ps_end.nr_eviction - ps_start.nr_eviction);
 			}
 		}
@@ -160,6 +166,7 @@ void test(unsigned long wss_t)
 	for (i_NR_WSS = 0; i_NR_WSS < NR_WSS; i_NR_WSS++) {
 		s_total = timeval_add(&s_total, &total[i_NR_WSS]);
 		s_nr_pgfault += nr_pgfault[i_NR_WSS];
+		s_nr_pgfault_code += nr_pgfault_code[i_NR_WSS];
 		s_nr_evictions += nr_evictions[i_NR_WSS];
 	}
 
@@ -169,19 +176,21 @@ void test(unsigned long wss_t)
 	 * First touch has [NR_WSS]
 	 * Others has [NR_WSS * (NR_REPEAT_EACH_WSS - 1)]
 	 */
-	printf( "   wss First_touch:  [%5lu.%06lu (s)] Avg of [ %8lu] round is: [%12lu (us)] per-pg: [%12lu (ns)] avg nr_pgfault: %lu avg nr_eviction: %lu\n"
-		"   wss Others:       [%5lu.%06lu (s)] Avg of [ %8lu] round is: [%12lu (us)] per-pg: [%12lu (ns)] avg nr_pgfault: %lu avg nr_eviction: %lu\n",
+	printf( "   wss First_touch:  [%5lu.%06lu (s)] Avg of [ %8lu] round is: [%12lu (us)] per-pg: [%12lu (ns)] avg nr_pgfault: %lu avg nr_pgfault_code: %lu(%lu) avg nr_eviction: %lu\n"
+		"   wss Others:       [%5lu.%06lu (s)] Avg of [ %8lu] round is: [%12lu (us)] per-pg: [%12lu (ns)] avg nr_pgfault: %lu avg nr_pgfault_code: %lu(%lu) avg nr_eviction: %lu\n",
 		/* First touch */
 		s_first_run.tv_sec, s_first_run.tv_usec, NR_WSS,
 		((s_first_run.tv_sec * 1000000) + s_first_run.tv_usec) / NR_WSS,
 		((s_first_run.tv_sec * 1000000000) + s_first_run.tv_usec * 1000) / NR_WSS / nr_pages,
 		f_nr_pgfault / NR_WSS,
+		f_nr_pgfault_code / NR_WSS, f_nr_pgfault_code,
 		f_nr_evictions /NR_WSS,
 		/* Others */
 		s_total.tv_sec, s_total.tv_usec, NR_WSS * (NR_REPEAT_EACH_WSS-1),
 		(((s_total.tv_sec * 1000000) + s_total.tv_usec) / (NR_WSS * (NR_REPEAT_EACH_WSS-1))),
 		(((s_total.tv_sec * 1000000000) + s_total.tv_usec * 1000) / (NR_WSS * (NR_REPEAT_EACH_WSS-1))) / nr_pages,
 		s_nr_pgfault / (NR_WSS * (NR_REPEAT_EACH_WSS-1)),
+		s_nr_pgfault_code / (NR_WSS * (NR_REPEAT_EACH_WSS-1)), s_nr_pgfault_code,
 		s_nr_evictions / (NR_WSS * (NR_REPEAT_EACH_WSS-1)));
 
 	free(base);

@@ -73,7 +73,7 @@ void print_pcache_events(void)
 			atomic_long_read(&pcache_event_stats.event[i]));
 	}
 
-	pr_info("nr_ib_send_reply: %lu\n", atomic_long_read(&nr_ib_send_reply));
-	pr_info("nr_ib_bytes_tx: %lu\n", atomic_long_read(&nr_bytes_tx));
-	pr_info("nr_ib_bytes_rx: %lu\n", atomic_long_read(&nr_bytes_rx));
+	pr_info("nr_ib_send_reply: %lu\n", COUNTER_nr_ib_send_reply());
+	pr_info("nr_ib_bytes_tx: %lu\n", COUNTER_nr_bytes_tx());
+	pr_info("nr_ib_bytes_rx: %lu\n", COUNTER_nr_bytes_tx());
 }
