@@ -31,13 +31,6 @@
 
 #include <monitor/gmm_handler.h>
 
-#ifdef CONFIG_DEBUG_THPOOL_PRINT
-#define thpool_debug(fmt, ...)	\
-	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
-#else
-static inline void thpool_debug(const char *fmt, ...) { }
-#endif
-
 void handle_bad_request(struct common_header *hdr, u64 desc)
 {
 	u32 retbuf;
