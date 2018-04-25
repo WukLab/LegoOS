@@ -28,9 +28,13 @@ struct profile_point {
 #define _PP_TIME(name)	__profilepoint_start_ns_##name
 #define _PP_NAME(name)	__profilepoint_##name
 
+/*
+ * Define a profile point
+ * It is ON by default.
+ */
 #define DEFINE_PROFILE_POINT(name)							\
 	struct profile_point _PP_NAME(name) __profile_point = {				\
-		.enabled	=	false,						\
+		.enabled	=	true,						\
 		.pp_name	=	__stringify(name),				\
 	};
 
@@ -43,17 +47,20 @@ struct profile_point {
 
 #define profile_point_start(name)							\
 	do {										\
-		_PP_TIME(name) = sched_clock();						\
+		if (_PP_NAME(name).enabled)						\
+			_PP_TIME(name) = sched_clock();					\
 	} while (0)
 
 #define profile_point_leave(name)							\
 	do {										\
-		unsigned long __PP_end_time;						\
-		unsigned long __PP_diff_time;						\
-		__PP_end_time = sched_clock();						\
-		__PP_diff_time = __PP_end_time - _PP_TIME(name);			\
-		atomic_long_inc(&(_PP_NAME(name).nr));					\
-		atomic_long_add(__PP_diff_time, &(_PP_NAME(name).time_ns));		\
+		if (_PP_NAME(name).enabled) {						\
+			unsigned long __PP_end_time;					\
+			unsigned long __PP_diff_time;					\
+			__PP_end_time = sched_clock();					\
+			__PP_diff_time = __PP_end_time - _PP_TIME(name);		\
+			atomic_long_inc(&(_PP_NAME(name).nr));				\
+			atomic_long_add(__PP_diff_time, &(_PP_NAME(name).time_ns));	\
+		}									\
 	} while (0)
 
 #define PROFILE_START(name)								\
@@ -80,6 +87,8 @@ void print_profile_points(void);
 #define PROFILE_POINT_TIME(name)
 #define profile_point_start(name)	do { } while (0)
 #define profile_point_leave(name)	do { } while (0)
+#define PROFILE_START(name)		do { } while (0)
+#define PROFILE_LEAVE(name)		do { } while (0)
 
 static inline void print_profile_point(struct profile_point *pp) { }
 static inline void print_profile_points(void) { }

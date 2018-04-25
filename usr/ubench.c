@@ -44,7 +44,7 @@ static char *sstr(unsigned long bytes, char *buf)
  * The larger the better we can emulate the App real resident Memory.
  * But may be very slow.
  */
-#define NR_WSS			32
+#define NR_WSS			4
 
 /*
  * How many rounds we want to walk _within_ a working set.
@@ -52,7 +52,7 @@ static char *sstr(unsigned long bytes, char *buf)
  *
  * The larger the better. But may be very slow.
  */
-#define NR_REPEAT_EACH_WSS	128
+#define NR_REPEAT_EACH_WSS	4
 
 /*
  * Make sure this is tested _without_ zerofill
@@ -66,7 +66,11 @@ void test(unsigned long wss_t)
 	unsigned long i_NR_WSS, i, r;
 	struct timeval start, end, diff;
 	struct timeval total[NR_WSS];
+	unsigned long s_nr_evictions, nr_evictions[NR_WSS];
+	unsigned long s_nr_pgfault, nr_pgfault[NR_WSS];
+	unsigned long f_nr_evictions, f_nr_pgfault;
 	struct timeval s_total, s_first_run;
+	struct pcache_stat ps_start, ps_end;
 	char str[32];
 	char str2[32];
 	char str3[32];
@@ -74,11 +78,17 @@ void test(unsigned long wss_t)
 	for (i = 0; i < NR_WSS; i++) {
 		total[i].tv_sec = 0;
 		total[i].tv_usec = 0;
+		nr_evictions[i] = 0;
+		nr_pgfault[i] = 0;
 	}
 	s_first_run.tv_sec = 0;
 	s_first_run.tv_usec = 0;
 	s_total.tv_sec = 0;
 	s_total.tv_usec = 0;
+	s_nr_pgfault = 0;
+	s_nr_evictions = 0;
+	f_nr_pgfault = 0;
+	f_nr_evictions = 0;
 
 	/*
 	 * Allocate Max Resident Memory
@@ -121,6 +131,7 @@ void test(unsigned long wss_t)
 			/*
 			 * Finally walk through the wss
 			 */
+			pcache_stat(&ps_start);
 			gettimeofday(&start, NULL);
 			for (i = 0; i < nr_pages; i++) {
 				foo = base_wss + i * PAGE_SIZE;
@@ -128,27 +139,50 @@ void test(unsigned long wss_t)
 				computation_delay();
 			}
 			gettimeofday(&end, NULL);
+			pcache_stat(&ps_end);
 			timeval_sub(&diff, &end, &start);
 
-			if (r == 0)
+			if (r == 0) {
+				f_nr_pgfault += (ps_end.nr_pgfault - ps_start.nr_pgfault);
+				f_nr_evictions += (ps_end.nr_eviction - ps_start.nr_eviction);
 				s_first_run = timeval_add(&s_first_run, &diff);
-			else
+			} else {
 				total[i_NR_WSS] = timeval_add(&total[i_NR_WSS], &diff);
+				nr_pgfault[i_NR_WSS] += (ps_end.nr_pgfault - ps_start.nr_pgfault);
+				nr_evictions[i_NR_WSS] += (ps_end.nr_eviction - ps_start.nr_eviction);
+			}
 		}
 	}
 
 	/*
 	 * Calculate and print
 	 */
-	for (i_NR_WSS = 0; i_NR_WSS < NR_WSS; i_NR_WSS++)
+	for (i_NR_WSS = 0; i_NR_WSS < NR_WSS; i_NR_WSS++) {
 		s_total = timeval_add(&s_total, &total[i_NR_WSS]);
+		s_nr_pgfault += nr_pgfault[i_NR_WSS];
+		s_nr_evictions += nr_evictions[i_NR_WSS];
+	}
 
-	printf( "    First_touch:  [%5lu.%06lu (s)] Average of [ %12lu] round is: [%12lu (us)]\n"
-		"    Others:       [%5lu.%06lu (s)] Average of [ %12lu] round is: [%12lu (us)]\n",
+	/*
+	 * Total is: [NR_WSS * NR_REPEAT_EACH_WSS]
+	 *
+	 * First touch has [NR_WSS]
+	 * Others has [NR_WSS * (NR_REPEAT_EACH_WSS - 1)]
+	 */
+	printf( "   wss First_touch:  [%5lu.%06lu (s)] Avg of [ %8lu] round is: [%12lu (us)] per-pg: [%12lu (ns)] avg nr_pgfault: %lu avg nr_eviction: %lu\n"
+		"   wss Others:       [%5lu.%06lu (s)] Avg of [ %8lu] round is: [%12lu (us)] per-pg: [%12lu (ns)] avg nr_pgfault: %lu avg nr_eviction: %lu\n",
+		/* First touch */
 		s_first_run.tv_sec, s_first_run.tv_usec, NR_WSS,
-		((s_first_run.tv_sec * 1000000) + s_first_run.tv_usec)/NR_WSS,
+		((s_first_run.tv_sec * 1000000) + s_first_run.tv_usec) / NR_WSS,
+		((s_first_run.tv_sec * 1000000000) + s_first_run.tv_usec * 1000) / NR_WSS / nr_pages,
+		f_nr_pgfault / NR_WSS,
+		f_nr_evictions /NR_WSS,
+		/* Others */
 		s_total.tv_sec, s_total.tv_usec, NR_WSS * (NR_REPEAT_EACH_WSS-1),
-		(((s_total.tv_sec * 1000000) + s_total.tv_usec) / (NR_WSS * (NR_REPEAT_EACH_WSS-1))));
+		(((s_total.tv_sec * 1000000) + s_total.tv_usec) / (NR_WSS * (NR_REPEAT_EACH_WSS-1))),
+		(((s_total.tv_sec * 1000000000) + s_total.tv_usec * 1000) / (NR_WSS * (NR_REPEAT_EACH_WSS-1))) / nr_pages,
+		s_nr_pgfault / (NR_WSS * (NR_REPEAT_EACH_WSS-1)),
+		s_nr_evictions / (NR_WSS * (NR_REPEAT_EACH_WSS-1)));
 
 	free(base);
 }

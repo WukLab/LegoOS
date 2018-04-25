@@ -84,6 +84,7 @@ rmap_get_pmd(struct mm_struct *mm, unsigned long address)
 	return pmd;
 }
 
+__used
 static void report_bad_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 			    unsigned long address, pte_t *ptep, void *caller)
 {

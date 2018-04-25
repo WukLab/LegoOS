@@ -2390,14 +2390,18 @@ static int ib_mad_completion_handler(void *_data)
 
 		switch (wc.opcode) {
 		case IB_WC_SEND:
+#if 0
 			pr_info("%s %d got successful send cq op %d mad_got_one %d\n",
 				__func__, __LINE__, wc.opcode, mad_got_one);
+#endif
 			ib_mad_send_done_handler(port_priv, &wc);
 			break;
 		case IB_WC_RECV:
 			mad_got_one++;
+#if 0
 			pr_info("%s %d got successful recv cq op %d mad_got_one %d\n",
 				__func__, __LINE__, wc.opcode, mad_got_one);
+#endif
 			ib_mad_recv_done_handler(port_priv, &wc);
 			break;
 		default:

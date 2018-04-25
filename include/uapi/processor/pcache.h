@@ -20,6 +20,14 @@ struct pcache_stat {
 	unsigned long	associativity;
 	unsigned long	cacheline_size;
 	unsigned long	way_stride;
+
+	/*
+	 * Pcache Runtime Stats
+	 */
+	unsigned long	nr_pgfault;
+	unsigned long	nr_pgfault_code;
+	unsigned long	nr_flush;
+	unsigned long	nr_eviction;
 };
 
 #endif /* _LEGO_UAPI_PROCESSOR_PCACHE_H_ */

@@ -545,5 +545,8 @@ int pcache_handle_fault(struct mm_struct *mm,
 		return VM_FAULT_OOM;
 
 	inc_pcache_event(PCACHE_FAULT);
+	if (flags & FAULT_FLAG_INSTRUCTION)
+		inc_pcache_event(PCACHE_FAULT_CODE);
+
 	return pcache_handle_pte_fault(mm, address, pte, pmd, flags);
 }

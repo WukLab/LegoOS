@@ -109,11 +109,11 @@ static inline void checkpoint_process(pid_t pid)
 
 static inline int pcache_stat(struct pcache_stat *buf)
 {
-	long ret;
+	int ret;
 
 	ret = syscall(__NR_pcache_stat, buf);
 	if (ret < 0) {
-		perror("pcache_stat");
+		memset(buf, 0, sizeof(*buf));
 	}
 	return ret;
 }

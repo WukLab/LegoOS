@@ -15,6 +15,7 @@ struct pcache_event_stat pcache_event_stats;
 
 static const char *const pcache_event_text[] = {
 	"nr_pgfault",
+	"nr_pgfault_code",
 
 	"nr_clflush",
 	"nr_clflush_fail",

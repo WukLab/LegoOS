@@ -42,6 +42,7 @@ static inline void dec_pset_event(struct pcache_set *pset,
 
 enum pcache_event_item {
 	PCACHE_FAULT,			/* nr of page fault occurred */
+	PCACHE_FAULT_CODE,		/* nr of instruction page fault */
 
 	/*
 	 * Flush activities
@@ -122,6 +123,11 @@ extern struct pcache_event_stat pcache_event_stats;
 static inline void inc_pcache_event(enum pcache_event_item item)
 {
 	atomic_long_inc(&pcache_event_stats.event[item]);
+}
+
+static inline unsigned long pcache_event(enum pcache_event_item item)
+{
+	return atomic_long_read(&pcache_event_stats.event[item]);
 }
 
 #ifdef CONFIG_COMP_PROCESSOR
