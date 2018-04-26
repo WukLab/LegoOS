@@ -15,6 +15,7 @@
 #include <lego/kernel.h>
 #include <lego/kthread.h>
 #include <lego/syscalls.h>
+#include <lego/profile.h>
 #include <processor/zerofill.h>
 #include <processor/processor.h>
 #include <processor/distvm.h>
@@ -180,4 +181,5 @@ void watchdog_print(void)
 	p_i = div64_u64_rem(pcache_used() * 100UL,
 			    nr_cachelines, &p_re);
 	pr_info("Cache Utilization %Lu.%Lu%%\n", p_i, p_re);
+	print_profile_points();
 }

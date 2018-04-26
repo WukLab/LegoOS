@@ -84,11 +84,14 @@ rmap_get_pmd(struct mm_struct *mm, unsigned long address)
 	return pmd;
 }
 
-__used
 static void report_bad_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 			    unsigned long address, pte_t *ptep, void *caller)
 {
 	unsigned long pcache_pfn, _pte_pfn;
+	static bool warned = false;
+
+	if (warned)
+		return;
 
 	pcache_pfn = pcache_meta_to_pfn(pcm);
 	_pte_pfn = pte_pfn(*ptep);
@@ -108,7 +111,8 @@ static void report_bad_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 	dump_pcache_rmap(rmap, "Corrupted RMAP");
 	dump_pcache_meta(pcm, "Corrupted RMAP");
 	dump_pcache_rmaps_locked(pcm);
-	BUG();
+	WARN_ON_ONCE(1);
+	warned = true;
 }
 
 /*
@@ -251,13 +255,13 @@ rmap_get_pte_locked(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 	ptep = pte_offset(pmd, address);
 
 	if (unlikely(ptep != rmap->page_table)) {
-		//report_bad_rmap(pcm, rmap, address, ptep, NULL);
+		report_bad_rmap(pcm, rmap, address, ptep, NULL);
 		ptep = NULL;
 		goto out;
 	}
 
 	if (unlikely(pcache_meta_to_pfn(pcm) != pte_pfn(*ptep))) {
-		//report_bad_rmap(pcm, rmap, address, ptep, NULL);
+		report_bad_rmap(pcm, rmap, address, ptep, NULL);
 		ptep = NULL;
 		goto out;
 	}
@@ -459,7 +463,13 @@ void pcache_remove_rmap(struct pcache_meta *pcm, pte_t *ptep, unsigned long addr
 	rmap_walk(pcm, &rwc);
 
 	/* Well, failure is not an option */
-	BUG_ON(!rri.removed);
+	if (unlikely(!rri.removed)) {
+		pr_info("pte: %p ptent: %#lx address: %#lx\n",
+			ptep, (unsigned long)ptep->pte, address);
+		dump_pte(ptep, "fail to remove");
+		WARN_ON_ONCE(1);
+		return;
+	}
 
 	/*
 	 * Unlike pcache_zap_pte, we don't need to put_cache here.
@@ -801,10 +811,11 @@ int pcache_zap_pte(struct mm_struct *mm, unsigned long address,
 
 	pcm = pte_to_pcache_meta(ptent);
 	if (unlikely(!pcm)) {
-		pr_info("ptent: %#lx address: %#lx\n",
-			(unsigned long)ptent.pte, address);
+		pr_info("pte: %p ptent: %#lx address: %#lx\n",
+			pte, (unsigned long)ptent.pte, address);
 		dump_pte(pte, "corrupted");
-		BUG();
+		WARN_ON_ONCE(1);
+		return 0;
 	}
 
 	/*
@@ -850,7 +861,13 @@ int pcache_zap_pte(struct mm_struct *mm, unsigned long address,
 	 * cos we checked pte content after releasing the ptl lock.
 	 * 2) will not be selected as condidate cos we locked pcache.
 	 */
-	BUG_ON(!zpc.zapped);
+	if (unlikely(!zpc.zapped)) {
+		pr_info("pte: %p ptent: %#lx address: %#lx\n",
+			pte, (unsigned long)ptent.pte, address);
+		dump_pte(pte, "corrupted");
+		WARN_ON_ONCE(1);
+		return 0;
+	}
 
 	/*
 	 * Last step, try to free this pcache line

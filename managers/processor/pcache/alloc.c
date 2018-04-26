@@ -38,6 +38,7 @@ static void bad_pcache(struct pcache_meta *pcm,
 	if (bad_flags)
 		pr_alert("bad because of flags: %#lx(%pGc)\n",\
 			 bad_flags, &bad_flags);
+	WARN_ON_ONCE(1);
 	/* Leave bad fields for debug */
 }
 
