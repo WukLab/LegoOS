@@ -10,6 +10,7 @@
 #include <lego/bug.h>
 #include <lego/mm.h>
 #include <lego/spinlock.h>
+#include <lego/profile.h>
 #include <lego/comp_memory.h>
 
 #include <lego/comp_storage.h>
@@ -40,10 +41,6 @@ static int do_wp_page(struct vm_area_struct *vma, unsigned long address,
 	return 0;
 }
 
-/* TODO:
- * This is a much simplified __do_fault
- * we need to consider alot other protection things.
- */
 static int __do_fault(struct lego_mm_struct *mm, struct vm_area_struct *vma,
 		unsigned long address, pmd_t *pmd,
 		pgoff_t pgoff, unsigned int flags, pte_t orig_pte,
@@ -129,6 +126,10 @@ unlock:
 	return 0;
 }
 
+DEFINE_PROFILE_POINT(anon_fault)
+DEFINE_PROFILE_POINT(file_fault)
+DEFINE_PROFILE_POINT(wp_fault)
+
 static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
 			    unsigned int flags, pte_t *pte, pmd_t *pmd,
 			    unsigned long *mapping_flags)
@@ -136,16 +137,27 @@ static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
 	pte_t entry;
 	spinlock_t *ptl;
 	struct lego_mm_struct *mm = vma->vm_mm;
+	int ret;
+	PROFILE_POINT_TIME(anon_fault)
+	PROFILE_POINT_TIME(file_fault)
+	PROFILE_POINT_TIME(wp_fault)
 
 	entry = *pte;
 	if (likely(!pte_present(entry))) {
 		if (pte_none(entry)) {
-			if (vma->vm_ops && vma->vm_ops->fault)
-				return do_linear_fault(vma, address, flags,
-						       pte, pmd, entry, mapping_flags);
-			else
-				return do_anonymous_page(vma, address, flags,
-							 pte, pmd, mapping_flags);
+			if (vma->vm_ops && vma->vm_ops->fault) {
+				PROFILE_START(file_fault);
+				ret = do_linear_fault(vma, address, flags,
+						      pte, pmd, entry, mapping_flags);
+				PROFILE_LEAVE(file_fault);
+				return ret;
+			} else {
+				PROFILE_START(anon_fault);
+				ret = do_anonymous_page(vma, address, flags,
+							pte, pmd, mapping_flags);
+				PROFILE_LEAVE(anon_fault);
+				return ret;
+			}
 		}
 
 		/*
@@ -172,9 +184,12 @@ static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
 	 * in which case, all pcache misses will walk here. Shall we do this?
 	 */
 	if (flags & FAULT_FLAG_WRITE) {
-		if (likely(!pte_write(entry)))
-			return do_wp_page(vma, address, flags, pte, pmd, entry, ptl);
-		else {
+		if (likely(!pte_write(entry))) {
+			PROFILE_START(wp_fault);
+			ret = do_wp_page(vma, address, flags, pte, pmd, entry, ptl);
+			PROFILE_LEAVE(wp_fault);
+			return ret;
+		} else {
 			/*
 			 * In a real environment equipped with TLB,
 			 * stale TLB entries may lead to here. Like
