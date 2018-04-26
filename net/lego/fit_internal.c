@@ -1088,7 +1088,10 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 
 	if(s_mode == FIT_SEND_MESSAGE_HEADER_AND_IMM)
 	{
-		wr.wr_id = (uint64_t)ctx->reply_ready_indicators[header->reply_indicator_index];//get the real local_reply_ready_checker address from inbox information
+		if (header->reply_indicator_index == -1)
+			wr.wr_id = -1;
+		else
+			wr.wr_id = (uint64_t)ctx->reply_ready_indicators[header->reply_indicator_index];//get the real local_reply_ready_checker address from inbox information
 		wr.send_flags = IB_SEND_SIGNALED;
 		wr.num_sge = 2;
 		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
@@ -1167,6 +1170,86 @@ inline int fit_get_connection_by_atomic_number(ppc *ctx, int target_node, int pr
 	return atomic_inc_return(&ctx->atomic_request_num[target_node]) % (atomic_read(&ctx->num_alive_connection[target_node])) 
 			+ NUM_PARALLEL_CONNECTION * target_node;
 #endif			
+}
+
+int fit_receive_message_no_reply(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, int userspace_flag)
+{
+	//This ret_addr is 
+	struct imm_message_metadata *tmp;
+	int get_size;
+	int offset;
+	int node_id;
+	struct imm_header_from_cq_to_port *new_request;
+	int last_ack;
+	int ack_flag=0;
+
+	/*
+	 * Busy polling incoming message
+	 */
+	while(1) {
+		spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
+		if (likely(!list_empty(&(ctx->imm_waitqueue_perport[port].list)))) {
+			new_request = list_entry(ctx->imm_waitqueue_perport[port].list.next,
+						 struct imm_header_from_cq_to_port, list);
+			list_del(&new_request->list);	
+			spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
+			break;
+		}
+		spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
+	}
+
+	offset = new_request->offset;
+	node_id = new_request->source_node_id;
+	//printk(KERN_CRIT "%s got new req offset %d sourcenode %d\n", __func__, offset, node_id);
+	//free list
+	// XXX kmem_cache_free(imm_header_from_cq_to_port_cache, new_request);
+	kfree(new_request);
+
+	//get buffer from hash table based on node and port
+	
+	tmp = (struct imm_message_metadata *)(ctx->local_rdma_recv_rings[node_id] + offset);
+	get_size = tmp->size;
+	//Check size
+	if(get_size > receive_size)
+	{
+		return SEND_REPLY_SIZE_TOO_BIG;
+	}
+
+	//do data memcpy
+	memcpy(ret_addr, ((void *)tmp) + sizeof(struct imm_message_metadata), get_size);
+	//printk(KERN_CRIT "%s: hash-%p offset-%x tmp-%p recv %s testport-%d testnodeid-%d\n", __func__, current_hash_ptr->addr, offset, tmp, ret_addr, tmp->designed_port, tmp->source_node_id);
+
+	//do ack based on the last_ack_index, submit a request to waiting_queue_handler	
+	//printk(KERN_CRIT "%s last_ack %d offset %d\n", __func__, last_ack, offset);
+	spin_lock(&ctx->local_last_ack_index_lock[node_id]);
+	last_ack = ctx->local_last_ack_index[node_id];
+	if( (offset>= last_ack && offset - last_ack >= IMM_ACK_FREQ) || 
+	    (offset< last_ack && offset + IMM_PORT_CACHE_SIZE - last_ack >= IMM_ACK_FREQ))
+	{
+		ack_flag = 1;
+		ctx->local_last_ack_index[node_id] = offset;
+	}
+	spin_unlock(&ctx->local_last_ack_index_lock[node_id]);
+
+	if(ack_flag)
+	{	
+		struct send_and_reply_format *pass;
+
+		pass = kmalloc(sizeof(*pass), GFP_KERNEL);
+		if (!pass)
+			return -ENOMEM;
+
+		pass->msg = (void *)(long)node_id;
+		pass->length = offset;
+		pass->type = MSG_DO_ACK_INTERNAL;
+
+		//printk(KERN_CRIT "%s add ack req offset %d\n", __func__, offset);
+		spin_lock(&wq_lock);
+		list_add_tail(&(pass->list), &request_list.list);
+		spin_unlock(&wq_lock);
+	}
+	
+	return get_size;
 }
 
 int fit_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag)
@@ -2231,6 +2314,84 @@ inline int fit_set_reply_indicator_and_get_index(ppc *ctx, void *addr)
 	ctx->reply_ready_indicators[tar] = addr;
 
 	return tar;
+}
+
+/*
+ * Return:
+ * Negative values on failues
+ * zero for succeed
+ */
+int fit_send_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
+					       int size, int userspace_flag)
+{
+	int tar_offset_start;
+	int connection_id;
+	int imm_data;
+	int real_size;
+	void *remote_addr;
+	uint32_t remote_rkey;
+	struct fit_ibv_mr *remote_mr;
+	struct imm_message_metadata msg_header;
+	int last_ack;
+	unsigned long start_time;
+	int ret;
+
+	real_size = size + sizeof(struct imm_message_metadata);
+	if (real_size > IMM_MAX_SIZE)
+	{
+		printk(KERN_CRIT "%s: message size %d + header is larger than max size %d\n", __func__, size, IMM_MAX_SIZE);
+		return -1;
+	}
+	if(!addr)
+	{
+		printk(KERN_CRIT "%s: null input addr\n", __func__);
+		return -2;
+	}
+
+	spin_lock(&ctx->remote_imm_offset_lock[target_node]);
+	if(ctx->remote_rdma_ring_mrs_offset[target_node] + real_size >= RDMA_RING_SIZE)//If hits the end of ring, write start from 0 directly
+		ctx->remote_rdma_ring_mrs_offset[target_node] = real_size;//Record the last point
+	else
+		ctx->remote_rdma_ring_mrs_offset[target_node] += real_size;
+	tar_offset_start = ctx->remote_rdma_ring_mrs_offset[target_node] - real_size;//Trace back to the real starting point
+	spin_unlock(&ctx->remote_imm_offset_lock[target_node]);
+
+	//printk(KERN_CRIT "%s tar_offset_start %d real_size %d last_ack_index %d\n", 
+	//		__func__, tar_offset_start, real_size, ctx->remote_last_ack_index[target_node]);
+
+	/* make sure we do not write beyond lastack */
+	while(1)
+	{
+		last_ack = ctx->remote_last_ack_index[target_node];
+		if(tar_offset_start < last_ack && tar_offset_start + real_size > last_ack)
+			schedule();
+		else
+			break;
+	}
+
+	remote_mr = &(ctx->remote_rdma_ring_mrs[target_node]);
+
+	connection_id = fit_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);
+	
+	imm_data = IMM_SEND_REPLY_SEND | tar_offset_start; 
+	
+	msg_header.reply_addr = 0;
+	msg_header.reply_rkey = 0;
+	msg_header.reply_indicator_index = -1;
+	msg_header.source_node_id = ctx->node_id;
+	msg_header.size = size;
+	remote_addr = remote_mr->addr;
+	remote_rkey = remote_mr->rkey;
+
+	fit_debug("send imm-%x addr-%x rkey-%x oaddr-%x orkey-%x\n",
+		imm_data, remote_addr, remote_rkey, msg_header.reply_addr, msg_header.reply_rkey);
+
+	/* for send reply, no need to poll the send now, since we have reply already */
+	ret = fit_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, 
+			(uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, 
+			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, FIT_KERNELSPACE_FLAG, 0);
+
+	return ret;
 }
 
 /*

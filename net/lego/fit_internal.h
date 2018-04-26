@@ -55,6 +55,10 @@ int fit_multicast_send_reply(ppc *ctx, int num_nodes, int *target_node,
 						int max_ret_size, int userspace_flag, int if_use_ret_phys_addr,
 						unsigned long timeout_sec, void *caller);
 
+int fit_send_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
+					       int size, int userspace_flag);
+int fit_receive_message_no_reply(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, int userspace_flag);
+
 int fit_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag, int if_poll_now);
 int fit_reply_message_w_extra_bits(ppc *ctx, void *addr, int size, int private_bits, uintptr_t descriptor, int userspace_flag, int if_poll_now);
 int fit_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag);

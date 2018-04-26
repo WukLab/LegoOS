@@ -75,8 +75,12 @@ inline int ibapi_reply_message_nowait(void *addr, int size, uintptr_t descriptor
 inline int ibapi_reply_message_w_extra_bits_nowait(void *addr, int size, int bits, uintptr_t descriptor);
 int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor);
 
+int ibapi_send(int target_node, void *addr, int size);
+
 int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr,
 			 int max_ret_size, int if_use_ret_phys_addr);
+int ibapi_receive_message_no_reply(unsigned int designed_port,
+		void *ret_addr, int receive_size);
 
 extern unsigned long sysctl_send_reply_max_timeout_sec;
 

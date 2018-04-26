@@ -155,6 +155,11 @@ __ibapi_send_reply_timeout_w_private_bits(int target_node, void *addr, int size,
 	return ret;
 }
 
+int ibapi_send(int target_node, void *addr, int size)
+{
+	return fit_send_with_rdma_write_with_imm(FIT_ctx, target_node, addr, size, 0);
+}
+
 /**
  * ibapi_multicast_send_reply_timeout - issue a RDMA request with several sge request - mainly used for multicast in kernel
  * @ctx: fit context
@@ -182,6 +187,13 @@ inline int ibapi_receive_message(unsigned int designed_port,
 {
 	ppc *ctx = FIT_ctx;
 	return fit_receive_message(ctx, designed_port, ret_addr, receive_size, descriptor, 0);
+}
+
+int ibapi_receive_message_no_reply(unsigned int designed_port, 
+		void *ret_addr, int receive_size)
+{
+	ppc *ctx = FIT_ctx;
+	return fit_receive_message_no_reply(ctx, designed_port, ret_addr, receive_size, 0);
 }
 
 inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor)
