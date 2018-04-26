@@ -312,7 +312,7 @@ static inline bool victim_may_hit(unsigned long address)
 }
 
 int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
-			   pte_t *page_table, pmd_t *pmd,
+			   pte_t *page_table, pte_t orig_pte, pmd_t *pmd,
 			   unsigned long flags);
 
 /*

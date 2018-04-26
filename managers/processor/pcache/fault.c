@@ -471,7 +471,7 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 			 * Check victim cache
 			 */
 			if (victim_may_hit(address)) {
-				if (!victim_try_fill_pcache(mm, address, pte, pmd, flags))
+				if (!victim_try_fill_pcache(mm, address, pte, entry, pmd, flags))
 					return 0;
 			}
 #endif
@@ -497,7 +497,10 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 			return pcache_do_wp_page(mm, address, pte, pmd, ptl, entry);
 		else {
 			/*
-			 * This will happen due to stale TLB entries. The page table
+			 * HACK!!!
+			 * We have cases that lead to here:
+			 *
+			 * 1) This will happen due to stale TLB entries. The page table
 			 * entries are upgraded by remote CPUs. But they have not flush
 			 * this CPU's TLB yet. This is a very small time window. But
 			 * we've seen this during real testing.
@@ -505,8 +508,12 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 			 * In x86, this is an empty function. I think this is valid.
 			 * Because whenever permission upgrade happen, there will be
 			 * TLB shootdown follows. We should just let this thread retry.
-			 *
 			 * Checkout https://lkml.org/lkml/2012/11/22/952
+			 *
+			 * 2) Two CPU fault into the same address concurrently, and both
+			 * of them are Write. One CPU is faster than the other to establish
+			 * the PTE, even before the slow CPU reaches the first line of this
+			 * function. Thus the slow CPU will just saw a valid writeable PTE.
 			 */
 			flush_tlb_fix_spurious_fault(vma, address);
 		}

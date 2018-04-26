@@ -692,14 +692,20 @@ __victim_fill_pcache(unsigned long address, unsigned long flags,
  * This function will fill the pcache line from victim cache.
  * If this fails, caller needs to fallback to remote memory.
  *
+ * HACK!!! Please note the @orig_pte passed by handle_pte_fault() is crutial
+ * for SMP case. It is the @orig_pte that initially lead the code path here.
+ * If we do a *page_table instead of @orig_pte, that will break all the conditions
+ * that lead us here to be false, and it is very easy to falsely get pte_same()
+ * holds true in common_do_fill_page().
+ *
  * Return 0 on success, otherwise on VM_FAULT_XXX flags
  */
 static inline int
 victim_fill_pcache(struct mm_struct *mm, unsigned long address,
-		   pte_t *page_table, pmd_t *pmd, unsigned long flags,
+		   pte_t *page_table, pte_t orig_pte, pmd_t *pmd, unsigned long flags,
 		   struct pcache_victim_meta *victim)
 {
-	return common_do_fill_page(mm, address, page_table, *page_table, pmd, flags,
+	return common_do_fill_page(mm, address, page_table, orig_pte, pmd, flags,
 			__victim_fill_pcache, victim, RMAP_VICTIM_FILL);
 }
 
@@ -751,7 +757,7 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
  * Return 0 on success, otherwise on failures
  */
 int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
-			   pte_t *page_table, pmd_t *pmd,
+			   pte_t *page_table, pte_t orig_pte, pmd_t *pmd,
 			   unsigned long flags)
 {
 	struct pcache_victim_meta *v;
@@ -862,7 +868,7 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			 */
 			spin_unlock(&usable_victims_lock);
 
-			ret = victim_fill_pcache(mm, address, page_table,
+			ret = victim_fill_pcache(mm, address, page_table, orig_pte,
 						 pmd, flags, v);
 
 			/*
