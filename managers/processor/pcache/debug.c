@@ -45,6 +45,15 @@ void dump_pcache_meta(struct pcache_meta *pcm, const char *reason)
 		pr_debug("pcache dumped because: %s\n", reason);
 }
 
+static const char *RMAP_CALLER_NAME[] = {
+	"fill_page_remote",
+	"zerofill",
+	"victim_fill",
+	"cow",
+	"fork",
+	"mremap_slowpath",
+};
+
 /**
  * dump_pcache_rmap
  * @rmap: the reverse map in question
@@ -55,8 +64,9 @@ void dump_pcache_rmap(struct pcache_rmap *rmap, const char *reason)
 {
 	pte_t *ptep = rmap->page_table;
 
-	pr_debug("rmap:%p flags:%#lx owner-tgid:%u user_va:%#lx ptep:%p\n",
-		rmap, rmap->flags, rmap->owner_process->pid, rmap->address, ptep);
+	pr_debug("rmap:%p flags:%#lx owner-tgid:%u user_va:%#lx ptep:%p caller: %s\n",
+		rmap, rmap->flags, rmap->owner_process->pid, rmap->address, ptep,
+		RMAP_CALLER_NAME[rmap->caller]);
 	dump_pte(ptep, NULL);
 
 	if (reason)

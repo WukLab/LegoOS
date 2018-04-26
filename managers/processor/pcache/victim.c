@@ -700,7 +700,7 @@ victim_fill_pcache(struct mm_struct *mm, unsigned long address,
 		   struct pcache_victim_meta *victim)
 {
 	return common_do_fill_page(mm, address, page_table, *page_table, pmd, flags,
-			__victim_fill_pcache, victim);
+			__victim_fill_pcache, victim, RMAP_VICTIM_FILL);
 }
 
 enum victim_check_status {

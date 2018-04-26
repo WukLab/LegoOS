@@ -98,19 +98,32 @@ static void report_bad_rmap(struct pcache_meta *pcm, struct pcache_rmap *rmap,
 
 	pr_err("\n"
 	       "****    ERROR:\n"
-	       "***     current: %d:%s caller: %pS\n"
+	       "****    current: %d:%s caller: %pS\n"
 	       "****    [pte %s rmap->page_table] && [pcache_pfn %s pte_pfn]\n"
-	       "****    rmap->owner_process: %s uva: %#lx ptep: %p, rmap->page_table: %p\n"
+	       "****    rmap->owner_process: %s rmap->address: %#lx rmap->page_table: %p\n"
+	       "****    address: %#lx ptep: %p\n"
 	       "****    pcache_pfn: %#lx, pte_pfn: %#lx\n\n",
 	        current->pid, current->comm, caller,
 	        (ptep == rmap->page_table) ? "==":"!=",
 	        (pcache_pfn == _pte_pfn) ? "==":"!=",
-		rmap->owner_process->comm, address, ptep, rmap->page_table,
+		rmap->owner_process->comm, rmap->address, rmap->page_table,
+		address, ptep,
 		pcache_pfn, _pte_pfn);
 
 	dump_pcache_rmap(rmap, "Corrupted RMAP");
 	dump_pcache_meta(pcm, "Corrupted RMAP");
 	dump_pcache_rmaps_locked(pcm);
+
+	if (pcache_pfn != _pte_pfn) {
+		struct pcache_meta *weirdo;
+
+		weirdo = pfn_to_pcache_meta(_pte_pfn);
+		if (weirdo) {
+			dump_pcache_meta(weirdo, "The weirdo");
+			dump_pcache_rmaps(weirdo);
+		}
+	}
+
 	WARN_ON_ONCE(1);
 	warned = true;
 }
@@ -336,12 +349,14 @@ out:
  */
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 		    unsigned long address, struct mm_struct *owner_mm,
-		    struct task_struct *owner_process)
+		    struct task_struct *owner_process,
+		    enum rmap_caller caller)
 {
 	struct pcache_rmap *rmap, *pos;
 	int ret;
 
 	PCACHE_BUG_ON_PCM(PcacheLocked(pcm), pcm);
+	PCACHE_BUG_ON(caller >= NR_RMAP_CALLER);
 
 	lock_pcache(pcm);
 
@@ -354,6 +369,7 @@ int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 	rmap->page_table = page_table;
 	rmap->address = address & PAGE_MASK;
 	rmap->owner_mm = owner_mm;
+	rmap->caller = caller;
 
 	/* Must be thread group leader */
 	BUG_ON(!thread_group_leader(owner_process));
@@ -625,7 +641,7 @@ static int __pcache_move_pte_slowpath(struct pcache_meta *old_pcm,
 	 * Thus can be selected as an eviction candidate.
 	 */
 	ret = pcache_add_rmap(new_pcm, new_pte, mpi->new_addr,
-			      current->mm, current->group_leader);
+			      current->mm, current->group_leader, RMAP_MREMAP_SLOWPATH);
 	if (ret) {
 		WARN_ON(1);
 		return PCACHE_RMAP_AGAIN;

@@ -312,7 +312,7 @@ pcache_copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		 * another thread which is doing eviction, already locked
 		 * this pcm and tried to acquire pte lock to do unmap.
 		 */
-		pcache_add_rmap(pcm, dst_pte, addr, dst_mm, dst_task);
+		pcache_add_rmap(pcm, dst_pte, addr, dst_mm, dst_task, RMAP_FORK);
 	}
 	return 0;
 }

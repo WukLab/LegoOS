@@ -129,11 +129,23 @@ struct pcache_meta {
 #endif
 } ____cacheline_aligned;
 
+enum rmap_caller {
+	RMAP_FILL_PAGE_REMOTE,
+	RMAP_ZEROFILL,
+	RMAP_VICTIM_FILL,
+	RMAP_COW,
+	RMAP_FORK,
+	RMAP_MREMAP_SLOWPATH,
+
+	NR_RMAP_CALLER,
+};
+
 struct pcache_rmap {
 	pte_t			*page_table;
 	unsigned long		flags;
 	struct mm_struct	*owner_mm;
 	struct task_struct	*owner_process;
+	enum rmap_caller	caller;
 
 	/* page aligned */
 	unsigned long		address;

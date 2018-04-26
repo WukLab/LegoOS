@@ -86,7 +86,8 @@ static void print_bad_pte(struct mm_struct *mm, unsigned long addr, pte_t pte,
  */
 int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 			pte_t *page_table, pte_t orig_pte, pmd_t *pmd,
-			unsigned long flags, fill_func_t fill_func, void *arg)
+			unsigned long flags, fill_func_t fill_func, void *arg,
+			enum rmap_caller caller)
 {
 	struct pcache_meta *pcm;
 	spinlock_t *ptl;
@@ -129,7 +130,7 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 
 	/* which will also mark PcacheValid */
 	ret = pcache_add_rmap(pcm, page_table, address,
-			      mm, current->group_leader);
+			      mm, current->group_leader, caller);
 	if (unlikely(ret)) {
 		pte_clear(page_table);
 		ret = VM_FAULT_OOM;
@@ -226,7 +227,7 @@ pcache_do_fill_page(struct mm_struct *mm, unsigned long address,
 		    pte_t *page_table, pte_t orig_pte, pmd_t *pmd, unsigned long flags)
 {
 	return common_do_fill_page(mm, address, page_table, orig_pte, pmd, flags,
-			__pcache_do_fill_page, NULL);
+			__pcache_do_fill_page, NULL, RMAP_FILL_PAGE_REMOTE);
 }
 
 #ifdef CONFIG_PCACHE_ZEROFILL
@@ -272,7 +273,7 @@ pcache_do_zerofill_page(struct mm_struct *mm, unsigned long address,
 		return VM_FAULT_SIGBUS;
 	}
 	return common_do_fill_page(mm, address, page_table, orig_pte, pmd, flags,
-			__pcache_do_zerofill_page, NULL);
+			__pcache_do_zerofill_page, NULL, RMAP_ZEROFILL);
 }
 #else
 /*
@@ -405,7 +406,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 
 		/* which will also mark new_pcm PcacheValid */
 		ret = pcache_add_rmap(new_pcm, page_table, address,
-				      current->mm, current->group_leader);
+				      current->mm, current->group_leader, RMAP_COW);
 		if (unlikely(ret)) {
 			put_pcache(new_pcm);
 			pte_clear(page_table);

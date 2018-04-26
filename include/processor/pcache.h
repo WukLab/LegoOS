@@ -596,7 +596,8 @@ int pcache_move_pte(struct mm_struct *mm, pte_t *old_pte, pte_t *new_pte,
 
 int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 		    unsigned long address, struct mm_struct *owner_mm,
-		    struct task_struct *owner_process);
+		    struct task_struct *owner_process,
+		    enum rmap_caller caller);
 
 void pcache_remove_rmap(struct pcache_meta *pcm, pte_t *ptep, unsigned long address,
 			struct mm_struct *owner_mm, struct task_struct *owner_process);
@@ -631,7 +632,8 @@ typedef int (*fill_func_t)(unsigned long, unsigned long, struct pcache_meta *, v
 
 int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 			pte_t *page_table, pte_t orig_pte, pmd_t *pmd,
-			unsigned long flags, fill_func_t fill_func, void *arg);
+			unsigned long flags, fill_func_t fill_func, void *arg,
+			enum rmap_caller caller);
 
 #include <processor/pcache_victim.h>
 #include <processor/pcache_evict.h>
