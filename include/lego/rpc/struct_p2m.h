@@ -61,7 +61,7 @@ struct p2m_flush_msg {
 	char			pcacheline[PCACHE_LINE_SIZE];
 };
 
-int handle_p2m_flush_one(struct p2m_flush_msg *, u64);
+void handle_p2m_flush_one(struct p2m_flush_msg *, u64);
 
 struct p2m_replica_msg {
 	struct common_header	header;
