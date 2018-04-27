@@ -38,7 +38,7 @@ do {									\
 	if (unlikely(cond)) {						\
 		dump_pcache_victim(victim,				\
 			"PCACHE_BUG_ON_VICTIM("__stringify(cond)")");	\
-		BUG();							\
+		WARN_ON(1);						\
 	}								\
 } while (0)
 #endif /* VICTIM */

@@ -32,6 +32,7 @@ struct pcache_victim_meta {
 	 * to sync with eviction routine.
 	 */
 	atomic_t		nr_fill_pcache;
+	atomic_t		max_nr_fill_pcache;
 
 	atomic_t		_refcount;
 
@@ -161,6 +162,8 @@ extern void *pcache_victim_data_map;
  *
  * PCACHE_VICTIM_reclaim:	victim cache is selected to be evicted, but not yet
  *
+ * PCACHE_VICTIM_fillfree:	victim cache can only be freed by fill path.
+ *
  * Hack: remember to update the victimflag_names array in debug file.
  */
 enum pcache_victim_flags {
@@ -172,6 +175,7 @@ enum pcache_victim_flags {
 	PCACHE_VICTIM_waitflush,
 	PCACHE_VICTIM_flushed,
 	PCACHE_VICTIM_reclaim,
+	PCACHE_VICTIM_fillfree,
 
 	NR_PCACHE_VICTIM_FLAGS
 };
@@ -206,10 +210,24 @@ static inline int TestClearVictim##uname(struct pcache_victim_meta *p)	\
 	return test_and_clear_bit(PCACHE_VICTIM_##lname, &p->flags);	\
 }
 
+#define __SET_VICTIM_FLAGS(uname, lname)				\
+static inline void __SetVictim##uname(struct pcache_victim_meta *p)	\
+{									\
+	__set_bit(PCACHE_VICTIM_##lname, &p->flags);			\
+}
+
+#define __CLEAR_VICTIM_FLAGS(uname, lname)				\
+static inline void __ClearVictim##uname(struct pcache_victim_meta *p)	\
+{									\
+	__clear_bit(PCACHE_VICTIM_##lname, &p->flags);			\
+}
+
 #define VICTIM_FLAGS(uname, lname)					\
 	TEST_VICTIM_FLAGS(uname, lname)					\
 	SET_VICTIM_FLAGS(uname, lname)					\
+	__SET_VICTIM_FLAGS(uname, lname)				\
 	CLEAR_VICTIM_FLAGS(uname, lname)				\
+	__CLEAR_VICTIM_FLAGS(uname, lname)				\
 	TEST_SET_VICTIM_BITS(uname, lname)				\
 	TEST_CLEAR_VICTIM_BITS(uname, lname)
 
@@ -221,6 +239,7 @@ VICTIM_FLAGS(Writeback, writeback)
 VICTIM_FLAGS(Waitflush, waitflush)
 VICTIM_FLAGS(Flushed, flushed)
 VICTIM_FLAGS(Reclaim, reclaim)
+VICTIM_FLAGS(Fillfree, fillfree)
 
 static inline void lock_victim(struct pcache_victim_meta *victim)
 {
@@ -322,6 +341,9 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 static inline void inc_victim_filling(struct pcache_victim_meta *victim)
 {
 	atomic_inc(&victim->nr_fill_pcache);
+
+	if (atomic_read(&victim->nr_fill_pcache) > atomic_read(&victim->max_nr_fill_pcache))
+		atomic_set(&victim->max_nr_fill_pcache, atomic_read(&victim->nr_fill_pcache));
 }
 
 static inline void dec_victim_filling(struct pcache_victim_meta *victim)

@@ -65,11 +65,6 @@ static inline void enqueue_victim_flush_job(struct victim_flush_job *job)
 	spin_unlock(&victim_flush_lock);
 }
 
-void wake_up_victim_flushd(void)
-{
-	wake_up_process(victim_flush_thread);
-}
-
 /*
  * Submit a victim cache line to flush queue.
  * @wait: true if you want to wait for completion
@@ -91,18 +86,12 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait, bool dirty
 	 */
 	if (!dirty) {
 		SetVictimFlushed(victim);
+		put_victim(victim);
 		inc_pcache_event(PCACHE_VICTIM_FLUSH_SUBMITTED_CLEAN);
 		return 0;
 	}
 
-	SetVictimWaitflush(victim);
-
-	/*
-	 * Make sure this victim will not go away during flush.
-	 * Eviction won't touch it cause Flushed bit is not.
-	 * But victim fill pcache path will put it once hit finished.
-	 */
-	get_victim(victim);
+	__SetVictimWaitflush(victim);
 
 	job = kmalloc(sizeof(*job), GFP_KERNEL);
 	if (WARN_ON(!job))
@@ -113,15 +102,11 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait, bool dirty
 		init_completion(&job->done);
 
 	enqueue_victim_flush_job(job);
-
-	/* Update counter */
 	inc_pcache_event(PCACHE_VICTIM_FLUSH_SUBMITTED_DIRTY);
 
 	/* flush thread will free job */
-	wake_up_process(victim_flush_thread);
 	if (unlikely(wait))
 		wait_for_completion(&job->done);
-
 	return 0;
 }
 
@@ -157,26 +142,27 @@ static void __victim_flush_func(struct victim_flush_job *job)
 	PCACHE_BUG_ON_VICTIM(VictimFlushed(victim) || VictimWriteback(victim), victim);
 	PCACHE_BUG_ON_VICTIM(!VictimWaitflush(victim), victim);
 
-	SetVictimWriteback(victim);
+	__SetVictimWriteback(victim);
 	victim_flush_one(victim);
-	ClearVictimWriteback(victim);
+	inc_pcache_event(PCACHE_VICTIM_FLUSH_FINISHED_DIRTY);
+	__ClearVictimWriteback(victim);
 
-	ClearVictimWaitflush(victim);
+	__ClearVictimWaitflush(victim);
 	/*
 	 * Once this flag is set,
 	 * this victim can be an eviction candidate.
 	 */
 	SetVictimFlushed(victim);
-
-	/* Paired when job submitted */
+	/*
+	 * victim_finish_insert has grabbed 1 ref prior the job was
+	 * submitted. Here, we must have a ref > 0. If the victim
+	 * has back fill pcached already, this put will lead to free.
+	 */
 	put_victim(victim);
 
 	if (unlikely(wait))
 		complete(done);
 	kfree(job);
-
-	/* Update counter */
-	inc_pcache_event(PCACHE_VICTIM_FLUSH_FINISHED_DIRTY);
 }
 
 /*

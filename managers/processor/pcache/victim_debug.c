@@ -30,7 +30,8 @@
 	{1UL << PCACHE_VICTIM_writeback,	"writeback"	},	\
 	{1UL << PCACHE_VICTIM_waitflush,	"waitflush"	},	\
 	{1UL << PCACHE_VICTIM_flushed,		"flushed"	},	\
-	{1UL << PCACHE_VICTIM_reclaim,		"reclaim"	},
+	{1UL << PCACHE_VICTIM_reclaim,		"reclaim"	},	\
+	{1UL << PCACHE_VICTIM_fillfree,		"fillfree"	},
 
 const struct trace_print_flags victimflag_names[] = {
 	__def_victimflag_names
@@ -59,17 +60,19 @@ void dump_pcache_victim_hits(struct pcache_victim_meta *victim)
 
 void dump_pcache_victim_simple(struct pcache_victim_meta *victim)
 {
-	vdump(" victim:%p index:%d refcount:%d nr_fill:%d locked:%d flags:(%pGV) "
+	vdump(" victim:%p index:%d refcount:%d nr_fill:%d max_fill:%d locked:%d flags:(%#lx)(%pGV) "
 		 "pcm:%p pset:%p\n",
 		victim, victim_index(victim), atomic_read(&victim->_refcount),
-		atomic_read(&victim->nr_fill_pcache), spin_is_locked(&victim->lock),
-		&victim->flags, victim->pcm, victim->pset);
+		atomic_read(&victim->nr_fill_pcache), atomic_read(&victim->max_nr_fill_pcache),
+		spin_is_locked(&victim->lock),
+		victim->flags, &victim->flags, victim->pcm, victim->pset);
 }
 
 void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason)
 {
 	dump_pcache_victim_simple(victim);
 	dump_pcache_victim_hits(victim);
+	dump_pcache_victim_simple(victim);
 
 	if (victim->pcm)
 		dump_pcache_meta(victim->pcm, "dump_victim");
