@@ -13,6 +13,7 @@
 #include <rdma/ib_verbs.h>
 #include <lego/fit_ibapi.h>
 #include <lego/completion.h>
+#include <lego/profile.h>
 #include "fit.h"
 #include "fit_internal.h"
 
@@ -75,6 +76,8 @@ atomic_long_t	nr_bytes_tx;
 atomic_long_t	nr_bytes_rx;
 #endif
 
+DEFINE_PROFILE_POINT(ibapi_send_reply)
+
 static inline int
 __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr,
 			   int max_ret_size, int if_use_ret_phys_addr,
@@ -82,6 +85,9 @@ __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr
 {
 	ppc *ctx = FIT_ctx;
 	int ret;
+        PROFILE_POINT_TIME(ibapi_send_reply)
+
+        PROFILE_START(ibapi_send_reply);
 
 	if (unlikely(target_node >= CONFIG_FIT_NR_NODES)) {
 		pr_info("target_node: %d\n", target_node);
@@ -105,6 +111,7 @@ __ibapi_send_reply_timeout(int target_node, void *addr, int size, void *ret_addr
 	atomic_long_add(ret, &nr_bytes_rx);
 #endif
 
+        PROFILE_LEAVE(ibapi_send_reply);
 	return ret;
 }
 
