@@ -779,6 +779,8 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 
 	victim_debug("checking uva: %#lx tgid: %d", address, current->tgid);
 
+        inc_pcache_event(PCACHE_VICTIM_LOOKUP);
+
 	spin_lock(&usable_victims_lock);
 	list_for_each_entry(v, &usable_victims, next) {
 		PCACHE_BUG_ON_VICTIM(!VictimUsable(v), v);
@@ -798,6 +800,7 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			 * So, _don't_ hold the same lock:
 			 */
 			spin_unlock(&usable_victims_lock);
+                        inc_pcache_event(PCACHE_VICTIM_HIT);
 
 			ret = victim_fill_pcache(mm, address, page_table, orig_pte,
 						 pmd, flags, v);

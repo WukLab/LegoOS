@@ -61,6 +61,9 @@ enum pcache_event_item {
 	PCACHE_EVICTION_FAILURE_EVICT,
 	PCACHE_EVICTION_SUCCEED,
 
+        PCACHE_VICTIM_LOOKUP,
+        PCACHE_VICTIM_HIT,
+
 	/*
 	 * triggered = eagain + succeed
 	 * Failure is not an option for victim cache eviction 

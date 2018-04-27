@@ -39,6 +39,9 @@ static const char *const pcache_event_text[] = {
 	"nr_pcache_eviction_failure_evict",
 	"nr_pcache_eviction_succeed",
 
+        "nr_victim_lookup",
+        "nr_victim_hit",
+
 	"nr_victim_eviction_triggered",
 	"nr_victim_eviction_eagain",
 	"nr_victim_eviction_succeed",
