@@ -316,6 +316,8 @@ static int thpool_worker_func(void *_worker)
 	complete(&thpool_init_completion);
 	set_cpu_thpool_worker(w, smp_processor_id());
 
+	local_irq_disable();
+	preempt_disable();
 	while (1) {
 		/* Check comments on enqueue */
 		while (!nr_queued_thpool_worker(w))
@@ -355,6 +357,8 @@ static int thpool_worker_func(void *_worker)
 		}
 		spin_unlock(&w->lock);
 	}
+	preempt_enable();
+	local_irq_enable();
 	BUG();
 	return 0;
 }
@@ -379,6 +383,8 @@ static int thpool_polling(void *unused)
 		smp_processor_id(), current->comm);
 	complete(&thpool_init_completion);
 
+	local_irq_disable();
+	preempt_disable();
 	while (1) {
 		buffer = alloc_thpool_buffer();
 
@@ -395,6 +401,8 @@ static int thpool_polling(void *unused)
 
 		nr_thpool_reqs++;
 	}
+	preempt_enable();
+	local_irq_enable();
 	BUG();
 	return 0;
 }
@@ -415,6 +423,8 @@ void __init thpool_init(void)
 		worker->flags = 0;
 		worker->nr_handled = 0;
 		worker->total_queuing_delay_ns = 0;
+		worker->max_queuing_delay_ns = 0;
+		worker->min_queuing_delay_ns = ULONG_MAX;
 		INIT_LIST_HEAD(&worker->work_head);
 		spin_lock_init(&worker->lock);
 
@@ -534,21 +544,36 @@ static inline void ht_check_worker(int i, struct thpool_worker *tw, struct hb_ca
 	}
 }
 
-void watchdog_print(void)
+#ifdef CONFIG_COUNTER_THPOOL
+void print_thpool_stats(void)
 {
+
 	int i;
 	struct thpool_worker *tw;
 
 	for (i = 0; i < NR_THPOOL_WORKERS; i++) {
 		tw = thpool_worker_map + i;
+
 		pr_info("Watchdog:\n"
 			"    worker[%d]\n"
 			"        max_nr_queued=%d current_nr_queued=%d in_handler=%s\n"
-			"        nr_handled=%lu total_queuing_ns: %lu avg_queuing_ns:%lu nr_thpool_reqs=%lu\n",
+			"        nr_handled=%lu nr_thpool_reqs=%lu\n"
+			"        total_queuing_ns: %lu avg_queuing_ns:%lu max_queuing_ns: %lu min_queuing_ns: %lu\n",
 			i, max_queued_thpool_worker(tw), tw->nr_queued, thpool_worker_in_handler(tw) ? "YES" : "NO",
-			tw->nr_handled, tw->total_queuing_delay_ns, tw->total_queuing_delay_ns / tw->nr_handled, nr_thpool_reqs);
+			tw->nr_handled, nr_thpool_reqs,
+			tw->total_queuing_delay_ns, tw->total_queuing_delay_ns / tw->nr_handled,
+			tw->max_queuing_delay_ns, tw->min_queuing_delay_ns);
+
 		ht_check_worker(i, tw, &hb_cached_data[i]);
 	}
+}
+#else
+static void print_thpool_stats(void) { }
+#endif
+
+void watchdog_print(void)
+{
+	print_thpool_stats();
 	print_memory_manager_stats();
 	print_profile_points();
 }

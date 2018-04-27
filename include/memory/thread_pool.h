@@ -53,6 +53,8 @@ struct thpool_worker {
 	/* for debug usage */
 	unsigned long		nr_handled;
 	unsigned long		total_queuing_delay_ns;
+	unsigned long		max_queuing_delay_ns;
+	unsigned long		min_queuing_delay_ns;
 	int			max_nr_queued;
 	unsigned long		flags;
 	struct thpool_buffer	*wip_buffer;
@@ -223,6 +225,11 @@ static inline unsigned long thpool_buffer_queuing_delay(struct thpool_buffer *tb
 static inline void add_thpool_worker_total_queuing(struct thpool_worker *tw, unsigned long diff_ns)
 {
 	tw->total_queuing_delay_ns += diff_ns;
+
+	if (diff_ns > tw->max_queuing_delay_ns)
+		tw->max_queuing_delay_ns = diff_ns;
+	if (diff_ns < tw->min_queuing_delay_ns)
+		tw->min_queuing_delay_ns = diff_ns;
 }
 
 static inline void inc_thpool_worker_nr_handled(struct thpool_worker *tw)
