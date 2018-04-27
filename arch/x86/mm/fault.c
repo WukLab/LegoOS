@@ -17,6 +17,7 @@
 #include <lego/uaccess.h>
 #include <lego/extable.h>
 #include <lego/pgfault.h>
+#include <lego/profile.h>
 #include <processor/processor.h>
 
 #include <asm/asm.h>
@@ -609,6 +610,8 @@ component_failure_check(struct pt_regs *regs, unsigned long error_code,
 #endif
 }
 
+DEFINE_PROFILE_POINT(pcache_handle_fault)
+
 /*
  * This routine handles page faults.  It determines the address,
  * and the problem, and then passes it off to one of the appropriate
@@ -619,6 +622,7 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	int fault;
 	unsigned long address = read_cr2();
 	unsigned long flags = FAULT_FLAG_KILLABLE;
+	PROFILE_POINT_TIME(pcache_handle_fault)
 
 #if 0
 	pr_info("%s %d ip: %#lx(%pS) fault addr: %#lx error_code:%#lx\n",
@@ -708,7 +712,9 @@ dotraplinkage void do_page_fault(struct pt_regs *regs, long error_code)
 	 * Forward this pgfault to pcache, which will in turn ask remote memory
 	 * for further VM handling:
 	 */
+	PROFILE_START(pcache_handle_fault);
 	fault = pcache_handle_fault(current->mm, address, flags);
+	PROFILE_LEAVE(pcache_handle_fault);
 	if (unlikely(fault & VM_FAULT_ERROR)) {
 		/*
 		 * If for any reason at all we couldn't handle the fault,

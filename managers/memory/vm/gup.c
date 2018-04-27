@@ -128,9 +128,6 @@ __get_user_pages_locked(struct lego_task_struct *tsk, struct lego_mm_struct *mm,
 		BUG_ON(*locked != 1);
 	}
 
-	if (pages)
-		flags |= FOLL_GET;
-
 	pages_done = 0;
 	lock_dropped = false;
 	for (;;) {

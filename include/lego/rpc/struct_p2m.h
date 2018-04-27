@@ -26,16 +26,32 @@ struct p2m_zerofill_msg {
 };
 void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc, void *tx);
 
+/* P2M_PCACHE_FLUSH */
+struct p2m_flush_msg {
+	struct common_header	header;
+	u32			pid;
+	unsigned long		user_va;
+	char			pcacheline[PCACHE_LINE_SIZE];
+};
+
+void handle_p2m_flush_one(struct p2m_flush_msg *, u64);
+
 /*
  * P2M_MISS
  */
 
 struct p2m_pcache_miss_msg {
 	struct common_header	header;
+	unsigned int		has_flush_msg;
 	__u32			pid;
 	__u32			tgid;
 	__u32			flags;
 	__u64			missing_vaddr;
+};
+
+struct p2m_pcache_miss_flush_combine_msg {
+	struct p2m_pcache_miss_msg	miss;
+	struct p2m_flush_msg		flush;
 };
 
 #define PCACHE_MAPPING_ANON	0x1
@@ -49,19 +65,6 @@ struct p2m_pcache_miss_reply_struct {
 };
 
 int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *, u64, void *);
-
-/* P2M_PCACHE_FLUSH */
-struct p2m_flush_payload {
-};
-
-struct p2m_flush_msg {
-	struct common_header	header;
-	u32			pid;
-	unsigned long		user_va;
-	char			pcacheline[PCACHE_LINE_SIZE];
-};
-
-void handle_p2m_flush_one(struct p2m_flush_msg *, u64);
 
 struct p2m_replica_msg {
 	struct common_header	header;

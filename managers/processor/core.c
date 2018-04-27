@@ -174,12 +174,21 @@ SYSCALL_DEFINE1(checkpoint_process, pid_t, pid)
 }
 #endif
 
-void watchdog_print(void)
+#ifdef CONFIG_COUNTER_PCACHE
+static inline void print_pcache_util(void)
 {
 	u64 p_i, p_re;
 
 	p_i = div64_u64_rem(pcache_used() * 100UL,
 			    nr_cachelines, &p_re);
 	pr_info("Cache Utilization %Lu.%Lu%%\n", p_i, p_re);
+}
+#else
+static inline void print_pcache_util(void) { }
+#endif
+
+void watchdog_print(void)
+{
+	print_pcache_util();
 	print_profile_points();
 }

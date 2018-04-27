@@ -158,6 +158,20 @@ static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 	ibapi_reply_message((void *)new_page, PCACHE_LINE_SIZE, desc);
 }
 
+static void do_combined_flush(void *_msg, struct lego_task_struct *p)
+{
+	struct p2m_pcache_miss_flush_combine_msg *comb_msg = _msg;
+	struct p2m_flush_msg *flush = &comb_msg->flush;
+	unsigned long dst_page;
+	int ret;
+
+	down_read(&p->mm->mmap_sem);
+	ret = get_user_pages(p, flush->user_va, 1, 0, &dst_page, NULL);
+	up_read(&p->mm->mmap_sem);
+	if (likely(ret == 1))
+		memcpy((void *)dst_page, flush->pcacheline, PCACHE_LINE_SIZE);
+}
+
 static int fault_in_kernel_space(unsigned long address)
 {
 	return address >= TASK_SIZE_MAX;
@@ -195,6 +209,8 @@ int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc, void *tx)
 
 	PROFILE_START(handle_miss);
 	do_handle_p2m_pcache_miss(p, vaddr, flags, desc, tx);
+	if (msg->has_flush_msg)
+		do_combined_flush(msg, p);
 	PROFILE_LEAVE(handle_miss);
 
 	do_mmap_prefetch(p, vaddr, flags, 1 << PREFETCH_ORDER);
@@ -258,15 +274,15 @@ void handle_p2m_flush_one(struct p2m_flush_msg *msg, u64 desc)
 		goto out_reply;
 	}
 
-	ret = common_handle_p2m_miss(p, user_vaddr, FAULT_FLAG_WRITE, &dst_page);
-	if (unlikely(ret & VM_FAULT_ERROR)) {
+	down_read(&p->mm->mmap_sem);
+	ret = get_user_pages(p, msg->user_va, 1, 0, &dst_page, NULL);
+	up_read(&p->mm->mmap_sem);
+	if (likely(ret == 1)) {
+		memcpy((void *)dst_page, msg->pcacheline, PCACHE_LINE_SIZE);
+		reply = 0;
+	} else
 		reply = -EFAULT;
-		goto out_reply;
-	}
 
-	/* In-place update */
-	memcpy((void *)dst_page, msg->pcacheline, PCACHE_LINE_SIZE);
-	reply = 0;
 out_reply:
 	ibapi_reply_message(&reply, sizeof(reply), desc);
 	PROFILE_LEAVE(handle_flush);

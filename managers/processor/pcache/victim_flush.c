@@ -132,7 +132,7 @@ static void victim_flush_one(struct pcache_victim_meta *victim)
 			      entry->m_nid, entry->rep_nid, cache_kva);
 }
 
-static void __victim_flush_func(struct victim_flush_job *job)
+void __victim_flush_func(struct victim_flush_job *job)
 {
 	bool wait = job->wait;
 	struct completion *done = &job->done;
@@ -166,33 +166,20 @@ static void __victim_flush_func(struct victim_flush_job *job)
 }
 
 /*
- * Synchronously flush victim cache lines
- * return number of lines be flushed at this run.
+ * Stead a victim flush job from the pending queue.
+ * Return NULL if we failed.
  */
-int victim_flush_sync(void)
+struct victim_flush_job *steal_victim_flush_job(void)
 {
-	int nr_flushed = 0;
+	struct victim_flush_job *job = NULL;
 
-	inc_pcache_event(PCACHE_VICTIM_FLUSH_SYNC);
-
-	/*
-	 * Don't release the lock in the middle
-	 * We may end up flushing for more than we wanted.
-	 */
 	spin_lock(&victim_flush_lock);
-	while (!list_empty(&victim_flush_queue)) {
-		struct victim_flush_job *job;
-
-		job = list_entry(victim_flush_queue.next,
-				 struct victim_flush_job, next);
+	if (unlikely(!list_empty(&victim_flush_queue))) {
+		job = list_entry(victim_flush_queue.next, struct victim_flush_job, next);
 		__dequeue_victim_flush_job(job);
-
-		__victim_flush_func(job);
-		nr_flushed++;
 	}
 	spin_unlock(&victim_flush_lock);
-
-	return nr_flushed;
+	return job;
 }
 
 static int victim_flush_async(void *unused)

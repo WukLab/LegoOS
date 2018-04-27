@@ -17,6 +17,7 @@
 #include <lego/pgfault.h>
 #include <lego/jiffies.h>
 #include <lego/kthread.h>
+#include <lego/profile.h>
 #include <lego/memblock.h>
 #include <lego/completion.h>
 #include <processor/node.h>
@@ -345,23 +346,14 @@ static int victim_evict_line(void)
 		inc_pcache_event(PCACHE_VICTIM_EVICTION_EAGAIN);
 		return -EAGAIN;
 	}
-
 	PCACHE_BUG_ON_VICTIM(!VictimReclaim(victim), victim);
-	if (unlikely(victim_ref_count(victim) > 2)) {
-		dump_pcache_victim(victim, "victim/ref bug");
-		BUG();
-	}
 
-	/*
-	 * This victim is out of allocated list now. But victim_try_fill_pcache()
-	 * is still able to see this victim, because it use for_each_victim to walk.
-	 * However, this is OKAY. Because this victim has Reclaim bit set, and it
-	 * will not be reset until the last step. Check comment in that function.
-	 *
-	 * We manually set refcount to 0 and free it, it is kind of weird.
-	 */
-	victim_ref_count_set(victim, 0);
-	__put_victim_nolist(victim);
+	if (victim_ref_freeze(victim, 2))
+		__put_victim_nolist(victim);
+	else {
+		dump_pcache_victim(victim, NULL);
+		WARN_ON_ONCE(1);
+	}
 
 	inc_pcache_event(PCACHE_VICTIM_EVICTION_SUCCEED);
 	return 0;
@@ -675,6 +667,8 @@ static inline void wait_victim_has_data(struct pcache_victim_meta *victim)
 	}
 }
 
+DEFINE_PROFILE_POINT(__pcache_fill_victim)
+
 /*
  * Callback for common fill code
  * Fill the pcache line from victim cache
@@ -686,6 +680,9 @@ __victim_fill_pcache(unsigned long address, unsigned long flags,
 	struct pcache_victim_meta *victim = _victim;
 	struct pcache_set *pset;
 	void *victim_cache, *pcache;
+	PROFILE_POINT_TIME(__pcache_fill_victim)
+
+	PROFILE_START(__pcache_fill_victim);
 
 	victim_cache = pcache_victim_to_kva(victim);
 	pcache = pcache_meta_to_kva(pcm);
@@ -699,6 +696,7 @@ __victim_fill_pcache(unsigned long address, unsigned long flags,
 	inc_pset_event(pset, PSET_FILL_VICTIM);
 	inc_pcache_event(PCACHE_FAULT_FILL_FROM_VICTIM);
 
+	PROFILE_LEAVE(__pcache_fill_victim);
 	return 0;
 }
 
@@ -805,12 +803,15 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 						 pmd, flags, v);
 
 			/* Paired with above get */
-			put_victim(v);
+			if (put_victim_testzero(v)) {
+				dequeue_usable_victim(v);
+				__put_victim_nolist(v);
+				return ret;
+			}
 
 			if (likely(dec_and_test_victim_filling(v))) {
-				if (!ret) {
+				if (!ret)
 					put_victim(v);
-				}
 			}
 			goto out;
 		} else if (result == VICTIM_MISS) {

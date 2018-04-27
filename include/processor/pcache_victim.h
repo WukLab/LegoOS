@@ -127,6 +127,13 @@ static inline void put_victim(struct pcache_victim_meta *v)
 		__put_victim(v);
 }
 
+/* Return true if the original value equals @count */
+static inline int victim_ref_freeze(struct pcache_victim_meta *v, int count)
+{
+	int ret = likely(atomic_cmpxchg(&v->_refcount, count, 0) == count);
+	return ret;
+}
+
 extern struct pcache_victim_meta *pcache_victim_meta_map;
 extern void *pcache_victim_data_map;
 
@@ -386,7 +393,7 @@ void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason);
 void dump_pcache_victim_simple(struct pcache_victim_meta *victim);
 void dump_pcache_victim_hits(struct pcache_victim_meta *victim);
 
-void wake_up_victim_flushd(void);
+struct victim_flush_job *steal_victim_flush_job(void);
 
 #else
 static inline void victim_cache_early_init(void) { }

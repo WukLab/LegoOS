@@ -16,6 +16,7 @@
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
 #include <lego/jiffies.h>
+#include <lego/profile.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
@@ -197,6 +198,8 @@ retry:
 	return pcm;
 }
 
+DEFINE_PROFILE_POINT(pcache_alloc)
+
 /**
  * pcache_alloc
  * @address: user virtual address
@@ -209,6 +212,9 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 {
 	struct pcache_set *pset;
 	struct pcache_meta *pcm;
+	PROFILE_POINT_TIME(pcache_alloc)
+
+	PROFILE_START(pcache_alloc);
 
 	pset = user_vaddr_to_pcache_set(address);
 	inc_pset_event(pset, PSET_ALLOC);
@@ -216,8 +222,11 @@ struct pcache_meta *pcache_alloc(unsigned long address)
 	/* Fastpath: try to allocate one directly */
 	pcm = pcache_alloc_fastpath(pset);
 	if (likely(pcm))
-		return pcm;
+		goto out;
 
 	/* Slowpath: fallback and try to evict one */
-	return pcache_alloc_slowpath(pset, address);
+	pcm = pcache_alloc_slowpath(pset, address);
+out:
+	PROFILE_LEAVE(pcache_alloc);
+	return pcm;
 }

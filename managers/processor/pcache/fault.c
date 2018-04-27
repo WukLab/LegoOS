@@ -159,7 +159,46 @@ static inline void pcache_fill_update_stat(struct pcache_meta *pcm)
 static inline void pcache_fill_update_stat(struct pcache_meta *pcm) { }
 #endif
 
-DEFINE_PROFILE_POINT(pcache_miss_net)
+static inline void prepare_combined_msg(struct p2m_pcache_miss_flush_combine_msg *msg,
+					struct victim_flush_job *job)
+{
+	struct p2m_flush_msg *flush = &msg->flush;
+	struct pcache_victim_meta *victim = job->victim;
+	struct pcache_victim_hit_entry *hit;
+	void *victim_kva;
+
+	__SetVictimWriteback(victim);
+	victim_kva = pcache_victim_to_kva(victim);
+	memcpy(flush->pcacheline, victim_kva, PCACHE_LINE_SIZE);
+
+	/* should be just 1 */
+	list_for_each_entry(hit, &victim->hits, next) {
+		flush->pid = hit->tgid;
+		flush->user_va = hit->address;
+		return;
+	}
+}
+
+/* Same cleanup as __victim_flush_func */
+static inline void finish_combined_msg_notify(struct victim_flush_job *job)
+{
+	bool wait = job->wait;
+	struct completion *done = &job->done;
+	struct pcache_victim_meta *victim = job->victim;
+
+	__ClearVictimWriteback(victim);
+	__ClearVictimWaitflush(victim);
+	SetVictimFlushed(victim);
+	put_victim(victim);
+
+	if (unlikely(wait))
+		complete(done);
+	kfree(job);
+}
+
+DEFINE_PROFILE_POINT(__pcache_fill_remote)
+DEFINE_PROFILE_POINT(__pcache_fill_remote_net)
+DEFINE_PROFILE_POINT(__pcache_fill_remote_combined_net)
 
 /*
  * Callback for common fill code
@@ -169,26 +208,56 @@ static int
 __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		      struct pcache_meta *pcm, void *unused)
 {
-	PROFILE_POINT_TIME(pcache_miss_net)
 	int ret, len, dst_nid;
 	void *va_cache = pcache_meta_to_kva(pcm);
 	struct p2m_pcache_miss_msg msg;
+	struct p2m_pcache_miss_flush_combine_msg *comb_msg = NULL;
+	struct victim_flush_job *flush_job;
+	PROFILE_POINT_TIME(__pcache_fill_remote)
+	PROFILE_POINT_TIME(__pcache_fill_remote_net)
+	PROFILE_POINT_TIME(__pcache_fill_remote_combined_net)
 
-	fill_common_header(&msg, P2M_PCACHE_MISS);
-	msg.pid = current->pid;
-	msg.tgid = current->tgid;
-	msg.flags = flags;
-	msg.missing_vaddr = address;
-	dst_nid = get_memory_node(current, address);
+	PROFILE_START(__pcache_fill_remote);
 
-	pcache_fill_debug("I dst_nid:%d pid:%u tgid:%u address:%#lx flags:%#lx va_cache:%p",
-		dst_nid, current->pid, current->tgid, address, flags, va_cache);
+	flush_job = steal_victim_flush_job();
+	if (likely(flush_job)) {
+		comb_msg = kmalloc(sizeof(*comb_msg), GFP_KERNEL);
+		if (!comb_msg)
+			return -ENOMEM;
 
-	profile_point_start(pcache_miss_net);
-	len = ibapi_send_reply_timeout(dst_nid, &msg, sizeof(msg),
-				       va_cache, PCACHE_LINE_SIZE, false,
-				       DEF_NET_TIMEOUT);
-	profile_point_leave(pcache_miss_net);
+		fill_common_header(&comb_msg->miss, P2M_PCACHE_MISS);
+		comb_msg->miss.has_flush_msg = 1;
+		comb_msg->miss.pid = current->pid;
+		comb_msg->miss.tgid = current->tgid;
+		comb_msg->miss.flags = flags;
+		comb_msg->miss.missing_vaddr = address;
+		dst_nid = get_memory_node(current, address);
+
+		/* Cook the message */
+		prepare_combined_msg(comb_msg, flush_job);
+
+		PROFILE_START(__pcache_fill_remote_combined_net);
+		len = ibapi_send_reply_timeout(dst_nid, comb_msg, sizeof(*comb_msg),
+					       va_cache, PCACHE_LINE_SIZE, false, DEF_NET_TIMEOUT);
+		PROFILE_LEAVE(__pcache_fill_remote_combined_net);
+
+		/* Notify victim about stealed flush */
+		finish_combined_msg_notify(flush_job);
+		inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY_FLUSH_COMBINED);
+	} else {
+		fill_common_header(&msg, P2M_PCACHE_MISS);
+		msg.has_flush_msg = 0;
+		msg.pid = current->pid;
+		msg.tgid = current->tgid;
+		msg.flags = flags;
+		msg.missing_vaddr = address;
+		dst_nid = get_memory_node(current, address);
+
+		PROFILE_START(__pcache_fill_remote_net);
+		len = ibapi_send_reply_timeout(dst_nid, &msg, sizeof(msg),
+					       va_cache, PCACHE_LINE_SIZE, false, DEF_NET_TIMEOUT);
+		PROFILE_LEAVE(__pcache_fill_remote_net);
+	}
 
 	if (unlikely(len < (int)PCACHE_LINE_SIZE)) {
 		if (likely(len == sizeof(int))) {
@@ -213,8 +282,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	pcache_fill_update_stat(pcm);
 	ret = 0;
 out:
-	pcache_fill_debug("O pid:%u tgid:%u address:%#lx flags:%#lx pa_cache:%p ret:%d(%s)",
-		current->pid, current->tgid, address, flags, pa_cache, ret, perror(ret));
+	PROFILE_LEAVE(__pcache_fill_remote);
 	return ret;
 }
 
@@ -231,16 +299,16 @@ pcache_do_fill_page(struct mm_struct *mm, unsigned long address,
 }
 
 #ifdef CONFIG_PCACHE_ZEROFILL
-DEFINE_PROFILE_POINT(__pcache_do_zerofill)
+DEFINE_PROFILE_POINT(__pcache_fill_zerofill)
 
 static int
 __pcache_do_zerofill_page(unsigned long address, unsigned long flags,
 			  struct pcache_meta *pcm, void *unused)
 {
 	void *pcache_kva;
-	PROFILE_POINT_TIME(__pcache_do_zerofill)
+	PROFILE_POINT_TIME(__pcache_fill_zerofill)
 
-	profile_point_start(__pcache_do_zerofill);
+	PROFILE_START(__pcache_fill_zerofill);
 
 	pcache_kva = pcache_meta_to_kva(pcm);
 	memset(pcache_kva, 0, PCACHE_LINE_SIZE);
@@ -252,9 +320,9 @@ __pcache_do_zerofill_page(unsigned long address, unsigned long flags,
 	 * Check PCACHE_ZEROFILL_NOTIFY_MEMORY Kconfig.
 	 */
 	submit_zerofill_notify_work(current, address, flags);
-	profile_point_leave(__pcache_do_zerofill);
 
 	inc_pcache_event(PCACHE_FAULT_FILL_ZEROFILL);
+	PROFILE_LEAVE(__pcache_fill_zerofill);
 	return 0;
 }
 
