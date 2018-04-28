@@ -18,8 +18,7 @@ config MEM_PREFETCH
 config THPOOL_NR_WORKERS
 	int "Thread pool: number of workers"
 	range 1 16
-	default 4
-	depends on THPOOL
+	default 1
 	help
 	  Determines how many workers threads memory manager has.
 	  Each worker thread is pinned a CPU core. So, it should

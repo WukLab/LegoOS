@@ -98,15 +98,20 @@ struct tb_padding {
 #define THPOOL_PADDING(name)	struct tb_padding name
 
 struct thpool_buffer {
-	unsigned long		desc;
 	unsigned long		flags;
 	unsigned long		time_enqueue_ns;
 	unsigned long		time_dequeue_ns;
 	struct list_head	next;
 
-	THPOOL_PADDING(_pad1);
+	void			*fit_rx;
+	void			*fit_ctx;
+	void			*fit_imm;
+	int			fit_node_id;
+	int			fit_offset;
 
-	char			rx[THPOOL_RX_SIZE];
+	int			tx_size;
+
+	THPOOL_PADDING(_pad1);
 	char			tx[THPOOL_TX_SIZE];
 };
 
@@ -157,7 +162,7 @@ THPOOL_BUFFER_FLAGS(Used, used)
 
 static inline void *thpool_buffer_rx(struct thpool_buffer *tb)
 {
-	return tb->rx;
+	return tb->fit_rx;
 }
 
 static inline void *thpool_buffer_tx(struct thpool_buffer *tb)
@@ -270,5 +275,9 @@ static inline void add_thpool_worker_total_queuing(struct thpool_worker *tw, uns
 
 static inline void inc_thpool_worker_nr_handled(struct thpool_worker *tw) { }
 #endif /* CONFIG_COUNTER_THPOOL */
+
+void fit_ack_reply_callback(struct thpool_buffer *b);
+void thpool_callback(void *fit_ctx, void *fit_imm,
+		     void *rx, int rx_size, int node_id, int fit_offset);
 
 #endif /* _MEM_THREAD_POOL_H_ */

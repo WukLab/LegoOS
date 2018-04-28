@@ -26,6 +26,8 @@
 #include <lego/comp_common.h>
 #include <rdma/ib_verbs.h>
 
+#include <memory/thread_pool.h>
+
 #include "fit_internal.h"
 
 #ifdef CONFIG_FIT_DEBUG
@@ -1252,6 +1254,80 @@ int fit_receive_message_no_reply(ppc *ctx, unsigned int port, void *ret_addr, in
 	return get_size;
 }
 
+#ifdef CONFIG_COMP_MEMORY
+/*
+ * Callback for thread pool
+ */
+void fit_ack_reply_callback(struct thpool_buffer *b)
+{
+	int last_ack, ack_flag = 0;
+	int reply_size, node_id, offset;
+	int reply_connection_id;
+	void *reply_data;
+	ppc *ctx;
+	struct imm_message_metadata *request_metadata;
+
+	ctx = b->fit_ctx;
+	request_metadata = b->fit_imm;
+	node_id = b->fit_node_id;
+	offset = b->fit_offset;
+
+	reply_data = b->tx;
+	reply_size = b->tx_size;
+
+	/*
+	 * Step II
+	 * FIT internal ACK
+	 */
+	spin_lock(&ctx->local_last_ack_index_lock[node_id]);
+	last_ack = ctx->local_last_ack_index[node_id];
+	if ((offset>= last_ack && offset - last_ack >= IMM_ACK_FREQ) ||
+	    (offset< last_ack && offset + IMM_PORT_CACHE_SIZE - last_ack >= IMM_ACK_FREQ)) {
+		ack_flag = 1;
+		ctx->local_last_ack_index[node_id] = offset;
+	}
+	spin_unlock(&ctx->local_last_ack_index_lock[node_id]);
+
+        if (ack_flag) {
+                struct send_and_reply_format *pass;
+
+                pass = kmalloc(sizeof(*pass), GFP_KERNEL);
+                if (!pass) {
+			WARN_ON_ONCE(1);
+			return;
+		}
+
+                pass->msg = (void *)(long)node_id;
+                pass->length = offset;
+                pass->type = MSG_DO_ACK_INTERNAL;
+
+                spin_lock(&wq_lock);
+                list_add_tail(&(pass->list), &request_list.list);
+                spin_unlock(&wq_lock);
+        }
+
+	/*
+	 * Step III
+	 * Reply message
+	 */
+        reply_connection_id = fit_get_connection_by_atomic_number(ctx, node_id, LOW_PRIORITY);
+        fit_send_message_with_rdma_write_with_imm_request(ctx, reply_connection_id, request_metadata->reply_rkey,
+                        request_metadata->reply_addr, reply_data, reply_size, 0, request_metadata->reply_indicator_index | IMM_SEND_REPLY_RECV,
+                        FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG, 1);
+}
+
+/*
+ * Step I
+ * Call back to thread pool
+ */
+static __always_inline void
+fit_internal_got_message_call_handle_and_reply(ppc *ctx, struct imm_message_metadata *imm,
+					       void *rx, int rx_size, int node_id, int offset)
+{
+	thpool_callback(ctx, imm, rx, rx_size, node_id, offset);
+}
+#endif
+
 int fit_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag)
 {
 	//This ret_addr is 
@@ -1743,8 +1819,9 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 #ifdef NOTIFY_MODEL
 	int test_result=0;
 #endif
-	struct imm_header_from_cq_to_port *tmp;
 	int reply_data, private_bits;
+
+	struct imm_message_metadata *tmp1;
 
 	if (pin_current_thread())
 		panic("Fail to pin poll_cq");
@@ -1824,6 +1901,12 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 						offset = wc[i].ex.imm_data & IMM_GET_OFFSET; 
 						port = IMM_GET_PORT_NUMBER(wc[i].ex.imm_data);
 
+#ifdef CONFIG_COMP_MEMORY
+						/* yy for testing */
+                                                tmp1 = (struct imm_message_metadata *)(ctx->local_rdma_recv_rings[node_id] + offset);
+                                                fit_internal_got_message_call_handle_and_reply(ctx, tmp1, (void *)tmp1 + sizeof(struct imm_message_metadata),
+                                                                tmp1->size, node_id, offset);
+#else
 						//printk(KERN_CRIT "%s: from node %d access to port %d imm-%x\n", __func__, node_id, port, wc[i].ex.imm_data);
 						tmp = (struct imm_header_from_cq_to_port *)kmalloc(sizeof(struct imm_header_from_cq_to_port), GFP_KERNEL); //kmem_cache_alloc(imm_header_from_cq_to_port_cache, GFP_KERNEL);
 						tmp->source_node_id = node_id;
@@ -1831,6 +1914,7 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 						spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
 						list_add_tail(&(tmp->list), &ctx->imm_waitqueue_perport[port].list);
 						spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
+#endif
 					}
 					/* handle internal acknoledgement of new MR offset */
 					else if (wc[i].ex.imm_data & IMM_ACK || wc[i].byte_len == 0)
@@ -2341,7 +2425,6 @@ int fit_send_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
 	struct fit_ibv_mr *remote_mr;
 	struct imm_message_metadata msg_header;
 	int last_ack;
-	unsigned long start_time;
 	int ret;
 
 	real_size = size + sizeof(struct imm_message_metadata);

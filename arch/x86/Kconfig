@@ -344,11 +344,12 @@ config NUMA
 
 config NUMA_USE_ONE_SOCKET
 	bool "Only use the first socket even more than one sockets present"
+	def_bool y
 	depends on NUMA
-	depends on !COMP_MEMORY
+	depends on COMP_MEMORY
 	depends on COMP_PROCESSOR
 	default y if COMP_PROCESSOR
-	default n if COMP_MEMORY
+	default y if COMP_MEMORY
 	---help---
 	If this option is on, Lego will use only boot one socket and register
 	the memory from that socket, even if there are more than one sockets

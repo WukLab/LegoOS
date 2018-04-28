@@ -51,11 +51,13 @@ static int procmgmt(void *unused)
 	 * Use the correct name if a real storage node is used.
 	 * If CONFIG_USE_RAMFS is set, then filename does not matter anyway.
 	 */
+#if 1
 	init_filename = "/usr/bin/python";
 	argv_init[0] = init_filename;
 	argv_init[1] = "/root/ys/models-1.4.0/official/mnist/mnist.py";
 	argv_init[2] = "--train_epochs";
 	argv_init[3] = "1";
+#endif
 
 	/*
 	 * If vNode is configured, which implies GPM is also configured,

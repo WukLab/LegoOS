@@ -42,14 +42,6 @@ void handle_bad_request(struct common_header *hdr, u64 desc)
 	ibapi_reply_message(&retbuf, 4, desc);
 }
 
-void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr)
-{
-	int retbuf = RET_OKAY;
-
-	pr_info("%s(): from node: %u", __func__, hdr->src_nid);
-	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
-}
-
 struct thpool_worker thpool_worker_map[NR_THPOOL_WORKERS];
 static int TW_HEAD __cacheline_aligned;
 static DEFINE_COMPLETION(thpool_init_completion);
@@ -140,18 +132,17 @@ select_thpool_worker(struct thpool_buffer *r)
 	return tw;
 }
 
-static void __thpool_worker(struct thpool_worker *worker,
-			    struct thpool_buffer *buffer)
+static void thpool_worker_handler(struct thpool_worker *worker,
+				  struct thpool_buffer *buffer)
 {
-	unsigned long desc;
 	void *msg;
 	void *payload;
 	struct common_header *hdr;
 	void *tx;
+	unsigned long desc;
 
 	tx = thpool_buffer_tx(buffer);
 	msg = thpool_buffer_rx(buffer);
-	desc = buffer->desc;
 	hdr = to_common_header(msg);
 	payload = to_payload(msg);
 
@@ -286,28 +277,21 @@ static void __thpool_worker(struct thpool_worker *worker,
 		break;
 #endif
 
-/* TEST */
-	case P2M_TEST:
-		handle_p2m_test(payload, desc, hdr);
-		break;
-
 	default:
 		handle_bad_request(hdr, desc);
 	}
 }
 
-DEFINE_PROFILE_POINT(__thpool_worker)
+DEFINE_PROFILE_POINT(thpool_worker_handler)
+DEFINE_PROFILE_POINT(thpool_worker_fit_ack_reply)
 
-/*
- * The worker thread.
- * We do what master told us to do.
- */
 static int thpool_worker_func(void *_worker)
 {
-	struct thpool_worker *w= _worker;
+	struct thpool_worker *w = _worker;
 	struct thpool_buffer *b;
 	unsigned long queuing_delay;
-	PROFILE_POINT_TIME(__thpool_worker)
+	PROFILE_POINT_TIME(thpool_worker_handler)
+	PROFILE_POINT_TIME(thpool_worker_fit_ack_reply)
 
 	pin_current_thread();
 	pr_info("thpool: CPU%2d %s worker_id: %d UP\n",
@@ -331,7 +315,7 @@ static int thpool_worker_func(void *_worker)
 			/*
 			 * Update queuing stats
 			 *
-			 * HACK!!! The operations below except __thpool_worker()
+			 * HACK!!! The operations below except thpool_worker_handler()
 			 * are for debugging/tracing purpose. The will be compiled
 			 * away if disable CONFIG_COUNTER_THPOOL.
 			 */
@@ -342,17 +326,24 @@ static int thpool_worker_func(void *_worker)
 			set_in_handler_thpool_worker(w);
 			set_wip_buffer_thpool_worker(w, b);
 
-			/* Callback to handler */
-			PROFILE_START(__thpool_worker);
-			__thpool_worker(w, b);
-			inc_thpool_worker_nr_handled(w);
-			PROFILE_LEAVE(__thpool_worker);
+			PROFILE_START(thpool_worker_handler);
+			thpool_worker_handler(w, b);
+			PROFILE_LEAVE(thpool_worker_handler);
+
+			/*
+			 * Callback to FIT layer to perform the
+			 * last two steps: ACK, and REPLY.
+			 */
+			PROFILE_START(thpool_worker_fit_ack_reply);
+			fit_ack_reply_callback(b);
+			PROFILE_LEAVE(thpool_worker_fit_ack_reply);
 
 			clear_wip_buffer_thpool_worker(w);
 			clear_in_handler_thpool_worker(w);
 
 			/* Return buffer to free pool */
 			__ClearThpoolBufferUsed(b);
+			inc_thpool_worker_nr_handled(w);
 			spin_lock(&w->lock);
 		}
 		spin_unlock(&w->lock);
@@ -363,65 +354,29 @@ static int thpool_worker_func(void *_worker)
 	return 0;
 }
 
-#define THPOOL_IB_PORT	(0)
-
 unsigned long nr_thpool_reqs;
 
-/*
- * The thread pool polling thread. This is the only thread that is
- * doing ibapi_receive_message. We do not do any handling here.
- * All requests are offloaded to workers. Good to be a master, huh?
- */
-static int thpool_polling(void *unused)
+void thpool_callback(void *fit_ctx, void *fit_imm,
+		     void *rx, int rx_size, int node_id, int fit_offset)
 {
 	struct thpool_buffer *b;
 	struct thpool_worker *w;
-	int retlen;
-	PROFILE_POINT_TIME(__thpool_worker)
 
-	pin_current_thread();
-	pr_info("thpool: CPU%2d %s UP\n",
-		smp_processor_id(), current->comm);
-	complete(&thpool_init_completion);
+	b = alloc_thpool_buffer();
+	b->fit_rx = rx;
+	b->fit_ctx = fit_ctx;
+	b->fit_imm = fit_imm;
+	b->fit_offset = fit_offset;
+	b->fit_node_id = node_id;
 
-	local_irq_disable();
-	preempt_disable();
-	while (1) {
-		b = alloc_thpool_buffer();
-
-		/* Wait until message comes in */
-		retlen = ibapi_receive_message(THPOOL_IB_PORT,
-				b->rx, THPOOL_RX_SIZE, &b->desc);
-
-		if (retlen >= THPOOL_RX_SIZE)
-			panic("%d %lu", retlen, THPOOL_RX_SIZE);
-
-#ifdef CONFIG_THPOOL
-		thpool_buffer_enqueue_time(b);
-		w = select_thpool_worker(b);
-		enqueue_tail_thpool_worker(w, b);
-#else
-		w = &thpool_worker_map[0];
-		set_in_handler_thpool_worker(w);
-		set_wip_buffer_thpool_worker(w, b);
-
-		PROFILE_START(__thpool_worker);
-		__thpool_worker(w, b);
-		PROFILE_LEAVE(__thpool_worker);
-
-		clear_wip_buffer_thpool_worker(w);
-		clear_in_handler_thpool_worker(w);
-
-		/* Return buffer to free pool */
-		inc_thpool_worker_nr_handled(w);
-		__ClearThpoolBufferUsed(b);
-#endif
-		nr_thpool_reqs++;
-	}
-	preempt_enable();
-	local_irq_enable();
-	BUG();
-	return 0;
+	/*
+	 * Select a worker thread and pass the buffer
+	 * to it. The worker should do ACK and REPLY.
+	 */
+	thpool_buffer_enqueue_time(b);
+	w = select_thpool_worker(b);
+	enqueue_tail_thpool_worker(w, b);
+	nr_thpool_reqs++;
 }
 
 /* Create worker and polling threads */
@@ -455,12 +410,6 @@ void __init thpool_init(void)
 		wait_for_completion(&thpool_init_completion);
 		worker->task = p;
 	}
-
-	init_completion(&thpool_init_completion);
-	p = kthread_run(thpool_polling, NULL, "thpool-polling");
-	if (IS_ERR(p))
-		panic("Fail to create mc thread");
-	wait_for_completion(&thpool_init_completion);
 }
 
 void __init memory_component_init(void)
