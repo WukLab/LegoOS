@@ -214,7 +214,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 		break;
 
 	case P2M_MREMAP:
-		handle_p2m_mremap(payload, desc, hdr, tx);
+		handle_p2m_mremap(payload, hdr, buffer);
 		break;
 
 	case P2M_BRK:

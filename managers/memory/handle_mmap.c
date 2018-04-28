@@ -420,8 +420,8 @@ out:
 }
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
-		      struct common_header *hdr, void *tx)
+void handle_p2m_mremap(struct p2m_mremap_struct *payload,
+		       struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -431,24 +431,27 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 	unsigned long flags = payload->flags;
 	unsigned long new_addr = payload->new_addr;
 	struct lego_task_struct *tsk;
-	struct p2m_mremap_reply_struct *reply = tx;
+	struct p2m_mremap_reply_struct *reply;
 
 	mmap_debug("nid:%u,pid:%u,old_addr:%#lx,old_len:%#lx,new_len:%#lx,"
 		   "flags:%#lx,new_addr:%#lx", nid, pid, old_addr, old_len,
 		   new_len, flags, new_addr);
 
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
+
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
 		reply->status = RET_ESRCH;
 		reply->line = __LINE__;
-		goto out;
+		return;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
 	if (down_write_killable(&tsk->mm->mmap_sem)) {
 		reply->status = RET_EINTR;
 		reply->line = __LINE__;
-		goto out;
+		return;
 	}
 
 	load_reply_buffer(tsk->mm, &reply->map);
@@ -470,9 +473,7 @@ out:
 		   (reply->status != RET_OKAY) ? reply->line : 0);
 	dump_reply(&reply->map);
 
-	ibapi_reply_message(reply, sizeof(*reply), desc);
 	debug_dump_vm_all(tsk->mm, 0);
-	return 0;
 }
 #else
 static void mremap_to(unsigned long addr, unsigned long old_len,
@@ -556,8 +557,8 @@ static void mremap_to(unsigned long addr, unsigned long old_len,
 	reply->new_addr = new_addr;
 }
 
-int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
-		      struct common_header *hdr, void *tx)
+void handle_p2m_mremap(struct p2m_mremap_struct *payload,
+		       struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -568,25 +569,28 @@ int handle_p2m_mremap(struct p2m_mremap_struct *payload, u64 desc,
 	unsigned long new_addr = payload->new_addr;
 	struct lego_task_struct *tsk;
 	struct vm_area_struct *vma;
-	struct p2m_mremap_reply_struct *reply = tx;
+	struct p2m_mremap_reply_struct *reply;
 	unsigned long ret;
 
 	mmap_debug("nid:%u,pid:%u,old_addr:%#lx,old_len:%#lx,new_len:%#lx,"
 		   "flags:%#lx,new_addr:%#lx", nid, pid, old_addr, old_len,
 		   new_len, flags, new_addr);
 
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
+
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
 		reply->status = RET_ESRCH;
 		reply->line = __LINE__;
-		goto out_nolock;
+		return;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
 	if (down_write_killable(&tsk->mm->mmap_sem)) {
 		reply->status = RET_EINTR;
 		reply->line = __LINE__;
-		goto out_nolock;
+		return;
 	}
 
 	if (flags & MREMAP_FIXED) {
@@ -683,11 +687,8 @@ out_nolock:
 		   ret_to_string(reply->status), reply->new_addr,
 		   (reply->status != RET_OKAY) ? reply->line : 0);
 
-	ibapi_reply_message(reply, sizeof(*reply), desc);
-
 	replicate_vma(tsk, REPLICATE_MREMAP, reply->new_addr, new_len, old_addr, old_len);
 	debug_dump_vm_all(tsk->mm, 0);
-	return 0;
 }
 #endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */
 

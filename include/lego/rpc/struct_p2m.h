@@ -227,7 +227,8 @@ struct p2m_mremap_reply_struct {
 	struct vmr_map_reply map;
 #endif
 };
-int handle_p2m_mremap(struct p2m_mremap_struct *, u64, struct common_header *, void *);
+void handle_p2m_mremap(struct p2m_mremap_struct *payload,
+		       struct common_header *hdr, struct thpool_buffer *tb);
 
 /*
  * P2M_MPROTECT
