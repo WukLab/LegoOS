@@ -219,7 +219,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 
 	case P2M_BRK:
 		inc_mm_stat(HANDLE_P2M_BRK);
-		handle_p2m_brk(payload, desc, hdr, tx);
+		handle_p2m_brk(payload, hdr, buffer);
 		break;
 
 	case P2M_MSYNC:

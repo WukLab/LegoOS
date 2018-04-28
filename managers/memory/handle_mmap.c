@@ -49,8 +49,8 @@ static inline void debug_dump_vm_all(struct lego_mm_struct *mm, int enter) { }
  *	RET_EINTR
  */
 #ifndef CONFIG_DISTRIBUTED_VMA_MEMORY
-int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
-		   struct common_header *hdr, void *tx)
+void handle_p2m_brk(struct p2m_brk_struct *payload,
+		    struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -58,24 +58,25 @@ int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
 	unsigned long newbrk, oldbrk;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
-	struct p2m_brk_reply_struct* reply = tx;
+	struct p2m_brk_reply_struct *reply;
 	int ret;
 
 	mmap_debug("src_nid: %u, pid: %u, brk: %#lx", nid, pid, brk);
 
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
+
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
 		reply->ret_brk = RET_ESRCH;
-		ibapi_reply_message(reply, sizeof(*reply), desc);
-		return 0;
+		return;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
 	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
 		reply->ret_brk = RET_EINTR;
-		ibapi_reply_message(reply, sizeof(*reply), desc);
-		return 0;
+		return;
 	}
 
 	min_brk = mm->start_brk;
@@ -116,11 +117,9 @@ out:
 	up_write(&mm->mmap_sem);
 
 	reply->ret_brk = mm->brk;
-	ibapi_reply_message(reply, sizeof(*reply), desc);
 
 	replicate_vma(tsk, REPLICATE_BRK, newbrk, 0, oldbrk, 0);
 	debug_dump_vm_all(mm, 0);
-	return 0;
 }
 #endif
 
@@ -701,8 +700,8 @@ void handle_p2m_mprotect(struct p2m_mprotect_struct *payload,
 }
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
-		   struct common_header *hdr, void *tx)
+void handle_p2m_brk(struct p2m_brk_struct *payload,
+		    struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -710,24 +709,25 @@ int handle_p2m_brk(struct p2m_brk_struct *payload, u64 desc,
 	unsigned long newbrk, oldbrk;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
-	struct p2m_brk_reply_struct *reply = tx;
+	struct p2m_brk_reply_struct *reply;
 	int ret;
 
 	mmap_debug("src_nid: %u, pid: %u, brk: %#lx", nid, pid, brk);
 
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
+
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
 		reply->ret_brk = RET_ESRCH;
-		ibapi_reply_message(reply, sizeof(*reply), desc);
-		return 0;
+		return;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
 	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
 		reply->ret_brk = RET_EINTR;
-		ibapi_reply_message(reply, sizeof(*reply), desc);
-		return 0;
+		return;
 	}
 
 	load_reply_buffer(mm, &reply->map);
@@ -774,10 +774,6 @@ out:
 	dump_reply(&reply->map);
 #endif
 	reply->ret_brk = mm->brk;
-	ibapi_reply_message(reply, sizeof(*reply), desc);
-
-	debug_dump_vm_all(mm, 0);
-	return 0;
 }
 
 int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
