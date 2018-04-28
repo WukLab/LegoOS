@@ -227,7 +227,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 		break;
 
 	case P2M_FORK:
-		handle_p2m_fork(payload, desc, hdr, tx);
+		handle_p2m_fork(payload, hdr, buffer);
 		break;
 
 	case P2M_EXECVE:

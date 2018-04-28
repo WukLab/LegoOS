@@ -16,6 +16,7 @@
 #include <memory/task.h>
 #include <memory/file_types.h>
 #include <memory/distvm.h>
+#include <memory/thread_pool.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_FORK
 #define fork_debug(fmt, ...)	\
@@ -479,17 +480,20 @@ out:
 	return err;
 }
 
-int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
-		    struct common_header *hdr, void *tx)
+void handle_p2m_fork(struct p2m_fork_struct *payload,
+		     struct common_header *hdr, struct thpool_buffer *tb)
 {
 	unsigned int nid = hdr->src_nid;
 	unsigned int tgid = payload->tgid;
 	unsigned int parent_tgid = payload->parent_tgid;
 	struct lego_task_struct *tsk, *parent;
-	u32 *retbuf = tx;
+	u32 *retbuf;
 
 	fork_debug("nid:%u,pid:%u,tgid:%u,parent_tgid:%u",
 		nid, payload->pid, tgid, parent_tgid);
+
+	retbuf = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*retbuf));
 
 	parent = find_lego_task_by_pid(nid, parent_tgid);
 	if (!parent && parent_tgid != 1)
@@ -498,7 +502,7 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	tsk = alloc_lego_task_struct();
 	if (!tsk) {
 		*retbuf = -ENOMEM;
-		goto reply;
+		return;
 	}
 
 	/*
@@ -518,8 +522,9 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 	/* Duplicate the mmap from parent */
 	*retbuf = dup_lego_mm(tsk, parent);
 	if (*retbuf) {
+		WARN_ONCE(1, "Fail to dup mm");
 		free_lego_task_struct(tsk);
-		goto reply;
+		return;
 	}
 
 	/* All done, insert into hashtable */
@@ -531,12 +536,6 @@ int handle_p2m_fork(struct p2m_fork_struct *payload, u64 desc,
 		/* Same process? */
 		if (likely(*retbuf == -EEXIST))
 			*retbuf = 0;
-		goto reply;
+		return;
 	}
-
-	*retbuf = 0;
-reply:
-	fork_debug("reply: %d:%s", *retbuf, perror(*retbuf));
-	ibapi_reply_message(retbuf, 4, desc);
-	return 0;
 }

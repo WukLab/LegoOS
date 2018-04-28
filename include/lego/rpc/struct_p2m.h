@@ -129,7 +129,8 @@ struct p2m_fork_struct {
 };
 struct task_struct;
 int p2m_fork(struct task_struct *p, unsigned long clone_flags);
-int handle_p2m_fork(struct p2m_fork_struct *, u64, struct common_header *, void *);
+void handle_p2m_fork(struct p2m_fork_struct *payload,
+		     struct common_header *hdr, struct thpool_buffer *tb);
 
 /*
  * P2M_EXECVE
