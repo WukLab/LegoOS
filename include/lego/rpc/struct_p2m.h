@@ -165,7 +165,8 @@ struct m2p_execve_struct {
 	struct vmr_map_reply map;
 #endif
 };
-int handle_p2m_execve(struct p2m_execve_struct *, u64, struct common_header *, void *);
+void handle_p2m_execve(struct p2m_execve_struct *payload,
+		       struct common_header *hdr, struct thpool_buffer *tb);
 
 /*
  * P2M_MMAP

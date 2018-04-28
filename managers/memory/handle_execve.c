@@ -17,6 +17,7 @@
 #include <memory/pid.h>
 #include <memory/loader.h>
 #include <memory/distvm.h>
+#include <memory/thread_pool.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_EXECVE
 #define execve_debug(fmt, ...)	\
@@ -45,10 +46,9 @@ debug_argv_envp_array(u32 argc, const char **argv, unsigned long *argv_len,
 { }
 #endif
 
-int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
-		      struct common_header *hdr, void *tx)
+void handle_p2m_execve(struct p2m_execve_struct *payload,
+		       struct common_header *hdr, struct thpool_buffer *tb)
 {
-	struct m2p_execve_struct *reply = tx;
 	__u32 argc, envc;
 	size_t len;
 	unsigned long *argv_len, *envp_len;
@@ -58,6 +58,10 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 	struct lego_task_struct *tsk;
 	int i, ret;
 	__u64 new_ip, new_sp;
+	struct m2p_execve_struct *reply;
+
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
 
 	pid = payload->pid;
 	argc = payload->argc;
@@ -70,20 +74,20 @@ int handle_p2m_execve(struct p2m_execve_struct *payload, u64 desc,
 	tsk = find_lego_task_by_pid(hdr->src_nid, pid);
 	if (!tsk) {
 		reply->status = RET_ESRCH;
-		goto out_reply;
+		return;
 	}
 
 	argv = kzalloc(sizeof(*argv) * (argc + envc), GFP_KERNEL);
 	if (!argv) {
 		reply->status = RET_ENOMEM;
-		goto out_reply;
+		return;
 	}
 
 	argv_len = kzalloc(sizeof(*argv_len) * (argc + envc), GFP_KERNEL);
 	if (!argv_len) {
 		kfree(argv);
 		reply->status = RET_ENOMEM;
-		goto out_reply;
+		return;
 	}
 
 	/* Prepare argv and envp */
@@ -128,13 +132,10 @@ out:
 	kfree(argv);
 	kfree(argv_len);
 
-out_reply:
 	execve_debug("reply_status: %s, new_ip: %#Lx, new_sp: %#Lx",
 		ret_to_string(reply->status), reply->new_ip, reply->new_sp);
 
 #ifdef CONFIG_DEBUG_VMA
 	dump_reply(&reply->map);
 #endif
-	ibapi_reply_message(reply, sizeof(*reply), desc);
-	return 0;
 }
