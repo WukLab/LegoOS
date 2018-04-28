@@ -691,15 +691,12 @@ out_nolock:
 }
 #endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */
 
-int handle_p2m_mprotect(struct p2m_mprotect_struct *payload, u64 desc,
-			struct common_header *hdr, void *tx)
+void handle_p2m_mprotect(struct p2m_mprotect_struct *payload,
+			 struct thpool_buffer *tb)
 {
-	int *reply = tx;
-
-	WARN_ON(1);
-
-	ibapi_reply_message(reply, sizeof(*reply), desc);
-	return 0;
+	int *reply = thpool_buffer_tx(tb);
+	*reply = 0;
+	tb_set_tx_size(tb, sizeof(*reply));
 }
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY

@@ -235,7 +235,8 @@ struct p2m_mprotect_struct {
 	__u64	len;
 	__u32	prot;
 };
-int handle_p2m_mprotect(struct p2m_mprotect_struct *, u64, struct common_header *, void *);
+void handle_p2m_mprotect(struct p2m_mprotect_struct *payload,
+			 struct thpool_buffer *tb);
 
 /*
  * P2M_BRK
