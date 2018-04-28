@@ -12,7 +12,7 @@
 
 #include <lego/rpc/struct_common.h>
 
-#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 /* M2M_MMAP */
 struct m2m_mmap_struct {
 	u32		pid;
@@ -89,7 +89,7 @@ struct m2m_mremap_move_split_reply_struct {
 	unsigned long	old_max_gap;
 	unsigned long	new_max_gap;
 };
-int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *, 
+int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *,
 				 u64, struct common_header *, void *);
 
 /* M2M_FINDVMA */
@@ -112,7 +112,8 @@ struct m2m_msync_struct {
 	unsigned long	len;
 	unsigned long	flags;
 };
-int handle_m2m_msync(struct m2m_msync_struct *, u64, struct common_header *, void *);
+void handle_m2m_msync(struct m2m_msync_struct *payload,
+		      struct common_header *hdr, struct thpool_buffer *tb);
 
 /* M2M_FORK */
 struct m2m_fork_struct {

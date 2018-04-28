@@ -247,7 +247,7 @@ void handle_p2m_munmap(struct p2m_munmap_struct *payload,
 	debug_dump_vm_all(tsk->mm, 0);
 }
 
-static int do_msync(struct lego_mm_struct *mm, unsigned long start, 
+static int do_msync(struct lego_mm_struct *mm, unsigned long start,
 		    unsigned long end, unsigned long flags)
 {
 	int ret = 0, unmapped_error = 0;
@@ -313,8 +313,8 @@ out:
 }
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-static int 
-distribute_msync(struct lego_task_struct *tsk, unsigned long start, 
+static int
+distribute_msync(struct lego_task_struct *tsk, unsigned long start,
 		 unsigned long len, unsigned long flags, int mnode)
 {
 	int ret, reply;
@@ -336,8 +336,8 @@ distribute_msync(struct lego_task_struct *tsk, unsigned long start,
 	return reply;
 }
 
-int handle_m2m_msync(struct m2m_msync_struct *payload, u64 desc,
-		     struct common_header *hdr, void *tx)
+void handle_m2m_msync(struct m2m_msync_struct *payload,
+		      struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -346,25 +346,24 @@ int handle_m2m_msync(struct m2m_msync_struct *payload, u64 desc,
 	unsigned long len = payload->len;
 	unsigned long flags = payload->flags;
 	struct lego_task_struct *tsk;
-	u32 *ret = tx;
+	u32 *ret;
 
 	mmap_debug("src_nid:%u,pid:%u,start:%#lx,len:%#lx,flags:%#lx",
 		   nid, pid, start, len, flags);
 
+	ret = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*ret));
+
 	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!tsk)) {
 		*ret = RET_ESRCH;
-		goto out;
+		return;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
 	*ret = do_msync(tsk->mm, start, start + len, flags);
 
-out:
-	ibapi_reply_message(ret, sizeof(u32), desc);
-
 	debug_dump_vm_all(tsk->mm, 0);
-	return 0;
 }
 #endif
 
@@ -796,7 +795,7 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 	struct m2m_mmap_reply_struct *reply = tx;
 
 	mmap_debug("src_nid:%u, pid:%u, addr: %lx, len: %lx, prot:%lx, flags:%lx, "
-		   "vm_flags: %lx, pgoff:%#lx, f_name:[%s]", nid, pid, addr, len, 
+		   "vm_flags: %lx, pgoff:%#lx, f_name:[%s]", nid, pid, addr, len,
 		   prot, flags, vm_flags, pgoff, f_name);
 
 	/*
@@ -833,7 +832,7 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 				reply->addr = 0;
 			goto reply;
 		}
-		
+
 		/* virtual memory map layout */
 		arch_pick_mmap_layout(tsk->mm);
 	}
@@ -900,7 +899,7 @@ int handle_m2m_munmap(struct m2m_munmap_struct *payload, u64 desc,
 	up_write(&mm->mmap_sem);
 
 out:
-	mmap_debug("%s, reply status: %x, max_gap: %lx\n", 
+	mmap_debug("%s, reply status: %x, max_gap: %lx\n",
 			__func__, reply->status, reply->max_gap);
 	ibapi_reply_message(reply, sizeof(*reply), desc);
 	debug_dump_vm_all(tsk->mm, 0);

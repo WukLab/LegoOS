@@ -268,6 +268,10 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 		handle_m2m_mremap_move_split(payload, desc, hdr, tx);
 		break;
 
+	case M2M_MSYNC:
+		handle_m2m_msync(payload, hdr, buffer);
+		break;
+
 	case M2M_FORK:
 		handle_m2m_fork(payload, desc, hdr, tx);
 		break;
