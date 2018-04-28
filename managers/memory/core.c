@@ -261,7 +261,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 		break;
 
 	case M2M_MREMAP_MOVE:
-		handle_m2m_mremap_move(payload, desc, hdr, tx);
+		handle_m2m_mremap_move(payload, hdr, buffer);
 		break;
 
 	case M2M_MREMAP_MOVE_SPLIT:
