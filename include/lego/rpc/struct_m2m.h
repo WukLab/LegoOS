@@ -93,8 +93,8 @@ struct m2m_mremap_move_split_reply_struct {
 	unsigned long	old_max_gap;
 	unsigned long	new_max_gap;
 };
-int handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *,
-				 u64, struct common_header *, void *);
+void handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *payload,
+				  struct common_header *hdr, struct thpool_buffer *tb);
 
 /* M2M_FINDVMA */
 struct m2m_findvma_struct {
