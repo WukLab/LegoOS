@@ -174,8 +174,10 @@ void handle_p2m_mmap(struct p2m_mmap_struct *payload,
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
-	if (down_write_killable(&tsk->mm->mmap_sem))
-		ret = -EINTR;
+	if (down_write_killable(&tsk->mm->mmap_sem)) {
+		reply->ret = -EINTR;
+		return;
+	}
 
 	load_reply_buffer(tsk->mm, &(reply->map));
 	ret = distvm_mmap_homenode(tsk->mm, file, addr, len, prot, flags, pgoff);
@@ -203,8 +205,8 @@ void handle_p2m_mmap(struct p2m_mmap_struct *payload,
 	debug_dump_vm_all(tsk->mm, 0);
 }
 
-int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
-		      struct common_header *hdr, void *tx)
+void handle_p2m_munmap(struct p2m_munmap_struct *payload,
+		       struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -212,22 +214,25 @@ int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 	unsigned long len = payload->len;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
-	struct p2m_munmap_reply_struct* reply = tx;
+	struct p2m_munmap_reply_struct *reply;
 
 	mmap_debug("src_nid:%u, pid:%u, addr:%#lx, len:%#lx",
 		   nid, pid, addr, len);
 
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
+
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
 		reply->ret = RET_ESRCH;
-		goto out;
+		return;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
 	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
 		reply->ret = RET_EINTR;
-		goto out;
+		return;
 	}
 
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
@@ -239,12 +244,8 @@ int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
 #endif
 	up_write(&mm->mmap_sem);
 
-out:
-	ibapi_reply_message(reply, sizeof(*reply), desc);
-
 	replicate_vma(tsk, REPLICATE_MUNMAP, addr, len, 0, 0);
 	debug_dump_vm_all(tsk->mm, 0);
-	return 0;
 }
 
 static int do_msync(struct lego_mm_struct *mm, unsigned long start, 

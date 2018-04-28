@@ -203,7 +203,8 @@ struct p2m_munmap_reply_struct {
 #endif
 };
 
-int handle_p2m_munmap(struct p2m_munmap_struct *, u64, struct common_header *, void *);
+void handle_p2m_munmap(struct p2m_munmap_struct *payload,
+		       struct common_header *hdr, struct thpool_buffer *tb);
 
 /*
  * P2M_MREMAP

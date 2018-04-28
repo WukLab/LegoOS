@@ -210,7 +210,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 
 	case P2M_MUNMAP:
 		inc_mm_stat(HANDLE_P2M_MUNMAP);
-		handle_p2m_munmap(payload, desc, hdr, tx);
+		handle_p2m_munmap(payload, hdr, buffer);
 		break;
 
 	case P2M_MREMAP:
