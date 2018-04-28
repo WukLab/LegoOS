@@ -249,7 +249,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 
 	case M2M_MUNMAP:
 		inc_mm_stat(HANDLE_M2M_MUNMAP);
-		handle_m2m_munmap(payload, desc, hdr, tx);
+		handle_m2m_munmap(payload, hdr, buffer);
 		break;
 
 	case M2M_FINDVMA:

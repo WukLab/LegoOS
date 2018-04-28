@@ -44,7 +44,8 @@ struct m2m_munmap_reply_struct {
 	int status;
 	unsigned long	max_gap;
 };
-int handle_m2m_munmap(struct m2m_munmap_struct *, u64, struct common_header *, void *);
+void handle_m2m_munmap(struct m2m_munmap_struct *payload,
+		       struct common_header *hdr, struct thpool_buffer *tb);
 
 /* M2M_MREMAP_GROW */
 struct m2m_mremap_grow_struct {
