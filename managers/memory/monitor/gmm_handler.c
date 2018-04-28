@@ -11,22 +11,23 @@
 #include <lego/sysinfo.h>
 #include <lego/comp_common.h>
 #include <lego/fit_ibapi.h>
+#include <memory/thread_pool.h>
 #include <monitor/gmm_handler.h>
 
-int handle_m2mm_status_report(u64 desc, struct common_header *hdr, void *tx)
+void handle_m2mm_status_report(struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
-	struct m2mm_mnode_status_reply *reply = tx;
+	struct m2mm_mnode_status_reply *reply;
 	struct manager_sysinfo info;
 
-	pr_info("[STATUS REPORT]\n");
+	pr_info("[REPORT MEMORY STATUS]\n");
 	WARN_ON(nid != CONFIG_GMM_NODEID);
+
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
 
 	manager_meminfo(&info);
 	reply->totalram = info.totalram;
 	reply->freeram = info.freeram;
-
-	ibapi_reply_message(reply, sizeof(*reply), desc);
-	return 0;
 }
 

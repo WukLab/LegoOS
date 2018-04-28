@@ -279,7 +279,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 
 #ifdef CONFIG_GMM
 	case M2MM_STATUS_REPORT:
-		handle_m2mm_status_report(desc, hdr, tx);
+		handle_m2mm_status_report(hdr, buffer);
 		break;
 #endif
 
