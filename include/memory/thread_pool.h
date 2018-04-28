@@ -15,10 +15,11 @@
 #include <lego/spinlock.h>
 #include <lego/comp_common.h>
 
-#define MAX_RXBUF_SIZE	(PAGE_SIZE * 20)
-
-#define THPOOL_RX_SIZE	(PAGE_SIZE * 32)
-#define THPOOL_TX_SIZE	(PAGE_SIZE * 32)
+/*
+ * This is the maximum reply buffer size.
+ * Retrict your reply size to below the limit.
+ */
+#define THPOOL_TX_SIZE		(PAGE_SIZE * 1024)
 
 /* TODO: use IB macro */
 #define NR_THPOOL_BUFFER	(4*24)
@@ -117,6 +118,8 @@ struct thpool_buffer {
 
 static inline void tb_set_tx_size(struct thpool_buffer *tb, int size)
 {
+	if (unlikely(size >= THPOOL_TX_SIZE))
+		panic("Size: %d\n", size);
 	tb->tx_size = size;
 }
 

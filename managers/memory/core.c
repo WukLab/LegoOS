@@ -174,10 +174,12 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 
 /* SYSCALL */
 	case P2M_READ:
+		inc_mm_stat(HANDLE_READ);
 		handle_p2m_read(payload, hdr, buffer);
 		break;
 
 	case P2M_WRITE:
+		inc_mm_stat(HANDLE_WRITE);
 		handle_p2m_write(payload, hdr, buffer);
 		break;
 
@@ -514,9 +516,6 @@ static inline void ht_check_worker(int i, struct thpool_worker *tw, struct hb_ca
 	} else {
 		if ((jiffies - cached->last_updated_jiffies) < 20 * HZ)
 			return;
-
-		if (cached->nr_thpool_reqs == nr_thpool_reqs)
-			panic("Watcdog: No more requests.");
 
 		if (!wip_buffer_thpool_worker(tw))
 			return;

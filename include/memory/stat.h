@@ -23,6 +23,9 @@ enum memory_manager_stat_item {
 	HANDLE_M2M_MMAP,
 	HANDLE_M2M_MUNMAP,
 
+	HANDLE_READ,
+	HANDLE_WRITE,
+
 	NR_MEMORY_MANAGER_STAT_ITEMS,
 };
 

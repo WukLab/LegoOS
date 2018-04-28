@@ -53,10 +53,16 @@ void handle_p2m_read(struct p2m_read_write_payload *payload,
 	struct p2m_read_reply *retbuf;
 	struct lego_task_struct *tsk;
 
-	file_debug("pid: %u tgid: %u buf: %p len: %zu, f_name: %s",
+	file_debug("pid: %u tgid: %u buf: %p len: %zu, f_name: %s count: %zu",
 		payload->pid, payload->tgid, payload->buf, payload->len,
-		payload->filename);
+		payload->filename, count);
 
+	/*
+	 * read() is dangerous here, because it may need a
+	 * very large tx buffer. Currently, we have two insurance:
+	 * - P side will chunk the read() based on THPOOL_TX_SIZE
+	 * - tb_set_tx_size() will check against THPOOL_TX_SIZE
+	 */
 	retbuf = thpool_buffer_tx(tb);
 	buf = (char *)retbuf + sizeof(retval);
 	tb_set_tx_size(tb, sizeof(retval) + count);

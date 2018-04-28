@@ -23,6 +23,10 @@ static const char *const memory_manager_stat_text[] = {
 	"handle_p2m_brk",
 	"handle_m2m_mmap",
 	"handle_m2m_munmap",
+
+	/* fs related */
+	"handle_read",
+	"handle_write",
 };
 
 #ifdef CONFIG_COUNTER_MEMORY_HANDLER
