@@ -30,6 +30,11 @@ unsigned long sysctl_pcache_alloc_timeout_sec __read_mostly = 30;
 static void bad_pcache(struct pcache_meta *pcm,
 		       const char *reason, unsigned long bad_flags)
 {
+	static bool bad_pcache_printed = false;
+
+	if (bad_pcache_printed)
+		return;
+
 	pr_alert("BUG: Bad pcache state in process [%s][pid:%d tgid: %d]\n",
 		current->comm, current->pid, current->tgid);
 
@@ -40,6 +45,7 @@ static void bad_pcache(struct pcache_meta *pcm,
 		pr_alert("bad because of flags: %#lx(%pGc)\n",\
 			 bad_flags, &bad_flags);
 	WARN_ON_ONCE(1);
+	bad_pcache_printed = true;
 	/* Leave bad fields for debug */
 }
 

@@ -86,12 +86,13 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait, bool dirty
 	 */
 	if (!dirty) {
 		SetVictimFlushed(victim);
-		put_victim(victim);
 		inc_pcache_event(PCACHE_VICTIM_FLUSH_SUBMITTED_CLEAN);
 		return 0;
 	}
 
 	__SetVictimWaitflush(victim);
+
+	get_victim(victim);
 
 	job = kmalloc(sizeof(*job), GFP_KERNEL);
 	if (WARN_ON(!job))
