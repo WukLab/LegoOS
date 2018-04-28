@@ -126,7 +126,8 @@ struct m2m_fork_struct {
 	u32		child_pid;
 	u32		prcsr_nid;
 };
-int handle_m2m_fork(struct m2m_fork_struct *, u64, struct common_header *, void *);
+void handle_m2m_fork(struct m2m_fork_struct *payload,
+		     struct common_header *hdr, struct thpool_buffer *tb);
 
 #endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */
 

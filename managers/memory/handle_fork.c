@@ -223,8 +223,8 @@ static int distribute_m2m_fork(struct lego_task_struct *parent,
  *
  * HACK!!! Check all the necessary setup steps.
  */
-int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc,
-		    struct common_header *hdr, void *tx)
+void handle_m2m_fork(struct m2m_fork_struct *payload,
+		     struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
 	u32 parent_pid = payload->parent_pid;
@@ -232,21 +232,24 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc,
 	u32 prcsr_nid = payload->prcsr_nid;
 	struct lego_task_struct *parent;
 	struct lego_task_struct *child;
-	u32 *reply = tx;
+	u32 *reply;
 
 	vma_debug("%s, nid: %d, pid: %d, tgid: %d, prcsr_nid: %d",
 		   __func__, nid, pid, tgid, prcsr_nid);
 
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
+
 	parent = find_lego_task_by_pid(prcsr_nid, parent_pid);
 	if (unlikely(!parent)) {
 		*reply = -ESRCH;
-		goto out;
+		return;
 	}
 
 	child = alloc_lego_task_struct();
 	if (unlikely(!child)) {
 		*reply = -ENOMEM;
-		goto out;
+		return;
 	}
 
 	child->pid = child_pid;
@@ -258,7 +261,7 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc,
 	if (!child->mm) {
 		*reply = -ENOMEM;
 		free_lego_task_struct(child);
-		goto out;
+		return;
 	}
 	/* virtual memory map layout */
 	arch_pick_mmap_layout(child->mm);
@@ -272,12 +275,12 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc,
 		/* Same process? */
 		if (likely(*reply == -EEXIST))
 			*reply = 0;
-		goto out;
+		return;
 	}
 
 	if (down_write_killable(&parent->mm->mmap_sem)) {
 		*reply = -EINTR;
-		goto out;
+		return;
 	}
 
 	down_write(&child->mm->mmap_sem);
@@ -287,10 +290,6 @@ int handle_m2m_fork(struct m2m_fork_struct *payload, u64 desc,
 
 	up_write(&child->mm->mmap_sem);
 	up_write(&parent->mm->mmap_sem);
-
-out:
-	ibapi_reply_message(reply, sizeof(u32), desc);
-	return 0;
 }
 
 /*
