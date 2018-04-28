@@ -253,7 +253,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 		break;
 
 	case M2M_FINDVMA:
-		handle_m2m_findvma(payload, desc, hdr, tx);
+		handle_m2m_findvma(payload, hdr, buffer);
 		break;
 
 	case M2M_MREMAP_GROW:

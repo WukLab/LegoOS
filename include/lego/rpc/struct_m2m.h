@@ -104,7 +104,8 @@ struct m2m_findvma_struct {
 struct m2m_findvma_reply_struct {
 	int vma_exist;
 };
-int handle_m2m_findvma(struct m2m_findvma_struct *, u64, struct common_header *, void *);
+void handle_m2m_findvma(struct m2m_findvma_struct *payload,
+		       struct common_header *hdr, struct thpool_buffer *tb);
 
 /* M2M_MSYNC */
 struct m2m_msync_struct {

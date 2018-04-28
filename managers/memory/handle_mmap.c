@@ -906,8 +906,8 @@ void handle_m2m_munmap(struct m2m_munmap_struct *payload,
 	debug_dump_vm_all(tsk->mm, 0);
 }
 
-int handle_m2m_findvma(struct m2m_findvma_struct *payload, u64 desc,
-		      struct common_header *hdr, void *tx)
+void handle_m2m_findvma(struct m2m_findvma_struct *payload,
+			struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -916,23 +916,26 @@ int handle_m2m_findvma(struct m2m_findvma_struct *payload, u64 desc,
 	unsigned long end = payload->end;
 	struct lego_task_struct *tsk;
 	struct lego_mm_struct *mm;
-	struct m2m_findvma_reply_struct *reply = tx;
+	struct m2m_findvma_reply_struct *reply;
 	struct vma_tree *root;
 
 	mmap_debug("src_nid:%u, pid:%u, begin:%#lx, end:%#lx",
 		   nid, pid, begin, end);
 
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
+
 	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!tsk)) {
 		reply->vma_exist = RET_ESRCH;
-		goto out;
+		return;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
 	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
 		reply->vma_exist = RET_EINTR;
-		goto out;
+		return;
 	}
 
 	reply->vma_exist = 0;
@@ -943,10 +946,7 @@ int handle_m2m_findvma(struct m2m_findvma_struct *payload, u64 desc,
 	save_vma_context(mm, root);
 	up_write(&mm->mmap_sem);
 
-out:
-	ibapi_reply_message(reply, sizeof(*reply), desc);
 	debug_dump_vm_all(tsk->mm, 0);
-	return 0;
 }
 
 int handle_m2m_mremap_grow(struct m2m_mremap_grow_struct *payload, u64 desc,
