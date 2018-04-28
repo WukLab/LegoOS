@@ -22,6 +22,7 @@
 #include <memory/pid.h>
 #include <memory/file_ops.h>
 #include <memory/pgcache.h>
+#include <memory/thread_pool.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_FILE
 #define file_debug(fmt, ...)	\
@@ -30,36 +31,41 @@
 static inline void file_debug(const char *fmt, ...) { }
 #endif
 
+struct p2m_read_reply {
+	/* nb of bytes read, or error */
+	ssize_t		retval;
+
+	/* the content */
+	char		buf[0];
+};
+
 /*
  * OPCODE: P2M_READ
  * Handle a read() syscall request from processor
  */
-int handle_p2m_read(struct p2m_read_write_payload *payload, u64 desc,
-		    struct common_header *hdr)
+void handle_p2m_read(struct p2m_read_write_payload *payload,
+		     struct common_header *hdr, struct thpool_buffer *tb)
 {
 	loff_t pos = payload->offset;
 	ssize_t count = payload->len;
 	ssize_t retval;
-	void *retbuf, *buf;
+	void *buf;
+	struct p2m_read_reply *retbuf;
 	struct lego_task_struct *tsk;
 
 	file_debug("pid: %u tgid: %u buf: %p len: %zu, f_name: %s",
 		payload->pid, payload->tgid, payload->buf, payload->len,
 		payload->filename);
 
+	retbuf = thpool_buffer_tx(tb);
+	buf = (char *)retbuf + sizeof(retval);
+	tb_set_tx_size(tb, sizeof(retval) + count);
+
 	tsk = find_lego_task_by_pid(hdr->src_nid, payload->tgid);
 	if (unlikely(!tsk)) {
-		retval = -ESRCH;
-		goto err_reply;
+		retbuf->retval = -ESRCH;
+		return;
 	}
-
-	retbuf = kmalloc(count + sizeof(retval), GFP_KERNEL);
-	if (!retbuf) {
-		retval = -ENOMEM;
-		goto err_reply;
-	}
-
-	buf = retbuf + sizeof(retval);
 
 #ifndef CONFIG_MEM_PAGE_CACHE
 	retval = __storage_read(tsk, payload->filename, buf, count, &pos);
@@ -67,28 +73,11 @@ int handle_p2m_read(struct p2m_read_write_payload *payload, u64 desc,
 	retval = lego_pgcache_read(NULL, payload->filename, STORAGE_NODE, buf, count, &pos);
 #endif
 
-	if (retval < 0) {
-		kfree(retbuf);
-		goto err_reply;
-	}
-
 	/*
-	 * The first 8 bytes is nr of bytes be read
-	 * We really need a structure to fill this.
-	 * This is hard to code and debug.
+	 * retval is the number of bytes be read
+	 * or a negative value indicate error.
 	 */
-	*(ssize_t *)retbuf = retval;
-
-	/* Succeed */
-	ibapi_reply_message(retbuf, count + sizeof(retval), desc);
-
-	kfree(retbuf);
-	return 0;
-
-err_reply:
-	/* Error, only reply 8 bytes */
-	ibapi_reply_message(&retval, sizeof(ssize_t), desc);
-	return 0;
+	retbuf->retval = retval;
 }
 
 /*

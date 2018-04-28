@@ -174,7 +174,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 
 /* SYSCALL */
 	case P2M_READ:
-		handle_p2m_read(payload, desc, hdr);
+		handle_p2m_read(payload, hdr, buffer);
 		break;
 
 	case P2M_WRITE:
@@ -327,7 +327,13 @@ static int thpool_worker_func(void *_worker)
 			set_wip_buffer_thpool_worker(w, b);
 
 			PROFILE_START(thpool_worker_handler);
+			b->tx_size = 0;
 			thpool_worker_handler(w, b);
+
+			/*
+			 * Leave this BUG_ON checking to catch
+			 * buggy handlers.
+			 */
 			BUG_ON(!b->tx_size);
 			PROFILE_LEAVE(thpool_worker_handler);
 

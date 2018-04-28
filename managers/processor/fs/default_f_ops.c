@@ -113,13 +113,10 @@ static ssize_t p2m_read(struct file *f, char __user *buf, size_t count,
 	retlen = ibapi_send_reply_imm(mem_node, msg, len_msg,
 				      retbuf, len_retbuf, false);
 
-	if (unlikely(retlen == sizeof(ssize_t))) {
-		retval = *(ssize_t *)retbuf;
-		file_debug("%s", ret_to_string(ERR_TO_LEGO_RET(retval)));
+	if (retlen != len_retbuf) {
+		WARN_ON_ONCE(1);
+		retval = -EIO;
 		goto out;
-	} else if (unlikely(retlen > len_retbuf)) {
-		panic("BUG: retlen: %zu, len_retbuf: %u\n",
-				retlen, len_retbuf);
 	}
 
 	/*
@@ -136,7 +133,7 @@ static ssize_t p2m_read(struct file *f, char __user *buf, size_t count,
 	file_debug(" app wants to read: %zu, we read: %zu", count, retval);
 
 	/* If success, we copy the content into user's cacheline */
-	if (likely(retval >= 0)) {
+	if (likely(retval > 0)) {
 #ifdef CONFIG_DEBUG_FILE
 		print_hex_dump_bytes("Read Content: ", DUMP_PREFIX_ADDRESS, content, retval);
 #endif
@@ -145,9 +142,6 @@ static ssize_t p2m_read(struct file *f, char __user *buf, size_t count,
 			retval = -EFAULT;
 			goto out;
 		}
-	} else {
-		/* should only got 8 bytes return buffer */
-		BUG();
 	}
 
 out:
