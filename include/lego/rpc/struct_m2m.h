@@ -30,7 +30,8 @@ struct m2m_mmap_reply_struct {
 	unsigned long	addr;
 	unsigned long	max_gap;
 };
-int handle_m2m_mmap(struct m2m_mmap_struct *, u64, struct common_header *, void *);
+void handle_m2m_mmap(struct m2m_mmap_struct *payload,
+		     struct common_header *hdr, struct thpool_buffer *tb);
 
 /* M2M_MUMMAP */
 struct m2m_munmap_struct {

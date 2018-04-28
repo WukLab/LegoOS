@@ -244,7 +244,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 /* DISTRIBUTED VMA */
 	case M2M_MMAP:
 		inc_mm_stat(HANDLE_M2M_MMAP);
-		handle_m2m_mmap(payload, desc, hdr, tx);
+		handle_m2m_mmap(payload, hdr, buffer);
 		break;
 
 	case M2M_MUNMAP:

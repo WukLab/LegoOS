@@ -776,8 +776,8 @@ out:
 	reply->ret_brk = mm->brk;
 }
 
-int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
-		    struct common_header *hdr, void *tx)
+void handle_m2m_mmap(struct m2m_mmap_struct *payload,
+		     struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -792,11 +792,14 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 	char *f_name = payload->f_name;
 	struct lego_task_struct *tsk;
 	struct lego_file *file = NULL;
-	struct m2m_mmap_reply_struct *reply = tx;
+	struct m2m_mmap_reply_struct *reply;
 
 	mmap_debug("src_nid:%u, pid:%u, addr: %lx, len: %lx, prot:%lx, flags:%lx, "
 		   "vm_flags: %lx, pgoff:%#lx, f_name:[%s]", nid, pid, addr, len,
 		   prot, flags, vm_flags, pgoff, f_name);
+
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
 
 	/*
 	 * since it's not homenode, won't be able to find task struct
@@ -807,7 +810,7 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 		tsk = alloc_lego_task_struct();
 		if (unlikely(!tsk)) {
 			reply->addr = -ENOMEM;
-			goto reply;
+			return;
 		}
 
 		tsk->pid = pid;
@@ -818,7 +821,7 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 		if (!tsk->mm) {
 			free_lego_task_struct(tsk);
 			reply->addr = -ENOMEM;
-			goto reply;
+			return;
 		}
 
 		/* All done, insert into hashtable */
@@ -830,7 +833,7 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 			/* Same process? */
 			if (likely(reply->addr == -EEXIST))
 				reply->addr = 0;
-			goto reply;
+			return;
 		}
 
 		/* virtual memory map layout */
@@ -846,13 +849,13 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 		file = file_open(tsk, f_name);
 		if (IS_ERR(file)) {
 			reply->addr = -ENOMEM;
-			goto reply;
+			return;
 		}
 	}
 
 	if (down_write_killable(&tsk->mm->mmap_sem)) {
 		reply->addr = -EINTR;
-		goto reply;
+		return;
 	}
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
@@ -861,10 +864,7 @@ int handle_m2m_mmap(struct m2m_mmap_struct *payload, u64 desc,
 
 	up_write(&tsk->mm->mmap_sem);
 
-reply:
-	ibapi_reply_message(reply, sizeof(*reply), desc);
 	debug_dump_vm_all(tsk->mm, 0);
-	return 0;
 }
 
 int handle_m2m_munmap(struct m2m_munmap_struct *payload, u64 desc,
