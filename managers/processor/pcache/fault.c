@@ -219,8 +219,9 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 
 	PROFILE_START(__pcache_fill_remote);
 
-	flush_job = steal_victim_flush_job();
-	if (likely(flush_job)) {
+	//flush_job = steal_victim_flush_job();
+	flush_job = NULL;
+	if (flush_job) {
 		comb_msg = kmalloc(sizeof(*comb_msg), GFP_KERNEL);
 		if (!comb_msg)
 			return -ENOMEM;

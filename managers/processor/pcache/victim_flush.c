@@ -169,7 +169,7 @@ void __victim_flush_func(struct victim_flush_job *job)
  * Stead a victim flush job from the pending queue.
  * Return NULL if we failed.
  */
-struct victim_flush_job *steal_victim_flush_job(void)
+struct victim_flush_job *__steal_victim_flush_job(void)
 {
 	struct victim_flush_job *job = NULL;
 
@@ -187,7 +187,12 @@ static int victim_flush_async(void *unused)
 	if (pin_current_thread())
 		panic("Fail to pin victim flush");
 
+	local_irq_disable();
+	preempt_disable();
 	for (;;) {
+		while (!nr_flush_queue_jobs())
+			cpu_relax();
+
 		spin_lock(&victim_flush_lock);
 		while (!list_empty(&victim_flush_queue)) {
 			struct victim_flush_job *job;
@@ -203,6 +208,8 @@ static int victim_flush_async(void *unused)
 		}
 		spin_unlock(&victim_flush_lock);
 	}
+	local_irq_enable();
+	preempt_enable();
 	return 0;
 }
 

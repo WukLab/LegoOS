@@ -405,17 +405,23 @@ victim_alloc_fastpath(void)
  */
 unsigned long sysctl_victim_alloc_timeout_sec __read_mostly = 20;
 
+DEFINE_PROFILE_POINT(victim_alloc_slowpath)
+
 static struct pcache_victim_meta *
 victim_alloc_slowpath(struct pcache_set *pset)
 {
 	struct pcache_victim_meta *victim;
 	int ret;
 	unsigned long alloc_start = jiffies;
+	PROFILE_POINT_TIME(victim_alloc_slowpath)
 
+	PROFILE_START(victim_alloc_slowpath);
 retry:
 	ret = victim_evict_line();
-	if (ret && ret != -EAGAIN)
+	if (ret && ret != -EAGAIN) {
+		PROFILE_LEAVE(victim_alloc_slowpath);
 		return NULL;
+	}
 
 	if (time_after(jiffies, alloc_start + sysctl_victim_alloc_timeout_sec * HZ)) {
 		/*
@@ -431,12 +437,15 @@ retry:
 			pset, pcache_set_to_set_index(pset),
 			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0);
 		dump_victim_lines_and_queue();
+		PROFILE_LEAVE(victim_alloc_slowpath);
 		return NULL;
 	}
 
 	victim = victim_alloc_fastpath();
 	if (!victim)
 		goto retry;
+
+	PROFILE_LEAVE(victim_alloc_slowpath);
 	return victim;
 }
 
@@ -542,6 +551,8 @@ victim_insert_hit_entries(struct pcache_victim_meta *victim, struct pcache_meta 
 	return 0;
 }
 
+DEFINE_PROFILE_POINT(victim_alloc)
+
 /*
  * First step of victim insertion.
  *
@@ -559,6 +570,7 @@ victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
 {
 	int ret;
 	struct pcache_victim_meta *victim;
+	PROFILE_POINT_TIME(victim_alloc)
 
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 
@@ -568,7 +580,9 @@ victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
 	 */
 	inc_pcache_event(PCACHE_VICTIM_PREPARE_INSERT);
 
+	PROFILE_START(victim_alloc);
 	victim = victim_alloc(pset);
+	PROFILE_LEAVE(victim_alloc);
 	if (!victim)
 		return ERR_PTR(-ENOMEM);
 	victim->pset = pset;
@@ -595,6 +609,8 @@ victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
 	return victim;
 }
 
+DEFINE_PROFILE_POINT(victim_submit_flush)
+
 /*
  * Second step of victim insertion
  *
@@ -607,6 +623,7 @@ void victim_finish_insert(struct pcache_victim_meta *victim, bool dirty)
 {
 	void *src, *dst;
 	struct pcache_meta *pcm = victim->pcm;
+	PROFILE_POINT_TIME(victim_submit_flush)
 
 	victim_debug("pcm: %p v%u", pcm, victim_index(victim));
 
@@ -650,7 +667,9 @@ void victim_finish_insert(struct pcache_victim_meta *victim, bool dirty)
 	 * Don't wait for the slow flush.
 	 * We are in pgfault critical path.
 	 */
+	PROFILE_START(victim_submit_flush);
 	victim_submit_flush_nowait(victim, dirty);
+	PROFILE_LEAVE(victim_submit_flush);
 }
 
 /* Wait for second step of insertion */

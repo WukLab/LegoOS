@@ -393,7 +393,14 @@ void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason);
 void dump_pcache_victim_simple(struct pcache_victim_meta *victim);
 void dump_pcache_victim_hits(struct pcache_victim_meta *victim);
 
-struct victim_flush_job *steal_victim_flush_job(void);
+struct victim_flush_job *__steal_victim_flush_job(void);
+
+static __always_inline struct victim_flush_job *steal_victim_flush_job(void)
+{
+	if (nr_flush_queue_jobs())
+		return __steal_victim_flush_job();
+	return NULL;
+}
 
 #else
 static inline void victim_cache_early_init(void) { }

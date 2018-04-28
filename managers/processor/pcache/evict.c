@@ -17,6 +17,7 @@
 #include <lego/syscalls.h>
 #include <lego/random.h>
 #include <lego/jiffies.h>
+#include <lego/profile.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
@@ -153,13 +154,21 @@ evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm)
 #endif /* CONFIG_PCACHE_EVICTION_PERSET_LIST */
 
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
+DEFINE_PROFILE_POINT(evict_line_victim_prepare)
+DEFINE_PROFILE_POINT(evict_line_victim_unmap)
+DEFINE_PROFILE_POINT(evict_line_victim_finish)
 static inline int
 evict_line_victim(struct pcache_set *pset, struct pcache_meta *pcm)
 {
 	struct pcache_victim_meta *victim;
 	bool dirty;
+	PROFILE_POINT_TIME(evict_line_victim_prepare)
+	PROFILE_POINT_TIME(evict_line_victim_unmap)
+	PROFILE_POINT_TIME(evict_line_victim_finish)
 
+	PROFILE_START(evict_line_victim_prepare);
 	victim = victim_prepare_insert(pset, pcm);
+	PROFILE_LEAVE(evict_line_victim_prepare);
 	if (IS_ERR(victim))
 		return PTR_ERR(victim);
 
@@ -168,10 +177,14 @@ evict_line_victim(struct pcache_set *pset, struct pcache_meta *pcm)
 	 * updates before we do the unmap operations.
 	 */
 	smp_wmb();
+	PROFILE_START(evict_line_victim_unmap);
 	dirty = pcache_try_to_unmap_check_dirty(pcm);
+	PROFILE_LEAVE(evict_line_victim_unmap);
 	PCACHE_BUG_ON_PCM(pcache_mapped(pcm), pcm);
 
+	PROFILE_START(evict_line_victim_finish);
 	victim_finish_insert(victim, dirty);
+	PROFILE_LEAVE(evict_line_victim_finish);
 
 	return 0;
 }
@@ -206,6 +219,9 @@ evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
 #endif
 }
 
+DEFINE_PROFILE_POINT(pcache_evict_do_find)
+DEFINE_PROFILE_POINT(pcache_evict_do_evict)
+
 /**
  * pcache_evict_line
  * @pset: the pcache set to find a line to evict
@@ -233,6 +249,8 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int nr_mapped;
 	int ret;
+	PROFILE_POINT_TIME(pcache_evict_do_find)
+	PROFILE_POINT_TIME(pcache_evict_do_evict)
 
 	inc_pcache_event(PCACHE_EVICTION_TRIGGERED);
 
@@ -243,9 +261,11 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	 * will try to avoid use it concurrently. Since lock is
 	 * held within evict_find_line(), it is fine to clear it.
 	 */
+	PROFILE_START(pcache_evict_do_find);
 	__SetPsetEvicting(pset);
 	pcm = evict_find_line(pset);
 	__ClearPsetEvicting(pset);
+	PROFILE_LEAVE(pcache_evict_do_find);
 
 	if (IS_ERR_OR_NULL(pcm)) {
 		if (likely(PTR_ERR(pcm) == -EAGAIN)) {
@@ -264,7 +284,9 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	nr_mapped = pcache_mapcount(pcm);
 	BUG_ON(nr_mapped < 1);
 
+	PROFILE_START(pcache_evict_do_evict);
 	ret = evict_line(pset, pcm);
+	PROFILE_LEAVE(pcache_evict_do_evict);
 	if (ret) {
 		/*
 		 * Revert what algorithm has done:
