@@ -88,11 +88,11 @@ void handle_p2m_read(struct p2m_read_write_payload *payload,
  * |<-hdr                |<-payload                     |<-content
  * retrun 0 on success, -errno on fail
  */
-int handle_p2m_write(struct p2m_read_write_payload *payload, u64 desc,
-		     struct common_header *hdr)
+void handle_p2m_write(struct p2m_read_write_payload *payload,
+		      struct common_header *hdr, struct thpool_buffer *tb)
 {
 	struct lego_task_struct *tsk;
-	ssize_t retval;
+	ssize_t *retval;
 	loff_t offset = payload->offset;
 	void *content = (void *)payload + sizeof(*payload);
 
@@ -100,23 +100,23 @@ int handle_p2m_write(struct p2m_read_write_payload *payload, u64 desc,
 		payload->pid, payload->tgid, payload->buf, payload->len,
 		payload->filename);
 
+	retval = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*retval));
+
 	tsk = find_lego_task_by_pid(hdr->src_nid, payload->tgid);
 	if (unlikely(!tsk)){
-		retval = -ESRCH;
-		goto out_reply;
+		*retval = -ESRCH;
+		return;
 	}
 
 #ifndef CONFIG_MEM_PAGE_CACHE
-	retval = __storage_write(tsk, payload->filename,
-				content, payload->len, &offset);
+	*retval = __storage_write(tsk, payload->filename,
+				  content, payload->len, &offset);
 #else
-	retval = lego_pgcache_write(NULL, payload->filename, STORAGE_NODE, content,
-			payload->len, &offset);
+	*retval = lego_pgcache_write(NULL, payload->filename,
+				     STORAGE_NODE, content,
+				     payload->len, &offset);
 #endif
-
-out_reply:
-	ibapi_reply_message(&retval, sizeof(retval), desc);
-	return retval;
 }
 
 int handle_p2m_close(struct p2m_close_struct *payload, u64 desc,

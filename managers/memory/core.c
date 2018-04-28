@@ -178,7 +178,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 		break;
 
 	case P2M_WRITE:
-		handle_p2m_write(payload, desc, hdr);
+		handle_p2m_write(payload, hdr, buffer);
 		break;
 
 #ifdef CONFIG_MEM_PAGE_CACHE

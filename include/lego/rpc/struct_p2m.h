@@ -99,7 +99,8 @@ struct p2m_read_write_payload {
 };
 void handle_p2m_read(struct p2m_read_write_payload *payload,
 		     struct common_header *hdr, struct thpool_buffer *tb);
-int handle_p2m_write(struct p2m_read_write_payload*, u64, struct common_header *);
+void handle_p2m_write(struct p2m_read_write_payload *payload,
+		      struct common_header *hdr, struct thpool_buffer *tb);
 
 /*
  * P2M_CLOSE
