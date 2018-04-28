@@ -201,7 +201,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 
 	case P2M_MMAP:
 		inc_mm_stat(HANDLE_P2M_MMAP);
-		handle_p2m_mmap(payload, desc, hdr, tx);
+		handle_p2m_mmap(payload, hdr, buffer);
 		break;
 
 	case P2M_MPROTECT:

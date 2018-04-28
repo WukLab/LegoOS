@@ -23,6 +23,7 @@
 #include <memory/file_ops.h>
 #include <memory/distvm.h>
 #include <memory/replica.h>
+#include <memory/thread_pool.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_MMAP
 #define mmap_debug(fmt, ...)	\
@@ -128,8 +129,8 @@ out:
  *  ERROR:
  *	RET_ESRCH
  */
-int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
-		    struct common_header *hdr, void *tx)
+void handle_p2m_mmap(struct p2m_mmap_struct *payload,
+		     struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
 	u32 pid = payload->pid;
@@ -141,17 +142,20 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	char *f_name = payload->f_name;
 	struct lego_task_struct *tsk;
 	struct lego_file *file = NULL;
-	struct p2m_mmap_reply_struct *reply = tx;
+	struct p2m_mmap_reply_struct *reply;
 	s64 ret;
 
 	mmap_debug("src_nid:%u,pid:%u,addr:%#lx,len:%#lx,prot:%#lx,flags:%#lx"
 		   "pgoff:%#lx,f_name:[%s]", nid, pid, addr, len, prot,
 		   flags, pgoff, f_name);
 
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
+
 	tsk = find_lego_task_by_pid(nid, pid);
 	if (unlikely(!tsk)) {
 		reply->ret = -ESRCH;
-		goto out;
+		return;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
@@ -163,7 +167,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 		file = file_open(tsk, f_name);
 		if (IS_ERR(file)) {
 			reply->ret = -ENOMEM;
-			goto out;
+			return;
 		}
 	}
 
@@ -185,7 +189,7 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	/* which means vm_mmap_pgoff() returns -ERROR */
 	if (unlikely(ret < 0)) {
 		reply->ret = ret;
-		goto out;
+		return;
 	}
 
 	reply->ret = 0;
@@ -195,12 +199,8 @@ int handle_p2m_mmap(struct p2m_mmap_struct *payload, u64 desc,
 	dump_reply(&reply->map);
 #endif
 
-out:
-	ibapi_reply_message(reply, sizeof(*reply), desc);
-
 	replicate_vma(tsk, REPLICATE_MMAP, reply->ret_addr, len, 0, 0);
 	debug_dump_vm_all(tsk->mm, 0);
-	return 0;
 }
 
 int handle_p2m_munmap(struct p2m_munmap_struct *payload, u64 desc,
