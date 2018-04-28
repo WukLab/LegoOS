@@ -32,6 +32,10 @@ struct tw_padding {
 } ____cacheline_aligned;
 #define TW_PADDING(name)	struct tw_padding name
 
+#define QUEUING_STAT_STRIDE_US	(5)
+#define QUEUING_STAT_STRIDE_NS	(QUEUING_STAT_STRIDE_US*1000)
+#define QUEUING_STAT_ENTRIES	(40)
+
 /* This structure describes a worker thread */
 struct thpool_worker {
 	/*
@@ -55,6 +59,9 @@ struct thpool_worker {
 	unsigned long		total_queuing_delay_ns;
 	unsigned long		max_queuing_delay_ns;
 	unsigned long		min_queuing_delay_ns;
+
+	/* us: [0, 5), [5, 10) ... [195, 200) */
+	unsigned long		queuing_stats[QUEUING_STAT_ENTRIES];
 	int			max_nr_queued;
 	unsigned long		flags;
 	struct thpool_buffer	*wip_buffer;
@@ -224,12 +231,18 @@ static inline unsigned long thpool_buffer_queuing_delay(struct thpool_buffer *tb
 
 static inline void add_thpool_worker_total_queuing(struct thpool_worker *tw, unsigned long diff_ns)
 {
+	int i;
+
 	tw->total_queuing_delay_ns += diff_ns;
 
 	if (diff_ns > tw->max_queuing_delay_ns)
 		tw->max_queuing_delay_ns = diff_ns;
 	if (diff_ns < tw->min_queuing_delay_ns)
 		tw->min_queuing_delay_ns = diff_ns;
+
+	i = (diff_ns / QUEUING_STAT_STRIDE_NS);
+	if (i < QUEUING_STAT_ENTRIES)
+		tw->queuing_stats[i]++;
 }
 
 static inline void inc_thpool_worker_nr_handled(struct thpool_worker *tw)

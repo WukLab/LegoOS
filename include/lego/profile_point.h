@@ -43,7 +43,7 @@ struct profile_point {
  * Stack is per-thread, thus SMP safe.
  */
 #define PROFILE_POINT_TIME(name)							\
-	unsigned long _PP_TIME(name);
+	unsigned long _PP_TIME(name) __maybe_unused;
 
 #define profile_point_start(name)							\
 	do {										\

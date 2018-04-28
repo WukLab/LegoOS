@@ -16,9 +16,10 @@ config MEM_PREFETCH
 	  Enable to prefetch pages from storage for page fault
 
 config THPOOL_NR_WORKERS
-	int "Thread poll number of workers"
+	int "Thread pool: number of workers"
 	range 1 16
 	default 4
+	depends on THPOOL
 	help
 	  Determines how many workers threads memory manager has.
 	  Each worker thread is pinned a CPU core. So, it should

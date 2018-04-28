@@ -194,7 +194,7 @@ static void __thpool_worker(struct thpool_worker *worker,
 	case P2M_LSEEK:
 		handle_p2m_lseek(payload, desc, hdr);
 		break;
-	
+
 	case P2M_RENAME:
 		handle_p2m_rename(payload, desc, hdr);
 		break;
@@ -374,9 +374,10 @@ unsigned long nr_thpool_reqs;
  */
 static int thpool_polling(void *unused)
 {
-	struct thpool_buffer *buffer;
-	struct thpool_worker *worker;
+	struct thpool_buffer *b;
+	struct thpool_worker *w;
 	int retlen;
+	PROFILE_POINT_TIME(__thpool_worker)
 
 	pin_current_thread();
 	pr_info("thpool: CPU%2d %s UP\n",
@@ -386,19 +387,35 @@ static int thpool_polling(void *unused)
 	local_irq_disable();
 	preempt_disable();
 	while (1) {
-		buffer = alloc_thpool_buffer();
+		b = alloc_thpool_buffer();
 
 		/* Wait until message comes in */
 		retlen = ibapi_receive_message(THPOOL_IB_PORT,
-				buffer->rx, THPOOL_RX_SIZE, &buffer->desc);
+				b->rx, THPOOL_RX_SIZE, &b->desc);
 
 		if (retlen >= THPOOL_RX_SIZE)
 			panic("%d %lu", retlen, THPOOL_RX_SIZE);
 
-		thpool_buffer_enqueue_time(buffer);
-		worker = select_thpool_worker(buffer);
-		enqueue_tail_thpool_worker(worker, buffer);
+#ifdef CONFIG_THPOOL
+		thpool_buffer_enqueue_time(b);
+		w = select_thpool_worker(b);
+		enqueue_tail_thpool_worker(w, b);
+#else
+		w = &thpool_worker_map[0];
+		set_in_handler_thpool_worker(w);
+		set_wip_buffer_thpool_worker(w, b);
 
+		PROFILE_START(__thpool_worker);
+		__thpool_worker(w, b);
+		PROFILE_LEAVE(__thpool_worker);
+
+		clear_wip_buffer_thpool_worker(w);
+		clear_in_handler_thpool_worker(w);
+
+		/* Return buffer to free pool */
+		inc_thpool_worker_nr_handled(w);
+		__ClearThpoolBufferUsed(b);
+#endif
 		nr_thpool_reqs++;
 	}
 	preempt_enable();
@@ -427,6 +444,7 @@ void __init thpool_init(void)
 		worker->min_queuing_delay_ns = ULONG_MAX;
 		INIT_LIST_HEAD(&worker->work_head);
 		spin_lock_init(&worker->lock);
+		memset(worker->queuing_stats, 0, sizeof(worker->queuing_stats));
 
 		init_completion(&thpool_init_completion);
 
@@ -495,6 +513,7 @@ void __init memory_manager_early_init(void)
 struct hb_cached {
 	struct thpool_buffer *wip_buffer;
 	unsigned long last_updated_jiffies;
+	unsigned long nr_thpool_reqs;
 };
 
 static struct hb_cached hb_cached_data[NR_THPOOL_WORKERS];
@@ -528,15 +547,20 @@ static inline void ht_check_worker(int i, struct thpool_worker *tw, struct hb_ca
 	if (!max_queued_thpool_worker(tw)) {
 		cached->wip_buffer = NULL;
 		cached->last_updated_jiffies = jiffies;
+		cached->nr_thpool_reqs = 0;
 		return;
 	}
 
 	if (wip_buffer_thpool_worker(tw) != cached->wip_buffer) {
 		cached->wip_buffer = wip_buffer_thpool_worker(tw);
 		cached->last_updated_jiffies = jiffies;
+		cached->nr_thpool_reqs = nr_thpool_reqs;
 	} else {
 		if ((jiffies - cached->last_updated_jiffies) < 20 * HZ)
 			return;
+
+		if (cached->nr_thpool_reqs == nr_thpool_reqs)
+			panic("Watcdog: No more requests.");
 
 		if (!wip_buffer_thpool_worker(tw))
 			return;
@@ -552,6 +576,10 @@ void print_thpool_stats(void)
 	struct thpool_worker *tw;
 
 	for (i = 0; i < NR_THPOOL_WORKERS; i++) {
+		int j;
+		u64 p_i, p_re;
+		char p_re_buf[32];
+
 		tw = thpool_worker_map + i;
 
 		pr_info("Watchdog:\n"
@@ -561,8 +589,19 @@ void print_thpool_stats(void)
 			"        total_queuing_ns: %lu avg_queuing_ns:%lu max_queuing_ns: %lu min_queuing_ns: %lu\n",
 			i, max_queued_thpool_worker(tw), tw->nr_queued, thpool_worker_in_handler(tw) ? "YES" : "NO",
 			tw->nr_handled, nr_thpool_reqs,
-			tw->total_queuing_delay_ns, tw->total_queuing_delay_ns / tw->nr_handled,
+			tw->total_queuing_delay_ns, tw->nr_handled ? (tw->total_queuing_delay_ns / tw->nr_handled) : 0,
 			tw->max_queuing_delay_ns, tw->min_queuing_delay_ns);
+
+		for (j = 0; j < QUEUING_STAT_ENTRIES; j++) {
+			if (!tw->queuing_stats[i])
+				continue;
+			p_i = div64_u64_rem(tw->queuing_stats[j] * 100UL, tw->nr_handled, &p_re);
+			scnprintf(p_re_buf, 8, "%0Lu", p_re);
+
+			pr_info("        [%3d, %3d)    %Lu.%s%%\n",
+				j * QUEUING_STAT_STRIDE_US, (j + 1) * QUEUING_STAT_STRIDE_US,
+				p_i, p_re_buf);
+		}
 
 		ht_check_worker(i, tw, &hb_cached_data[i]);
 	}
