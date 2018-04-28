@@ -169,7 +169,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 /* clflush REPLICA */
 	case P2M_PCACHE_REPLICA:
 		inc_mm_stat(HANDLE_PCACHE_REPLICA);
-		handle_p2m_replica(msg, desc);
+		handle_p2m_replica(msg, buffer);
 		break;
 
 /* SYSCALL */

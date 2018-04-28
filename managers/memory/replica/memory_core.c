@@ -27,6 +27,7 @@
 #include <memory/pid.h>
 #include <memory/task.h>
 #include <memory/replica.h>
+#include <memory/thread_pool.h>
 #include <processor/pcache.h>
 
 #ifdef CONFIG_DEBUG_HANDLE_REPLICA
@@ -333,7 +334,7 @@ static inline int append_replica_log(struct replica_struct *r,
 	return 0;
 }
 
-void handle_p2m_replica(void *_msg, u64 desc)
+void handle_p2m_replica(void *_msg, struct thpool_buffer *tb)
 {
 	struct p2m_replica_msg *msg;
 	struct replica_log *src_log;
@@ -359,5 +360,6 @@ void handle_p2m_replica(void *_msg, u64 desc)
 
 	reply = append_replica_log(replica, src_log);
 out:
-	ibapi_reply_message(&reply, sizeof(reply), desc);
+	*(int *)thpool_buffer_tx(tb) = reply;
+	tb_set_tx_size(tb, sizeof(int));
 }

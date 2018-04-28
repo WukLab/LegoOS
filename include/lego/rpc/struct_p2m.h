@@ -74,7 +74,7 @@ struct p2m_replica_msg {
 	struct common_header	header;
 	struct replica_log	log;
 } __packed;
-void handle_p2m_replica(void *, u64);
+void handle_p2m_replica(void *_msg, struct thpool_buffer *tb);
 
 /*
  * P2M_READ
