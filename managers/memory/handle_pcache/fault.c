@@ -20,6 +20,7 @@
 #include <lego/comp_storage.h>
 #include <memory/vm.h>
 #include <memory/pid.h>
+#include <memory/thread_pool.h>
 #include <processor/pcache.h>
 
 #include "internal.h"
@@ -50,13 +51,13 @@ static inline void handle_zerofill_debug(const char *fmt, ...) { }
  * Processor manager rely on the length of replied
  * message to know if us succeed or failed.
  */
-static void pcache_miss_error(u32 retval, u64 desc,
-			   struct lego_task_struct *p, u64 vaddr, void *tx)
+static void pcache_miss_error(u32 retval, struct lego_task_struct *p,
+			      u64 vaddr, struct thpool_buffer *tb)
 {
-	int *reply = tx;
+	int *reply = thpool_buffer_tx(tb);
 
 	*reply = retval;
-	ibapi_reply_message(reply, sizeof(*reply), desc);
+	tb_set_tx_size(tb, sizeof(*reply));
 
 	dump_lego_tasks();
 	if (p) {
@@ -121,9 +122,10 @@ unlock:
 }
 
 static void do_handle_p2m_zerofill_miss(struct lego_task_struct *p,
-					u64 vaddr, u32 flags, u64 desc, void *tx)
+					u64 vaddr, u32 flags,
+					struct thpool_buffer *tb)
 {
-	int *reply = tx;
+	int *reply = thpool_buffer_tx(tb);
 	int ret;
 
 	ret = common_handle_p2m_miss(p, vaddr, flags, NULL);
@@ -131,11 +133,12 @@ static void do_handle_p2m_zerofill_miss(struct lego_task_struct *p,
 		*reply = -EFAULT;
 	else
 		*reply = 0;
-	ibapi_reply_message(reply, sizeof(*reply), desc);
+	tb_set_tx_size(tb, sizeof(int));
 }
 
 static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
-				      u64 vaddr, u32 flags, u64 desc, void *tx)
+				      u64 vaddr, u32 flags,
+				      struct thpool_buffer *tb)
 {
 	int ret;
 	unsigned long new_page;
@@ -147,15 +150,18 @@ static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 		else if (ret & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV))
 			ret = RET_ESIGSEGV;
 
-		pcache_miss_error(ret, desc, p, vaddr, tx);
+		pcache_miss_error(ret, p, vaddr, tb);
 		return;
 	}
 
 	/*
 	 * For normal pcache miss, we do not use the rx buffer.
 	 * We simply use the page itself.
+	 *
+	 * TODO
 	 */
-	ibapi_reply_message((void *)new_page, PCACHE_LINE_SIZE, desc);
+	memcpy(tb->tx, (void *)new_page, PCACHE_LINE_SIZE);
+	tb->tx_size = PCACHE_LINE_SIZE;
 }
 
 static void do_combined_flush(void *_msg, struct lego_task_struct *p)
@@ -179,7 +185,8 @@ static int fault_in_kernel_space(unsigned long address)
 
 DEFINE_PROFILE_POINT(handle_miss)
 
-int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc, void *tx)
+void handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg,
+			    struct thpool_buffer *tb)
 {
 	u32 tgid, flags;
 	u64 vaddr;
@@ -198,29 +205,27 @@ int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg, u64 desc, void *tx)
 	p = find_lego_task_by_pid(src_nid, tgid);
 	if (unlikely(!p)) {
 		pr_info("%s(): src_nid: %d tgid: %d\n", __func__, src_nid, tgid);
-		pcache_miss_error(RET_ESRCH, desc, p, vaddr, tx);
-		return 0;
+		pcache_miss_error(RET_ESRCH, p, vaddr, tb);
+		return;
 	}
 
 	if (unlikely(fault_in_kernel_space(vaddr))) {
-		pcache_miss_error(RET_EFAULT, desc, p, vaddr, tx);
-		return 0;
+		pcache_miss_error(RET_EFAULT, p, vaddr, tb);
+		return;
 	}
 
 	PROFILE_START(handle_miss);
-	do_handle_p2m_pcache_miss(p, vaddr, flags, desc, tx);
+	do_handle_p2m_pcache_miss(p, vaddr, flags, tb);
 	if (msg->has_flush_msg)
 		do_combined_flush(msg, p);
 	PROFILE_LEAVE(handle_miss);
 
-	do_mmap_prefetch(p, vaddr, flags, 1 << PREFETCH_ORDER);
-
 	handle_pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
 		src_nid, msg->pid, tgid, flags, vaddr);
-	return 0;
 }
 
-void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc, void *tx)
+void handle_p2m_zerofill(struct p2m_zerofill_msg *msg,
+			 struct thpool_buffer *tb)
 {
 	u32 tgid, flags;
 	u64 vaddr;
@@ -237,16 +242,16 @@ void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc, void *tx)
 
 	p = find_lego_task_by_pid(src_nid, tgid);
 	if (unlikely(!p)) {
-		pcache_miss_error(RET_ESRCH, desc, p, vaddr, tx);
+		pcache_miss_error(RET_ESRCH, p, vaddr, tb);
 		return;
 	}
 
 	if (unlikely(fault_in_kernel_space(vaddr))) {
-		pcache_miss_error(RET_EFAULT, desc, p, vaddr, tx);
+		pcache_miss_error(RET_EFAULT, p, vaddr, tb);
 		return;
 	}
 
-	do_handle_p2m_zerofill_miss(p, vaddr, flags, desc, tx);
+	do_handle_p2m_zerofill_miss(p, vaddr, flags, tb);
 
 	handle_zerofill_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
 		src_nid, msg->pid, tgid, flags, vaddr);
@@ -254,7 +259,7 @@ void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc, void *tx)
 
 DEFINE_PROFILE_POINT(handle_flush)
 
-void handle_p2m_flush_one(struct p2m_flush_msg *msg, u64 desc)
+void handle_p2m_flush_one(struct p2m_flush_msg *msg, struct thpool_buffer *tb)
 {
 	pid_t pid;
 	unsigned long user_vaddr, dst_page;
@@ -271,7 +276,7 @@ void handle_p2m_flush_one(struct p2m_flush_msg *msg, u64 desc)
 	p = find_lego_task_by_pid(src_nid, pid);
 	if (unlikely(!p)) {
 		reply = -ESRCH;
-		goto out_reply;
+		goto out;
 	}
 
 	down_read(&p->mm->mmap_sem);
@@ -283,7 +288,8 @@ void handle_p2m_flush_one(struct p2m_flush_msg *msg, u64 desc)
 	} else
 		reply = -EFAULT;
 
-out_reply:
-	ibapi_reply_message(&reply, sizeof(reply), desc);
+out:
+	*(int *)thpool_buffer_tx(tb) = reply;
+	tb_set_tx_size(tb, sizeof(int));
 	PROFILE_LEAVE(handle_flush);
 }

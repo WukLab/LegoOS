@@ -115,6 +115,11 @@ struct thpool_buffer {
 	char			tx[THPOOL_TX_SIZE];
 };
 
+static inline void tb_set_tx_size(struct thpool_buffer *tb, int size)
+{
+	tb->tx_size = size;
+}
+
 enum thpool_buffer_flags {
 	THPOOL_BUFFER_used,
 

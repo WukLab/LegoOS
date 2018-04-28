@@ -14,6 +14,8 @@
 #include <processor/pcache_config.h>
 #include <lego/rpc/struct_common.h>
 
+struct thpool_buffer;
+
 /*
  * P2M_ZEROFILL
  */
@@ -24,7 +26,8 @@ struct p2m_zerofill_msg {
 	__u32			flags;
 	__u64			missing_vaddr;
 };
-void handle_p2m_zerofill(struct p2m_zerofill_msg *msg, u64 desc, void *tx);
+void handle_p2m_zerofill(struct p2m_zerofill_msg *msg,
+			 struct thpool_buffer *tb);
 
 /* P2M_PCACHE_FLUSH */
 struct p2m_flush_msg {
@@ -34,7 +37,7 @@ struct p2m_flush_msg {
 	char			pcacheline[PCACHE_LINE_SIZE];
 };
 
-void handle_p2m_flush_one(struct p2m_flush_msg *, u64);
+void handle_p2m_flush_one(struct p2m_flush_msg *msg, struct thpool_buffer *tb);
 
 /*
  * P2M_MISS
@@ -64,7 +67,8 @@ struct p2m_pcache_miss_reply_struct {
 	char	data[PCACHE_LINE_SIZE];
 };
 
-int handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *, u64, void *);
+void handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg,
+			    struct thpool_buffer *b);
 
 struct p2m_replica_msg {
 	struct common_header	header;

@@ -1819,6 +1819,7 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 #ifdef NOTIFY_MODEL
 	int test_result=0;
 #endif
+	struct imm_header_from_cq_to_port *tmp;
 	int reply_data, private_bits;
 
 	struct imm_message_metadata *tmp1;

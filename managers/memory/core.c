@@ -156,14 +156,14 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 /* PCACHE */
 	case P2M_PCACHE_MISS:
 		inc_mm_stat(HANDLE_PCACHE_MISS);
-		handle_p2m_pcache_miss(msg, desc, tx);
+		handle_p2m_pcache_miss(msg, buffer);
 		break;
 	case P2M_PCACHE_FLUSH:
 		inc_mm_stat(HANDLE_PCACHE_FLUSH);
-		handle_p2m_flush_one(msg, desc);
+		handle_p2m_flush_one(msg, buffer);
 		break;
 	case P2M_PCACHE_ZEROFILL:
-		handle_p2m_zerofill(msg, desc, tx);
+		handle_p2m_zerofill(msg, buffer);
 		break;
 
 /* clflush REPLICA */
@@ -328,6 +328,7 @@ static int thpool_worker_func(void *_worker)
 
 			PROFILE_START(thpool_worker_handler);
 			thpool_worker_handler(w, b);
+			BUG_ON(!b->tx_size);
 			PROFILE_LEAVE(thpool_worker_handler);
 
 			/*

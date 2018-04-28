@@ -69,7 +69,10 @@ int ibapi_establish_conn(int ib_port, int mynodeid);
 void ibapi_free_recv_buf(void *input_buf);
 
 /* IMM related */
+#ifdef CONFIG_COMP_MEMORY
 inline int ibapi_reply_message(void *addr, int size, uintptr_t descriptor);
+#endif
+
 inline int ibapi_reply_message_w_extra_bits(void *addr, int size, int bits, uintptr_t descriptor);
 inline int ibapi_reply_message_nowait(void *addr, int size, uintptr_t descriptor);
 inline int ibapi_reply_message_w_extra_bits_nowait(void *addr, int size, int bits, uintptr_t descriptor);
