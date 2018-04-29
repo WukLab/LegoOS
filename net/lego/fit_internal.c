@@ -2187,9 +2187,7 @@ int fit_poll_cq_pass(void *in)
 	struct thread_pass_struct *input = (struct thread_pass_struct *)in;
 	//printk(KERN_CRIT "%s: target_cq %p\n", __func__, input->target_cq);
 
-	local_irq_disable();
 	fit_poll_cq(input->ctx, input->target_cq);
-	local_irq_enable();
 
 	kfree(input);
 	//printk(KERN_CRIT "%s: kill ctx %p cq %p\n", __func__, (void *)input->ctx, (void *)input->target_cq);
@@ -2205,7 +2203,6 @@ int waiting_queue_handler(void *in)
 	
 	//printk(KERN_CRIT "%s\n", __func__);
 	pin_current_thread();
-	local_irq_disable();
 	while(1)
 	{
 		while(list_empty(&(request_list.list)))
@@ -2299,7 +2296,6 @@ int waiting_queue_handler(void *in)
 		kfree(new_request);
 		//kmem_cache_free(s_r_cache, new_request);
 	}
-	local_irq_enable();
 }
 
 void fit_setup_ibapi_header(uint32_t src_id, uint64_t reply_addr, uint64_t reply_indicator_index, uint32_t length, int priority, int type, struct ibapi_header *msg_header)
