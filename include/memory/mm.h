@@ -159,7 +159,12 @@ struct lego_mm_struct {
 	 * it back to NULL before request handler return.
 	 */
 	struct vmr_map_reply * reply;	
-#endif 
+
+#ifdef CONFIG_VMA_CACHE_AWARENESS
+	unsigned long addr_offset;	/* used for ruducing cache conflict */
+#endif
+
+#endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */
 };
 
 #endif /* _LEGO_MEMORY_MM_H_ */

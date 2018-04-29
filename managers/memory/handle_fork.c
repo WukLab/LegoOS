@@ -234,8 +234,8 @@ void handle_m2m_fork(struct m2m_fork_struct *payload,
 	struct lego_task_struct *child;
 	u32 *reply;
 
-	vma_debug("%s, nid: %d, pid: %d, tgid: %d, prcsr_nid: %d",
-		   __func__, nid, pid, tgid, prcsr_nid);
+	vma_debug("%s, nid: %d, parent_pid: %d, child_pid: %d, prcsr_nid: %d",
+		   __func__, nid, parent_pid, child_pid, prcsr_nid);
 
 	reply = thpool_buffer_tx(tb);
 	tb_set_tx_size(tb, sizeof(*reply));
