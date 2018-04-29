@@ -337,6 +337,7 @@ static inline int cpumask_test_and_clear_cpu(int cpu, struct cpumask *cpumask)
 
 #define for_each_possible_cpu(cpu) for_each_cpu((cpu), cpu_possible_mask)
 #define for_each_online_cpu(cpu)   for_each_cpu((cpu), cpu_online_mask)
+#define for_each_active_cpu(cpu)   for_each_cpu((cpu), cpu_active_mask)
 #define for_each_present_cpu(cpu)  for_each_cpu((cpu), cpu_present_mask)
 
 static inline void

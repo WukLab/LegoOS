@@ -154,6 +154,7 @@ void __victim_flush_func(struct victim_flush_job *job)
 	 * this victim can be an eviction candidate.
 	 */
 	SetVictimFlushed(victim);
+
 	/*
 	 * victim_finish_insert has grabbed 1 ref prior the job was
 	 * submitted. Here, we must have a ref > 0. If the victim

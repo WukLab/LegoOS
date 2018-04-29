@@ -219,61 +219,52 @@ static struct pcache_victim_meta *
 find_victim_to_evict(void)
 {
 	bool found = false;
-	struct pcache_victim_meta *v, *saver;
+	struct pcache_victim_meta *v, *safer;
 
-	if (atomic_read(&nr_usable_victims) < VICTIM_NR_ENTRIES)
+	/*
+	 * If multiple CPUs want to evict victim, we don't want them
+	 * to rush for the same just freed line. Leave some cushion.
+	 */
+	if (atomic_read(&nr_usable_victims) < (VICTIM_NR_ENTRIES-1))
 		return NULL;
 
 	victim_debug("begin selection. nr_allocated: %d",
 		atomic_read(&nr_usable_victims));
 
 	spin_lock(&usable_victims_lock);
-	list_for_each_entry_safe(v, saver, &usable_victims, next) {
+	list_for_each_entry_safe(v, safer, &usable_victims, next) {
 		PCACHE_BUG_ON_VICTIM(!VictimUsable(v), v);
 		PCACHE_BUG_ON_VICTIM(VictimReclaim(v), v);
 
-		victim_debug("  victim:%p index:%d refcount:%d nr_fill:%d locked:%d flags:(%pGV) "
-			 "pcm:%p pset:%p\n",
-			v, victim_index(v), atomic_read(&v->_refcount),
-			atomic_read(&v->nr_fill_pcache), spin_is_locked(&v->lock),
-			&v->flags, v->pcm, v->pset);
-
-		/*
-		 * Grab a ref first in case it goes away,
-		 * Check if someone else freed one before us.
-		 */
 		if (unlikely(!get_victim_unless_zero(v)))
 			goto out_unlock_list;
-
-		/*
-		 * Skip victim that has not been flushed back,
-		 * kvictim_flushd will flush it soon.
-		 * Flushed also implies it must have data
-		 */
-		if (!VictimFlushed(v))
-			goto loop_put;
-		PCACHE_BUG_ON_VICTIM(!VictimHasdata(v), v);
 
 		/* Lock contention? */
 		if (!spin_trylock(&v->lock))
 			goto loop_put;
 
 		/*
-		 * Skip victim that is filling back to pcache
-		 * Synchronize with victim_try_fill_pcache()
+		 * Skip victim that is, was filling back to pcache.
+		 * victim_try_fill_pcache() is responsible for free the vicitm.
 		 */
 		if (unlikely(victim_is_filling(v)))
+			goto loop_unlock_victim;
+		if (unlikely(VictimFillfree(v)))
+			goto loop_unlock_victim;
+
+		/*
+		 * Skip victim that has not been flushed back,
+		 * Flushed also implies it must have data
+		 */
+		if (!VictimFlushed(v))
 			goto loop_unlock_victim;
 
 		/*
 		 * 1 for original allocation
 		 * 1 for get_victim above
-		 * Otherwise it is used by others
 		 *
-		 * XXX
-		 * Currently only eviction, filling, flush routines
-		 * those are syned by different things. And this simple
-		 * refcount check should work. Be careful if we add more.
+		 * Otherwise it is still used by flush routine!
+		 * This is a time window after Flush bit set, before that put_pcache.
 		 */
 		if (unlikely(victim_ref_count(v) > 2))
 			goto loop_unlock_victim;
@@ -343,30 +334,31 @@ static int victim_evict_line(void)
 		inc_pcache_event(PCACHE_VICTIM_EVICTION_EAGAIN);
 		return -EAGAIN;
 	}
-
 	PCACHE_BUG_ON_VICTIM(!VictimReclaim(victim), victim);
-	if (unlikely(victim_ref_count(victim) > 2)) {
-		dump_pcache_victim(victim, "victim/ref bug");
-		BUG();
+
+	if (unlikely(!victim_ref_freeze(victim, 2))) {
+		if (unlikely(victim_ref_sub_and_test(victim, 2))) {
+			dump_pcache_victim(victim, "ref error");
+			WARN_ON_ONCE(1);
+			goto free;
+		}
+
+		ClearVictimReclaim(victim);
+		enqueue_usable_victim(victim);
+		return -EAGAIN;
 	}
 
-	/*
-	 * This victim is out of allocated list now. But victim_try_fill_pcache()
-	 * is still able to see this victim, because it use for_each_victim to walk.
-	 * However, this is OKAY. Because this victim has Reclaim bit set, and it
-	 * will not be reset until the last step. Check comment in that function.
-	 *
-	 * We manually set refcount to 0 and free it, it is kind of weird.
-	 */
-	victim_ref_count_set(victim, 0);
+free:
 	__put_victim_nolist(victim);
-
 	inc_pcache_event(PCACHE_VICTIM_EVICTION_SUCCEED);
 	return 0;
 }
 
 static inline void prep_new_victim(struct pcache_victim_meta *victim)
 {
+	spin_lock_init(&victim->lock);
+	atomic_set(&victim->nr_fill_pcache, 0);
+
 	/*
 	 * ref count = 1 for the caller
 	 */
@@ -374,8 +366,8 @@ static inline void prep_new_victim(struct pcache_victim_meta *victim)
 
 	victim->pcm = NULL;
 	victim->pset = NULL;
-	atomic_set(&victim->nr_fill_pcache, 0);
 	INIT_LIST_HEAD(&victim->next);
+	INIT_LIST_HEAD(&victim->hits);
 }
 
 static struct pcache_victim_meta *
@@ -384,23 +376,19 @@ victim_alloc_fastpath(void)
 	int index;
 	struct pcache_victim_meta *v;
 
-	spin_lock(&usable_victims_lock);
 	for_each_victim(v, index) {
 		if (likely(!TestSetVictimAllocated(v))) {
 			prep_new_victim(v);
-			__enqueue_usable_victim(v);
 
 			/*
 			 * Make the victim line visible to other
 			 * victim code such as pgfault fill path:
 			 */
 			set_victim_usable(v);
-			spin_unlock(&usable_victims_lock);
+			enqueue_usable_victim(v);
 			return v;
 		}
 	}
-	spin_unlock(&usable_victims_lock);
-
 	return NULL;
 }
 
@@ -704,7 +692,7 @@ victim_fill_pcache(struct mm_struct *mm, unsigned long address,
 		   pte_t *page_table, pte_t orig_pte, pmd_t *pmd, unsigned long flags,
 		   struct pcache_victim_meta *victim)
 {
-	return common_do_fill_page(mm, address, page_table, *page_table, pmd, flags,
+	return common_do_fill_page(mm, address, page_table, orig_pte, pmd, flags,
 			__victim_fill_pcache, victim, RMAP_VICTIM_FILL);
 }
 
@@ -740,6 +728,7 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
 			 * Increment the fill counter
 			 * We are no longer an eviction candidate
 			 */
+			SetVictimFillfree(victim);
 			inc_victim_filling(victim);
 			result = VICTIM_HIT;
 			break;
@@ -759,89 +748,16 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			   pte_t *page_table, pte_t orig_pte, pmd_t *pmd,
 			   unsigned long flags)
 {
-	struct pcache_victim_meta *v;
+	struct pcache_victim_meta *v, *safer;
 	enum victim_check_status result;
-	int index, ret = 1;
+	int ret = 1;
 
 	victim_debug("checking uva: %#lx tgid: %d", address, current->tgid);
 
-	spin_lock(&usable_victims_lock);
-	for_each_victim(v, index) {
-		/*
-		 * There is a small time frame after eviction release
-		 * the lock and before frees it. If we happen to see this,
-		 * we skip this line. If victim is _not_ Reclaim, it is either
-		 * Usable or simply free. Futher, this victim will _not_ be marked
-		 * as Reclaim after this check, since we are holding the lock above.
-		 *
-		 * Worst case:
-		 * 		CPU0			CPU1
-		 * t0	find_victim_to_evict
-		 * t1	  spin_lock
-		 * t2	    SetVictimReclaim
-		 * t3	    __dequeue
-		 * t4	  spin_unlock
-		 * t5   ..				spin_lock
-		 * t6	..
-		 * t7   ..
-		 * t8	__put_victim_nolist
-		 * t9					 VictimReclaim (1, continue)
-		 * t10     v->flags = 0;
-		 * t11					 VictimReclaim (0)
-		 * t12					 <interrupt>
-		 * t13   victim_alloc
-		 * t14   ..				 VictimUsable   (0)
-		 * t15     SetVictimUsable
-		 * t16					 VictimUsable   (1)
-		 *
-		 * VictimReclaim test can avoid t5-t9 race. Assume CPU1 gets an
-		 * interrupt after t11 testing (which yields 0), right before
-		 * the VictimUsable testing. Meanwhile, this victim got allocated
-		 * agagin by CPU0! As for CPU1, it may do the VictimUsable test at
-		 * t14, or t16 which is the worst case. Although semantically this
-		 * victim is not the same thing as what CPU1 looked since t11.
-		 *
-		 * But this is OKAY: what we want here, is just to grab
-		 * a victim that is Usable, and not being evicted, and of course,
-		 * will not be evicted if there will be a victim hit later.
-		 *
-		 * In all, these two checkings ensure us a victim that is Usable,
-		 * within the allocated victim list, and not being evicted.
-		 */
-		if (unlikely(VictimReclaim(v)))
-			continue;
-		if (unlikely(!VictimUsable(v)))
-			continue;
+	inc_pcache_event(PCACHE_VICTIM_LOOKUP);
 
-		/*
-		 * We need to grab one more reference to avoid concurrent hit.
-		 * Assume two CPUs are fauling into the same victim, and both
-		 * of them _will_ have victim_hit. Since our policy here is to
-		 * free the victim once hit, we must avoid one CPU operating
-		 * on a going-to-be-freed victim. The case is as follows:
-		 *
-		 *		CPU0				CPU1
-		 * t0	victim_try_fill_pcache
-		 * t1	  spin_lock
-		 * t2	    get_victim_unless_zero (ref=2)
-		 * t3	    victim_check_hit_entry (HIT)
-		 * t4	      inc_victim_filling (fill=1)
-		 * t5	  spin_unlock				victim_try_fill_pcache
-		 * t6	  victim_fill_pcache			  spin_lock
-		 * t7	  put_victim (for above get, ref=1)
-		 * t8	  dec_and_test_victim_filling (fill=0)	  ..
-		 * t9	   put_victim (for free, ref=0)		  ..
-		 * t10	    dequeue_usable_victim		    get_victim_unless_zero (failed)
-		 * t11	     spin_lock (wait)
-		 *
-		 * The case is CPU1 did a get_victim_unless_zero at t10, so we
-		 * know we are looking into a going-to-be freed victim. We should
-		 * just skip, even though this victim may yield a hit. But this
-		 * is okay, cause the content is already flushed back to memory.
-		 *
-		 * As long as CPU1's get_victim_unless_zero() happen _before_ CPU0' t9,
-		 * CPU1 can safely reuse this victim if it have a hit.
-		 */
+	spin_lock(&usable_victims_lock);
+	list_for_each_entry_safe(v, safer, &usable_victims, next) {
 		if (unlikely(!get_victim_unless_zero(v)))
 			continue;
 
@@ -867,35 +783,20 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			 */
 			spin_unlock(&usable_victims_lock);
 
+			inc_pcache_event(PCACHE_VICTIM_HIT);
 			ret = victim_fill_pcache(mm, address, page_table, orig_pte,
 						 pmd, flags, v);
 
 			/*
-			 * Paired with above get_victim_unless_zero.
-			 * We do not need to testzero here, combined with the above comment,
-			 * we are sure the refcount at this point must be larger or equal to 2.
-			 *
-			 * The larger than 2 case:
-			 *		CPU0				CPU1
-			 * t0	victim_try_fill_pcache
-			 * t1	  spin_lock
-			 * t2	    get_victim_unless_zero (ref=2)
-			 * t3	    victim_check_hit_entry (HIT)
-			 * t4	      inc_victim_filling (fill=1)
-			 * t5	  spin_unlock				victim_try_fill_pcache
-			 * t6						  spin_lock
-			 * t7						    get_victim_unless_zero(ref=3)
-			 * t8						    victim_check_hit_entry (HIT)
-			 * t9						    inc_victim_filling (fill=2)
-			 * t10						   spin_unlock
-			 * t11	  victim_fill_pcache			victim_fill_pcache
-			 * t12	  put_victim (for above get, ref=2)
-			 * t13						put_victim(for above get, ref =1)
-			 * t14	  dec_and_test_victim_filling (fill=1)
-			 * t15						dec_and_test_victim_filling(fill=0)
-			 * t16						 put_victim (free, ref=0)
+			 * In case one victim is hit by multiple CPUs, one fast CPU
+			 * may reach the underlying dec_and_test_victim_filling() first
+			 * and tried to free the victim. Thus we can have ref=1 when
+			 * we reach here. If that happens, simply do the work and return.
 			 */
-			put_victim(v);
+			if (unlikely(put_victim_testzero(v))) {
+				__put_victim(v);
+				goto out;
+			}
 
 			/*
 			 * VICTIM Policy:

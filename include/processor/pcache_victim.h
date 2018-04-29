@@ -92,6 +92,13 @@ victim_ref_add_unless(struct pcache_victim_meta *v, int nr, int u)
 	return atomic_add_unless(&v->_refcount, nr, u);
 }
 
+/* Return true if value drops to 0 */
+static inline int victim_ref_sub_and_test(struct pcache_victim_meta *v, int nr)
+{
+	int ret = atomic_sub_and_test(nr, &v->_refcount);
+	return ret;
+}
+
 /* Drop a ref, return true if ref drops to zero (no users) */
 static inline int victim_ref_count_dec_and_test(struct pcache_victim_meta *v)
 {
