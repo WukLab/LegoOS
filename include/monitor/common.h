@@ -7,7 +7,7 @@
  * (at your option) any later version.
  */
 /*
- * for any sending message struct, if no reply struct defined, 
+ * for any sending message struct, if no reply struct defined,
  * just reply the status using int
  */
 
@@ -19,7 +19,7 @@
 /*
  * PM2P_START_PROC
  * start a new process
- */ 
+ */
 struct pm2p_start_proc_struct {
 	int vpid;			/* virtual pid */
 	int homenode;			/* memory home node id */
@@ -43,9 +43,13 @@ struct p2pm_exit_proc_struct {
 /*
  * M2MM_CONSULT
  * consult memory monitor for memory allocation
+ * together reporting current memory status
  */
 struct consult_info {
 	unsigned long len;
+	unsigned long freeram;
+	unsigned long totalram;
+	unsigned long nr_request;
 };
 
 /*
@@ -61,14 +65,15 @@ struct consult_reply {
 	struct alloc_scheme scheme[CONFIG_FIT_NR_NODES];
 };
 
-/* 
- * M2MM_MNODE_STATUS 
- * we don't need any struct when sending request,
- * only necessary when receive request
+/*
+ * M2MM_MNODE_STATUS
  */
-struct m2mm_mnode_status_reply {
+struct m2mm_status_report {
+	struct common_header hdr;
+	int counter;
 	unsigned long totalram;
 	unsigned long freeram;
+	unsigned long nr_request;
 };
 
 /*
@@ -89,7 +94,7 @@ struct p2pm_request_vnode_reply_struct {
  * PM2P_BROADCAST_VNODE
  */
 struct pm2p_broadcast_vnode_struct {
-	struct common_header *hdr;
+	struct common_header hdr;
 	int p_nid;
 	int vid;
 	int ip;

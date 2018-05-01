@@ -78,18 +78,18 @@ static int prep_start_proc_payload(int size, char *cmd, char *sendbuf)
 	hdr->length = start_proc_msg_len(size);
 
 	info->vpid = get_vpid();
-	info->homenode = choose_homenode();
+	info->homenode = choose_node();
 	if (info->homenode < 0) {
 		pr_warn("NO MEMORY COMPONENT EXISTS\n");
 		return -EPERM;
 	}
-	
+
 	memcpy(cmdsent, cmd, size);
 	return info->vpid;
 }
 
 int lego_proc_create(char *command, int size)
-{	
+{
 	int ret = -ENOMEM, reply = 0;
 	char *sendbuf;
 	struct pnode_struct *target_pnode;
@@ -124,7 +124,7 @@ int lego_proc_create(char *command, int size)
 	proc->pnode = target_pnode;
 	list_add_tail(&proc->proclist, &target_pnode->proclist);
 #if USE_IBAPI
-	ret = ibapi_send_reply_imm(target_pnode->nid, sendbuf, 
+	ret = ibapi_send_reply_imm(target_pnode->nid, sendbuf,
 				start_proc_msg_len(size), &reply, sizeof(int), 0);
 	pr_debug("ibapi result: %d\n", ret);
 #endif
@@ -154,9 +154,9 @@ EXPORT_SYMBOL(lego_proc_create);
  * functions serve PM2P_EXIT_PROC
  * details refer to include/monitor/common.h
  */
-int handle_p2pm_exit_proc(struct p2pm_exit_proc_struct *payload, 
+int handle_p2pm_exit_proc(struct p2pm_exit_proc_struct *payload,
 			  uintptr_t desc, struct common_header *hdr)
-{	
+{
 	int reply = 0;
 	int vpid = payload->vpid;
 	struct pnode_struct *pnode;
@@ -185,7 +185,7 @@ reply:
 	return reply;
 }
 EXPORT_SYMBOL(handle_p2pm_exit_proc);
-		
+
 /*
  * functions for P2PM_REQUEST_VNODE
  */
@@ -211,7 +211,7 @@ static int pm2p_broadcast_vnode(int p_nid, int vid, int ip)
 	int ret = 0, reply = 0;
 	struct pnode_struct *pos;
 	struct pm2p_broadcast_vnode_struct *send;
-	
+
 	send = prepare_broadcast_payload(p_nid, vid, ip);
 	if (!send)
 		return -ENOMEM;
@@ -222,7 +222,7 @@ static int pm2p_broadcast_vnode(int p_nid, int vid, int ip)
 			continue;
 
 #if USE_IBAPI
-		ret = ibapi_send_reply_imm(pos->nid, &send, sizeof(send), 
+		ret = ibapi_send_reply_imm(pos->nid, &send, sizeof(send),
 					   &reply, sizeof(reply), 0);
 #endif
 		if (ret < 0 || reply) {
@@ -250,7 +250,7 @@ int handle_p2pm_request_vnode(struct p2pm_request_vnode_struct *req, uintptr_t d
 	vnode_map[vid].p_nid = nid;
 	vnode_map[vid].vid = vid;
 	vnode_map[vid].ip = ip;
-	
+
 	reply.status = 0;
 	reply.p_nid = nid;
 	reply.vid = vid;

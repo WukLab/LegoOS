@@ -224,6 +224,13 @@ config MEM_NR_NODES
 	help
 	  this config helps determine the size of reply of vma request 
 
+config VMA_CACHE_AWARENESS
+	bool "whether distributed vma being aware of cache"
+	default y
+	depends on COMP_MEMORY
+	help
+	  this config helps reducing cache conflicts
+
 config DEBUG_VMA
 	bool "Debug vma"
 	default n

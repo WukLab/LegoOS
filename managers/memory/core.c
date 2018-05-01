@@ -278,12 +278,6 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 		break;
 #endif
 
-#ifdef CONFIG_GMM
-	case M2MM_STATUS_REPORT:
-		handle_m2mm_status_report(hdr, buffer);
-		break;
-#endif
-
 	default:
 		handle_bad_request(hdr, desc);
 	}
@@ -433,6 +427,8 @@ void __init memory_component_init(void)
 	while (1)
 		hlt();
 #endif
+
+	gmm_init();
 
 	/* Register exec binary handlers */
 	exec_init();

@@ -8,26 +8,51 @@
  */
 
 #include <lego/mm.h>
+#include <lego/time.h>
+#include <lego/jiffies.h>
 #include <lego/sysinfo.h>
 #include <lego/comp_common.h>
 #include <lego/fit_ibapi.h>
+#include <lego/kthread.h>
+#include <memory/stat.h>
 #include <memory/thread_pool.h>
+#include <monitor/common.h>
 #include <monitor/gmm_handler.h>
 
-void handle_m2mm_status_report(struct common_header *hdr, struct thpool_buffer *tb)
+unsigned long sysctl_m2mm_status_report_interval_ms = 500;
+
+static int m2mm_status_report(void *_unused)
 {
-	u32 nid = hdr->src_nid;
-	struct m2mm_mnode_status_reply *reply;
+	struct m2mm_status_report r;
 	struct manager_sysinfo info;
+	int reply;
 
-	pr_info("[REPORT MEMORY STATUS]\n");
-	WARN_ON(nid != CONFIG_GMM_NODEID);
+	r.hdr.src_nid = LEGO_LOCAL_NID;
+	r.hdr.opcode = M2MM_STATUS_REPORT;
 
-	reply = thpool_buffer_tx(tb);
-	tb_set_tx_size(tb, sizeof(*reply));
+	while (1) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		schedule_timeout(msecs_to_jiffies(sysctl_m2mm_status_report_interval_ms));
+		__set_current_state(TASK_RUNNING);
 
-	manager_meminfo(&info);
-	reply->totalram = info.totalram;
-	reply->freeram = info.freeram;
+		manager_meminfo(&info);
+		r.totalram = info.totalram;
+		r.freeram = info.freeram;
+		r.nr_request = mm_stat(HANDLE_PCACHE_MISS) + mm_stat(HANDLE_PCACHE_FLUSH);
+
+		//pr_info("%s(): r.nr_req:%lu mm_stat:%lu\n", __func__, r.nr_request, mm_stat(HANDLE_PCACHE_MISS));
+		ibapi_send_reply_timeout(CONFIG_GMM_NODEID, &r, sizeof(r),
+					 &reply, sizeof(reply), false, 10);
+	}
+	BUG();
+	return 0;
 }
 
+void __init gmm_init(void)
+{
+	struct task_struct *ret;
+
+	ret = kthread_run(m2mm_status_report, NULL, "m2mm_hb");
+	if (IS_ERR(ret))
+		pr_info("ERROR: fail to create m2mm_hb thread");
+}

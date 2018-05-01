@@ -37,6 +37,11 @@ struct memory_manager_stat {
 
 extern struct memory_manager_stat memory_manager_stats;
 
+static inline unsigned long mm_stat(enum memory_manager_stat_item i)
+{
+	return atomic_long_read(&memory_manager_stats.stat[i]);
+}
+
 #ifdef CONFIG_COUNTER_MEMORY_HANDLER
 static inline void inc_mm_stat(enum memory_manager_stat_item i)
 {

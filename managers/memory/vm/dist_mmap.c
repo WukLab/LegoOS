@@ -32,11 +32,13 @@
 #include <lego/slab.h>
 #include <lego/comp_common.h>
 #include <lego/fit_ibapi.h>
+#include <lego/sysinfo.h>
 
 #include <memory/vm.h>
 #include <memory/task.h>
 #include <memory/distvm.h>
 #include <memory/file_types.h>
+#include <memory/stat.h>
 
 static int vmpool_init(struct lego_mm_struct *mm, bool is_copy)
 {
@@ -85,6 +87,10 @@ int distvm_init_homenode(struct lego_mm_struct *mm, bool is_copy)
 	mm->vmpool_rb = RB_ROOT;
 	if (vmpool_init(mm, is_copy))
 		return -ENOMEM;
+
+#ifdef CONFIG_VMA_CACHE_AWARENESS
+	mm->addr_offset = 0;
+#endif
 
 	return distvm_init(mm);
 }
@@ -155,7 +161,8 @@ vmpool_overlap_check(unsigned long pstart, unsigned long pend,
 }
 
 /* retieve start and end should be VM_GRANULARITY aligned */
-int vmpool_retrieve(struct rb_root *root, unsigned long start, unsigned long end)
+int
+vmpool_retrieve(struct rb_root *root, unsigned long start, unsigned long end)
 {
 	struct rb_node **node = &(root->rb_node), *parent = NULL;
 	struct vm_pool_struct *new;
@@ -170,10 +177,11 @@ int vmpool_retrieve(struct rb_root *root, unsigned long start, unsigned long end
 
 	while(*node) {
 		struct rb_node *adj;
-		struct vm_pool_struct *pool, *adj_pool = NULL;
+		struct vm_pool_struct *pool, *adjpool = NULL;
 		pool = rb_entry(*node, struct vm_pool_struct, vmr_rb);
 
-		vmpool_overlap_check(pool->pool_start, pool->pool_end, start, end);
+		vmpool_overlap_check(pool->pool_start,
+				     pool->pool_end, start, end);
 
 		/* Good cases, don't even need to create a new tree node,
 		 * and potentially remove tree node
@@ -192,16 +200,16 @@ int vmpool_retrieve(struct rb_root *root, unsigned long start, unsigned long end
 			if (!adj)
 				return 0;
 
-			adj_pool = rb_entry(adj, struct vm_pool_struct, vmr_rb);
+			adjpool = rb_entry(adj, struct vm_pool_struct, vmr_rb);
 			/* start not connected with end of previous hole */
-			if (adj_pool->pool_end < start)
+			if (adjpool->pool_end < start)
 				return 0;
 
 			/* finally, good case 1 */
-			pool->pool_start = adj_pool->pool_start;
+			pool->pool_start = adjpool->pool_start;
 			rb_erase(adj, root);
-			kfree(adj_pool);
-			adj_pool = NULL;
+			kfree(adjpool);
+			adjpool = NULL;
 			return 0;
 		} else if (pool->pool_end == start) {
 			/* mirror of above */
@@ -211,23 +219,23 @@ int vmpool_retrieve(struct rb_root *root, unsigned long start, unsigned long end
 			if (!adj)
 				return 0;
 
-			adj_pool = rb_entry(adj, struct vm_pool_struct, vmr_rb);
+			adjpool = rb_entry(adj, struct vm_pool_struct, vmr_rb);
 			/* start not connected with end of next hole */
-			if (adj_pool->pool_start > end)
+			if (adjpool->pool_start > end)
 				return 0;
 
 			/* finally, good case 2 */
-			pool->pool_end = adj_pool->pool_end;
+			pool->pool_end = adjpool->pool_end;
 			rb_erase(adj, root);
-			kfree(adj_pool);
-			adj_pool = NULL;
+			kfree(adjpool);
+			adjpool = NULL;
 			return 0;
 		} else {
-			/* when request not adjacent to current pool, need search
+			/* when request not adjacent to current pool, search
 			 * CASE 1:	|start.......end|
-			 *					|pstart.....pend|
+			 *				   |pstart.....pend|
 			 *
-			 * CASE 2:				|start.......end|
+			 * CASE 2:			   |start.......end|
 			 *		|pstart.....pend|
 			 */
 			parent = *node;
@@ -253,7 +261,8 @@ int vmpool_retrieve(struct rb_root *root, unsigned long start, unsigned long end
  * Find the first VM poolwhich satisfies  addr < pool_end,  NULL if none.
  * addr argument should be VM_GRANULARITY aligned
  */
-static struct vm_pool_struct *vmpool_find(struct rb_root *root, unsigned long addr)
+static struct vm_pool_struct *
+vmpool_find(struct rb_root *root, unsigned long addr)
 {
 	struct rb_node *node = root->rb_node;
 	struct vm_pool_struct *pool = NULL;
@@ -533,10 +542,10 @@ distribute_mremap_move(struct lego_task_struct *tsk, unsigned long old_addr,
 }
 
 static int
-distribute_mremap_move_split(struct lego_task_struct *tsk, unsigned long old_addr,
-			     unsigned long old_len, unsigned long new_addr,
-			     unsigned long new_len, int mnode,
-			     unsigned long *old_max_gap, unsigned long *new_max_gap)
+distribute_mremap_move_split(struct lego_task_struct *tsk,
+	unsigned long old_addr, unsigned long old_len,
+	unsigned long new_addr, unsigned long new_len, int mnode,
+	unsigned long *old_max_gap, unsigned long *new_max_gap)
 {
 #ifdef CONFIG_FIT
 	int ret;
@@ -550,10 +559,9 @@ distribute_mremap_move_split(struct lego_task_struct *tsk, unsigned long old_add
 	send.old_len = old_len;
 	send.new_len = new_len;
 
-	ret = net_send_reply_timeout(mnode, M2M_MREMAP_MOVE_SPLIT, (void *)&send,
-		sizeof(struct m2m_mremap_move_split_struct), (void *)&reply,
-		sizeof(struct m2m_mremap_move_split_reply_struct), false,
-		DEF_NET_TIMEOUT);
+	ret = net_send_reply_timeout(mnode, M2M_MREMAP_MOVE_SPLIT,
+			(void *)&send, sizeof(send), (void *)&reply,
+			sizeof(reply), false, DEF_NET_TIMEOUT);
 
 	if (ret != sizeof(reply))
 		return -EIO;
@@ -594,15 +602,15 @@ distribute_findvma(struct lego_task_struct *tsk, unsigned long begin,
 #endif
 }
 
-static inline void
-extract_reply(struct consult_reply *reply, int *nodecount, struct alloc_scheme **scheme)
+static inline void extract_reply(struct consult_reply *reply,
+				 int *nodecount, struct alloc_scheme **scheme)
 {
 	*scheme = reply->scheme;
 	*nodecount = reply->count;
 }
 
-static int
-consult_gmm(unsigned long request, unsigned long flag, struct consult_reply *reply)
+static int consult_gmm(unsigned long request,
+		       unsigned long flag, struct consult_reply *reply)
 {
 	int ret = 0;
 
@@ -610,9 +618,15 @@ consult_gmm(unsigned long request, unsigned long flag, struct consult_reply *rep
 
 #ifdef CONFIG_GMM
 
+	struct manager_sysinfo info;
 	struct consult_info send;
 
+	manager_meminfo(&info);
+	send.totalram = info.totalram;
+	send.freeram = info.freeram;
+	send.nr_request = atomic_long_read(&memory_manager_stats.stat[HANDLE_PCACHE_MISS]);
 	send.len = request;
+
 	ret = net_send_reply_timeout(CONFIG_GMM_NODEID, M2MM_CONSULT,
 				&send, sizeof(struct consult_info),
 				reply, sizeof(struct consult_reply),
@@ -720,7 +734,7 @@ void max_gap_update(struct vma_tree *root)
 	if (!lastvma)
 		root->max_gap = root->end - root->begin;
 	else {
-		/* there is definitely at least one vma, so don't need NULL check */
+		/* here, definitely at least one vma, don't need NULL check */
 		node = root->vm_rb.rb_node;
 		vma = rb_entry(node, struct vm_area_struct, vm_rb);
 		root->max_gap = max((long)(root->end - lastvma->vm_end),
@@ -778,8 +792,8 @@ free_root:
 	kfree(root);
 }
 
-static int
-unmap_vmatrees(struct lego_mm_struct *mm, unsigned long begin, unsigned long len)
+static int unmap_vmatrees(struct lego_mm_struct *mm,
+			  unsigned long begin, unsigned long len)
 {
 	unsigned long end = begin + len;
 	unsigned long idx = vmr_idx(begin);
@@ -847,7 +861,7 @@ int map_vmatrees(struct lego_mm_struct *mm, int mnode, unsigned long addr,
 	struct vma_tree *root;
 	struct vmr_map_struct *entry = NULL;
 	unsigned long begin = VMR_OFFSET(addr);
-	unsigned long end = addr + len - 1; /* -1 makes it an inclusive boundary */
+	unsigned long end = addr + len - 1;	/* an inclusive boundary */
 	unsigned long idx = vmr_idx(begin);
 	unsigned long end_idx = vmr_idx(end);
 
@@ -988,7 +1002,7 @@ static void update_nodegaps_freepool(struct lego_mm_struct *mm,
  */
 static unsigned long
 get_unmapped_range(struct lego_mm_struct *mm, unsigned long addr,
-		   unsigned long len, int mnode, unsigned long flag, int nr_split)
+		unsigned long len, int mnode, unsigned long flag, int nr_split)
 {
 	struct distvm_node *node = mm->node_map[mnode];
 	struct vma_tree *pos, *root = NULL;
@@ -1061,6 +1075,41 @@ get_free_pool:
 	return IS_ERR_VALUE(addr) ? addr : VMR_OFFSET(addr);
 }
 
+static unsigned long
+address_hint(struct lego_mm_struct *mm, unsigned long addr,
+	     unsigned long new_range, unsigned long flag,
+	     unsigned long first_scheme_len, unsigned long scheme_count)
+{
+	unsigned long end;
+
+	vma_trace("%s, new_range: %lx, addr: %lx, first_scheme_len: %lx, "
+		  "flag: %lx, scheme_count: %d\n", __func__,
+		  new_range, addr, first_scheme_len, flag, scheme_count);
+
+	/* on hint for MAP_FIXED */
+	if (flag & MAP_FIXED)
+		return addr;
+
+	end = min((unsigned long)(new_range + VMR_ALIGN(first_scheme_len)),
+		  (unsigned long)PAGE_ALIGN(TASK_SIZE - MIN_GAP));
+
+#ifdef CONFIG_VMA_CACHE_AWARENESS
+	/* For split, always aligned to vmrange end boundary with offset */
+	if (scheme_count > 1)
+		return end - first_scheme_len;
+
+	/* if user provides a hint, following the hint when it falls
+	 * into desired new range */
+	if (addr && vmr_idx(addr) == vmr_idx(new_range))
+		return addr;
+
+	/* for reducing the chance of virtual extended cache conflict */
+	return new_range + abs(mm->addr_offset - first_scheme_len);
+#else
+	return end - first_scheme_len;
+#endif
+}
+
 /*
  * Some cases for croping request start and len
  * Case 1: len aligned
@@ -1092,25 +1141,21 @@ get_free_pool:
  */
 static unsigned long
 do_dist_mmap_homenode(struct lego_mm_struct *mm, struct alloc_scheme *scheme,
-		      int scheme_count, unsigned long new_range, struct lego_file *file,
-		      unsigned long addr, unsigned long len, unsigned long prot,
-		      unsigned long flag, vm_flags_t vm_flags, unsigned long pgoff)
+	int scheme_count, unsigned long new_range, struct lego_file *file,
+	unsigned long addr, unsigned long len, unsigned long prot,
+	unsigned long flag, vm_flags_t vm_flags, unsigned long pgoff)
 {
 	struct vma_tree **map = mm->vmrange_map;
 	unsigned long var_addr;
 	unsigned long counter = 0, iteration_counter = 1;
 	unsigned long ret;
 
-	vma_trace("%s, new_range: %lx, addr: %lx, len: %lx, "
-		  "flag: %lx, vm_flags: %lx, pgoff: %lx, scheme_count: %d\n", 
-		  __func__, new_range, addr, len, flag, vm_flags, pgoff, scheme_count);
+	vma_trace("%s, new_range: %lx, addr: %lx, len: %lx, flag: %lx, "
+		  "vm_flags: %lx, pgoff: %lx, scheme_count: %d\n", __func__,
+		  new_range, addr, len, flag, vm_flags, pgoff, scheme_count);
 
-	var_addr = addr;
-	if (!(flag & MAP_FIXED)) {
-		var_addr = min((unsigned long)(new_range + VMR_ALIGN(scheme[0].len)),
-			       (unsigned long)PAGE_ALIGN(TASK_SIZE - MIN_GAP)) -
-			      scheme[0].len;
-	}
+	var_addr = address_hint(mm, addr, new_range,
+				flag, scheme[0].len, scheme_count);
 
 	while (counter < scheme_count) {
 		struct alloc_scheme *cur_scheme = &scheme[counter];
@@ -1127,7 +1172,8 @@ do_dist_mmap_homenode(struct lego_mm_struct *mm, struct alloc_scheme *scheme,
 			goto another_half;
 		}
 		/* Case 4 */
-		request = min(cur_len, (unsigned long)(map[idx]->end - var_addr));
+		request = min((unsigned long)(map[idx]->end - var_addr),
+			       cur_len);
 		nid = map[idx]->mnode;
 
 another_half:
@@ -1139,8 +1185,9 @@ another_half:
 			request -= end - VMR_OFFSET(end);
 
 		VMA_BUG_ON(PAGE_ALIGN(len) < request);
-		vma_trace("%s, addr: %lx, request: %lx, len: %lx, scheme counter: %lx\n",
-			   __func__, var_addr, request, cur_len, counter);
+		vma_trace("%s, addr: %lx, request: %lx, len: %lx, "
+			  "scheme counter: %lx\n", __func__,
+			  var_addr, request, cur_len, counter);
 
 		/* map vmrange array */
 		ret = map_vmatrees(mm, nid, var_addr, request, flag);
@@ -1189,6 +1236,10 @@ another_half:
 		VMA_BUG_ON(PAGE_ALIGN(request) > request);
 		VMA_BUG_ON((long)(cur_scheme->len) < 0);
 	}
+	/* update address offset with address assigned this time */
+	if (!(flag & MAP_FIXED))
+		mm->addr_offset = addr % VM_GRANULARITY;
+
 	return addr;
 }
 
@@ -1244,9 +1295,9 @@ do_dist_mmap(struct lego_mm_struct *mm, struct lego_file *file,
 }
 
 unsigned long
-distvm_mmap_homenode_noconsult(struct lego_mm_struct *mm, struct lego_file *file,
-		     unsigned long addr, unsigned long len, unsigned long prot,
-		     unsigned long flag, unsigned long pgoff)
+distvm_mmap_homenode_noconsult(struct lego_mm_struct *mm,
+	struct lego_file *file, unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flag, unsigned long pgoff)
 {
 	struct consult_reply *reply;
 	struct alloc_scheme *scheme;
@@ -1347,7 +1398,8 @@ out:
 }
 
 int
-distvm_brk_homenode(struct lego_mm_struct *mm, unsigned long addr, unsigned long len)
+distvm_brk_homenode(struct lego_mm_struct *mm,
+		    unsigned long addr, unsigned long len)
 {
 	struct consult_reply *reply;
 	struct alloc_scheme *scheme;
@@ -1412,7 +1464,8 @@ int distvm_munmap(struct lego_mm_struct *mm, unsigned long begin,
 }
 
 int
-distvm_munmap_homenode(struct lego_mm_struct *mm, unsigned long begin, unsigned long len)
+distvm_munmap_homenode(struct lego_mm_struct *mm,
+		       unsigned long begin, unsigned long len)
 {
 	int ret;
 
@@ -1453,7 +1506,7 @@ distvm_mremap_grow(struct lego_task_struct *tsk, unsigned long addr,
 	if (!vma_expandable(tsk, vma, new_len - old_len))
 		goto bad;
 
-	if (vma_adjust(vma, vma->vm_start, addr + new_len, vma->vm_pgoff, NULL))
+	if (vma_adjust(vma, vma->vm_start, addr+new_len, vma->vm_pgoff, NULL))
 		return -ENOMEM;
 
 	save_update_vma_context(tsk->mm, root);
@@ -1464,10 +1517,10 @@ bad:
 }
 
 unsigned long
-do_dist_mremap_move(struct lego_mm_struct *mm, int mnode, unsigned long old_addr,
-		    unsigned long old_len, unsigned long new_len,
-		    unsigned long new_range, unsigned long *old_max_gap,
-		    unsigned long *new_max_gap)
+do_dist_mremap_move(struct lego_mm_struct *mm, int mnode,
+		unsigned long old_addr, unsigned long old_len,
+		unsigned long new_len, unsigned long new_range,
+		unsigned long *old_max_gap, unsigned long *new_max_gap)
 {
 	struct vma_tree *oldroot = get_vmatree_by_addr(mm, old_addr);
 	struct vma_tree *newroot = get_vmatree_by_addr(mm, new_range);
@@ -1514,9 +1567,8 @@ do_dist_mremap_move(struct lego_mm_struct *mm, int mnode, unsigned long old_addr
 
 	load_vma_context(mm, newroot);
 	new_addr = get_unmapped_area(mm->task, vma->vm_file, 0, new_len,
-				     vma->vm_pgoff +
-				     ((old_addr - vma->vm_start) >> PAGE_SHIFT),
-				     flag);
+			vma->vm_pgoff+((old_addr-vma->vm_start) >> PAGE_SHIFT),
+			flag);
 	if (offset_in_page(new_addr))
 		return new_addr;
 
@@ -1555,7 +1607,8 @@ do_dist_mremap_move_split(struct lego_mm_struct *mm, unsigned long old_addr,
 		  __func__, old_addr, old_len, new_len, new_addr);
 
 	if (!newroot) {
-		int ret = map_vmatrees(mm, LEGO_LOCAL_NID, new_addr, new_len, 0);
+		int ret = map_vmatrees(mm, LEGO_LOCAL_NID,
+				       new_addr, new_len, 0);
 		if (ret)
 			return (unsigned long)ret;
 
@@ -1584,9 +1637,9 @@ do_dist_mremap_move_split(struct lego_mm_struct *mm, unsigned long old_addr,
 }
 
 static unsigned long
-do_dist_mremap_move_split_homenode(struct lego_mm_struct *mm, unsigned long old_addr,
-				   unsigned long old_len, unsigned long new_len,
-				   unsigned long new_range)
+do_dist_mremap_move_split_homenode(struct lego_mm_struct *mm,
+		unsigned long old_addr, unsigned long old_len,
+		unsigned long new_len, unsigned long new_range)
 {
 	struct vma_tree *root = get_vmatree_by_addr(mm, old_addr);
 	unsigned long delta = 0, ret, new_addr;
@@ -1609,7 +1662,8 @@ do_dist_mremap_move_split_homenode(struct lego_mm_struct *mm, unsigned long old_
 		if (delta + old_req == old_len)
 			new_req += new_len - old_len;
 
-		ret = map_vmatrees(mm, root->mnode, new_addr + delta, new_req, 0);
+		ret = map_vmatrees(mm, root->mnode,
+				   new_addr + delta, new_req, 0);
 		if (ret)
 			break;
 
