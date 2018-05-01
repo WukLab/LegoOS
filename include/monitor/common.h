@@ -67,9 +67,12 @@ struct consult_reply {
 
 /*
  * M2MM_MNODE_STATUS
- * we don't need any struct when sending request,
- * only necessary when receive request
  */
+struct m2mm_mnode_status {
+	struct common_header hdr;
+	int counter;
+};
+
 struct m2mm_mnode_status_reply {
 	unsigned long totalram;
 	unsigned long freeram;
@@ -94,7 +97,7 @@ struct p2pm_request_vnode_reply_struct {
  * PM2P_BROADCAST_VNODE
  */
 struct pm2p_broadcast_vnode_struct {
-	struct common_header *hdr;
+	struct common_header hdr;
 	int p_nid;
 	int vid;
 	int ip;

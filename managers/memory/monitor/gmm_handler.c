@@ -15,14 +15,16 @@
 #include <memory/thread_pool.h>
 #include <monitor/gmm_handler.h>
 
-void handle_m2mm_status_report(struct common_header *hdr, struct thpool_buffer *tb)
+void handle_m2mm_status_report(struct m2mm_mnode_status *payload,
+			       struct common_header *hdr, struct thpool_buffer *tb)
 {
 	u32 nid = hdr->src_nid;
+	int counter = payload->counter;
 	struct m2mm_mnode_status_reply *reply;
 	struct manager_sysinfo info;
 
 #ifdef CONFIG_SOFT_WATCHDOG
-	pr_info("[REPORT MEMORY STATUS]\n");
+	pr_info("[REPORT MEMORY STATUS: NR %d]\n", counter);
 #endif
 	WARN_ON(nid != CONFIG_GMM_NODEID);
 

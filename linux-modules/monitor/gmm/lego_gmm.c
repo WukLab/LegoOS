@@ -13,18 +13,13 @@
 #include <linux/module.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
-#include <linux/timer.h>
 #include <linux/jiffies.h>
 
 #include <common.h>
 #include <gmm.h>
 
-static unsigned long period;
 static LIST_HEAD(mnodes);
 static struct task_struct *status_polling;
-
-static void handle_timer_request(unsigned long unused);
-DEFINE_TIMER(timer, handle_timer_request, 0, 0);
 
 static struct mnode_struct *get_mnode(unsigned int nid)
 {
@@ -75,38 +70,34 @@ int handle_m2mm_consult(struct consult_info *payload, u64 desc, struct common_he
 }
 EXPORT_SYMBOL(handle_m2mm_consult);
 
-static void handle_timer_request(unsigned long unused)
+static inline void prepare_memstatus_payload(struct m2mm_mnode_status *send)
 {
-	wake_up_process(status_polling);
-	mod_timer(&timer, jiffies + period);
-}
+	static int counter = 0;
+	counter++;
 
-static inline void prepare_memstatus_payload(struct common_header *hdr)
-{
-	hdr->opcode = M2MM_STATUS_REPORT;
-	hdr->src_nid = LEGO_LOCAL_NID;
-	hdr->length = sizeof(*hdr);
+	send->counter = counter;
+	send->hdr.opcode = M2MM_STATUS_REPORT;
+	send->hdr.src_nid = LEGO_LOCAL_NID;
 }
 
 static int request_memory_nodes_status(void *unused)
 {
 	int ret = 0;
 	struct mnode_struct *pos;
-	struct common_header hdr;
+	struct m2mm_mnode_status send;
 	struct m2mm_mnode_status_reply reply;
 
 	while (1) {
-		pr_info("Request New Status\n");
-
 		set_current_state(TASK_INTERRUPTIBLE);
-		schedule();
-		if (kthread_should_stop())
-			break;
+		schedule_timeout(1);
+		__set_current_state(TASK_RUNNING);
 
-		prepare_memstatus_payload(&hdr);
+		prepare_memstatus_payload(&send);
+		pr_info("Request New Status: NR %d\n", send.counter);
+
 		list_for_each_entry(pos, &mnodes, list) {
 #if USE_IBAPI
-			ret = ibapi_send_reply_imm(pos->nid, &hdr, sizeof(hdr),
+			ret = ibapi_send_reply_imm(pos->nid, &send, sizeof(send),
 						   &reply, sizeof(reply), 0);
 #endif
 			if (ret < 0) {
@@ -118,8 +109,8 @@ static int request_memory_nodes_status(void *unused)
 			pos->totalram = reply.totalram;
 			pos->freeram = reply.freeram;
 			pos->nr_request = reply.nr_request;
-			pr_info("Node %d, new freeram: %lx, new totalram: %lx\n",
-				pos->nid, pos->freeram, pos->totalram);
+			pr_info("    Node %d, new freeram: %lx, new totalram: %lx, nr_request: %ld\n",
+				pos->nid, pos->freeram, pos->totalram, pos->nr_request);
 		}
 	}
 	return 0;
@@ -143,8 +134,9 @@ int choose_node(void)
 		return last_time_choose;
 
 	/* choose the one with least network traffic */
-	target = mnode = list_first_entry(&mnodes, struct mnode_struct, list);
-	list_for_each_entry(mnode, &mnode->list, list) {
+	target = list_first_entry(&mnodes, struct mnode_struct, list);
+	list_for_each_entry(mnode, &mnodes, list) {
+		pr_info("nid: %d, nr_request: %ld", mnode->nid, mnode->nr_request);
 		if (mnode->nr_request <= target->nr_request)
 			target = mnode;
 	}
@@ -154,9 +146,9 @@ int choose_node(void)
 
 #if RESIDENT_MEMORY_CHOOSE
 	struct mnode_struct *mnode, *target;
-	target = mnode = list_first_entry(&mnodes, struct mnode_struct, list);
 
-	list_for_each_entry(mnode, &mnode->list, list) {
+	target = list_first_entry(&mnodes, struct mnode_struct, list);
+	list_for_each_entry(mnode, &mnodes, list) {
 		if (mnode->freeram > target->freeram)
 			target = mnode;
 	}
@@ -178,6 +170,7 @@ static int lego_mnode_conn_setup(void)
 		m->nid = mnode_nids[i];
 		m->totalram = 0;
 		m->freeram = 0;
+		m->nr_request = 0;
 		list_add_tail(&m->list, &mnodes);
 		pr_info("memory node with id %d is online\n", m->nid);
 	}
@@ -193,11 +186,8 @@ static int __init lego_gmm_module_init(void)
 	if (ret)
 		return ret;
 #if MNODES_STATUS_REQUEST
-	period = msecs_to_jiffies(1000 * MNODES_STATUS_REQUEST_PERIOD);
-	mod_timer(&timer, jiffies + period);
-
-	status_polling = kthread_create(request_memory_nodes_status,
-					NULL, "request_memory_nodes_status");
+	status_polling = kthread_run(request_memory_nodes_status,
+				     NULL, "request_memory_nodes_status");
 	return IS_ERR(status_polling);
 #else
 	return 0;
@@ -220,7 +210,6 @@ static void __exit lego_gmm_module_exit(void)
 {
 	mnodes_free();
 #if MNODES_STATUS_REQUEST
-	del_timer(&timer);
 	kthread_stop(status_polling);
 #endif
 	pr_info("lego memory monitor module exit\n");
