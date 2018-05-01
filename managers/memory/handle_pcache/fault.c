@@ -16,6 +16,7 @@
 #include <lego/fit_ibapi.h>
 #include <lego/ratelimit.h>
 #include <lego/checksum.h>
+#include <lego/profile.h>
 #include <lego/comp_memory.h>
 #include <lego/comp_storage.h>
 #include <memory/vm.h>
@@ -75,16 +76,22 @@ static void pcache_miss_error(u32 retval, struct lego_task_struct *p,
  * Both of them are valid page fault in traditional concept.
  * We need to establish mapping (e.g. page table) here in memory component.
  */
+DEFINE_PROFILE_POINT(pcache_miss_find_vma)
+
 static int common_handle_p2m_miss(struct lego_task_struct *p,
 				  u64 vaddr, u32 flags, unsigned long *new_page)
 {
 	struct vm_area_struct *vma;
 	struct lego_mm_struct *mm = p->mm;
 	int ret;
+	PROFILE_POINT_TIME(pcache_miss_find_vma)
 
 	down_read(&mm->mmap_sem);
 
+	PROFILE_START(pcache_miss_find_vma);
 	vma = find_vma(mm, vaddr);
+	PROFILE_LEAVE(pcache_miss_find_vma);
+
 	if (unlikely(!vma)) {
 		pr_info("fail to find vma\n");
 		ret = VM_FAULT_SIGSEGV;
