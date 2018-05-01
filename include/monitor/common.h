@@ -68,12 +68,9 @@ struct consult_reply {
 /*
  * M2MM_MNODE_STATUS
  */
-struct m2mm_mnode_status {
+struct m2mm_status_report {
 	struct common_header hdr;
 	int counter;
-};
-
-struct m2mm_mnode_status_reply {
 	unsigned long totalram;
 	unsigned long freeram;
 	unsigned long nr_request;

@@ -11,14 +11,9 @@
 #define _GMM_HANDLER_H
 
 #ifdef CONFIG_GMM
-#include <monitor/common.h>
-
-/* 
- * M2MM_STATUS_REPORT
- */
-void handle_m2mm_status_report(struct m2mm_mnode_status *payload,
-			       struct common_header *hdr, struct thpool_buffer *tb);
-
-#endif /* CONFIG_GMM */
+void __init gmm_init(void);
+#else
+static inline void gmm_init(void) { }
+#endif
 
 #endif /* _GMM_HANDLER_H */

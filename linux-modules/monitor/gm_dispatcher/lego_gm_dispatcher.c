@@ -66,6 +66,10 @@ static int req_dispatcher(void)
 		handle_p2pm_request_vnode((void *)rcvbuf, desc);
 		break;
 
+	case M2MM_STATUS_REPORT:
+		handle_m2mm_status_report((void *)rcvbuf, desc);
+		break;
+
 	default:
 		handle_bad_request(hdr, desc);
 	}

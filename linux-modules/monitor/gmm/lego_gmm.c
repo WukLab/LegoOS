@@ -19,7 +19,6 @@
 #include <gmm.h>
 
 static LIST_HEAD(mnodes);
-static struct task_struct *status_polling;
 
 static struct mnode_struct *get_mnode(unsigned int nid)
 {
@@ -70,51 +69,28 @@ int handle_m2mm_consult(struct consult_info *payload, u64 desc, struct common_he
 }
 EXPORT_SYMBOL(handle_m2mm_consult);
 
-static inline void prepare_memstatus_payload(struct m2mm_mnode_status *send)
+void handle_m2mm_status_report(struct m2mm_status_report *payload, u64 desc)
 {
-	static int counter = 0;
-	counter++;
+	struct common_header *hdr = &payload->hdr;
+	struct mnode_struct *ms;
+	int src_nid = hdr->src_nid;
+	int reply = 0;
 
-	send->counter = counter;
-	send->hdr.opcode = M2MM_STATUS_REPORT;
-	send->hdr.src_nid = LEGO_LOCAL_NID;
+	ms = get_mnode(src_nid);
+	if (!ms)
+		goto reply;
+
+	ms->totalram = payload->totalram;
+	ms->freeram = payload->freeram;
+	ms->nr_request = payload->nr_request;
+
+	//pr_info("%s():  [src_nid=%d] [nr_reqs=%lu]\n",
+	//	__func__, src_nid, ms->nr_request);
+
+reply:
+	ibapi_reply_message(&reply, sizeof(reply), desc);
 }
-
-static int request_memory_nodes_status(void *unused)
-{
-	int ret = 0;
-	struct mnode_struct *pos;
-	struct m2mm_mnode_status send;
-	struct m2mm_mnode_status_reply reply;
-
-	while (1) {
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule_timeout(1);
-		__set_current_state(TASK_RUNNING);
-
-		prepare_memstatus_payload(&send);
-		pr_info("Request New Status: NR %d\n", send.counter);
-
-		list_for_each_entry(pos, &mnodes, list) {
-#if USE_IBAPI
-			ret = ibapi_send_reply_imm(pos->nid, &send, sizeof(send),
-						   &reply, sizeof(reply), 0);
-#endif
-			if (ret < 0) {
-				pr_info("couldn't retrieve memory information from node %d\n",
-					pos->nid);
-				continue;
-			}
-
-			pos->totalram = reply.totalram;
-			pos->freeram = reply.freeram;
-			pos->nr_request = reply.nr_request;
-			pr_info("    Node %d, new freeram: %lx, new totalram: %lx, nr_request: %ld\n",
-				pos->nid, pos->freeram, pos->totalram, pos->nr_request);
-		}
-	}
-	return 0;
-}
+EXPORT_SYMBOL(handle_m2mm_status_report);
 
 int choose_node(void)
 {
@@ -136,7 +112,7 @@ int choose_node(void)
 	/* choose the one with least network traffic */
 	target = list_first_entry(&mnodes, struct mnode_struct, list);
 	list_for_each_entry(mnode, &mnodes, list) {
-		pr_info("nid: %d, nr_request: %ld", mnode->nid, mnode->nr_request);
+		//pr_info("nid: %d, nr_request: %ld", mnode->nid, mnode->nr_request);
 		if (mnode->nr_request <= target->nr_request)
 			target = mnode;
 	}
@@ -183,15 +159,8 @@ static int __init lego_gmm_module_init(void)
 
 	pr_info("lego memory monitor module init is called.\n");
 	ret = lego_mnode_conn_setup();
-	if (ret)
-		return ret;
-#if MNODES_STATUS_REQUEST
-	status_polling = kthread_run(request_memory_nodes_status,
-				     NULL, "request_memory_nodes_status");
-	return IS_ERR(status_polling);
-#else
-	return 0;
-#endif
+
+	return ret;
 }
 
 /*
@@ -209,9 +178,6 @@ static void mnodes_free(void)
 static void __exit lego_gmm_module_exit(void)
 {
 	mnodes_free();
-#if MNODES_STATUS_REQUEST
-	kthread_stop(status_polling);
-#endif
 	pr_info("lego memory monitor module exit\n");
 }
 

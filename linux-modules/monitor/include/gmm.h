@@ -19,7 +19,8 @@ struct mnode_struct {
 	struct list_head list;
 };
 
-extern int choose_node(void);
-extern int handle_m2mm_consult(struct consult_info *, u64, struct common_header *);
+int choose_node(void);
+int handle_m2mm_consult(struct consult_info *, u64, struct common_header *);
+void handle_m2mm_status_report(struct m2mm_status_report *payload, u64 desc);
 
 #endif /* _LEGO_GMM_H */

@@ -44,8 +44,7 @@ const static int pnode_nids[PROCESSOR_NODE_COUNT] =
 /*
  * GMM configuration
  * CONFIG_MEM_NR_NODES:			save as aboce, just for compatibility with Lego def
- * MNODES_STATUS_REQUEST: enable	memory node status polling
- * MNODES_STATUS_REQUEST_PERIOD:	memory nodes status polling period
+ * MEMORY_NODE_COUNT:			number of memory nodes connected
  *
  * momery node selection policy(only enable 1):
  * RR_CHOOSE_INTERVAL:			round robin interval, if 1, xyxy, if 2, xxyy, etc.
@@ -53,13 +52,10 @@ const static int pnode_nids[PROCESSOR_NODE_COUNT] =
  * NETWORK_TRAFFIC_RR_CHOOSE:		similar to RR, but switch depends on network traffic
  * RESIDENT_MEMORY_CHOOSE:		choose depends on maximum free resident memory
  *
- * MEMORY_NODE_COUNT:			number of memory nodes connected
  * mnode_nids:				memory node id array with size MEMORY_NODE_COUNT
  */
 #define MEMORY_NODE_COUNT		1
 #define CONFIG_MEM_NR_NODES		CONFIG_FIT_NR_NODES
-#define MNODES_STATUS_REQUEST		0
-#define MNODES_STATUS_REQUEST_PERIOD	30
 #define RR_CHOOSE_INTERVAL		4
 #define PURE_RR_CHOOSE			0
 #define NETWORK_TRAFFIC_RR_CHOOSE	1
