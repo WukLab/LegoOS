@@ -26,6 +26,8 @@ enum memory_manager_stat_item {
 	HANDLE_READ,
 	HANDLE_WRITE,
 
+	NR_BATCHED_LOG_FLUSH,
+
 	NR_MEMORY_MANAGER_STAT_ITEMS,
 };
 

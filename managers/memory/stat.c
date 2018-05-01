@@ -27,6 +27,9 @@ static const char *const memory_manager_stat_text[] = {
 	/* fs related */
 	"handle_read",
 	"handle_write",
+
+	/* replication */
+	"nr_batched_log_flush"
 };
 
 #ifdef CONFIG_COUNTER_MEMORY_HANDLER

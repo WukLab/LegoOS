@@ -276,45 +276,55 @@ static inline bool replica_log_full(struct replica_struct *r)
 	return false;
 }
 
-/*
- * Reset HEAD to 0.
- * Called with @r locked
- */
-static inline void reset_replica_head(struct replica_struct *r)
-{
-	r->HEAD = 0;
-}
-
-unsigned long mem_sysctl_replica_alloc_timeout_sec = 30;
-
 struct replica_log *alloc_replica_log(struct replica_struct *r)
 {
-	struct replica_log *log;
-	unsigned long start = jiffies;
+	struct replica_log *log = NULL;
 
 	spin_lock(&r->lock);
-retry:
+
+	/*
+	 * Best-effort:
+	 * If the in-memory log is under flush,
+	 * do not append the entry.
+	 */
+	if (unlikely(ReplicaFlushing(r)))
+		goto unlock;
+
 	if (unlikely(replica_log_full(r))) {
-		if (time_after(jiffies, start + mem_sysctl_replica_alloc_timeout_sec * HZ)) {
-			spin_unlock(&r->lock);
-			dump_replica_struct(r, "timeout");
-			WARN_ON_ONCE(1);
-			return NULL;
-		}
+		struct log_flush_job *job;
+
+		/* flush thread will free @job */
+		job = kmalloc(sizeof(*job), GFP_KERNEL);
+		if (!job)
+			goto unlock;
 
 		/*
-		 * - Wait until all logs are valid
-		 * - Flush whole log back to storage
-		 * - Reset HEAD to 0
+		 * Wait until all logs are valid
+		 * We do this because we do log alloc before
+		 * copying the real data from network.
 		 */
 		wait_for_replica_struct(r);
-		flush_replica_struct(r);
-		reset_replica_head(r);
-		goto retry;
-	}
-	log = __alloc_replica_log(r);
-	spin_unlock(&r->lock);
 
+		/*
+		 * Best effort:
+		 * If the in-memory log is full,
+		 * do not append the entry. Submit the flush
+		 * job and wake up the slave to do the dirty work.
+		 */
+		SetReplicaFlushing(r);
+		job->r = r;
+		submit_replcia_flush_job(job);
+		goto unlock;
+	}
+
+	/*
+	 * Alright the in-memory log is not full and it is
+	 * not under flushing back, allocate one for it:
+	 */
+	log = __alloc_replica_log(r);
+
+unlock:
+	spin_unlock(&r->lock);
 	return log;
 }
 
@@ -358,6 +368,10 @@ void handle_p2m_replica(void *_msg, struct thpool_buffer *tb)
 		goto out;
 	}
 
+	/*
+	 * Append is not guranteed to succeed.
+	 * Our replication is doing the best-effort.
+	 */
 	reply = append_replica_log(replica, src_log);
 out:
 	*(int *)thpool_buffer_tx(tb) = reply;

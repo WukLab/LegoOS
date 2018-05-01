@@ -132,11 +132,29 @@ static inline void put_replica(struct replica_struct *r)
 		__put_replica_struct(r);
 }
 
+/*
+ * Reset HEAD to 0.
+ * This is safe because we have already set the Flush bit.
+ * And others will not be allowed to alloc.
+ */
+static inline void reset_replica_head(struct replica_struct *r)
+{
+	r->HEAD = 0;
+}
+
 void flush_replica_struct(struct replica_struct *r);
 
 void dump_replica_log(struct replica_log *log, int idx);
 void dump_replica_struct(struct replica_struct *r, char *reason);
 void dump_all_replica(void);
+
+/* async log flush */
+struct log_flush_job {
+	struct replica_struct	*r;
+	struct list_head	list;
+};
+void submit_replcia_flush_job(struct log_flush_job *job);
+void __init init_memory_flush_thread(void);
 
 /*
  * Primary Memory VMA Replication

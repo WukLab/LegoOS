@@ -26,6 +26,7 @@
 #include <memory/stat.h>
 #include <memory/loader.h>
 #include <memory/distvm.h>
+#include <memory/replica.h>
 #include <memory/thread_pool.h>
 #include <memory/pgcache.h>
 
@@ -437,6 +438,8 @@ void __init memory_component_init(void)
 	exec_init();
 	thpool_init();
 
+	init_memory_flush_thread();
+
 #ifdef CONFIG_VMA_MEMORY_UNITTEST
 	mem_vma_unittest();
 #endif
@@ -478,7 +481,7 @@ struct hb_cached {
 	unsigned long nr_thpool_reqs;
 };
 
-static struct hb_cached hb_cached_data[NR_THPOOL_WORKERS];
+struct hb_cached hb_cached_data[NR_THPOOL_WORKERS];
 
 static inline void report_stucked_worker(int idx, struct thpool_worker *tw)
 {
