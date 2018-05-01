@@ -15,10 +15,11 @@ struct mnode_struct {
 	__u32 nid;
 	unsigned long totalram;
 	unsigned long freeram;
+	unsigned long nr_request;
 	struct list_head list;
 };
 
-extern int choose_homenode(void);
+extern int choose_node(void);
 extern int handle_m2mm_consult(struct consult_info *, u64, struct common_header *);
 
 #endif /* _LEGO_GMM_H */

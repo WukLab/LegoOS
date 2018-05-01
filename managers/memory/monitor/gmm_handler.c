@@ -11,6 +11,7 @@
 #include <lego/sysinfo.h>
 #include <lego/comp_common.h>
 #include <lego/fit_ibapi.h>
+#include <memory/stat.h>
 #include <memory/thread_pool.h>
 #include <monitor/gmm_handler.h>
 
@@ -20,7 +21,9 @@ void handle_m2mm_status_report(struct common_header *hdr, struct thpool_buffer *
 	struct m2mm_mnode_status_reply *reply;
 	struct manager_sysinfo info;
 
+#ifdef CONFIG_SOFT_WATCHDOG
 	pr_info("[REPORT MEMORY STATUS]\n");
+#endif
 	WARN_ON(nid != CONFIG_GMM_NODEID);
 
 	reply = thpool_buffer_tx(tb);
@@ -29,5 +32,5 @@ void handle_m2mm_status_report(struct common_header *hdr, struct thpool_buffer *
 	manager_meminfo(&info);
 	reply->totalram = info.totalram;
 	reply->freeram = info.freeram;
+	reply->nr_request = atomic_long_read(&memory_manager_stats.stat[HANDLE_PCACHE_MISS]);
 }
-

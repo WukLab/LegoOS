@@ -32,11 +32,13 @@
 #include <lego/slab.h>
 #include <lego/comp_common.h>
 #include <lego/fit_ibapi.h>
+#include <lego/sysinfo.h>
 
 #include <memory/vm.h>
 #include <memory/task.h>
 #include <memory/distvm.h>
 #include <memory/file_types.h>
+#include <memory/stat.h>
 
 static int vmpool_init(struct lego_mm_struct *mm, bool is_copy)
 {
@@ -616,9 +618,15 @@ static int consult_gmm(unsigned long request,
 
 #ifdef CONFIG_GMM
 
+	struct manager_sysinfo info;
 	struct consult_info send;
 
+	manager_meminfo(&info);
+	send.totalram = info.totalram;
+	send.freeram = info.freeram;
+	send.nr_request = atomic_long_read(&memory_manager_stats.stat[HANDLE_PCACHE_MISS]);
 	send.len = request;
+
 	ret = net_send_reply_timeout(CONFIG_GMM_NODEID, M2MM_CONSULT,
 				&send, sizeof(struct consult_info),
 				reply, sizeof(struct consult_reply),
