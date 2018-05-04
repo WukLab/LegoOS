@@ -1236,9 +1236,11 @@ another_half:
 		VMA_BUG_ON(PAGE_ALIGN(request) > request);
 		VMA_BUG_ON((long)(cur_scheme->len) < 0);
 	}
+#ifdef CONFIG_VMA_CACHE_AWARENESS
 	/* update address offset with address assigned this time */
 	if (!(flag & MAP_FIXED))
 		mm->addr_offset = addr % VM_GRANULARITY;
+#endif
 
 	return addr;
 }
