@@ -43,14 +43,14 @@
 #include <lego/device.h>
 #include <lego/mm.h>
 #include <lego/dma-mapping.h>
-//#include <lego/kref.h>
+#include <lego/kref.h>
 #include <lego/list.h>
-//#include <lego/rwsem.h>
+#include <lego/rwsem.h>
 #include <lego/scatterlist.h>
-//#include <lego/workqueue.h>
+#include <lego/workqueue.h>
 
 #include <lego/atomic.h>
-//#include <asm/uaccess.h>
+#include <asm/uaccess.h>
 
 extern struct workqueue_struct *ib_wq;
 
@@ -509,6 +509,7 @@ enum ib_wc_flags {
 	IB_WC_GRH		= 1,
 	IB_WC_WITH_IMM		= (1<<1),
 	IB_WC_WITH_INVALIDATE	= (1<<2),
+	IB_WC_IP_CSUM_OK	= (1<<3),
 };
 
 struct ib_wc {
@@ -596,15 +597,32 @@ enum ib_qp_type {
 	IB_QPT_UD,
 	IB_QPT_RAW_IPV6,
 	IB_QPT_RAW_ETHERTYPE,
-	/* Save 8 for RAW_PACKET */
+	IB_QPT_RAW_PACKET = 8,
 	IB_QPT_XRC_INI = 9,
 	IB_QPT_XRC_TGT,
-	IB_QPT_MAX
+	IB_QPT_MAX,
+	/* Reserve a range for qp types internal to the low level driver.
+	 * These qp types will not be visible at the IB core layer, so the
+	 * IB_QPT_MAX usages should not be affected in the core layer
+	 */
+	IB_QPT_RESERVED1 = 0x1000,
+	IB_QPT_RESERVED2,
+	IB_QPT_RESERVED3,
+	IB_QPT_RESERVED4,
+	IB_QPT_RESERVED5,
+	IB_QPT_RESERVED6,
+	IB_QPT_RESERVED7,
+	IB_QPT_RESERVED8,
+	IB_QPT_RESERVED9,
+	IB_QPT_RESERVED10,
 };
 
 enum ib_qp_create_flags {
 	IB_QP_CREATE_IPOIB_UD_LSO		= 1 << 0,
 	IB_QP_CREATE_BLOCK_MULTICAST_LOOPBACK	= 1 << 1,
+	/* reserve bits 26-31 for low level drivers' internal use */
+	IB_QP_CREATE_RESERVED_START		= 1 << 26,
+	IB_QP_CREATE_RESERVED_END		= 1 << 31,
 };
 
 struct ib_qp_init_attr {
@@ -703,6 +721,11 @@ enum ib_mig_state {
 	IB_MIG_ARMED
 };
 
+enum ib_mw_type {
+	IB_MW_TYPE_1 = 1,
+	IB_MW_TYPE_2 = 2
+};
+
 struct ib_qp_attr {
 	enum ib_qp_state	qp_state;
 	enum ib_qp_state	cur_qp_state;
@@ -746,6 +769,20 @@ enum ib_wr_opcode {
 	IB_WR_FAST_REG_MR,
 	IB_WR_MASKED_ATOMIC_CMP_AND_SWP,
 	IB_WR_MASKED_ATOMIC_FETCH_AND_ADD,
+	IB_WR_BIND_MW,
+	/* reserve values for low level drivers' internal use.
+	 * These values will not be used at all in the ib core layer.
+	 */
+	IB_WR_RESERVED1 = 0xf0,
+	IB_WR_RESERVED2,
+	IB_WR_RESERVED3,
+	IB_WR_RESERVED4,
+	IB_WR_RESERVED5,
+	IB_WR_RESERVED6,
+	IB_WR_RESERVED7,
+	IB_WR_RESERVED8,
+	IB_WR_RESERVED9,
+	IB_WR_RESERVED10,
 };
 
 enum ib_send_flags {
@@ -753,7 +790,11 @@ enum ib_send_flags {
 	IB_SEND_SIGNALED	= (1<<1),
 	IB_SEND_SOLICITED	= (1<<2),
 	IB_SEND_INLINE		= (1<<3),
-	IB_SEND_IP_CSUM		= (1<<4)
+	IB_SEND_IP_CSUM		= (1<<4),
+
+	/* reserve bits 26-31 for low level drivers' internal use */
+	IB_SEND_RESERVED_START	= (1 << 26),
+	IB_SEND_RESERVED_END	= (1 << 31),
 };
 
 struct ib_sge {
@@ -766,6 +807,23 @@ struct ib_fast_reg_page_list {
 	struct ib_device       *device;
 	u64		       *page_list;
 	unsigned int		max_page_list_len;
+};
+
+/**
+ * struct ib_mw_bind_info - Parameters for a memory window bind operation.
+ * @mr: A memory region to bind the memory window to.
+ * @addr: The address where the memory window should begin.
+ * @length: The length of the memory window, in bytes.
+ * @mw_access_flags: Access flags from enum ib_access_flags for the window.
+ *
+ * This struct contains the shared parameters for type 1 and type 2
+ * memory window bind operations.
+ */
+struct ib_mw_bind_info {
+	struct ib_mr   *mr;
+	u64		addr;
+	u64		length;
+	int		mw_access_flags;
 };
 
 struct ib_send_wr {
@@ -850,13 +908,16 @@ enum ib_mr_rereg_flags {
 	IB_MR_REREG_ACCESS	= (1<<2)
 };
 
+/**
+ * struct ib_mw_bind - Parameters for a type 1 memory window bind operation.
+ * @wr_id:      Work request id.
+ * @send_flags: Flags from ib_send_flags enum.
+ * @bind_info:  More parameters of the bind operation.
+ */
 struct ib_mw_bind {
-	struct ib_mr   *mr;
-	u64		wr_id;
-	u64		addr;
-	u32		length;
-	int		send_flags;
-	int		mw_access_flags;
+	u64                    wr_id;
+	int                    send_flags;
+	struct ib_mw_bind_info bind_info;
 };
 
 struct ib_fmr_attr {
@@ -865,7 +926,6 @@ struct ib_fmr_attr {
 	u8	page_shift;
 };
 
-#if 0
 struct ib_ucontext {
 	struct ib_device       *device;
 	struct list_head	pd_list;
@@ -896,7 +956,6 @@ struct ib_udata {
 	size_t       inlen;
 	size_t       outlen;
 };
-#endif
 
 struct ib_pd {
 	struct ib_device       *device;
@@ -918,7 +977,7 @@ struct ib_xrcd {
 struct ib_ah {
 	struct ib_device	*device;
 	struct ib_pd		*pd;
-	//struct ib_uobject	*uobject;
+	struct ib_uobject	*uobject;
 };
 
 typedef void (*ib_comp_handler)(struct ib_cq *cq, void *cq_context);
@@ -1115,7 +1174,6 @@ struct ib_device {
 	int                        (*query_ah)(struct ib_ah *ah,
 					       struct ib_ah_attr *ah_attr);
 	int                        (*destroy_ah)(struct ib_ah *ah);
-#if 0					
 	struct ib_srq *            (*create_srq)(struct ib_pd *pd,
 						 struct ib_srq_init_attr *srq_init_attr,
 						 struct ib_udata *udata);
@@ -1129,7 +1187,6 @@ struct ib_device {
 	int                        (*post_srq_recv)(struct ib_srq *srq,
 						    struct ib_recv_wr *recv_wr,
 						    struct ib_recv_wr **bad_recv_wr);
-#endif
 	struct ib_qp *             (*create_qp)(struct ib_pd *pd,
 						struct ib_qp_init_attr *qp_init_attr);
 	int                        (*modify_qp)(struct ib_qp *qp,
@@ -1169,7 +1226,6 @@ struct ib_device {
 	int                        (*query_mr)(struct ib_mr *mr,
 					       struct ib_mr_attr *mr_attr);
 	int                        (*dereg_mr)(struct ib_mr *mr);
-#if 0
 	struct ib_mr *		   (*alloc_fast_reg_mr)(struct ib_pd *pd,
 					       int max_page_list_len);
 	struct ib_fast_reg_page_list * (*alloc_fast_reg_page_list)(struct ib_device *device,
@@ -1201,7 +1257,6 @@ struct ib_device {
 	int                        (*detach_mcast)(struct ib_qp *qp,
 						   union ib_gid *gid,
 						   u16 lid);
-#endif
 	int                        (*process_mad)(struct ib_device *device,
 						  int process_mad_flags,
 						  u8 port_num,
@@ -1209,12 +1264,10 @@ struct ib_device {
 						  struct ib_grh *in_grh,
 						  struct ib_mad *in_mad,
 						  struct ib_mad *out_mad);
-#if 0
 	struct ib_xrcd *	   (*alloc_xrcd)(struct ib_device *device,
 						 struct ib_ucontext *ucontext,
 						 struct ib_udata *udata);
 	int			   (*dealloc_xrcd)(struct ib_xrcd *xrcd);
-#endif
 
 	struct ib_dma_mapping_ops   *dma_ops;
 
@@ -1389,7 +1442,6 @@ int ib_query_ah(struct ib_ah *ah, struct ib_ah_attr *ah_attr);
  */
 int ib_destroy_ah(struct ib_ah *ah);
 
-#if 0
 /**
  * ib_create_srq - Creates a SRQ associated with the specified protection
  *   domain.
@@ -1450,7 +1502,6 @@ static inline int ib_post_srq_recv(struct ib_srq *srq,
 {
 	return srq->device->post_srq_recv(srq, recv_wr, bad_recv_wr);
 }
-#endif
 
 /**
  * ib_create_qp - Creates a QP associated with the specified protection
