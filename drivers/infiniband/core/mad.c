@@ -3193,55 +3193,27 @@ static void ib_mad_remove_device(struct ib_device *device)
 }
 
 static struct ib_client mad_client = {
-	.name   = "mad",
-	.add = ib_mad_init_device,
-	.remove = ib_mad_remove_device
+	.name		= "mad",
+	.add		= ib_mad_init_device,
+	.remove		= ib_mad_remove_device
 };
 
 int ib_mad_init(void)
 {
 	int ret;
 
-	//pr_info("%s\n", __func__);
 	mad_recvq_size = min(mad_recvq_size, IB_MAD_QP_MAX_SIZE);
 	mad_recvq_size = max(mad_recvq_size, IB_MAD_QP_MIN_SIZE);
 
 	mad_sendq_size = min(mad_sendq_size, IB_MAD_QP_MAX_SIZE);
 	mad_sendq_size = max(mad_sendq_size, IB_MAD_QP_MIN_SIZE);
 
-/*
-	ib_mad_cache = kmem_cache_create("ib_mad",
-					 sizeof(struct ib_mad_private),
-					 0,
-					 SLAB_HWCACHE_ALIGN,
-					 NULL);
-	if (!ib_mad_cache) {
-		printk(KERN_ERR PFX "Couldn't create ib_mad cache\n");
-		ret = -ENOMEM;
-		goto error1;
-	}
-*/
 	INIT_LIST_HEAD(&ib_mad_port_list);
 
-	if (ib_register_client(&mad_client)) {
-		printk(KERN_ERR PFX "Couldn't register ib_mad client\n");
-		ret = -EINVAL;
-		goto error2;
-	}
-	//pr_info("%s exit\n", __func__);
-
-	return 0;
-
-error2:
-//	kmem_cache_destroy(ib_mad_cache);
-//error1:
-	return ret;
+	/*
+	 * For Lego, it simply means we can not run
+	 * without any IB services..
+	 */
+	if (ib_register_client(&mad_client))
+		panic("Couldn't register ib_mad client");
 }
-
-void ib_mad_cleanup(void)
-{
-	ib_unregister_client(&mad_client);
-//	kmem_cache_destroy(ib_mad_cache);
-}
-
-

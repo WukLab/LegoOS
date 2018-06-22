@@ -10,8 +10,6 @@
 #include <lego/ctype.h>
 #include <lego/kernel.h>
 
-#define KSTRTOX_OVERFLOW	(1U << 31)
-
 const char *_parse_integer_fixup_radix(const char *s, unsigned int *base)
 {
 	if (*base == 0) {

@@ -31,13 +31,17 @@
  * SOFTWARE.
  */
 
+/*
+ * This used to be the ib_code.ko module in Linux. This file mainly describes
+ * the IB device, client registration and de-registration.
+ */
+
 #include <lego/string.h>
 #include <lego/errno.h>
 #include <lego/kernel.h>
 #include <lego/slab.h>
 #include <lego/init.h>
 #include <lego/mutex.h>
-//#include <rdma/rdma_netlink.h>
 
 #include "core_priv.h"
 
@@ -49,9 +53,8 @@ struct ib_client_data {
 
 struct workqueue_struct *ib_wq;
 
-//static LIST_HEAD(device_list);
+static LIST_HEAD(device_list);
 static LIST_HEAD(client_list);
-struct ib_device *global_device = NULL;
 
 /*
  * device_mutex protects access to both device_list and client_list.
@@ -72,11 +75,11 @@ static int ib_device_check_mandatory(struct ib_device *device)
 		IB_MANDATORY_FUNC(query_device),
 		IB_MANDATORY_FUNC(query_port),
 		IB_MANDATORY_FUNC(query_pkey),
-//		IB_MANDATORY_FUNC(query_gid),
+		IB_MANDATORY_FUNC(query_gid),
 		IB_MANDATORY_FUNC(alloc_pd),
 		IB_MANDATORY_FUNC(dealloc_pd),
-//		IB_MANDATORY_FUNC(create_ah),
-//		IB_MANDATORY_FUNC(destroy_ah),
+		IB_MANDATORY_FUNC(create_ah),
+		IB_MANDATORY_FUNC(destroy_ah),
 		IB_MANDATORY_FUNC(create_qp),
 		IB_MANDATORY_FUNC(modify_qp),
 		IB_MANDATORY_FUNC(destroy_qp),
@@ -102,7 +105,6 @@ static int ib_device_check_mandatory(struct ib_device *device)
 	return 0;
 }
 
-#if 0
 static struct ib_device *__ib_device_get_by_name(const char *name)
 {
 	struct ib_device *device;
@@ -121,7 +123,7 @@ static int alloc_name(char *name)
 	struct ib_device *device;
 	int i;
 
-	inuse = (unsigned long *) get_zeroed_page(GFP_KERNEL);
+	inuse = (unsigned long *)get_zeroed_page(GFP_KERNEL);
 	if (!inuse)
 		return -ENOMEM;
 
@@ -145,13 +147,11 @@ static int alloc_name(char *name)
 	strlcpy(name, buf, IB_DEVICE_NAME_MAX);
 	return 0;
 }
-#endif
 
 static int start_port(struct ib_device *device)
 {
 	return (device->node_type == RDMA_NODE_IB_SWITCH) ? 0 : 1;
 }
-
 
 static int end_port(struct ib_device *device)
 {
@@ -190,8 +190,6 @@ void ib_dealloc_device(struct ib_device *device)
 	}
 
 	BUG_ON(device->reg_state != IB_DEV_UNREGISTERED);
-
-//	kobject_put(&device->dev.kobj);
 }
 
 static int add_client_context(struct ib_device *device, struct ib_client *client)
@@ -270,13 +268,11 @@ int ib_register_device(struct ib_device *device)
 
 	mutex_lock(&device_mutex);
 
-#if 0
 	if (strchr(device->name, '%')) {
 		ret = alloc_name(device->name);
 		if (ret)
 			goto out;
 	}
-#endif
 
 	if (ib_device_check_mandatory(device)) {
 		ret = -EINVAL;
@@ -295,9 +291,7 @@ int ib_register_device(struct ib_device *device)
 		goto out;
 	}
 
-	global_device = device;
-	//list_add_tail(&device->core_list, &device_list);
-	//pr_debug("%s added device %p\n", __func__, device);
+	list_add_tail(&device->core_list, &device_list);
 
 	device->reg_state = IB_DEV_REGISTERED;
 
@@ -326,14 +320,13 @@ void ib_unregister_device(struct ib_device *device)
 	struct ib_client_data *context, *tmp;
 	unsigned long flags;
 
-	//pr_info("%s\n", __func__);
 	mutex_lock(&device_mutex);
 
 	list_for_each_entry_reverse(client, &client_list, list)
 		if (client->remove)
 			client->remove(device);
 
-//	list_del(&device->core_list);
+	list_del(&device->core_list);
 
 	kfree(device->gid_tbl_len);
 	kfree(device->pkey_tbl_len);
@@ -368,19 +361,12 @@ int ib_register_client(struct ib_client *client)
 	mutex_lock(&device_mutex);
 
 	list_add_tail(&client->list, &client_list);
-	//pr_debug("%s added client %p\n", __func__, client);
-	//list_for_each_entry(device, &device_list, core_list)
-	if (global_device != NULL) {
-		device = global_device;
-		//pr_debug("%s device %p\n", __func__, device);
-		if (client->add && !add_client_context(device, client)) {
-			//pr_debug("calling client add\n");
+	list_for_each_entry(device, &device_list, core_list)
+		if (client->add && !add_client_context(device, client))
 			client->add(device);
-		}
-	}
 
 	mutex_unlock(&device_mutex);
-	//pr_info("%s exit\n", __func__);
+
 	return 0;
 }
 
@@ -400,9 +386,7 @@ void ib_unregister_client(struct ib_client *client)
 
 	mutex_lock(&device_mutex);
 
-	//list_for_each_entry(device, &device_list, core_list) {
-	if (global_device != NULL) {
-		device = global_device;
+	list_for_each_entry(device, &device_list, core_list) {
 		if (client->remove)
 			client->remove(device);
 
@@ -686,25 +670,33 @@ int ib_find_pkey(struct ib_device *device,
 {
 	int ret, i;
 	u16 tmp_pkey;
+	int partial_ix = -1;
 
 	for (i = 0; i < device->pkey_tbl_len[port_num - start_port(device)]; ++i) {
 		ret = ib_query_pkey(device, port_num, i, &tmp_pkey);
 		if (ret)
 			return ret;
-
 		if ((pkey & 0x7fff) == (tmp_pkey & 0x7fff)) {
-			*index = i;
-			return 0;
+			/* if there is full-member pkey take it.*/
+			if (tmp_pkey & 0x8000) {
+				*index = i;
+				return 0;
+			}
+			if (partial_ix < 0)
+				partial_ix = i;
 		}
 	}
 
+	/*no full-member, if exists take the limited*/
+	if (partial_ix >= 0) {
+		*index = partial_ix;
+		return 0;
+	}
 	return -ENOENT;
 }
 
 static int ib_core_init(void)
 {
-	int ret;
-
 #if 0
 	ib_wq = alloc_workqueue("infiniband", 0, 0);
 	if (!ib_wq)
@@ -722,24 +714,4 @@ static int ib_core_init(void)
 		goto err_nl;
 	}
 #endif
-
-	return 0;
-
-//err_nl:
-//	ibnl_cleanup();
-
-//err:
-//	destroy_workqueue(ib_wq);
-	return ret;
 }
-
-static void ib_core_cleanup(void)
-{
-#if 0
-	ib_cache_cleanup();
-	ibnl_cleanup();
-	/* Make sure that any pending umem accounting work is done. */
-	destroy_workqueue(ib_wq);
-#endif
-}
-

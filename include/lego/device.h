@@ -31,6 +31,6 @@ struct device_driver {
 };
 
 struct device {
-}
+};
 
 #endif /* _LEGO_DEVICE_H_ */
