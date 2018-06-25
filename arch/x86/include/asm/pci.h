@@ -50,4 +50,43 @@ extern void early_dump_pci_devices(void);
 
 extern unsigned int pci_probe;
 
+struct irq_info {
+	u8 bus, devfn;			/* Bus, device and function */
+	struct {
+		u8 link;		/* IRQ line ID, chipset dependent,
+					   0 = not routed */
+		u16 bitmap;		/* Available IRQs */
+	} __attribute__((packed)) irq[4];
+	u8 slot;			/* Slot number, 0=onboard */
+	u8 rfu;
+} __attribute__((packed));
+
+struct irq_routing_table {
+	u32 signature;			/* PIRQ_SIGNATURE should be here */
+	u16 version;			/* PIRQ_VERSION */
+	u16 size;			/* Table size in bytes */
+	u8 rtr_bus, rtr_devfn;		/* Where the interrupt router lies */
+	u16 exclusive_irqs;		/* IRQs devoted exclusively to
+					   PCI usage */
+	u16 rtr_vendor, rtr_device;	/* Vendor and device ID of
+					   interrupt router */
+	u32 miniport_data;		/* Crap */
+	u8 rfu[11];
+	u8 checksum;			/* Modulo 256 checksum must give 0 */
+	struct irq_info slots[0];
+} __attribute__((packed));
+
+struct pci_raw_ops {
+	int (*read)(unsigned int domain, unsigned int bus, unsigned int devfn,
+						int reg, int len, u32 *val);
+	int (*write)(unsigned int domain, unsigned int bus, unsigned int devfn,
+						int reg, int len, u32 val);
+};
+
+extern const struct pci_raw_ops *raw_pci_ops;
+extern const struct pci_raw_ops *raw_pci_ext_ops;
+
+extern const struct pci_raw_ops pci_mmcfg;
+extern const struct pci_raw_ops pci_direct_conf1;
+
 #endif /* _ASM_X86_PCI_H_ */

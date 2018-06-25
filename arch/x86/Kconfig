@@ -413,8 +413,78 @@ config HPET_TIMER
 
 	  Choose N to continue using the legacy 8254 timer.
 
+menu "Bus options (PCI etc.)"
+
+config PCI
+	bool "PCI support"
+	default y
+
+choice
+	prompt "PCI access mode"
+	depends on X86_32 && PCI
+	default PCI_GOANY
+	---help---
+	  On PCI systems, the BIOS can be used to detect the PCI devices and
+	  determine their configuration. However, some old PCI motherboards
+	  have BIOS bugs and may crash if this is done. Also, some embedded
+	  PCI-based systems don't have any BIOS at all. Linux can also try to
+	  detect the PCI hardware directly without using the BIOS.
+
+	  With this option, you can specify how Linux should detect the
+	  PCI devices. If you choose "BIOS", the BIOS will be used,
+	  if you choose "Direct", the BIOS won't be used, and if you
+	  choose "MMConfig", then PCI Express MMCONFIG will be used.
+	  If you choose "Any", the kernel will try MMCONFIG, then the
+	  direct access method and falls back to the BIOS if that doesn't
+	  work. If unsure, go with the default, which is "Any".
+
+config PCI_GOBIOS
+	bool "BIOS"
+
+config PCI_GOMMCONFIG
+	bool "MMConfig"
+
+config PCI_GODIRECT
+	bool "Direct"
+
+config PCI_GOOLPC
+	bool "OLPC XO-1"
+	depends on OLPC
+
+config PCI_GOANY
+	bool "Any"
+
+endchoice
+
+config PCI_BIOS
+	def_bool y
+	depends on X86_32 && PCI && (PCI_GOBIOS || PCI_GOANY)
+
+# x86-64 doesn't support PCI BIOS access from long mode so always go direct.
+config PCI_DIRECT
+	def_bool y
+	depends on PCI && (X86_64 || (PCI_GODIRECT || PCI_GOANY || PCI_GOOLPC || PCI_GOMMCONFIG))
+
+config PCI_MMCONFIG
+	def_bool y
+	depends on X86_32 && PCI && (ACPI || SFI) && (PCI_GOMMCONFIG || PCI_GOANY)
+
+config PCI_OLPC
+	def_bool y
+	depends on PCI && OLPC && (PCI_GOOLPC || PCI_GOANY)
+
 config PCI_MSI
 	def_bool y
+
+config PCI_DOMAINS
+	def_bool y
+	depends on PCI
+
+config PCI_MMCONFIG
+	bool "Support mmconfig PCI config space access"
+	depends on X86_64 && PCI && ACPI
+
+endmenu # Bus options
 
 endmenu
 

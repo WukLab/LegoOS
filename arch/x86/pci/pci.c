@@ -15,7 +15,7 @@ static u32 pci_conf1_data_ioport = 0x0cfc;
 static int pci_bridge_attach(struct pci_dev *pcif);
 
 // PCI driver table
-struct pci_driver {
+struct _pci_driver {
 	u32 vendor, device;
 	int (*attachfn) (struct pci_dev *pcif); /* New device inserted */
 //	const struct pci_device_id *id_table;	/* must be non-NULL for probe to be called */
@@ -24,13 +24,13 @@ struct pci_driver {
 };
 
 // pci_attach_class matches the class and subclass of a PCI device
-struct pci_driver pci_attach_class[] = {
+struct _pci_driver pci_attach_class[] = {
 	{ PCI_CLASS_BRIDGE, PCI_SUBCLASS_BRIDGE_PCI, &pci_bridge_attach },
 	{ 0, 0, 0 },
 };
 
 // pci_attach_vendor matches the vendor ID and device ID of a PCI device
-struct pci_driver pci_attach_vendor[] = {
+struct _pci_driver pci_attach_vendor[] = {
 //	{ 0x8086, 0x100E, &pci_func_attach_E1000 }, // #define PCI_VENDOR_ID_INTEL 8086
 //	{ 0x8086, 0x1015, &pci_func_attach_E1000 },
 	{ 0x15b3, 0x1003, &mlx4_init_one }, // #define PCI_VENDOR_ID_MELLANOX 15b3
@@ -59,7 +59,7 @@ u32 pci_conf_read(struct pci_dev *f, u32 off, int len)
 {
 	u32 val;
 
-	pci_conf1_set_addr(f->bus->busno, f->dev, f->func, off);
+	pci_conf1_set_addr(f->bus->number, f->dev, f->func, off);
 	switch (len) {
 		case 1:
 			val = inb(pci_conf1_data_ioport);
@@ -77,7 +77,7 @@ u32 pci_conf_read(struct pci_dev *f, u32 off, int len)
 
 void pci_conf_write(struct pci_dev *f, u32 off, u32 v, int len)
 {
-	pci_conf1_set_addr(f->bus->busno, f->dev, f->func, off);
+	pci_conf1_set_addr(f->bus->number, f->dev, f->func, off);
 	switch (len) {
 		case 1:
 			outb(v, pci_conf1_data_ioport);
@@ -94,7 +94,7 @@ void pci_conf_write(struct pci_dev *f, u32 off, u32 v, int len)
 
 static int __attribute__((warn_unused_result))
 pci_attach_match(u32 vendor, u32 device,
-		 struct pci_driver *list, struct pci_dev *pcif)
+		 struct _pci_driver *list, struct pci_dev *pcif)
 {
 	u32 i;
 
@@ -142,7 +142,7 @@ static void pci_print_func(struct pci_dev *f)
 		class = pci_class[PCI_CLASS(f->dev_class)];
 
 	pr_debug("PCI: %02x:%02Lx.%d: %04x:%04x: class: %x.%x (%s) irq: %d\n",
-		f->bus->busno, f->dev, f->func,
+		f->bus->number, f->dev, f->func,
 		PCI_VENDOR(f->dev_id), PCI_PRODUCT(f->dev_id),
 		PCI_CLASS(f->dev_class), PCI_SUBCLASS(f->dev_class), class,
 		f->irq_line);
@@ -196,115 +196,23 @@ static int pci_bridge_attach(struct pci_dev *pcif)
 
 	if (PCI_BRIDGE_IO_32BITS(ioreg)) {
 		pr_debug("PCI: %02x:%02Lx.%d: 32-bit bridge IO not supported.\n",
-			pcif->bus->busno, pcif->dev, pcif->func);
+			pcif->bus->number, pcif->dev, pcif->func);
 		return 0;
 	}
 
 	memset(&nbus, 0, sizeof(nbus));
-	nbus.parent_bridge = pcif;
-	nbus.busno = (busreg >> PCI_BRIDGE_BUS_SECONDARY_SHIFT) & 0xff;
+	nbus.parent = pcif;
+	nbus.number = (busreg >> PCI_BRIDGE_BUS_SECONDARY_SHIFT) & 0xff;
 
 	if (pci_show_devs)
 		pr_debug("PCI: %02x:%02Lx.%d: bridge to PCI bus %d--%d\n",
-			pcif->bus->busno, pcif->dev, pcif->func,
-			nbus.busno,
+			pcif->bus->number, pcif->dev, pcif->func,
+			nbus.number,
 			(busreg >> PCI_BRIDGE_BUS_SUBORDINATE_SHIFT) & 0xff);
 
 	pci_scan_bus(&nbus);
 	return 1;
 }
-
-#if 0
-#define PCI_FIND_CAP_TTL	48
-
-static int __pci_find_next_cap_ttl(struct pci_bus *bus,
-				   u8 pos, int cap, int *ttl)
-{
-	u8 id;
-
-	while ((*ttl)--) {
-		pos = pci_conf_read(bus, pos, 1);
-		if (pos < 0x40)
-			break;
-		pos &= ~3;
-		id = pci_bus_read_config_byte(bus, pos + PCI_CAP_LIST_ID, 1);
-		if (id == 0xff)
-			break;
-		if (id == cap)
-			return pos;
-		pos += PCI_CAP_LIST_NEXT;
-	}
-	return 0;
-}
-
-static int __pci_find_next_cap(struct pci_bus *bus, 
-			       u8 pos, int cap)
-{
-	int ttl = PCI_FIND_CAP_TTL;
-
-	return __pci_find_next_cap_ttl(bus, pos, cap, &ttl);
-}
-
-int pci_find_next_capability(struct pci_dev *dev, u8 pos, int cap)
-{
-	return __pci_find_next_cap(dev->bus, 
-				   pos + PCI_CAP_LIST_NEXT, cap);
-}
-
-static int __pci_bus_find_cap_start(struct pci_bus *bus,
-				    u8 hdr_type)
-{
-	u16 status;
-
-	status = pci_conf_read_config_word(bus, PCI_STATUS, 2);
-	if (!(status & PCI_STATUS_CAP_LIST))
-		return 0;
-
-	switch (hdr_type) {
-	case PCI_HEADER_TYPE_NORMAL:
-	case PCI_HEADER_TYPE_BRIDGE:
-		return PCI_CAPABILITY_LIST;
-	case PCI_HEADER_TYPE_CARDBUS:
-		return PCI_CB_CAPABILITY_LIST;
-	default:
-		return 0;
-	}
-
-	return 0;
-}
-
-/**
- * pci_find_capability - query for devices' capabilities 
- * @dev: PCI device to query
- * @cap: capability code
- *
- * Tell if a device supports a given PCI capability.
- * Returns the address of the requested capability structure within the
- * device's PCI configuration space or 0 in case the device does not
- * support it.  Possible values for @cap:
- *
- *  %PCI_CAP_ID_PM           Power Management 
- *  %PCI_CAP_ID_AGP          Accelerated Graphics Port 
- *  %PCI_CAP_ID_VPD          Vital Product Data 
- *  %PCI_CAP_ID_SLOTID       Slot Identification 
- *  %PCI_CAP_ID_MSI          Message Signalled Interrupts
- *  %PCI_CAP_ID_CHSWP        CompactPCI HotSwap 
- *  %PCI_CAP_ID_PCIX         PCI-X
- *  %PCI_CAP_ID_EXP          PCI Express
- */
-int pci_find_capability(struct pci_dev *dev, int cap)
-{
-	int pos;
-
-	pos = __pci_bus_find_cap_start(dev->bus, dev->hdr_type);
-	if (pos)
-		pos = __pci_find_next_cap(dev->bus, pos, cap);
-
-	return pos;
-}
-#endif
-
-// External PCI subsystem interface
 
 void pci_func_enable(struct pci_dev *f)
 {
@@ -357,13 +265,13 @@ void pci_func_enable(struct pci_dev *f)
 			pr_debug("PCI device %02x:%02Lx.%d (%04x:%04x) "
 				"may be misconfigured: "
 				"region %d: base 0x%x, size %d\n",
-				f->bus->busno, f->dev, f->func,
+				f->bus->number, f->dev, f->func,
 				PCI_VENDOR(f->dev_id), PCI_PRODUCT(f->dev_id),
 				regnum, base, size);
 	}
 
 	pr_debug("PCI function %02x:%02Lx.%d (%04x:%04x) enabled\n",
-		f->bus->busno, f->dev, f->func,
+		f->bus->number, f->dev, f->func,
 		PCI_VENDOR(f->dev_id), PCI_PRODUCT(f->dev_id));
 }
 
