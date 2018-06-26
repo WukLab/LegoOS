@@ -89,4 +89,7 @@ extern const struct pci_raw_ops *raw_pci_ext_ops;
 extern const struct pci_raw_ops pci_mmcfg;
 extern const struct pci_raw_ops pci_direct_conf1;
 
+int __init pci_direct_probe(void);
+void __init pci_direct_init(int type);
+
 #endif /* _ASM_X86_PCI_H_ */

@@ -460,6 +460,14 @@ struct pci_driver {
 
 extern struct list_head pci_root_buses;	/* list of all known PCI buses */
 
+#ifdef CONFIG_PCI_MMCONFIG
+void __init pci_mmcfg_early_init(void);
+void __init pci_mmcfg_late_init(void);
+#else
+static inline void pci_mmcfg_early_init(void) { }
+static inline void pci_mmcfg_late_init(void) { }
+#endif
+
 
 
 
@@ -487,12 +495,6 @@ static inline int pci_channel_offline(struct pci_dev *pcif)
 {
         return (pcif->error_state != pci_channel_io_normal);
 }
-
-/* This defines the direction arg to the DMA mapping routines. */
-#define PCI_DMA_BIDIRECTIONAL   0
-#define PCI_DMA_TODEVICE        1
-#define PCI_DMA_FROMDEVICE      2
-#define PCI_DMA_NONE            3
 
 struct msix_entry {
         u32     vector; /* kernel uses to write allocated vector */

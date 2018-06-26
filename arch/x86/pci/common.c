@@ -9,12 +9,16 @@
 
 #include <lego/pci.h>
 #include <lego/kernel.h>
-
 #include <asm/pci.h>
 
 unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2 |
 				PCI_PROBE_MMCONF;
 
+/*
+ * This pci_raw_ops are the lowest-level PCI access ops.
+ * x86 has this indirection because it has some different variant methods.
+ * We choose one at early boot by pci_arch_init().
+ */
 const struct pci_raw_ops *__read_mostly raw_pci_ops;
 const struct pci_raw_ops *__read_mostly raw_pci_ext_ops;
 
@@ -54,7 +58,49 @@ static int pci_write(struct pci_bus *bus, unsigned int devfn, int where, int siz
  * This pci_ops is exposed to core pci sub-system
  * Upper layer code should use this.
  */
-struct pci_ops pci_root_ops = {
+struct pci_ops pci_root_ops __read_mostly = {
 	.read = pci_read,
 	.write = pci_write,
 };
+
+/*
+ * This should be the first function called in PCI initlization part.
+ * This function will determines the configuration space access method.
+ */
+static void __init pci_arch_init(void)
+{
+#ifdef CONFIG_PCI_DIRECT
+	int type = 0;
+
+	/*
+	 * Check if we can use type 1 or type 2 hardware direct access.
+	 * Mostly, she will say Yes.
+	 */
+	type = pci_direct_probe();
+#endif
+
+	if (!(pci_probe & PCI_PROBE_NOEARLY))
+		pci_mmcfg_early_init();
+
+	/*
+	 * Skip the PCI BIOS part.
+	 * Who need this shit to access PCI?
+	 * (https://wiki.osdev.org/BIOS32)
+	 */
+
+#ifdef CONFIG_PCI_DIRECT
+	pci_direct_init(type);
+#endif
+
+	/*
+	 * Lego simply can NOT live without PCI
+	 * Because we need NICs..
+	 */
+	if (!raw_pci_ops && !raw_pci_ext_ops)
+		panic("PCI: Fatal: No config space access function found\n");
+}
+
+void __init pci_subsys_init(void)
+{
+	pci_arch_init();
+}
