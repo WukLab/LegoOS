@@ -105,6 +105,7 @@ extern struct resource iomem_resource;
 
 struct resource *request_resource_conflict(struct resource *root, struct resource *new);
 int request_resource(struct resource *root, struct resource *new);
+int release_resource(struct resource *old);
 
 struct resource *insert_resource_conflict(struct resource *parent, struct resource *new);
 int insert_resource(struct resource *parent, struct resource *new);
@@ -113,5 +114,22 @@ struct resource *lookup_resource(struct resource *root, resource_size_t start);
 
 int walk_system_ram_range(unsigned long start_pfn, unsigned long nr_pages,
 		void *arg, int (*func)(unsigned long, unsigned long, void *));
+
+/* Convenience shorthand with allocation */
+#define request_region(start,n,name)		__request_region(&ioport_resource, (start), (n), (name), 0)
+
+extern struct resource * __request_region(struct resource *,
+					resource_size_t start,
+					resource_size_t n,
+					const char *name, int flags);
+
+/* Compatibility cruft */
+#define release_region(start,n)	__release_region(&ioport_resource, (start), (n))
+
+void __release_region(struct resource *parent, resource_size_t start,
+			resource_size_t n);
+
+int __check_region(struct resource *parent, resource_size_t start,
+			resource_size_t n);
 
 #endif /* _LEGO_RESOURCE_H_ */
