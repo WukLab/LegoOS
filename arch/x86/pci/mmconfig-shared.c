@@ -9,6 +9,7 @@
 
 #include <lego/pci.h>
 #include <lego/slab.h>
+#include <lego/acpi.h>
 #include <lego/list.h>
 #include <lego/mutex.h>
 #include <lego/kernel.h>
@@ -339,6 +340,73 @@ static void __init pci_mmcfg_reject_broken(int early)
 	}
 }
 
+static int __init acpi_mcfg_check_entry(struct acpi_table_mcfg *mcfg,
+					struct acpi_mcfg_allocation *cfg)
+{
+	if (cfg->address < 0xFFFFFFFF)
+		return 0;
+
+	if (!strncmp(mcfg->header.oem_id, "SGI", 3))
+		return 0;
+
+	/*
+	 * XXX:
+	 * Lego omit the BIOS year check here.
+	 * Assume we are running on a new system.
+	 */
+	if (mcfg->header.revision >= 1)
+		return 0;
+
+	pr_err(PREFIX "MCFG region for %04x [bus %02x-%02x] at %#llx "
+	       "is above 4GB, ignored\n", cfg->pci_segment,
+	       cfg->start_bus_number, cfg->end_bus_number, cfg->address);
+	return -EINVAL;
+}
+
+static int __init pci_parse_mcfg(struct acpi_table_header *header)
+{
+	struct acpi_table_mcfg *mcfg;
+	struct acpi_mcfg_allocation *cfg_table, *cfg;
+	unsigned long i;
+	int entries;
+
+	if (!header)
+		return -EINVAL;
+
+	mcfg = (struct acpi_table_mcfg *)header;
+
+	/* how many config structures do we have */
+	free_all_mmcfg();
+	entries = 0;
+	i = header->length - sizeof(struct acpi_table_mcfg);
+	while (i >= sizeof(struct acpi_mcfg_allocation)) {
+		entries++;
+		i -= sizeof(struct acpi_mcfg_allocation);
+	}
+	if (entries == 0) {
+		pr_err(PREFIX "MMCONFIG has no entries\n");
+		return -ENODEV;
+	}
+
+	cfg_table = (struct acpi_mcfg_allocation *) &mcfg[1];
+	for (i = 0; i < entries; i++) {
+		cfg = &cfg_table[i];
+		if (acpi_mcfg_check_entry(mcfg, cfg)) {
+			free_all_mmcfg();
+			return -ENODEV;
+		}
+
+		if (pci_mmconfig_add(cfg->pci_segment, cfg->start_bus_number,
+				   cfg->end_bus_number, cfg->address) == NULL) {
+			pr_warn(PREFIX "no memory for MCFG entries\n");
+			free_all_mmcfg();
+			return -ENOMEM;
+		}
+	}
+
+	return 0;
+}
+
 static void __init __pci_mmcfg_init(int early)
 {
 	pci_mmcfg_reject_broken(early);
@@ -370,10 +438,8 @@ void __init pci_mmcfg_early_init(void)
 	if (pci_probe & PCI_PROBE_MMCONF) {
 		if (pci_mmcfg_check_hostbridge())
 			known_bridge = 1;
-		else {
-			panic("we walked here, need ACPI to pass\n");
-			//acpi_sfi_table_parse(ACPI_SIG_MCFG, pci_parse_mcfg);
-		}
+		else
+			acpi_parse_table(ACPI_SIG_MCFG, pci_parse_mcfg);
 		__pci_mmcfg_init(1);
 	}
 }
