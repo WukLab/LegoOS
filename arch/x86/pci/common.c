@@ -14,6 +14,8 @@
 unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2 |
 				PCI_PROBE_MMCONF;
 
+int pcibios_last_bus = -1;
+
 /*
  * This pci_raw_ops are the lowest-level PCI access ops.
  * x86 has this indirection because it has some different variant methods.
@@ -103,4 +105,5 @@ static void __init pci_arch_init(void)
 void __init pci_subsys_init(void)
 {
 	pci_arch_init();
+	panic("asd");
 }

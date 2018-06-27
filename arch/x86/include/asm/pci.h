@@ -11,6 +11,7 @@
 #define _ASM_X86_PCI_H_
 
 #include <lego/types.h>
+#include <lego/resource.h>
 
 /* Direct PCI access. This is used for PCI accesses in early boot before
    the PCI subsystem works. */
@@ -49,6 +50,7 @@ extern void early_dump_pci_devices(void);
 #define PCI_NOASSIGN_BARS	0x200000
 
 extern unsigned int pci_probe;
+extern int pcibios_last_bus;
 
 struct irq_info {
 	u8 bus, devfn;			/* Bus, device and function */
@@ -91,5 +93,75 @@ extern const struct pci_raw_ops pci_direct_conf1;
 
 int __init pci_direct_probe(void);
 void __init pci_direct_init(int type);
+
+/* "PCI MMCONFIG %04x [bus %02x-%02x]" */
+#define PCI_MMCFG_RESOURCE_NAME_LEN (22 + 4 + 2 + 2)
+
+struct pci_mmcfg_region {
+	struct list_head list;
+	struct resource res;
+	u64 address;
+	char __iomem *virt;
+	u16 segment;
+	u8 start_bus;
+	u8 end_bus;
+	char name[PCI_MMCFG_RESOURCE_NAME_LEN];
+};
+
+extern int __init pci_mmcfg_arch_init(void);
+extern void __init pci_mmcfg_arch_free(void);
+extern int pci_mmcfg_arch_map(struct pci_mmcfg_region *cfg);
+extern void pci_mmcfg_arch_unmap(struct pci_mmcfg_region *cfg);
+extern int pci_mmconfig_insert(struct device *dev, u16 seg, u8 start, u8 end,
+			       phys_addr_t addr);
+extern int pci_mmconfig_delete(u16 seg, u8 start, u8 end);
+extern struct pci_mmcfg_region *pci_mmconfig_lookup(int segment, int bus);
+
+extern struct list_head pci_mmcfg_list;
+
+#define PCI_MMCFG_BUS_OFFSET(bus)      ((bus) << 20)
+
+/*
+ * AMD Fam10h CPUs are buggy, and cannot access MMIO config space
+ * on their northbrige except through the * %eax register. As such, you MUST
+ * NOT use normal IOMEM accesses, you need to only use the magic mmio-config
+ * accessor functions.
+ * In fact just use pci_config_*, nothing else please.
+ */
+static inline unsigned char mmio_config_readb(void __iomem *pos)
+{
+	u8 val;
+	asm volatile("movb (%1),%%al" : "=a" (val) : "r" (pos));
+	return val;
+}
+
+static inline unsigned short mmio_config_readw(void __iomem *pos)
+{
+	u16 val;
+	asm volatile("movw (%1),%%ax" : "=a" (val) : "r" (pos));
+	return val;
+}
+
+static inline unsigned int mmio_config_readl(void __iomem *pos)
+{
+	u32 val;
+	asm volatile("movl (%1),%%eax" : "=a" (val) : "r" (pos));
+	return val;
+}
+
+static inline void mmio_config_writeb(void __iomem *pos, u8 val)
+{
+	asm volatile("movb %%al,(%1)" : : "a" (val), "r" (pos) : "memory");
+}
+
+static inline void mmio_config_writew(void __iomem *pos, u16 val)
+{
+	asm volatile("movw %%ax,(%1)" : : "a" (val), "r" (pos) : "memory");
+}
+
+static inline void mmio_config_writel(void __iomem *pos, u32 val)
+{
+	asm volatile("movl %%eax,(%1)" : : "a" (val), "r" (pos) : "memory");
+}
 
 #endif /* _ASM_X86_PCI_H_ */

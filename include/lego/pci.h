@@ -468,6 +468,7 @@ static inline void pci_mmcfg_early_init(void) { }
 static inline void pci_mmcfg_late_init(void) { }
 #endif
 
+void __init pci_subsys_init(void);
 
 
 
