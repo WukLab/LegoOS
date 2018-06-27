@@ -228,6 +228,10 @@ static void __init pci_mmcfg_check_end_bus_number(void)
 	}
 }
 
+/*
+ * Check pre-defined hostbridges..
+ * Mostly, you are not using these bridge (not sure though).
+ */
 static int __init pci_mmcfg_check_hostbridge(void)
 {
 	u32 l;
@@ -423,6 +427,7 @@ static void __init __pci_mmcfg_init(int early)
 		}
 	}
 
+	/* Install raw_pci_ops */
 	if (pci_mmcfg_arch_init())
 		pci_probe = (pci_probe & ~PCI_PROBE_MASK) | PCI_PROBE_MMCONF;
 	else {
@@ -433,9 +438,24 @@ static void __init __pci_mmcfg_init(int early)
 
 static int __initdata known_bridge;
 
+/*
+ * Lego only has one version of mmcfg init.
+ * It is invoked at early PCI subsystem init phase
+ * to install the extended pci ops.
+ */
 void __init pci_mmcfg_early_init(void)
 {
 	if (pci_probe & PCI_PROBE_MMCONF) {
+		/*
+		 * First check if it is a known bridge, by walking
+		 * through predefined callbacks. If none of them is
+		 * found, we consult ACPI MCFG table to get the info.
+		 *
+		 * In our DELL PowerEdge machines, we end up using ACPI.
+		 * I guess mostly current machines will like this.
+		 *
+		 * 	- ys
+		 */
 		if (pci_mmcfg_check_hostbridge())
 			known_bridge = 1;
 		else
