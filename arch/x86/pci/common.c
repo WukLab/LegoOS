@@ -8,6 +8,8 @@
  */
 
 #include <lego/pci.h>
+#include <lego/slab.h>
+#include <lego/list.h>
 #include <lego/kernel.h>
 #include <asm/pci.h>
 
@@ -46,13 +48,13 @@ int raw_pci_write(unsigned int domain, unsigned int bus, unsigned int devfn,
 
 static int pci_read(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 *value)
 {
-	return raw_pci_read(0, bus->number,
+	return raw_pci_read(pci_domain_nr(bus), bus->number,
 				 devfn, where, size, value);
 }
 
 static int pci_write(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 value)
 {
-	return raw_pci_write(0, bus->number,
+	return raw_pci_write(pci_domain_nr(bus), bus->number,
 				  devfn, where, size, value);
 }
 
@@ -105,5 +107,7 @@ static void __init pci_arch_init(void)
 void __init pci_subsys_init(void)
 {
 	pci_arch_init();
+
+
 	panic("asd");
 }

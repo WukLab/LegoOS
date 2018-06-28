@@ -17,6 +17,8 @@
 #include <lego/pci_regs.h>
 #include <lego/spinlock.h>
 
+#include <asm/pci.h>
+
 /*
  * The PCI interface treats multi-function devices as independent
  * devices.  The slot/function address of each device is encoded
@@ -244,7 +246,12 @@ struct pci_bus {
 	struct list_head devices;	/* list of devices on this bus */
 	struct pci_dev	*self;		/* bridge device as seen by parent */
 
+	struct resource *resource[PCI_BRIDGE_RESOURCE_NUM];
+	struct list_head resources;	/* address space routed to this bus */
+	struct resource busn_res;	/* bus numbers routed to this bus */
+
 	struct pci_ops	*ops;		/* configuration access functions */
+	void		*sysdata;	/* hook for sys-specific extension */
 
 	unsigned char	number;		/* bus number */
 	unsigned char	primary;	/* number of primary bridge */
@@ -252,7 +259,11 @@ struct pci_bus {
 	unsigned char	cur_bus_speed;	/* enum pci_bus_speed */
 
 	char		name[48];
+	unsigned int		is_added:1;
 };
+
+#define pci_bus_b(n)	list_entry(n, struct pci_bus, node)
+#define to_pci_bus(n)	container_of(n, struct pci_bus, dev)
 
 /*
  * Returns true if the pci bus is root (behind host-pci bridge),
@@ -470,7 +481,15 @@ static inline void pci_mmcfg_late_init(void) { }
 
 void __init pci_subsys_init(void);
 
+static inline int pci_domain_nr(struct pci_bus *bus)
+{
+	return 0;
+}
 
+struct pci_bus *pci_scan_root_bus(struct device *parent, int bus,
+					     struct pci_ops *ops, void *sysdata,
+					     struct list_head *resources);
+struct pci_bus *pci_find_next_bus(const struct pci_bus *from);
 
 
 int  pci_init(void);

@@ -164,4 +164,13 @@ static inline void mmio_config_writel(void __iomem *pos, u32 val)
 	asm volatile("movl %%eax,(%1)" : : "a" (val), "r" (pos) : "memory");
 }
 
+struct pci_sysdata {
+	int		domain;		/* PCI domain */
+	int		node;		/* NUMA node */
+	void		*acpi;		/* ACPI-specific data */
+#ifdef CONFIG_X86_64
+	void		*iommu;		/* IOMMU private data */
+#endif
+};
+
 #endif /* _ASM_X86_PCI_H_ */
