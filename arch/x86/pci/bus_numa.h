@@ -36,4 +36,7 @@ struct pci_root_info *alloc_pci_root_info(int bus_min, int bus_max,
 						int node, int link);
 extern void update_res(struct pci_root_info *info, resource_size_t start,
 		      resource_size_t end, unsigned long flags, int merge);
+
+void x86_pci_root_bus_resources(int bus, struct list_head *resources);
+
 #endif

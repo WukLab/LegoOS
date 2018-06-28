@@ -13,6 +13,8 @@
 #include <lego/kernel.h>
 #include <asm/pci.h>
 
+#include "bus_numa.h"
+
 unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2 |
 				PCI_PROBE_MMCONF;
 
@@ -104,10 +106,70 @@ static void __init pci_arch_init(void)
 		panic("PCI: Fatal: No config space access function found\n");
 }
 
+struct pci_bus *pci_scan_bus_on_node(int busno, struct pci_ops *ops, int node)
+{
+	LIST_HEAD(resources);
+	struct pci_bus *bus = NULL;
+	struct pci_sysdata *sd;
+
+	/*
+	 * Allocate per-root-bus (not per bus) arch-specific data.
+	 */
+	sd = kzalloc(sizeof(*sd), GFP_KERNEL);
+	if (!sd) {
+		printk(KERN_ERR "PCI: OOM, skipping PCI bus %02x\n", busno);
+		return NULL;
+	}
+	sd->node = node;
+
+	/* hmm.. */
+	x86_pci_root_bus_resources(busno, &resources);
+
+	printk(KERN_INFO "PCI: Probing PCI hardware (bus %02x)\n", busno);
+
+	bus = pci_scan_root_bus(NULL, busno, ops, sd, &resources);
+	if (!bus)
+		panic("PCI: fail to create PCI root bus.");
+	return bus;
+}
+
+int get_mp_bus_to_node(int busnum)
+{
+	return 0;
+}
+
+struct pci_bus *pcibios_scan_root(int busnum)
+{
+	struct pci_bus *bus = NULL;
+
+	while ((bus = pci_find_next_bus(bus)) != NULL) {
+		if (bus->number == busnum) {
+			/* Already scanned */
+			return bus;
+		}
+	}
+
+	return pci_scan_bus_on_node(busnum, &pci_root_ops,
+					get_mp_bus_to_node(busnum));
+}
+
+int __init pci_legacy_init(void)
+{
+	if (!raw_pci_ops) {
+		printk("PCI: System does not support PCI\n");
+		return 0;
+	}
+
+	printk("PCI: Probing PCI hardware\n");
+	pcibios_scan_root(0);
+	return 0;
+}
+
 void __init pci_subsys_init(void)
 {
 	pci_arch_init();
-
+	/* XXX: missed  ACPI shit here */
+	pci_legacy_init();
 
 	panic("asd");
 }

@@ -19,3 +19,9 @@ struct resource busn_resource = {
 };
 
 LIST_HEAD(pci_root_buses);
+
+struct pci_bus *pci_scan_root_bus(struct device *parent, int bus,
+		struct pci_ops *ops, void *sysdata, struct list_head *resources)
+{
+	return NULL;
+}
