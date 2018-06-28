@@ -1053,6 +1053,16 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 					/* [mM]F (FDDI) */
 					/* [mM]R (Reverse order; Bluetooth) */
 		return mac_address_string(buf, end, ptr, spec, fmt);
+	case 'V':
+		{
+			va_list va;
+
+			va_copy(va, *((struct va_format *)ptr)->va);
+			buf += vsnprintf(buf, end > buf ? end - buf : 0,
+					 ((struct va_format *)ptr)->fmt, va);
+			va_end(va);
+			return buf;
+		}
 	case 'a':
 		return address_val(buf, end, ptr, fmt);
 	case 'G':

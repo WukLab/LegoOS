@@ -129,7 +129,7 @@ struct pci_bus *pci_scan_bus_on_node(int busno, struct pci_ops *ops, int node)
 
 	bus = pci_scan_root_bus(NULL, busno, ops, sd, &resources);
 	if (!bus)
-		panic("PCI: fail to create PCI root bus.");
+		panic("PCI: fail to scan PCI root bus.");
 	return bus;
 }
 
@@ -153,13 +153,13 @@ struct pci_bus *pcibios_scan_root(int busnum)
 					get_mp_bus_to_node(busnum));
 }
 
+/*
+ * Why this is legacy?
+ * Nowadays ACPI is used to init PCI subsystem. This kind of old school
+ * scan is legacy compared with ACPI. Although, ACPI is just another broken crap.
+ */
 int __init pci_legacy_init(void)
 {
-	if (!raw_pci_ops) {
-		printk("PCI: System does not support PCI\n");
-		return 0;
-	}
-
 	printk("PCI: Probing PCI hardware\n");
 	pcibios_scan_root(0);
 	return 0;

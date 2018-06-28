@@ -147,4 +147,9 @@ void print_hex_dump_bytes(const char *prefix_str, int prefix_type,
 #define pr_info_ratelimited(fmt, ...)					\
 	printk_ratelimited(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
 
+struct va_format {
+	const char *fmt;
+	va_list *va;
+};
+
 #endif /* _LEGO_PRINTK_H_ */

@@ -523,6 +523,8 @@ static inline int pci_domain_nr(struct pci_bus *bus)
 struct pci_bus *pci_scan_root_bus(struct device *parent, int bus,
 					     struct pci_ops *ops, void *sysdata,
 					     struct list_head *resources);
+
+struct pci_bus *pci_find_bus(int domain, int busnr);
 struct pci_bus *pci_find_next_bus(const struct pci_bus *from);
 
 /* drivers/pci/bus.c */
