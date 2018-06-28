@@ -10,12 +10,14 @@
 #ifndef _LEGO_PCI_H_
 #define _LEGO_PCI_H_
 
+#include <lego/list.h>
 #include <lego/types.h>
 #include <lego/errno.h>
 #include <lego/device.h>
 #include <lego/pci_ids.h>
 #include <lego/pci_regs.h>
 #include <lego/spinlock.h>
+#include <lego/resource.h>
 
 #include <asm/pci.h>
 
@@ -193,11 +195,16 @@ enum pci_res {
 struct pci_bus;
 
 struct pci_dev {
-	struct pci_bus 		*bus;
+	struct list_head bus_list;	/* node in per-bus list */
+	struct pci_bus	*bus;		/* bus this device is on */
+	struct pci_bus	*subordinate;	/* bus this device bridges to */
 
+	void		*sysdata;	/* hook for sys-specific extension */
 	unsigned int	devfn;		/* encoded device & function index */
 	unsigned short	vendor;
 	unsigned short	device;
+	unsigned short	subsystem_vendor;
+	unsigned short	subsystem_device;
 
 	u64			dev;
 	u32			func;
@@ -233,11 +240,38 @@ struct pci_dev {
 
 	void			*driver_data;
 	void			*priv;
+
+	struct resource resource[DEVICE_COUNT_RESOURCE]; /* I/O and memory regions + expansion ROMs */
 };
 
-#define pci_resource_start(dev, bar)    ((dev)->reg_base[(bar)])
-#define pci_resource_len(dev, bar)    ((dev)->reg_size[(bar)])
-#define pci_resource_end(dev, bar)      ((dev)->reg_base[(bar)] + (dev)->reg_size[(bar)])
+static inline int pci_channel_offline(struct pci_dev *pcif)
+{
+        return (pcif->error_state != pci_channel_io_normal);
+}
+
+struct pci_host_bridge_window {
+	struct list_head list;
+	struct resource *res;		/* host bridge aperture (CPU address) */
+	resource_size_t offset;		/* bus address + offset = CPU address */
+};
+
+struct pci_host_bridge {
+	struct device dev;
+	struct pci_bus *bus;		/* root bus */
+	struct list_head windows;	/* pci_host_bridge_windows */
+	void (*release_fn)(struct pci_host_bridge *);
+	void *release_data;
+};
+
+#define	to_pci_host_bridge(n) container_of(n, struct pci_host_bridge, dev)
+
+struct pci_bus_resource {
+	struct list_head list;
+	struct resource *res;
+	unsigned int flags;
+};
+
+#define PCI_REGION_FLAG_MASK	0x0fU	/* These bits of resource flags tell us the PCI region flags */
 
 struct pci_bus {
 	struct list_head node;		/* node in list of buses */
@@ -491,6 +525,51 @@ struct pci_bus *pci_scan_root_bus(struct device *parent, int bus,
 					     struct list_head *resources);
 struct pci_bus *pci_find_next_bus(const struct pci_bus *from);
 
+/* drivers/pci/bus.c */
+struct pci_bus *pci_bus_get(struct pci_bus *bus);
+void pci_bus_put(struct pci_bus *bus);
+void pci_add_resource(struct list_head *resources, struct resource *res);
+void pci_add_resource_offset(struct list_head *resources, struct resource *res,
+			     resource_size_t offset);
+void pci_free_resource_list(struct list_head *resources);
+void pci_bus_add_resource(struct pci_bus *bus, struct resource *res, unsigned int flags);
+struct resource *pci_bus_resource_n(const struct pci_bus *bus, int n);
+void pci_bus_remove_resources(struct pci_bus *bus);
+
+#define pci_bus_for_each_resource(bus, res, i)				\
+	for (i = 0;							\
+	    (res = pci_bus_resource_n(bus, i)) || i < PCI_BRIDGE_RESOURCE_NUM; \
+	     i++)
+
+/* these helpers provide future and backwards compatibility
+ * for accessing popular PCI BAR info */
+#define pci_resource_start(dev, bar)	((dev)->resource[(bar)].start)
+#define pci_resource_end(dev, bar)	((dev)->resource[(bar)].end)
+#define pci_resource_flags(dev, bar)	((dev)->resource[(bar)].flags)
+#define pci_resource_len(dev,bar) \
+	((pci_resource_start((dev), (bar)) == 0 &&	\
+	  pci_resource_end((dev), (bar)) ==		\
+	  pci_resource_start((dev), (bar))) ? 0 :	\
+							\
+	 (pci_resource_end((dev), (bar)) -		\
+	  pci_resource_start((dev), (bar)) + 1))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 int  pci_init(void);
 void pci_func_enable(struct pci_dev *f);
@@ -510,11 +589,6 @@ static inline int mlx4_init_one(struct pci_dev *f) { return 0; }
 
 u32 pci_conf_read(struct pci_dev *f, u32 off, int len);
 void pci_conf_write(struct pci_dev *f, u32 off, u32 v, int len);
-
-static inline int pci_channel_offline(struct pci_dev *pcif)
-{
-        return (pcif->error_state != pci_channel_io_normal);
-}
 
 struct msix_entry {
         u32     vector; /* kernel uses to write allocated vector */
