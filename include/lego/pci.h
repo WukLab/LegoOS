@@ -293,6 +293,10 @@ struct pci_bus {
 	unsigned char	cur_bus_speed;	/* enum pci_bus_speed */
 
 	char		name[48];
+	unsigned short  bridge_ctl;	/* manage NO_ISA/FBB/et al behaviors */
+	pci_bus_flags_t bus_flags;	/* Inherited by child busses */
+	struct device		*bridge;
+	struct device		dev;
 	unsigned int		is_added:1;
 };
 
