@@ -75,4 +75,9 @@ static inline int dev_set_name(struct device *dev, const char *fmt, ...)
 	return i;
 }
 
+static inline const char *dev_name(const struct device *dev)
+{
+	return dev->name;
+}
+
 #endif /* _LEGO_DEVICE_H_ */

@@ -259,6 +259,64 @@ int insert_resource(struct resource *parent, struct resource *new)
 	return conflict ? -EBUSY : 0;
 }
 
+static int __adjust_resource(struct resource *res, resource_size_t start,
+				resource_size_t size)
+{
+	struct resource *tmp, *parent = res->parent;
+	resource_size_t end = start + size - 1;
+	int result = -EBUSY;
+
+	if (!parent)
+		goto skip;
+
+	if ((start < parent->start) || (end > parent->end))
+		goto out;
+
+	if (res->sibling && (res->sibling->start <= end))
+		goto out;
+
+	tmp = parent->child;
+	if (tmp != res) {
+		while (tmp->sibling != res)
+			tmp = tmp->sibling;
+		if (start <= tmp->end)
+			goto out;
+	}
+
+skip:
+	for (tmp = res->child; tmp; tmp = tmp->sibling)
+		if ((tmp->start < start) || (tmp->end > end))
+			goto out;
+
+	res->start = start;
+	res->end = end;
+	result = 0;
+
+ out:
+	return result;
+}
+
+/**
+ * adjust_resource - modify a resource's start and size
+ * @res: resource to modify
+ * @start: new start value
+ * @size: new size
+ *
+ * Given an existing resource, change its start and size to match the
+ * arguments.  Returns 0 on success, -EBUSY if it can't fit.
+ * Existing children of the resource are assumed to be immutable.
+ */
+int adjust_resource(struct resource *res, resource_size_t start,
+			resource_size_t size)
+{
+	int result;
+
+	spin_lock(&resource_lock);
+	result = __adjust_resource(res, start, size);
+	spin_unlock(&resource_lock);
+	return result;
+}
+
 /*
  * Finds the lowest iomem resource existing within [res->start.res->end).
  * The caller must specify res->start, res->end, res->flags, and optionally

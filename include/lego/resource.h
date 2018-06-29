@@ -58,6 +58,9 @@ struct resource {
 /* I/O resource extended types */
 #define IORESOURCE_SYSTEM_RAM		(IORESOURCE_MEM|IORESOURCE_SYSRAM)
 
+/* PCI control bits.  Shares IORESOURCE_BITS with above PCI ROM.  */
+#define IORESOURCE_PCI_FIXED		(1<<4)	/* Do not move resource */
+
 /*
  * I/O Resource Descriptors
  *
@@ -115,9 +118,17 @@ struct resource *lookup_resource(struct resource *root, resource_size_t start);
 int walk_system_ram_range(unsigned long start_pfn, unsigned long nr_pages,
 		void *arg, int (*func)(unsigned long, unsigned long, void *));
 
+int adjust_resource(struct resource *res, resource_size_t start,
+		    resource_size_t size);
+
 static inline resource_size_t resource_size(const struct resource *res)
 {
 	return res->end - res->start + 1;
+}
+
+static inline unsigned long resource_type(const struct resource *res)
+{
+	return res->flags & IORESOURCE_TYPE_BITS;
 }
 
 /* Convenience shorthand with allocation */

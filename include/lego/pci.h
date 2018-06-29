@@ -205,6 +205,23 @@ struct pci_dev {
 	unsigned short	device;
 	unsigned short	subsystem_vendor;
 	unsigned short	subsystem_device;
+	u8		revision;	/* PCI revision, low byte of class word */
+	u8		hdr_type;	/* PCI header type (`multi' flag masked out) */
+	u8		pcie_cap;	/* PCI-E capability offset */
+	u8		msi_cap;	/* MSI capability offset */
+	u8		msix_cap;	/* MSI-X capability offset */
+	u8		pcie_mpss:3;	/* PCI-E Max Payload Size Supported */
+	u8		rom_base_reg;	/* which config register controls the ROM */
+	u8		pin;  		/* which interrupt pin this device uses */
+	u16		pcie_flags_reg;	/* cached PCI-E Capabilities Register */
+
+	struct pci_driver *driver;	/* which driver has allocated this device */
+	u64		_dma_mask;	/* Mask of the bits of bus address this
+					   device implements.  Normally this is
+					   0xffffffff.  You only need to change
+					   this if your device has broken DMA
+					   or supports 64-bit transfers.  */
+
 
 	u64			dev;
 	u32			func;
@@ -214,8 +231,6 @@ struct pci_dev {
 
 	unsigned int		msi_enabled:1;
 	unsigned int		msix_enabled:1;
-	u8			msi_cap;        /* MSI capability offset */
-	u8      	        msix_cap;       /* MSI-X capability offset */
 #ifdef CONFIG_PCI_MSI
 	struct list_head	msi_list;
 #endif
@@ -242,6 +257,8 @@ struct pci_dev {
 	void			*priv;
 
 	struct resource resource[DEVICE_COUNT_RESOURCE]; /* I/O and memory regions + expansion ROMs */
+
+	unsigned int		is_added:1;
 };
 
 static inline int pci_channel_offline(struct pci_dev *pcif)
@@ -508,6 +525,7 @@ struct pci_driver {
 
 
 extern struct list_head pci_root_buses;	/* list of all known PCI buses */
+extern struct rw_semaphore pci_bus_sem;
 
 #ifdef CONFIG_PCI_MMCONFIG
 void __init pci_mmcfg_early_init(void);
@@ -524,11 +542,13 @@ static inline int pci_domain_nr(struct pci_bus *bus)
 	return 0;
 }
 
+unsigned int pci_scan_child_bus(struct pci_bus *bus);
 struct pci_bus *pci_scan_root_bus(struct device *parent, int bus,
 					     struct pci_ops *ops, void *sysdata,
 					     struct list_head *resources);
 
 struct pci_bus *pci_find_bus(int domain, int busnr);
+void pci_bus_add_devices(const struct pci_bus *bus);
 struct pci_bus *pci_find_next_bus(const struct pci_bus *from);
 
 /* drivers/pci/bus.c */

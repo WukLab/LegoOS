@@ -22,25 +22,85 @@
 #ifndef LEGO_PCI_REGS_H
 #define LEGO_PCI_REGS_H
 
-/*
- * Standardized PCI configuration information
- *
- * XXX This is not complete.
- */
-
 #include <lego/types.h>
+
+/*
+ * Under PCI, each device has 256 bytes of configuration address space,
+ * of which the first 64 bytes are standardized as follows:
+ */
+#define PCI_STD_HEADER_SIZEOF	64
+#define PCI_VENDOR_ID		0x00	/* 16 bits */
+#define PCI_DEVICE_ID		0x02	/* 16 bits */
+#define PCI_COMMAND		0x04	/* 16 bits */
+#define  PCI_COMMAND_IO		0x1	/* Enable response in I/O space */
+#define  PCI_COMMAND_MEMORY	0x2	/* Enable response in Memory space */
+#define  PCI_COMMAND_MASTER	0x4	/* Enable bus mastering */
+#define  PCI_COMMAND_SPECIAL	0x8	/* Enable response to special cycles */
+#define  PCI_COMMAND_INVALIDATE	0x10	/* Use memory write and invalidate */
+#define  PCI_COMMAND_VGA_PALETTE 0x20	/* Enable palette snooping */
+#define  PCI_COMMAND_PARITY	0x40	/* Enable parity checking */
+#define  PCI_COMMAND_WAIT 	0x80	/* Enable address/data stepping */
+#define  PCI_COMMAND_SERR	0x100	/* Enable SERR */
+#define  PCI_COMMAND_FAST_BACK	0x200	/* Enable back-to-back writes */
+#define  PCI_COMMAND_INTX_DISABLE 0x400 /* INTx Emulation Disable */
+
+#define PCI_STATUS		0x06	/* 16 bits */
+#define  PCI_STATUS_INTERRUPT	0x08	/* Interrupt status */
+#define  PCI_STATUS_CAP_LIST	0x10	/* Support Capability List */
+#define  PCI_STATUS_66MHZ	0x20	/* Support 66 Mhz PCI 2.1 bus */
+#define  PCI_STATUS_UDF		0x40	/* Support User Definable Features [obsolete] */
+#define  PCI_STATUS_FAST_BACK	0x80	/* Accept fast-back to back */
+#define  PCI_STATUS_PARITY	0x100	/* Detected parity error */
+#define  PCI_STATUS_DEVSEL_MASK	0x600	/* DEVSEL timing */
+#define  PCI_STATUS_DEVSEL_FAST		0x000
+#define  PCI_STATUS_DEVSEL_MEDIUM	0x200
+#define  PCI_STATUS_DEVSEL_SLOW		0x400
+#define  PCI_STATUS_SIG_TARGET_ABORT	0x800 /* Set on target abort */
+#define  PCI_STATUS_REC_TARGET_ABORT	0x1000 /* Master ack of " */
+#define  PCI_STATUS_REC_MASTER_ABORT	0x2000 /* Set on master abort */
+#define  PCI_STATUS_SIG_SYSTEM_ERROR	0x4000 /* Set when we drive SERR */
+#define  PCI_STATUS_DETECTED_PARITY	0x8000 /* Set on parity error */
+
+#define PCI_CLASS_REVISION	0x08	/* High 24 bits are class, low 8 revision */
+#define PCI_REVISION_ID		0x08	/* Revision ID */
+#define PCI_CLASS_PROG		0x09	/* Reg. Level Programming Interface */
+#define PCI_CLASS_DEVICE	0x0a	/* Device class */
+
+#define PCI_CACHE_LINE_SIZE	0x0c	/* 8 bits */
+#define PCI_LATENCY_TIMER	0x0d	/* 8 bits */
+#define PCI_HEADER_TYPE		0x0e	/* 8 bits */
+#define  PCI_HEADER_TYPE_NORMAL		0
+#define  PCI_HEADER_TYPE_BRIDGE		1
+#define  PCI_HEADER_TYPE_CARDBUS	2
+
+#define PCI_BIST		0x0f	/* 8 bits */
+#define  PCI_BIST_CODE_MASK	0x0f	/* Return result */
+#define  PCI_BIST_START		0x40	/* 1 to start BIST, 2 secs or less */
+#define  PCI_BIST_CAPABLE	0x80	/* 1 if BIST capable */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /*
  * Device identification register; contains a vendor ID and a device ID.
  */
 #define	PCI_ID_REG			0x00
 
-;
-
 typedef u16 pci_vendor_id_t;
 typedef u16 pci_product_id_t;
 
-#define PCI_VENDOR_ID           0x00    /* 16 bits */
 #define	PCI_VENDOR_SHIFT			0
 #define	PCI_VENDOR_MASK				0xffff
 #define	PCI_VENDOR(id) \
@@ -59,7 +119,6 @@ typedef u16 pci_product_id_t;
  * Command and status register.
  */
 #define	PCI_COMMAND_STATUS_REG			0x04
-#define	PCI_COMMAND PCI_COMMAND_STATUS_REG
 #define	PCI_COMMAND_SHIFT			0
 #define	PCI_COMMAND_MASK			0xffff
 #define	PCI_STATUS_SHIFT			16
@@ -80,21 +139,6 @@ typedef u16 pci_product_id_t;
 #define	PCI_COMMAND_SERR_ENABLE			0x00000100
 #define	PCI_COMMAND_BACKTOBACK_ENABLE		0x00000200
 #define PCI_COMMAND_INTX_DISABLE		0x400 /* INTx Emulation Disable */
-
-#define	PCI_STATUS_CAPLIST_SUPPORT		0x00100000
-#define	PCI_STATUS_66MHZ_SUPPORT		0x00200000
-#define	PCI_STATUS_UDF_SUPPORT			0x00400000
-#define	PCI_STATUS_BACKTOBACK_SUPPORT		0x00800000
-#define	PCI_STATUS_PARITY_ERROR			0x01000000
-#define	PCI_STATUS_DEVSEL_FAST			0x00000000
-#define	PCI_STATUS_DEVSEL_MEDIUM		0x02000000
-#define	PCI_STATUS_DEVSEL_SLOW			0x04000000
-#define	PCI_STATUS_DEVSEL_MASK			0x06000000
-#define	PCI_STATUS_TARGET_TARGET_ABORT		0x08000000
-#define	PCI_STATUS_MASTER_TARGET_ABORT		0x10000000
-#define	PCI_STATUS_MASTER_ABORT			0x20000000
-#define	PCI_STATUS_SPECIAL_ERROR		0x40000000
-#define	PCI_STATUS_PARITY_DETECT		0x80000000
 
 /*
  * PCI Class and Revision Register; defines type and revision of device.
@@ -294,10 +338,7 @@ typedef u8 pci_revision_t;
  */
 #define	PCI_BHLC_REG			0x0c
 
-#define	PCI_BIST_SHIFT				24
 #define	PCI_BIST_MASK				0xff
-#define	PCI_BIST(bhlcr) \
-	    (((bhlcr) >> PCI_BIST_SHIFT) & PCI_BIST_MASK)
 
 #define	PCI_HDRTYPE_SHIFT			16
 #define	PCI_HDRTYPE_MASK			0xff
