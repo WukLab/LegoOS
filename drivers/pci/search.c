@@ -75,3 +75,34 @@ pci_find_next_bus(const struct pci_bus *from)
 	up_read(&pci_bus_sem);
 	return b;
 }
+
+/**
+ * pci_get_slot - locate PCI device for a given PCI slot
+ * @bus: PCI bus on which desired PCI device resides
+ * @devfn: encodes number of PCI slot in which the desired PCI 
+ * device resides and the logical device number within that slot 
+ * in case of multi-function devices.
+ *
+ * Given a PCI bus and slot/function number, the desired PCI device 
+ * is located in the list of PCI devices.
+ * If the device is found, its reference count is increased and this
+ * function returns a pointer to its data structure.  The caller must
+ * decrement the reference count by calling pci_dev_put().
+ * If no device is found, %NULL is returned.
+ */
+struct pci_dev *pci_get_slot(struct pci_bus *bus, unsigned int devfn)
+{
+	struct pci_dev *dev;
+
+	down_read(&pci_bus_sem);
+
+	list_for_each_entry(dev, &bus->devices, bus_list) {
+		if (dev->devfn == devfn)
+			goto out;
+	}
+
+	dev = NULL;
+out:
+	up_read(&pci_bus_sem);
+	return dev;
+}

@@ -175,7 +175,7 @@ static int pci_scan_bus(struct pci_bus *bus)
 				continue;
 
 			intr = pci_conf_read(&af, PCI_INTERRUPT_REG, 3);
-			af.irq_line = PCI_INTERRUPT_LINE(intr);
+			//af.irq_line = PCI_INTERRUPT_LINE(intr);
 
 			af.dev_class = pci_conf_read(&af, PCI_CLASS_REG, 3);
 			if (pci_show_devs)

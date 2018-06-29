@@ -27,10 +27,26 @@
 #define MAX_DEVICE_NAME		(64)
 
 struct device;
+struct device_driver;
+
+struct bus_type {
+	const char		*name;
+	const char		*dev_name;
+	struct device		*dev_root;
+
+	int (*match)(struct device *dev, struct device_driver *drv);
+	int (*probe)(struct device *dev);
+	int (*remove)(struct device *dev);
+	void (*shutdown)(struct device *dev);
+
+	int (*online)(struct device *dev);
+	int (*offline)(struct device *dev);
+};
 
 struct device_driver {
 	char			name[MAX_DEVICE_NAME];
 	const char		*mod_name;
+	struct bus_type		*bus;
 
 	int (*probe) (struct device *dev);
 	int (*remove) (struct device *dev);
@@ -41,6 +57,7 @@ struct device {
 	struct device	*parent;
 	char		name[MAX_DEVICE_NAME];
 
+	struct bus_type	*bus;		/* type of bus device is on */
 	struct device_driver *driver;	/* which driver has allocated this
 					   device */
 	void		*platform_data;	/* Platform specific data, device

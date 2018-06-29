@@ -21,6 +21,9 @@
 
 #include <asm/pci.h>
 
+#define PCI_CFG_SPACE_SIZE	256
+#define PCI_CFG_SPACE_EXP_SIZE	4096
+
 /*
  * The PCI interface treats multi-function devices as independent
  * devices.  The slot/function address of each device is encoded
@@ -184,6 +187,57 @@ struct pci_cap_saved_state {
 	struct pci_cap_saved_data cap;
 };
 
+enum {
+	/* Force re-assigning all resources (ignore firmware
+	 * setup completely)
+	 */
+	PCI_REASSIGN_ALL_RSRC	= 0x00000001,
+
+	/* Re-assign all bus numbers */
+	PCI_REASSIGN_ALL_BUS	= 0x00000002,
+
+	/* Do not try to assign, just use existing setup */
+	PCI_PROBE_ONLY		= 0x00000004,
+
+	/* Don't bother with ISA alignment unless the bridge has
+	 * ISA forwarding enabled
+	 */
+	PCI_CAN_SKIP_ISA_ALIGN	= 0x00000008,
+
+	/* Enable domain numbers in /proc */
+	PCI_ENABLE_PROC_DOMAINS	= 0x00000010,
+	/* ... except for domain 0 */
+	PCI_COMPAT_DOMAIN_0	= 0x00000020,
+
+	/* PCIe downstream ports are bridges that normally lead to only a
+	 * device 0, but if this is set, we scan all possible devices, not
+	 * just device 0.
+	 */
+	PCI_SCAN_ALL_PCIE_DEVS	= 0x00000040,
+};
+
+extern unsigned int pci_flags;
+
+static inline void pci_set_flags(int flags)
+{
+	pci_flags = flags;
+}
+
+static inline void pci_add_flags(int flags)
+{
+	pci_flags |= flags;
+}
+
+static inline void pci_clear_flags(int flags)
+{
+	pci_flags &= ~flags;
+}
+
+static inline int pci_has_flag(int flag)
+{
+	return pci_flags & flag;
+}
+
 // PCI subsystem interface
 enum pci_res { 
 	pci_res_bus = 0,
@@ -205,6 +259,7 @@ struct pci_dev {
 	unsigned short	device;
 	unsigned short	subsystem_vendor;
 	unsigned short	subsystem_device;
+	unsigned int	class;		/* 3 bytes: (base,sub,prog-if) */
 	u8		revision;	/* PCI revision, low byte of class word */
 	u8		hdr_type;	/* PCI header type (`multi' flag masked out) */
 	u8		pcie_cap;	/* PCI-E capability offset */
@@ -222,43 +277,95 @@ struct pci_dev {
 					   this if your device has broken DMA
 					   or supports 64-bit transfers.  */
 
+	pci_power_t     current_state;  /* Current operating state. In ACPI-speak,
+					   this is D0-D3, D0 being fully functional,
+					   and D3 being off. */
+	u8		pm_cap;		/* PM capability offset */
+	unsigned int	pme_support:5;	/* Bitmask of states from which PME#
+					   can be generated */
+	unsigned int	pme_interrupt:1;
+	unsigned int	pme_poll:1;	/* Poll device's PME status bit */
+	unsigned int	d1_support:1;	/* Low power state D1 is supported */
+	unsigned int	d2_support:1;	/* Low power state D2 is supported */
+	unsigned int	no_d1d2:1;	/* D1 and D2 are forbidden */
+	unsigned int	no_d3cold:1;	/* D3cold is forbidden */
+	unsigned int	d3cold_allowed:1;	/* D3cold is allowed by user */
+	unsigned int	mmio_always_on:1;	/* disallow turning off io/mem
+						   decoding during bar sizing */
+	unsigned int	wakeup_prepared:1;
+	unsigned int	runtime_d3cold:1;	/* whether go through runtime
+						   D3cold, not set for devices
+						   powered on/off by the
+						   corresponding bridge */
+	unsigned int	d3_delay;	/* D3->D0 transition time in ms */
+	unsigned int	d3cold_delay;	/* D3cold->D0 transition time in ms */
 
-	u64			dev;
-	u32			func;
+	pci_channel_state_t error_state;	/* current connectivity state */
+	struct	device	dev;		/* Generic device interface */
 
-	u32			dev_id;
-	u32			dev_class;
-
-	unsigned int		msi_enabled:1;
-	unsigned int		msix_enabled:1;
-#ifdef CONFIG_PCI_MSI
-	struct list_head	msi_list;
-#endif
+	int		cfg_size;	/* Size of configuration space */
 
 	/*
-	 *  For PCI devices, the region numbers are assigned this way:
-	 *
-	 *      0-5     standard PCI regions
-	 *      6       expansion ROM
-	 *      7-10    bridges: address space assigned to buses behind the bridge
+	 * Instead of touching interrupt line and base address registers
+	 * directly, use the values stored here. They might be different!
 	 */
-	u32			reg_base[11];
-	u32			reg_size[11];
-	u8			irq_line;
-
-	u64			*dma_mask;
-	u64			coherent_dma_mask;
-	struct dma_coherent_mem	*dma_mem;
-
-	unsigned int		irq;
-	unsigned int		error_state;
-
-	void			*driver_data;
-	void			*priv;
-
+	unsigned int	irq;
 	struct resource resource[DEVICE_COUNT_RESOURCE]; /* I/O and memory regions + expansion ROMs */
 
-	unsigned int		is_added:1;
+	bool match_driver;		/* Skip attaching driver */
+	/* These fields are used by common fixups */
+	unsigned int	transparent:1;	/* Transparent PCI bridge */
+	unsigned int	multifunction:1;/* Part of multi-function device */
+	/* keep track of device state */
+	unsigned int	is_added:1;
+	unsigned int	is_busmaster:1; /* device is busmaster */
+	unsigned int	no_msi:1;	/* device may not use msi */
+	unsigned int	block_cfg_access:1;	/* config space access is blocked */
+	unsigned int	broken_parity_status:1;	/* Device generates false positive parity */
+	unsigned int	irq_reroute_variant:2;	/* device needs IRQ rerouting variant */
+	unsigned int 	msi_enabled:1;
+	unsigned int	msix_enabled:1;
+	unsigned int	ari_enabled:1;	/* ARI forwarding */
+	unsigned int	is_managed:1;
+	unsigned int	is_pcie:1;	/* Obsolete. Will be removed.
+					   Use pci_is_pcie() instead */
+	unsigned int    needs_freset:1; /* Dev requires fundamental reset */
+	unsigned int	state_saved:1;
+	unsigned int	is_physfn:1;
+	unsigned int	is_virtfn:1;
+	unsigned int	reset_fn:1;
+	unsigned int    is_hotplug_bridge:1;
+	unsigned int    __aer_firmware_first_valid:1;
+	unsigned int	__aer_firmware_first:1;
+	unsigned int	broken_intx_masking:1;
+	unsigned int	io_window_1k:1;	/* Intel P2P bridge 1K I/O windows */
+	pci_dev_flags_t dev_flags;
+	atomic_t	enable_cnt;	/* pci_enable_device has been called */
+
+	u32		saved_config_space[16]; /* config space saved at suspend time */
+	struct hlist_head saved_cap_space;
+	struct bin_attribute *rom_attr; /* attribute descriptor for sysfs ROM entry */
+	int rom_attr_enabled;		/* has display of the rom attribute been enabled? */
+	struct bin_attribute *res_attr[DEVICE_COUNT_RESOURCE]; /* sysfs file for resources */
+	struct bin_attribute *res_attr_wc[DEVICE_COUNT_RESOURCE]; /* sysfs file for WC mapping of resources */
+#ifdef CONFIG_PCI_MSI
+	struct list_head msi_list;
+	struct kset *msi_kset;
+#endif
+	struct pci_vpd *vpd;
+	phys_addr_t rom; /* Physical address of ROM if it's not from the BAR */
+	size_t romlen; /* Length of ROM if it's not from the BAR */
+
+
+	/* yiying specific */
+	u64		*dma_mask;
+	u64		coherent_dma_mask;/* Like dma_mask, but for
+					     alloc_coherent mappings as
+					     not all hardware supports
+					     64 bit addresses for consistent
+					     allocations such descriptors. */
+	struct dma_coherent_mem	*dma_mem;
+	void			*driver_data;
 };
 
 static inline int pci_channel_offline(struct pci_dev *pcif)
@@ -526,6 +633,7 @@ struct pci_driver {
 
 extern struct list_head pci_root_buses;	/* list of all known PCI buses */
 extern struct rw_semaphore pci_bus_sem;
+extern struct bus_type pci_bus_type;
 
 #ifdef CONFIG_PCI_MMCONFIG
 void __init pci_mmcfg_early_init(void);
@@ -551,6 +659,11 @@ struct pci_bus *pci_find_bus(int domain, int busnr);
 void pci_bus_add_devices(const struct pci_bus *bus);
 struct pci_bus *pci_find_next_bus(const struct pci_bus *from);
 
+void pcibios_resource_to_bus(struct pci_dev *dev, struct pci_bus_region *region,
+			     struct resource *res);
+void pcibios_bus_to_resource(struct pci_dev *dev, struct resource *res,
+			     struct pci_bus_region *region);
+
 /* drivers/pci/bus.c */
 struct pci_bus *pci_bus_get(struct pci_bus *bus);
 void pci_bus_put(struct pci_bus *bus);
@@ -561,6 +674,7 @@ void pci_free_resource_list(struct list_head *resources);
 void pci_bus_add_resource(struct pci_bus *bus, struct resource *res, unsigned int flags);
 struct resource *pci_bus_resource_n(const struct pci_bus *bus, int n);
 void pci_bus_remove_resources(struct pci_bus *bus);
+struct pci_dev *pci_get_slot(struct pci_bus *bus, unsigned int devfn);
 
 #define pci_bus_for_each_resource(bus, res, i)				\
 	for (i = 0;							\
@@ -580,6 +694,132 @@ void pci_bus_remove_resources(struct pci_bus *bus);
 	 (pci_resource_end((dev), (bar)) -		\
 	  pci_resource_start((dev), (bar)) + 1))
 
+/* If you want to know what to call your pci_dev, ask this function.
+ * Again, it's a wrapper around the generic device.
+ */
+static inline const char *pci_name(const struct pci_dev *pdev)
+{
+	return dev_name(&pdev->dev);
+}
+
+/**
+ * pci_pcie_cap - get the saved PCIe capability offset
+ * @dev: PCI device
+ *
+ * PCIe capability offset is calculated at PCI device initialization
+ * time and saved in the data structure. This function returns saved
+ * PCIe capability offset. Using this instead of pci_find_capability()
+ * reduces unnecessary search in the PCI configuration space. If you
+ * need to calculate PCIe capability offset from raw device for some
+ * reasons, please use pci_find_capability() instead.
+ */
+static inline int pci_pcie_cap(struct pci_dev *dev)
+{
+	return dev->pcie_cap;
+}
+
+/**
+ * pci_is_pcie - check if the PCI device is PCI Express capable
+ * @dev: PCI device
+ *
+ * Retrun true if the PCI device is PCI Express capable, false otherwise.
+ */
+static inline bool pci_is_pcie(struct pci_dev *dev)
+{
+	return !!pci_pcie_cap(dev);
+}
+
+/**
+ * pcie_caps_reg - get the PCIe Capabilities Register
+ * @dev: PCI device
+ */
+static inline u16 pcie_caps_reg(const struct pci_dev *dev)
+{
+	return dev->pcie_flags_reg;
+}
+
+/**
+ * pci_pcie_type - get the PCIe device/port type
+ * @dev: PCI device
+ */
+static inline int pci_pcie_type(const struct pci_dev *dev)
+{
+	return (pcie_caps_reg(dev) & PCI_EXP_FLAGS_TYPE) >> 4;
+}
+
+int pci_bus_read_config_byte(struct pci_bus *bus, unsigned int devfn,
+			     int where, u8 *val);
+int pci_bus_read_config_word(struct pci_bus *bus, unsigned int devfn,
+			     int where, u16 *val);
+int pci_bus_read_config_dword(struct pci_bus *bus, unsigned int devfn,
+			      int where, u32 *val);
+int pci_bus_write_config_byte(struct pci_bus *bus, unsigned int devfn,
+			      int where, u8 val);
+int pci_bus_write_config_word(struct pci_bus *bus, unsigned int devfn,
+			      int where, u16 val);
+int pci_bus_write_config_dword(struct pci_bus *bus, unsigned int devfn,
+			       int where, u32 val);
+struct pci_ops *pci_bus_set_ops(struct pci_bus *bus, struct pci_ops *ops);
+
+static inline int pci_read_config_byte(const struct pci_dev *dev, int where, u8 *val)
+{
+	return pci_bus_read_config_byte(dev->bus, dev->devfn, where, val);
+}
+static inline int pci_read_config_word(const struct pci_dev *dev, int where, u16 *val)
+{
+	return pci_bus_read_config_word(dev->bus, dev->devfn, where, val);
+}
+static inline int pci_read_config_dword(const struct pci_dev *dev, int where,
+					u32 *val)
+{
+	return pci_bus_read_config_dword(dev->bus, dev->devfn, where, val);
+}
+static inline int pci_write_config_byte(const struct pci_dev *dev, int where, u8 val)
+{
+	return pci_bus_write_config_byte(dev->bus, dev->devfn, where, val);
+}
+static inline int pci_write_config_word(const struct pci_dev *dev, int where, u16 val)
+{
+	return pci_bus_write_config_word(dev->bus, dev->devfn, where, val);
+}
+static inline int pci_write_config_dword(const struct pci_dev *dev, int where,
+					 u32 val)
+{
+	return pci_bus_write_config_dword(dev->bus, dev->devfn, where, val);
+}
+
+int pcie_capability_read_word(struct pci_dev *dev, int pos, u16 *val);
+int pcie_capability_read_dword(struct pci_dev *dev, int pos, u32 *val);
+int pcie_capability_write_word(struct pci_dev *dev, int pos, u16 val);
+int pcie_capability_write_dword(struct pci_dev *dev, int pos, u32 val);
+int pcie_capability_clear_and_set_word(struct pci_dev *dev, int pos,
+				       u16 clear, u16 set);
+int pcie_capability_clear_and_set_dword(struct pci_dev *dev, int pos,
+					u32 clear, u32 set);
+
+static inline int pcie_capability_set_word(struct pci_dev *dev, int pos,
+					   u16 set)
+{
+	return pcie_capability_clear_and_set_word(dev, pos, 0, set);
+}
+
+static inline int pcie_capability_set_dword(struct pci_dev *dev, int pos,
+					    u32 set)
+{
+	return pcie_capability_clear_and_set_dword(dev, pos, 0, set);
+}
+
+static inline int pcie_capability_clear_word(struct pci_dev *dev, int pos,
+					     u16 clear)
+{
+	return pcie_capability_clear_and_set_word(dev, pos, clear, 0);
+}
+
+static inline int pcie_capability_clear_dword(struct pci_dev *dev, int pos,
+					      u32 clear)
+{
+	return pcie_capability_clear_and_set_dword(dev, pos, clear, 0);
+}
 
 
 
