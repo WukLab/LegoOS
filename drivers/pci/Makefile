@@ -3,3 +3,4 @@ obj-y += bus.o
 obj-y += probe.o
 obj-y += search.o
 obj-y += host-bridge.o
+obj-y += driver.o

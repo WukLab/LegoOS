@@ -602,4 +602,35 @@ static inline int dma_mmap_wc(struct pci_dev *pcid,
 
 extern struct dma_map_ops nommu_dma_ops;
 
+
+static inline unsigned int dma_get_max_seg_size(struct device *dev)
+{
+	return dev->dma_parms ? dev->dma_parms->max_segment_size : 65536;
+}
+
+static inline unsigned int dma_set_max_seg_size(struct device *dev,
+						unsigned int size)
+{
+	if (dev->dma_parms) {
+		dev->dma_parms->max_segment_size = size;
+		return 0;
+	} else
+		return -EIO;
+}
+
+static inline unsigned long dma_get_seg_boundary(struct device *dev)
+{
+	return dev->dma_parms ?
+		dev->dma_parms->segment_boundary_mask : 0xffffffff;
+}
+
+static inline int dma_set_seg_boundary(struct device *dev, unsigned long mask)
+{
+	if (dev->dma_parms) {
+		dev->dma_parms->segment_boundary_mask = mask;
+		return 0;
+	} else
+		return -EIO;
+}
+
 #endif /* _LEGO_DMA_MAPPING_H_ */

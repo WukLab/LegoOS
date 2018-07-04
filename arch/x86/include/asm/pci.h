@@ -49,6 +49,8 @@ extern void early_dump_pci_devices(void);
 #define PCI_ROOT_NO_CRS		0x100000
 #define PCI_NOASSIGN_BARS	0x200000
 
+unsigned int pcibios_assign_all_busses(void);
+
 extern unsigned int pci_probe;
 extern int pcibios_last_bus;
 

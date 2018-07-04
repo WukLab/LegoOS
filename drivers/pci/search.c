@@ -62,7 +62,7 @@ struct pci_bus * pci_find_bus(int domain, int busnr)
  * @from is not %NULL, searches continue from next device on the
  * global list.
  */
-struct pci_bus * 
+struct pci_bus *
 pci_find_next_bus(const struct pci_bus *from)
 {
 	struct list_head *n;
@@ -79,11 +79,11 @@ pci_find_next_bus(const struct pci_bus *from)
 /**
  * pci_get_slot - locate PCI device for a given PCI slot
  * @bus: PCI bus on which desired PCI device resides
- * @devfn: encodes number of PCI slot in which the desired PCI 
- * device resides and the logical device number within that slot 
+ * @devfn: encodes number of PCI slot in which the desired PCI
+ * device resides and the logical device number within that slot
  * in case of multi-function devices.
  *
- * Given a PCI bus and slot/function number, the desired PCI device 
+ * Given a PCI bus and slot/function number, the desired PCI device
  * is located in the list of PCI devices.
  * If the device is found, its reference count is increased and this
  * function returns a pointer to its data structure.  The caller must

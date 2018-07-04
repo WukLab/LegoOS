@@ -172,4 +172,9 @@ void __init pci_subsys_init(void)
 	pci_legacy_init();
 
 	panic("asd");
+} 
+
+unsigned int pcibios_assign_all_busses(void)
+{
+	return (pci_probe & PCI_ASSIGN_ALL_BUSSES) ? 1 : 0;
 }

@@ -277,6 +277,8 @@ struct pci_dev {
 					   this if your device has broken DMA
 					   or supports 64-bit transfers.  */
 
+	struct device_dma_parameters dma_parms;
+
 	pci_power_t     current_state;  /* Current operating state. In ACPI-speak,
 					   this is D0-D3, D0 being fully functional,
 					   and D3 being off. */
@@ -747,6 +749,17 @@ static inline int pci_pcie_type(const struct pci_dev *dev)
 	return (pcie_caps_reg(dev) & PCI_EXP_FLAGS_TYPE) >> 4;
 }
 
+/**
+ * pci_ari_enabled - query ARI forwarding status
+ * @bus: the PCI bus
+ *
+ * Returns 1 if ARI forwarding is enabled, or 0 if not enabled;
+ */
+static inline int pci_ari_enabled(struct pci_bus *bus)
+{
+	return bus->self && bus->self->ari_enabled;
+}
+
 int pci_bus_read_config_byte(struct pci_bus *bus, unsigned int devfn,
 			     int where, u8 *val);
 int pci_bus_read_config_word(struct pci_bus *bus, unsigned int devfn,
@@ -821,6 +834,29 @@ static inline int pcie_capability_clear_dword(struct pci_dev *dev, int pos,
 	return pcie_capability_clear_and_set_dword(dev, pos, clear, 0);
 }
 
+/*
+ *  The world is not perfect and supplies us with broken PCI devices.
+ *  For at least a part of these bugs we need a work-around, so both
+ *  generic (drivers/pci/quirks.c) and per-architecture code can define
+ *  fixup hooks to be called for particular buggy devices.
+ */
+struct pci_fixup {
+	u16 vendor;		/* You can use PCI_ANY_ID here of course */
+	u16 device;		/* You can use PCI_ANY_ID here of course */
+	u32 class;		/* You can use PCI_ANY_ID here too */
+	unsigned int class_shift;	/* should be 0, 8, 16 */
+	void (*hook)(struct pci_dev *dev);
+};
+
+enum pci_fixup_pass {
+	pci_fixup_early,	/* Before probing BARs */
+	pci_fixup_header,	/* After reading configuration header */
+	pci_fixup_final,	/* Final phase of device fixups */
+	pci_fixup_enable,	/* pci_enable_device() time */
+	pci_fixup_resume,	/* pci_device_resume() */
+	pci_fixup_suspend,	/* pci_device_suspend */
+	pci_fixup_resume_early, /* pci_device_resume_early() */
+};
 
 
 
@@ -837,8 +873,6 @@ static inline int pcie_capability_clear_dword(struct pci_dev *dev, int pos,
 
 
 
-int  pci_init(void);
-void pci_func_enable(struct pci_dev *f);
 
 #ifdef CONFIG_E1000
 int pci_func_attach_E1000(struct pci_dev *f);
@@ -853,8 +887,9 @@ int mlx4_init_one(struct pci_dev *f);
 static inline int mlx4_init_one(struct pci_dev *f) { return 0; }
 #endif
 
-u32 pci_conf_read(struct pci_dev *f, u32 off, int len);
-void pci_conf_write(struct pci_dev *f, u32 off, u32 v, int len);
+static inline void pci_func_enable(struct pci_dev *f) { }
+static inline u32 pci_conf_read(struct pci_dev *f, u32 off, int len) { return 0; }
+static inline void pci_conf_write(struct pci_dev *f, u32 off, u32 v, int len) { }
 
 struct msix_entry {
         u32     vector; /* kernel uses to write allocated vector */

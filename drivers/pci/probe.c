@@ -14,10 +14,13 @@
 #include <lego/timer.h>
 #include <lego/kernel.h>
 #include <lego/resource.h>
+#include <lego/dma-mapping.h>
 
 #include <asm/io.h>
-
 #include "pci.h"
+
+#define CARDBUS_LATENCY_TIMER	176	/* secondary latency timer */
+#define CARDBUS_RESERVE_BUSNR	3
 
 struct resource busn_resource = {
 	.name	= "PCI busn",
@@ -243,7 +246,7 @@ struct pci_bus *pci_scan_root_bus(struct device *parent, int bus,
 
 	if (!found) {
 		pr_info("No busn resource found for root bus, "
-		 	 "will use [bus %02x-ff]\n", bus);
+			 "will use [bus %02x-ff]\n", bus);
 		pci_bus_insert_busn_res(b, bus, 255);
 	}
 
@@ -535,7 +538,7 @@ int pci_find_next_capability(struct pci_dev *dev, u8 pos, int cap)
 }
 
 /**
- * pci_find_capability - query for devices' capabilities 
+ * pci_find_capability - query for devices' capabilities
  * @dev: PCI device to query
  * @cap: capability code
  *
@@ -544,12 +547,12 @@ int pci_find_next_capability(struct pci_dev *dev, u8 pos, int cap)
  * device's PCI configuration space or 0 in case the device does not
  * support it.  Possible values for @cap:
  *
- *  %PCI_CAP_ID_PM           Power Management 
- *  %PCI_CAP_ID_AGP          Accelerated Graphics Port 
- *  %PCI_CAP_ID_VPD          Vital Product Data 
- *  %PCI_CAP_ID_SLOTID       Slot Identification 
+ *  %PCI_CAP_ID_PM           Power Management
+ *  %PCI_CAP_ID_AGP          Accelerated Graphics Port
+ *  %PCI_CAP_ID_VPD          Vital Product Data
+ *  %PCI_CAP_ID_SLOTID       Slot Identification
  *  %PCI_CAP_ID_MSI          Message Signalled Interrupts
- *  %PCI_CAP_ID_CHSWP        CompactPCI HotSwap 
+ *  %PCI_CAP_ID_CHSWP        CompactPCI HotSwap
  *  %PCI_CAP_ID_PCIX         PCI-X
  *  %PCI_CAP_ID_EXP          PCI Express
  */
@@ -562,6 +565,76 @@ int pci_find_capability(struct pci_dev *dev, int cap)
 		pos = __pci_find_next_cap(dev->bus, dev->devfn, pos, cap);
 
 	return pos;
+}
+
+/**
+ * pci_find_next_ext_capability - Find an extended capability
+ * @dev: PCI device to query
+ * @start: address at which to start looking (0 to start at beginning of list)
+ * @cap: capability code
+ *
+ * Returns the address of the next matching extended capability structure
+ * within the device's PCI configuration space or 0 if the device does
+ * not support it.  Some capabilities can occur several times, e.g., the
+ * vendor-specific capability, and this provides a way to find them all.
+ */
+int pci_find_next_ext_capability(struct pci_dev *dev, int start, int cap)
+{
+	u32 header;
+	int ttl;
+	int pos = PCI_CFG_SPACE_SIZE;
+
+	/* minimum 8 bytes per capability */
+	ttl = (PCI_CFG_SPACE_EXP_SIZE - PCI_CFG_SPACE_SIZE) / 8;
+
+	if (dev->cfg_size <= PCI_CFG_SPACE_SIZE)
+		return 0;
+
+	if (start)
+		pos = start;
+
+	if (pci_read_config_dword(dev, pos, &header) != PCIBIOS_SUCCESSFUL)
+		return 0;
+
+	/*
+	 * If we have no capabilities, this is indicated by cap ID,
+	 * cap version and next pointer all being 0.
+	 */
+	if (header == 0)
+		return 0;
+
+	while (ttl-- > 0) {
+		if (PCI_EXT_CAP_ID(header) == cap && pos != start)
+			return pos;
+
+		pos = PCI_EXT_CAP_NEXT(header);
+		if (pos < PCI_CFG_SPACE_SIZE)
+			break;
+
+		if (pci_read_config_dword(dev, pos, &header) != PCIBIOS_SUCCESSFUL)
+			break;
+	}
+
+	return 0;
+}
+
+/**
+ * pci_find_ext_capability - Find an extended capability
+ * @dev: PCI device to query
+ * @cap: capability code
+ *
+ * Returns the address of the requested extended capability structure
+ * within the device's PCI configuration space or 0 if the device does
+ * not support it.  Possible values for @cap:
+ *
+ *  %PCI_EXT_CAP_ID_ERR		Advanced Error Reporting
+ *  %PCI_EXT_CAP_ID_VC		Virtual Channel
+ *  %PCI_EXT_CAP_ID_DSN		Device Serial Number
+ *  %PCI_EXT_CAP_ID_PWR		Power Budgeting
+ */
+int pci_find_ext_capability(struct pci_dev *dev, int cap)
+{
+	return pci_find_next_ext_capability(dev, 0, cap);
 }
 
 void set_pcie_port_type(struct pci_dev *pdev)
@@ -659,12 +732,17 @@ void set_pcie_hotplug_bridge(struct pci_dev *pdev)
 
 static void pci_fixup_device(int _x, struct pci_dev *dev)
 {
-
+	pr_info_once("%s(): TODO\n", __func__);
 }
 
-void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
+int pci_set_dma_max_seg_size(struct pci_dev *dev, unsigned int size)
 {
-	WARN_ON_ONCE(1);
+	return dma_set_max_seg_size(&dev->dev, size);
+}
+
+int pci_set_dma_seg_boundary(struct pci_dev *dev, unsigned long mask)
+{
+	return dma_set_seg_boundary(&dev->dev, mask);
 }
 
 #define LEGACY_IO_RESOURCE	(IORESOURCE_IO | IORESOURCE_PCI_FIXED)
@@ -673,7 +751,7 @@ void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
  * pci_setup_device - fill in class and map information of a device
  * @dev: the device structure to fill
  *
- * Initialize the device structure with information about the device's 
+ * Initialize the device structure with information about the device's
  * vendor,class,memory and IO-space addresses,IRQ lines etc.
  * Called at initialisation of the PCI subsystem and by CardBus services.
  * Returns 0 on success and negative if unknown type of device (not normal,
@@ -710,8 +788,9 @@ int pci_setup_device(struct pci_dev *dev)
 	dev->revision = class & 0xff;
 	dev->class = class >> 8;		    /* upper 3 bytes */
 
-	pr_info("[%04x:%04x] type %02x class %#08x\n",
-		   dev->vendor, dev->device, dev->hdr_type, dev->class);
+	pr_info("pci %s: [%04x:%04x] type %02x class %#08x\n",
+		dev_name(&dev->dev), dev->vendor, dev->device,
+		dev->hdr_type, dev->class);
 
 	/* need to have dev->class ready */
 	dev->cfg_size = pci_cfg_space_size(dev);
@@ -775,7 +854,7 @@ int pci_setup_device(struct pci_dev *dev)
 			goto bad;
 		/* The PCI-to-PCI bridge spec requires that subtractive
 		   decoding (i.e. transparent) bridge must have programming
-		   interface code of 0x01. */ 
+		   interface code of 0x01. */
 		pci_read_irq(dev);
 		dev->transparent = ((dev->class & 0xff) == 1);
 		pci_read_bases(dev, 2, PCI_ROM_ADDRESS1);
@@ -887,6 +966,127 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 	return dev;
 }
 
+/*
+ * XXX: Looks quite important!!!
+ * And this is a good reference to do stuff.
+ */
+static void pci_init_capabilities(struct pci_dev *dev)
+{
+	pr_info_once("%s(): TODO\n", __func__);
+#if 0
+	/* MSI/MSI-X list */
+	pci_msi_init_pci_dev(dev);
+
+	/* Buffers for saving PCIe and PCI-X capabilities */
+	pci_allocate_cap_save_buffers(dev);
+
+	/* Power Management */
+	pci_pm_init(dev);
+
+	/* Vital Product Data */
+	pci_vpd_pci22_init(dev);
+
+	/* Alternative Routing-ID Forwarding */
+	pci_configure_ari(dev);
+
+	/* Single Root I/O Virtualization */
+	pci_iov_init(dev);
+
+	/* Enable ACS P2P upstream forwarding */
+	pci_enable_acs(dev);
+#endif
+}
+
+/*
+ * Add @dev to its @bus. This make @dev visible to other friends.
+ * It is always a good practice to write the de-init along with
+ * init function. But now Lego does not have any support for removing
+ * PCI devices.
+ */
+void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
+{
+	dev->dev.dma_mask = &dev->_dma_mask;
+	dev->dev.dma_parms = &dev->dma_parms;
+	dev->dev.coherent_dma_mask = 0xffffffffull;
+
+	pci_set_dma_max_seg_size(dev, 65536);
+	pci_set_dma_seg_boundary(dev, 0xffffffff);
+
+	/* Fix up broken headers */
+	pci_fixup_device(pci_fixup_header, dev);
+
+	/* Clear the state_saved flag. */
+	dev->state_saved = false;
+
+	/* Initialize various capabilities */
+	pci_init_capabilities(dev);
+
+	/*
+	 * Add the device to our list of discovered devices
+	 * and the bus list for fixup functions, etc.
+	 */
+	down_write(&pci_bus_sem);
+	list_add_tail(&dev->bus_list, &bus->devices);
+	up_write(&pci_bus_sem);
+
+	/* Notifier could use PCI capabilities */
+	dev->match_driver = false;
+}
+
+/*
+ * HACK!!!
+ *
+ * This is the ultimate function you might want to look into. It has everything
+ * about setting up a PCI device: alloc data structure, fill with info read from
+ * device conf space, and linked into other data structures.
+ *
+ * It also has great details on how different PCI/PCIe functionalities are dealt with.
+ */
+struct pci_dev *pci_scan_single_device(struct pci_bus *bus, int devfn)
+{
+	struct pci_dev *dev;
+
+	/* Check if it is already added */
+	dev = pci_get_slot(bus, devfn);
+	if (dev)
+		return dev;
+
+	dev = pci_scan_device(bus, devfn);
+	if (!dev)
+		return NULL;
+
+	pci_device_add(dev, bus);
+	return dev;
+}
+
+static unsigned next_fn(struct pci_bus *bus, struct pci_dev *dev, unsigned fn)
+{
+	int pos;
+	u16 cap = 0;
+	unsigned next_fn;
+
+	if (pci_ari_enabled(bus)) {
+		if (!dev)
+			return 0;
+		pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ARI);
+		if (!pos)
+			return 0;
+
+		pci_read_config_word(dev, pos + PCI_ARI_CAP, &cap);
+		next_fn = PCI_ARI_CAP_NFN(cap);
+		if (next_fn <= fn)
+			return 0;	/* protect against malformed list */
+
+		return next_fn;
+	}
+
+	/* dev may be NULL for non-contiguous multifunction devices */
+	if (!dev || dev->multifunction)
+		return (fn + 1) % 8;
+
+	return 0;
+}
+
 static int only_one_child(struct pci_bus *bus)
 {
 	struct pci_dev *parent = bus->self;
@@ -901,22 +1101,16 @@ static int only_one_child(struct pci_bus *bus)
 	return 0;
 }
 
-struct pci_dev *pci_scan_single_device(struct pci_bus *bus, int devfn)
+/*
+ * pcie_aspm_init_link_state: Initiate PCI express link state.
+ * It is called after the pcie and its children devices are scaned.
+ * @pdev: the root port or switch downstream port
+ */
+void pcie_aspm_init_link_state(struct pci_dev *pdev)
 {
-	struct pci_dev *dev;
-
-	dev = pci_get_slot(bus, devfn);
-	if (dev)
-		return dev;
-
-	dev = pci_scan_device(bus, devfn);
-	if (!dev)
-		return NULL;
-
-	pci_device_add(dev, bus);
-
-	return dev;
+	pr_info_once("%s(): TODO\n", __func__);
 }
+
 /**
  * pci_scan_slot - scan a PCI slot on a bus for devices.
  * @bus: PCI bus to scan
@@ -933,8 +1127,9 @@ int pci_scan_slot(struct pci_bus *bus, int devfn)
 	unsigned fn, nr = 0;
 	struct pci_dev *dev;
 
+	/* Already scanned the entire slot */
 	if (only_one_child(bus) && (devfn > 0))
-		return 0; /* Already scanned the entire slot */
+		return 0;
 
 	dev = pci_scan_single_device(bus, devfn);
 	if (!dev)
@@ -942,12 +1137,241 @@ int pci_scan_slot(struct pci_bus *bus, int devfn)
 	if (!dev->is_added)
 		nr++;
 
+	/* multifunction devices? */
+	for (fn = next_fn(bus, dev, 0); fn > 0; fn = next_fn(bus, dev, fn)) {
+		dev = pci_scan_single_device(bus, devfn + fn);
+		if (dev) {
+			if (!dev->is_added)
+				nr++;
+			dev->multifunction = 1;
+		}
+	}
+
+	/* only one slot has pcie device */
+	if (bus->self && nr)
+		pcie_aspm_init_link_state(bus->self);
+
 	return nr;
 }
 
-static inline int pci_iov_bus_range(struct pci_bus *bus)
+static unsigned char pcix_bus_speed[] = {
+	PCI_SPEED_UNKNOWN,		/* 0 */
+	PCI_SPEED_66MHz_PCIX,		/* 1 */
+	PCI_SPEED_100MHz_PCIX,		/* 2 */
+	PCI_SPEED_133MHz_PCIX,		/* 3 */
+	PCI_SPEED_UNKNOWN,		/* 4 */
+	PCI_SPEED_66MHz_PCIX_ECC,	/* 5 */
+	PCI_SPEED_100MHz_PCIX_ECC,	/* 6 */
+	PCI_SPEED_133MHz_PCIX_ECC,	/* 7 */
+	PCI_SPEED_UNKNOWN,		/* 8 */
+	PCI_SPEED_66MHz_PCIX_266,	/* 9 */
+	PCI_SPEED_100MHz_PCIX_266,	/* A */
+	PCI_SPEED_133MHz_PCIX_266,	/* B */
+	PCI_SPEED_UNKNOWN,		/* C */
+	PCI_SPEED_66MHz_PCIX_533,	/* D */
+	PCI_SPEED_100MHz_PCIX_533,	/* E */
+	PCI_SPEED_133MHz_PCIX_533	/* F */
+};
+
+static unsigned char pcie_link_speed[] = {
+	PCI_SPEED_UNKNOWN,		/* 0 */
+	PCIE_SPEED_2_5GT,		/* 1 */
+	PCIE_SPEED_5_0GT,		/* 2 */
+	PCIE_SPEED_8_0GT,		/* 3 */
+	PCI_SPEED_UNKNOWN,		/* 4 */
+	PCI_SPEED_UNKNOWN,		/* 5 */
+	PCI_SPEED_UNKNOWN,		/* 6 */
+	PCI_SPEED_UNKNOWN,		/* 7 */
+	PCI_SPEED_UNKNOWN,		/* 8 */
+	PCI_SPEED_UNKNOWN,		/* 9 */
+	PCI_SPEED_UNKNOWN,		/* A */
+	PCI_SPEED_UNKNOWN,		/* B */
+	PCI_SPEED_UNKNOWN,		/* C */
+	PCI_SPEED_UNKNOWN,		/* D */
+	PCI_SPEED_UNKNOWN,		/* E */
+	PCI_SPEED_UNKNOWN		/* F */
+};
+
+void pcie_update_link_speed(struct pci_bus *bus, u16 linksta)
 {
-	return 0;
+	bus->cur_bus_speed = pcie_link_speed[linksta & PCI_EXP_LNKSTA_CLS];
+}
+
+static unsigned char agp_speeds[] = {
+	AGP_UNKNOWN,
+	AGP_1X,
+	AGP_2X,
+	AGP_4X,
+	AGP_8X
+};
+
+static enum pci_bus_speed agp_speed(int agp3, int agpstat)
+{
+	int index = 0;
+
+	if (agpstat & 4)
+		index = 3;
+	else if (agpstat & 2)
+		index = 2;
+	else if (agpstat & 1)
+		index = 1;
+	else
+		goto out;
+
+	if (agp3) {
+		index += 2;
+		if (index == 5)
+			index = 0;
+	}
+
+ out:
+	return agp_speeds[index];
+}
+
+static void pci_set_bus_speed(struct pci_bus *bus)
+{
+	struct pci_dev *bridge = bus->self;
+	int pos;
+
+	pos = pci_find_capability(bridge, PCI_CAP_ID_AGP);
+	if (!pos)
+		pos = pci_find_capability(bridge, PCI_CAP_ID_AGP3);
+	if (pos) {
+		u32 agpstat, agpcmd;
+
+		pci_read_config_dword(bridge, pos + PCI_AGP_STATUS, &agpstat);
+		bus->max_bus_speed = agp_speed(agpstat & 8, agpstat & 7);
+
+		pci_read_config_dword(bridge, pos + PCI_AGP_COMMAND, &agpcmd);
+		bus->cur_bus_speed = agp_speed(agpstat & 8, agpcmd & 7);
+	}
+
+	pos = pci_find_capability(bridge, PCI_CAP_ID_PCIX);
+	if (pos) {
+		u16 status;
+		enum pci_bus_speed max;
+
+		pci_read_config_word(bridge, pos + PCI_X_BRIDGE_SSTATUS,
+				     &status);
+
+		if (status & PCI_X_SSTATUS_533MHZ) {
+			max = PCI_SPEED_133MHz_PCIX_533;
+		} else if (status & PCI_X_SSTATUS_266MHZ) {
+			max = PCI_SPEED_133MHz_PCIX_266;
+		} else if (status & PCI_X_SSTATUS_133MHZ) {
+			if ((status & PCI_X_SSTATUS_VERS) == PCI_X_SSTATUS_V2) {
+				max = PCI_SPEED_133MHz_PCIX_ECC;
+			} else {
+				max = PCI_SPEED_133MHz_PCIX;
+			}
+		} else {
+			max = PCI_SPEED_66MHz_PCIX;
+		}
+
+		bus->max_bus_speed = max;
+		bus->cur_bus_speed = pcix_bus_speed[
+			(status & PCI_X_SSTATUS_FREQ) >> 6];
+
+		return;
+	}
+
+	pos = pci_find_capability(bridge, PCI_CAP_ID_EXP);
+	if (pos) {
+		u32 linkcap;
+		u16 linksta;
+
+		pcie_capability_read_dword(bridge, PCI_EXP_LNKCAP, &linkcap);
+		bus->max_bus_speed = pcie_link_speed[linkcap & PCI_EXP_LNKCAP_SLS];
+
+		pcie_capability_read_word(bridge, PCI_EXP_LNKSTA, &linksta);
+		pcie_update_link_speed(bus, linksta);
+	}
+}
+
+static struct pci_bus *pci_alloc_child_bus(struct pci_bus *parent,
+					   struct pci_dev *bridge, int busnr)
+{
+	struct pci_bus *child;
+	int i;
+
+	/*
+	 * Allocate a new bus, and inherit stuff from the parent..
+	 */
+	child = pci_alloc_bus();
+	if (!child)
+		return NULL;
+
+	child->parent = parent;
+	child->ops = parent->ops;
+	child->sysdata = parent->sysdata;
+	child->bus_flags = parent->bus_flags;
+
+	/* initialize some portions of the bus device, but don't register it
+	 * now as the parent is not properly set up yet.
+	 */
+	dev_set_name(&child->dev, "%04x:%02x", pci_domain_nr(child), busnr);
+
+	/*
+	 * Set up the primary, secondary and subordinate
+	 * bus numbers.
+	 */
+	child->number = child->busn_res.start = busnr;
+	child->primary = parent->busn_res.start;
+	child->busn_res.end = 0xff;
+
+	if (!bridge) {
+		child->dev.parent = parent->bridge;
+		goto add_dev;
+	}
+
+	child->self = bridge;
+	child->bridge = &bridge->dev;
+	child->dev.parent = child->bridge;
+	pci_set_bus_speed(child);
+
+	/* Set up default resource pointers and names.. */
+	for (i = 0; i < PCI_BRIDGE_RESOURCE_NUM; i++) {
+		child->resource[i] = &bridge->resource[PCI_BRIDGE_RESOURCES+i];
+		child->resource[i]->name = child->name;
+	}
+	bridge->subordinate = child;
+
+add_dev:
+	/*
+	 * HACK!!!
+	 * Lego omit some add callback here,
+	 * which is fine I think.
+	 */
+	return child;
+}
+
+struct pci_bus *pci_add_new_bus(struct pci_bus *parent, struct pci_dev *dev, int busnr)
+{
+	struct pci_bus *child;
+
+	child = pci_alloc_child_bus(parent, dev, busnr);
+	if (child) {
+		down_write(&pci_bus_sem);
+		list_add_tail(&child->node, &parent->children);
+		up_write(&pci_bus_sem);
+	}
+	return child;
+}
+
+static void pci_fixup_parent_subordinate_busnr(struct pci_bus *child, int max)
+{
+	struct pci_bus *parent = child->parent;
+
+	/* Attempts to fix that up are really dangerous unless
+	   we're going to re-assign all bus numbers. */
+	if (!pcibios_assign_all_busses())
+		return;
+
+	while (parent->parent && parent->busn_res.end < max) {
+		parent->busn_res.end = max;
+		pci_write_config_byte(parent->self, PCI_SUBORDINATE_BUS, max);
+		parent = parent->parent;
+	}
 }
 
 /*
@@ -962,19 +1386,245 @@ static inline int pci_iov_bus_range(struct pci_bus *bus)
  */
 int pci_scan_bridge(struct pci_bus *bus, struct pci_dev *dev, int max, int pass)
 {
-	return 0;
+	struct pci_bus *child;
+	int is_cardbus = (dev->hdr_type == PCI_HEADER_TYPE_CARDBUS);
+	u32 buses, i, j = 0;
+	u16 bctl;
+	u8 primary, secondary, subordinate;
+	int broken = 0;
+
+	pci_read_config_dword(dev, PCI_PRIMARY_BUS, &buses);
+	primary = buses & 0xFF;
+	secondary = (buses >> 8) & 0xFF;
+	subordinate = (buses >> 16) & 0xFF;
+
+	pr_info("pci %s: scanning [bus %02x-%02x] behind bridge, pass %d\n",
+		dev_name(&dev->dev), secondary, subordinate, pass);
+
+	if (!primary && (primary != bus->number) && secondary && subordinate) {
+		pr_warn("pci %s: Primary bus is hard wired to 0\n", dev_name(&dev->dev));
+		primary = bus->number;
+	}
+
+	/* Check if setup is sensible at all */
+	if (!pass &&
+	    (primary != bus->number || secondary <= bus->number ||
+	     secondary > subordinate)) {
+		pr_info("pci %s: bridge configuration invalid ([bus %02x-%02x]), reconfiguring\n",
+			 dev_name(&dev->dev), secondary, subordinate);
+		broken = 1;
+	}
+
+	/* Disable MasterAbortMode during probing to avoid reporting
+	   of bus errors (in some architectures) */
+	pci_read_config_word(dev, PCI_BRIDGE_CONTROL, &bctl);
+	pci_write_config_word(dev, PCI_BRIDGE_CONTROL,
+			      bctl & ~PCI_BRIDGE_CTL_MASTER_ABORT);
+
+	if ((secondary || subordinate) && !pcibios_assign_all_busses() &&
+	    !is_cardbus && !broken) {
+		unsigned int cmax;
+		/*
+		 * Bus already configured by firmware, process it in the first
+		 * pass and just note the configuration.
+		 */
+		if (pass)
+			goto out;
+
+		/*
+		 * If we already got to this bus through a different bridge,
+		 * don't re-add it. This can happen with the i450NX chipset.
+		 *
+		 * However, we continue to descend down the hierarchy and
+		 * scan remaining child buses.
+		 */
+		child = pci_find_bus(pci_domain_nr(bus), secondary);
+		if (!child) {
+			child = pci_add_new_bus(bus, dev, secondary);
+			if (!child)
+				goto out;
+			child->primary = primary;
+			pci_bus_insert_busn_res(child, secondary, subordinate);
+			child->bridge_ctl = bctl;
+		}
+
+		cmax = pci_scan_child_bus(child);
+		if (cmax > max)
+			max = cmax;
+		if (child->busn_res.end > max)
+			max = child->busn_res.end;
+	} else {
+		/*
+		 * We need to assign a number to this bus which we always
+		 * do in the second pass.
+		 */
+		if (!pass) {
+			if (pcibios_assign_all_busses() || broken)
+				/* Temporarily disable forwarding of the
+				   configuration cycles on all bridges in
+				   this bus segment to avoid possible
+				   conflicts in the second pass between two
+				   bridges programmed with overlapping
+				   bus ranges. */
+				pci_write_config_dword(dev, PCI_PRIMARY_BUS,
+						       buses & ~0xffffff);
+			goto out;
+		}
+
+		/* Clear errors */
+		pci_write_config_word(dev, PCI_STATUS, 0xffff);
+
+		/* Prevent assigning a bus number that already exists.
+		 * This can happen when a bridge is hot-plugged, so in
+		 * this case we only re-scan this bus. */
+		child = pci_find_bus(pci_domain_nr(bus), max+1);
+		if (!child) {
+			child = pci_add_new_bus(bus, dev, ++max);
+			if (!child)
+				goto out;
+			pci_bus_insert_busn_res(child, max, 0xff);
+		}
+		buses = (buses & 0xff000000)
+		      | ((unsigned int)(child->primary)     <<  0)
+		      | ((unsigned int)(child->busn_res.start)   <<  8)
+		      | ((unsigned int)(child->busn_res.end) << 16);
+
+		/*
+		 * yenta.c forces a secondary latency timer of 176.
+		 * Copy that behaviour here.
+		 */
+		if (is_cardbus) {
+			buses &= ~0xff000000;
+			buses |= CARDBUS_LATENCY_TIMER << 24;
+		}
+
+		/*
+		 * We need to blast all three values with a single write.
+		 */
+		pci_write_config_dword(dev, PCI_PRIMARY_BUS, buses);
+
+		if (!is_cardbus) {
+			child->bridge_ctl = bctl;
+			/*
+			 * Adjust subordinate busnr in parent buses.
+			 * We do this before scanning for children because
+			 * some devices may not be detected if the bios
+			 * was lazy.
+			 */
+			pci_fixup_parent_subordinate_busnr(child, max);
+			/* Now we can scan all subordinate buses... */
+			max = pci_scan_child_bus(child);
+			/*
+			 * now fix it up again since we have found
+			 * the real value of max.
+			 */
+			pci_fixup_parent_subordinate_busnr(child, max);
+		} else {
+			/*
+			 * For CardBus bridges, we leave 4 bus numbers
+			 * as cards with a PCI-to-PCI bridge can be
+			 * inserted later.
+			 */
+			for (i=0; i<CARDBUS_RESERVE_BUSNR; i++) {
+				struct pci_bus *parent = bus;
+				if (pci_find_bus(pci_domain_nr(bus),
+							max+i+1))
+					break;
+				while (parent->parent) {
+					if ((!pcibios_assign_all_busses()) &&
+					    (parent->busn_res.end > max) &&
+					    (parent->busn_res.end <= max+i)) {
+						j = 1;
+					}
+					parent = parent->parent;
+				}
+				if (j) {
+					/*
+					 * Often, there are two cardbus bridges
+					 * -- try to leave one valid bus number
+					 * for each one.
+					 */
+					i /= 2;
+					break;
+				}
+			}
+			max += i;
+			pci_fixup_parent_subordinate_busnr(child, max);
+		}
+		/*
+		 * Set the subordinate bus number to its real value.
+		 */
+		pci_bus_update_busn_res_end(child, max);
+		pci_write_config_byte(dev, PCI_SUBORDINATE_BUS, max);
+	}
+
+	sprintf(child->name,
+		(is_cardbus ? "PCI CardBus %04x:%02x" : "PCI Bus %04x:%02x"),
+		pci_domain_nr(bus), child->number);
+
+	/* Has only triggered on CardBus, fixup is in yenta_socket */
+	while (bus->parent) {
+		if ((child->busn_res.end > bus->busn_res.end) ||
+		    (child->number > bus->busn_res.end) ||
+		    (child->number < bus->number) ||
+		    (child->busn_res.end < bus->number)) {
+			pr_info("pci %s %pR %s "
+				"hidden behind%s bridge %s %pR\n",
+				dev_name(&child->dev),
+				&child->busn_res,
+				(bus->number > child->busn_res.end &&
+				 bus->busn_res.end < child->number) ?
+					"wholly" : "partially",
+				bus->self->transparent ? " transparent" : "",
+				dev_name(&bus->dev),
+				&bus->busn_res);
+		}
+		bus = bus->parent;
+	}
+
+out:
+	pci_write_config_word(dev, PCI_BRIDGE_CONTROL, bctl);
+
+	return max;
 }
 
+/*
+ * Called after each bus is probed, but before its children
+ * are examined.
+ *
+ * XXX: Looks like we don't need this guy. ;-)
+ */
 void pcibios_fixup_bus(struct pci_bus *b)
 {
 }
 
+/**
+ * pci_iov_bus_range - find bus range used by Virtual Function
+ * @bus: the PCI bus
+ *
+ * Returns max number of buses (exclude current one) used by Virtual
+ * Functions.
+ *
+ * XXX: not sure if we need this. As long as we are not using SR-IOV'ed
+ * device, I guess we are safe?
+ */
+static inline int pci_iov_bus_range(struct pci_bus *bus)
+{
+	return 0;
+}
+
+/*
+ * This function will sacn this @bus, slot by slot, function by function.
+ * It will add any found devices into the PCI subsystem. If a bridge is found,
+ * it will call pci_scan_bridge(), which will recursively scan underlying buses.
+ */
 unsigned int pci_scan_child_bus(struct pci_bus *bus)
 {
 	unsigned int devfn, pass, max = bus->busn_res.start;
 	struct pci_dev *dev;
 
-	pr_info("scanning bus\n");
+	pr_info("%s() pci %s scanning bus\n",
+		__func__, dev_name(&bus->dev));
 
 	/* Go find them, Rover! */
 	for (devfn = 0; devfn < 0x100; devfn += 8)
@@ -988,7 +1638,8 @@ unsigned int pci_scan_child_bus(struct pci_bus *bus)
 	 * all PCI-to-PCI bridges on this bus.
 	 */
 	if (!bus->is_added) {
-		pr_info("fixups for bus\n");
+		pr_info("%s() pci %s fixups for bus\n",
+			__func__, dev_name(&bus->dev));
 		pcibios_fixup_bus(bus);
 		bus->is_added = 1;
 	}
@@ -1007,6 +1658,7 @@ unsigned int pci_scan_child_bus(struct pci_bus *bus)
 	 *
 	 * Return how far we've got finding sub-buses.
 	 */
-	pr_debug("bus scan returning with max=%02x\n", max);
+	pr_debug("%s() pci %s bus scan returning with max=%02x\n",
+		__func__, dev_name(&bus->dev), max);
 	return max;
 }
