@@ -133,7 +133,6 @@ static int kernel_init(void *unused)
 #endif
 
 	pci_subsys_init();
-	pci_init();
 
 #if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
 	ib_cm_init();
