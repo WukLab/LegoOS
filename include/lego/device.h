@@ -86,7 +86,7 @@ struct bus_type {
 };
 
 struct device_driver {
-	char			name[MAX_DEVICE_NAME];
+	const char		*name;
 	const char		*mod_name;
 	struct bus_type		*bus;
 

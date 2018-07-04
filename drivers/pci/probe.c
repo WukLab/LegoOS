@@ -453,7 +453,7 @@ out:
 	if (bar_too_big)
 		dev_err(&dev->dev, "reg 0x%x: can't handle 64-bit BAR\n", pos);
 	if (res->flags && !bar_disabled)
-		dev_printk(KERN_DEBUG, &dev->dev, "reg 0x%x: %pR\n", pos, res);
+		pr_info("    pci %s: reg 0x%x: %pR\n", dev_name(&dev->dev), pos, res);
 
 	return (res->flags & IORESOURCE_MEM_64) ? 1 : 0;
 }
@@ -1623,7 +1623,7 @@ unsigned int pci_scan_child_bus(struct pci_bus *bus)
 	unsigned int devfn, pass, max = bus->busn_res.start;
 	struct pci_dev *dev;
 
-	pr_info("%s() pci %s scanning bus\n",
+	pr_debug("%s() pci %s scanning bus\n",
 		__func__, dev_name(&bus->dev));
 
 	/* Go find them, Rover! */
@@ -1638,8 +1638,10 @@ unsigned int pci_scan_child_bus(struct pci_bus *bus)
 	 * all PCI-to-PCI bridges on this bus.
 	 */
 	if (!bus->is_added) {
-		pr_info("%s() pci %s fixups for bus\n",
+#if 0
+		pr_debug("%s() pci %s fixups for bus\n",
 			__func__, dev_name(&bus->dev));
+#endif
 		pcibios_fixup_bus(bus);
 		bus->is_added = 1;
 	}
@@ -1658,7 +1660,5 @@ unsigned int pci_scan_child_bus(struct pci_bus *bus)
 	 *
 	 * Return how far we've got finding sub-buses.
 	 */
-	pr_debug("%s() pci %s bus scan returning with max=%02x\n",
-		__func__, dev_name(&bus->dev), max);
 	return max;
 }

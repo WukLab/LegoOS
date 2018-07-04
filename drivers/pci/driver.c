@@ -19,6 +19,126 @@
 
 #include "pci.h"
 
+struct pci_dynid {
+	struct list_head node;
+	struct pci_device_id id;
+};
+
+static inline int driver_match_device(struct device_driver *drv,
+				      struct device *dev)
+{
+	return drv->bus->match ? drv->bus->match(dev, drv) : 1;
+}
+
+/**
+ * driver_attach - try to bind driver to devices.
+ * @drv: driver.
+ *
+ * Walk the list of devices that the bus has on it and try to
+ * match the driver with each one.  If driver_probe_device()
+ * returns 0 and the @dev->driver is set, we've found a
+ * compatible pair.
+ */
+int driver_attach(struct device_driver *drv)
+{
+	return 0;
+}
+
+/**
+ * driver_register - register driver with bus
+ * @drv: driver to register
+ */
+static int driver_register(struct device_driver *drv)
+{
+	int ret;
+
+	if ((drv->bus->probe && drv->probe) ||
+	    (drv->bus->remove && drv->remove) ||
+	    (drv->bus->shutdown && drv->shutdown)) {
+		printk(KERN_WARNING "Driver '%s' needs updating - please use "
+			"bus_type methods\n", drv->name);
+		return -EINVAL;
+	}
+
+	ret = driver_attach(drv);
+	return ret;
+}
+
+/**
+ * pci_register_driver - register a new pci driver
+ * @drv: the driver structure to register
+ * @owner: owner module of drv
+ * 
+ * Adds the driver structure to the list of registered drivers.
+ * Returns a negative value on error, otherwise 0. 
+ * If no error occurred, the driver remains registered even if 
+ * no device was claimed during registration.
+ */
+int pci_register_driver(struct pci_driver *drv)
+{
+	/* initialize common driver fields */
+	drv->driver.name = drv->name;
+	drv->driver.bus = &pci_bus_type;
+
+	spin_lock_init(&drv->dynids.lock);
+	INIT_LIST_HEAD(&drv->dynids.list);
+
+	/* register with core */
+	return driver_register(&drv->driver);
+}
+
+/**
+ * pci_match_id - See if a pci device matches a given pci_id table
+ * @ids: array of PCI device id structures to search in
+ * @dev: the PCI device structure to match against.
+ *
+ * Used by a driver to check whether a PCI device present in the
+ * system is in its list of supported devices.  Returns the matching
+ * pci_device_id structure or %NULL if there is no match.
+ *
+ * Deprecated, don't use this as it will not catch any dynamic ids
+ * that a driver might want to check for.
+ */
+const struct pci_device_id *pci_match_id(const struct pci_device_id *ids,
+					 struct pci_dev *dev)
+{
+	if (ids) {
+		while (ids->vendor || ids->subvendor || ids->class_mask) {
+			if (pci_match_one_device(ids, dev))
+				return ids;
+			ids++;
+		}
+	}
+	return NULL;
+}
+
+/**
+ * pci_match_device - Tell if a PCI device structure has a matching PCI device id structure
+ * @drv: the PCI driver to match against
+ * @dev: the PCI device structure to match against
+ *
+ * Used by a driver to check whether a PCI device present in the
+ * system is in its list of supported devices.  Returns the matching
+ * pci_device_id structure or %NULL if there is no match.
+ */
+static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
+						    struct pci_dev *dev)
+{
+	struct pci_dynid *dynid;
+
+	/* Look at the dynamic ids first, before the static ones */
+	spin_lock(&drv->dynids.lock);
+	list_for_each_entry(dynid, &drv->dynids.list, node) {
+		if (pci_match_one_device(&dynid->id, dev)) {
+			spin_unlock(&drv->dynids.lock);
+			return &dynid->id;
+		}
+	}
+	spin_unlock(&drv->dynids.lock);
+
+	return pci_match_id(drv->id_table, dev);
+}
+
 /**
  * pci_bus_match - Tell if a PCI device structure has a matching PCI device id structure
  * @dev: the PCI device structure to match against
@@ -30,6 +150,18 @@
  */
 static int pci_bus_match(struct device *dev, struct device_driver *drv)
 {
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	struct pci_driver *pci_drv;
+	const struct pci_device_id *found_id;
+
+	if (!pci_dev->match_driver)
+		return 0;
+
+	pci_drv = to_pci_driver(drv);
+	found_id = pci_match_device(pci_drv, pci_dev);
+	if (found_id)
+		return 1;
+
 	return 0;
 }
 

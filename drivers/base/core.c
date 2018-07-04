@@ -15,8 +15,9 @@ static int __dev_printk(const char *level, const struct device *dev,
 			struct va_format *vaf)
 {
 	if (!dev)
-		return printk("%s(NULL device *): %pV", level, vaf);
-	return printk("%s(dev): %pV", level, vaf);
+		return printk("(NULL device *): %pV", vaf);
+
+	return printk("(dev %s): %pV", dev_name(dev), vaf);
 }
 
 int dev_printk(const char *level, const struct device *dev,

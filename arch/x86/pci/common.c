@@ -20,6 +20,11 @@ unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2 |
 
 int pcibios_last_bus = -1;
 
+unsigned int pcibios_assign_all_busses(void)
+{
+	return (pci_probe & PCI_ASSIGN_ALL_BUSSES) ? 1 : 0;
+}
+
 /*
  * This pci_raw_ops are the lowest-level PCI access ops.
  * x86 has this indirection because it has some different variant methods.
@@ -157,24 +162,14 @@ struct pci_bus *pcibios_scan_root(int busnum)
  * Why this is legacy?
  * Nowadays ACPI is used to init PCI subsystem. This kind of old school
  * scan is legacy compared with ACPI. Although, ACPI is just another broken crap.
+ *
+ * However, for Lego, old school scan works just fine and perfect.
+ * Eventually we call back into driver/pci core PCI subsystem.
  */
-int __init pci_legacy_init(void)
-{
-	printk("PCI: Probing PCI hardware\n");
-	pcibios_scan_root(0);
-	return 0;
-}
-
 void __init pci_subsys_init(void)
 {
 	pci_arch_init();
-	/* XXX: missed  ACPI shit here */
-	pci_legacy_init();
 
-	panic("asd");
-} 
-
-unsigned int pcibios_assign_all_busses(void)
-{
-	return (pci_probe & PCI_ASSIGN_ALL_BUSSES) ? 1 : 0;
+	printk("PCI: Probing PCI hardware\n");
+	pcibios_scan_root(0);
 }

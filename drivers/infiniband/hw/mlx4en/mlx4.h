@@ -82,6 +82,11 @@ enum {
 	MLX4_NUM_CMPTS		= MLX4_CMPT_NUM_TYPE << MLX4_CMPT_SHIFT
 };
 
+enum {
+	MLX4_PCI_DEV_IS_VF		= 1 << 0,
+	MLX4_PCI_DEV_FORCE_SENSE_PORT	= 1 << 1,
+};
+
 //#ifdef CONFIG_MLX4_DEBUG
 //extern int mlx4_debug_level;
 //#else /* CONFIG_MLX4_DEBUG */

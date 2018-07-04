@@ -566,6 +566,38 @@ struct pci_driver {
 	struct pci_dynids dynids;
 };
 
+#define	to_pci_driver(drv) container_of(drv, struct pci_driver, driver)
+#define	to_pci_dev(n) container_of(n, struct pci_dev, dev)
+
+#define PCI_ANY_ID (~0)
+
+struct pci_device_id {
+	__u32 vendor, device;		/* Vendor and device ID or PCI_ANY_ID*/
+	__u32 subvendor, subdevice;	/* Subsystem ID's or PCI_ANY_ID */
+	__u32 class, class_mask;	/* (class,subclass,prog-if) triplet */
+	unsigned long driver_data;	/* Data private to the driver */
+};
+
+/**
+ * pci_match_one_device - Tell if a PCI device structure has a matching
+ *                        PCI device id structure
+ * @id: single PCI device id structure to match
+ * @dev: the PCI device structure to match against
+ *
+ * Returns the matching pci_device_id structure or %NULL if there is no match.
+ */
+static inline const struct pci_device_id *
+pci_match_one_device(const struct pci_device_id *id, const struct pci_dev *dev)
+{
+	if ((id->vendor == PCI_ANY_ID || id->vendor == dev->vendor) &&
+	    (id->device == PCI_ANY_ID || id->device == dev->device) &&
+	    (id->subvendor == PCI_ANY_ID || id->subvendor == dev->subsystem_vendor) &&
+	    (id->subdevice == PCI_ANY_ID || id->subdevice == dev->subsystem_device) &&
+	    !((id->class ^ dev->class) & id->class_mask))
+		return id;
+	return NULL;
+}
+
 /**
  * DEFINE_PCI_DEVICE_TABLE - macro used to describe a pci device table
  * @_table: device table name
@@ -858,6 +890,7 @@ enum pci_fixup_pass {
 	pci_fixup_resume_early, /* pci_device_resume_early() */
 };
 
+int pci_register_driver(struct pci_driver *drv);
 
 
 
