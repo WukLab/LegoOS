@@ -1,0 +1,218 @@
+/*
+ * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+
+#include <lego/pci.h>
+#include <lego/slab.h>
+#include <lego/list.h>
+#include <lego/delay.h>
+#include <lego/timer.h>
+#include <lego/kernel.h>
+#include <lego/resource.h>
+
+#include "pci.h"
+
+/**
+ * pci_pm_init - Initialize PM functions of given PCI device
+ * @dev: PCI device to handle.
+ */
+void pci_pm_init(struct pci_dev *dev)
+{
+	int pm;
+	u16 pmc;
+
+	dev->pm_cap = 0;
+	dev->pme_support = 0;
+
+	/* find PCI PM capability in list */
+	pm = pci_find_capability(dev, PCI_CAP_ID_PM);
+	if (!pm)
+		return;
+	/* Check device's ability to generate PME# */
+	pci_read_config_word(dev, pm + PCI_PM_PMC, &pmc);
+
+	if ((pmc & PCI_PM_CAP_VER_MASK) > 3) {
+		pr_info("pci %s: unsupported PM cap regs version (%u)\n",
+			pci_name(dev), pmc & PCI_PM_CAP_VER_MASK);
+		return;
+	}
+
+	dev->pm_cap = pm;
+	dev->d3_delay = PCI_PM_D3_WAIT;
+	dev->d3cold_delay = PCI_PM_D3COLD_WAIT;
+	dev->d3cold_allowed = true;
+
+	dev->d1_support = false;
+	dev->d2_support = false;
+	if (!pci_no_d1d2(dev)) {
+		if (pmc & PCI_PM_CAP_D1)
+			dev->d1_support = true;
+		if (pmc & PCI_PM_CAP_D2)
+			dev->d2_support = true;
+
+		if (dev->d1_support || dev->d2_support)
+			pr_info("pci %s: supports%s%s\n", pci_name(dev),
+				   dev->d1_support ? " D1" : "",
+				   dev->d2_support ? " D2" : "");
+	}
+
+	pmc &= PCI_PM_CAP_PME_MASK;
+	if (pmc) {
+		pr_info("pci %s: "
+			 "PME# supported from%s%s%s%s%s\n",
+			 pci_name(dev),
+			 (pmc & PCI_PM_CAP_PME_D0) ? " D0" : "",
+			 (pmc & PCI_PM_CAP_PME_D1) ? " D1" : "",
+			 (pmc & PCI_PM_CAP_PME_D2) ? " D2" : "",
+			 (pmc & PCI_PM_CAP_PME_D3) ? " D3hot" : "",
+			 (pmc & PCI_PM_CAP_PME_D3cold) ? " D3cold" : "");
+		dev->pme_support = pmc >> PCI_PM_CAP_PME_SHIFT;
+		dev->pme_poll = true;
+	}
+}
+
+/*
+ * From my current experience on Infiniband devices, the device
+ * is already setup after boot. Probably the firmware already did
+ * a lot dirty work during BIOS boot time.
+ */
+int pci_enable_resources(struct pci_dev *dev, int mask)
+{
+	u16 cmd, old_cmd;
+	int i;
+	struct resource *r;
+
+	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+	old_cmd = cmd;
+
+	for (i = 0; i < PCI_NUM_RESOURCES; i++) {
+		if (!(mask & (1 << i)))
+			continue;
+
+		r = &dev->resource[i];
+
+		if (!(r->flags & (IORESOURCE_IO | IORESOURCE_MEM)))
+			continue;
+		if ((i == PCI_ROM_RESOURCE) &&
+				(!(r->flags & IORESOURCE_ROM_ENABLE)))
+			continue;
+
+		if (r->flags & IORESOURCE_IO)
+			cmd |= PCI_COMMAND_IO;
+		if (r->flags & IORESOURCE_MEM)
+			cmd |= PCI_COMMAND_MEMORY;
+	}
+
+	if (cmd != old_cmd) {
+		pr_info("pci %s: enabling device (%04x -> %04x)\n",
+			 pci_name(dev), old_cmd, cmd);
+		pci_write_config_word(dev, PCI_COMMAND, cmd);
+	}
+	return 0;
+}
+
+/**
+ * pci_set_power_state - Set the power state of a PCI device
+ * @dev: PCI device to handle.
+ * @state: PCI power state (D0, D1, D2, D3hot) to put the device into.
+ *
+ * Transition a device to a new power state, using the platform firmware and/or
+ * the device's PCI PM registers.
+ *
+ * RETURN VALUE:
+ * -EINVAL if the requested state is invalid.
+ * -EIO if device does not support PCI PM or its PM capabilities register has a
+ * wrong version, or device doesn't support the requested state.
+ * 0 if device already is in the requested state.
+ * 0 if device's power state has been successfully changed.
+ */
+int pci_set_power_state(struct pci_dev *dev, pci_power_t state)
+{
+	/* bound the state we're entering */
+	if (state > PCI_D3cold)
+		state = PCI_D3cold;
+	else if (state < PCI_D0)
+		state = PCI_D0;
+
+	/* Check if we're already there */
+	if (dev->current_state == state) {
+		pr_info("pci %s: already in state %#x\n",
+			pci_name(dev), state);
+		return 0;
+	}
+
+	return 0;
+}
+
+static int do_pci_enable_device(struct pci_dev *dev, int bars)
+{
+	int err;
+
+	err = pci_set_power_state(dev, PCI_D0);
+	if (err < 0 && err != -EIO)
+		return err;
+
+	/* Callback to arch code */
+	err = pcibios_enable_device(dev, bars);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+
+static int pci_enable_device_flags(struct pci_dev *dev, unsigned long flags)
+{
+	int err;
+	int i, bars = 0;
+
+	/*
+	 * Power state could be unknown at this point, either due to a fresh
+	 * boot or a device removal call.  So get the current power state
+	 * so that things like MSI message writing will behave as expected
+	 * (e.g. if the device really is in D0 at enable time).
+	 */
+	if (dev->pm_cap) {
+		u16 pmcsr;
+		pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
+		dev->current_state = (pmcsr & PCI_PM_CTRL_STATE_MASK);
+		pr_info("pci %s: current_state %#x\n",
+			pci_name(dev), dev->current_state);
+	}
+
+	if (atomic_inc_return(&dev->enable_cnt) > 1)
+		return 0;		/* already enabled */
+
+	/* only skip sriov related */
+	for (i = 0; i <= PCI_ROM_RESOURCE; i++)
+		if (dev->resource[i].flags & flags)
+			bars |= (1 << i);
+	for (i = PCI_BRIDGE_RESOURCES; i < DEVICE_COUNT_RESOURCE; i++)
+		if (dev->resource[i].flags & flags)
+			bars |= (1 << i);
+
+	err = do_pci_enable_device(dev, bars);
+	if (err < 0)
+		atomic_dec(&dev->enable_cnt);
+	return err;
+}
+
+/**
+ * pci_enable_device - Initialize device before it's used by a driver.
+ * @dev: PCI device to be initialized
+ *
+ *  Initialize device before it's used by a driver. Ask low-level code
+ *  to enable I/O and memory. Wake up the device if it was suspended.
+ *  Beware, this function can fail.
+ *
+ *  Note we don't actually enable the device many times if we call
+ *  this function repeatedly (we just increment the count).
+ */
+int pci_enable_device(struct pci_dev *dev)
+{
+	return pci_enable_device_flags(dev, IORESOURCE_MEM | IORESOURCE_IO);
+}

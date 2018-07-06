@@ -701,6 +701,7 @@ void pcibios_resource_to_bus(struct pci_dev *dev, struct pci_bus_region *region,
 			     struct resource *res);
 void pcibios_bus_to_resource(struct pci_dev *dev, struct resource *res,
 			     struct pci_bus_region *region);
+int pcibios_enable_device(struct pci_dev *dev, int mask);
 
 /* drivers/pci/bus.c */
 struct pci_bus *pci_bus_get(struct pci_bus *bus);
@@ -895,6 +896,8 @@ enum pci_fixup_pass {
 };
 
 int pci_register_driver(struct pci_driver *drv);
+int pci_enable_resources(struct pci_dev *, int mask);
+int __must_check pci_enable_device(struct pci_dev *dev);
 
 struct pci_dev *pci_get_device(unsigned int vendor, unsigned int device,
 				struct pci_dev *from);

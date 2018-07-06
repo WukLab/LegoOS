@@ -1190,6 +1190,13 @@ static int __mlx4_init_one(struct pci_dev *pdev, int pci_dev_data)
 	u16 old_cmd, cmd;
 
 	pr_debug("Initializing %s\n", pci_name(pdev));
+
+	err = pci_enable_device(pdev);
+	if (err) {
+		pr_err("Fail to enable PCI device\n");
+		goto err;
+	}
+
 	panic("Need more on enable pci device\n");
 
 	pci_func_enable(pdev);

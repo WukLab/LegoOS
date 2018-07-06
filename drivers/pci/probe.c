@@ -981,15 +981,17 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 static void pci_init_capabilities(struct pci_dev *dev)
 {
 	pr_info_once("%s(): TODO\n", __func__);
-#if 0
+
 	/* MSI/MSI-X list */
 	pci_msi_init_pci_dev(dev);
 
-	/* Buffers for saving PCIe and PCI-X capabilities */
-	pci_allocate_cap_save_buffers(dev);
-
 	/* Power Management */
 	pci_pm_init(dev);
+
+#if 0
+
+	/* Buffers for saving PCIe and PCI-X capabilities */
+	pci_allocate_cap_save_buffers(dev);
 
 	/* Vital Product Data */
 	pci_vpd_pci22_init(dev);

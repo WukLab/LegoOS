@@ -175,4 +175,8 @@ struct pci_sysdata {
 #endif
 };
 
+struct pci_dev;
+extern int (*pcibios_enable_irq)(struct pci_dev *dev);
+extern void (*pcibios_disable_irq)(struct pci_dev *dev);
+
 #endif /* _ASM_X86_PCI_H_ */

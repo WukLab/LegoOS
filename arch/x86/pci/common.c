@@ -111,6 +111,18 @@ static void __init pci_arch_init(void)
 		panic("PCI: Fatal: No config space access function found\n");
 }
 
+int pcibios_enable_device(struct pci_dev *dev, int mask)
+{
+	int err;
+
+	if ((err = pci_enable_resources(dev, mask)) < 0)
+		return err;
+
+	if (!pci_dev_msi_enabled(dev))
+		return pcibios_enable_irq(dev);
+	return 0;
+}
+
 struct pci_bus *pci_scan_bus_on_node(int busno, struct pci_ops *ops, int node)
 {
 	LIST_HEAD(resources);
