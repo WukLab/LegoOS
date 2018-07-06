@@ -31,6 +31,13 @@ struct resource busn_resource = {
 
 LIST_HEAD(pci_root_buses);
 
+/*
+ * List of all PCI devices
+ * Used for driver to attach device, cause we don't have a nice
+ * device subsystem.
+ */
+LIST_HEAD(pci_devices);
+
 unsigned int pci_flags;
 
 static LIST_HEAD(pci_domain_busn_res_list);
@@ -899,6 +906,7 @@ struct pci_dev *pci_alloc_dev(struct pci_bus *bus)
 		return NULL;
 
 	INIT_LIST_HEAD(&dev->bus_list);
+	INIT_LIST_HEAD(&dev->device_list);
 	dev->bus = bus;
 
 	return dev;
@@ -1027,6 +1035,7 @@ void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
 	 */
 	down_write(&pci_bus_sem);
 	list_add_tail(&dev->bus_list, &bus->devices);
+	list_add_tail(&dev->device_list, &pci_devices);
 	up_write(&pci_bus_sem);
 
 	/* Notifier could use PCI capabilities */

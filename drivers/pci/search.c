@@ -106,3 +106,162 @@ out:
 	up_read(&pci_bus_sem);
 	return dev;
 }
+
+static int match_pci_dev_by_id(struct pci_dev *pdev, void *data)
+{
+	struct pci_device_id *id = data;
+
+	if (pci_match_one_device(id, pdev))
+		return 1;
+	return 0;
+}
+
+struct pci_dev *pci_bus_find_device(struct bus_type *bus,
+			       struct device *start, void *data,
+			       int (*match)(struct pci_dev *dev, void *data))
+{
+	struct pci_dev *pdev;
+
+	down_write(&pci_bus_sem);
+	list_for_each_entry(pdev, &pci_devices, device_list) {
+		if (match(pdev, data)) {
+			up_write(&pci_bus_sem);
+			return pdev;
+		}
+	}
+	up_write(&pci_bus_sem);
+	return NULL;
+}
+
+/*
+ * pci_get_dev_by_id - begin or continue searching for a PCI device by id
+ * @id: pointer to struct pci_device_id to match for the device
+ * @from: Previous PCI device found in search, or %NULL for new search.
+ *
+ * Iterates through the list of known PCI devices.  If a PCI device is found
+ * with a matching id a pointer to its device structure is returned, and the
+ * reference count to the device is incremented.  Otherwise, %NULL is returned.
+ * A new search is initiated by passing %NULL as the @from argument.  Otherwise
+ * if @from is not %NULL, searches continue from next device on the global
+ * list.  The reference count for @from is always decremented if it is not
+ * %NULL.
+ *
+ * This is an internal function for use by the other search functions in
+ * this file.
+ */
+static struct pci_dev *pci_get_dev_by_id(const struct pci_device_id *id,
+					 struct pci_dev *from)
+{
+	struct device *dev_start = NULL;
+	struct pci_dev *pdev = NULL;
+
+	if (from)
+		dev_start = &from->dev;
+	pdev = pci_bus_find_device(&pci_bus_type, dev_start, (void *)id,
+			      match_pci_dev_by_id);
+	return pdev;
+}
+
+/**
+ * pci_get_subsys - begin or continue searching for a PCI device by vendor/subvendor/device/subdevice id
+ * @vendor: PCI vendor id to match, or %PCI_ANY_ID to match all vendor ids
+ * @device: PCI device id to match, or %PCI_ANY_ID to match all device ids
+ * @ss_vendor: PCI subsystem vendor id to match, or %PCI_ANY_ID to match all vendor ids
+ * @ss_device: PCI subsystem device id to match, or %PCI_ANY_ID to match all device ids
+ * @from: Previous PCI device found in search, or %NULL for new search.
+ *
+ * Iterates through the list of known PCI devices.  If a PCI device is found
+ * with a matching @vendor, @device, @ss_vendor and @ss_device, a pointer to its
+ * device structure is returned, and the reference count to the device is
+ * incremented.  Otherwise, %NULL is returned.  A new search is initiated by
+ * passing %NULL as the @from argument.  Otherwise if @from is not %NULL,
+ * searches continue from next device on the global list.
+ * The reference count for @from is always decremented if it is not %NULL.
+ */
+struct pci_dev *pci_get_subsys(unsigned int vendor, unsigned int device,
+			       unsigned int ss_vendor, unsigned int ss_device,
+			       struct pci_dev *from)
+{
+	struct pci_device_id id = {
+		.vendor = vendor,
+		.device = device,
+		.subvendor = ss_vendor,
+		.subdevice = ss_device,
+	};
+
+	return pci_get_dev_by_id(&id, from);
+}
+
+/**
+ * pci_get_device - begin or continue searching for a PCI device by vendor/device id
+ * @vendor: PCI vendor id to match, or %PCI_ANY_ID to match all vendor ids
+ * @device: PCI device id to match, or %PCI_ANY_ID to match all device ids
+ * @from: Previous PCI device found in search, or %NULL for new search.
+ *
+ * Iterates through the list of known PCI devices.  If a PCI device is
+ * found with a matching @vendor and @device, the reference count to the
+ * device is incremented and a pointer to its device structure is returned.
+ * Otherwise, %NULL is returned.  A new search is initiated by passing %NULL
+ * as the @from argument.  Otherwise if @from is not %NULL, searches continue
+ * from next device on the global list.  The reference count for @from is
+ * always decremented if it is not %NULL.
+ */
+struct pci_dev *
+pci_get_device(unsigned int vendor, unsigned int device, struct pci_dev *from)
+{
+	return pci_get_subsys(vendor, device, PCI_ANY_ID, PCI_ANY_ID, from);
+}
+
+/**
+ * pci_get_class - begin or continue searching for a PCI device by class
+ * @class: search for a PCI device with this class designation
+ * @from: Previous PCI device found in search, or %NULL for new search.
+ *
+ * Iterates through the list of known PCI devices.  If a PCI device is
+ * found with a matching @class, the reference count to the device is
+ * incremented and a pointer to its device structure is returned.
+ * Otherwise, %NULL is returned.
+ * A new search is initiated by passing %NULL as the @from argument.
+ * Otherwise if @from is not %NULL, searches continue from next device
+ * on the global list.  The reference count for @from is always decremented
+ * if it is not %NULL.
+ */
+struct pci_dev *pci_get_class(unsigned int class, struct pci_dev *from)
+{
+	struct pci_device_id id = {
+		.vendor = PCI_ANY_ID,
+		.device = PCI_ANY_ID,
+		.subvendor = PCI_ANY_ID,
+		.subdevice = PCI_ANY_ID,
+		.class_mask = PCI_ANY_ID,
+		.class = class,
+	};
+
+	return pci_get_dev_by_id(&id, from);
+}
+
+/**
+ * pci_dev_present - Returns 1 if device matching the device list is present, 0 if not.
+ * @ids: A pointer to a null terminated list of struct pci_device_id structures
+ * that describe the type of PCI device the caller is trying to find.
+ *
+ * Obvious fact: You do not have a reference to any device that might be found
+ * by this function, so if that device is removed from the system right after
+ * this function is finished, the value will be stale.  Use this function to
+ * find devices that are usually built into a system, or for a general hint as
+ * to if another device happens to be present at this specific moment in time.
+ */
+int pci_dev_present(const struct pci_device_id *ids)
+{
+	struct pci_dev *found = NULL;
+
+	while (ids->vendor || ids->subvendor || ids->class_mask) {
+		found = pci_get_dev_by_id(ids, NULL);
+		if (found) {
+			return 1;
+		}
+		ids++;
+	}
+
+	return 0;
+}

@@ -250,6 +250,7 @@ struct pci_bus;
 
 struct pci_dev {
 	struct list_head bus_list;	/* node in per-bus list */
+	struct list_head device_list;	/* node in all PCI device list */
 	struct pci_bus	*bus;		/* bus this device is on */
 	struct pci_bus	*subordinate;	/* bus this device bridges to */
 
@@ -568,6 +569,8 @@ struct pci_driver {
 
 #define	to_pci_driver(drv) container_of(drv, struct pci_driver, driver)
 #define	to_pci_dev(n) container_of(n, struct pci_dev, dev)
+#define for_each_pci_dev(d)	\
+	while ((d = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, d)) != NULL)
 
 #define PCI_ANY_ID (~0)
 
@@ -666,6 +669,7 @@ pci_match_one_device(const struct pci_device_id *id, const struct pci_dev *dev)
 
 
 extern struct list_head pci_root_buses;	/* list of all known PCI buses */
+extern struct list_head pci_devices;
 extern struct rw_semaphore pci_bus_sem;
 extern struct bus_type pci_bus_type;
 
@@ -892,6 +896,8 @@ enum pci_fixup_pass {
 
 int pci_register_driver(struct pci_driver *drv);
 
+struct pci_dev *pci_get_device(unsigned int vendor, unsigned int device,
+				struct pci_dev *from);
 
 
 

@@ -1506,6 +1506,7 @@ static DEFINE_PCI_DEVICE_TABLE(mlx4_pci_table) = {
 	{ PCI_VDEVICE(MELLANOX, 0x1010), 0 }, /* MT27561 Family */
 	{ 0, }
 };
+
 static struct pci_driver mlx4_driver = {
 	.name		= "mlx4_core",
 	.id_table	= mlx4_pci_table,
