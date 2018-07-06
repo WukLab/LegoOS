@@ -63,7 +63,11 @@ static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 {
 	struct pci_dynid *dynid;
 
-	/* Look at the dynamic ids first, before the static ones */
+	/*
+	 * Look at the dynamic ids first, before the static ones
+	 * For lego, remember we don't have the dynids thing,
+	 * we go down to pci_match_id() directly.
+	 */
 	spin_lock(&drv->dynids.lock);
 	list_for_each_entry(dynid, &drv->dynids.list, node) {
 		if (pci_match_one_device(&dynid->id, dev)) {
