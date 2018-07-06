@@ -920,12 +920,6 @@ int pci_transmit_packet(const void * src,size_t n);
 int pci_receive_packet(void * dst);
 #endif
 
-#ifdef CONFIG_INFINIBAND
-int mlx4_init_one(struct pci_dev *f);
-#else
-static inline int mlx4_init_one(struct pci_dev *f) { return 0; }
-#endif
-
 static inline void pci_func_enable(struct pci_dev *f) { }
 static inline u32 pci_conf_read(struct pci_dev *f, u32 off, int len) { return 0; }
 static inline void pci_conf_write(struct pci_dev *f, u32 off, u32 v, int len) { }

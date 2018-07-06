@@ -262,7 +262,7 @@ struct pci_bus *pci_scan_root_bus(struct device *parent, int bus,
 	if (!found)
 		pci_bus_update_busn_res_end(b, max);
 
-	pci_bus_add_devices(b);
+	//pci_bus_add_devices(b);
 	return b;
 }
 
@@ -1037,9 +1037,6 @@ void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
 	list_add_tail(&dev->bus_list, &bus->devices);
 	list_add_tail(&dev->device_list, &pci_devices);
 	up_write(&pci_bus_sem);
-
-	/* Notifier could use PCI capabilities */
-	dev->match_driver = false;
 }
 
 /*

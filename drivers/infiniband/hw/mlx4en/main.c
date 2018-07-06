@@ -33,6 +33,8 @@
  * SOFTWARE.
  */
 
+#define pr_fmt(fmt) "mlx4: " fmt
+
 #include <lego/init.h>
 #include <lego/errno.h>
 #include <lego/pci.h>
@@ -1175,71 +1177,11 @@ static int mlx4_init_port_info(struct mlx4_dev *dev, int port)
 	return err;
 }
 
-static void mlx4_cleanup_port_info(struct mlx4_port_info *info)
-{
-	if (info->port < 0)
-		return;
-
-	//device_remove_file(&info->dev->pdev->dev, &info->port_attr);
-}
-
-#if 0
-XXX
-static int mlx4_init_steering(struct mlx4_dev *dev)
-{
-	struct mlx4_priv *priv = mlx4_priv(dev);
-	int num_entries = dev->caps.num_ports;
-	int i, j;
-
-	priv->steer = kzalloc(sizeof(struct mlx4_steer) * num_entries, GFP_KERNEL);
-	if (!priv->steer)
-		return -ENOMEM;
-
-	for (i = 0; i < num_entries; i++) {
-		for (j = 0; j < MLX4_NUM_STEERS; j++) {
-			INIT_LIST_HEAD(&priv->steer[i].promisc_qps[j]);
-			INIT_LIST_HEAD(&priv->steer[i].steer_entries[j]);
-		}
-		INIT_LIST_HEAD(&priv->steer[i].high_prios);
-	}
-	return 0;
-}
-
-static void mlx4_clear_steering(struct mlx4_dev *dev)
-{
-	struct mlx4_priv *priv = mlx4_priv(dev);
-	struct mlx4_steer_index *entry, *tmp_entry;
-	struct mlx4_promisc_qp *pqp, *tmp_pqp;
-	int num_entries = dev->caps.num_ports;
-	int i, j;
-
-	for (i = 0; i < num_entries; i++) {
-		for (j = 0; j < MLX4_NUM_STEERS; j++) {
-			list_for_each_entry_safe(pqp, tmp_pqp,
-						 &priv->steer[i].promisc_qps[j],
-						 list) {
-				list_del(&pqp->list);
-				kfree(pqp);
-			}
-			list_for_each_entry_safe(entry, tmp_entry,
-						 &priv->steer[i].steer_entries[j],
-						 list) {
-				list_del(&entry->list);
-				list_for_each_entry_safe(pqp, tmp_pqp,
-							 &entry->duplicates,
-							 list) {
-					list_del(&pqp->list);
-					kfree(pqp);
-				}
-				kfree(entry);
-			}
-		}
-	}
-	kfree(priv->steer);
-}
-#endif
-
-int mlx4_init_one(struct pci_dev *pdev)
+/*
+ * Failure is simply not an option for Lego.
+ * Panic if anything went wrong.
+ */
+static int __mlx4_init_one(struct pci_dev *pdev, int pci_dev_data)
 {
 	struct mlx4_priv *priv;
 	struct mlx4_dev *dev;
@@ -1247,7 +1189,8 @@ int mlx4_init_one(struct pci_dev *pdev)
 	int port;
 	u16 old_cmd, cmd;
 
-	pr_debug("Initializing mlx4\n");
+	pr_debug("Initializing %s\n", pci_name(pdev));
+	panic("Need more on enable pci device\n");
 
 	pci_func_enable(pdev);
 
@@ -1279,7 +1222,7 @@ int mlx4_init_one(struct pci_dev *pdev)
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv) {
 		err = -ENOMEM;
-		goto err_release_regions;
+		goto err;
 	}
 
 	dev       = &priv->dev;
@@ -1305,22 +1248,22 @@ int mlx4_init_one(struct pci_dev *pdev)
 	err = mlx4_reset(dev);
 	if (err) {
 		mlx4_err(dev, "Failed to reset HCA, aborting.\n");
-		goto err_free_dev;
+		goto err;
 	}
 
 	if (mlx4_cmd_init(dev)) {
 		mlx4_err(dev, "Failed to init command interface, aborting.\n");
-		goto err_free_dev;
+		goto err;
 	}
 	pr_debug("%s inited cmd\n", __func__);
 
 	err = mlx4_init_hca(dev);
 	if (err)
-		goto err_cmd;
+		goto err;
 
 	err = mlx4_alloc_eq_table(dev);
 	if (err)
-		goto err_close;
+		goto err;
 
 	priv->msix_ctl.pool_bm = 0;
 	spin_lock_init(&priv->msix_ctl.pool_lock);
@@ -1340,17 +1283,17 @@ int mlx4_init_one(struct pci_dev *pdev)
 		err = mlx4_setup_hca(dev);
 	}
 	if (err)
-		goto err_steer;
+		goto err;
 
 	for (port = 1; port <= dev->caps.num_ports; port++) {
 		err = mlx4_init_port_info(dev, port);
 		if (err)
-			goto err_port;
+			goto err;
 	}
 
 	err = mlx4_register_device(dev);
 	if (err)
-		goto err_port;
+		goto err;
 
 	// XXX
 	//mlx4_sense_init(dev);
@@ -1367,99 +1310,17 @@ int mlx4_init_one(struct pci_dev *pdev)
 	pr_debug("%s exit\n", __func__);
 	return 0;
 
-err_port:
-	for (--port; port >= 1; --port)
-		mlx4_cleanup_port_info(&priv->port[port]);
-
-	mlx4_cleanup_counters_table(dev);
-//	mlx4_cleanup_mcg_table(dev);
-	mlx4_cleanup_qp_table(dev);
-//	mlx4_cleanup_srq_table(dev);
-	mlx4_cleanup_cq_table(dev);
-	mlx4_cmd_use_polling(dev);
-	mlx4_cleanup_eq_table(dev);
-	mlx4_cleanup_mr_table(dev);
-//	mlx4_cleanup_xrcd_table(dev);
-	mlx4_cleanup_pd_table(dev);
-//	mlx4_cleanup_uar_table(dev);
-
-err_steer:
-//	mlx4_clear_steering(dev);
-
-err_free_eq:
-	mlx4_free_eq_table(dev);
-
-err_close:
-//	if (dev->flags & MLX4_FLAG_MSI_X)
-//		pci_disable_msix(pdev);
-
-	mlx4_close_hca(dev);
-
-err_cmd:
-	mlx4_cmd_cleanup(dev);
-
-err_free_dev:
-	kfree(priv);
-
-err_release_regions:
-//	pci_release_regions(pdev);
-
-err_disable_pdev:
-//	pci_disable_device(pdev);
-//	pci_set_drvdata(pdev, NULL);
-	return err;
+err:
+	panic("Fail to register mlx4 %s device!\n", pci_name(pdev));
+	return -ENODEV;
 }
 
-void mlx4_remove_one(struct pci_dev *pdev)
+static int mlx4_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 {
-	struct mlx4_dev  *dev  = (struct mlx4_dev *) pdev->driver_data;
-	struct mlx4_priv *priv = mlx4_priv(dev);
-	int               pci_dev_data;
-	int p;
-
-	if (priv->removed)
-		return;
-
-	pci_dev_data = priv->pci_dev_data;
-
-	//mlx4_stop_sense(dev);
-	mlx4_unregister_device(dev);
-
-	for (p = 1; p <= dev->caps.num_ports; p++) {
-		mlx4_cleanup_port_info(&priv->port[p]);
-		mlx4_CLOSE_PORT(dev, p);
-	}
-
-	mlx4_cleanup_counters_table(dev);
-//	mlx4_cleanup_mcg_table(dev);
-	mlx4_cleanup_qp_table(dev);
-//	mlx4_cleanup_srq_table(dev);
-	mlx4_cleanup_cq_table(dev);
-	mlx4_cmd_use_polling(dev);
-	mlx4_cleanup_eq_table(dev);
-	mlx4_cleanup_mr_table(dev);
-//	mlx4_cleanup_xrcd_table(dev);
-	mlx4_cleanup_pd_table(dev);
-
-	iounmap(priv->kar);
-	mlx4_uar_free(dev, &priv->driver_uar);
-	mlx4_cleanup_uar_table(dev);
-//	mlx4_clear_steering(dev);
-	mlx4_free_eq_table(dev);
-	mlx4_close_hca(dev);
-	mlx4_cmd_cleanup(dev);
-
-//	if (dev->flags & MLX4_FLAG_MSI_X)
-//		pci_disable_msix(pdev);
-
-//	pci_release_regions(pdev);
-//	pci_disable_device(pdev);
-	memset(priv, 0, sizeof(*priv));
-	priv->pci_dev_data = pci_dev_data;
-	priv->removed = 1;
-
-	kfree(priv);
+	return __mlx4_init_one(pdev, id->driver_data);
 }
+
+void mlx4_remove_one(struct pci_dev *pdev) { }
 
 static DEFINE_PCI_DEVICE_TABLE(mlx4_pci_table) = {
 	/* MT25408 "Hermon" SDR */
@@ -1518,7 +1379,13 @@ int __init mlx4_init(void)
 {
 	int ret;
 
+	/*
+	 * Register our driver, the solo purpose is to
+	 * let PCI subsystem try to find a device and call back
+	 * our mlx4_init_one().
+	 */
 	ret = pci_register_driver(&mlx4_driver);
 	if (ret < 0)
 		panic("Fail to register mlx4 PCI driver");
+	return 0;
 }

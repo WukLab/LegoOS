@@ -11,6 +11,17 @@
 #include <lego/device.h>
 #include <lego/kernel.h>
 
+extern int __init mlx4_init(void);
+
+/*
+ * This is called after PCI init.
+ * Please put any device init code here.
+ */
+void __init device_init(void)
+{
+	mlx4_init();
+}
+
 static int __dev_printk(const char *level, const struct device *dev,
 			struct va_format *vaf)
 {

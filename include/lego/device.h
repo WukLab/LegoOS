@@ -150,4 +150,7 @@ static inline const char *dev_name(const struct device *dev)
 	return dev->name;
 }
 
+/* driver/base/core.c */
+void __init device_init(void);
+
 #endif /* _LEGO_DEVICE_H_ */

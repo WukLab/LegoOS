@@ -116,17 +116,30 @@ static int match_pci_dev_by_id(struct pci_dev *pdev, void *data)
 	return 0;
 }
 
+/*
+ * This function is VERY fragile: if @start is invalid,
+ * we will crash memory or have a kernel panic.
+ * Thus use with caution, all callers.
+ */
 struct pci_dev *pci_bus_find_device(struct bus_type *bus,
-			       struct device *start, void *data,
-			       int (*match)(struct pci_dev *dev, void *data))
+			       struct pci_dev *start, void *data)
 {
 	struct pci_dev *pdev;
 
 	down_write(&pci_bus_sem);
-	list_for_each_entry(pdev, &pci_devices, device_list) {
-		if (match(pdev, data)) {
-			up_write(&pci_bus_sem);
-			return pdev;
+	if (start) {
+		list_for_each_entry_continue(start, &pci_devices, device_list) {
+			if (match_pci_dev_by_id(start, data)) {
+				up_write(&pci_bus_sem);
+				return start;
+			}
+		}
+	} else {
+		list_for_each_entry(pdev, &pci_devices, device_list) {
+			if (match_pci_dev_by_id(pdev, data)) {
+				up_write(&pci_bus_sem);
+				return pdev;
+			}
 		}
 	}
 	up_write(&pci_bus_sem);
@@ -152,13 +165,9 @@ struct pci_dev *pci_bus_find_device(struct bus_type *bus,
 static struct pci_dev *pci_get_dev_by_id(const struct pci_device_id *id,
 					 struct pci_dev *from)
 {
-	struct device *dev_start = NULL;
 	struct pci_dev *pdev = NULL;
 
-	if (from)
-		dev_start = &from->dev;
-	pdev = pci_bus_find_device(&pci_bus_type, dev_start, (void *)id,
-			      match_pci_dev_by_id);
+	pdev = pci_bus_find_device(&pci_bus_type, from, (void *)id);
 	return pdev;
 }
 

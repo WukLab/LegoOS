@@ -128,13 +128,15 @@ static int kernel_init(void *unused)
 
 	init_workqueues();
 
+	/*
+	 * Scan the PCI bus and build core PCI data structures.
+	 * Then we initialize all the devices (IB, Ethernet etc)
+	 */
+	pci_subsys_init();
+	device_init();
+
 #if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
 	ib_mad_init();
-#endif
-
-	pci_subsys_init();
-
-#if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
 	ib_cm_init();
 	init_socket();
 	kthread_run(lego_ib_init, NULL, "ib-initd");
