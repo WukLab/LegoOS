@@ -905,8 +905,28 @@ int pci_find_capability(struct pci_dev *dev, int cap);
 struct pci_dev *pci_get_device(unsigned int vendor, unsigned int device,
 				struct pci_dev *from);
 
+/* these helpers provide future and backwards compatibility
+ * for accessing popular PCI BAR info */
+#define pci_resource_start(dev, bar)	((dev)->resource[(bar)].start)
+#define pci_resource_end(dev, bar)	((dev)->resource[(bar)].end)
+#define pci_resource_flags(dev, bar)	((dev)->resource[(bar)].flags)
+#define pci_resource_len(dev,bar) \
+	((pci_resource_start((dev), (bar)) == 0 &&	\
+	  pci_resource_end((dev), (bar)) ==		\
+	  pci_resource_start((dev), (bar))) ? 0 :	\
+							\
+	 (pci_resource_end((dev), (bar)) -		\
+	  pci_resource_start((dev), (bar)) + 1))
 
+int __must_check pci_request_regions(struct pci_dev *, const char *);
+int __must_check pci_request_regions_exclusive(struct pci_dev *, const char *);
+void pci_release_regions(struct pci_dev *);
+int __must_check pci_request_region(struct pci_dev *, int, const char *);
+int __must_check pci_request_region_exclusive(struct pci_dev *, int, const char *);
+void pci_release_region(struct pci_dev *, int);
 
+void pci_set_master(struct pci_dev *dev);
+void pci_clear_master(struct pci_dev *dev);
 
 
 

@@ -1197,6 +1197,66 @@ static int __mlx4_init_one(struct pci_dev *pdev, int pci_dev_data)
 		goto err;
 	}
 
+	/*
+	 * Check for BARs.
+	 */
+	if (!(pci_dev_data & MLX4_PCI_DEV_IS_VF) &&
+	    !(pci_resource_flags(pdev, 0) & IORESOURCE_MEM)) {
+		pr_info("pci %s: Missing DCS, aborting."
+			"(driver_data: 0x%x, pci_resource_flags(pdev, 0):0x%lx)\n",
+			pci_name(pdev),
+			pci_dev_data, pci_resource_flags(pdev, 0));
+		err = -ENODEV;
+		goto err;
+	}
+
+	if (!(pci_resource_flags(pdev, 2) & IORESOURCE_MEM)) {
+		pr_info("pci %s: Missing UAR, aborting.\n",
+			pci_name(pdev));
+		err = -ENODEV;
+		goto err;
+	}
+
+	err = pci_request_regions(pdev, DRV_NAME);
+	if (err) {
+		pr_info("pci %s: Couldn't get PCI resources, aborting\n",
+			pci_name(pdev));
+		goto err;
+	}
+
+	pci_set_master(pdev);
+
+	err = pci_set_dma_mask(pdev, DMA_BIT_MASK(64));
+	if (err) {
+		pr_info("pci %s: Warning: couldn't set 64-bit PCI DMA mask.\n",
+			pci_name(pdev));
+		err = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
+		if (err) {
+			pr_info("pci %s: Can't set PCI DMA mask, aborting.\n",
+				pci_name(pdev));
+			goto err;
+		}
+	}
+	err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(64));
+	if (err) {
+		pr_info("pci %s: Warning: couldn't set 64-bit "
+			 "consistent PCI DMA mask.\n", pci_name(pdev));
+		err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
+		if (err) {
+			pr_info("pci %s: Can't set consistent PCI DMA mask, "
+				"aborting.\n", pci_name(pdev));
+			goto err;
+		}
+	}
+
+	/* Allow large DMA segments, up to the firmware limit of 1 GB */
+	dma_set_max_seg_size(&pdev->dev, 1024 * 1024 * 1024);
+
+
+
+
+
+
 	panic("Need more on enable pci device\n");
 
 	pci_func_enable(pdev);

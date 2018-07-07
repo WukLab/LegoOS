@@ -16,7 +16,6 @@
  */
 
 #include <asm/io.h>
-#include <lego/pci.h>
 
 #ifdef CONFIG_ISA
 # define ISA_DMA_BIT_MASK DMA_BIT_MASK(24)
@@ -26,22 +25,20 @@
 
 #define DMA_ERROR_CODE	0
 
+struct pci_dev;
+struct device;
+
 extern struct pci_dev x86_dma_fallback_dev;
 extern int panic_on_overflow;
 
 extern struct dma_map_ops *dma_ops;
 
-static inline struct dma_map_ops *get_dma_ops(struct pci_dev *pcif)
-{
-	return dma_ops;
-}
+#define get_dma_ops(_x)		(dma_ops)
 
 bool arch_dma_alloc_attrs(struct pci_dev **dev, gfp_t *gfp);
 #define arch_dma_alloc_attrs arch_dma_alloc_attrs
 
 #define HAVE_ARCH_DMA_SUPPORTED 1
-extern int dma_supported(struct pci_dev *hwdev, u64 mask);
-
 extern void *dma_generic_alloc_coherent(struct pci_dev *dev, size_t size,
 					dma_addr_t *dma_addr, gfp_t flag,
 					unsigned long attrs);
@@ -96,6 +93,26 @@ static inline gfp_t dma_alloc_coherent_gfp_flags(struct pci_dev *dev, gfp_t gfp)
 	if (dma_mask <= DMA_BIT_MASK(32) && !(gfp & GFP_DMA))
 		gfp |= GFP_DMA32;
        return gfp;
+}
+
+int dma_supported(struct device *dev, u64 mask);
+
+static inline int dma_set_mask(struct device *dev, u64 mask)
+{
+	if (!dev->dma_mask || !dma_supported(dev, mask))
+		return -EIO;
+
+	*dev->dma_mask = mask;
+
+	return 0;
+}
+
+static inline int dma_set_coherent_mask(struct device *dev, u64 mask)
+{
+	if (!dma_supported(dev, mask))
+		return -EIO;
+	dev->coherent_dma_mask = mask;
+	return 0;
 }
 
 #endif /* _ASM_X86_DMA_MAPPING_H_ */

@@ -139,6 +139,8 @@ static inline unsigned long resource_type(const struct resource *res)
 
 /* Convenience shorthand with allocation */
 #define request_region(start,n,name)		__request_region(&ioport_resource, (start), (n), (name), 0)
+#define __request_mem_region(start,n,name, excl) __request_region(&iomem_resource, (start), (n), (name), excl)
+#define release_mem_region(start,n)	__release_region(&iomem_resource, (start), (n))
 
 extern struct resource * __request_region(struct resource *,
 					resource_size_t start,

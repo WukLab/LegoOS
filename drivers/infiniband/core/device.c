@@ -695,7 +695,7 @@ int ib_find_pkey(struct ib_device *device,
 	return -ENOENT;
 }
 
-static int ib_core_init(void)
+int ib_core_init(void)
 {
 #if 0
 	ib_wq = alloc_workqueue("infiniband", 0, 0);
@@ -714,4 +714,5 @@ static int ib_core_init(void)
 		goto err_nl;
 	}
 #endif
+	return 0;
 }

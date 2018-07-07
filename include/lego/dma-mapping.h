@@ -19,6 +19,9 @@
 #include <lego/mm.h>
 #include <lego/scatterlist.h>
 
+struct pci_dev;
+struct device;
+
 enum dma_data_direction {
 	DMA_BIDIRECTIONAL = 0,
 	DMA_TO_DEVICE = 1,
@@ -106,7 +109,7 @@ struct dma_map_ops {
 			dma_addr_t dma_handle, size_t size,
 			enum dma_data_direction dir);
 	int (*mapping_error)(struct pci_dev *pcid, dma_addr_t dma_addr);
-	int (*dma_supported)(struct pci_dev *pcid, u64 mask);
+	int (*dma_supported)(struct device *dev, u64 mask);
 	int (*set_dma_mask)(struct pci_dev *pcid, u64 mask);
 #ifdef ARCH_HAS_DMA_GET_REQUIRED_MASK
 	u64 (*get_required_mask)(struct pci_dev *pcid);
@@ -127,10 +130,13 @@ static inline int valid_dma_direction(int dma_direction)
 		(dma_direction == DMA_FROM_DEVICE));
 }
 
-static inline int is_device_dma_capable(struct pci_dev *pcid)
+static inline int is_device_dma_capable(struct device *dev)
 {
-	return pcid->dma_mask != NULL && *pcid->dma_mask != DMA_MASK_NONE;
+	return dev->dma_mask != NULL && *dev->dma_mask != DMA_MASK_NONE;
 }
+
+
+#include <asm/dma-mapping.h>
 
 /*
  * These three functions are only for dma allocator.
@@ -142,8 +148,6 @@ int dma_release_from_coherent(struct pci_dev *pcid, int order, void *vaddr);
 
 int dma_mmap_from_coherent(struct pci_dev *pcid, struct vm_area_struct *vma,
 			    void *cpu_addr, size_t size, int *ret);
-
-#include <asm/dma-mapping.h>
 
 static inline dma_addr_t dma_map_single_attrs(struct pci_dev *pcid, void *ptr,
 					      size_t size,
@@ -402,52 +406,13 @@ static inline int dma_mapping_error(struct pci_dev *pcid, dma_addr_t dma_addr)
 #endif
 }
 
-#ifndef HAVE_ARCH_DMA_SUPPORTED
-static inline int dma_supported(struct pci_dev *pcid, u64 mask)
+static inline u64 dma_get_mask(struct device *dev)
 {
-	struct dma_map_ops *ops = get_dma_ops(pcid);
-
-	if (!ops)
-		return 0;
-	if (!ops->dma_supported)
-		return 1;
-	return ops->dma_supported(pcid, mask);
-}
-#endif
-
-#ifndef HAVE_ARCH_DMA_SET_MASK
-static inline int dma_set_mask(struct pci_dev *pcid, u64 mask)
-{
-	struct dma_map_ops *ops = get_dma_ops(pcid);
-
-	if (ops->set_dma_mask)
-		return ops->set_dma_mask(pcid, mask);
-
-	if (!pcid->dma_mask || !dma_supported(pcid, mask))
-		return -EIO;
-	*pcid->dma_mask = mask;
-	return 0;
-}
-#endif
-
-static inline u64 dma_get_mask(struct pci_dev *pcid)
-{
-	if (pcid && pcid->dma_mask && *pcid->dma_mask)
-		return *pcid->dma_mask;
+	if (dev && dev->dma_mask && *dev->dma_mask)
+		return *dev->dma_mask;
 	return DMA_BIT_MASK(32);
 }
 
-#ifdef CONFIG_ARCH_HAS_DMA_SET_COHERENT_MASK
-int dma_set_coherent_mask(struct pci_dev *pcid, u64 mask);
-#else
-static inline int dma_set_coherent_mask(struct pci_dev *pcid, u64 mask)
-{
-	if (!dma_supported(pcid, mask))
-		return -EIO;
-	pcid->coherent_dma_mask = mask;
-	return 0;
-}
-#endif
 
 /*
  * Set both the DMA mask and the coherent DMA mask to the same thing.
@@ -457,20 +422,10 @@ static inline int dma_set_coherent_mask(struct pci_dev *pcid, u64 mask)
  */
 static inline int dma_set_mask_and_coherent(struct pci_dev *pcid, u64 mask)
 {
-	int rc = dma_set_mask(pcid, mask);
+	int rc = dma_set_mask(&pcid->dev, mask);
 	if (rc == 0)
-		dma_set_coherent_mask(pcid, mask);
+		dma_set_coherent_mask(&pcid->dev, mask);
 	return rc;
-}
-
-/*
- * Similar to the above, except it deals with the case where the device
- * does not have pcid->dma_mask appropriately setup.
- */
-static inline int dma_coerce_mask_and_coherent(struct pci_dev *pcid, u64 mask)
-{
-	pcid->dma_mask = &pcid->coherent_dma_mask;
-	return dma_set_mask_and_coherent(pcid, mask);
 }
 
 extern u64 dma_get_required_mask(struct pci_dev *pcid);
@@ -485,13 +440,6 @@ static inline void arch_setup_dma_ops(struct pci_dev *pcid, u64 dma_base,
 #ifndef arch_teardown_dma_ops
 static inline void arch_teardown_dma_ops(struct pci_dev *pcid) { }
 #endif
-#endif
-
-#ifndef dma_max_pfn
-static inline unsigned long dma_max_pfn(struct pci_dev *pcid)
-{
-	return *pcid->dma_mask >> PAGE_SHIFT;
-}
 #endif
 
 static inline void *dma_zalloc_coherent(struct pci_dev *pcid, size_t size,
@@ -631,6 +579,16 @@ static inline int dma_set_seg_boundary(struct device *dev, unsigned long mask)
 		return 0;
 	} else
 		return -EIO;
+}
+
+static inline int pci_set_dma_mask(struct pci_dev *dev, u64 mask)
+{
+	return dma_set_mask(&dev->dev, mask);
+}
+
+static inline int pci_set_consistent_dma_mask(struct pci_dev *dev, u64 mask)
+{
+	return dma_set_coherent_mask(&dev->dev, mask);
 }
 
 #endif /* _LEGO_DMA_MAPPING_H_ */

@@ -17,6 +17,12 @@
 
 #include "pci.h"
 
+/*
+ * If we set up a device for bus mastering, we need to check the latency
+ * timer as certain BIOSes forget to set it properly.
+ */
+unsigned int pcibios_max_latency = 255;
+
 /**
  * pci_pm_init - Initialize PM functions of given PCI device
  * @dev: PCI device to handle.
@@ -215,4 +221,185 @@ static int pci_enable_device_flags(struct pci_dev *dev, unsigned long flags)
 int pci_enable_device(struct pci_dev *dev)
 {
 	return pci_enable_device_flags(dev, IORESOURCE_MEM | IORESOURCE_IO);
+}
+
+/**
+ *	pci_release_region - Release a PCI bar
+ *	@pdev: PCI device whose resources were previously reserved by pci_request_region
+ *	@bar: BAR to release
+ *
+ *	Releases the PCI I/O and memory resources previously reserved by a
+ *	successful call to pci_request_region.  Call this function only
+ *	after all use of the PCI regions has ceased.
+ */
+void pci_release_region(struct pci_dev *pdev, int bar)
+{
+	if (pci_resource_len(pdev, bar) == 0)
+		return;
+	if (pci_resource_flags(pdev, bar) & IORESOURCE_IO)
+		release_region(pci_resource_start(pdev, bar),
+				pci_resource_len(pdev, bar));
+	else if (pci_resource_flags(pdev, bar) & IORESOURCE_MEM)
+		release_mem_region(pci_resource_start(pdev, bar),
+				pci_resource_len(pdev, bar));
+}
+
+/**
+ *	__pci_request_region - Reserved PCI I/O and memory resource
+ *	@pdev: PCI device whose resources are to be reserved
+ *	@bar: BAR to be reserved
+ *	@res_name: Name to be associated with resource.
+ *	@exclusive: whether the region access is exclusive or not
+ *
+ *	Mark the PCI region associated with PCI device @pdev BR @bar as
+ *	being reserved by owner @res_name.  Do not access any
+ *	address inside the PCI regions unless this call returns
+ *	successfully.
+ *
+ *	If @exclusive is set, then the region is marked so that userspace
+ *	is explicitly not allowed to map the resource via /dev/mem or
+ * 	sysfs MMIO access.
+ *
+ *	Returns 0 on success, or %EBUSY on error.  A warning
+ *	message is also printed on failure.
+ */
+static int __pci_request_region(struct pci_dev *pdev, int bar, const char *res_name,
+									int exclusive)
+{
+	if (pci_resource_len(pdev, bar) == 0)
+		return 0;
+		
+	if (pci_resource_flags(pdev, bar) & IORESOURCE_IO) {
+		if (!request_region(pci_resource_start(pdev, bar),
+			    pci_resource_len(pdev, bar), res_name))
+			goto err_out;
+	}
+	else if (pci_resource_flags(pdev, bar) & IORESOURCE_MEM) {
+		if (!__request_mem_region(pci_resource_start(pdev, bar),
+					pci_resource_len(pdev, bar), res_name,
+					exclusive))
+			goto err_out;
+	}
+
+	return 0;
+
+err_out:
+	dev_warn(&pdev->dev, "BAR %d: can't reserve %pR\n", bar,
+		 &pdev->resource[bar]);
+	return -EBUSY;
+}
+
+static int __pci_request_selected_regions(struct pci_dev *pdev, int bars,
+				 const char *res_name, int excl)
+{
+	int i;
+
+	for (i = 0; i < 6; i++)
+		if (bars & (1 << i))
+			if (__pci_request_region(pdev, i, res_name, excl))
+				goto err_out;
+	return 0;
+
+err_out:
+	while(--i >= 0)
+		if (bars & (1 << i))
+			pci_release_region(pdev, i);
+
+	return -EBUSY;
+}
+
+/**
+ * pci_request_selected_regions - Reserve selected PCI I/O and memory resources
+ * @pdev: PCI device whose resources are to be reserved
+ * @bars: Bitmask of BARs to be requested
+ * @res_name: Name to be associated with resource
+ */
+int pci_request_selected_regions(struct pci_dev *pdev, int bars,
+				 const char *res_name)
+{
+	return __pci_request_selected_regions(pdev, bars, res_name, 0);
+}
+
+/**
+ *	pci_request_regions - Reserved PCI I/O and memory resources
+ *	@pdev: PCI device whose resources are to be reserved
+ *	@res_name: Name to be associated with resource.
+ *
+ *	Mark all PCI regions associated with PCI device @pdev as
+ *	being reserved by owner @res_name.  Do not access any
+ *	address inside the PCI regions unless this call returns
+ *	successfully.
+ *
+ *	Returns 0 on success, or %EBUSY on error.  A warning
+ *	message is also printed on failure.
+ */
+int pci_request_regions(struct pci_dev *pdev, const char *res_name)
+{
+	return pci_request_selected_regions(pdev, ((1 << 6) - 1), res_name);
+}
+
+static void __pci_set_master(struct pci_dev *dev, bool enable)
+{
+	u16 old_cmd, cmd;
+
+	pci_read_config_word(dev, PCI_COMMAND, &old_cmd);
+	if (enable)
+		cmd = old_cmd | PCI_COMMAND_MASTER;
+	else
+		cmd = old_cmd & ~PCI_COMMAND_MASTER;
+	if (cmd != old_cmd) {
+		pr_info("pci %s: %s bus mastering\n",
+			pci_name(dev), enable ? "enabling" : "disabling");
+		pci_write_config_word(dev, PCI_COMMAND, cmd);
+	}
+	dev->is_busmaster = enable;
+}
+
+/**
+ * pcibios_set_master - enable PCI bus-mastering for device dev
+ * @dev: the PCI device to enable
+ *
+ * Enables PCI bus-mastering for the device.  This is the default
+ * implementation.  Architecture specific implementations can override
+ * this if necessary.
+ */
+void __weak pcibios_set_master(struct pci_dev *dev)
+{
+	u8 lat;
+
+	/* The latency timer doesn't apply to PCIe (either Type 0 or Type 1) */
+	if (pci_is_pcie(dev))
+		return;
+
+	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
+	if (lat < 16)
+		lat = (64 <= pcibios_max_latency) ? 64 : pcibios_max_latency;
+	else if (lat > pcibios_max_latency)
+		lat = pcibios_max_latency;
+	else
+		return;
+	pr_info("pci %s: setting latency timer to %d\n", pci_name(dev), lat);
+	pci_write_config_byte(dev, PCI_LATENCY_TIMER, lat);
+}
+
+/**
+ * pci_set_master - enables bus-mastering for device dev
+ * @dev: the PCI device to enable
+ *
+ * Enables bus-mastering on the device and calls pcibios_set_master()
+ * to do the needed arch specific settings.
+ */
+void pci_set_master(struct pci_dev *dev)
+{
+	__pci_set_master(dev, true);
+	pcibios_set_master(dev);
+}
+
+/**
+ * pci_clear_master - disables bus-mastering for device dev
+ * @dev: the PCI device to disable
+ */
+void pci_clear_master(struct pci_dev *dev)
+{
+	__pci_set_master(dev, false);
 }

@@ -77,3 +77,19 @@ bool arch_dma_alloc_attrs(struct pci_dev **pcid, gfp_t *gfp)
 	return true;
 
 }
+
+int dma_supported(struct device *dev, u64 mask)
+{
+	struct dma_map_ops *ops = get_dma_ops(dev);
+
+	if (ops->dma_supported)
+		return ops->dma_supported(dev, mask);
+
+	/* Copied from i386. Doesn't make much sense, because it will
+	   only work for pci_alloc_coherent.
+	   The caller just has to use GFP_DMA in this case. */
+	if (mask < DMA_BIT_MASK(24))
+		return 0;
+
+	return 1;
+}

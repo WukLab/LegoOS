@@ -181,7 +181,6 @@ int ib_init_ah_from_wc(struct ib_device *device, u8 port_num, struct ib_wc *wc,
 {
 	u32 flow_class;
 	u16 gid_index;
-	int ret;
 
 	memset(ah_attr, 0, sizeof *ah_attr);
 	ah_attr->dlid = wc->slid;
@@ -302,14 +301,6 @@ int ib_destroy_srq(struct ib_srq *srq)
 
 /* Queue pairs */
 
-static void __ib_shared_qp_event_handler(struct ib_event *event, void *context)
-{
-	struct ib_qp *qp = context;
-
-	list_for_each_entry(event->element.qp, &qp->open_list, open_list)
-		event->element.qp->event_handler(event, event->element.qp->qp_context);
-}
-
 #if 0
 static void __ib_insert_xrcd_qp(struct ib_xrcd *xrcd, struct ib_qp *qp)
 {
@@ -369,7 +360,7 @@ struct ib_qp *ib_open_qp(struct ib_xrcd *xrcd,
 struct ib_qp *ib_create_qp(struct ib_pd *pd,
 			   struct ib_qp_init_attr *qp_init_attr)
 {
-	struct ib_qp *qp, *real_qp;
+	struct ib_qp *qp;
 	struct ib_device *device;
 
 	device = pd->device;

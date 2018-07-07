@@ -3200,8 +3200,6 @@ static struct ib_client mad_client = {
 
 int ib_mad_init(void)
 {
-	int ret;
-
 	mad_recvq_size = min(mad_recvq_size, IB_MAD_QP_MAX_SIZE);
 	mad_recvq_size = max(mad_recvq_size, IB_MAD_QP_MIN_SIZE);
 
@@ -3216,4 +3214,6 @@ int ib_mad_init(void)
 	 */
 	if (ib_register_client(&mad_client))
 		panic("Couldn't register ib_mad client");
+
+	return 0;
 }
