@@ -898,6 +898,9 @@ enum pci_fixup_pass {
 int pci_register_driver(struct pci_driver *drv);
 int pci_enable_resources(struct pci_dev *, int mask);
 int __must_check pci_enable_device(struct pci_dev *dev);
+void pci_msi_init_pci_dev(struct pci_dev *dev);
+void pci_pm_init(struct pci_dev *dev);
+int pci_find_capability(struct pci_dev *dev, int cap);
 
 struct pci_dev *pci_get_device(unsigned int vendor, unsigned int device,
 				struct pci_dev *from);
