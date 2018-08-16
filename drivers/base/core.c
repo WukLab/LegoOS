@@ -76,3 +76,9 @@ define_dev_printk_level(dev_err, KERN_ERR);
 define_dev_printk_level(dev_warn, KERN_WARNING);
 define_dev_printk_level(dev_notice, KERN_NOTICE);
 define_dev_printk_level(_dev_info, KERN_INFO);
+
+void device_initialize(struct device *dev)
+{
+	INIT_LIST_HEAD(&dev->dma_pools);
+	set_dev_node(dev, 0);
+}

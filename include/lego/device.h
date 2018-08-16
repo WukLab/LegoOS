@@ -125,6 +125,8 @@ struct device {
 
 	struct device_dma_parameters *dma_parms;
 
+	struct list_head	dma_pools;	/* dma pools (if dma'ble) */
+
 	void	(*release)(struct device *dev);
 };
 
@@ -150,7 +152,28 @@ static inline const char *dev_name(const struct device *dev)
 	return dev->name;
 }
 
+#ifdef CONFIG_NUMA
+static inline int dev_to_node(struct device *dev)
+{
+	return dev->numa_node;
+}
+static inline void set_dev_node(struct device *dev, int node)
+{
+	dev->numa_node = node;
+}
+#else
+static inline int dev_to_node(struct device *dev)
+{
+	return -1;
+}
+static inline void set_dev_node(struct device *dev, int node)
+{
+}
+#endif
+
 /* driver/base/core.c */
 void __init device_init(void);
+
+void device_initialize(struct device *dev);
 
 #endif /* _LEGO_DEVICE_H_ */

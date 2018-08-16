@@ -1015,6 +1015,7 @@ static void pci_init_capabilities(struct pci_dev *dev)
  */
 void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
 {
+	device_initialize(&dev->dev);
 	dev->dev.dma_mask = &dev->_dma_mask;
 	dev->dev.dma_parms = &dev->dma_parms;
 	dev->dev.coherent_dma_mask = 0xffffffffull;
