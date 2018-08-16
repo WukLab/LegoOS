@@ -210,7 +210,7 @@ u64 mlx4_make_profile(struct mlx4_dev *dev,
 			init_hca->cmpt_base	 = profile[i].start;
 			break;
 		case MLX4_RES_MTT:
-			dev->caps.num_mtt_segs	 = profile[i].num;
+			dev->caps.num_mtts	 = profile[i].num;
 			priv->mr_table.mtt_base	 = profile[i].start;
 			init_hca->mtt_base	 = profile[i].start;
 			break;

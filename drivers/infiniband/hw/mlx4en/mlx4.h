@@ -50,8 +50,23 @@
 #include <lego/mlx4/doorbell.h>
 
 #define DRV_NAME	"mlx4_core"
-#define DRV_VERSION	"1.0"
-#define DRV_RELDATE	"July 14, 2011"
+#define PFX		DRV_NAME ": "
+#define DRV_VERSION	"1.1"
+#define DRV_RELDATE	"Dec, 2011"
+
+#define MLX4_FS_UDP_UC_EN		(1 << 1)
+#define MLX4_FS_TCP_UC_EN		(1 << 2)
+#define MLX4_FS_NUM_OF_L2_ADDR		8
+#define MLX4_FS_MGM_LOG_ENTRY_SIZE	7
+#define MLX4_FS_NUM_MCG			(1 << 17)
+
+#define INIT_HCA_TPT_MW_ENABLE          (1 << 7)
+
+#define MLX4_NUM_UP		8
+#define MLX4_NUM_TC		8
+#define MLX4_RATELIMIT_UNITS 3 /* 100 Mbps */
+#define MLX4_RATELIMIT_DEFAULT 0xffff
+
 
 enum {
 	MLX4_HCR_BASE		= 0x80680,
@@ -163,12 +178,16 @@ struct mlx4_profile {
 struct mlx4_fw {
 	u64			clr_int_base;
 	u64			catas_offset;
+	u64			comm_base;
+	u64			clock_offset;
 	struct mlx4_icm	       *fw_icm;
 	struct mlx4_icm	       *aux_icm;
 	u32			catas_size;
 	u16			fw_pages;
 	u8			clr_int_bar;
 	u8			catas_bar;
+	u8			comm_bar;
+	u8			clock_bar;
 };
 
 #define MGM_QPN_MASK       0x00FFFFFF
@@ -192,6 +211,52 @@ struct mlx4_mgm {
 	u8			gid[16];
 	__be32			qp[MLX4_QP_PER_MGM];
 };
+
+/*
+ *Virtual HCR structures.
+ * mlx4_vhcr is the sw representation, in machine endianess
+ *
+ * mlx4_vhcr_cmd is the formalized structure, the one that is passed
+ * to FW to go through communication channel.
+ * It is big endian, and has the same structure as the physical HCR
+ * used by command interface
+ */
+struct mlx4_vhcr {
+	u64	in_param;
+	u64	out_param;
+	u32	in_modifier;
+	u32	errno;
+	u16	op;
+	u16	token;
+	u8	op_modifier;
+	u8	e_bit;
+};
+
+struct mlx4_vhcr_cmd {
+	__be64 in_param;
+	__be32 in_modifier;
+	__be64 out_param;
+	__be16 token;
+	u16 reserved;
+	u8 status;
+	u8 flags;
+	__be16 opcode;
+};
+
+struct mlx4_cmd_info {
+	u16 opcode;
+	bool has_inbox;
+	bool has_outbox;
+	bool out_is_imm;
+	bool encode_slave_id;
+	int (*verify)(struct mlx4_dev *dev, int slave, struct mlx4_vhcr *vhcr,
+		      struct mlx4_cmd_mailbox *inbox);
+	int (*wrapper)(struct mlx4_dev *dev, int slave, struct mlx4_vhcr *vhcr,
+		       struct mlx4_cmd_mailbox *inbox,
+		       struct mlx4_cmd_mailbox *outbox,
+		       struct mlx4_cmd_info *cmd);
+};
+
 struct mlx4_cmd {
 	struct dma_pool	       *pool;
 	void __iomem	       *hcr;

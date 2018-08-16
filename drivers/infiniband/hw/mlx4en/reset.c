@@ -51,7 +51,6 @@ int mlx4_reset(struct mlx4_dev *dev)
 	u32 sem;
 	int i;
 	int err = 0;
-	u32 pci_read_val;
 
 #define MLX4_RESET_BASE		0xf0000
 #define MLX4_RESET_SIZE		  0x400

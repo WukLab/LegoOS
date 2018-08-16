@@ -33,7 +33,7 @@
  * SOFTWARE.
  */
 
-#define pr_fmt(fmt) "mlx4: " fmt
+#define pr_fmt(fmt) "mlx4_core: " fmt
 
 #include <lego/init.h>
 #include <lego/errno.h>
@@ -50,15 +50,9 @@
 /* enable #num_vfs functions if num_vfs > 0 */
 static const int num_vfs = 0;
 
-//struct workqueue_struct *mlx4_wq;
-
 #ifdef CONFIG_MLX4_DEBUG
-
 int mlx4_debug_level = 0;
-//module_param_named(debug_level, mlx4_debug_level, int, 0644);
-//MODULE_PARM_DESC(debug_level, "Enable debug tracing if > 0");
-
-#endif /* CONFIG_MLX4_DEBUG */
+#endif
 
 #ifdef CONFIG_PCI_MSI
 
@@ -137,10 +131,8 @@ static void mlx4_set_port_mask(struct mlx4_dev *dev)
 {
 	int i;
 
-	dev->caps.port_mask = 0;
 	for (i = 1; i <= dev->caps.num_ports; ++i)
-		if (dev->caps.port_type[i] == MLX4_PORT_TYPE_IB)
-			dev->caps.port_mask |= 1 << (i - 1);
+		dev->caps.port_mask[i] = dev->caps.port_type[i];
 }
 
 static int mlx4_dev_cap(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap)
@@ -434,7 +426,7 @@ static int mlx4_init_icm(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap,
 	err = mlx4_init_icm_table(dev, &priv->mr_table.mtt_table,
 				  init_hca->mtt_base,
 				  dev->caps.mtt_entry_sz,
-				  dev->caps.num_mtt_segs,
+				  dev->caps.num_mtts,
 				  dev->caps.reserved_mtts, 1, 0);
 	if (err) {
 		mlx4_err(dev, "Failed to map MTT context memory, aborting.\n");
