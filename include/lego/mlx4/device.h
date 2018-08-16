@@ -49,6 +49,14 @@
 enum {
 	MLX4_FLAG_MSI_X		= 1 << 0,
 	MLX4_FLAG_OLD_PORT_CMDS	= 1 << 1,
+	MLX4_FLAG_MASTER	= 1 << 2,
+	MLX4_FLAG_SLAVE		= 1 << 3,
+	MLX4_FLAG_SRIOV		= 1 << 4,
+};
+
+enum {
+	MLX4_PORT_CAP_IS_SM	= 1 << 1,
+	MLX4_PORT_CAP_DEV_MGMT_SUP = 1 << 19,
 };
 
 enum {
@@ -600,5 +608,20 @@ int mlx4_wol_write(struct mlx4_dev *dev, u64 config, int port);
 
 int mlx4_counter_alloc(struct mlx4_dev *dev, u32 *idx);
 void mlx4_counter_free(struct mlx4_dev *dev, u32 idx);
+
+static inline int mlx4_is_master(struct mlx4_dev *dev)
+{
+	return dev->flags & MLX4_FLAG_MASTER;
+}
+
+static inline int mlx4_is_mfunc(struct mlx4_dev *dev)
+{
+	return dev->flags & (MLX4_FLAG_SLAVE | MLX4_FLAG_MASTER);
+}
+
+static inline int mlx4_is_slave(struct mlx4_dev *dev)
+{
+	return dev->flags & MLX4_FLAG_SLAVE;
+}
 
 #endif /* MLX4_DEVICE_H */

@@ -343,22 +343,24 @@ int mlx4_cmd_init(struct mlx4_dev *dev)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
 
-	//pr_debug("%s enter\n", __func__);
-
 	mutex_init(&priv->cmd.hcr_mutex);
 	sema_init(&priv->cmd.poll_sem, 1);
 	priv->cmd.use_events = 0;
 	priv->cmd.toggle     = 1;
 
-	//pr_debug("%s ioremap %lx size %d\n",
-	//		__func__, pci_resource_start(dev->pdev, 0) + MLX4_HCR_BASE,
-	//		MLX4_HCR_SIZE);
-	priv->cmd.hcr = ioremap(pci_resource_start(dev->pdev, 0) + MLX4_HCR_BASE,
-				MLX4_HCR_SIZE);
-	if (!priv->cmd.hcr) {
-		mlx4_err(dev, "Couldn't map command register.");
-		return -ENOMEM;
+	priv->cmd.hcr = NULL;
+
+	if (!mlx4_is_slave(dev)) {
+		priv->cmd.hcr = ioremap(pci_resource_start(dev->pdev, 0) +
+					MLX4_HCR_BASE, MLX4_HCR_SIZE);
+		if (!priv->cmd.hcr) {
+			mlx4_err(dev, "Couldn't map command register.\n");
+			return -ENOMEM;
+		}
 	}
+
+	if (mlx4_is_mfunc(dev))
+		panic("Not supported now. Need more port.\n");
 
 	priv->cmd.pool = dma_pool_create("mlx4_cmd", dev->pdev,  
 					 MLX4_MAILBOX_SIZE,
@@ -367,7 +369,6 @@ int mlx4_cmd_init(struct mlx4_dev *dev)
 		iounmap(priv->cmd.hcr);
 		return -ENOMEM;
 	}
-	//pr_debug("%s exit\n", __func__);
 
 	return 0;
 }

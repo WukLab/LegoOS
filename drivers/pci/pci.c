@@ -17,6 +17,10 @@
 
 #include "pci.h"
 
+const char *pci_power_names[] = {
+	"error", "D0", "D1", "D2", "D3hot", "D3cold", "unknown",
+};
+
 /*
  * If we set up a device for bus mastering, we need to check the latency
  * timer as certain BIOSes forget to set it properly.
@@ -69,7 +73,8 @@ void pci_pm_init(struct pci_dev *dev)
 
 	pmc &= PCI_PM_CAP_PME_MASK;
 	if (pmc) {
-		pr_info("pci %s: "
+#if 0
+		pr_debug("pci %s: "
 			 "PME# supported from%s%s%s%s%s\n",
 			 pci_name(dev),
 			 (pmc & PCI_PM_CAP_PME_D0) ? " D0" : "",
@@ -77,6 +82,7 @@ void pci_pm_init(struct pci_dev *dev)
 			 (pmc & PCI_PM_CAP_PME_D2) ? " D2" : "",
 			 (pmc & PCI_PM_CAP_PME_D3) ? " D3hot" : "",
 			 (pmc & PCI_PM_CAP_PME_D3cold) ? " D3cold" : "");
+#endif
 		dev->pme_support = pmc >> PCI_PM_CAP_PME_SHIFT;
 		dev->pme_poll = true;
 	}
@@ -147,8 +153,8 @@ int pci_set_power_state(struct pci_dev *dev, pci_power_t state)
 
 	/* Check if we're already there */
 	if (dev->current_state == state) {
-		pr_info("pci %s: already in state %#x\n",
-			pci_name(dev), state);
+		pr_info("pci %s: already in state %#x %s\n",
+			pci_name(dev), state, pci_power_name(state));
 		return 0;
 	}
 
@@ -186,8 +192,9 @@ static int pci_enable_device_flags(struct pci_dev *dev, unsigned long flags)
 		u16 pmcsr;
 		pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
 		dev->current_state = (pmcsr & PCI_PM_CTRL_STATE_MASK);
-		pr_info("pci %s: current_state %#x\n",
-			pci_name(dev), dev->current_state);
+		pr_info("pci %s: current_state %#x (%s)\n",
+			pci_name(dev), dev->current_state,
+			pci_power_name(dev->current_state));
 	}
 
 	if (atomic_inc_return(&dev->enable_cnt) > 1)

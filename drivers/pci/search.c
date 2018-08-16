@@ -117,6 +117,8 @@ static int match_pci_dev_by_id(struct pci_dev *pdev, void *data)
 }
 
 /*
+ * HACK!!!
+ *
  * This function is VERY fragile: if @start is invalid,
  * we will crash memory or have a kernel panic.
  * Thus use with caution, all callers.
