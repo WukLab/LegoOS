@@ -144,7 +144,7 @@ int mlx4_register_mac(struct mlx4_dev *dev, u8 port, u64 mac, int *qpn, u8 wrap)
 {
 	struct mlx4_port_info *info = &mlx4_priv(dev)->port[port];
 	struct mlx4_mac_table *table = &info->mac_table;
-	struct mlx4_mac_entry *entry;
+	//struct mlx4_mac_entry *entry;
 	int i, err = 0;
 	int free = -1;
 
@@ -230,24 +230,12 @@ static int validate_index(struct mlx4_dev *dev,
 	return err;
 }
 
-static int find_index(struct mlx4_dev *dev,
-		      struct mlx4_mac_table *table, u64 mac)
-{
-	int i;
-	for (i = 0; i < MLX4_MAX_MAC_NUM; i++) {
-		if (mac == (MLX4_MAC_MASK & be64_to_cpu(table->entries[i])))
-			return i;
-	}
-	/* Mac not found */
-	return -EINVAL;
-}
-
 void mlx4_unregister_mac(struct mlx4_dev *dev, u8 port, int qpn)
 {
 	struct mlx4_port_info *info = &mlx4_priv(dev)->port[port];
 	struct mlx4_mac_table *table = &info->mac_table;
 	int index = qpn - info->base_qpn;
-	struct mlx4_mac_entry *entry;
+	//struct mlx4_mac_entry *entry;
 
 #if 0
 	if (dev->caps.flags & MLX4_DEV_CAP_FLAG_VEP_UC_STEER) {
@@ -281,7 +269,7 @@ int mlx4_replace_mac(struct mlx4_dev *dev, u8 port, int qpn, u64 new_mac, u8 wra
 	struct mlx4_port_info *info = &mlx4_priv(dev)->port[port];
 	struct mlx4_mac_table *table = &info->mac_table;
 	int index = qpn - info->base_qpn;
-	struct mlx4_mac_entry *entry;
+	//struct mlx4_mac_entry *entry;
 	int err;
 
 #if 0

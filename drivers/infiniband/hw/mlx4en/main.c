@@ -953,8 +953,6 @@ static int mlx4_setup_hca(struct mlx4_dev *dev)
 	int port;
 	__be32 ib_port_default_caps;
 
-	//pr_debug("%s enter\n",__func__);
-
 	err = mlx4_init_uar_table(dev);
 	if (err) {
 		mlx4_err(dev, "Failed to initialize "

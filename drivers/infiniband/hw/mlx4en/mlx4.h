@@ -117,25 +117,20 @@ enum {
 	MLX4_PCI_DEV_FORCE_SENSE_PORT	= 1 << 1,
 };
 
-//#ifdef CONFIG_MLX4_DEBUG
-//extern int mlx4_debug_level;
-//#else /* CONFIG_MLX4_DEBUG */
 #define mlx4_debug_level	(1)
-//#endif /* CONFIG_MLX4_DEBUG */
 
-// XXX was originally dev_printk
 #define mlx4_dbg(mdev, format, arg...)					\
 do {									\
 	if (mlx4_debug_level)						\
-		printk(KERN_DEBUG format, ##arg); \
+		pr_debug(format, ##arg);				\
 } while (0)
 
 #define mlx4_err(mdev, format, arg...) \
-	printk(KERN_ERR format, ##arg)
+	pr_err(format, ##arg)
 #define mlx4_info(mdev, format, arg...) \
-	printk(KERN_INFO format, ##arg)
+	pr_info(format, ##arg)
 #define mlx4_warn(mdev, format, arg...) \
-	printk(KERN_ALERT format, ##arg)
+	pr_warn(format, ##arg)
 
 struct mlx4_bitmap {
 	u32			last;

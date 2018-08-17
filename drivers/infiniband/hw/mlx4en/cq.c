@@ -319,7 +319,6 @@ err_radix:
 	cq_table_rb_delete(&cq_table->tree, cq->cqn);
 	spin_unlock_irq(&cq_table->lock);
 
-err_cmpt_put:
 	mlx4_table_put(dev, &cq_table->cmpt_table, cq->cqn);
 
 err_put:

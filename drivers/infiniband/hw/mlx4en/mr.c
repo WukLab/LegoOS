@@ -141,16 +141,27 @@ static int mlx4_buddy_init(struct mlx4_buddy *buddy, int max_order)
 
 	buddy->bits = kzalloc((buddy->max_order + 1) * sizeof (long *),
 			      GFP_KERNEL);
+	if (!buddy->bits) {
+		pr_info("size: %zu\n", (buddy->max_order + 1) * sizeof (long *));
+		return -ENOMEM;
+	}
+
 	buddy->num_free = kcalloc((buddy->max_order + 1), sizeof *buddy->num_free,
 				  GFP_KERNEL);
-	if (!buddy->bits || !buddy->num_free)
-		goto err_out;
+	if (!buddy->num_free) {
+		pr_info("nr: %u size: %zu\n", (buddy->max_order + 1), sizeof *buddy->num_free);
+		kfree(buddy->bits);
+		return -ENOMEM;
+	}
 
 	for (i = 0; i <= buddy->max_order; ++i) {
 		s = BITS_TO_LONGS(1 << (buddy->max_order - i));
 		buddy->bits[i] = kmalloc(s * sizeof (long), GFP_KERNEL);
-		if (!buddy->bits[i])
+		if (!buddy->bits[i]) {
+			pr_info("size: %lu max_order: %d\n",
+				s * sizeof(long), buddy->max_order - i);
 			goto err_out_free;
+		}
 		bitmap_zero(buddy->bits[i], 1 << (buddy->max_order - i));
 	}
 
@@ -163,7 +174,6 @@ err_out_free:
 	for (i = 0; i <= buddy->max_order; ++i)
 		kfree(buddy->bits[i]);
 
-err_out:
 	kfree(buddy->bits);
 	kfree(buddy->num_free);
 

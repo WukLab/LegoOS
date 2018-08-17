@@ -281,50 +281,6 @@ void mlx4_cmd_event(struct mlx4_dev *dev, u16 token, u8 status, u64 out_param)
 	complete(&context->done);
 }
 
-static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
-			 int out_is_imm, u32 in_modifier, u8 op_modifier,
-			 u16 op, unsigned long timeout)
-{
-	struct mlx4_cmd *cmd = &mlx4_priv(dev)->cmd;
-	struct mlx4_cmd_context *context;
-	int err = 0;
-
-	down(&cmd->event_sem);
-
-	spin_lock(&cmd->context_lock);
-	BUG_ON(cmd->free_head < 0);
-	context = &cmd->context[cmd->free_head];
-	context->token += cmd->token_mask + 1;
-	cmd->free_head = context->next;
-	spin_unlock(&cmd->context_lock);
-
-	init_completion(&context->done);
-
-	mlx4_cmd_post(dev, in_param, out_param ? *out_param : 0,
-		      in_modifier, op_modifier, op, context->token, 1);
-
-	if (!wait_for_completion_timeout(&context->done, msecs_to_jiffies(timeout))) {
-		err = -EBUSY;
-		goto out;
-	}
-
-	err = context->result;
-	if (err)
-		goto out;
-
-	if (out_is_imm)
-		*out_param = context->out_param;
-
-out:
-	spin_lock(&cmd->context_lock);
-	context->next = cmd->free_head;
-	cmd->free_head = context - cmd->context;
-	spin_unlock(&cmd->context_lock);
-
-	up(&cmd->event_sem);
-	return err;
-}
-
 int __mlx4_cmd(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	       int out_is_imm, u32 in_modifier, u8 op_modifier,
 	       u16 op, unsigned long timeout)
@@ -362,7 +318,7 @@ int mlx4_cmd_init(struct mlx4_dev *dev)
 	if (mlx4_is_mfunc(dev))
 		panic("Not supported now. Need more port.\n");
 
-	priv->cmd.pool = dma_pool_create("mlx4_cmd", dev->pdev,  
+	priv->cmd.pool = dma_pool_create("mlx4_cmd", &(dev->pdev->dev),
 					 MLX4_MAILBOX_SIZE,
 					 MLX4_MAILBOX_SIZE, 0);
 	if (!priv->cmd.pool) {
