@@ -39,12 +39,12 @@
 
 #include <lego/mutex.h>
 #include <lego/rbtree.h>
-//#include <lego/radix-tree.h>
 #include <lego/timer.h>
 #include <lego/semaphore.h>
 #include <lego/workqueue.h>
 #include <lego/completion.h>
 
+#include <lego/mlx4/cmd.h>
 #include <lego/mlx4/device.h>
 #include <lego/mlx4/driver.h>
 #include <lego/mlx4/doorbell.h>
@@ -67,17 +67,32 @@
 #define MLX4_RATELIMIT_UNITS 3 /* 100 Mbps */
 #define MLX4_RATELIMIT_DEFAULT 0xffff
 
+extern int mlx4_log_num_mgm_entry_size;
+extern int log_mtts_per_seg;
+
+#define MLX4_MAX_NUM_SLAVES	(MLX4_MAX_NUM_PF + MLX4_MAX_NUM_VF)
+#define ALL_SLAVES 0xff
 
 enum {
 	MLX4_HCR_BASE		= 0x80680,
 	MLX4_HCR_SIZE		= 0x0001c,
-	MLX4_CLR_INT_SIZE	= 0x00008
+	MLX4_CLR_INT_SIZE	= 0x00008,
+	MLX4_SLAVE_COMM_BASE	= 0x0,
+	MLX4_COMM_PAGESIZE	= 0x1000,
+	MLX4_CLOCK_SIZE		= 0x00008,
 };
 
 enum {
 	MLX4_MGM_ENTRY_SIZE	=  0x100,
 	MLX4_QP_PER_MGM		= 4 * (MLX4_MGM_ENTRY_SIZE / 16 - 2),
-	MLX4_MTT_ENTRY_PER_SEG	= 8
+};
+
+enum {
+	MLX4_DEFAULT_MGM_LOG_ENTRY_SIZE = 10,
+	MLX4_MIN_MGM_LOG_ENTRY_SIZE = 7,
+	MLX4_MAX_MGM_LOG_ENTRY_SIZE = 12,
+	MLX4_MAX_QP_PER_MGM = 4 * ((1 << MLX4_MAX_MGM_LOG_ENTRY_SIZE) / 16 - 2),
+	MLX4_MTT_ENTRY_PER_SEG	= 8,
 };
 
 enum {
@@ -436,6 +451,9 @@ struct mlx4_priv {
 	struct list_head	bf_list;
 	struct mutex		bf_mutex;
 	struct io_mapping	*bf_mapping;
+	void __iomem            *clock_mapping;
+	int			reserved_mtts;
+	int			fs_hash_mode;
 };
 
 static inline struct mlx4_priv *mlx4_priv(struct mlx4_dev *dev)
@@ -514,7 +532,6 @@ void mlx4_srq_event(struct mlx4_dev *dev, u32 srqn, int event_type);
 
 void mlx4_handle_catas_err(struct mlx4_dev *dev);
 
-#if 0
 int mlx4_SENSE_PORT(struct mlx4_dev *dev, int port,
 		    enum mlx4_port_type *type);
 void mlx4_do_sense_ports(struct mlx4_dev *dev,
@@ -523,7 +540,6 @@ void mlx4_do_sense_ports(struct mlx4_dev *dev,
 void mlx4_start_sense(struct mlx4_dev *dev);
 void mlx4_stop_sense(struct mlx4_dev *dev);
 void mlx4_sense_init(struct mlx4_dev *dev);
-#endif
 int mlx4_check_port_params(struct mlx4_dev *dev,
 			   enum mlx4_port_type *port_type);
 int mlx4_change_port_types(struct mlx4_dev *dev,
@@ -541,4 +557,8 @@ int mlx4_qp_detach_common(struct mlx4_dev *dev, struct mlx4_qp *qp, u8 gid[16],
 int mlx4_qp_attach_common(struct mlx4_dev *dev, struct mlx4_qp *qp, u8 gid[16],
 			  int block_mcast_loopback, enum mlx4_protocol prot,
 			  enum mlx4_steer_type steer);
+
+int mlx4_get_mgm_entry_size(struct mlx4_dev *dev);
+int mlx4_get_qp_per_mgm(struct mlx4_dev *dev);
+
 #endif /* MLX4_H */

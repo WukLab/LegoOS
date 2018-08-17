@@ -90,11 +90,22 @@ enum {
 };
 
 enum {
-	MLX4_MAX_PORTS		= 2
+	MLX4_MAX_PORTS		= 2,
+	MLX4_MAX_PORT_PKEYS	= 128,
 };
 
 enum {
 	MLX4_BOARD_ID_LEN = 64
+};
+
+enum {
+	MLX4_MAX_NUM_PF		= 16,
+	MLX4_MAX_NUM_VF		= 64,
+	MLX4_MFUNC_MAX		= 80,
+	MLX4_MAX_EQ_NUM		= 1024,
+	MLX4_MFUNC_EQ_NUM	= 4,
+	MLX4_MFUNC_MAX_EQES     = 8,
+	MLX4_MFUNC_EQE_MASK     = (MLX4_MFUNC_MAX_EQES - 1)
 };
 
 enum {
@@ -253,6 +264,7 @@ enum mlx4_qp_region {
 };
 
 enum mlx4_port_type {
+	MLX4_PORT_TYPE_NONE	= 0,
 	MLX4_PORT_TYPE_IB	= 1,
 	MLX4_PORT_TYPE_ETH	= 2,
 	MLX4_PORT_TYPE_AUTO	= 3
@@ -572,6 +584,10 @@ struct mlx4_dev {
 	struct rb_root		qp_table_tree;
 	u8			rev_id;
 	char			board_id[MLX4_BOARD_ID_LEN];
+	int			num_vfs;
+	int			oper_log_mgm_entry_size;
+	u64			regid_promisc_array[MLX4_MAX_PORTS + 1];
+	u64			regid_allmulti_array[MLX4_MAX_PORTS + 1];
 };
 
 struct mlx4_init_port_param {
