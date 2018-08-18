@@ -32,6 +32,8 @@
  * SOFTWARE.
  */
 
+#define pr_fmt(fmt) "mlx4_core: " fmt
+
 #include <lego/sched.h>
 #include <lego/slab.h>
 #include <lego/pci.h>
@@ -401,7 +403,7 @@ void mlx4_cmd_event(struct mlx4_dev *dev, u16 token, u8 status, u64 out_param)
 	complete(&context->done);
 }
 
-__used static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
+static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 			 int out_is_imm, u32 in_modifier, u8 op_modifier,
 			 u16 op, unsigned long timeout)
 {
@@ -423,6 +425,7 @@ __used static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_par
 	mlx4_cmd_post(dev, in_param, out_param ? *out_param : 0,
 		      in_modifier, op_modifier, op, context->token, 1);
 
+	pr_info("%s(): going to sleep\n", __func__);
 	if (!wait_for_completion_timeout(&context->done,
 					 msecs_to_jiffies(timeout))) {
 		mlx4_warn(dev, "command 0x%x timed out (go bit not cleared)\n",
@@ -430,6 +433,7 @@ __used static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_par
 		err = -EBUSY;
 		goto out;
 	}
+	pr_info("%s(): after sleep\n", __func__);
 
 	err = context->result;
 	if (err) {
@@ -462,9 +466,6 @@ int __mlx4_cmd(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	       int out_is_imm, u32 in_modifier, u8 op_modifier,
 	       u16 op, unsigned long timeout)
 {
-	return mlx4_cmd_poll(dev, in_param, out_param, out_is_imm,
-			     in_modifier, op_modifier, op, timeout);
-
 	if (!mlx4_is_mfunc(dev)) {
 		if (mlx4_priv(dev)->cmd.use_events)
 			return mlx4_cmd_wait(dev, in_param, out_param,
@@ -476,6 +477,7 @@ int __mlx4_cmd(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 					     op_modifier, op, timeout);
 	}
 	panic("mlx4_slave_cmd() needed. Why?");
+	return 0;
 }
 
 int mlx4_cmd_init(struct mlx4_dev *dev)
@@ -529,16 +531,41 @@ void mlx4_cmd_cleanup(struct mlx4_dev *dev)
  */
 int mlx4_cmd_use_events(struct mlx4_dev *dev)
 {
-/*
- * NOTE!!!
- * Lego does not use interruptes. Lego uses polling.
- *
- * This function will introduce unnecessary semaphore deadlock, because
- * our __mlx4_cmd does not use mlx4_cmd_wait().
- */
+#if 0
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	int i;
+	int err = 0;
 
-	pr_info("%s(): no interruptes, polling instead!\n", __func__);
+	priv->cmd.context = kmalloc(priv->cmd.max_cmds *
+				   sizeof (struct mlx4_cmd_context),
+				   GFP_KERNEL);
+	if (!priv->cmd.context)
+		return -ENOMEM;
+
+	for (i = 0; i < priv->cmd.max_cmds; ++i) {
+		priv->cmd.context[i].token = i;
+		priv->cmd.context[i].next  = i + 1;
+	}
+
+	priv->cmd.context[priv->cmd.max_cmds - 1].next = -1;
+	priv->cmd.free_head = 0;
+
+	sema_init(&priv->cmd.event_sem, priv->cmd.max_cmds);
+	spin_lock_init(&priv->cmd.context_lock);
+
+	for (priv->cmd.token_mask = 1;
+	     priv->cmd.token_mask < priv->cmd.max_cmds;
+	     priv->cmd.token_mask <<= 1)
+		; /* nothing */
+	--priv->cmd.token_mask;
+
+	down(&priv->cmd.poll_sem);
+	priv->cmd.use_events = 1;
+
+	return err;
+#else
 	return 0;
+#endif
 }
 
 /*

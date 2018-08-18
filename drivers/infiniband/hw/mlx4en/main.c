@@ -1169,6 +1169,12 @@ static void mlx4_enable_msi_x(struct mlx4_dev *dev)
 	pr_info("%s(): nomsi by default.\n", __func__);
 }
 
+int mlx4_get_base_qpn(struct mlx4_dev *dev, u8 port)
+{
+	return dev->caps.reserved_qps_base[MLX4_QP_REGION_ETH_ADDR] +
+			(port - 1) * (1 << dev->caps.log_num_macs);
+}
+
 static int mlx4_init_port_info(struct mlx4_dev *dev, int port)
 {
 	struct mlx4_port_info *info = &mlx4_priv(dev)->port[port];
@@ -1176,25 +1182,11 @@ static int mlx4_init_port_info(struct mlx4_dev *dev, int port)
 
 	info->dev = dev;
 	info->port = port;
-	mlx4_init_mac_table(dev, &info->mac_table);
-	mlx4_init_vlan_table(dev, &info->vlan_table);
-	info->base_qpn = dev->caps.reserved_qps_base[MLX4_QP_REGION_ETH_ADDR] +
-			(port - 1) * (1 << log_num_mac);
-
-#if 0
-	sprintf(info->dev_name, "mlx4_port%d", port);
-	info->port_attr.attr.name = info->dev_name;
-	info->port_attr.attr.mode = S_IRUGO | S_IWUSR;
-	info->port_attr.show      = show_port_type;
-	info->port_attr.store     = set_port_type;
-	sysfs_attr_init(&info->port_attr.attr);
-
-	err = device_create_file(&dev->pdev->dev, &info->port_attr);
-	if (err) {
-		mlx4_err(dev, "Failed to create file for port %d\n", port);
-		info->port = -1;
+	if (!mlx4_is_slave(dev)) {
+		mlx4_init_mac_table(dev, &info->mac_table);
+		mlx4_init_vlan_table(dev, &info->vlan_table);
+		info->base_qpn = mlx4_get_base_qpn(dev, port);
 	}
-#endif
 	return err;
 }
 
@@ -1472,10 +1464,10 @@ slave_start:
 #if 0
 	mlx4_sense_init(dev);
 	mlx4_start_sense(dev);
+#endif
 
 	priv->pci_dev_data = pci_dev_data;
 	pci_set_drvdata(pdev, dev);
-#endif
 
 	return 0;
 

@@ -31,11 +31,10 @@
  * SOFTWARE.
  */
 
-//#include <lego/interrupt.h>
 #include <lego/slab.h>
 #include <lego/mm.h>
+#include <lego/irqdesc.h>
 #include <lego/dma-mapping.h>
-
 #include <lego/mlx4/cmd.h>
 
 #include "mlx4.h"
@@ -411,12 +410,14 @@ static irqreturn_t mlx4_interrupt(int irq, void *dev_ptr)
 	writel(priv->eq_table.clr_mask, priv->eq_table.clr_int);
 
 	pr_info("%s(): irq %d\n", __func__, irq);
+	WARN_ON(1);
 	return IRQ_RETVAL(work);
 }
 
 static irqreturn_t mlx4_msi_x_interrupt(int irq, void *eq_ptr)
 {
 	pr_info("%s(): irq %d\n", __func__, irq);
+	WARN_ON(1);
 	return IRQ_HANDLED;
 }
 

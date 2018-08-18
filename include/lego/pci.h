@@ -724,6 +724,21 @@ struct pci_dev *pci_get_slot(struct pci_bus *bus, unsigned int devfn);
 	 (pci_resource_end((dev), (bar)) -		\
 	  pci_resource_start((dev), (bar)) + 1))
 
+/*
+ * Similar to the helpers above, these manipulate per-pci_dev
+ * driver-specific data.  They are really just a wrapper around
+ * the generic device structure functions of these calls.
+ */
+static inline void *pci_get_drvdata(struct pci_dev *pdev)
+{
+	return dev_get_drvdata(&pdev->dev);
+}
+
+static inline void pci_set_drvdata(struct pci_dev *pdev, void *data)
+{
+	dev_set_drvdata(&pdev->dev, data);
+}
+
 /* If you want to know what to call your pci_dev, ask this function.
  * Again, it's a wrapper around the generic device.
  */
@@ -919,6 +934,8 @@ void pci_release_region(struct pci_dev *, int);
 void pci_set_master(struct pci_dev *dev);
 void pci_clear_master(struct pci_dev *dev);
 
+u8 pci_swizzle_interrupt_pin(const struct pci_dev *dev, u8 pin);
+int pci_get_interrupt_pin(struct pci_dev *dev, struct pci_dev **bridge);
 
 
 

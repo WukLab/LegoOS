@@ -23,6 +23,7 @@
 #define _LEGO_DEVICE_H_
 
 #include <lego/kernel.h>
+#include <lego/slab.h>
 
 #define MAX_DEVICE_NAME		(64)
 
@@ -104,8 +105,15 @@ struct device_dma_parameters {
 	unsigned long segment_boundary_mask;
 };
 
+struct device_private {
+	void *driver_data;
+	struct device *device;
+};
+
 struct device {
-	struct device	*parent;
+	struct device		*parent;
+	struct device_private	*p;
+
 	char		name[MAX_DEVICE_NAME];
 
 	struct bus_type	*bus;		/* type of bus device is on */
@@ -176,6 +184,35 @@ static inline void set_dev_node(struct device *dev, int node)
 {
 }
 #endif
+
+static inline void *dev_get_drvdata(const struct device *dev)
+{
+	if (dev && dev->p)
+		return dev->p->driver_data;
+	return NULL;
+}
+
+static inline int device_private_init(struct device *dev)
+{
+	dev->p = kzalloc(sizeof(*dev->p), GFP_KERNEL);
+	if (!dev->p)
+		return -ENOMEM;
+	dev->p->device = dev;
+	return 0;
+}
+
+static inline int dev_set_drvdata(struct device *dev, void *data)
+{
+	int error;
+
+	if (!dev->p) {
+		error = device_private_init(dev);
+		if (error)
+			return error;
+	}
+	dev->p->driver_data = data;
+	return 0;
+}
 
 /* driver/base/core.c */
 void __init device_init(void);

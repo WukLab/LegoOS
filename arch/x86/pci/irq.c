@@ -14,12 +14,17 @@
 #include <lego/kernel.h>
 #include <lego/resource.h>
 
+#include <asm/io_apic.h>
+
 static int pirq_enable_irq(struct pci_dev *dev);
 
 int (*pcibios_enable_irq)(struct pci_dev *dev) = pirq_enable_irq;
 
 static int pirq_enable_irq(struct pci_dev *dev)
 {
-	pr_info_once("%s(): TODO\n", __func__);
+	u8 pin;
+
+	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
+	pr_info("%s(): dev: %s pin: %d\n", __func__, dev_name(&dev->dev), pin);
 	return 0;
 }

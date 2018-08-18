@@ -4,4 +4,4 @@ obj-y += irq.o
 obj-y += mmconfig-shared.o mmconfig_64.o
 obj-y += bus_numa.o
 
-#obj-y += pci.o msi.o
+#obj-y += msi.o
