@@ -43,6 +43,7 @@
 #include <lego/slab.h>
 #include <lego/mlx4/driver.h>
 #include <lego/mlx4/doorbell.h>
+#include <rdma/ib_verbs.h>
 
 #include "mlx4.h"
 #include "fw.h"
@@ -380,6 +381,7 @@ static int mlx4_init_cmpt_table(struct mlx4_dev *dev, u64 cmpt_base,
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	int err;
+	int num_eqs;
 
 	err = mlx4_init_icm_table(dev, &priv->qp_table.cmpt_table,
 				  cmpt_base +
@@ -391,7 +393,6 @@ static int mlx4_init_cmpt_table(struct mlx4_dev *dev, u64 cmpt_base,
 	if (err)
 		goto err;
 
-#if 0
 	err = mlx4_init_icm_table(dev, &priv->srq_table.cmpt_table,
 				  cmpt_base +
 				  ((u64) (MLX4_CMPT_TYPE_SRQ *
@@ -400,7 +401,6 @@ static int mlx4_init_cmpt_table(struct mlx4_dev *dev, u64 cmpt_base,
 				  dev->caps.reserved_srqs, 0, 0);
 	if (err)
 		goto err_qp;
-#endif
 
 	err = mlx4_init_icm_table(dev, &priv->cq_table.cmpt_table,
 				  cmpt_base +
@@ -411,12 +411,13 @@ static int mlx4_init_cmpt_table(struct mlx4_dev *dev, u64 cmpt_base,
 	if (err)
 		goto err_srq;
 
+	num_eqs = (mlx4_is_master(dev)) ? dev->phys_caps.num_phys_eqs :
+		  dev->caps.num_eqs;
 	err = mlx4_init_icm_table(dev, &priv->eq_table.cmpt_table,
 				  cmpt_base +
 				  ((u64) (MLX4_CMPT_TYPE_EQ *
 					  cmpt_entry_sz) << MLX4_CMPT_SHIFT),
-				  cmpt_entry_sz,
-				  dev->caps.num_eqs, dev->caps.num_eqs, 0, 0);
+				  cmpt_entry_sz, num_eqs, num_eqs, 0, 0);
 	if (err)
 		goto err_cq;
 
@@ -426,8 +427,9 @@ err_cq:
 	mlx4_cleanup_icm_table(dev, &priv->cq_table.cmpt_table);
 
 err_srq:
-//	mlx4_cleanup_icm_table(dev, &priv->srq_table.cmpt_table);
+	mlx4_cleanup_icm_table(dev, &priv->srq_table.cmpt_table);
 
+err_qp:
 	mlx4_cleanup_icm_table(dev, &priv->qp_table.cmpt_table);
 
 err:
@@ -439,6 +441,7 @@ static int mlx4_init_icm(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap,
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	u64 aux_pages;
+	int num_eqs;
 	int err;
 
 	err = mlx4_SET_ICM_SIZE(dev, icm_size, &aux_pages);
@@ -470,10 +473,11 @@ static int mlx4_init_icm(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap,
 		goto err_unmap_aux;
 	}
 
+	num_eqs = (mlx4_is_master(dev)) ? dev->phys_caps.num_phys_eqs :
+		   dev->caps.num_eqs;
 	err = mlx4_init_icm_table(dev, &priv->eq_table.table,
 				  init_hca->eqc_base, dev_cap->eqc_entry_sz,
-				  dev->caps.num_eqs, dev->caps.num_eqs,
-				  0, 0);
+				  num_eqs, num_eqs, 0, 0);
 	if (err) {
 		mlx4_err(dev, "Failed to map EQ context memory, aborting.\n");
 		goto err_unmap_cmpt;
@@ -564,7 +568,6 @@ static int mlx4_init_icm(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap,
 		goto err_unmap_rdmarc;
 	}
 
-#if 0
 	err = mlx4_init_icm_table(dev, &priv->srq_table.table,
 				  init_hca->srqc_base,
 				  dev_cap->srq_entry_sz,
@@ -572,16 +575,19 @@ static int mlx4_init_icm(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap,
 				  dev->caps.reserved_srqs, 0, 0);
 	if (err) {
 		mlx4_err(dev, "Failed to map SRQ context memory, aborting.\n");
-		goto err_unmap_cq;
+		goto err_unmap_srq;
 	}
 
 	/*
-	 * It's not strictly required, but for simplicity just map the
-	 * whole multicast group table now.  The table isn't very big
-	 * and it's a lot easier than trying to track ref counts.
+	 * For flow steering device managed mode it is required to use
+	 * mlx4_init_icm_table. For B0 steering mode it's not strictly
+	 * required, but for simplicity just map the whole multicast
+	 * group table now.  The table isn't very big and it's a lot
+	 * easier than trying to track ref counts.
 	 */
 	err = mlx4_init_icm_table(dev, &priv->mcg_table.table,
-				  init_hca->mc_base, MLX4_MGM_ENTRY_SIZE,
+				  init_hca->mc_base,
+				  mlx4_get_mgm_entry_size(dev),
 				  dev->caps.num_mgms + dev->caps.num_amgms,
 				  dev->caps.num_mgms + dev->caps.num_amgms,
 				  0, 0);
@@ -589,11 +595,10 @@ static int mlx4_init_icm(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap,
 		mlx4_err(dev, "Failed to map MCG context memory, aborting.\n");
 		goto err_unmap_srq;
 	}
-#endif
 
 	return 0;
 
-
+err_unmap_srq:
 	mlx4_cleanup_icm_table(dev, &priv->cq_table.table);
 
 err_unmap_rdmarc:
@@ -620,7 +625,6 @@ err_unmap_eq:
 err_unmap_cmpt:
 	mlx4_cleanup_icm_table(dev, &priv->eq_table.cmpt_table);
 	mlx4_cleanup_icm_table(dev, &priv->cq_table.cmpt_table);
-//	mlx4_cleanup_icm_table(dev, &priv->srq_table.cmpt_table);
 	mlx4_cleanup_icm_table(dev, &priv->qp_table.cmpt_table);
 
 err_unmap_aux:
@@ -725,8 +729,8 @@ static void mlx4_parav_master_pf_caps(struct mlx4_dev *dev)
 
 static int map_bf_area(struct mlx4_dev *dev)
 {
-	struct mlx4_priv *priv = mlx4_priv(dev);
 #if 0
+	struct mlx4_priv *priv = mlx4_priv(dev);
 	resource_size_t bf_start;
 	resource_size_t bf_len;
 	int err = 0;
@@ -744,7 +748,6 @@ static int map_bf_area(struct mlx4_dev *dev)
 
 	return err;
 #endif
-	priv->bf_mapping = NULL;
 	return 0;
 }
 
@@ -982,14 +985,12 @@ static int mlx4_setup_hca(struct mlx4_dev *dev)
 		goto err_kar_unmap;
 	}
 
-#if 0
 	err = mlx4_init_xrcd_table(dev);
 	if (err) {
 		mlx4_err(dev, "Failed to initialize "
 			 "reliable connection domain table, aborting.\n");
-		goto err_pd_table_free;
+		goto err;
 	}
-#endif
 
 	err = mlx4_init_mr_table(dev);
 	if (err) {
@@ -1043,7 +1044,7 @@ static int mlx4_setup_hca(struct mlx4_dev *dev)
 	if (err) {
 		mlx4_err(dev, "Failed to initialize "
 			 "shared receive queue table, aborting.\n");
-		goto err_cq_table_free;
+		goto err;
 	}
 #endif
 
@@ -1054,14 +1055,14 @@ static int mlx4_setup_hca(struct mlx4_dev *dev)
 		goto err_srq_table_free;
 	}
 
-#if 0
-	err = mlx4_init_mcg_table(dev);
-	if (err) {
-		mlx4_err(dev, "Failed to initialize "
-			 "multicast group table, aborting.\n");
-		goto err_qp_table_free;
+	if (!mlx4_is_slave(dev)) {
+		err = mlx4_init_mcg_table(dev);
+		if (err) {
+			mlx4_err(dev, "Failed to initialize "
+				 "multicast group table, aborting.\n");
+			goto err;
+		}
 	}
-#endif
 
 	err = mlx4_init_counters_table(dev);
 	if (err && err != -ENOENT) {
@@ -1069,36 +1070,44 @@ static int mlx4_setup_hca(struct mlx4_dev *dev)
 		goto err_counters_table_free;
 	}
 
-	for (port = 1; port <= dev->caps.num_ports; port++) {
-		ib_port_default_caps = 0;
-		err = mlx4_get_port_ib_caps(dev, port, &ib_port_default_caps);
-		if (err)
-			mlx4_warn(dev, "failed to get port %d default "
-				  "ib capabilities (%d). Continuing with "
-				  "caps = 0\n", port, err);
-		dev->caps.ib_port_def_cap[port] = ib_port_default_caps;
+	if (!mlx4_is_slave(dev)) {
+		for (port = 1; port <= dev->caps.num_ports; port++) {
+			ib_port_default_caps = 0;
+			err = mlx4_get_port_ib_caps(dev, port,
+						    &ib_port_default_caps);
+			if (err)
+				mlx4_warn(dev, "failed to get port %d default "
+					  "ib capabilities (%d). Continuing "
+					  "with caps = 0\n", port, err);
+			dev->caps.ib_port_def_cap[port] = ib_port_default_caps;
 
-		err = mlx4_check_ext_port_caps(dev, port);
-		if (err)
-			mlx4_warn(dev, "failed to get port %d extended "
-				  "port capabilities support info (%d)."
-				  " Assuming not supported\n", port, err);
+			/* initialize per-slave default ib port capabilities */
+			if (mlx4_is_master(dev)) {
+				int i;
+				for (i = 0; i < dev->num_slaves; i++) {
+					if (i == mlx4_master_func_num(dev))
+						continue;
+					priv->mfunc.master.slave_state[i].ib_cap_mask[port] =
+							ib_port_default_caps;
+				}
+			}
 
-		err = mlx4_SET_PORT(dev, port);
-		if (err) {
-			mlx4_err(dev, "Failed to set port %d, aborting\n",
-				port);
-			goto err_mcg_table_free;
+			if (mlx4_is_mfunc(dev))
+				dev->caps.port_ib_mtu[port] = IB_MTU_2048;
+			else
+				dev->caps.port_ib_mtu[port] = IB_MTU_4096;
+
+			err = mlx4_SET_PORT(dev, port, mlx4_is_master(dev) ?
+					    dev->caps.pkey_table_len[port] : -1);
+			if (err) {
+				mlx4_err(dev, "Failed to set port %d, aborting\n",
+					port);
+				goto err_counters_table_free;
+			}
 		}
 	}
-	mlx4_set_port_mask(dev);
-
-	//pr_debug("%s exit\n",__func__);
 
 	return 0;
-
-err_mcg_table_free:
-//	mlx4_cleanup_mcg_table(dev);
 
 err_counters_table_free:
 	mlx4_cleanup_counters_table(dev);
@@ -1132,12 +1141,23 @@ err_uar_free:
 
 err_uar_table_free:
 	mlx4_cleanup_uar_table(dev);
+
+err:
 	return err;
 }
 
 static void mlx4_enable_msi_x(struct mlx4_dev *dev)
 {
-	pr_info("%s(): TODO\n", __func__);
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	int i;
+
+	dev->caps.num_comp_vectors = 1;
+	dev->caps.comp_pool	   = 0;
+
+	for (i = 0; i < 2; ++i)
+		priv->eq_table.eq[i].irq = dev->pdev->irq;
+
+	pr_info("%s(): nomsi by default.\n", __func__);
 }
 
 static int mlx4_init_port_info(struct mlx4_dev *dev, int port)
@@ -1360,11 +1380,25 @@ slave_start:
 		goto err;
 	}
 
-	/* In slave functions, the communication channel must be initialized
+	/*
+	 * In slave functions, the communication channel must be initialized
 	 * before posting commands. Also, init num_slaves before calling
-	 * mlx4_init_hca */
-	if (mlx4_is_mfunc(dev))
-		panic("Not supported now. Need more port.\n");
+	 * mlx4_init_hca()
+	 */
+	if (mlx4_is_mfunc(dev)) {
+		pr_info("FAT NODE: mlx4_is_mfunc() is true!\n");
+		if (mlx4_is_master(dev))
+			dev->num_slaves = MLX4_MAX_NUM_SLAVES;
+		else {
+			dev->num_slaves = 0;
+			err = mlx4_multi_func_init(dev);
+			if (err) {
+				mlx4_err(dev, "Failed to init slave mfunc"
+					 " interface, aborting.\n");
+				goto err;
+			}
+		}
+	}
 
 	err = mlx4_init_hca(dev);
 	if (err) {

@@ -434,9 +434,9 @@ int mlx4_init_eq_table(struct mlx4_dev *dev)
 	int err;
 	int i;
 
-	//pr_debug("%s num_eq_uar %d\n", __func__, mlx4_num_eq_uar(dev));
-	priv->eq_table.uar_map = kcalloc(sizeof *priv->eq_table.uar_map,
-					 mlx4_num_eq_uar(dev), GFP_KERNEL);
+	priv->eq_table.uar_map = kcalloc(mlx4_num_eq_uar(dev),
+					 sizeof *priv->eq_table.uar_map,
+					 GFP_KERNEL);
 	if (!priv->eq_table.uar_map) {
 		err = -ENOMEM;
 		goto err_out_free;
@@ -450,14 +450,16 @@ int mlx4_init_eq_table(struct mlx4_dev *dev)
 	for (i = 0; i < mlx4_num_eq_uar(dev); ++i)
 		priv->eq_table.uar_map[i] = NULL;
 
-	err = mlx4_map_clr_int(dev);
-	if (err)
-		goto err_out_bitmap;
+	if (!mlx4_is_slave(dev)) {
+		err = mlx4_map_clr_int(dev);
+		if (err)
+			goto err_out_bitmap;
 
-	priv->eq_table.clr_mask =
-		swab32(1 << (priv->eq_table.inta_pin & 31));
-	priv->eq_table.clr_int  = priv->clr_base +
-		(priv->eq_table.inta_pin < 32 ? 4 : 0);
+		priv->eq_table.clr_mask =
+			swab32(1 << (priv->eq_table.inta_pin & 31));
+		priv->eq_table.clr_int  = priv->clr_base +
+			(priv->eq_table.inta_pin < 32 ? 4 : 0);
+	}
 
 	priv->eq_table.irq_names =
 		kmalloc(MLX4_IRQNAME_SIZE * (dev->caps.num_comp_vectors + 1 +

@@ -289,6 +289,7 @@ int mlx4_ib_resize_cq(struct ib_cq *ibcq, int entries)
 		goto err_buf;
 
 	mlx4_mtt_cleanup(dev->dev, &mtt);
+	{
 		struct mlx4_ib_cq_buf tmp_buf;
 		int tmp_cqe = 0;
 
@@ -307,7 +308,7 @@ int mlx4_ib_resize_cq(struct ib_cq *ibcq, int entries)
 
 		if (tmp_cqe)
 			mlx4_ib_free_cq_buf(dev, &tmp_buf, tmp_cqe);
-
+	}
 	goto out;
 
 err_buf:

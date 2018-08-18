@@ -67,6 +67,8 @@
 #define MLX4_RATELIMIT_UNITS 3 /* 100 Mbps */
 #define MLX4_RATELIMIT_DEFAULT 0xffff
 
+#define NOT_MASKED_PD_BITS 17
+
 extern int mlx4_log_num_mgm_entry_size;
 extern int log_mtts_per_seg;
 
@@ -143,6 +145,18 @@ enum mlx4_resource {
 	MLX4_NUM_OF_RESOURCE_TYPE
 };
 
+enum mlx4_alloc_mode {
+	RES_OP_RESERVE,
+	RES_OP_RESERVE_AND_MAP,
+	RES_OP_MAP_ICM,
+};
+
+enum mlx4_res_tracker_free_type {
+	RES_TR_FREE_ALL,
+	RES_TR_FREE_SLAVES_ONLY,
+	RES_TR_FREE_STRUCTS_ONLY,
+};
+
 #define MLX4_COMM_TIME		10000
 enum {
 	MLX4_COMM_CMD_RESET,
@@ -199,6 +213,42 @@ struct mlx4_icm_table {
 	struct mutex		mutex;
 	struct mlx4_icm	      **icm;
 };
+
+#define MLX4_MPT_FLAG_SW_OWNS	    (0xfUL << 28)
+#define MLX4_MPT_FLAG_FREE	    (0x3UL << 28)
+#define MLX4_MPT_FLAG_MIO	    (1 << 17)
+#define MLX4_MPT_FLAG_BIND_ENABLE   (1 << 15)
+#define MLX4_MPT_FLAG_PHYSICAL	    (1 <<  9)
+#define MLX4_MPT_FLAG_REGION	    (1 <<  8)
+
+#define MLX4_MPT_PD_FLAG_FAST_REG   (1 << 27)
+#define MLX4_MPT_PD_FLAG_RAE	    (1 << 28)
+#define MLX4_MPT_PD_FLAG_EN_INV	    (3 << 24)
+
+#define MLX4_MPT_QP_FLAG_BOUND_QP   (1 << 7)
+
+#define MLX4_MPT_STATUS_SW		0xF0
+#define MLX4_MPT_STATUS_HW		0x00
+
+/*
+ * Must be packed because mtt_seg is 64 bits but only aligned to 32 bits.
+ */
+struct mlx4_mpt_entry {
+	__be32 flags;
+	__be32 qpn;
+	__be32 key;
+	__be32 pd_flags;
+	__be64 start;
+	__be64 length;
+	__be32 lkey;
+	__be32 win_cnt;
+	u8	reserved1[3];
+	u8	mtt_rep;
+	__be64 mtt_addr;
+	__be32 mtt_sz;
+	__be32 entity_size;
+	__be32 first_byte_offset;
+} __packed;
 
 struct mlx4_eq {
 	struct mlx4_dev	       *dev;
@@ -449,7 +499,50 @@ struct mlx4_steer {
 	struct list_head high_prios;
 };
 
+struct mlx4_slave_eqe {
+	u8 type;
+	u8 port;
+	u32 param;
+};
+
+#define VLAN_FLTR_SIZE	128
+
+struct mlx4_vlan_fltr {
+	__be32 entry[VLAN_FLTR_SIZE];
+};
+
+struct mlx4_slave_event_eq_info {
+	int eqn;
+	u16 token;
+};
+
+#define MLX4_EVENT_TYPES_NUM 64
+
+struct mlx4_slave_state {
+	u8 comm_toggle;
+	u8 last_cmd;
+	u8 init_port_mask;
+	bool active;
+	u8 function;
+	dma_addr_t vhcr_dma;
+	u16 mtu[MLX4_MAX_PORTS + 1];
+	__be32 ib_cap_mask[MLX4_MAX_PORTS + 1];
+	struct mlx4_slave_eqe eq[MLX4_MFUNC_MAX_EQES];
+	struct list_head mcast_filters[MLX4_MAX_PORTS + 1];
+	struct mlx4_vlan_fltr *vlan_filter[MLX4_MAX_PORTS + 1];
+	/* event type to eq number lookup */
+	struct mlx4_slave_event_eq_info event_eq[MLX4_EVENT_TYPES_NUM];
+	u16 eq_pi;
+	u16 eq_ci;
+	spinlock_t lock;
+	/*initialized via the kzalloc*/
+	u8 is_slave_going_down;
+	u32 cookie;
+	enum slave_port_state port_state[MLX4_MAX_PORTS + 1];
+};
+
 struct mlx4_mfunc_master_ctx {
+	struct mlx4_slave_state *slave_state;
 	int			init_port_ref[MLX4_MAX_PORTS + 1];
 	u16			max_mtu[MLX4_MAX_PORTS + 1];
 	int			disable_mcast_ref[MLX4_MAX_PORTS + 1];
@@ -537,24 +630,24 @@ int mlx4_alloc_eq_table(struct mlx4_dev *dev);
 void mlx4_free_eq_table(struct mlx4_dev *dev);
 
 int mlx4_init_pd_table(struct mlx4_dev *dev);
-//int mlx4_init_xrcd_table(struct mlx4_dev *dev);
+int mlx4_init_xrcd_table(struct mlx4_dev *dev);
 int mlx4_init_uar_table(struct mlx4_dev *dev);
 int mlx4_init_mr_table(struct mlx4_dev *dev);
 int mlx4_init_eq_table(struct mlx4_dev *dev);
 int mlx4_init_cq_table(struct mlx4_dev *dev);
 int mlx4_init_qp_table(struct mlx4_dev *dev);
-//int mlx4_init_srq_table(struct mlx4_dev *dev);
-//int mlx4_init_mcg_table(struct mlx4_dev *dev);
+int mlx4_init_srq_table(struct mlx4_dev *dev);
+int mlx4_init_mcg_table(struct mlx4_dev *dev);
 
 void mlx4_cleanup_pd_table(struct mlx4_dev *dev);
-//void mlx4_cleanup_xrcd_table(struct mlx4_dev *dev);
+void mlx4_cleanup_xrcd_table(struct mlx4_dev *dev);
 void mlx4_cleanup_uar_table(struct mlx4_dev *dev);
 void mlx4_cleanup_mr_table(struct mlx4_dev *dev);
 void mlx4_cleanup_eq_table(struct mlx4_dev *dev);
 void mlx4_cleanup_cq_table(struct mlx4_dev *dev);
 void mlx4_cleanup_qp_table(struct mlx4_dev *dev);
-//void mlx4_cleanup_srq_table(struct mlx4_dev *dev);
-//void mlx4_cleanup_mcg_table(struct mlx4_dev *dev);
+void mlx4_cleanup_srq_table(struct mlx4_dev *dev);
+void mlx4_cleanup_mcg_table(struct mlx4_dev *dev);
 
 #if 0
 void mlx4_start_catas_poll(struct mlx4_dev *dev);
@@ -605,7 +698,7 @@ int mlx4_change_port_types(struct mlx4_dev *dev,
 void mlx4_init_mac_table(struct mlx4_dev *dev, struct mlx4_mac_table *table);
 void mlx4_init_vlan_table(struct mlx4_dev *dev, struct mlx4_vlan_table *table);
 
-int mlx4_SET_PORT(struct mlx4_dev *dev, u8 port);
+int mlx4_SET_PORT(struct mlx4_dev *dev, u8 port, int pkey_tbl_sz);
 int mlx4_get_port_ib_caps(struct mlx4_dev *dev, u8 port, __be32 *caps);
 int mlx4_check_ext_port_caps(struct mlx4_dev *dev, u8 port);
 
@@ -617,5 +710,25 @@ int mlx4_qp_attach_common(struct mlx4_dev *dev, struct mlx4_qp *qp, u8 gid[16],
 
 int mlx4_get_mgm_entry_size(struct mlx4_dev *dev);
 int mlx4_get_qp_per_mgm(struct mlx4_dev *dev);
+
+static inline void set_param_l(u64 *arg, u32 val)
+{
+	*arg = (*arg & 0xffffffff00000000ULL) | (u64) val;
+}
+
+static inline void set_param_h(u64 *arg, u32 val)
+{
+	*arg = (*arg & 0xffffffff) | ((u64) val << 32);
+}
+
+static inline u32 get_param_l(u64 *arg)
+{
+	return (u32) (*arg & 0xffffffff);
+}
+
+static inline u32 get_param_h(u64 *arg)
+{
+	return (u32)(*arg >> 32);
+}
 
 #endif /* MLX4_H */

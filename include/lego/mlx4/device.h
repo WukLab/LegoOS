@@ -290,6 +290,25 @@ enum {
 	MLX4_MAX_FAST_REG_PAGES = 511,
 };
 
+enum slave_port_state {
+	SLAVE_PORT_DOWN = 0,
+	SLAVE_PENDING_UP,
+	SLAVE_PORT_UP,
+};
+
+enum slave_port_gen_event {
+	SLAVE_PORT_GEN_EVENT_DOWN = 0,
+	SLAVE_PORT_GEN_EVENT_UP,
+	SLAVE_PORT_GEN_EVENT_NONE,
+};
+
+enum slave_port_state_event {
+	MLX4_PORT_STATE_DEV_EVENT_PORT_DOWN,
+	MLX4_PORT_STATE_DEV_EVENT_PORT_UP,
+	MLX4_PORT_STATE_IB_PORT_STATE_EVENT_GID_VALID,
+	MLX4_PORT_STATE_IB_EVENT_GID_INVALID,
+};
+
 static inline u64 mlx4_fw_ver(u64 major, u64 minor, u64 subminor)
 {
 	return (major << 32) | (minor << 16) | subminor;
@@ -415,7 +434,7 @@ struct mlx4_buf {
 };
 
 struct mlx4_mtt {
-	u32			first_seg;
+	u32			offset;
 	int			order;
 	int			page_shift;
 };
@@ -579,6 +598,7 @@ struct mlx4_counter {
 struct mlx4_dev {
 	struct pci_dev	       *pdev;
 	unsigned long		flags;
+	unsigned long		num_slaves;
 	struct mlx4_caps	caps;
 	struct mlx4_phys_caps	phys_caps;
 	struct rb_root		qp_table_tree;
@@ -648,7 +668,7 @@ u64 mlx4_mtt_addr(struct mlx4_dev *dev, struct mlx4_mtt *mtt);
 
 int mlx4_mr_alloc(struct mlx4_dev *dev, u32 pd, u64 iova, u64 size, u32 access,
 		  int npages, int page_shift, struct mlx4_mr *mr);
-void mlx4_mr_free(struct mlx4_dev *dev, struct mlx4_mr *mr);
+int mlx4_mr_free(struct mlx4_dev *dev, struct mlx4_mr *mr);
 int mlx4_mr_enable(struct mlx4_dev *dev, struct mlx4_mr *mr);
 int mlx4_write_mtt(struct mlx4_dev *dev, struct mlx4_mtt *mtt,
 		   int start_index, int npages, u64 *page_list);
@@ -733,6 +753,11 @@ static inline int mlx4_is_mfunc(struct mlx4_dev *dev)
 static inline int mlx4_is_slave(struct mlx4_dev *dev)
 {
 	return dev->flags & MLX4_FLAG_SLAVE;
+}
+
+static inline int mlx4_master_func_num(struct mlx4_dev *dev)
+{
+	return dev->caps.function;
 }
 
 #endif /* MLX4_DEVICE_H */
