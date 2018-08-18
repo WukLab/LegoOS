@@ -184,7 +184,6 @@ struct ib_cq *mlx4_ib_create_cq(struct ib_device *ibdev, int entries, int vector
 
 err_dbmap:
 
-err_mtt:
 	mlx4_mtt_cleanup(dev->dev, &cq->buf.mtt);
 
 	mlx4_ib_free_cq_buf(dev, &cq->buf, cq->ibcq.cqe);
@@ -412,20 +411,6 @@ static void mlx4_ib_handle_error_cqe(struct mlx4_err_cqe *cqe,
 	wc->vendor_err = cqe->vendor_err_syndrome;
 }
 
-static int mlx4_ib_ipoib_csum_ok(__be16 status, __be16 checksum)
-{
-	return ((status & cpu_to_be16(MLX4_CQE_STATUS_IPV4      |
-				      MLX4_CQE_STATUS_IPV4F     |
-				      MLX4_CQE_STATUS_IPV4OPT   |
-				      MLX4_CQE_STATUS_IPV6      |
-				      MLX4_CQE_STATUS_IPOK)) ==
-		cpu_to_be16(MLX4_CQE_STATUS_IPV4        |
-			    MLX4_CQE_STATUS_IPOK))              &&
-		(status & cpu_to_be16(MLX4_CQE_STATUS_UDP       |
-				      MLX4_CQE_STATUS_TCP))     &&
-		checksum == cpu_to_be16(0xffff);
-}
-
 static int mlx4_ib_poll_one(struct mlx4_ib_cq *cq,
 			    struct mlx4_ib_qp **cur_qp,
 			    struct ib_wc *wc)
@@ -433,7 +418,6 @@ static int mlx4_ib_poll_one(struct mlx4_ib_cq *cq,
 	struct mlx4_cqe *cqe;
 	struct mlx4_qp *mqp;
 	struct mlx4_ib_wq *wq;
-	struct mlx4_ib_srq *srq;
 	int is_send;
 	int is_error;
 	u32 g_mlpath_rqpn;

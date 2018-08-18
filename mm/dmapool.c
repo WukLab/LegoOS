@@ -158,7 +158,7 @@ static struct dma_page *pool_alloc_page(struct dma_pool *pool, gfp_t mem_flags)
 	page = kmalloc(sizeof(*page), mem_flags);
 	if (!page)
 		return NULL;
-	page->vaddr = dma_alloc_coherent(to_pci_dev(pool->dev), pool->allocation,
+	page->vaddr = dma_alloc_coherent(pool->dev, pool->allocation,
 					 &page->dma, mem_flags);
 	if (page->vaddr) {
 #ifdef	DMAPOOL_DEBUG
@@ -186,7 +186,7 @@ static void pool_free_page(struct dma_pool *pool, struct dma_page *page)
 #ifdef	DMAPOOL_DEBUG
 	memset(page->vaddr, POOL_POISON_FREED, pool->allocation);
 #endif
-	dma_free_coherent(to_pci_dev(pool->dev), pool->allocation, page->vaddr, dma);
+	dma_free_coherent(pool->dev, pool->allocation, page->vaddr, dma);
 	list_del(&page->page_list);
 	kfree(page);
 }

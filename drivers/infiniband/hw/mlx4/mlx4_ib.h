@@ -327,7 +327,7 @@ int mlx4_ib_resolve_grh(struct mlx4_ib_dev *dev, const struct ib_ah_attr *ah_att
 
 static inline int mlx4_ib_ah_grh_present(struct mlx4_ib_ah *ah)
 {
-	u8 port = be32_to_cpu(ah->av.ib.port_pd) >> 24 & 3;
+	//u8 port = be32_to_cpu(ah->av.ib.port_pd) >> 24 & 3;
 
 	//if (rdma_port_get_link_layer(ah->ibah.device, port) == IB_LINK_LAYER_ETHERNET)
 	//	return 1;

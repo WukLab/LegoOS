@@ -175,7 +175,7 @@ struct mlx4_icm *mlx4_alloc_icm(struct mlx4_dev *dev, int npages,
 		if (coherent)
 			++chunk->nsg;
 		else if (chunk->npages == MLX4_ICM_CHUNK_LEN) {
- 			chunk->nsg = dma_map_sg(dev->pdev, chunk->mem,
+ 			chunk->nsg = dma_map_sg(&dev->pdev->dev, chunk->mem,
 						chunk->npages,
 						PCI_DMA_BIDIRECTIONAL);
 
@@ -190,7 +190,7 @@ struct mlx4_icm *mlx4_alloc_icm(struct mlx4_dev *dev, int npages,
 	}
 
 	if (!coherent && chunk) {
- 		chunk->nsg = dma_map_sg(dev->pdev, chunk->mem,
+ 		chunk->nsg = dma_map_sg(&dev->pdev->dev, chunk->mem,
 					chunk->npages,
 					PCI_DMA_BIDIRECTIONAL);
 

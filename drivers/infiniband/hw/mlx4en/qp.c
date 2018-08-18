@@ -188,7 +188,7 @@ int mlx4_qp_modify(struct mlx4_dev *dev, struct mlx4_mtt *mtt,
 
 	mailbox = mlx4_alloc_cmd_mailbox(dev);
 	if (IS_ERR(mailbox)) {
-		pr_debug("%s error %d\n", PTR_ERR(mailbox));
+		pr_debug("%s error %ld\n", __func__, PTR_ERR(mailbox));
 		return PTR_ERR(mailbox);
 	}
 
@@ -280,7 +280,6 @@ int mlx4_qp_alloc(struct mlx4_dev *dev, int qpn, struct mlx4_qp *qp)
 
 	return 0;
 
-err_put_cmpt:
 	mlx4_table_put(dev, &qp_table->cmpt_table, qp->qpn);
 
 err_put_rdmarc:

@@ -70,8 +70,6 @@ static void init_query_mad(struct ib_smp *mad)
 	mad->method	   = IB_MGMT_METHOD_GET;
 }
 
-static union ib_gid zgid;
-
 static int mlx4_ib_query_device(struct ib_device *ibdev,
 				struct ib_device_attr *props)
 {
@@ -239,11 +237,6 @@ static int ib_link_query_port(struct ib_device *ibdev, u8 port,
 	return 0;
 }
 
-static u8 state_to_phys_state(enum ib_port_state state)
-{
-	return state == IB_PORT_ACTIVE ? 5 : 3;
-}
-
 static int mlx4_ib_query_port(struct ib_device *ibdev, u8 port,
 			      struct ib_port_attr *props)
 {
@@ -281,50 +274,6 @@ out:
 	return err;
 }
 
-static int __mlx4_ib_query_gid(struct ib_device *ibdev, u8 port, int index,
-			       union ib_gid *gid)
-{
-	struct ib_smp *in_mad  = NULL;
-	struct ib_smp *out_mad = NULL;
-	int err = -ENOMEM;
-
-	in_mad  = kzalloc(sizeof *in_mad, GFP_KERNEL);
-	out_mad = kmalloc(sizeof *out_mad, GFP_KERNEL);
-	if (!in_mad || !out_mad)
-		goto out;
-
-	init_query_mad(in_mad);
-	in_mad->attr_id  = IB_SMP_ATTR_PORT_INFO;
-	in_mad->attr_mod = cpu_to_be32(port);
-
-	err = mlx4_MAD_IFC(to_mdev(ibdev), 1, 1, port, NULL, NULL, in_mad, out_mad);
-	if (err)
-		goto out;
-
-	memcpy(gid->raw, out_mad->data + 8, 8);
-
-	init_query_mad(in_mad);
-	in_mad->attr_id  = IB_SMP_ATTR_GUID_INFO;
-	in_mad->attr_mod = cpu_to_be32(index / 8);
-
-	err = mlx4_MAD_IFC(to_mdev(ibdev), 1, 1, port, NULL, NULL, in_mad, out_mad);
-	if (err)
-		goto out;
-
-	memcpy(gid->raw + 8, out_mad->data + (index % 8) * 8, 8);
-
-out:
-	kfree(in_mad);
-	kfree(out_mad);
-	return err;
-}
-
-static int mlx4_ib_query_gid(struct ib_device *ibdev, u8 port, int index,
-			     union ib_gid *gid)
-{			 
-	return __mlx4_ib_query_gid(ibdev, port, index, gid);
-}
-
 static int mlx4_ib_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 			      u16 *pkey)
 {
@@ -351,39 +300,6 @@ out:
 	kfree(in_mad);
 	kfree(out_mad);
 	return err;
-}
-
-static int mlx4_ib_modify_device(struct ib_device *ibdev, int mask,
-				 struct ib_device_modify *props)
-{
-	struct mlx4_cmd_mailbox *mailbox;
-
-	if (mask & ~IB_DEVICE_MODIFY_NODE_DESC)
-		return -EOPNOTSUPP;
-
-	if (!(mask & IB_DEVICE_MODIFY_NODE_DESC))
-		return 0;
-
-	spin_lock(&to_mdev(ibdev)->sm_lock);
-	memcpy(ibdev->node_desc, props->node_desc, 64);
-	spin_unlock(&to_mdev(ibdev)->sm_lock);
-
-	/*
-	 * If possible, pass node desc to FW, so it can generate
-	 * a 144 trap.  If cmd fails, just ignore.
-	 */
-	mailbox = mlx4_alloc_cmd_mailbox(to_mdev(ibdev)->dev);
-	if (IS_ERR(mailbox))
-		return 0;
-
-	memset(mailbox->buf, 0, 256);
-	memcpy(mailbox->buf, props->node_desc, 64);
-	mlx4_cmd(to_mdev(ibdev)->dev, mailbox->dma, 1, 0,
-		 MLX4_CMD_SET_NODE, MLX4_CMD_TIME_CLASS_A);
-
-	mlx4_free_cmd_mailbox(to_mdev(ibdev)->dev, mailbox);
-
-	return 0;
 }
 
 static int mlx4_SET_PORT(struct mlx4_ib_dev *dev, u8 port, int reset_qkey_viols,
@@ -440,7 +356,9 @@ out:
 	return err;
 }
 
-static struct ib_pd *mlx4_ib_alloc_pd(struct ib_device *ibdev)
+static struct ib_pd *mlx4_ib_alloc_pd(struct ib_device *ibdev,
+					void *context,
+					void *udata)
 {
 	struct mlx4_ib_pd *pd;
 	int err;
@@ -466,54 +384,13 @@ static int mlx4_ib_dealloc_pd(struct ib_pd *pd)
 	return 0;
 }
 
-static int add_gid_entry(struct ib_qp *ibqp, union ib_gid *gid)
-{
-	struct mlx4_ib_qp *mqp = to_mqp(ibqp);
-	struct mlx4_ib_dev *mdev = to_mdev(ibqp->device);
-	struct mlx4_ib_gid_entry *ge;
-
-	ge = kzalloc(sizeof *ge, GFP_KERNEL);
-	if (!ge)
-		return -ENOMEM;
-
-	ge->gid = *gid;
-	if (mlx4_ib_add_mc(mdev, mqp, gid)) {
-		ge->port = mqp->port;
-		ge->added = 1;
-	}
-
-	mutex_lock(&mqp->mutex);
-	list_add_tail(&ge->list, &mqp->gid_list);
-	mutex_unlock(&mqp->mutex);
-
-	return 0;
-}
-
 int mlx4_ib_add_mc(struct mlx4_ib_dev *mdev, struct mlx4_ib_qp *mqp,
 		   union ib_gid *gid)
 {
-	u8 mac[6];
-	struct net_device *ndev;
 	int ret = 0;
 
 	if (!mqp->port)
 		return 0;
-
-	return ret;
-}
-
-static struct mlx4_ib_gid_entry *find_gid_entry(struct mlx4_ib_qp *qp, u8 *raw)
-{
-	struct mlx4_ib_gid_entry *ge;
-	struct mlx4_ib_gid_entry *tmp;
-	struct mlx4_ib_gid_entry *ret = NULL;
-
-	list_for_each_entry_safe(ge, tmp, &qp->gid_list, list) {
-		if (!memcmp(raw, ge->gid.raw, 16)) {
-			ret = ge;
-			break;
-		}
-	}
 
 	return ret;
 }
@@ -557,7 +434,6 @@ void *mlx4_ib_add(struct mlx4_dev *dev)
 	struct mlx4_ib_dev *ibdev;
 	int num_ports = 0;
 	int i;
-	int err;
 
 	mlx4_foreach_ib_transport_port(i, dev)
 		num_ports++;
@@ -594,7 +470,7 @@ void *mlx4_ib_add(struct mlx4_dev *dev)
 	ibdev->num_ports		= num_ports;
 	ibdev->ib_dev.phys_port_cnt     = ibdev->num_ports;
 	ibdev->ib_dev.num_comp_vectors	= dev->caps.num_comp_vectors;
-	ibdev->ib_dev.dma_device	= dev->pdev;
+	ibdev->ib_dev.dma_device	= &dev->pdev->dev;
 	ibdev->ib_dev.dev		= *(dev->pdev);
 
 	//printk_once(KERN_INFO "%s %s ibdev %p mlx4dev %p pcidev %p dmadev %p\n", 
@@ -664,8 +540,6 @@ void *mlx4_ib_add(struct mlx4_dev *dev)
  	//pr_debug("%s successful ibdev %p\n", __func__, ibdev);
 	return ibdev;
 
-err_notif:
-	//flush_workqueue(wq);
 
 err_reg:
 	ib_unregister_device(&ibdev->ib_dev);
@@ -764,10 +638,4 @@ int mlx4_ib_init(void)
 	}
 
 	return 0;
-}
-
-static void mlx4_ib_cleanup(void)
-{
-	mlx4_unregister_interface(&mlx4_ib_interface);
-	//destroy_workqueue(wq);
 }

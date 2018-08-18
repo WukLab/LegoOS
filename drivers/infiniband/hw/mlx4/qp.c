@@ -437,26 +437,6 @@ static int set_kernel_sq_size(struct mlx4_ib_dev *dev, struct ib_qp_cap *cap,
 	return 0;
 }
 
-static int set_user_sq_size(struct mlx4_ib_dev *dev,
-			    struct mlx4_ib_qp *qp,
-			    struct mlx4_ib_create_qp *ucmd)
-{
-	/* Sanity check SQ size before proceeding */
-	if ((1 << ucmd->log_sq_bb_count) > dev->dev->caps.max_wqes	 ||
-	    ucmd->log_sq_stride >
-		ilog2(roundup_pow_of_two(dev->dev->caps.max_sq_desc_sz)) ||
-	    ucmd->log_sq_stride < MLX4_IB_MIN_SQ_STRIDE)
-		return -EINVAL;
-
-	qp->sq.wqe_cnt   = 1 << ucmd->log_sq_bb_count;
-	qp->sq.wqe_shift = ucmd->log_sq_stride;
-
-	qp->buf_size = (qp->rq.wqe_cnt << qp->rq.wqe_shift) +
-		(qp->sq.wqe_cnt << qp->sq.wqe_shift);
-
-	return 0;
-}
-
 static int qp_has_rq(struct ib_qp_init_attr *attr)
 {
 	if (attr->qp_type == IB_QPT_XRC_INI || attr->qp_type == IB_QPT_XRC_TGT)
@@ -860,12 +840,6 @@ static void mlx4_set_sched(struct mlx4_qp_path *path, u8 port)
 static int mlx4_set_path(struct mlx4_ib_dev *dev, const struct ib_ah_attr *ah,
 			 struct mlx4_qp_path *path, u8 port)
 {
-	int err;
-	u8 mac[6];
-	int is_mcast;
-	u16 vlan_tag;
-	int vidx;
-
 	path->grh_mylmc     = ah->src_path_bits & 0x7f;
 	path->rlid	    = cpu_to_be16(ah->dlid);
 	if (ah->static_rate) {
@@ -1274,7 +1248,6 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 	struct mlx4_wqe_mlx_seg *mlx = wqe;
 	struct mlx4_wqe_inline_seg *inl = wqe + sizeof *mlx;
 	struct mlx4_ib_ah *ah = to_mah(wr->wr.ud.ah);
-	union ib_gid sgid;
 	u16 pkey;
 	int send_size;
 	int header_size;
@@ -1283,7 +1256,6 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 	int is_vlan = 0;
 	int is_eth = 0;
 	int is_grh = 0;
-	u16 vlan;
 
 	//pr_info("%s\n", __func__);
 	send_size = 0;
@@ -1429,46 +1401,6 @@ static int mlx4_wq_overflow(struct mlx4_ib_wq *wq, int nreq, struct ib_cq *ib_cq
 	return cur + nreq >= wq->max_post;
 }
 
-static __be32 convert_access(int acc)
-{
-	return (acc & IB_ACCESS_REMOTE_ATOMIC ? cpu_to_be32(MLX4_WQE_FMR_PERM_ATOMIC)       : 0) |
-	       (acc & IB_ACCESS_REMOTE_WRITE  ? cpu_to_be32(MLX4_WQE_FMR_PERM_REMOTE_WRITE) : 0) |
-	       (acc & IB_ACCESS_REMOTE_READ   ? cpu_to_be32(MLX4_WQE_FMR_PERM_REMOTE_READ)  : 0) |
-	       (acc & IB_ACCESS_LOCAL_WRITE   ? cpu_to_be32(MLX4_WQE_FMR_PERM_LOCAL_WRITE)  : 0) |
-		cpu_to_be32(MLX4_WQE_FMR_PERM_LOCAL_READ);
-}
-
-#if 0
-static void set_fmr_seg(struct mlx4_wqe_fmr_seg *fseg, struct ib_send_wr *wr)
-{
-	struct mlx4_ib_fast_reg_page_list *mfrpl = to_mfrpl(wr->wr.fast_reg.page_list);
-	int i;
-
-	for (i = 0; i < wr->wr.fast_reg.page_list_len; ++i)
-		mfrpl->mapped_page_list[i] =
-			cpu_to_be64(wr->wr.fast_reg.page_list->page_list[i] |
-				    MLX4_MTT_FLAG_PRESENT);
-
-	fseg->flags		= convert_access(wr->wr.fast_reg.access_flags);
-	fseg->mem_key		= cpu_to_be32(wr->wr.fast_reg.rkey);
-	fseg->buf_list		= cpu_to_be64(mfrpl->map);
-	fseg->start_addr	= cpu_to_be64(wr->wr.fast_reg.iova_start);
-	fseg->reg_len		= cpu_to_be64(wr->wr.fast_reg.length);
-	fseg->offset		= 0; /* XXX -- is this just for ZBVA? */
-	fseg->page_size		= cpu_to_be32(wr->wr.fast_reg.page_shift);
-	fseg->reserved[0]	= 0;
-	fseg->reserved[1]	= 0;
-}
-#endif
-
-static void set_local_inv_seg(struct mlx4_wqe_local_inval_seg *iseg, u32 rkey)
-{
-	iseg->flags	= 0;
-	iseg->mem_key	= cpu_to_be32(rkey);
-	iseg->guest_id	= 0;
-	iseg->pa	= 0;
-}
-
 static __always_inline void set_raddr_seg(struct mlx4_wqe_raddr_seg *rseg,
 					  u64 remote_addr, u32 rkey)
 {
@@ -1554,26 +1486,6 @@ static void __set_data_seg(struct mlx4_wqe_data_seg *dseg, struct ib_sge *sg)
 	dseg->byte_count = cpu_to_be32(sg->length);
 	dseg->lkey       = cpu_to_be32(sg->lkey);
 	dseg->addr       = cpu_to_be64(sg->addr);
-}
-
-static int build_lso_seg(struct mlx4_wqe_lso_seg *wqe, struct ib_send_wr *wr,
-			 struct mlx4_ib_qp *qp, unsigned *lso_seg_len,
-			 __be32 *lso_hdr_sz, __be32 *blh)
-{
-	unsigned halign = ALIGN(sizeof *wqe + wr->wr.ud.hlen, 16);
-
-	if (unlikely(halign > MLX4_IB_CACHE_LINE_SIZE))
-		*blh = cpu_to_be32(1 << 6);
-
-	if (unlikely(!(qp->flags & MLX4_IB_QP_LSO) &&
-		     wr->num_sge > qp->sq.max_gs - (halign >> 4)))
-		return -EINVAL;
-
-	memcpy(wqe->header, wr->wr.ud.header, wr->wr.ud.hlen);
-
-	*lso_hdr_sz  = cpu_to_be32(wr->wr.ud.mss << 16 | wr->wr.ud.hlen);
-	*lso_seg_len = halign;
-	return 0;
 }
 
 static __be32 send_ieth(struct ib_send_wr *wr)
@@ -1951,7 +1863,6 @@ static void to_ib_ah_attr(struct mlx4_ib_dev *ibdev, struct ib_ah_attr *ib_ah_at
 				struct mlx4_qp_path *path)
 {
 	struct mlx4_dev *dev = ibdev->dev;
-	int is_eth;
 
 	memset(ib_ah_attr, 0, sizeof *ib_ah_attr);
 	ib_ah_attr->port_num	  = path->sched_queue & 0x40 ? 2 : 1;

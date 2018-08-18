@@ -359,15 +359,6 @@ struct pci_dev {
 	phys_addr_t rom; /* Physical address of ROM if it's not from the BAR */
 	size_t romlen; /* Length of ROM if it's not from the BAR */
 
-
-	/* yiying specific */
-	u64		*dma_mask;
-	u64		coherent_dma_mask;/* Like dma_mask, but for
-					     alloc_coherent mappings as
-					     not all hardware supports
-					     64 bit addresses for consistent
-					     allocations such descriptors. */
-	struct dma_coherent_mem	*dma_mem;
 	void			*driver_data;
 };
 

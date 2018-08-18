@@ -117,6 +117,43 @@ enum {
 	MLX4_PCI_DEV_FORCE_SENSE_PORT	= 1 << 1,
 };
 
+enum mlx4_mpt_state {
+	MLX4_MPT_DISABLED = 0,
+	MLX4_MPT_EN_HW,
+	MLX4_MPT_EN_SW
+};
+
+/* The flag indicates that the slave should delay the RESET cmd*/
+#define MLX4_DELAY_RESET_SLAVE 0xbbbbbbb
+/*indicates how many retries will be done if we are in the middle of FLR*/
+#define NUM_OF_RESET_RETRIES	10
+#define SLEEP_TIME_IN_RESET	(2 * 1000)
+enum mlx4_resource {
+	RES_QP,
+	RES_CQ,
+	RES_SRQ,
+	RES_XRCD,
+	RES_MPT,
+	RES_MTT,
+	RES_MAC,
+	RES_VLAN,
+	RES_EQ,
+	RES_COUNTER,
+	RES_FS_RULE,
+	MLX4_NUM_OF_RESOURCE_TYPE
+};
+
+#define MLX4_COMM_TIME		10000
+enum {
+	MLX4_COMM_CMD_RESET,
+	MLX4_COMM_CMD_VHCR0,
+	MLX4_COMM_CMD_VHCR1,
+	MLX4_COMM_CMD_VHCR2,
+	MLX4_COMM_CMD_VHCR_EN,
+	MLX4_COMM_CMD_VHCR_POST,
+	MLX4_COMM_CMD_FLR = 254
+};
+
 #define mlx4_debug_level	(1)
 
 #define mlx4_dbg(mdev, format, arg...)					\
@@ -271,6 +308,7 @@ struct mlx4_cmd {
 	struct dma_pool	       *pool;
 	void __iomem	       *hcr;
 	struct mutex		hcr_mutex;
+	struct mutex		slave_cmd_mutex;
 	struct semaphore	poll_sem;
 	struct semaphore	event_sem;
 	int			max_cmds;
@@ -280,6 +318,7 @@ struct mlx4_cmd {
 	u16			token_mask;
 	u8			use_events;
 	u8			toggle;
+	u8			comm_toggle;
 };
 
 struct mlx4_uar_table {
@@ -399,10 +438,32 @@ struct mlx4_msix_ctl {
 	spinlock_t	pool_lock;
 };
 
+struct mlx4_comm {
+	u32			slave_write;
+	u32			slave_read;
+};
+
 struct mlx4_steer {
 	struct list_head promisc_qps[MLX4_NUM_STEERS];
 	struct list_head steer_entries[MLX4_NUM_STEERS];
 	struct list_head high_prios;
+};
+
+struct mlx4_mfunc_master_ctx {
+	int			init_port_ref[MLX4_MAX_PORTS + 1];
+	u16			max_mtu[MLX4_MAX_PORTS + 1];
+	int			disable_mcast_ref[MLX4_MAX_PORTS + 1];
+	spinlock_t		slave_state_lock;
+	__be32			comm_arm_bit_vector[4];
+	struct mutex		gen_eqe_mutex[MLX4_MFUNC_MAX];
+};
+
+struct mlx4_mfunc {
+	struct mlx4_comm __iomem       *comm;
+	struct mlx4_vhcr_cmd	       *vhcr;
+	dma_addr_t			vhcr_dma;
+
+	struct mlx4_mfunc_master_ctx	master;
 };
 
 struct mlx4_priv {
@@ -417,6 +478,7 @@ struct mlx4_priv {
 
 	struct list_head        pgdir_list;
 	struct mutex            pgdir_mutex;
+	struct mlx4_mfunc	mfunc;
 
 	struct mlx4_fw		fw;
 	struct mlx4_cmd		cmd;

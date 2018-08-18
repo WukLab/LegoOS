@@ -1124,7 +1124,7 @@ struct ib_dma_mapping_ops {
 struct iw_cm_verbs;
 
 struct ib_device {
-	struct pci_dev               *dma_device;
+	struct device			*dma_device;
 
 	char                          name[IB_DEVICE_NAME_MAX];
 
@@ -1785,7 +1785,7 @@ static inline void ib_dma_unmap_single(struct ib_device *dev,
 static inline u64 ib_dma_map_single_attrs(struct ib_device *dev,
 					  void *cpu_addr, size_t size,
 					  enum dma_data_direction direction,
-					  unsigned long attrs)
+					  struct dma_attrs *attrs)
 {
 	return dma_map_single_attrs(dev->dma_device, cpu_addr, size,
 				    direction, attrs);
@@ -1794,7 +1794,7 @@ static inline u64 ib_dma_map_single_attrs(struct ib_device *dev,
 static inline void ib_dma_unmap_single_attrs(struct ib_device *dev,
 					     u64 addr, size_t size,
 					     enum dma_data_direction direction,
-					     unsigned long attrs)
+					     struct dma_attrs *attrs)
 {
 	return dma_unmap_single_attrs(dev->dma_device, addr, size,
 				      direction, attrs);
