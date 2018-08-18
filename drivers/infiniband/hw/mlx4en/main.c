@@ -999,6 +999,15 @@ static int mlx4_setup_hca(struct mlx4_dev *dev)
 		goto err_xrcd_table_free;
 	}
 
+	/*
+	 * HACK!!!
+	 *
+	 * This function will request IRQ and set up interrupt handlers.
+	 * After this guy, the use_events will try to let IB device use interrupts.
+	 *
+	 * At the time of writing, lego does not have confidence on irq.
+	 * We use polling.
+	 */
 	err = mlx4_init_eq_table(dev);
 	if (err) {
 		mlx4_err(dev, "Failed to initialize "
@@ -1432,6 +1441,14 @@ slave_start:
 	spin_lock_init(&priv->msix_ctl.pool_lock);
 
 	mlx4_enable_msi_x(dev);
+	if ((mlx4_is_mfunc(dev)) &&
+	    !(dev->flags & MLX4_FLAG_MSI_X)) {
+		err = -ENOSYS;
+		mlx4_err(dev, "INTx is not supported in multi-function mode."
+			 " aborting.\n");
+		goto err;
+	}
+
 	if (!mlx4_is_slave(dev)) {
 		err = mlx4_init_steering(dev);
 		if (err)

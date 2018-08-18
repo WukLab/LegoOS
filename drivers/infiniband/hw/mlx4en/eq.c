@@ -99,7 +99,10 @@ struct mlx4_eq_context {
 			       (1ull << MLX4_EVENT_TYPE_SRQ_CATAS_ERROR)    | \
 			       (1ull << MLX4_EVENT_TYPE_SRQ_QP_LAST_WQE)    | \
 			       (1ull << MLX4_EVENT_TYPE_SRQ_LIMIT)	    | \
-			       (1ull << MLX4_EVENT_TYPE_CMD))
+			       (1ull << MLX4_EVENT_TYPE_CMD)		    | \
+			       (1ull << MLX4_EVENT_TYPE_COMM_CHANNEL)       | \
+			       (1ull << MLX4_EVENT_TYPE_FLR_EVENT)	    | \
+			       (1ull << MLX4_EVENT_TYPE_FATAL_WARNING))
 
 struct mlx4_eqe {
 	u8			reserved1;
@@ -139,6 +142,15 @@ struct mlx4_eqe {
 	u8			reserved3[3];
 	u8			owner;
 } __packed;
+
+static u64 get_async_ev_mask(struct mlx4_dev *dev)
+{
+	u64 async_ev_mask = MLX4_ASYNC_EVENT_MASK;
+	if (dev->caps.flags & MLX4_DEV_CAP_FLAG_PORT_MNG_CHG_EV)
+		async_ev_mask |= (1ull << MLX4_EVENT_TYPE_PORT_MNG_CHG_EVENT);
+
+	return async_ev_mask;
+}
 
 static void eq_set_ci(struct mlx4_eq *eq, int req_not)
 {
@@ -390,6 +402,24 @@ XXX
 #endif
 }
 
+static irqreturn_t mlx4_interrupt(int irq, void *dev_ptr)
+{
+	struct mlx4_dev *dev = dev_ptr;
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	int work = 0;
+
+	writel(priv->eq_table.clr_mask, priv->eq_table.clr_int);
+
+	pr_info("%s(): irq %d\n", __func__, irq);
+	return IRQ_RETVAL(work);
+}
+
+static irqreturn_t mlx4_msi_x_interrupt(int irq, void *eq_ptr)
+{
+	pr_info("%s(): irq %d\n", __func__, irq);
+	return IRQ_HANDLED;
+}
+
 static int mlx4_map_clr_int(struct mlx4_dev *dev)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
@@ -503,8 +533,6 @@ int mlx4_init_eq_table(struct mlx4_dev *dev)
 		}
 	}
 
-#if 0
-XXX
 	if (dev->flags & MLX4_FLAG_MSI_X) {
 		const char *eq_name;
 
@@ -529,7 +557,7 @@ XXX
 					  mlx4_msi_x_interrupt, 0, eq_name,
 					  priv->eq_table.eq + i);
 			if (err)
-				goto err_out_async;
+				goto err;
 
 			priv->eq_table.eq[i].have_irq = 1;
 		}
@@ -538,16 +566,15 @@ XXX
 			 MLX4_IRQNAME_SIZE,
 			 DRV_NAME "@pci:%s",
 			 pci_name(dev->pdev));
-
 		err = request_irq(dev->pdev->irq, mlx4_interrupt,
 				  IRQF_SHARED, priv->eq_table.irq_names, dev);
 		if (err)
-			goto err_out_async;
+			goto err;
 
 		priv->eq_table.have_irq = 1;
 	}
 
-	err = mlx4_MAP_EQ(dev, MLX4_ASYNC_EVENT_MASK, 0,
+	err = mlx4_MAP_EQ(dev, get_async_ev_mask(dev), 0,
 			  priv->eq_table.eq[dev->caps.num_comp_vectors].eqn);
 	if (err)
 		mlx4_warn(dev, "MAP_EQ for async EQ %d failed (%d)\n",
@@ -555,7 +582,7 @@ XXX
 
 	for (i = 0; i < dev->caps.num_comp_vectors + 1; ++i)
 		eq_set_ci(&priv->eq_table.eq[i], 1);
-#endif
+
 
 	return 0;
 
@@ -578,6 +605,7 @@ err_out_bitmap:
 err_out_free:
 	kfree(priv->eq_table.uar_map);
 
+err:
 	return err;
 }
 
