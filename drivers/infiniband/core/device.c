@@ -697,22 +697,5 @@ int ib_find_pkey(struct ib_device *device,
 
 int ib_core_init(void)
 {
-#if 0
-	ib_wq = alloc_workqueue("infiniband", 0, 0);
-	if (!ib_wq)
-		return -ENOMEM;
-
-	ret = ibnl_init();
-	if (ret) {
-		printk(KERN_WARNING "Couldn't init IB netlink interface\n");
-		goto err_sysfs;
-	}
-
-	ret = ib_cache_setup();
-	if (ret) {
-		printk(KERN_WARNING "Couldn't set up InfiniBand P_Key/GID cache\n");
-		goto err_nl;
-	}
-#endif
 	return 0;
 }
