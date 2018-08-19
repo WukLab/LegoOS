@@ -86,6 +86,10 @@ struct mlx4_qp *qp_table_rb_lookup(struct rb_root *root, u32 qpn)
 	struct rb_node *node = root->rb_node;
 	struct mlx4_qp *entry;
 	
+	/*
+	 * XXX
+	 * why & 0xff may not be right!
+	 */
 	qpn = qpn & 0xFF;
 	while (node) {
 		entry = rb_entry(node, struct mlx4_qp, node);

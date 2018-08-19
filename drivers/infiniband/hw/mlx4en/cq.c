@@ -34,9 +34,7 @@
  * SOFTWARE.
  */
 
-//#include <lego/hardirq.h>
-//#include <lego/gfp.h>
-
+#include <lego/irqdesc.h>
 #include <lego/mlx4/cmd.h>
 #include <lego/mlx4/cq.h>
 
@@ -73,44 +71,22 @@ struct mlx4_cq_context {
 #define MLX4_CQ_STATE_ARMED_SOL		( 6 <<  8)
 #define MLX4_EQ_STATE_FIRED		(10 <<  8)
 
-static struct mlx4_cq *cq_table_rb_lookup(struct rb_root *root, u32 cqn)
-{
-	struct rb_node *node = root->rb_node;
-	struct mlx4_cq *entry;
-	
-	while (node)
-	{
-		entry = rb_entry(node, struct mlx4_cq, node);
-
-		if (entry->cqn > cqn)
-			node = node->rb_left;
-		else if (entry->cqn < cqn)
-			node = node->rb_right;
-		else
-			return entry;
-	}
-	return NULL;
-}
-
-static void cq_table_rb_insert(struct rb_root *root, u32 cqn, struct mlx4_cq *new_entry)
+static void cq_table_rb_insert(struct rb_root *root, u32 cqn,
+			       struct mlx4_cq *new_entry)
 {
 	struct rb_node **link = &root->rb_node;
 	struct rb_node *parent = NULL;
 	struct mlx4_cq *entry;
 
-	//pr_debug("%s root %p, link %p cqn %d, new_entry %p\n", __func__, root, root->rb_node, cqn, new_entry);
 	while (*link) {
 		parent = *link;
 		entry = rb_entry(parent, struct mlx4_cq, node);
-		//pr_debug("%s entry %p entrycqn %d\n", __func__, entry, entry->cqn);
 		if (entry->cqn > cqn)
-			link = &(*link)->rb_left;
+			link = &parent->rb_left;
 		else
-			link = &(*link)->rb_right;
+			link = &parent->rb_right;
 	}
 
-	//pr_debug("%s new_netry %p node %p parent %p root %p\n",
-	//		__func__, new_entry, &new_entry->node, parent, root);
 	rb_link_node(&new_entry->node, parent, link);
 	rb_insert_color(&new_entry->node, root);
 }
@@ -120,8 +96,7 @@ static int cq_table_rb_delete(struct rb_root *root, u32 cqn)
 	struct rb_node *node = root->rb_node;
 	struct mlx4_cq *entry;
 	
-	while (node)
-	{
+	while (node) {
 		entry = rb_entry(node, struct mlx4_cq, node);
 
 		if (entry->cqn > cqn)
@@ -133,7 +108,29 @@ static int cq_table_rb_delete(struct rb_root *root, u32 cqn)
 			return 0;
 		}
 	}
+
+	WARN(1, "cqn %u not found", cqn);
 	return -1;
+}
+
+static struct mlx4_cq *cq_table_rb_lookup(struct rb_root *root, u32 cqn)
+{
+	struct rb_node *node = root->rb_node;
+	struct mlx4_cq *entry;
+	
+	while (node) {
+		entry = rb_entry(node, struct mlx4_cq, node);
+
+		if (entry->cqn > cqn)
+			node = node->rb_left;
+		else if (entry->cqn < cqn)
+			node = node->rb_right;
+		else
+			return entry;
+	}
+
+	WARN(1, "cqn %u not found", cqn);
+	return NULL;
 }
 
 void mlx4_cq_completion(struct mlx4_dev *dev, u32 cqn)
@@ -179,8 +176,8 @@ void mlx4_cq_event(struct mlx4_dev *dev, u32 cqn, int event_type)
 static int mlx4_SW2HW_CQ(struct mlx4_dev *dev, struct mlx4_cmd_mailbox *mailbox,
 			 int cq_num)
 {
-	return mlx4_cmd(dev, mailbox->dma, cq_num, 0, MLX4_CMD_SW2HW_CQ,
-			MLX4_CMD_TIME_CLASS_A);
+	return mlx4_cmd(dev, mailbox->dma, cq_num, 0,
+			MLX4_CMD_SW2HW_CQ, MLX4_CMD_TIME_CLASS_A);
 }
 
 static int mlx4_MODIFY_CQ(struct mlx4_dev *dev, struct mlx4_cmd_mailbox *mailbox,
@@ -193,8 +190,8 @@ static int mlx4_MODIFY_CQ(struct mlx4_dev *dev, struct mlx4_cmd_mailbox *mailbox
 static int mlx4_HW2SW_CQ(struct mlx4_dev *dev, struct mlx4_cmd_mailbox *mailbox,
 			 int cq_num)
 {
-	return mlx4_cmd_box(dev, 0, mailbox ? mailbox->dma : 0, cq_num,
-			    mailbox ? 0 : 1, MLX4_CMD_HW2SW_CQ,
+	return mlx4_cmd_box(dev, 0, mailbox ? mailbox->dma : 0,
+			    cq_num, mailbox ? 0 : 1, MLX4_CMD_HW2SW_CQ,
 			    MLX4_CMD_TIME_CLASS_A);
 }
 
@@ -248,6 +245,78 @@ int mlx4_cq_resize(struct mlx4_dev *dev, struct mlx4_cq *cq,
 	return err;
 }
 
+int __mlx4_cq_alloc_icm(struct mlx4_dev *dev, int *cqn)
+{
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	struct mlx4_cq_table *cq_table = &priv->cq_table;
+	int err;
+
+	*cqn = mlx4_bitmap_alloc(&cq_table->bitmap);
+	if (*cqn == -1)
+		return -ENOMEM;
+
+	err = mlx4_table_get(dev, &cq_table->table, *cqn);
+	if (err)
+		goto err_out;
+
+	err = mlx4_table_get(dev, &cq_table->cmpt_table, *cqn);
+	if (err)
+		goto err_put;
+	return 0;
+
+err_put:
+	mlx4_table_put(dev, &cq_table->table, *cqn);
+
+err_out:
+	mlx4_bitmap_free(&cq_table->bitmap, *cqn);
+	return err;
+}
+
+static int mlx4_cq_alloc_icm(struct mlx4_dev *dev, int *cqn)
+{
+	u64 out_param;
+	int err;
+
+	if (mlx4_is_mfunc(dev)) {
+		err = mlx4_cmd_imm(dev, 0, &out_param, RES_CQ,
+				   RES_OP_RESERVE_AND_MAP, MLX4_CMD_ALLOC_RES,
+				   MLX4_CMD_TIME_CLASS_A);
+		if (err)
+			return err;
+		else {
+			*cqn = get_param_l(&out_param);
+			return 0;
+		}
+	}
+	return __mlx4_cq_alloc_icm(dev, cqn);
+}
+
+void __mlx4_cq_free_icm(struct mlx4_dev *dev, int cqn)
+{
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	struct mlx4_cq_table *cq_table = &priv->cq_table;
+
+	mlx4_table_put(dev, &cq_table->cmpt_table, cqn);
+	mlx4_table_put(dev, &cq_table->table, cqn);
+	mlx4_bitmap_free(&cq_table->bitmap, cqn);
+}
+
+static void mlx4_cq_free_icm(struct mlx4_dev *dev, int cqn)
+{
+	u64 in_param = 0;
+	int err;
+
+	if (mlx4_is_mfunc(dev)) {
+		set_param_l(&in_param, cqn);
+		err = mlx4_cmd(dev, in_param, RES_CQ, RES_OP_RESERVE_AND_MAP,
+			       MLX4_CMD_FREE_RES,
+			       MLX4_CMD_TIME_CLASS_A);
+		if (err)
+			mlx4_warn(dev, "Failed freeing cq:%d\n", cqn);
+	} else
+		__mlx4_cq_free_icm(dev, cqn);
+}
+
 int mlx4_cq_alloc(struct mlx4_dev *dev, int nent, struct mlx4_mtt *mtt,
 		  struct mlx4_uar *uar, u64 db_rec, struct mlx4_cq *cq,
 		  unsigned vector, int collapsed)
@@ -264,23 +333,15 @@ int mlx4_cq_alloc(struct mlx4_dev *dev, int nent, struct mlx4_mtt *mtt,
 
 	cq->vector = vector;
 
-	cq->cqn = mlx4_bitmap_alloc(&cq_table->bitmap);
-	if (cq->cqn == -1)
-		return -ENOMEM;
-
-	err = mlx4_table_get(dev, &cq_table->table, cq->cqn);
+	err = mlx4_cq_alloc_icm(dev, &cq->cqn);
 	if (err)
-		goto err_out;
+		return err;
 
-	err = mlx4_table_get(dev, &cq_table->cmpt_table, cq->cqn);
-	if (err)
-		goto err_put;
-
-	//pr_debug("%s cq_table %p, tree %p cqn %p cq %p\n", 
-	//		__func__, cq_table, cq_table->tree, cq->cqn, cq);
 	spin_lock_irq(&cq_table->lock);
 	cq_table_rb_insert(&cq_table->tree, cq->cqn, cq);
 	spin_unlock_irq(&cq_table->lock);
+	if (err)
+		goto err_icm;
 
 	mailbox = mlx4_alloc_cmd_mailbox(dev);
 	if (IS_ERR(mailbox)) {
@@ -319,13 +380,8 @@ err_radix:
 	cq_table_rb_delete(&cq_table->tree, cq->cqn);
 	spin_unlock_irq(&cq_table->lock);
 
-	mlx4_table_put(dev, &cq_table->cmpt_table, cq->cqn);
-
-err_put:
-	mlx4_table_put(dev, &cq_table->table, cq->cqn);
-
-err_out:
-	mlx4_bitmap_free(&cq_table->bitmap, cq->cqn);
+err_icm:
+	mlx4_cq_free_icm(dev, cq->cqn);
 
 	return err;
 }
@@ -340,7 +396,7 @@ void mlx4_cq_free(struct mlx4_dev *dev, struct mlx4_cq *cq)
 	if (err)
 		mlx4_warn(dev, "HW2SW_CQ failed (%d) for CQN %06x\n", err, cq->cqn);
 
-// XXX	synchronize_irq(priv->eq_table.eq[cq->vector].irq);
+	synchronize_irq(priv->eq_table.eq[cq->vector].irq);
 
 	spin_lock_irq(&cq_table->lock);
 	cq_table_rb_delete(&cq_table->tree, cq->cqn);
@@ -350,8 +406,7 @@ void mlx4_cq_free(struct mlx4_dev *dev, struct mlx4_cq *cq)
 		complete(&cq->free);
 	wait_for_completion(&cq->free);
 
-	mlx4_table_put(dev, &cq_table->table, cq->cqn);
-	mlx4_bitmap_free(&cq_table->bitmap, cq->cqn);
+	mlx4_cq_free_icm(dev, cq->cqn);
 }
 
 int mlx4_init_cq_table(struct mlx4_dev *dev)
@@ -361,10 +416,11 @@ int mlx4_init_cq_table(struct mlx4_dev *dev)
 
 	spin_lock_init(&cq_table->lock);
 	cq_table->tree = RB_ROOT;
+	if (mlx4_is_slave(dev))
+		return 0;
 
 	err = mlx4_bitmap_init(&cq_table->bitmap, dev->caps.num_cqs,
 			       dev->caps.num_cqs - 1, dev->caps.reserved_cqs, 0);
-	//pr_debug("%s %d\n", __func__, err);
 	if (err)
 		return err;
 
@@ -373,6 +429,8 @@ int mlx4_init_cq_table(struct mlx4_dev *dev)
 
 void mlx4_cleanup_cq_table(struct mlx4_dev *dev)
 {
+	if (mlx4_is_slave(dev))
+		return;
 	/* Nothing to do to clean up rb_tree */
 	mlx4_bitmap_cleanup(&mlx4_priv(dev)->cq_table.bitmap);
 }

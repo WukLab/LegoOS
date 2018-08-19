@@ -282,6 +282,8 @@ struct mlx4_ib_dev {
 	bool			ib_active;
 	struct mlx4_ib_iboe	iboe;
 	int			counters[MLX4_MAX_PORTS];
+	int		       *eq_table;
+	int			eq_added;
 };
 
 struct mlx4_ib_qp_tunnel_init_attr {
