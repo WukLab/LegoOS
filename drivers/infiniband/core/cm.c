@@ -781,7 +781,7 @@ static void cm_enter_timewait(struct cm_id_private *cm_id_priv)
 	 * timewait before notifying the user that we've exited timewait.
 	 */
 	cm_id_priv->id.state = IB_CM_TIMEWAIT;
-	pr_info("%s need to queue delayed work time %d\n", cm_convert_to_ms(cm_id_priv->av.timeout));
+	pr_info("%s need to queue delayed work time %d\n", __func__, cm_convert_to_ms(cm_id_priv->av.timeout));
 // XXX
 //	wait_time = cm_convert_to_ms(cm_id_priv->av.timeout);
 //	queue_delayed_work(cm.wq, &cm_id_priv->timewait_info->work.work,
@@ -3619,7 +3619,7 @@ static void cm_add_one(struct ib_device *ib_device)
 	int ret;
 	u8 i;
 
-	//pr_info("%s\n", __func__);
+	pr_info("%s(): device %s\n", __func__, dev_name(ib_device->dma_device));
 	cm_dev = kzalloc(sizeof(*cm_dev) + sizeof(*port) *
 			 ib_device->phys_port_cnt, GFP_KERNEL);
 	if (!cm_dev)
@@ -3707,7 +3707,6 @@ int ib_cm_init(void)
 {
 	int ret;
 
-	//pr_info("%s\n", __func__);
 	global_next_id = 0;
 	memset(&cm, 0, sizeof cm);
 	INIT_LIST_HEAD(&cm.device_list);
@@ -3741,7 +3740,6 @@ int ib_cm_init(void)
 	return 0;
 error2:
 	//destroy_workqueue(cm.wq);
-error1:
 	return ret;
 }
 

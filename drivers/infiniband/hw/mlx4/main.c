@@ -725,7 +725,7 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 		goto err_counter;
 
 	if (mlx4_ib_mad_init(ibdev)) {
-		pr_info("Fail to init mlx4_ib_mad");
+		pr_info("Fail to init mlx4_ib_mad\n");
 		goto err_reg;
 	}
 
@@ -753,6 +753,7 @@ err_pd:
 err_dealloc:
 	ib_dealloc_device(&ibdev->ib_dev);
 
+	panic("Fail to init mlx4 IB context");
 	return NULL;
 }
 
@@ -819,13 +820,13 @@ static struct mlx4_interface mlx4_ib_interface = {
  * XXX:
  * We missed two workqueue threads here.
  */
-int __init  mlx4_ib_init(void)
+int __init mlx4_ib_init(void)
 {
 	int err;
 
 	err = mlx4_register_interface(&mlx4_ib_interface);
 	if (err)
-		panic("Fail to register mlx4 interface");
+		return err;
 
 	return 0;
 }

@@ -3122,6 +3122,8 @@ static void ib_mad_init_device(struct ib_device *device)
 {
 	int start, end, i;
 
+	pr_info("%s(): device %s\n", __func__, dev_name(device->dma_device));
+
 	if (temp ==0)
 		temp =1;
 	else {
@@ -3132,7 +3134,6 @@ static void ib_mad_init_device(struct ib_device *device)
 	//device->phys_port_cnt = 1;
 	end   = device->phys_port_cnt;
 
-	//pr_info("%s device %p\n", __func__, device);
 	for (i = start; i <= end; i++) {
 		if (ib_mad_port_open(device, i)) {
 			printk(KERN_ERR PFX "Couldn't open %s port %d\n",

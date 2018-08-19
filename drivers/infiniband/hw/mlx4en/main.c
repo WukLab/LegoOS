@@ -1468,9 +1468,6 @@ slave_start:
 
 	return 0;
 
-	panic("Need more on enable pci device\n");
-	mlx4_ib_init();
-
 err:
 	panic("Fail to register mlx4 %s device!\n", pci_name(pdev));
 	return -ENODEV;
@@ -1536,6 +1533,12 @@ static struct pci_driver mlx4_driver = {
 	.remove		= mlx4_remove_one,
 };
 
+/*
+ * This function register mlx4 PCI device drivers, which is the mlx4_core
+ * module in linux. After that, we register IB glue code, which is mlx4_ib.
+ *
+ * This has to be done _after_ core IB initilization.
+ */
 int __init mlx4_init(void)
 {
 	int ret;
@@ -1548,5 +1551,10 @@ int __init mlx4_init(void)
 	ret = pci_register_driver(&mlx4_driver);
 	if (ret < 0)
 		panic("Fail to register mlx4 PCI driver");
+
+	ret = mlx4_ib_init();
+	if (ret)
+		panic("Fail to init mlx4 IB interface");
+
 	return 0;
 }

@@ -136,8 +136,6 @@ static int kernel_init(void *unused)
 	device_init();
 
 #if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
-	ib_mad_init();
-	ib_cm_init();
 	init_socket();
 	kthread_run(lego_ib_init, NULL, "ib-initd");
 

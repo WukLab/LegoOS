@@ -36,6 +36,7 @@
  * the IB device, client registration and de-registration.
  */
 
+#include <lego/net.h>
 #include <lego/string.h>
 #include <lego/errno.h>
 #include <lego/kernel.h>
@@ -695,7 +696,18 @@ int ib_find_pkey(struct ib_device *device,
 	return -ENOENT;
 }
 
-int ib_core_init(void)
+int __init mlx4_init(void);
+
+/*
+ * This is the only IB layer init entry point.
+ * This function should be called after PCI is initialized.
+ *
+ * We first init the core layer, then init specific drivers.
+ */
+void __init ib_core_init(void)
 {
-	return 0;
+	ib_mad_init();
+	ib_cm_init();
+
+	mlx4_init();
 }
