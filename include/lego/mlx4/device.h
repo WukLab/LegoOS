@@ -496,6 +496,18 @@ struct mlx4_mr {
 	int			enabled;
 };
 
+enum mlx4_mw_type {
+	MLX4_MW_TYPE_1 = 1,
+	MLX4_MW_TYPE_2 = 2,
+};
+
+struct mlx4_mw {
+	u32			key;
+	u32			pd;
+	enum mlx4_mw_type	type;
+	int			enabled;
+};
+
 struct mlx4_fmr {
 	struct mlx4_mr		mr;
 	struct mlx4_mpt_entry  *mpt;

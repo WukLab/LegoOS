@@ -229,7 +229,8 @@ int mlx4_UNMAP_ICM_AUX(struct mlx4_dev *dev)
 
 int mlx4_table_get(struct mlx4_dev *dev, struct mlx4_icm_table *table, int obj)
 {
-	int i = (obj & (table->num_obj - 1)) / (MLX4_TABLE_CHUNK_SIZE / table->obj_size);
+	u32 i = (obj & (table->num_obj - 1)) /
+			(MLX4_TABLE_CHUNK_SIZE / table->obj_size);
 	int ret = 0;
 
 	mutex_lock(&table->mutex);
