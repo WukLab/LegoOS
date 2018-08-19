@@ -115,6 +115,8 @@ enum ib_device_cap_flags {
 	IB_DEVICE_XRC			= (1<<20),
 	IB_DEVICE_MEM_MGT_EXTENSIONS	= (1<<21),
 	IB_DEVICE_BLOCK_MULTICAST_LOOPBACK = (1<<22),
+	IB_DEVICE_MEM_WINDOW_TYPE_2A	= (1<<23),
+	IB_DEVICE_MEM_WINDOW_TYPE_2B	= (1<<24)
 };
 
 enum ib_atomic_cap {
@@ -238,6 +240,15 @@ static inline int ib_width_enum_to_int(enum ib_port_width width)
 	default: 	  return -1;
 	}
 }
+
+enum ib_port_speed {
+	IB_SPEED_SDR	= 1,
+	IB_SPEED_DDR	= 2,
+	IB_SPEED_QDR	= 4,
+	IB_SPEED_FDR10	= 8,
+	IB_SPEED_FDR	= 16,
+	IB_SPEED_EDR	= 32
+};
 
 struct ib_protocol_stats {
 	/* TBD... */
@@ -963,16 +974,13 @@ struct ib_pd {
 	atomic_t          	usecnt; /* count all resources */
 };
 
-#if 0
 struct ib_xrcd {
 	struct ib_device       *device;
 	atomic_t		usecnt; /* count all exposed resources */
-	struct inode	       *inode;
 
 	struct mutex		tgt_qp_mutex;
 	struct list_head	tgt_qp_list;
 };
-#endif
 
 struct ib_ah {
 	struct ib_device	*device;
@@ -1272,8 +1280,6 @@ struct ib_device {
 	struct ib_dma_mapping_ops   *dma_ops;
 
 	struct module               *owner;
-	struct pci_dev               dev;
-	//struct kobject               *ports_parent;
 	struct list_head             port_list;
 
 	enum {

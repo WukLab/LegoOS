@@ -46,7 +46,6 @@ u32 mlx4_bitmap_alloc(struct mlx4_bitmap *bitmap)
 
 	spin_lock(&bitmap->lock);
 
-	//pr_debug("%s max %d last %d\n", __func__, bitmap->max, bitmap->last);
 	obj = find_next_zero_bit(bitmap->table, bitmap->max, bitmap->last);
 	if (obj >= bitmap->max) {
 		bitmap->top = (bitmap->top + bitmap->max + bitmap->reserved_top)
@@ -85,7 +84,6 @@ u32 mlx4_bitmap_alloc_range(struct mlx4_bitmap *bitmap, int cnt, int align)
 
 	spin_lock(&bitmap->lock);
 
-	//pr_debug("%s cnt %d align %d last %d\n", __func__, cnt, align, bitmap->table);
 	obj = bitmap_find_next_zero_area(bitmap->table, bitmap->max,
 				bitmap->last, cnt, align - 1);
 	if (obj >= bitmap->max) {
@@ -167,13 +165,11 @@ void mlx4_bitmap_cleanup(struct mlx4_bitmap *bitmap)
  * requested size is > max_direct, we split the allocation into
  * multiple pages, so we don't require too much contiguous memory.
  */
-
 int mlx4_buf_alloc(struct mlx4_dev *dev, int size, int max_direct,
 		   struct mlx4_buf *buf)
 {
 	dma_addr_t t;
 
-	//pr_debug("%s dev %p pdev %p size %d max_direct %d\n", __func__, dev, dev->pdev, size, max_direct);
 	if (size <= max_direct) {
 		buf->nbufs        = 1;
 		buf->npages       = 1;
@@ -203,20 +199,9 @@ int mlx4_buf_alloc(struct mlx4_dev *dev, int size, int max_direct,
 		if (!buf->page_list)
 			return -ENOMEM;
 
-		buf->direct.buf = dma_alloc_coherent(&dev->pdev->dev, PAGE_SIZE*buf->nbufs,
-						   &t, GFP_KERNEL);
-		if (!buf->direct.buf)
-			goto err_free;
-		memset(buf->direct.buf, 0, PAGE_SIZE*buf->nbufs);
-
-		for (i = 0; i < buf->nbufs; ++i) {
-			buf->page_list[i].buf = buf->direct.buf + PAGE_SIZE*i;
-			buf->page_list[i].map = t;
-		}
-#if 0
 		for (i = 0; i < buf->nbufs; ++i) {
 			buf->page_list[i].buf =
-				dma_alloc_coherent(dev->pdev, PAGE_SIZE,
+				dma_alloc_coherent(&dev->pdev->dev, PAGE_SIZE,
 						   &t, GFP_KERNEL);
 			if (!buf->page_list[i].buf)
 				goto err_free;
@@ -238,15 +223,12 @@ int mlx4_buf_alloc(struct mlx4_dev *dev, int size, int max_direct,
 			if (!buf->direct.buf)
 				goto err_free;
 		}
-#endif
 	}
 
-	//pr_debug("%s exit normal\n", __func__);
 	return 0;
 
 err_free:
 	mlx4_buf_free(dev, size, buf);
-	pr_debug("%s exit err\n", __func__);
 
 	return -ENOMEM;
 }
@@ -271,11 +253,10 @@ void mlx4_buf_free(struct mlx4_dev *dev, int size, struct mlx4_buf *buf)
 	}
 }
 
-static struct mlx4_db_pgdir *mlx4_alloc_db_pgdir(struct pci_dev *dma_device)
+static struct mlx4_db_pgdir *mlx4_alloc_db_pgdir(struct device *dma_device)
 {
 	struct mlx4_db_pgdir *pgdir;
 
-	//pr_debug("%s\n", __func__);
 	pgdir = kzalloc(sizeof *pgdir, GFP_KERNEL);
 	if (!pgdir)
 		return NULL;
@@ -283,7 +264,7 @@ static struct mlx4_db_pgdir *mlx4_alloc_db_pgdir(struct pci_dev *dma_device)
 	bitmap_fill(pgdir->order1, MLX4_DB_PER_PAGE / 2);
 	pgdir->bits[0] = pgdir->order0;
 	pgdir->bits[1] = pgdir->order1;
-	pgdir->db_page = dma_alloc_coherent(&dma_device->dev, PAGE_SIZE,
+	pgdir->db_page = dma_alloc_coherent(dma_device, PAGE_SIZE,
 					    &pgdir->db_dma, GFP_KERNEL);
 	if (!pgdir->db_page) {
 		kfree(pgdir);
@@ -299,7 +280,6 @@ static int mlx4_alloc_db_from_pgdir(struct mlx4_db_pgdir *pgdir,
 	int o;
 	int i;
 
-	//pr_debug("%s pgdir %p\n", __func__, pgdir);
 	for (o = order; o <= 1; ++o) {
 		i = find_first_bit(pgdir->bits[o], MLX4_DB_PER_PAGE >> o);
 		if (i < MLX4_DB_PER_PAGE >> o)
@@ -325,21 +305,20 @@ found:
 	return 0;
 }
 
+
 int mlx4_db_alloc(struct mlx4_dev *dev, struct mlx4_db *db, int order)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	struct mlx4_db_pgdir *pgdir;
 	int ret = 0;
 
-	//pr_debug("%s priv %p\n", __func__, priv);
 	mutex_lock(&priv->pgdir_mutex);
-	//pr_debug("%s priv %p locked\n", __func__, priv);
 
 	list_for_each_entry(pgdir, &priv->pgdir_list, list)
 		if (!mlx4_alloc_db_from_pgdir(pgdir, db, order))
 			goto out;
 
-	pgdir = mlx4_alloc_db_pgdir((dev->pdev));
+	pgdir = mlx4_alloc_db_pgdir(&(dev->pdev->dev));
 	if (!pgdir) {
 		ret = -ENOMEM;
 		goto out;
@@ -375,7 +354,7 @@ void mlx4_db_free(struct mlx4_dev *dev, struct mlx4_db *db)
 	set_bit(i, db->u.pgdir->bits[o]);
 
 	if (bitmap_full(db->u.pgdir->order1, MLX4_DB_PER_PAGE / 2)) {
-		dma_free_coherent(&dev->pdev->dev, PAGE_SIZE,
+		dma_free_coherent(&(dev->pdev->dev), PAGE_SIZE,
 				  db->u.pgdir->db_page, db->u.pgdir->db_dma);
 		list_del(&db->u.pgdir->list);
 		kfree(db->u.pgdir);

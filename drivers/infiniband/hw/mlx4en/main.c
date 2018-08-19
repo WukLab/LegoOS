@@ -751,9 +751,6 @@ static int map_bf_area(struct mlx4_dev *dev)
 	return 0;
 }
 
-/*
- * XXX: check pci resource correctness
- */
 static int map_internal_clock(struct mlx4_dev *dev)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);

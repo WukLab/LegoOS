@@ -116,7 +116,6 @@ rdma_node_get_transport(enum rdma_node_type node_type)
 	}
 }
 
-#if 0
 enum rdma_link_layer rdma_port_get_link_layer(struct ib_device *device, u8 port_num)
 {
 	if (device->get_link_layer)
@@ -131,7 +130,6 @@ enum rdma_link_layer rdma_port_get_link_layer(struct ib_device *device, u8 port_
 		return IB_LINK_LAYER_UNSPECIFIED;
 	}
 }
-#endif
 
 /* Protection domains */
 

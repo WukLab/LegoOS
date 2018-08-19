@@ -52,7 +52,7 @@ enum {
 		counter = cpu_to_be32(value);	 \
 } while (0)
 
-int mlx4_MAD_IFC(struct mlx4_ib_dev *dev, int ignore_mkey, int ignore_bkey,
+int mlx4_MAD_IFC(struct mlx4_ib_dev *dev, int mad_ifc_flags,
 		 int port, struct ib_wc *in_wc, struct ib_grh *in_grh,
 		 void *in_mad, void *response_mad)
 {
@@ -79,10 +79,13 @@ int mlx4_MAD_IFC(struct mlx4_ib_dev *dev, int ignore_mkey, int ignore_bkey,
 	 * Key check traps can't be generated unless we have in_wc to
 	 * tell us where to send the trap.
 	 */
-	if (ignore_mkey || !in_wc)
+	if ((mad_ifc_flags & MLX4_MAD_IFC_IGNORE_MKEY) || !in_wc)
 		op_modifier |= 0x1;
-	if (ignore_bkey || !in_wc)
+	if ((mad_ifc_flags & MLX4_MAD_IFC_IGNORE_BKEY) || !in_wc)
 		op_modifier |= 0x2;
+	if (mlx4_is_mfunc(dev->dev) &&
+	    (mad_ifc_flags & MLX4_MAD_IFC_NET_VIEW || in_wc))
+		op_modifier |= 0x8;
 
 	if (in_wc) {
 		struct {
@@ -115,9 +118,8 @@ int mlx4_MAD_IFC(struct mlx4_ib_dev *dev, int ignore_mkey, int ignore_bkey,
 		in_modifier |= in_wc->slid << 16;
 	}
 
-	//pr_info("%s inmod %x opmod %x\n", __func__, in_modifier, op_modifier);
-	err = mlx4_cmd_box(dev->dev, inmailbox->dma, outmailbox->dma,
-			   in_modifier, op_modifier,
+	err = mlx4_cmd_box(dev->dev, inmailbox->dma, outmailbox->dma, in_modifier,
+			   mlx4_is_master(dev->dev) ? (op_modifier & ~0x8) : op_modifier,
 			   MLX4_CMD_MAD_IFC, MLX4_CMD_TIME_CLASS_C);
 
 	if (!err)
@@ -298,8 +300,9 @@ static int ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 	//pr_info("%s current lid %d port_num %d\n", __func__, pattr.lid);
 
 	err = mlx4_MAD_IFC(to_mdev(ibdev),
-			   mad_flags & IB_MAD_IGNORE_MKEY,
-			   mad_flags & IB_MAD_IGNORE_BKEY,
+			   (mad_flags & IB_MAD_IGNORE_MKEY ? MLX4_MAD_IFC_IGNORE_MKEY : 0) |
+			   (mad_flags & IB_MAD_IGNORE_BKEY ? MLX4_MAD_IFC_IGNORE_BKEY : 0) |
+			   MLX4_MAD_IFC_NET_VIEW,
 			   port_num, in_wc, in_grh, in_mad, out_mad);
 	if (err) {
 		pr_info("%s mad_ifc fails\n", __func__);

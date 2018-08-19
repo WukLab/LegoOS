@@ -33,7 +33,6 @@
  * SOFTWARE.
  */
 
-//#include <lego/gfp.h>
 #include <lego/mlx4/cmd.h>
 #include <lego/mlx4/qp.h>
 
@@ -80,29 +79,6 @@ struct mlx4_qp *qp_table_rb_lookup(struct rb_root *root, u32 qpn)
 			return entry;
 	}
 	return NULL;
-}
-
-static void qp_table_rb_insert(struct rb_root *root, u32 qpn, struct mlx4_qp *new_entry)
-{
-	struct rb_node **link = &root->rb_node;
-	struct rb_node *parent = NULL;
-	struct mlx4_qp *entry;
-
-	//pr_debug("%s root %p, link %p qpn %d, new_entry %p\n", __func__, root, root->rb_node, qpn, new_entry);
-	while (*link) {
-		parent = *link;
-		entry = rb_entry(parent, struct mlx4_qp, node);
-		//pr_debug("%s entry %p entryqpn %d\n", __func__, entry, entry->qpn);
-		if (entry->qpn > qpn)
-			link = &(*link)->rb_left;
-		else
-			link = &(*link)->rb_right;
-	}
-
-	//pr_debug("%s new_netry %p node %p parent %p root %p\n",
-	//		__func__, new_entry, &new_entry->node, parent, root);
-	rb_link_node(&new_entry->node, parent, link);
-	rb_insert_color(&new_entry->node, root);
 }
 
 void mlx4_qp_event(struct mlx4_dev *dev, u32 qpn, int event_type)
@@ -214,20 +190,64 @@ int mlx4_qp_modify(struct mlx4_dev *dev, struct mlx4_mtt *mtt,
 	return ret;
 }
 
-int mlx4_qp_reserve_range(struct mlx4_dev *dev, int cnt, int align, int *base)
+int __mlx4_qp_reserve_range(struct mlx4_dev *dev, int cnt, int align,
+				   int *base)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	struct mlx4_qp_table *qp_table = &priv->qp_table;
-	int qpn;
 
-	//pr_debug("%s cnt %d align %d\n", __func__, cnt, align);
-	qpn = mlx4_bitmap_alloc_range(&qp_table->bitmap, cnt, align);
-	//pr_debug("%s got qpn %d\n", __func__, qpn);
-	if (qpn == -1)
+	*base = mlx4_bitmap_alloc_range(&qp_table->bitmap, cnt, align);
+	if (*base == -1)
 		return -ENOMEM;
 
-	*base = qpn;
 	return 0;
+}
+
+int mlx4_qp_reserve_range(struct mlx4_dev *dev, int cnt, int align, int *base)
+{
+	u64 in_param = 0;
+	u64 out_param;
+	int err;
+
+	if (mlx4_is_mfunc(dev)) {
+		set_param_l(&in_param, cnt);
+		set_param_h(&in_param, align);
+		err = mlx4_cmd_imm(dev, in_param, &out_param,
+				   RES_QP, RES_OP_RESERVE,
+				   MLX4_CMD_ALLOC_RES,
+				   MLX4_CMD_TIME_CLASS_A);
+		if (err)
+			return err;
+
+		*base = get_param_l(&out_param);
+		return 0;
+	}
+	return __mlx4_qp_reserve_range(dev, cnt, align, base);
+}
+
+void __mlx4_qp_free_icm(struct mlx4_dev *dev, int qpn)
+{
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	struct mlx4_qp_table *qp_table = &priv->qp_table;
+
+	mlx4_table_put(dev, &qp_table->cmpt_table, qpn);
+	mlx4_table_put(dev, &qp_table->rdmarc_table, qpn);
+	mlx4_table_put(dev, &qp_table->altc_table, qpn);
+	mlx4_table_put(dev, &qp_table->auxc_table, qpn);
+	mlx4_table_put(dev, &qp_table->qp_table, qpn);
+}
+
+static void mlx4_qp_free_icm(struct mlx4_dev *dev, int qpn)
+{
+	u64 in_param = 0;
+
+	if (mlx4_is_mfunc(dev)) {
+		set_param_l(&in_param, qpn);
+		if (mlx4_cmd(dev, in_param, RES_QP, RES_OP_MAP_ICM,
+			     MLX4_CMD_FREE_RES, MLX4_CMD_TIME_CLASS_A))
+			mlx4_warn(dev, "Failed to free icm of qp:%d\n", qpn);
+	} else
+		__mlx4_qp_free_icm(dev, qpn);
 }
 
 void mlx4_qp_release_range(struct mlx4_dev *dev, int base_qpn, int cnt)
@@ -238,6 +258,62 @@ void mlx4_qp_release_range(struct mlx4_dev *dev, int base_qpn, int cnt)
 		return;
 
 	mlx4_bitmap_free_range(&qp_table->bitmap, base_qpn, cnt);
+}
+
+int __mlx4_qp_alloc_icm(struct mlx4_dev *dev, int qpn)
+{
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	struct mlx4_qp_table *qp_table = &priv->qp_table;
+	int err;
+
+	err = mlx4_table_get(dev, &qp_table->qp_table, qpn);
+	if (err)
+		goto err_out;
+
+	err = mlx4_table_get(dev, &qp_table->auxc_table, qpn);
+	if (err)
+		goto err_put_qp;
+
+	err = mlx4_table_get(dev, &qp_table->altc_table, qpn);
+	if (err)
+		goto err_put_auxc;
+
+	err = mlx4_table_get(dev, &qp_table->rdmarc_table, qpn);
+	if (err)
+		goto err_put_altc;
+
+	err = mlx4_table_get(dev, &qp_table->cmpt_table, qpn);
+	if (err)
+		goto err_put_rdmarc;
+
+	return 0;
+
+err_put_rdmarc:
+	mlx4_table_put(dev, &qp_table->rdmarc_table, qpn);
+
+err_put_altc:
+	mlx4_table_put(dev, &qp_table->altc_table, qpn);
+
+err_put_auxc:
+	mlx4_table_put(dev, &qp_table->auxc_table, qpn);
+
+err_put_qp:
+	mlx4_table_put(dev, &qp_table->qp_table, qpn);
+
+err_out:
+	return err;
+}
+
+static int mlx4_qp_alloc_icm(struct mlx4_dev *dev, int qpn)
+{
+	u64 param = 0;
+
+	if (mlx4_is_mfunc(dev)) {
+		set_param_l(&param, qpn);
+		return mlx4_cmd_imm(dev, param, &param, RES_QP, RES_OP_MAP_ICM,
+				    MLX4_CMD_ALLOC_RES, MLX4_CMD_TIME_CLASS_A);
+	}
+	return __mlx4_qp_alloc_icm(dev, qpn);
 }
 
 int mlx4_qp_alloc(struct mlx4_dev *dev, int qpn, struct mlx4_qp *qp)
@@ -251,50 +327,24 @@ int mlx4_qp_alloc(struct mlx4_dev *dev, int qpn, struct mlx4_qp *qp)
 
 	qp->qpn = qpn;
 
-	err = mlx4_table_get(dev, &qp_table->qp_table, qp->qpn);
+	err = mlx4_qp_alloc_icm(dev, qpn);
 	if (err)
-		goto err_out;
-
-	err = mlx4_table_get(dev, &qp_table->auxc_table, qp->qpn);
-	if (err)
-		goto err_put_qp;
-
-	err = mlx4_table_get(dev, &qp_table->altc_table, qp->qpn);
-	if (err)
-		goto err_put_auxc;
-
-	err = mlx4_table_get(dev, &qp_table->rdmarc_table, qp->qpn);
-	if (err)
-		goto err_put_altc;
-
-	err = mlx4_table_get(dev, &qp_table->cmpt_table, qp->qpn);
-	if (err)
-		goto err_put_rdmarc;
+		return err;
 
 	spin_lock_irq(&qp_table->lock);
-	qp_table_rb_insert(&dev->qp_table_tree, qp->qpn & (dev->caps.num_qps - 1), qp);
+	err = radix_tree_insert(&dev->qp_table_tree, qp->qpn &
+				(dev->caps.num_qps - 1), qp);
 	spin_unlock_irq(&qp_table->lock);
+	if (err)
+		goto err_icm;
 
 	atomic_set(&qp->refcount, 1);
 	init_completion(&qp->free);
 
 	return 0;
 
-	mlx4_table_put(dev, &qp_table->cmpt_table, qp->qpn);
-
-err_put_rdmarc:
-	mlx4_table_put(dev, &qp_table->rdmarc_table, qp->qpn);
-
-err_put_altc:
-	mlx4_table_put(dev, &qp_table->altc_table, qp->qpn);
-
-err_put_auxc:
-	mlx4_table_put(dev, &qp_table->auxc_table, qp->qpn);
-
-err_put_qp:
-	mlx4_table_put(dev, &qp_table->qp_table, qp->qpn);
-
-err_out:
+err_icm:
+	mlx4_qp_free_icm(dev, qpn);
 	return err;
 }
 
