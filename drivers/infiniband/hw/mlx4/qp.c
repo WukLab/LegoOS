@@ -255,7 +255,7 @@ static void mlx4_ib_qp_event(struct mlx4_qp *qp, enum mlx4_event type)
 			event.event = IB_EVENT_QP_ACCESS_ERR;
 			break;
 		default:
-			printk(KERN_WARNING "mlx4_ib: Unexpected event type %d "
+			pr_warn("Unexpected event type %d "
 			       "on QP %06x\n", type, qp->qpn);
 			return;
 		}

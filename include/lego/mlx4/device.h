@@ -609,7 +609,16 @@ struct mlx4_dev {
 	unsigned long		num_slaves;
 	struct mlx4_caps	caps;
 	struct mlx4_phys_caps	phys_caps;
+
+	/*
+	 * This links all the QPs managed by this device.
+	 * Unlike original radix implementation, we use RB tree.
+	 *
+	 * The tree is modified by code in: mlx4en/qp.c
+	 */
 	struct rb_root		qp_table_tree;
+	unsigned long		nr_qps;
+
 	u8			rev_id;
 	char			board_id[MLX4_BOARD_ID_LEN];
 	int			num_vfs;
@@ -751,6 +760,12 @@ void mlx4_counter_free(struct mlx4_dev *dev, u32 idx);
 static inline int mlx4_is_master(struct mlx4_dev *dev)
 {
 	return dev->flags & MLX4_FLAG_MASTER;
+}
+
+static inline int mlx4_is_qp_reserved(struct mlx4_dev *dev, u32 qpn)
+{
+	return (qpn < dev->phys_caps.base_sqpn + 8 +
+		16 * MLX4_MFUNC_MAX * !!mlx4_is_master(dev));
 }
 
 static inline int mlx4_is_mfunc(struct mlx4_dev *dev)

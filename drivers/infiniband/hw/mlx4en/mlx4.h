@@ -541,8 +541,15 @@ struct mlx4_slave_state {
 	enum slave_port_state port_state[MLX4_MAX_PORTS + 1];
 };
 
+struct mlx4_master_qp0_state {
+	int proxy_qp0_active;
+	int qp0_active;
+	int port_active;
+};
+
 struct mlx4_mfunc_master_ctx {
 	struct mlx4_slave_state *slave_state;
+	struct mlx4_master_qp0_state qp0_state[MLX4_MAX_PORTS + 1];
 	int			init_port_ref[MLX4_MAX_PORTS + 1];
 	u16			max_mtu[MLX4_MAX_PORTS + 1];
 	int			disable_mcast_ref[MLX4_MAX_PORTS + 1];
