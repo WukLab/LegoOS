@@ -96,6 +96,20 @@ enum mlx4_ib_mad_ifc_flags {
 	MLX4_MAD_IFC_NET_VIEW		= 4,
 };
 
+enum {
+	MLX4_NUM_TUNNEL_BUFS		= 256,
+};
+
+struct mlx4_ib_tunnel_header {
+	struct mlx4_av av;
+	__be32 remote_qpn;
+	__be32 qkey;
+	__be16 vlan;
+	u8 mac[6];
+	__be16 pkey_index;
+	u8 reserved[6];
+};
+
 struct mlx4_ib_pd {
 	struct ib_pd		ibpd;
 	u32			pdn;
@@ -307,7 +321,6 @@ static inline struct mlx4_ib_mr *to_mmr(struct ib_mr *ibmr)
 	return container_of(ibmr, struct mlx4_ib_mr, ibmr);
 }
 
-#if 0
 static inline struct mlx4_ib_fast_reg_page_list *to_mfrpl(struct ib_fast_reg_page_list *ibfrpl)
 {
 	return container_of(ibfrpl, struct mlx4_ib_fast_reg_page_list, ibfrpl);
@@ -317,7 +330,6 @@ static inline struct mlx4_ib_fmr *to_mfmr(struct ib_fmr *ibfmr)
 {
 	return container_of(ibfmr, struct mlx4_ib_fmr, ibfmr);
 }
-#endif
 
 static inline struct mlx4_ib_qp *to_mqp(struct ib_qp *ibqp)
 {

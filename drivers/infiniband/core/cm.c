@@ -190,7 +190,7 @@ static void cm_work_handler(struct work_struct *work);
 
 static inline void cm_deref_id(struct cm_id_private *cm_id_priv)
 {
-	pr_info("%s need comp back\n");
+	pr_info("%s need comp back\n", __func__);
 	if (atomic_dec_and_test(&cm_id_priv->refcount))
 		complete(&cm_id_priv->comp);
 }
@@ -335,7 +335,6 @@ static int cm_alloc_id(struct cm_id_private *cm_id_priv)
 {
 	unsigned long flags;
 	int ret, id;
-	static int next_id;
 
 //	do {
 		spin_lock_irqsave(&cm.lock, flags);
@@ -768,7 +767,6 @@ static struct cm_timewait_info * cm_create_timewait_info(__be32 local_id)
 
 static void cm_enter_timewait(struct cm_id_private *cm_id_priv)
 {
-	int wait_time;
 	unsigned long flags;
 
 	//pr_info("%s\n", __func__);

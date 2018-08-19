@@ -107,12 +107,6 @@ static struct ib_client sa_client = {
 };
 #endif
 
-static DEFINE_SPINLOCK(idr_lock);
-//static DEFINE_IDR(query_idr);
-
-static DEFINE_SPINLOCK(tid_lock);
-static u32 tid;
-
 #define PATH_REC_FIELD(field) \
 	.struct_offset_bytes = offsetof(struct ib_sa_path_rec, field),		\
 	.struct_size_bytes   = sizeof ((struct ib_sa_path_rec *) 0)->field,	\
@@ -476,7 +470,7 @@ static u8 get_src_path_mask(struct ib_device *device, u8 port_num)
 	unsigned long flags;
 	u8 src_path_mask;
 
-	pr_info("%s need back\n");
+	pr_info("%s need back\n", __func__);
 	/* TODO */
 	sa_dev = NULL;
 	//sa_dev = ib_get_client_data(device, &sa_client);
@@ -496,7 +490,6 @@ int ib_init_ah_from_path(struct ib_device *device, u8 port_num,
 {
 	int ret;
 	u16 gid_index;
-	int force_grh;
 
 	memset(ah_attr, 0, sizeof *ah_attr);
 	ah_attr->dlid = be16_to_cpu(rec->dlid);
