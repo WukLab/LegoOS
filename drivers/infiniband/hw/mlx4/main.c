@@ -582,8 +582,7 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 {
 	struct mlx4_ib_dev *ibdev;
 	int num_ports = 0;
-	int i, j;
-	int err;
+	int i;
 	struct mlx4_ib_iboe *iboe;
 
 	pr_info_once("%s", mlx4_ib_version);
@@ -612,6 +611,7 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 	}
 
 	iboe = &ibdev->iboe;
+	spin_lock_init(&iboe->lock);
 
 	if (mlx4_pd_alloc(dev, &ibdev->priv_pdn))
 		goto err_dealloc;
@@ -711,7 +711,11 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 		goto err_map;
 
 	for (i = 0; i < ibdev->num_ports; ++i) {
-		ibdev->counters[i] = -1;
+		if (mlx4_ib_port_link_layer(&ibdev->ib_dev, i + 1) ==
+						IB_LINK_LAYER_ETHERNET) {
+			panic("no RoCE");
+		} else
+				ibdev->counters[i] = -1;
 	}
 
 	spin_lock_init(&ibdev->sm_lock);
@@ -727,9 +731,7 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 
 	ibdev->ib_active = true;
  
- 	//pr_debug("%s successful ibdev %p\n", __func__, ibdev);
 	return ibdev;
-
 
 err_reg:
 	ib_unregister_device(&ibdev->ib_dev);

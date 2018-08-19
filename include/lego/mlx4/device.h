@@ -94,6 +94,13 @@ enum {
 	MLX4_MAX_PORT_PKEYS	= 128,
 };
 
+/* base qkey for use in sriov tunnel-qp/proxy-qp communication.
+ * These qkeys must not be allowed for general use. This is a 64k range,
+ * and to test for violation, we use the mask (protect against future chg).
+ */
+#define MLX4_RESERVED_QKEY_BASE  (0xFFFF0000)
+#define MLX4_RESERVED_QKEY_MASK  (0xFFFF0000)
+
 enum {
 	MLX4_BOARD_ID_LEN = 64
 };

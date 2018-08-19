@@ -100,7 +100,8 @@ enum {
 
 struct mlx4_qp_path {
 	u8			fl;
-	u8			reserved1[2];
+	u8			vlan_control;
+	u8			disable_pkey_check;
 	u8			pkey_index;
 	u8			counter_index;
 	u8			grh_mylmc;
@@ -113,7 +114,8 @@ struct mlx4_qp_path {
 	u8			rgid[16];
 	u8			sched_queue;
 	u8			vlan_index;
-	u8			reserved3[2];
+	u8			feup;
+	u8			fvl_rx;
 	u8			reserved4[2];
 	u8			dmac[6];
 };

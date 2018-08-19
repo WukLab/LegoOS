@@ -111,6 +111,7 @@ struct mlx4_ib_xrcd {
 struct mlx4_ib_cq_buf {
 	struct mlx4_buf		buf;
 	struct mlx4_mtt		mtt;
+	int			entry_size;
 };
 
 struct mlx4_ib_cq_resize {
@@ -328,7 +329,6 @@ static inline struct mlx4_ib_qp *to_mibqp(struct mlx4_qp *mqp)
 	return container_of(mqp, struct mlx4_ib_qp, mqp);
 }
 
-#if 0
 static inline struct mlx4_ib_srq *to_msrq(struct ib_srq *ibsrq)
 {
 	return container_of(ibsrq, struct mlx4_ib_srq, ibsrq);
@@ -338,7 +338,6 @@ static inline struct mlx4_ib_srq *to_mibsrq(struct mlx4_srq *msrq)
 {
 	return container_of(msrq, struct mlx4_ib_srq, msrq);
 }
-#endif
 
 static inline struct mlx4_ib_ah *to_mah(struct ib_ah *ibah)
 {
