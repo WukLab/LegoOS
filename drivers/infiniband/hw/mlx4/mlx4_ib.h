@@ -264,6 +264,81 @@ struct mlx4_ib_ah {
 	union mlx4_ext_av       av;
 };
 
+struct pkey_mgt {
+	u8			virt2phys_pkey[MLX4_MFUNC_MAX][MLX4_MAX_PORTS][MLX4_MAX_PORT_PKEYS];
+	u16			phys_pkey_cache[MLX4_MAX_PORTS][MLX4_MAX_PORT_PKEYS];
+	struct list_head	pkey_port_list[MLX4_MFUNC_MAX];
+};
+
+enum mlx4_ib_demux_pv_state {
+	DEMUX_PV_STATE_DOWN,
+	DEMUX_PV_STATE_STARTING,
+	DEMUX_PV_STATE_ACTIVE,
+	DEMUX_PV_STATE_DOWNING,
+};
+
+struct mlx4_ib_tun_tx_buf {
+	struct mlx4_ib_buf buf;
+	struct ib_ah *ah;
+};
+
+struct mlx4_ib_demux_pv_qp {
+	struct ib_qp *qp;
+	enum ib_qp_type proxy_qpt;
+	struct mlx4_ib_buf *ring;
+	struct mlx4_ib_tun_tx_buf *tx_ring;
+	spinlock_t tx_lock;
+	unsigned tx_ix_head;
+	unsigned tx_ix_tail;
+};
+
+struct mlx4_ib_demux_pv_ctx {
+	int port;
+	int slave;
+	enum mlx4_ib_demux_pv_state state;
+	int has_smi;
+	struct ib_device *ib_dev;
+	struct ib_cq *cq;
+	struct ib_pd *pd;
+	struct ib_mr *mr;
+	struct mlx4_ib_demux_pv_qp qp[2];
+};
+
+struct mlx4_ib_demux_ctx {
+	struct ib_device *ib_dev;
+	int port;
+	spinlock_t ud_lock;
+	__be64 subnet_prefix;
+	__be64 guid_cache[128];
+	struct mlx4_ib_dev *dev;
+	/* the following lock protects both mcg_table and mcg_mgid0_list */
+	struct mutex		mcg_table_lock;
+	struct rb_root		mcg_table;
+	struct list_head	mcg_mgid0_list;
+	struct mlx4_ib_demux_pv_ctx **tun;
+	atomic_t tid;
+	int    flushing; /* flushing the work queue */
+};
+
+struct mlx4_sriov_alias_guid {
+};
+
+struct mlx4_ib_sriov {
+	struct mlx4_ib_demux_ctx demux[MLX4_MAX_PORTS];
+	struct mlx4_ib_demux_pv_ctx *sqps[MLX4_MAX_PORTS];
+	/* when using this spinlock you should use "irq" because
+	 * it may be called from interrupt context.*/
+	spinlock_t going_down_lock;
+	int is_going_down;
+
+	struct mlx4_sriov_alias_guid alias_guid;
+
+	/* CM paravirtualization fields */
+	struct list_head cm_list;
+	spinlock_t id_map_lock;
+	struct rb_root sl_id_map;
+};
+
 struct mlx4_ib_dev {
 	struct ib_device	ib_dev;
 	struct mlx4_dev	       *dev;
@@ -277,6 +352,7 @@ struct mlx4_ib_dev {
 	struct ib_mad_agent    *send_agent[MLX4_MAX_PORTS][2];
 	struct ib_ah	       *sm_ah[MLX4_MAX_PORTS];
 	spinlock_t		sm_lock;
+	struct mlx4_ib_sriov	sriov;
 
 	struct mutex		cap_mask_mutex;
 	bool			ib_active;
@@ -284,6 +360,7 @@ struct mlx4_ib_dev {
 	int			counters[MLX4_MAX_PORTS];
 	int		       *eq_table;
 	int			eq_added;
+	struct pkey_mgt		pkeys;
 };
 
 struct mlx4_ib_qp_tunnel_init_attr {
