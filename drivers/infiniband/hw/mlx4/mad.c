@@ -456,6 +456,9 @@ int mlx4_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 static void send_handler(struct ib_mad_agent *agent,
 			 struct ib_mad_send_wc *mad_send_wc)
 {
+	pr_info("%s(): we are mad callback checkme!\n", __func__);
+	if (mad_send_wc->send_buf->context[0])
+		ib_destroy_ah(mad_send_wc->send_buf->context[0]);
 	ib_free_send_mad(mad_send_wc->send_buf);
 }
 
@@ -464,20 +467,23 @@ int mlx4_ib_mad_init(struct mlx4_ib_dev *dev)
 	struct ib_mad_agent *agent;
 	int p, q;
 	int ret;
+	enum rdma_link_layer ll;
 
-	//pr_info("%s\n", __func__);
 	for (p = 0; p < dev->num_ports; ++p) {
+		ll = rdma_port_get_link_layer(&dev->ib_dev, p + 1);
 		for (q = 0; q <= 1; ++q) {
+			if (ll == IB_LINK_LAYER_INFINIBAND) {
 				agent = ib_register_mad_agent(&dev->ib_dev, p + 1,
 							      q ? IB_QPT_GSI : IB_QPT_SMI,
 							      NULL, 0, send_handler,
 							      NULL, NULL);
 				if (IS_ERR(agent)) {
 					ret = PTR_ERR(agent);
-					pr_info("%s register agent error\n", __func__);
 					goto err;
 				}
 				dev->send_agent[p][q] = agent;
+			} else
+				dev->send_agent[p][q] = NULL;
 		}
 	}
 
@@ -506,7 +512,7 @@ void mlx4_ib_mad_cleanup(struct mlx4_ib_dev *dev)
 			}
 		}
 
-	//	if (dev->sm_ah[p])
-	//		ib_destroy_ah(dev->sm_ah[p]);
+		if (dev->sm_ah[p])
+			ib_destroy_ah(dev->sm_ah[p]);
 	}
 }

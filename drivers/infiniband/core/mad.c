@@ -60,8 +60,7 @@ static int mad_recvq_size = IB_MAD_QP_RECV_SIZE;
 
 //static struct kmem_cache *ib_mad_cache;
 
-static struct list_head ib_mad_port_list;
-//static LIST_HEAD(ib_mad_port_list);
+static LIST_HEAD(ib_mad_port_list);
 static u32 ib_mad_client_id = 0;
 
 /* Port list lock */
@@ -303,7 +302,6 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	if (mad_reg_req) {
 		reg_req = kmalloc(sizeof *reg_req, GFP_KERNEL);
 		memcpy(reg_req, mad_reg_req, sizeof *reg_req);
-		//kmemdup(mad_reg_req, sizeof *reg_req, GFP_KERNEL);
 		if (!reg_req) {
 			ret = ERR_PTR(-ENOMEM);
 			goto error3;
@@ -328,8 +326,6 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	//INIT_DELAYED_WORK(&mad_agent_priv->timed_work, timeout_sends);
 	INIT_WORK(&mad_agent_priv->timed_work, timeout_sends);
 	INIT_LIST_HEAD(&mad_agent_priv->local_list);
-	//pr_info("%s init local completion reg_req %p qpn %d qptype %d mad_agent_priv %p, local_work %p\n", 
-	//		__func__, reg_req, qpn, qp_type, mad_agent_priv, &mad_agent_priv->local_work);
 	INIT_WORK(&mad_agent_priv->local_work, local_completions);
 	atomic_set(&mad_agent_priv->refcount, 1);
 	init_completion(&mad_agent_priv->comp);
@@ -636,8 +632,8 @@ static void unregister_mad_agent(struct ib_mad_agent_private *mad_agent_priv)
 int ib_unregister_mad_agent(struct ib_mad_agent *mad_agent)
 {
 	struct ib_mad_agent_private *mad_agent_priv;
-	//struct ib_mad_snoop_private *mad_snoop_priv;
 
+	WARN_ONCE(1, "Checkme!");
 	/* If the TID is zero, the agent can only snoop. */
 	if (mad_agent->hi_tid) {
 		mad_agent_priv = container_of(mad_agent,
@@ -645,10 +641,7 @@ int ib_unregister_mad_agent(struct ib_mad_agent *mad_agent)
 					      agent);
 		unregister_mad_agent(mad_agent_priv);
 	} else {
-		//mad_snoop_priv = container_of(mad_agent,
-		//			      struct ib_mad_snoop_private,
-		//			      agent);
-		//unregister_mad_snoop(mad_snoop_priv);
+		BUG();
 	}
 	return 0;
 }
@@ -3205,8 +3198,6 @@ int ib_mad_init(void)
 
 	mad_sendq_size = min(mad_sendq_size, IB_MAD_QP_MAX_SIZE);
 	mad_sendq_size = max(mad_sendq_size, IB_MAD_QP_MIN_SIZE);
-
-	INIT_LIST_HEAD(&ib_mad_port_list);
 
 	/*
 	 * For Lego, it simply means we can not run

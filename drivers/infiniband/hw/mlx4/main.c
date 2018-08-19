@@ -725,7 +725,7 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 		goto err_counter;
 
 	if (mlx4_ib_mad_init(ibdev)) {
-		pr_info("%s ib_mad_init fails\n", __func__);
+		pr_info("Fail to init mlx4_ib_mad");
 		goto err_reg;
 	}
 
@@ -825,7 +825,7 @@ int __init  mlx4_ib_init(void)
 
 	err = mlx4_register_interface(&mlx4_ib_interface);
 	if (err)
-		return err;
+		panic("Fail to register mlx4 interface");
 
 	return 0;
 }
