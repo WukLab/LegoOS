@@ -890,7 +890,7 @@ static u32 get_sqp_num(struct mlx4_ib_dev *dev, struct ib_qp_init_attr *attr)
 struct ib_qp *mlx4_ib_create_qp(struct ib_pd *pd,
 				struct ib_qp_init_attr *init_attr)
 {
-	struct mlx4_ib_qp *qp;
+	struct mlx4_ib_qp *qp = NULL;
 	int err;
 	u16 xrcdn = 0;
 
