@@ -103,45 +103,6 @@ struct mlx4_eq_context {
 			       (1ull << MLX4_EVENT_TYPE_FLR_EVENT)	    | \
 			       (1ull << MLX4_EVENT_TYPE_FATAL_WARNING))
 
-struct mlx4_eqe {
-	u8			reserved1;
-	u8			type;
-	u8			reserved2;
-	u8			subtype;
-	union {
-		u32		raw[6];
-		struct {
-			__be32	cqn;
-		} __packed comp;
-		struct {
-			u16	reserved1;
-			__be16	token;
-			u32	reserved2;
-			u8	reserved3[3];
-			u8	status;
-			__be64	out_param;
-		} __packed cmd;
-		struct {
-			__be32	qpn;
-		} __packed qp;
-		struct {
-			__be32	srqn;
-		} __packed srq;
-		struct {
-			__be32	cqn;
-			u32	reserved1;
-			u8	reserved2[3];
-			u8	syndrome;
-		} __packed cq_err;
-		struct {
-			u32	reserved1[2];
-			__be32	port;
-		} __packed port_change;
-	}			event;
-	u8			reserved3[3];
-	u8			owner;
-} __packed;
-
 static u64 get_async_ev_mask(struct mlx4_dev *dev)
 {
 	u64 async_ev_mask = MLX4_ASYNC_EVENT_MASK;
@@ -158,6 +119,24 @@ static void eq_set_ci(struct mlx4_eq *eq, int req_not)
 		     eq->doorbell);
 	/* We still want ordering, just not swabbing, so add a barrier */
 	mb();
+}
+
+static struct mlx4_eqe *get_eqe(struct mlx4_eq *eq, u32 entry, u8 eqe_factor)
+{
+	/* (entry & (eq->nent - 1)) gives us a cyclic array */
+	unsigned long offset = (entry & (eq->nent - 1)) * (MLX4_EQ_ENTRY_SIZE << eqe_factor);
+	/* CX3 is capable of extending the EQE from 32 to 64 bytes.
+	 * When this feature is enabled, the first (in the lower addresses)
+	 * 32 bytes in the 64 byte EQE are reserved and the next 32 bytes
+	 * contain the legacy EQE information.
+	 */
+	return eq->page_list[offset / PAGE_SIZE].buf + (offset + (eqe_factor ? MLX4_EQ_ENTRY_SIZE : 0)) % PAGE_SIZE;
+}
+
+static struct mlx4_eqe *next_eqe_sw(struct mlx4_eq *eq, u8 eqe_factor)
+{
+	struct mlx4_eqe *eqe = get_eqe(eq, eq->cons_index, eqe_factor);
+	return !!(eqe->owner & 0x80) ^ !!(eq->cons_index & eq->nent) ? NULL : eqe;
 }
 
 static int mlx4_MAP_EQ(struct mlx4_dev *dev, u64 event_mask, int unmap,
@@ -401,16 +380,72 @@ XXX
 #endif
 }
 
+static int mlx4_eq_int(struct mlx4_dev *dev, struct mlx4_eq *eq)
+{
+	struct mlx4_eqe *eqe;
+	int cqn;
+	int eqes_found = 0;
+	int set_ci = 0;
+
+	while ((eqe = next_eqe_sw(eq, dev->caps.eqe_factor))) {
+		/*
+		 * Make sure we read EQ entry contents after we've
+		 * checked the ownership bit.
+		 */
+		rmb();
+
+		switch (eqe->type) {
+		case MLX4_EVENT_TYPE_COMP:
+			cqn = be32_to_cpu(eqe->event.comp.cqn) & 0xffffff;
+			mlx4_cq_completion(dev, cqn);
+			break;
+		default:
+			mlx4_warn(dev, "Unhandled event %02x(%02x) on EQ %d at "
+				  "index %u. owner=%x, nent=0x%x, slave=%x, "
+				  "ownership=%s\n",
+				  eqe->type, eqe->subtype, eq->eqn,
+				  eq->cons_index, eqe->owner, eq->nent,
+				  eqe->slave_id,
+				  !!(eqe->owner & 0x80) ^
+				  !!(eq->cons_index & eq->nent) ? "HW" : "SW");
+			break;
+		};
+
+		++eq->cons_index;
+		eqes_found = 1;
+		++set_ci;
+
+		/*
+		 * The HCA will think the queue has overflowed if we
+		 * don't tell it we've been processing events.  We
+		 * create our EQs with MLX4_NUM_SPARE_EQE extra
+		 * entries, so we must update our consumer index at
+		 * least that often.
+		 */
+		if (unlikely(set_ci >= MLX4_NUM_SPARE_EQE)) {
+			eq_set_ci(eq, 0);
+			set_ci = 0;
+		}
+	}
+
+	eq_set_ci(eq, 1);
+
+	return eqes_found;
+}
+
 static irqreturn_t mlx4_interrupt(int irq, void *dev_ptr)
 {
 	struct mlx4_dev *dev = dev_ptr;
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	int work = 0;
-
-	writel(priv->eq_table.clr_mask, priv->eq_table.clr_int);
+	int i;
 
 	pr_info("%s(): irq %d\n", __func__, irq);
-	WARN_ON(1);
+	writel(priv->eq_table.clr_mask, priv->eq_table.clr_int);
+
+	for (i = 0; i < dev->caps.num_comp_vectors + 1; ++i)
+		work |= mlx4_eq_int(dev, &priv->eq_table.eq[i]);
+
 	return IRQ_RETVAL(work);
 }
 
