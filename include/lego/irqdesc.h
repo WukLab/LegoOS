@@ -17,6 +17,20 @@
 #include <lego/spinlock.h>
 
 /*
+ * Bits used by threaded handlers:
+ * IRQTF_RUNTHREAD - signals that the interrupt handler thread should run
+ * IRQTF_WARNED    - warning "IRQ_WAKE_THREAD w/o thread_fn" has been printed
+ * IRQTF_AFFINITY  - irq thread is requested to adjust affinity
+ * IRQTF_FORCED_THREAD  - irq action is force threaded
+ */
+enum {
+	IRQTF_RUNTHREAD,
+	IRQTF_WARNED,
+	IRQTF_AFFINITY,
+	IRQTF_FORCED_THREAD,
+};
+
+/*
  * Bit masks for irq_common_data.state_use_accessors
  *
  * IRQD_TRIGGER_MASK		- Mask for the trigger type bits
@@ -301,6 +315,8 @@ struct irq_desc {
 	unsigned int		irqs_unhandled;
 	spinlock_t		lock;
 	cpumask_var_t		pending_mask;
+	unsigned long		threads_oneshot;
+	atomic_t		threads_active;
 };
 
 extern struct irq_desc irq_desc[NR_IRQS];

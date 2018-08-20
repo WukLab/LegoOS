@@ -27,6 +27,32 @@ irqreturn_t no_action(int cpl, void *dev_id)
 	return IRQ_NONE;
 }
 
+static void warn_no_thread(unsigned int irq, struct irqaction *action)
+{
+	if (test_and_set_bit(IRQTF_WARNED, &action->thread_flags))
+		return;
+
+	printk(KERN_WARNING "IRQ %d device %s returned IRQ_WAKE_THREAD "
+	       "but no thread function available.", irq, action->name);
+}
+
+void __irq_wake_thread(struct irq_desc *desc, struct irqaction *action)
+{
+	WARN_ON(1);
+}
+
+static bool irq_may_run(struct irq_desc *desc)
+{
+	unsigned int mask = IRQD_IRQ_INPROGRESS;
+
+	/*
+	 * If the interrupt is not in progress, proceed.
+	 */
+	if (!irqd_has_set(&desc->irq_data, mask))
+		return true;
+	return false;
+}
+
 irqreturn_t handle_irq_event_percpu(struct irq_desc *desc)
 {
 	irqreturn_t retval = IRQ_NONE;
@@ -45,10 +71,13 @@ irqreturn_t handle_irq_event_percpu(struct irq_desc *desc)
 		switch (res) {
 		case IRQ_WAKE_THREAD:
 			/*
-			 * TODO:
 			 * Catch drivers which return WAKE_THREAD but
 			 * did not set up a thread function
 			 */
+			if (unlikely(!action->thread_fn)) {
+				warn_no_thread(irq, action);
+				break;
+			}
 
 		case IRQ_HANDLED:
 			break;
@@ -109,6 +138,27 @@ void handle_level_irq(struct irq_desc *desc)
 	print_irq_desc(irq, desc);
 }
 
+static void cond_unmask_eoi_irq(struct irq_desc *desc, struct irq_chip *chip)
+{
+	if (!(desc->istate & IRQS_ONESHOT)) {
+		chip->irq_eoi(&desc->irq_data);
+		return;
+	}
+	/*
+	 * We need to unmask in the following cases:
+	 * - Oneshot irq which did not wake the thread (caused by a
+	 *   spurious interrupt or a primary handler handling it
+	 *   completely).
+	 */
+	if (!irqd_irq_disabled(&desc->irq_data) &&
+	    irqd_irq_masked(&desc->irq_data) && !desc->threads_oneshot) {
+		chip->irq_eoi(&desc->irq_data);
+		unmask_irq(desc);
+	} else if (!(chip->flags & IRQCHIP_EOI_THREADED)) {
+		chip->irq_eoi(&desc->irq_data);
+	}
+}
+
 /**
  *	handle_fasteoi_irq - irq handler for transparent controllers
  *	@desc:	the interrupt description structure for this irq
@@ -120,21 +170,40 @@ void handle_level_irq(struct irq_desc *desc)
  */
 void handle_fasteoi_irq(struct irq_desc *desc)
 {
+	struct irq_chip *chip = desc->irq_data.chip;
 	unsigned int irq = irq_desc_get_irq(desc);
 
 	print_irq_desc(irq, desc);
-}
+	spin_lock(&desc->lock);
 
-static bool irq_may_run(struct irq_desc *desc)
-{
-	unsigned int mask = IRQD_IRQ_INPROGRESS;
+	if (!irq_may_run(desc))
+		goto out;
+
+	desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
 
 	/*
-	 * If the interrupt is not in progress, proceed.
+	 * If its disabled or no action available
+	 * then mask it and get out of here:
 	 */
-	if (!irqd_has_set(&desc->irq_data, mask))
-		return true;
-	return false;
+	if (unlikely(!desc->action || irqd_irq_disabled(&desc->irq_data))) {
+		desc->istate |= IRQS_PENDING;
+		mask_irq(desc);
+		goto out;
+	}
+
+	if (desc->istate & IRQS_ONESHOT)
+		mask_irq(desc);
+
+	handle_irq_event(desc);
+
+	cond_unmask_eoi_irq(desc, chip);
+
+	spin_unlock(&desc->lock);
+	return;
+out:
+	if (!(chip->flags & IRQCHIP_EOI_IF_HANDLED))
+		chip->irq_eoi(&desc->irq_data);
+	spin_unlock(&desc->lock);
 }
 
 /**
@@ -154,6 +223,9 @@ static bool irq_may_run(struct irq_desc *desc)
  */
 void handle_edge_irq(struct irq_desc *desc)
 {
+	unsigned int irq = irq_desc_get_irq(desc);
+
+	print_irq_desc(irq, desc);
 	spin_lock(&desc->lock);
 
 	desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
