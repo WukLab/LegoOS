@@ -1087,7 +1087,7 @@ enum ib_mad_result {
 #define IB_DEVICE_NAME_MAX 64
 
 struct ib_cache {
-	spinlock_t                lock; // XXX original is rwlock
+	spinlock_t                lock;
 	struct ib_event_handler event_handler;
 	struct ib_pkey_cache  **pkey_cache;
 	struct ib_gid_cache   **gid_cache;

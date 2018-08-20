@@ -312,7 +312,6 @@ static void forward_trap(struct mlx4_ib_dev *dev, u8 port_num, struct ib_mad *ma
 	int ret;
 	unsigned long flags;
 
-	pr_debug("%s(): check me!\n", __func__);
 	if (agent) {
 		send_buf = ib_create_send_mad(agent, qpn, 0, 0, IB_MGMT_MAD_HDR,
 					      IB_MGMT_MAD_DATA, GFP_ATOMIC);

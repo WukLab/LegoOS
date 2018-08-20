@@ -481,7 +481,7 @@ retry:
 	}
 	
    	if (!ctx->portinfo.lid || ctx->portinfo.state != 4) {
-		printk(KERN_CRIT "Couldn't get local LID %d state %d\n", ctx->portinfo.lid, ctx->portinfo.state);
+		//printk(KERN_CRIT "Couldn't get local LID %d state %d\n", ctx->portinfo.lid, ctx->portinfo.state);
 		schedule();
 		goto retry;
 	}

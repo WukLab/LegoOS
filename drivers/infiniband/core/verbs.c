@@ -189,12 +189,8 @@ int ib_init_ah_from_wc(struct ib_device *device, u8 port_num, struct ib_wc *wc,
 	ah_attr->src_path_bits = wc->dlid_path_bits;
 	ah_attr->port_num = port_num;
 
-	//pr_info("%s dlid %d sl %d src_path_bits %x port %d\n",
-	//	__func__, ah_attr->dlid, ah_attr->sl, ah_attr->src_path_bits, ah_attr->port_num);
-
 	if (wc->wc_flags & IB_WC_GRH) {
 		WARN_ONCE(1, "Checkme!");
-		pr_info("%s IB_WC_GRH\n", __func__);
 		ah_attr->ah_flags = IB_AH_GRH;
 		ah_attr->grh.dgid = grh->sgid;
 

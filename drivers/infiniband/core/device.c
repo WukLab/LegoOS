@@ -706,8 +706,14 @@ int __init mlx4_init(void);
  */
 void __init ib_core_init(void)
 {
+	/*
+	 * All the core IB layer play as IB client.
+	 * They will register their ib_client data structure,
+	 * and wait to be called whenever a device is registered.
+	 */
 	ib_mad_init();
 	ib_cm_init();
+	ib_cache_setup();
 
 	mlx4_init();
 }

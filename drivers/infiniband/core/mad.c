@@ -35,6 +35,7 @@
  */
 
 #define pr_fmt(fmt) "ib_mad: " fmt
+#define PFX
 
 #include <lego/dma-mapping.h>
 #include <lego/slab.h>
@@ -557,8 +558,6 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	struct ib_wc mad_wc;
 	struct ib_send_wr *send_wr = &mad_send_wr->send_wr;
 
-	pr_info("%s mad_agent_priv %p\n", __func__, mad_agent_priv);
-	WARN_ON(1);
 	if (device->node_type == RDMA_NODE_IB_SWITCH &&
 	    smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 		port_num = send_wr->wr.ud.port_num;
@@ -883,11 +882,6 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 	mad_send_wr->send_wr.wr_id = (unsigned long)&mad_send_wr->mad_list;
 	mad_send_wr->mad_list.mad_queue = &qp_info->send_queue;
 
-	if (!virt_addr_valid((unsigned long)(mad_send_wr->mad_list.mad_queue)))
-		panic("mad_queue is assigned a wrong value!");
-
-	//pr_info("%s wr_id %x qpn %d\n", __func__, mad_send_wr->send_wr.wr_id, mad_agent->qp->qp_num);
-
 	mad_agent = mad_send_wr->send_buf.mad_agent;
 	sge = mad_send_wr->sg_list;
 	sge[0].addr = ib_dma_map_single(mad_agent->device,
@@ -925,7 +919,6 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 				    mad_send_wr->payload_mapping,
 				    sge[1].length, DMA_TO_DEVICE);
 	}
-	//pr_info("%s ret %d\n", __func__, ret);
 	return ret;
 }
 
@@ -1872,7 +1865,6 @@ local:
 	}
 
 	mad_agent = find_mad_agent(port_priv, &recv->mad.mad);
-	pr_info("%s(): mad_agent: %pS\n", __func__, mad_agent);
 	if (mad_agent) {
 		ib_mad_complete_recv(mad_agent, &recv->header.recv_wc);
 		/*

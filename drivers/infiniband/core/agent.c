@@ -36,14 +36,14 @@
  *
  */
 
+#define pr_fmt(fmt) "ib_agent: " fmt
+
 #include <lego/slab.h>
 #include <lego/string.h>
 
 #include "agent.h"
 #include "smi.h"
 #include "mad_priv.h"
-
-#define SPFX "ib_agent: "
 
 struct ib_agent_port_private {
 	struct list_head port_list;
@@ -94,15 +94,14 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 		port_priv = ib_get_agent_port(device, port_num);
 
 	if (!port_priv) {
-		printk(KERN_ERR SPFX "Unable to find port agent\n");
+		pr_err("Unable to find port agent\n");
 		return;
 	}
 
 	agent = port_priv->agent[qpn];
 	ah = ib_create_ah_from_wc(agent->qp->pd, wc, grh, port_num);
 	if (IS_ERR(ah)) {
-		printk(KERN_ERR SPFX "ib_create_ah_from_wc error %ld\n",
-			PTR_ERR(ah));
+		pr_err("ib_create_ah_from_wc error %ld\n", PTR_ERR(ah));
 		return;
 	}
 
@@ -110,7 +109,7 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 				      IB_MGMT_MAD_HDR, IB_MGMT_MAD_DATA,
 				      GFP_KERNEL);
 	if (IS_ERR(send_buf)) {
-		printk(KERN_ERR SPFX "ib_create_send_mad error\n");
+		pr_err("ib_create_send_mad error\n");
 		goto err1;
 	}
 
@@ -125,7 +124,7 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 	}
 
 	if (ib_post_send_mad(send_buf, NULL)) {
-		printk(KERN_ERR SPFX "ib_post_send_mad error\n");
+		pr_err("ib_post_send_mad error\n");
 		goto err2;
 	}
 	return;
@@ -155,7 +154,7 @@ int ib_agent_port_open(struct ib_device *device, int port_num)
 	/* Create new device info */
 	port_priv = kzalloc(sizeof *port_priv, GFP_KERNEL);
 	if (!port_priv) {
-		printk(KERN_ERR SPFX "No memory for ib_agent_port_private\n");
+		pr_err("No memory for ib_agent_port_private\n");
 		ret = -ENOMEM;
 		goto error1;
 	}
@@ -206,7 +205,7 @@ int ib_agent_port_close(struct ib_device *device, int port_num)
 	port_priv = __ib_get_agent_port(device, port_num);
 	if (port_priv == NULL) {
 		spin_unlock_irqrestore(&ib_agent_port_list_lock, flags);
-		printk(KERN_ERR SPFX "Port %d not found\n", port_num);
+		pr_err("Port %d not found\n", port_num);
 		return -ENODEV;
 	}
 	list_del(&port_priv->port_list);
