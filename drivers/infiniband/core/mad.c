@@ -557,7 +557,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	struct ib_wc mad_wc;
 	struct ib_send_wr *send_wr = &mad_send_wr->send_wr;
 
-	//pr_info("%s mad_agent_priv %p\n", __func__, mad_agent_priv);
+	pr_info("%s mad_agent_priv %p\n", __func__, mad_agent_priv);
 	if (device->node_type == RDMA_NODE_IB_SWITCH &&
 	    smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 		port_num = send_wr->wr.ud.port_num;
@@ -582,7 +582,6 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	/* Check to post send on QP or process locally */
 	if (smi_check_local_smp(smp, device) == IB_SMI_DISCARD &&
 	    smi_check_local_returning_smp(smp, device) == IB_SMI_DISCARD) {
-		//pr_info("%s smi discard ret %d\n", __func__, ret);
 		goto out;
 	}
 
@@ -594,16 +593,14 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	}
 	local->mad_priv = NULL;
 	local->recv_mad_agent = NULL;
-	mad_priv = kmalloc(sizeof(struct ib_mad_private), GFP_KERNEL);
-/*
-	mad_priv = kmem_cache_alloc(ib_mad_cache, GFP_ATOMIC);
+	mad_priv = kmalloc(sizeof(*mad_priv), GFP_KERNEL);
 	if (!mad_priv) {
 		ret = -ENOMEM;
 		printk(KERN_ERR PFX "No memory for local response MAD\n");
 		kfree(local);
 		goto out;
 	}
-*/
+
 	build_smp_wc(mad_agent_priv->agent.qp,
 		     send_wr->wr_id, be16_to_cpu(smp->dr_slid),
 		     send_wr->wr.ud.pkey_index,
@@ -613,13 +610,10 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	ret = device->process_mad(device, 0, port_num, &mad_wc, NULL,
 				  (struct ib_mad *)smp,
 				  (struct ib_mad *)&mad_priv->mad);
-	//pr_info("%s got mad ret %d\n", __func__, ret);
-	switch (ret)
-	{
+	switch (ret) {
 	case IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_REPLY:
 		if (ib_response_mad(&mad_priv->mad.mad) &&
 		    mad_agent_priv->agent.recv_handler) {
-			//pr_info("%s got mad ret %d is response mad\n", __func__, ret);
 			local->mad_priv = mad_priv;
 			local->recv_mad_agent = mad_agent_priv;
 			/*
@@ -630,15 +624,11 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 		} 
 		else
 			kfree(mad_priv);
-		//	kmem_cache_free(ib_mad_cache, mad_priv);
 		break;
 	case IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED:
-		//pr_info("%s got mad ret %d result consumed\n", __func__, ret);
 		kfree(mad_priv);
-		//kmem_cache_free(ib_mad_cache, mad_priv);
 		break;
 	case IB_MAD_RESULT_SUCCESS:
-		//pr_info("%s got mad ret %d result success\n", __func__, ret);
 		/* Treat like an incoming receive MAD */
 		port_priv = ib_get_mad_port(mad_agent_priv->agent.device,
 					    mad_agent_priv->agent.port_num);
@@ -653,16 +643,13 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 			 * generate send completion.
 			 */
 			kfree(mad_priv);
-			//kmem_cache_free(ib_mad_cache, mad_priv);
 			break;
 		}
 		local->mad_priv = mad_priv;
 		local->recv_mad_agent = recv_mad_agent;
 		break;
 	default:
-		//pr_info("%s got mad ret %d result not success\n", __func__, ret);
 		kfree(mad_priv);
-		//kmem_cache_free(ib_mad_cache, mad_priv);
 		kfree(local);
 		ret = -EINVAL;
 		goto out;
@@ -675,12 +662,11 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	spin_lock_irqsave(&mad_agent_priv->lock, flags);
 	list_add_tail(&local->completion_list, &mad_agent_priv->local_list);
 	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
-	//pr_info("before mad queue_work\n");
+
 	queue_work(mad_agent_priv->qp_info->port_priv->wq,
 		   &mad_agent_priv->local_work);
 	ret = 1;
 out:
-	//pr_info("%s return %d\n", __func__, ret);
 	return ret;
 }
 
@@ -1801,8 +1787,10 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 	recv->header.recv_wc.recv_buf.mad = &recv->mad.mad;
 	recv->header.recv_wc.recv_buf.grh = &recv->grh;
 
-	if (atomic_read(&qp_info->snoop_count))
+	if (atomic_read(&qp_info->snoop_count)) {
+		pr_info("%s(): snoop recv\n", __func__);
 		snoop_recv(qp_info, &recv->header.recv_wc, IB_MAD_SNOOP_RECVS);
+	}
 
 	/* Validate MAD */
 	if (!validate_mad(&recv->mad.mad, qp_info->qp->qp_num))
@@ -1883,6 +1871,7 @@ local:
 	}
 
 	mad_agent = find_mad_agent(port_priv, &recv->mad.mad);
+	pr_info("%s(): mad_agent: %pS\n", __func__, mad_agent);
 	if (mad_agent) {
 		ib_mad_complete_recv(mad_agent, &recv->header.recv_wc);
 		/*
@@ -2520,7 +2509,7 @@ static void timeout_sends(struct work_struct *work)
  *
  * Now, we changed to let ib_mad_completion_handler() keep polling the CQ.
  */
-__maybe_unused static void ib_mad_thread_completion_handler(struct ib_cq *cq, void *arg)
+static void ib_mad_thread_completion_handler(struct ib_cq *cq, void *arg)
 {
 #if 0
 	struct ib_mad_port_private *port_priv = cq->cq_context;

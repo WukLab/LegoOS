@@ -102,10 +102,15 @@ enum {
 	CM_COUNTER_GROUPS
 };
 
+struct cm_counter_group {
+	atomic_long_t counter[CM_ATTR_COUNT];
+};
+
 struct cm_port {
 	struct cm_device *cm_dev;
 	struct ib_mad_agent *mad_agent;
 	u8 port_num;
+	struct cm_counter_group counter_group[CM_COUNTER_GROUPS];
 };
 
 struct cm_device {
@@ -190,7 +195,6 @@ static void cm_work_handler(struct work_struct *work);
 
 static inline void cm_deref_id(struct cm_id_private *cm_id_priv)
 {
-	pr_info("%s need comp back\n", __func__);
 	if (atomic_dec_and_test(&cm_id_priv->refcount))
 		complete(&cm_id_priv->comp);
 }
@@ -3130,7 +3134,6 @@ static void cm_process_send_error(struct ib_mad_send_buf *msg,
 	enum ib_cm_state state;
 	int ret;
 
-	//pr_info("%s\n", __func__);
 	memset(&cm_event, 0, sizeof cm_event);
 	cm_id_priv = msg->context[0];
 
@@ -3183,7 +3186,7 @@ static void cm_send_handler(struct ib_mad_agent *mad_agent,
 	struct cm_port *port;
 	u16 attr_index;
 
-	//pr_info("%s\n", __func__);
+	pr_info("%s(): we are here\n", __func__);
 	port = mad_agent->context;
 	attr_index = be16_to_cpu(((struct ib_mad_hdr *)
 				  msg->mad)->attr_id) - CM_ATTR_ID_OFFSET;
@@ -3193,8 +3196,15 @@ static void cm_send_handler(struct ib_mad_agent *mad_agent,
 	 * set to a cm_id), and is not a REJ, then it is a send that was
 	 * manually retried.
 	 */
-//XXX	if (!msg->context[0] && (attr_index != CM_REJ_COUNTER))
-//		msg->retries = 1;
+	if (!msg->context[0] && (attr_index != CM_REJ_COUNTER))
+		msg->retries = 1;
+
+	atomic_long_add(1 + msg->retries,
+			&port->counter_group[CM_XMIT].counter[attr_index]);
+	if (msg->retries)
+		atomic_long_add(msg->retries,
+				&port->counter_group[CM_XMIT_RETRIES].
+				counter[attr_index]);
 
 	switch (mad_send_wc->status) {
 	case IB_WC_SUCCESS:
@@ -3363,7 +3373,7 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 	u16 attr_id;
 	int paths = 0;
 
-	//pr_info("%s id %d\n", __func__, mad_recv_wc->recv_buf.mad->mad_hdr.attr_id);
+	WARN_ONCE(1, "Patch me!");
 	switch (mad_recv_wc->recv_buf.mad->mad_hdr.attr_id) {
 	case CM_REQ_ATTR_ID:
 		paths = 1 + (((struct cm_req_msg *) mad_recv_wc->recv_buf.mad)->
@@ -3407,6 +3417,8 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 	}
 
 	attr_id = be16_to_cpu(mad_recv_wc->recv_buf.mad->mad_hdr.attr_id);
+	atomic_long_inc(&port->counter_group[CM_RECV].
+			counter[attr_id - CM_ATTR_ID_OFFSET]);
 
 	work = kmalloc(sizeof *work + sizeof(struct ib_sa_path_rec) * paths,
 		       GFP_KERNEL);
@@ -3620,6 +3632,9 @@ static void cm_add_one(struct ib_device *ib_device)
 	u8 i;
 
 	pr_info("%s(): device %s\n", __func__, dev_name(ib_device->dma_device));
+	if (rdma_node_get_transport(ib_device->node_type) != RDMA_TRANSPORT_IB)
+		return;
+
 	cm_dev = kzalloc(sizeof(*cm_dev) + sizeof(*port) *
 			 ib_device->phys_port_cnt, GFP_KERNEL);
 	if (!cm_dev)
@@ -3654,10 +3669,8 @@ static void cm_add_one(struct ib_device *ib_device)
 	}
 	ib_set_client_data(ib_device, &cm_client, cm_dev);
 
-	//write_lock_irqsave(&cm.device_lock, flags);
 	spin_lock_irqsave(&cm.device_lock, flags);
 	list_add_tail(&cm_dev->list, &cm.device_list);
-	//write_unlock_irqrestore(&cm.device_lock, flags);
 	spin_unlock_irqrestore(&cm.device_lock, flags);
 	return;
 
@@ -3688,10 +3701,8 @@ static void cm_remove_one(struct ib_device *ib_device)
 	if (!cm_dev)
 		return;
 
-	//write_lock_irqsave(&cm.device_lock, flags);
 	spin_lock_irqsave(&cm.device_lock, flags);
 	list_del(&cm_dev->list);
-	//write_unlock_irqrestore(&cm.device_lock, flags);
 	spin_unlock_irqrestore(&cm.device_lock, flags);
 
 	for (i = 1; i <= ib_device->phys_port_cnt; i++) {
@@ -3710,7 +3721,6 @@ int ib_cm_init(void)
 	global_next_id = 0;
 	memset(&cm, 0, sizeof cm);
 	INIT_LIST_HEAD(&cm.device_list);
-	//rwlock_init(&cm.device_lock);
 	spin_lock_init(&cm.device_lock);
 	spin_lock_init(&cm.lock);
 	cm.listen_service_table = RB_ROOT;

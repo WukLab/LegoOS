@@ -425,8 +425,8 @@ int lego_ib_init(void *unused)
 	init_global_lid_qpn();
 	print_gloabl_lid();
 
-	//while (mad_got_one < 7)
-	//	schedule();
+	while (mad_got_one < 7)
+		schedule();
 
 	ret = ib_register_client(&ibv_client);
 	if (ret) {

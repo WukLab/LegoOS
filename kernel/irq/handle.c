@@ -223,9 +223,6 @@ out:
  */
 void handle_edge_irq(struct irq_desc *desc)
 {
-	unsigned int irq = irq_desc_get_irq(desc);
-
-	print_irq_desc(irq, desc);
 	spin_lock(&desc->lock);
 
 	desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
