@@ -466,6 +466,7 @@ ppc *fit_init_interface(int ib_port, struct ib_device *ib_dev, int mynodeid)
 	rcnt = 0;
 	scnt = 0;
 	ctx = fit_init_ctx(size,rx_depth,ib_port, ib_dev, mynodeid);
+	pr_info("Return after fit_init_ctx\n");
 	if(!ctx)
 	{
 		printk(KERN_ALERT "Fail to do fit_init_ctx\n");
@@ -480,7 +481,7 @@ retry:
 	}
 	
    	if (!ctx->portinfo.lid || ctx->portinfo.state != 4) {
-		//printk(KERN_CRIT "Couldn't get local LID %d state %d\n", ctx->portinfo.lid, ctx->portinfo.state);
+		printk(KERN_CRIT "Couldn't get local LID %d state %d\n", ctx->portinfo.lid, ctx->portinfo.state);
 		schedule();
 		goto retry;
 	}

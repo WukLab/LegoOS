@@ -39,7 +39,7 @@ struct ib_pd *ctx_pd;
 
 static void ibv_add_one(struct ib_device *device)
 {
-	FIT_ctx = (struct lego_context *)kmalloc(sizeof(struct lego_context), GFP_KERNEL);
+	FIT_ctx = kmalloc(sizeof(struct lego_context), GFP_KERNEL);
 	ibapi_dev = device;
 	
 	ctx_pd = ib_alloc_pd(device);
@@ -425,8 +425,8 @@ int lego_ib_init(void *unused)
 	init_global_lid_qpn();
 	print_gloabl_lid();
 
-	while (mad_got_one < 7)
-		schedule();
+	//while (mad_got_one < 7)
+	//	schedule();
 
 	ret = ib_register_client(&ibv_client);
 	if (ret) {

@@ -2212,34 +2212,23 @@ static int ib_mad_completion_handler(void *_data)
 			continue;
 		}
 
-		/* We are not prepared to get more than one */
-		if (nr_got != 1) {
-			pr_info("%s(): WARNING nr_got: %d\n", __func__, nr_got);
-			continue;
-		}
-
 		if (wc.status != IB_WC_SUCCESS) {
-			pr_info("%s(): WARNING mad_error\n", __func__);
+			WARN_ON(1);
 			mad_error_handler(port_priv, &wc);
 			continue;
 		}
 
+		pr_info("%s %d dev: %s port: %d %s cq op %d mad_got_one=%d\n",
+			__func__, __LINE__, dev_name(port_priv->device->dma_device),
+			port_priv->port_num, (wc.opcode == IB_WC_SEND) ? "SEND" : "RECV",
+			wc.opcode, mad_got_one);
+
 		switch (wc.opcode) {
 		case IB_WC_SEND:
-#if 1
-			pr_info("%s %d dev: %s port: %d SEND cq op %d mad_got_one=%d\n",
-				__func__, __LINE__, dev_name(port_priv->device->dma_device),
-				port_priv->port_num, wc.opcode, mad_got_one);
-#endif
 			ib_mad_send_done_handler(port_priv, &wc);
 			break;
 		case IB_WC_RECV:
 			mad_got_one++;
-#if 1
-			pr_info("%s %d dev: %s port: %d RECV cq op %d mad_got_one=%d\n",
-				__func__, __LINE__, dev_name(port_priv->device->dma_device),
-				port_priv->port_num, wc.opcode, mad_got_one);
-#endif
 			ib_mad_recv_done_handler(port_priv, &wc);
 			break;
 		default:
@@ -2533,6 +2522,7 @@ static void timeout_sends(struct work_struct *work)
  */
 __maybe_unused static void ib_mad_thread_completion_handler(struct ib_cq *cq, void *arg)
 {
+#if 0
 	struct ib_mad_port_private *port_priv = cq->cq_context;
 	unsigned long flags;
 
@@ -2542,6 +2532,7 @@ __maybe_unused static void ib_mad_thread_completion_handler(struct ib_cq *cq, vo
 		queue_work(port_priv->wq, &port_priv->work);
 	}
 	spin_unlock_irqrestore(&ib_mad_port_list_lock, flags);
+#endif
 }
 
 /*
