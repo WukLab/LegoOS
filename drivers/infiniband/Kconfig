@@ -13,6 +13,26 @@ menuconfig INFINIBAND
 	  any protocols you wish to use as well as drivers for your
 	  InfiniBand hardware.
 
+config DEBUG_INFINIBAND_QP_TABLE
+	bool "Debug QP table operations"
+	default n
+	depends on INFINIBAND
+	depends on DEBUG_KERNEL
+	help
+	 Enable if you want to track per IB device QP table activities.
+
+	 If unsure, say N.
+
+config DEBUG_INFINIBAND_CQ_TABLE
+	bool "Debug CQ table operations"
+	default n
+	depends on INFINIBAND
+	depends on DEBUG_KERNEL
+	help
+	 Enable if you want to track per IB device CQ table activities.
+
+	 If unsure, say N.
+
 if INFINIBAND
 
 source "drivers/infiniband/hw/mlx4/Kconfig"

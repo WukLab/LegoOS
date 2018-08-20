@@ -1773,9 +1773,6 @@ static inline u64 ib_dma_map_single(struct ib_device *dev,
 				    void *cpu_addr, size_t size,
 				    enum dma_data_direction direction)
 {
-	//pr_debug("%s dev %p dmadev %p cpu_addr %p size %d\n", __func__, dev, dev->dma_device, cpu_addr, size);
-//	if (dev->dma_ops)
-//		return dev->dma_ops->map_single(dev, cpu_addr, size, direction);
 	return dma_map_single(dev->dma_device, cpu_addr, size, direction);
 }
 
@@ -1790,10 +1787,7 @@ static inline void ib_dma_unmap_single(struct ib_device *dev,
 				       u64 addr, size_t size,
 				       enum dma_data_direction direction)
 {
-	if (dev->dma_ops)
-		dev->dma_ops->unmap_single(dev, addr, size, direction);
-	else
-		dma_unmap_single(dev->dma_device, addr, size, direction);
+	dma_unmap_single(dev->dma_device, addr, size, direction);
 }
 
 static inline u64 ib_dma_map_single_attrs(struct ib_device *dev,
@@ -1828,8 +1822,6 @@ static inline u64 ib_dma_map_page(struct ib_device *dev,
 				  size_t size,
 					 enum dma_data_direction direction)
 {
-	if (dev->dma_ops)
-		return dev->dma_ops->map_page(dev, page, offset, size, direction);
 	return dma_map_page(dev->dma_device, page, offset, size, direction);
 }
 
@@ -1844,87 +1836,8 @@ static inline void ib_dma_unmap_page(struct ib_device *dev,
 				     u64 addr, size_t size,
 				     enum dma_data_direction direction)
 {
-	if (dev->dma_ops)
-		dev->dma_ops->unmap_page(dev, addr, size, direction);
-	else
-		dma_unmap_page(dev->dma_device, addr, size, direction);
+	dma_unmap_page(dev->dma_device, addr, size, direction);
 }
-
-#if 0
-/**
- * ib_dma_map_sg - Map a scatter/gather list to DMA addresses
- * @dev: The device for which the DMA addresses are to be created
- * @sg: The array of scatter/gather entries
- * @nents: The number of scatter/gather entries
- * @direction: The direction of the DMA
- */
-static inline int ib_dma_map_sg(struct ib_device *dev,
-				struct scatterlist *sg, int nents,
-				enum dma_data_direction direction)
-{
-	if (dev->dma_ops)
-		return dev->dma_ops->map_sg(dev, sg, nents, direction);
-	return dma_map_sg(dev->dma_device, sg, nents, direction);
-}
-
-/**
- * ib_dma_unmap_sg - Unmap a scatter/gather list of DMA addresses
- * @dev: The device for which the DMA addresses were created
- * @sg: The array of scatter/gather entries
- * @nents: The number of scatter/gather entries
- * @direction: The direction of the DMA
- */
-static inline void ib_dma_unmap_sg(struct ib_device *dev,
-				   struct scatterlist *sg, int nents,
-				   enum dma_data_direction direction)
-{
-	if (dev->dma_ops)
-		dev->dma_ops->unmap_sg(dev, sg, nents, direction);
-	else
-		dma_unmap_sg(dev->dma_device, sg, nents, direction);
-}
-
-static inline int ib_dma_map_sg_attrs(struct ib_device *dev,
-				      struct scatterlist *sg, int nents,
-				      enum dma_data_direction direction,
-				      struct dma_attrs *attrs)
-{
-	return dma_map_sg_attrs(dev->dma_device, sg, nents, direction, attrs);
-}
-
-static inline void ib_dma_unmap_sg_attrs(struct ib_device *dev,
-					 struct scatterlist *sg, int nents,
-					 enum dma_data_direction direction,
-					 struct dma_attrs *attrs)
-{
-	dma_unmap_sg_attrs(dev->dma_device, sg, nents, direction, attrs);
-}
-/**
- * ib_sg_dma_address - Return the DMA address from a scatter/gather entry
- * @dev: The device for which the DMA addresses were created
- * @sg: The scatter/gather entry
- */
-static inline u64 ib_sg_dma_address(struct ib_device *dev,
-				    struct scatterlist *sg)
-{
-	if (dev->dma_ops)
-		return dev->dma_ops->dma_address(dev, sg);
-	return sg_dma_address(sg);
-}
-
-/**
- * ib_sg_dma_len - Return the DMA length from a scatter/gather entry
- * @dev: The device for which the DMA addresses were created
- * @sg: The scatter/gather entry
- */
-static inline unsigned int ib_sg_dma_len(struct ib_device *dev,
-					 struct scatterlist *sg)
-{
-	if (dev->dma_ops)
-		return dev->dma_ops->dma_len(dev, sg);
-	return sg_dma_len(sg);
-}
-#endif
 
 /**
  * ib_dma_sync_single_for_cpu - Prepare DMA region to be accessed by CPU
@@ -1938,10 +1851,7 @@ static inline void ib_dma_sync_single_for_cpu(struct ib_device *dev,
 					      size_t size,
 					      enum dma_data_direction dir)
 {
-	if (dev->dma_ops)
-		dev->dma_ops->sync_single_for_cpu(dev, addr, size, dir);
-	else
-		dma_sync_single_for_cpu(dev->dma_device, addr, size, dir);
+	dma_sync_single_for_cpu(dev->dma_device, addr, size, dir);
 }
 
 /**
@@ -1956,10 +1866,7 @@ static inline void ib_dma_sync_single_for_device(struct ib_device *dev,
 						 size_t size,
 						 enum dma_data_direction dir)
 {
-	if (dev->dma_ops)
-		dev->dma_ops->sync_single_for_device(dev, addr, size, dir);
-	else
-		dma_sync_single_for_device(dev->dma_device, addr, size, dir);
+	dma_sync_single_for_device(dev->dma_device, addr, size, dir);
 }
 
 /**
@@ -1974,16 +1881,12 @@ static inline void *ib_dma_alloc_coherent(struct ib_device *dev,
 					   u64 *dma_handle,
 					   gfp_t flag)
 {
-	if (dev->dma_ops)
-		return dev->dma_ops->alloc_coherent(dev, size, dma_handle, flag);
-	else {
-		dma_addr_t handle;
-		void *ret;
+	dma_addr_t handle;
+	void *ret;
 
-		ret = dma_alloc_coherent(dev->dma_device, size, &handle, flag);
-		*dma_handle = handle;
-		return ret;
-	}
+	ret = dma_alloc_coherent(dev->dma_device, size, &handle, flag);
+	*dma_handle = handle;
+	return ret;
 }
 
 /**
@@ -1997,10 +1900,7 @@ static inline void ib_dma_free_coherent(struct ib_device *dev,
 					size_t size, void *cpu_addr,
 					u64 dma_handle)
 {
-	if (dev->dma_ops)
-		dev->dma_ops->free_coherent(dev, size, cpu_addr, dma_handle);
-	else
-		dma_free_coherent(dev->dma_device, size, cpu_addr, dma_handle);
+	dma_free_coherent(dev->dma_device, size, cpu_addr, dma_handle);
 }
 
 /**
@@ -2062,159 +1962,5 @@ int ib_query_mr(struct ib_mr *mr, struct ib_mr_attr *mr_attr);
  * @mr: The memory region to deregister.
  */
 int ib_dereg_mr(struct ib_mr *mr);
-
-#if 0
-/**
- * ib_alloc_fast_reg_mr - Allocates memory region usable with the
- *   IB_WR_FAST_REG_MR send work request.
- * @pd: The protection domain associated with the region.
- * @max_page_list_len: requested max physical buffer list length to be
- *   used with fast register work requests for this MR.
- */
-struct ib_mr *ib_alloc_fast_reg_mr(struct ib_pd *pd, int max_page_list_len);
-
-/**
- * ib_alloc_fast_reg_page_list - Allocates a page list array
- * @device - ib device pointer.
- * @page_list_len - size of the page list array to be allocated.
- *
- * This allocates and returns a struct ib_fast_reg_page_list * and a
- * page_list array that is at least page_list_len in size.  The actual
- * size is returned in max_page_list_len.  The caller is responsible
- * for initializing the contents of the page_list array before posting
- * a send work request with the IB_WC_FAST_REG_MR opcode.
- *
- * The page_list array entries must be translated using one of the
- * ib_dma_*() functions just like the addresses passed to
- * ib_map_phys_fmr().  Once the ib_post_send() is issued, the struct
- * ib_fast_reg_page_list must not be modified by the caller until the
- * IB_WC_FAST_REG_MR work request completes.
- */
-struct ib_fast_reg_page_list *ib_alloc_fast_reg_page_list(
-				struct ib_device *device, int page_list_len);
-
-/**
- * ib_free_fast_reg_page_list - Deallocates a previously allocated
- *   page list array.
- * @page_list - struct ib_fast_reg_page_list pointer to be deallocated.
- */
-void ib_free_fast_reg_page_list(struct ib_fast_reg_page_list *page_list);
-
-/**
- * ib_update_fast_reg_key - updates the key portion of the fast_reg MR
- *   R_Key and L_Key.
- * @mr - struct ib_mr pointer to be updated.
- * @newkey - new key to be used.
- */
-static inline void ib_update_fast_reg_key(struct ib_mr *mr, u8 newkey)
-{
-	mr->lkey = (mr->lkey & 0xffffff00) | newkey;
-	mr->rkey = (mr->rkey & 0xffffff00) | newkey;
-}
-
-/**
- * ib_alloc_mw - Allocates a memory window.
- * @pd: The protection domain associated with the memory window.
- */
-struct ib_mw *ib_alloc_mw(struct ib_pd *pd);
-
-/**
- * ib_bind_mw - Posts a work request to the send queue of the specified
- *   QP, which binds the memory window to the given address range and
- *   remote access attributes.
- * @qp: QP to post the bind work request on.
- * @mw: The memory window to bind.
- * @mw_bind: Specifies information about the memory window, including
- *   its address range, remote access rights, and associated memory region.
- */
-static inline int ib_bind_mw(struct ib_qp *qp,
-			     struct ib_mw *mw,
-			     struct ib_mw_bind *mw_bind)
-{
-	/* XXX reference counting in corresponding MR? */
-	return mw->device->bind_mw ?
-		mw->device->bind_mw(qp, mw, mw_bind) :
-		-ENOSYS;
-}
-
-/**
- * ib_dealloc_mw - Deallocates a memory window.
- * @mw: The memory window to deallocate.
- */
-int ib_dealloc_mw(struct ib_mw *mw);
-
-/**
- * ib_alloc_fmr - Allocates a unmapped fast memory region.
- * @pd: The protection domain associated with the unmapped region.
- * @mr_access_flags: Specifies the memory access rights.
- * @fmr_attr: Attributes of the unmapped region.
- *
- * A fast memory region must be mapped before it can be used as part of
- * a work request.
- */
-struct ib_fmr *ib_alloc_fmr(struct ib_pd *pd,
-			    int mr_access_flags,
-			    struct ib_fmr_attr *fmr_attr);
-
-/**
- * ib_map_phys_fmr - Maps a list of physical pages to a fast memory region.
- * @fmr: The fast memory region to associate with the pages.
- * @page_list: An array of physical pages to map to the fast memory region.
- * @list_len: The number of pages in page_list.
- * @iova: The I/O virtual address to use with the mapped region.
- */
-static inline int ib_map_phys_fmr(struct ib_fmr *fmr,
-				  u64 *page_list, int list_len,
-				  u64 iova)
-{
-	return fmr->device->map_phys_fmr(fmr, page_list, list_len, iova);
-}
-
-/**
- * ib_unmap_fmr - Removes the mapping from a list of fast memory regions.
- * @fmr_list: A linked list of fast memory regions to unmap.
- */
-int ib_unmap_fmr(struct list_head *fmr_list);
-
-/**
- * ib_dealloc_fmr - Deallocates a fast memory region.
- * @fmr: The fast memory region to deallocate.
- */
-int ib_dealloc_fmr(struct ib_fmr *fmr);
-
-/**
- * ib_attach_mcast - Attaches the specified QP to a multicast group.
- * @qp: QP to attach to the multicast group.  The QP must be type
- *   IB_QPT_UD.
- * @gid: Multicast group GID.
- * @lid: Multicast group LID in host byte order.
- *
- * In order to send and receive multicast packets, subnet
- * administration must have created the multicast group and configured
- * the fabric appropriately.  The port associated with the specified
- * QP must also be a member of the multicast group.
- */
-int ib_attach_mcast(struct ib_qp *qp, union ib_gid *gid, u16 lid);
-
-/**
- * ib_detach_mcast - Detaches the specified QP from a multicast group.
- * @qp: QP to detach from the multicast group.
- * @gid: Multicast group GID.
- * @lid: Multicast group LID in host byte order.
- */
-int ib_detach_mcast(struct ib_qp *qp, union ib_gid *gid, u16 lid);
-
-/**
- * ib_alloc_xrcd - Allocates an XRC domain.
- * @device: The device on which to allocate the XRC domain.
- */
-struct ib_xrcd *ib_alloc_xrcd(struct ib_device *device);
-
-/**
- * ib_dealloc_xrcd - Deallocates an XRC domain.
- * @xrcd: The XRC domain to deallocate.
- */
-int ib_dealloc_xrcd(struct ib_xrcd *xrcd);
-#endif
 
 #endif /* IB_VERBS_H */

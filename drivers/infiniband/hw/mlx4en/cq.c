@@ -41,6 +41,13 @@
 #include "mlx4.h"
 #include "icm.h"
 
+#ifdef CONFIG_DEBUG_INFINIBAND_CP_TABLE
+#define cqtable_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void cqtable_debug(const char *fmt, ...) { }
+#endif
+
 struct mlx4_cq_context {
 	__be32			flags;
 	u16			reserved1[3];
@@ -78,6 +85,7 @@ static void cq_table_rb_insert(struct rb_root *root, u32 cqn,
 	struct rb_node *parent = NULL;
 	struct mlx4_cq *entry;
 
+	cqtable_debug("insert CQN %u", cqn);
 	while (*link) {
 		parent = *link;
 		entry = rb_entry(parent, struct mlx4_cq, node);
@@ -95,7 +103,8 @@ static int cq_table_rb_delete(struct rb_root *root, u32 cqn)
 {
 	struct rb_node *node = root->rb_node;
 	struct mlx4_cq *entry;
-	
+
+	cqtable_debug("delete CQN %u", cqn);
 	while (node) {
 		entry = rb_entry(node, struct mlx4_cq, node);
 
@@ -117,7 +126,8 @@ static struct mlx4_cq *cq_table_rb_lookup(struct rb_root *root, u32 cqn)
 {
 	struct rb_node *node = root->rb_node;
 	struct mlx4_cq *entry;
-	
+
+	cqtable_debug("lookup CQN %u", cqn);
 	while (node) {
 		entry = rb_entry(node, struct mlx4_cq, node);
 

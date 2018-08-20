@@ -39,12 +39,21 @@
 #include "mlx4.h"
 #include "icm.h"
 
+#ifdef CONFIG_DEBUG_INFINIBAND_QP_TABLE
+#define qptable_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void qptable_debug(const char *fmt, ...) { }
+#endif
+
 static void qp_table_rb_insert(struct rb_root *root, u32 qpn,
 			       struct mlx4_qp *new_entry)
 {
 	struct rb_node **link = &root->rb_node;
 	struct rb_node *parent = NULL;
 	struct mlx4_qp *entry;
+
+	qptable_debug("insert QPN %u", qpn);
 
 	while (*link) {
 		parent = *link;
@@ -64,6 +73,8 @@ static int qp_table_rb_delete(struct rb_root *root, u32 qpn)
 	struct rb_node *node = root->rb_node;
 	struct mlx4_qp *entry;
 	
+	qptable_debug("delete QPN %u", qpn);
+
 	while (node) {
 		entry = rb_entry(node, struct mlx4_qp, node);
 
@@ -85,7 +96,9 @@ struct mlx4_qp *qp_table_rb_lookup(struct rb_root *root, u32 qpn)
 {
 	struct rb_node *node = root->rb_node;
 	struct mlx4_qp *entry;
-	
+
+	qptable_debug("lookup QPN %u %u", qpn, qpn & 0xFF);
+
 	/*
 	 * XXX
 	 * why & 0xff may not be right!
@@ -446,7 +459,6 @@ int mlx4_qp_alloc(struct mlx4_dev *dev, int qpn, struct mlx4_qp *qp)
 		return err;
 
 	spin_lock_irq(&qp_table->lock);
-	qp_table_rb_dump(dev);
 	qp_table_rb_insert(&dev->qp_table_tree, qp->qpn & (dev->caps.num_qps - 1), qp);
 	dev->nr_qps++;
 	spin_unlock_irq(&qp_table->lock);

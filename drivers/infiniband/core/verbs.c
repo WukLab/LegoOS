@@ -42,7 +42,6 @@
 #include <lego/slab.h>
 
 #include <rdma/ib_verbs.h>
-//#include <rdma/ib_cache.h>
 
 int ib_rate_to_mult(enum ib_rate rate)
 {
@@ -167,13 +166,17 @@ struct ib_ah *ib_create_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr)
 	if (!IS_ERR(ah)) {
 		ah->device  = pd->device;
 		ah->pd      = pd;
-		//ah->uobject = NULL;
+		ah->uobject = NULL;
 		atomic_inc(&pd->usecnt);
 	}
 
 	return ah;
 }
 
+/*
+ * XXX
+ * Check this function gid_index
+ */
 int ib_init_ah_from_wc(struct ib_device *device, u8 port_num, struct ib_wc *wc,
 		       struct ib_grh *grh, struct ib_ah_attr *ah_attr)
 {
@@ -190,6 +193,7 @@ int ib_init_ah_from_wc(struct ib_device *device, u8 port_num, struct ib_wc *wc,
 	//	__func__, ah_attr->dlid, ah_attr->sl, ah_attr->src_path_bits, ah_attr->port_num);
 
 	if (wc->wc_flags & IB_WC_GRH) {
+		WARN_ONCE(1, "Checkme!");
 		pr_info("%s IB_WC_GRH\n", __func__);
 		ah_attr->ah_flags = IB_AH_GRH;
 		ah_attr->grh.dgid = grh->sgid;
@@ -249,57 +253,17 @@ int ib_destroy_ah(struct ib_ah *ah)
 	return ret;
 }
 
-#if 0
-int ib_modify_srq(struct ib_srq *srq,
-		  struct ib_srq_attr *srq_attr,
-		  enum ib_srq_attr_mask srq_attr_mask)
-{
-	return srq->device->modify_srq ?
-		srq->device->modify_srq(srq, srq_attr, srq_attr_mask, NULL) :
-		-ENOSYS;
-}
-
-int ib_query_srq(struct ib_srq *srq,
-		 struct ib_srq_attr *srq_attr)
-{
-	return srq->device->query_srq ?
-		srq->device->query_srq(srq, srq_attr) : -ENOSYS;
-}
-
-int ib_destroy_srq(struct ib_srq *srq)
-{
-	struct ib_pd *pd;
-	enum ib_srq_type srq_type;
-	struct ib_xrcd *uninitialized_var(xrcd);
-	struct ib_cq *uninitialized_var(cq);
-	int ret;
-
-	if (atomic_read(&srq->usecnt))
-		return -EBUSY;
-
-	pd = srq->pd;
-	srq_type = srq->srq_type;
-	if (srq_type == IB_SRQT_XRC) {
-		xrcd = srq->ext.xrc.xrcd;
-		cq = srq->ext.xrc.cq;
-	}
-
-	ret = srq->device->destroy_srq(srq);
-	if (!ret) {
-		atomic_dec(&pd->usecnt);
-		if (srq_type == IB_SRQT_XRC) {
-			atomic_dec(&xrcd->usecnt);
-			atomic_dec(&cq->usecnt);
-		}
-	}
-
-	return ret;
-}
-#endif
-
 /* Queue pairs */
 
-#if 0
+static void __ib_shared_qp_event_handler(struct ib_event *event, void *context)
+{
+	struct ib_qp *qp = context;
+
+	list_for_each_entry(event->element.qp, &qp->open_list, open_list)
+		if (event->element.qp->event_handler)
+			event->element.qp->event_handler(event, event->element.qp->qp_context);
+}
+
 static void __ib_insert_xrcd_qp(struct ib_xrcd *xrcd, struct ib_qp *qp)
 {
 	mutex_lock(&xrcd->tgt_qp_mutex);
@@ -333,36 +297,13 @@ static struct ib_qp *__ib_open_qp(struct ib_qp *real_qp,
 	return qp;
 }
 
-struct ib_qp *ib_open_qp(struct ib_xrcd *xrcd,
-			 struct ib_qp_open_attr *qp_open_attr)
-{
-	struct ib_qp *qp, *real_qp;
-
-	if (qp_open_attr->qp_type != IB_QPT_XRC_TGT)
-		return ERR_PTR(-EINVAL);
-
-	qp = ERR_PTR(-EINVAL);
-	mutex_lock(&xrcd->tgt_qp_mutex);
-	list_for_each_entry(real_qp, &xrcd->tgt_qp_list, xrcd_list) {
-		if (real_qp->qp_num == qp_open_attr->qp_num) {
-			qp = __ib_open_qp(real_qp, qp_open_attr->event_handler,
-					  qp_open_attr->qp_context);
-			break;
-		}
-	}
-	mutex_unlock(&xrcd->tgt_qp_mutex);
-	return qp;
-}
-#endif
-
 struct ib_qp *ib_create_qp(struct ib_pd *pd,
 			   struct ib_qp_init_attr *qp_init_attr)
 {
-	struct ib_qp *qp;
+	struct ib_qp *qp, *real_qp;
 	struct ib_device *device;
 
-	device = pd->device;
-	//device = pd ? pd->device : qp_init_attr->xrcd->device;
+	device = pd ? pd->device : qp_init_attr->xrcd->device;
 	qp = device->create_qp(pd, qp_init_attr);
 
 	if (!IS_ERR(qp)) {
@@ -372,8 +313,6 @@ struct ib_qp *ib_create_qp(struct ib_pd *pd,
 		qp->qp_type    = qp_init_attr->qp_type;
 
 		atomic_set(&qp->usecnt, 0);
-		//pr_debug("%s setting qp %p device %p\n", __func__, qp, qp->device);
-#if 0
 		if (qp_init_attr->qp_type == IB_QPT_XRC_TGT) {
 			qp->event_handler = __ib_shared_qp_event_handler;
 			qp->qp_context = qp;
@@ -392,7 +331,6 @@ struct ib_qp *ib_create_qp(struct ib_pd *pd,
 			else
 				real_qp->device->destroy_qp(real_qp);
 		} else {
-#endif
 			qp->event_handler = qp_init_attr->event_handler;
 			qp->qp_context = qp_init_attr->qp_context;
 			if (qp_init_attr->qp_type == IB_QPT_XRC_INI) {
@@ -412,7 +350,7 @@ struct ib_qp *ib_create_qp(struct ib_pd *pd,
 
 			atomic_inc(&pd->usecnt);
 			atomic_inc(&qp_init_attr->send_cq->usecnt);
-//		}
+		}
 	}
 
 	return qp;
@@ -431,6 +369,7 @@ static const struct {
 				[IB_QPT_UD]  = (IB_QP_PKEY_INDEX		|
 						IB_QP_PORT			|
 						IB_QP_QKEY),
+				[IB_QPT_RAW_PACKET] = IB_QP_PORT,
 				[IB_QPT_UC]  = (IB_QP_PKEY_INDEX		|
 						IB_QP_PORT			|
 						IB_QP_ACCESS_FLAGS),
@@ -763,7 +702,6 @@ int ib_query_qp(struct ib_qp *qp,
 		int qp_attr_mask,
 		struct ib_qp_init_attr *qp_init_attr)
 {
-	//pr_debug("%s qp %p device %p realqp %p\n", __func__, qp, qp->device, qp->real_qp);
 	return qp->device->query_qp ?
 		qp->device->query_qp(qp->real_qp, qp_attr, qp_attr_mask, qp_init_attr) :
 		-ENOSYS;
@@ -788,7 +726,6 @@ int ib_close_qp(struct ib_qp *qp)
 	return 0;
 }
 
-#if 0
 static int __ib_destroy_shared_qp(struct ib_qp *qp)
 {
 	struct ib_xrcd *xrcd;
@@ -816,7 +753,6 @@ static int __ib_destroy_shared_qp(struct ib_qp *qp)
 
 	return 0;
 }
-#endif
 
 int ib_destroy_qp(struct ib_qp *qp)
 {
@@ -828,8 +764,8 @@ int ib_destroy_qp(struct ib_qp *qp)
 	if (atomic_read(&qp->usecnt))
 		return -EBUSY;
 
-// XXX	if (qp->real_qp != qp)
-//		return __ib_destroy_shared_qp(qp);
+	if (qp->real_qp != qp)
+		return __ib_destroy_shared_qp(qp);
 
 	pd   = qp->pd;
 	scq  = qp->send_cq;
@@ -844,8 +780,8 @@ int ib_destroy_qp(struct ib_qp *qp)
 			atomic_dec(&scq->usecnt);
 		if (rcq)
 			atomic_dec(&rcq->usecnt);
-//		if (srq)
-//			atomic_dec(&srq->usecnt);
+		if (srq)
+			atomic_dec(&srq->usecnt);
 	}
 
 	return ret;
@@ -938,39 +874,6 @@ struct ib_mr *ib_reg_phys_mr(struct ib_pd *pd,
 	return mr;
 }
 
-#if 0
-int ib_rereg_phys_mr(struct ib_mr *mr,
-		     int mr_rereg_mask,
-		     struct ib_pd *pd,
-		     struct ib_phys_buf *phys_buf_array,
-		     int num_phys_buf,
-		     int mr_access_flags,
-		     u64 *iova_start)
-{
-	struct ib_pd *old_pd;
-	int ret;
-
-	if (!mr->device->rereg_phys_mr)
-		return -ENOSYS;
-
-	if (atomic_read(&mr->usecnt))
-		return -EBUSY;
-
-	old_pd = mr->pd;
-
-	ret = mr->device->rereg_phys_mr(mr, mr_rereg_mask, pd,
-					phys_buf_array, num_phys_buf,
-					mr_access_flags, iova_start);
-
-	if (!ret && (mr_rereg_mask & IB_MR_REREG_PD)) {
-		atomic_dec(&old_pd->usecnt);
-		atomic_inc(&pd->usecnt);
-	}
-
-	return ret;
-}
-#endif
-
 int ib_query_mr(struct ib_mr *mr, struct ib_mr_attr *mr_attr)
 {
 	return mr->device->query_mr ?
@@ -992,5 +895,3 @@ int ib_dereg_mr(struct ib_mr *mr)
 
 	return ret;
 }
-
-

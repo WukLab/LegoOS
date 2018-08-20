@@ -82,7 +82,6 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 			 struct ib_wc *wc, struct ib_device *device,
 			 int port_num, int qpn)
 {
-	//pr_info("%s qpn %d port %d\n", __func__, qpn, port_num);
 	struct ib_agent_port_private *port_priv;
 	struct ib_mad_agent *agent;
 	struct ib_mad_send_buf *send_buf;
@@ -139,7 +138,7 @@ err1:
 static void agent_send_handler(struct ib_mad_agent *mad_agent,
 			       struct ib_mad_send_wc *mad_send_wc)
 {
-	//pr_info("%s\n", __func__);
+	WARN_ONCE(1, "Checkme!");
 	ib_destroy_ah(mad_send_wc->send_buf->ah);
 	ib_free_send_mad(mad_send_wc->send_buf);
 }
@@ -150,7 +149,9 @@ int ib_agent_port_open(struct ib_device *device, int port_num)
 	unsigned long flags;
 	int ret;
 
-	//pr_info("%s\n", __func__);
+	pr_info("%s(): ib_device %s port %d\n",
+		__func__, dev_name(device->dma_device), port_num);
+
 	/* Create new device info */
 	port_priv = kzalloc(sizeof *port_priv, GFP_KERNEL);
 	if (!port_priv) {
@@ -159,6 +160,7 @@ int ib_agent_port_open(struct ib_device *device, int port_num)
 		goto error1;
 	}
 
+	if (rdma_port_get_link_layer(device, port_num) == IB_LINK_LAYER_INFINIBAND) {
 		/* Obtain send only MAD agent for SMI QP */
 		port_priv->agent[0] = ib_register_mad_agent(device, port_num,
 							    IB_QPT_SMI, NULL, 0,
@@ -168,6 +170,7 @@ int ib_agent_port_open(struct ib_device *device, int port_num)
 			ret = PTR_ERR(port_priv->agent[0]);
 			goto error2;
 		}
+	}
 
 	/* Obtain send only MAD agent for GSI QP */
 	port_priv->agent[1] = ib_register_mad_agent(device, port_num,

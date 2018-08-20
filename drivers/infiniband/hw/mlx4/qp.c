@@ -1522,48 +1522,64 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 	int header_size;
 	int spc;
 	int i;
-	int is_vlan = 0;
-	int is_eth = 0;
-	int is_grh = 0;
+	bool is_eth;
+	bool is_vlan = false;
+	bool is_grh;
 
-	WARN_ONCE(1, "Patch Me");
-
-	//pr_info("%s\n", __func__);
 	send_size = 0;
 	for (i = 0; i < wr->num_sge; ++i)
 		send_size += wr->sg_list[i].length;
 
-	is_eth = 0;
+	is_eth = rdma_port_get_link_layer(sqp->qp.ibqp.device, sqp->qp.port) == IB_LINK_LAYER_ETHERNET;
+	if (is_eth)
+		BUG();
+
 	is_grh = mlx4_ib_ah_grh_present(ah);
 	ib_ud_header_init(send_size, !is_eth, is_eth, is_vlan, is_grh, 0, &sqp->ud_header);
 
-	sqp->ud_header.lrh.service_level =
-		be32_to_cpu(ah->av.ib.sl_tclass_flowlabel) >> 28;
-	sqp->ud_header.lrh.destination_lid = ah->av.ib.dlid;
-	sqp->ud_header.lrh.source_lid = cpu_to_be16(ah->av.ib.g_slid & 0x7f);
+	if (!is_eth) {
+		sqp->ud_header.lrh.service_level =
+			be32_to_cpu(ah->av.ib.sl_tclass_flowlabel) >> 28;
+		sqp->ud_header.lrh.destination_lid = ah->av.ib.dlid;
+		sqp->ud_header.lrh.source_lid = cpu_to_be16(ah->av.ib.g_slid & 0x7f);
+	}
 
 	if (is_grh) {
-		pr_info("%s isgrdh need grh back\n", __func__);
-#if 0
 		sqp->ud_header.grh.traffic_class =
 			(be32_to_cpu(ah->av.ib.sl_tclass_flowlabel) >> 20) & 0xff;
 		sqp->ud_header.grh.flow_label    =
 			ah->av.ib.sl_tclass_flowlabel & cpu_to_be32(0xfffff);
 		sqp->ud_header.grh.hop_limit     = ah->av.ib.hop_limit;
-		ib_get_cached_gid(ib_dev, be32_to_cpu(ah->av.ib.port_pd) >> 24,
-				  ah->av.ib.gid_index, &sqp->ud_header.grh.source_gid);
+		if (mlx4_is_mfunc(to_mdev(ib_dev)->dev)) {
+			/* When multi-function is enabled, the ib_core gid
+			 * indexes don't necessarily match the hw ones, so
+			 * we must use our own cache */
+			sqp->ud_header.grh.source_gid.global.subnet_prefix =
+				to_mdev(ib_dev)->sriov.demux[sqp->qp.port - 1].
+						       subnet_prefix;
+			sqp->ud_header.grh.source_gid.global.interface_id =
+				to_mdev(ib_dev)->sriov.demux[sqp->qp.port - 1].
+					       guid_cache[ah->av.ib.gid_index];
+		} else
+			ib_get_cached_gid(ib_dev,
+					  be32_to_cpu(ah->av.ib.port_pd) >> 24,
+					  ah->av.ib.gid_index,
+					  &sqp->ud_header.grh.source_gid);
 		memcpy(sqp->ud_header.grh.destination_gid.raw,
 		       ah->av.ib.dgid, 16);
-#endif
 	}
 
 	mlx->flags &= cpu_to_be32(MLX4_WQE_CTRL_CQ_UPDATE);
 
+	if (!is_eth) {
 		mlx->flags |= cpu_to_be32((!sqp->qp.ibqp.qp_num ? MLX4_WQE_MLX_VL15 : 0) |
 					  (sqp->ud_header.lrh.destination_lid ==
 					   IB_LID_PERMISSIVE ? MLX4_WQE_MLX_SLR : 0) |
 					  (sqp->ud_header.lrh.service_level << 8));
+		if (ah->av.ib.port_pd & cpu_to_be32(0x80000000))
+			mlx->flags |= cpu_to_be32(0x1); /* force loopback */
 		mlx->rlid = sqp->ud_header.lrh.destination_lid;
+	}
 
 	switch (wr->opcode) {
 	case IB_WR_SEND:
@@ -1579,36 +1595,39 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_send_wr *wr,
 		return -EINVAL;
 	}
 
-	sqp->ud_header.lrh.virtual_lane    = !sqp->qp.ibqp.qp_num ? 15 : 0;
-	if (sqp->ud_header.lrh.destination_lid == IB_LID_PERMISSIVE)
-		sqp->ud_header.lrh.source_lid = IB_LID_PERMISSIVE;
+	if (is_eth) {
+		BUG();
+	} else {
+		sqp->ud_header.lrh.virtual_lane    = !sqp->qp.ibqp.qp_num ? 15 : 0;
+		if (sqp->ud_header.lrh.destination_lid == IB_LID_PERMISSIVE)
+			sqp->ud_header.lrh.source_lid = IB_LID_PERMISSIVE;
+	}
+
 	sqp->ud_header.bth.solicited_event = !!(wr->send_flags & IB_SEND_SOLICITED);
 	if (!sqp->qp.ibqp.qp_num)
-		//ib_get_cached_pkey(ib_dev, sqp->qp.port, sqp->pkey_index, &pkey);
-		ib_query_pkey(ib_dev, sqp->qp.port, sqp->pkey_index, &pkey);
+		ib_get_cached_pkey(ib_dev, sqp->qp.port, sqp->pkey_index, &pkey);
 	else
-		//ib_get_cached_pkey(ib_dev, sqp->qp.port, wr->wr.ud.pkey_index, &pkey);
-		ib_query_pkey(ib_dev, sqp->qp.port, wr->wr.ud.pkey_index, &pkey);
+		ib_get_cached_pkey(ib_dev, sqp->qp.port, wr->wr.ud.pkey_index, &pkey);
 	sqp->ud_header.bth.pkey = cpu_to_be16(pkey);
 	sqp->ud_header.bth.destination_qpn = cpu_to_be32(wr->wr.ud.remote_qpn);
 	sqp->ud_header.bth.psn = cpu_to_be32((sqp->send_psn++) & ((1 << 24) - 1));
 	sqp->ud_header.deth.qkey = cpu_to_be32(wr->wr.ud.remote_qkey & 0x80000000 ?
-			sqp->qkey : wr->wr.ud.remote_qkey);
+					       sqp->qkey : wr->wr.ud.remote_qkey);
 	sqp->ud_header.deth.source_qpn = cpu_to_be32(sqp->qp.ibqp.qp_num);
 
 	header_size = ib_ud_header_pack(&sqp->ud_header, sqp->header_buf);
 
 	if (0) {
-		printk(KERN_ERR "built UD header of size %d:\n", header_size);
+		pr_err("built UD header of size %d:\n", header_size);
 		for (i = 0; i < header_size / 4; ++i) {
 			if (i % 8 == 0)
-				printk("  [%02x] ", i * 4);
-			printk(" %08x",
-			       be32_to_cpu(((__be32 *) sqp->header_buf)[i]));
+				pr_err("  [%02x] ", i * 4);
+			pr_cont(" %08x",
+				be32_to_cpu(((__be32 *) sqp->header_buf)[i]));
 			if ((i + 1) % 8 == 0)
-				printk("\n");
+				pr_cont("\n");
 		}
-		printk("\n");
+		pr_err("\n");
 	}
 
 	/*

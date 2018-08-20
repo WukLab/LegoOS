@@ -345,7 +345,6 @@ static int ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 	int err;
 	struct ib_port_attr pattr;
 
-	pr_info("%s(): we got one here!\n", __func__);
 	if (in_wc && in_wc->qp->qp_num) {
 		pr_debug("received MAD: slid:%d sqpn:%d "
 			"dlid_bits:%d dqpn:%d wc_flags:0x%x, cls %x, mtd %x, atr %x\n",
@@ -456,7 +455,7 @@ int mlx4_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 static void send_handler(struct ib_mad_agent *agent,
 			 struct ib_mad_send_wc *mad_send_wc)
 {
-	pr_info("%s(): we are mad callback checkme!\n", __func__);
+	WARN_ONCE(1, "Checkme!");
 	if (mad_send_wc->send_buf->context[0])
 		ib_destroy_ah(mad_send_wc->send_buf->context[0]);
 	ib_free_send_mad(mad_send_wc->send_buf);

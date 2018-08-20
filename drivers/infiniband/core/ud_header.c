@@ -33,7 +33,6 @@
 
 #include <lego/errno.h>
 #include <lego/string.h>
-//#include <lego/if_ether.h>
 
 #include <rdma/ib_pack.h>
 
@@ -248,8 +247,10 @@ void ib_ud_header_init(int     		    payload_bytes,
 		header->lrh.packet_length = cpu_to_be16(packet_length);
 	}
 
-//	if (vlan_present)
-//		header->eth.type = cpu_to_be16(ETH_P_8021Q);
+#if 0
+	if (vlan_present)
+		header->eth.type = cpu_to_be16(ETH_P_8021Q);
+#endif
 
 	if (grh_present) {
 		header->grh.ip_version      = 6;
@@ -270,7 +271,7 @@ void ib_ud_header_init(int     		    payload_bytes,
 	header->bth.transport_header_version = 0;
 
 	header->lrh_present = lrh_present;
-//	header->eth_present = eth_present;
+	header->eth_present = eth_present;
 	header->vlan_present = vlan_present;
 	header->grh_present = grh_present;
 	header->immediate_present = immediate_present;
@@ -294,11 +295,11 @@ int ib_ud_header_pack(struct ib_ud_header *header,
 			&header->lrh, buf + len);
 		len += IB_LRH_BYTES;
 	}
-//	if (header->eth_present) {
-//		ib_pack(eth_table, ARRAY_SIZE(eth_table),
-//			&header->eth, buf + len);
-//		len += IB_ETH_BYTES;
-//	}
+	if (header->eth_present) {
+		ib_pack(eth_table, ARRAY_SIZE(eth_table),
+			&header->eth, buf + len);
+		len += IB_ETH_BYTES;
+	}
 	if (header->vlan_present) {
 		ib_pack(vlan_table, ARRAY_SIZE(vlan_table),
 			&header->vlan, buf + len);
