@@ -41,7 +41,7 @@
 #include "mlx4.h"
 #include "icm.h"
 
-#ifdef CONFIG_DEBUG_INFINIBAND_CP_TABLE
+#ifdef CONFIG_DEBUG_INFINIBAND_CQ_TABLE
 #define cqtable_debug(fmt, ...)	\
 	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
 #else

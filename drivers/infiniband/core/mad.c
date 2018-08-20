@@ -2520,6 +2520,17 @@ static void timeout_sends(struct work_struct *work)
 	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 }
 
+/*
+ * HACK!!!
+ *
+ * So the original model works like this:
+ * 1) If NIC got a MAD event, NIC will generate an interrupt. Inside the handler,
+ *    it will call mlx4_cq_completion(), which will call this function.
+ * 2) This function will queue work and wake up the ib_mad_completion_handler()
+ *    to handle the incoming MAD event.
+ *
+ * Now, we changed to let ib_mad_completion_handler() keep polling the CQ.
+ */
 __maybe_unused static void ib_mad_thread_completion_handler(struct ib_cq *cq, void *arg)
 {
 	struct ib_mad_port_private *port_priv = cq->cq_context;
@@ -2833,12 +2844,10 @@ static int ib_mad_port_open(struct ib_device *device,
 	 * We changed this.
 	 * We created our own thread. Will this work?
 	 * Check!
+	 */
 	port_priv->cq = ib_create_cq(port_priv->device,
 				     ib_mad_thread_completion_handler,
 				     NULL, port_priv, cq_size, 0);
-	 */
-	port_priv->cq = ib_create_cq(port_priv->device,
-				     NULL, NULL, port_priv, cq_size, 0);
 	if (IS_ERR(port_priv->cq)) {
 		printk(KERN_ERR PFX "Couldn't create ib_mad CQ\n");
 		ret = PTR_ERR(port_priv->cq);
