@@ -137,7 +137,6 @@ err1:
 static void agent_send_handler(struct ib_mad_agent *mad_agent,
 			       struct ib_mad_send_wc *mad_send_wc)
 {
-	WARN_ONCE(1, "Checkme!");
 	ib_destroy_ah(mad_send_wc->send_buf->ah);
 	ib_free_send_mad(mad_send_wc->send_buf);
 }

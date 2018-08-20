@@ -33,6 +33,8 @@
  * SOFTWARE.
  */
 
+#define pr_fmt(fmt) "ib_cm: " fmt
+
 #include <lego/completion.h>
 #include <lego/dma-mapping.h>
 #include <lego/pci.h>
@@ -349,7 +351,8 @@ static int cm_alloc_id(struct cm_id_private *cm_id_priv)
 		global_next_id++;
 		ret = id = global_next_id;
 		//pr_info("%s id %d\n", __func__, id);
-		cm.local_id_table[id] = cm_id_priv;
+		//XXX
+		//cm.local_id_table[id] = cm_id_priv;
 		//ret = idr_get_new_above(&cm.local_id_table, cm_id_priv,
 		//			next_id, &id);
 		//if (!ret)
@@ -373,18 +376,18 @@ static void cm_free_id(__be32 local_id)
 
 static struct cm_id_private * cm_get_id(__be32 local_id, __be32 remote_id)
 {
-	struct cm_id_private *cm_id_priv;
-	int id = (__force int) (local_id ^ cm.random_id_operand);
+	struct cm_id_private *cm_id_priv = NULL;
+	//int id = (__force int) (local_id ^ cm.random_id_operand);
 
+	//XXX
 	//cm_id_priv = idr_find(&cm.local_id_table,
-	cm_id_priv = cm.local_id_table[id];
+	//cm_id_priv = cm.local_id_table[id];
 	if (cm_id_priv) {
 		if (cm_id_priv->id.remote_id == remote_id)
 			atomic_inc(&cm_id_priv->refcount);
 		else
 			cm_id_priv = NULL;
 	}
-
 	return cm_id_priv;
 }
 
@@ -2303,7 +2306,8 @@ static struct cm_id_private * cm_acquire_rejected_id(struct cm_rej_msg *rej_msg)
 		}
 		id = (__force int) (timewait_info->work.local_id ^
 				       cm.random_id_operand);
-		cm_id_priv = cm.local_id_table[id];
+		//XXX
+		//cm_id_priv = cm.local_id_table[id];
 		if (cm_id_priv) {
 			if (cm_id_priv->id.remote_id == remote_id)
 				atomic_inc(&cm_id_priv->refcount);
@@ -3186,7 +3190,7 @@ static void cm_send_handler(struct ib_mad_agent *mad_agent,
 	struct cm_port *port;
 	u16 attr_index;
 
-	pr_info("%s(): we are here\n", __func__);
+	WARN_ONCE(1, "Checkme!");
 	port = mad_agent->context;
 	attr_index = be16_to_cpu(((struct ib_mad_hdr *)
 				  msg->mad)->attr_id) - CM_ATTR_ID_OFFSET;
@@ -3364,6 +3368,15 @@ int ib_cm_notify(struct ib_cm_id *cm_id, enum ib_event_type event)
 	return ret;
 }
 
+/*
+ * HACK!!!
+ *
+ * If cm_recv_handler and cm_send_handler are invoked, we must can back and
+ * fix whatever issues this file has. Currently, in our testbed, these two
+ * guys are not invoked.
+ *
+ * Things we need: workqueue, idr
+ */ 
 static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 			    struct ib_mad_recv_wc *mad_recv_wc)
 {
@@ -3752,25 +3765,3 @@ error2:
 	//destroy_workqueue(cm.wq);
 	return ret;
 }
-
-void ib_cm_cleanup(void)
-{
-	struct cm_timewait_info *timewait_info, *tmp;
-
-	//spin_lock_irq(&cm.lock);
-	//list_for_each_entry(timewait_info, &cm.timewait_list, list)
-	//	cancel_delayed_work(&timewait_info->work.work);
-	//spin_unlock_irq(&cm.lock);
-
-	ib_unregister_client(&cm_client);
-	//destroy_workqueue(cm.wq);
-
-	list_for_each_entry_safe(timewait_info, tmp, &cm.timewait_list, list) {
-		list_del(&timewait_info->list);
-		kfree(timewait_info);
-	}
-
-	kfree(cm.local_id_table);
-	//idr_destroy(&cm.local_id_table);
-}
-
