@@ -55,6 +55,13 @@
 #include "smi.h"
 #include "agent.h"
 
+#ifdef CONFIG_DEBUG_INFINIBAND_MAD
+#define ib_mad_debug(fmt, ...)	\
+	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
+#else
+static inline void ib_mad_debug(const char *fmt, ...) { }
+#endif
+
 static int mad_sendq_size = IB_MAD_QP_SEND_SIZE;
 static int mad_recvq_size = IB_MAD_QP_RECV_SIZE;
 
@@ -2200,10 +2207,9 @@ static int ib_mad_completion_handler(void *_data)
 			continue;
 		}
 
-		pr_info("%s %d dev: %s port: %d %s cq op %d mad_got_one=%d\n",
-			__func__, __LINE__, dev_name(port_priv->device->dma_device),
-			port_priv->port_num, (wc.opcode == IB_WC_SEND) ? "SEND" : "RECV",
-			wc.opcode, mad_got_one);
+		ib_mad_debug("dev: %s port: %d %s mad_got_one=%d",
+			dev_name(port_priv->device->dma_device), port_priv->port_num,
+			(wc.opcode == IB_WC_SEND) ? "SEND" : "RECV", mad_got_one);
 
 		switch (wc.opcode) {
 		case IB_WC_SEND:
@@ -2813,10 +2819,9 @@ static int ib_mad_port_open(struct ib_device *device,
 		cq_size *= 2;
 
 	/*
-	 * XXX
+	 * HACK!!!
+	 *
 	 * We changed this.
-	 * We created our own thread. Will this work?
-	 * Check!
 	 */
 	port_priv->cq = ib_create_cq(port_priv->device,
 				     ib_mad_thread_completion_handler,
