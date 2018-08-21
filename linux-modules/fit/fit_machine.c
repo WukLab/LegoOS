@@ -55,7 +55,7 @@ static struct fit_machine_info WUKLAB_CLUSTER[] = {
 [9]	= {	.hostname =	"wuklab09",	.lid =	12,	.first_qpn =	72,	},
 [10]	= {	.hostname =	"wuklab10",	.lid =	14,	.first_qpn =	74,	},
 [11]	= {	.hostname =	"wuklab11",	.lid =	11,	.first_qpn =	74,	},
-[12]	= {	.hostname =	"wuklab12",	.lid =	13,	.first_qpn =	74,	},
+[12]	= {	.hostname =	"wuklab12",	.lid =	26,	.first_qpn =	74,	},
 [13]	= {	.hostname =	"wuklab13",	.lid =	15,	.first_qpn =	72,	},
 [14]	= {	.hostname =	"wuklab14",	.lid =	16,	.first_qpn =	74,	},
 [15]	= {	.hostname =	"wuklab15",	.lid =	17,	.first_qpn =	72,	},

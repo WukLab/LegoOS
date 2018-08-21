@@ -466,7 +466,6 @@ ppc *fit_init_interface(int ib_port, struct ib_device *ib_dev, int mynodeid)
 	rcnt = 0;
 	scnt = 0;
 	ctx = fit_init_ctx(size,rx_depth,ib_port, ib_dev, mynodeid);
-	pr_info("Return after fit_init_ctx\n");
 	if(!ctx)
 	{
 		printk(KERN_ALERT "Fail to do fit_init_ctx\n");
@@ -488,7 +487,22 @@ retry:
 	else
 		fit_debug("got local LID %d\n", ctx->portinfo.lid);
 
-	//test_printk(KERN_ALERT "I am here before return fit_init_interface\n");
+	/*
+	 * Sanity Check...
+	 *
+	 */
+	if (ctx->portinfo.lid != get_node_global_lid(CONFIG_FIT_LOCAL_ID)) {
+		pr_info("\n"
+			"***\n"
+			"*** ERROR\n"
+			"*** Current LID: %d. Table LID: %d.\n"
+			"*** Other machine will fail to connect.\n"
+			"*** Please update the table to use the latest LID.\n"
+			"***\n", ctx->portinfo.lid,
+			get_node_global_lid(CONFIG_FIT_LOCAL_ID));
+		hlt();
+	}
+
 	return ctx;
 
 }
@@ -1823,8 +1837,6 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	struct imm_header_from_cq_to_port *tmp;
 	int reply_data, private_bits;
 
-	struct imm_message_metadata *tmp1;
-
 	if (pin_current_thread())
 		panic("Fail to pin poll_cq");
 
@@ -1905,9 +1917,12 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 
 #ifdef CONFIG_COMP_MEMORY
 						/* yy for testing */
+						{
+						struct imm_message_metadata *tmp1;
                                                 tmp1 = (struct imm_message_metadata *)(ctx->local_rdma_recv_rings[node_id] + offset);
                                                 fit_internal_got_message_call_handle_and_reply(ctx, tmp1, (void *)tmp1 + sizeof(struct imm_message_metadata),
                                                                 tmp1->size, node_id, offset);
+						}
 #else
 						//printk(KERN_CRIT "%s: from node %d access to port %d imm-%x\n", __func__, node_id, port, wc[i].ex.imm_data);
 						tmp = (struct imm_header_from_cq_to_port *)kmalloc(sizeof(struct imm_header_from_cq_to_port), GFP_KERNEL); //kmem_cache_alloc(imm_header_from_cq_to_port_cache, GFP_KERNEL);
