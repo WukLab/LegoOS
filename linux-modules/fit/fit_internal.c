@@ -25,6 +25,7 @@
 #include <linux/kernel.h>
 #include <rdma/ib_verbs.h>
 
+#include <asm/asm.h>
 #include "fit_internal.h"
 
 atomic_t global_sock_avail_recv_bufs;
@@ -389,6 +390,22 @@ retry:
 	}
 	else
 		printk(KERN_CRIT "got local LID %d\n", ctx->portinfo.lid);
+
+	/*
+	 * Sanity Check...
+	 *
+	 */
+	if (ctx->portinfo.lid != get_node_global_lid(CONFIG_FIT_LOCAL_ID)) {
+		pr_info("\n"
+			"***\n"
+			"*** ERROR\n"
+			"*** Current LID: %d. Table LID: %d.\n"
+			"*** Other machine will fail to connect.\n"
+			"*** Please update the table to use the latest LID.\n"
+			"***\n", ctx->portinfo.lid,
+			get_node_global_lid(CONFIG_FIT_LOCAL_ID));
+		return NULL;
+	}
 
 	printk(KERN_ALERT "I am here before return fit_init_interface\n");
 	return ctx;
