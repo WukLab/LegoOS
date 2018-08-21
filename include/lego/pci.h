@@ -10,6 +10,7 @@
 #ifndef _LEGO_PCI_H_
 #define _LEGO_PCI_H_
 
+#include <lego/msi.h>
 #include <lego/list.h>
 #include <lego/types.h>
 #include <lego/errno.h>
@@ -333,6 +334,7 @@ struct pci_dev {
 	unsigned int	is_pcie:1;	/* Obsolete. Will be removed.
 					   Use pci_is_pcie() instead */
 	unsigned int    needs_freset:1; /* Dev requires fundamental reset */
+	unsigned int	irq_managed:1;
 	unsigned int	state_saved:1;
 	unsigned int	is_physfn:1;
 	unsigned int	is_virtfn:1;
@@ -937,6 +939,7 @@ void pci_clear_master(struct pci_dev *dev);
 u8 pci_swizzle_interrupt_pin(const struct pci_dev *dev, u8 pin);
 int pci_get_interrupt_pin(struct pci_dev *dev, struct pci_dev **bridge);
 
+void pci_intx(struct pci_dev *pdev, int enable);
 
 
 

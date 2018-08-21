@@ -669,4 +669,15 @@ static inline struct msi_desc *irq_data_get_msi_desc(struct irq_data *d)
 	return d->common->msi_desc;
 }
 
+/* Test to see if a driver has successfully requested an irq */
+static inline int irq_desc_has_action(struct irq_desc *desc)
+{
+	return desc->action != NULL;
+}
+
+static inline int irq_has_action(unsigned int irq)
+{
+	return irq_desc_has_action(irq_to_desc(irq));
+}
+
 #endif /* _LEGO_IRQDESC_H_ */

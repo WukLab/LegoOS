@@ -433,3 +433,27 @@ u8 pci_swizzle_interrupt_pin(const struct pci_dev *dev, u8 pin)
 
 	return (((pin - 1) + slot) % 4) + 1;
 }
+
+/**
+ * pci_intx - enables/disables PCI INTx for device dev
+ * @pdev: the PCI device to operate on
+ * @enable: boolean: whether to enable or disable PCI INTx
+ *
+ * Enables/disables PCI INTx for device dev
+ */
+void pci_intx(struct pci_dev *pdev, int enable)
+{
+	u16 pci_command, new;
+
+	pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
+
+	if (enable) {
+		new = pci_command & ~PCI_COMMAND_INTX_DISABLE;
+	} else {
+		new = pci_command | PCI_COMMAND_INTX_DISABLE;
+	}
+
+	if (new != pci_command) {
+		WARN_ONCE(1, "Patchme");
+	}
+}

@@ -564,6 +564,10 @@ int mlx4_cmd_use_events(struct mlx4_dev *dev)
 
 	return err;
 #else
+	pr_info("****           FAT NOTE\n");
+	pr_info("****  Lego is not able to setup IRQ.\n");
+	pr_info("****  mlx4en will use polling to issue FW cmd.\n");
+	pr_info("****\n");
 	return 0;
 #endif
 }

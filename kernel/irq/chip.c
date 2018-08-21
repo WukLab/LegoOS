@@ -147,6 +147,39 @@ void irq_set_chip_and_handler_name(unsigned int irq, struct irq_chip *chip,
 	__irq_set_handler(irq, handle, 0, name);
 }
 
+/**
+ *	irq_set_msi_desc_off - set MSI descriptor data for an irq at offset
+ *	@irq_base:	Interrupt number base
+ *	@irq_offset:	Interrupt number offset
+ *	@entry:		Pointer to MSI descriptor data
+ *
+ *	Set the MSI descriptor entry for an irq at offset
+ */
+int irq_set_msi_desc_off(unsigned int irq_base, unsigned int irq_offset,
+			 struct msi_desc *entry)
+{
+	struct irq_desc *desc = irq_to_desc(irq_base + irq_offset);
+
+	if (!desc)
+		return -EINVAL;
+	desc->irq_common_data.msi_desc = entry;
+	if (entry && !irq_offset)
+		entry->irq = irq_base;
+	return 0;
+}
+
+/**
+ *	irq_set_msi_desc - set MSI descriptor data for an irq
+ *	@irq:	Interrupt number
+ *	@entry:	Pointer to MSI descriptor data
+ *
+ *	Set the MSI descriptor entry for an irq
+ */
+int irq_set_msi_desc(unsigned int irq, struct msi_desc *entry)
+{
+	return irq_set_msi_desc_off(irq, 0, entry);
+}
+
 void __enable_irq(struct irq_desc *desc)
 {
 	switch (desc->depth) {
