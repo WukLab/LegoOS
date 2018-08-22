@@ -778,7 +778,6 @@ struct ib_mad_send_buf * ib_create_send_mad(struct ib_mad_agent *mad_agent,
 	mad_send_wr->sg_list[0].lkey = mad_agent->mr->lkey;
 	mad_send_wr->sg_list[1].length = sizeof(struct ib_mad) - hdr_len;
 	mad_send_wr->sg_list[1].lkey = mad_agent->mr->lkey;
-
 	mad_send_wr->send_wr.wr_id = (unsigned long) mad_send_wr;
 	mad_send_wr->send_wr.sg_list = mad_send_wr->sg_list;
 	mad_send_wr->send_wr.num_sge = 2;
@@ -888,6 +887,7 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 	qp_info = mad_send_wr->mad_agent_priv->qp_info;
 	mad_send_wr->send_wr.wr_id = (unsigned long)&mad_send_wr->mad_list;
 	mad_send_wr->mad_list.mad_queue = &qp_info->send_queue;
+	BUG_ON(!&qp_info->send_queue);
 
 	mad_agent = mad_send_wr->send_buf.mad_agent;
 	sge = mad_send_wr->sg_list;
@@ -1748,6 +1748,14 @@ static void ib_mad_recv_done_handler(struct ib_mad_port_private *port_priv,
 	int port_num;
 	int ret = IB_MAD_RESULT_SUCCESS;
 
+	/*
+	 * HACK!!!
+	 *
+	 * This wr was posted by ib_mad_post_receive_mads().
+	 * The mad_queue was assigned to some recv_queue.
+	 * If anything goes wrong, check that function!
+	 */
+
 	mad_list = (struct ib_mad_list_head *)(unsigned long)wc->wr_id;
 	if (!virt_addr_valid((unsigned long)mad_list)) {
 		pr_info("BUG! mad_list: %p\n", mad_list);
@@ -2565,6 +2573,20 @@ static int ib_mad_post_receive_mads(struct ib_mad_qp_info *qp_info,
 						 DMA_FROM_DEVICE);
 		mad_priv->header.mapping = sg_list.addr;
 		recv_wr.wr_id = (unsigned long)&mad_priv->header.mad_list;
+
+		/*
+		 * HACK!!!
+		 *
+		 * This recv_queue must be not-NULL.
+		 * It will be used by both
+		 *  - ib_mad_send_done_handler()
+		 *  - ib_mad_recv_done_handler()
+		 *
+		 * If it is NULL here, catch the buggy caller.
+		 * If there is no buggy caller, and these two handlers still
+		 * go wrong, we have a problem. :-(
+		 */
+		BUG_ON(!recv_queue);
 		mad_priv->header.mad_list.mad_queue = recv_queue;
 
 		/* Post receive WR */
