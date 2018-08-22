@@ -41,6 +41,36 @@
 
 #include <lego/atomic.h>
 
+/* Driver supports 3 diffrent device methods to manage traffic steering:
+ *	-device managed - High level API for ib and eth flow steering. FW is
+ *			  managing flow steering tables.
+ *	- B0 steering mode - Common low level API for ib and (if supported) eth.
+ *	- A0 steering mode - Limited low level API for eth. In case of IB,
+ *			     B0 mode is in use.
+ */
+enum {
+	MLX4_STEERING_MODE_A0,
+	MLX4_STEERING_MODE_B0,
+	MLX4_STEERING_MODE_DEVICE_MANAGED
+};
+
+static inline const char *mlx4_steering_mode_str(int steering_mode)
+{
+	switch (steering_mode) {
+	case MLX4_STEERING_MODE_A0:
+		return "A0 steering";
+
+	case MLX4_STEERING_MODE_B0:
+		return "B0 steering";
+
+	case MLX4_STEERING_MODE_DEVICE_MANAGED:
+		return "Device managed flow steering";
+
+	default:
+		return "Unrecognize steering mode";
+	}
+}
+
 #define MAX_MSIX_P_PORT		17
 #define MAX_MSIX		64
 #define MSIX_LEGACY_SZ		4
@@ -49,14 +79,40 @@
 enum {
 	MLX4_FLAG_MSI_X		= 1 << 0,
 	MLX4_FLAG_OLD_PORT_CMDS	= 1 << 1,
+	MLX4_FLAG_MASTER	= 1 << 2,
+	MLX4_FLAG_SLAVE		= 1 << 3,
+	MLX4_FLAG_SRIOV		= 1 << 4,
 };
 
 enum {
-	MLX4_MAX_PORTS		= 2
+	MLX4_PORT_CAP_IS_SM	= 1 << 1,
+	MLX4_PORT_CAP_DEV_MGMT_SUP = 1 << 19,
 };
+
+enum {
+	MLX4_MAX_PORTS		= 2,
+	MLX4_MAX_PORT_PKEYS	= 128,
+};
+
+/* base qkey for use in sriov tunnel-qp/proxy-qp communication.
+ * These qkeys must not be allowed for general use. This is a 64k range,
+ * and to test for violation, we use the mask (protect against future chg).
+ */
+#define MLX4_RESERVED_QKEY_BASE  (0xFFFF0000)
+#define MLX4_RESERVED_QKEY_MASK  (0xFFFF0000)
 
 enum {
 	MLX4_BOARD_ID_LEN = 64
+};
+
+enum {
+	MLX4_MAX_NUM_PF		= 16,
+	MLX4_MAX_NUM_VF		= 64,
+	MLX4_MFUNC_MAX		= 80,
+	MLX4_MAX_EQ_NUM		= 1024,
+	MLX4_MFUNC_EQ_NUM	= 4,
+	MLX4_MFUNC_MAX_EQES     = 8,
+	MLX4_MFUNC_EQE_MASK     = (MLX4_MFUNC_MAX_EQES - 1)
 };
 
 enum {
@@ -83,21 +139,27 @@ enum {
 	MLX4_DEV_CAP_FLAG_UDP_RSS	= 1LL << 40,
 	MLX4_DEV_CAP_FLAG_VEP_UC_STEER	= 1LL << 41,
 	MLX4_DEV_CAP_FLAG_VEP_MC_STEER	= 1LL << 42,
-	MLX4_DEV_CAP_FLAG_COUNTERS	= 1LL << 48
+	MLX4_DEV_CAP_FLAG_COUNTERS	= 1LL << 48,
+	MLX4_DEV_CAP_FLAG_SET_ETH_SCHED = 1LL << 53,
+	MLX4_DEV_CAP_FLAG_SENSE_SUPPORT	= 1LL << 55,
+	MLX4_DEV_CAP_FLAG_PORT_MNG_CHG_EV = 1LL << 59,
+	MLX4_DEV_CAP_FLAG_64B_EQE	= 1LL << 61,
+	MLX4_DEV_CAP_FLAG_64B_CQE	= 1LL << 62
 };
 
 #define MLX4_ATTR_EXTENDED_PORT_INFO	cpu_to_be16(0xff90)
 
 enum {
-	MLX_EXT_PORT_CAP_FLAG_EXTENDED_PORT_INFO	= 1 <<  0
-};
-
-enum {
+	MLX4_BMME_FLAG_WIN_TYPE_2B	= 1 <<  1,
 	MLX4_BMME_FLAG_LOCAL_INV	= 1 <<  6,
 	MLX4_BMME_FLAG_REMOTE_INV	= 1 <<  7,
 	MLX4_BMME_FLAG_TYPE_2_WIN	= 1 <<  9,
 	MLX4_BMME_FLAG_RESERVED_LKEY	= 1 << 10,
 	MLX4_BMME_FLAG_FAST_REG_WR	= 1 << 11,
+};
+
+enum {
+	MLX_EXT_PORT_CAP_FLAG_EXTENDED_PORT_INFO	= 1 <<  0
 };
 
 enum mlx4_event {
@@ -118,8 +180,15 @@ enum mlx4_event {
 	MLX4_EVENT_TYPE_PORT_CHANGE	   = 0x09,
 	MLX4_EVENT_TYPE_EQ_OVERFLOW	   = 0x0f,
 	MLX4_EVENT_TYPE_ECC_DETECT	   = 0x0e,
-	MLX4_EVENT_TYPE_CMD		   = 0x0a
+	MLX4_EVENT_TYPE_CMD		   = 0x0a,
+	MLX4_EVENT_TYPE_VEP_UPDATE	   = 0x19,
+	MLX4_EVENT_TYPE_COMM_CHANNEL	   = 0x18,
+	MLX4_EVENT_TYPE_FATAL_WARNING	   = 0x1b,
+	MLX4_EVENT_TYPE_FLR_EVENT	   = 0x1c,
+	MLX4_EVENT_TYPE_PORT_MNG_CHG_EVENT = 0x1d,
+	MLX4_EVENT_TYPE_NONE		   = 0xff,
 };
+
 
 enum {
 	MLX4_PORT_CHANGE_SUBTYPE_DOWN	= 1,
@@ -162,6 +231,31 @@ enum {
 };
 
 enum {
+	MLX4_DEV_CAP_FLAG2_RSS			= 1LL <<  0,
+	MLX4_DEV_CAP_FLAG2_RSS_TOP		= 1LL <<  1,
+	MLX4_DEV_CAP_FLAG2_RSS_XOR		= 1LL <<  2,
+	MLX4_DEV_CAP_FLAG2_FS_EN		= 1LL <<  3,
+	MLX4_DEV_CAP_FLAGS2_REASSIGN_MAC_EN	= 1LL <<  4,
+	MLX4_DEV_CAP_FLAG2_TS			= 1LL <<  5,
+	MLX4_DEV_CAP_FLAG2_VLAN_CONTROL		= 1LL <<  6,
+	MLX4_DEV_CAP_FLAG2_FSM			= 1LL <<  7,
+	MLX4_DEV_CAP_FLAG2_UPDATE_QP		= 1LL <<  8
+};
+
+enum {
+	MLX4_DEV_CAP_64B_EQE_ENABLED	= 1LL << 0,
+	MLX4_DEV_CAP_64B_CQE_ENABLED	= 1LL << 1
+};
+
+enum {
+	MLX4_USER_DEV_CAP_64B_CQE	= 1L << 0
+};
+
+enum {
+	MLX4_FUNC_CAP_64B_EQE_CQE	= 1L << 0
+};
+
+enum {
 	MLX4_STAT_RATE_OFFSET	= 5
 };
 
@@ -185,6 +279,7 @@ enum mlx4_qp_region {
 };
 
 enum mlx4_port_type {
+	MLX4_PORT_TYPE_NONE	= 0,
 	MLX4_PORT_TYPE_IB	= 1,
 	MLX4_PORT_TYPE_ETH	= 2,
 	MLX4_PORT_TYPE_AUTO	= 3
@@ -210,13 +305,42 @@ enum {
 	MLX4_MAX_FAST_REG_PAGES = 511,
 };
 
+enum slave_port_state {
+	SLAVE_PORT_DOWN = 0,
+	SLAVE_PENDING_UP,
+	SLAVE_PORT_UP,
+};
+
+enum slave_port_gen_event {
+	SLAVE_PORT_GEN_EVENT_DOWN = 0,
+	SLAVE_PORT_GEN_EVENT_UP,
+	SLAVE_PORT_GEN_EVENT_NONE,
+};
+
+enum slave_port_state_event {
+	MLX4_PORT_STATE_DEV_EVENT_PORT_DOWN,
+	MLX4_PORT_STATE_DEV_EVENT_PORT_UP,
+	MLX4_PORT_STATE_IB_PORT_STATE_EVENT_GID_VALID,
+	MLX4_PORT_STATE_IB_EVENT_GID_INVALID,
+};
+
 static inline u64 mlx4_fw_ver(u64 major, u64 minor, u64 subminor)
 {
 	return (major << 32) | (minor << 16) | subminor;
 }
 
+struct mlx4_phys_caps {
+	u32			gid_phys_table_len[MLX4_MAX_PORTS + 1];
+	u32			pkey_phys_table_len[MLX4_MAX_PORTS + 1];
+	u32			num_phys_eqs;
+	u32			base_sqpn;
+	u32			base_proxy_sqpn;
+	u32			base_tunnel_sqpn;
+};
+
 struct mlx4_caps {
 	u64			fw_ver;
+	u32			function;
 	int			num_ports;
 	int			vl_cap[MLX4_MAX_PORTS + 1];
 	int			ib_mtu_cap[MLX4_MAX_PORTS + 1];
@@ -231,6 +355,7 @@ struct mlx4_caps {
 	u64			trans_code[MLX4_MAX_PORTS + 1];
 	int			local_ca_ack_delay;
 	int			num_uars;
+	u32			uar_page_size;
 	int			bf_reg_size;
 	int			bf_regs_per_page;
 	int			max_sq_sg;
@@ -241,6 +366,10 @@ struct mlx4_caps {
 	int			max_rq_desc_sz;
 	int			max_qp_init_rdma;
 	int			max_qp_dest_rdma;
+	u32			*qp0_proxy;
+	u32			*qp1_proxy;
+	u32			*qp0_tunnel;
+	u32			*qp1_tunnel;
 	int			sqp_start;
 	int			num_srqs;
 	int			max_srq_wqes;
@@ -254,8 +383,9 @@ struct mlx4_caps {
 	int			num_comp_vectors;
 	int			comp_pool;
 	int			num_mpts;
-	int			num_mtt_segs;
-	int			mtts_per_seg;
+	int			max_fmr_maps;
+	int			num_mtts;
+	int                     mtts_per_seg;
 	int			fmr_reserved_mtts;
 	int			reserved_mtts;
 	int			reserved_mrws;
@@ -264,6 +394,8 @@ struct mlx4_caps {
 	int			num_amgms;
 	int			reserved_mcgs;
 	int			num_qp_per_mgm;
+	int			steering_mode;
+	int			fs_log_max_ucast_qp_range_size;
 	int			num_pds;
 	int			reserved_pds;
 	int			max_xrcds;
@@ -272,11 +404,13 @@ struct mlx4_caps {
 	u32			max_msg_sz;
 	u32			page_size_cap;
 	u64			flags;
+	u64			flags2;
 	u32			bmme_flags;
 	u32			reserved_lkey;
 	u16			stat_rate_support;
 	u8			port_width_cap[MLX4_MAX_PORTS + 1];
 	int			max_gso_sz;
+	int			max_rss_tbl_sz;
 	int                     reserved_qps_cnt[MLX4_NUM_QP_REGION];
 	int			reserved_qps;
 	int                     reserved_qps_base[MLX4_NUM_QP_REGION];
@@ -285,10 +419,20 @@ struct mlx4_caps {
 	int                     log_num_prios;
 	enum mlx4_port_type	port_type[MLX4_MAX_PORTS + 1];
 	u8			supported_type[MLX4_MAX_PORTS + 1];
-	u32			port_mask;
+	u8                      suggested_type[MLX4_MAX_PORTS + 1];
+	u8                      default_sense[MLX4_MAX_PORTS + 1];
+	u32			port_mask[MLX4_MAX_PORTS + 1];
 	enum mlx4_port_type	possible_type[MLX4_MAX_PORTS + 1];
 	u32			max_counters;
-	u8			ext_port_cap[MLX4_MAX_PORTS + 1];
+	u8			port_ib_mtu[MLX4_MAX_PORTS + 1];
+	u16			sqp_demux;
+	u32			eqe_size;
+	u32			cqe_size;
+	u8			eqe_factor;
+	u32			userspace_caps; /* userspace must be aware of these */
+	u32			function_caps;  /* VFs must be aware of these */
+	u16			hca_core_clock;
+	u8                      ext_port_cap[MLX4_MAX_PORTS + 1];
 };
 
 struct mlx4_buf_list {
@@ -305,7 +449,7 @@ struct mlx4_buf {
 };
 
 struct mlx4_mtt {
-	u32			first_seg;
+	u32			offset;
 	int			order;
 	int			page_shift;
 };
@@ -349,6 +493,18 @@ struct mlx4_mr {
 	u32			key;
 	u32			pd;
 	u32			access;
+	int			enabled;
+};
+
+enum mlx4_mw_type {
+	MLX4_MW_TYPE_1 = 1,
+	MLX4_MW_TYPE_2 = 2,
+};
+
+struct mlx4_mw {
+	u32			key;
+	u32			pd;
+	enum mlx4_mw_type	type;
 	int			enabled;
 };
 
@@ -469,11 +625,101 @@ struct mlx4_counter {
 struct mlx4_dev {
 	struct pci_dev	       *pdev;
 	unsigned long		flags;
+	unsigned long		num_slaves;
 	struct mlx4_caps	caps;
+	struct mlx4_phys_caps	phys_caps;
+
+	/*
+	 * This links all the QPs managed by this device.
+	 * Unlike original radix implementation, we use RB tree.
+	 *
+	 * The tree is modified by code in: mlx4en/qp.c
+	 */
 	struct rb_root		qp_table_tree;
+	unsigned long		nr_qps;
+
 	u8			rev_id;
 	char			board_id[MLX4_BOARD_ID_LEN];
+	int			num_vfs;
+	int			oper_log_mgm_entry_size;
+	u64			regid_promisc_array[MLX4_MAX_PORTS + 1];
+	u64			regid_allmulti_array[MLX4_MAX_PORTS + 1];
 };
+
+struct mlx4_eqe {
+	u8			reserved1;
+	u8			type;
+	u8			reserved2;
+	u8			subtype;
+	union {
+		u32		raw[6];
+		struct {
+			__be32	cqn;
+		} __packed comp;
+		struct {
+			u16	reserved1;
+			__be16	token;
+			u32	reserved2;
+			u8	reserved3[3];
+			u8	status;
+			__be64	out_param;
+		} __packed cmd;
+		struct {
+			__be32	qpn;
+		} __packed qp;
+		struct {
+			__be32	srqn;
+		} __packed srq;
+		struct {
+			__be32	cqn;
+			u32	reserved1;
+			u8	reserved2[3];
+			u8	syndrome;
+		} __packed cq_err;
+		struct {
+			u32	reserved1[2];
+			__be32	port;
+		} __packed port_change;
+		struct {
+			#define COMM_CHANNEL_BIT_ARRAY_SIZE	4
+			u32 reserved;
+			u32 bit_vec[COMM_CHANNEL_BIT_ARRAY_SIZE];
+		} __packed comm_channel_arm;
+		struct {
+			u8	port;
+			u8	reserved[3];
+			__be64	mac;
+		} __packed mac_update;
+		struct {
+			__be32	slave_id;
+		} __packed flr_event;
+		struct {
+			__be16  current_temperature;
+			__be16  warning_threshold;
+		} __packed warming;
+		struct {
+			u8 reserved[3];
+			u8 port;
+			union {
+				struct {
+					__be16 mstr_sm_lid;
+					__be16 port_lid;
+					__be32 changed_attr;
+					u8 reserved[3];
+					u8 mstr_sm_sl;
+					__be64 gid_prefix;
+				} __packed port_info;
+				struct {
+					__be32 block_ptr;
+					__be32 tbl_entries_mask;
+				} __packed tbl_change_info;
+			} params;
+		} __packed port_mgmt_change;
+	}			event;
+	u8			slave_id;
+	u8			reserved3[2];
+	u8			owner;
+} __packed;
 
 struct mlx4_init_port_param {
 	int			set_guid0;
@@ -491,14 +737,18 @@ struct mlx4_init_port_param {
 
 #define mlx4_foreach_port(port, dev, type)				\
 	for ((port) = 1; (port) <= (dev)->caps.num_ports; (port)++)	\
-		if (((type) == MLX4_PORT_TYPE_IB ? (dev)->caps.port_mask : \
-		     ~(dev)->caps.port_mask) & 1 << ((port) - 1))
+		if ((type) == (dev)->caps.port_mask[(port)])
 
-#define mlx4_foreach_ib_transport_port(port, dev)			\
-	for ((port) = 1; (port) <= (dev)->caps.num_ports; (port)++)	\
-		if (((dev)->caps.port_mask & 1 << ((port) - 1)) ||	\
-		    ((dev)->caps.flags & MLX4_DEV_CAP_FLAG_IBOE))
+#define mlx4_foreach_non_ib_transport_port(port, dev)                     \
+	for ((port) = 1; (port) <= (dev)->caps.num_ports; (port)++)	  \
+		if (((dev)->caps.port_mask[port] != MLX4_PORT_TYPE_IB))
 
+#define mlx4_foreach_ib_transport_port(port, dev)                         \
+	for ((port) = 1; (port) <= (dev)->caps.num_ports; (port)++)	  \
+		if (((dev)->caps.port_mask[port] == MLX4_PORT_TYPE_IB) || \
+			((dev)->caps.flags & MLX4_DEV_CAP_FLAG_IBOE))
+
+#define MLX4_INVALID_SLAVE_ID	0xFF
 
 int mlx4_buf_alloc(struct mlx4_dev *dev, int size, int max_direct,
 		   struct mlx4_buf *buf);
@@ -529,7 +779,7 @@ u64 mlx4_mtt_addr(struct mlx4_dev *dev, struct mlx4_mtt *mtt);
 
 int mlx4_mr_alloc(struct mlx4_dev *dev, u32 pd, u64 iova, u64 size, u32 access,
 		  int npages, int page_shift, struct mlx4_mr *mr);
-void mlx4_mr_free(struct mlx4_dev *dev, struct mlx4_mr *mr);
+int mlx4_mr_free(struct mlx4_dev *dev, struct mlx4_mr *mr);
 int mlx4_mr_enable(struct mlx4_dev *dev, struct mlx4_mr *mr);
 int mlx4_write_mtt(struct mlx4_dev *dev, struct mlx4_mtt *mtt,
 		   int start_index, int npages, u64 *page_list);
@@ -600,5 +850,31 @@ int mlx4_wol_write(struct mlx4_dev *dev, u64 config, int port);
 
 int mlx4_counter_alloc(struct mlx4_dev *dev, u32 *idx);
 void mlx4_counter_free(struct mlx4_dev *dev, u32 idx);
+
+static inline int mlx4_is_master(struct mlx4_dev *dev)
+{
+	return dev->flags & MLX4_FLAG_MASTER;
+}
+
+static inline int mlx4_is_qp_reserved(struct mlx4_dev *dev, u32 qpn)
+{
+	return (qpn < dev->phys_caps.base_sqpn + 8 +
+		16 * MLX4_MFUNC_MAX * !!mlx4_is_master(dev));
+}
+
+static inline int mlx4_is_mfunc(struct mlx4_dev *dev)
+{
+	return dev->flags & (MLX4_FLAG_SLAVE | MLX4_FLAG_MASTER);
+}
+
+static inline int mlx4_is_slave(struct mlx4_dev *dev)
+{
+	return dev->flags & MLX4_FLAG_SLAVE;
+}
+
+static inline int mlx4_master_func_num(struct mlx4_dev *dev)
+{
+	return dev->caps.function;
+}
 
 #endif /* MLX4_DEVICE_H */

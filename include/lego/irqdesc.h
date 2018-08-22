@@ -17,6 +17,20 @@
 #include <lego/spinlock.h>
 
 /*
+ * Bits used by threaded handlers:
+ * IRQTF_RUNTHREAD - signals that the interrupt handler thread should run
+ * IRQTF_WARNED    - warning "IRQ_WAKE_THREAD w/o thread_fn" has been printed
+ * IRQTF_AFFINITY  - irq thread is requested to adjust affinity
+ * IRQTF_FORCED_THREAD  - irq action is force threaded
+ */
+enum {
+	IRQTF_RUNTHREAD,
+	IRQTF_WARNED,
+	IRQTF_AFFINITY,
+	IRQTF_FORCED_THREAD,
+};
+
+/*
  * Bit masks for irq_common_data.state_use_accessors
  *
  * IRQD_TRIGGER_MASK		- Mask for the trigger type bits
@@ -130,6 +144,18 @@ struct irqaction {
 	unsigned long		thread_mask;
 	const char		*name;
 } ____cacheline_aligned;
+
+extern int __must_check
+request_threaded_irq(unsigned int irq, irq_handler_t handler,
+		     irq_handler_t thread_fn,
+		     unsigned long flags, const char *name, void *dev);
+
+static inline int __must_check
+request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags,
+	    const char *name, void *dev)
+{
+	return request_threaded_irq(irq, handler, NULL, flags, name, dev);
+}
 
 /*
  * IRQ line status.
@@ -289,6 +315,8 @@ struct irq_desc {
 	unsigned int		irqs_unhandled;
 	spinlock_t		lock;
 	cpumask_var_t		pending_mask;
+	unsigned long		threads_oneshot;
+	atomic_t		threads_active;
 };
 
 extern struct irq_desc irq_desc[NR_IRQS];
@@ -639,6 +667,17 @@ static inline struct msi_desc *irq_get_msi_desc(unsigned int irq)
 static inline struct msi_desc *irq_data_get_msi_desc(struct irq_data *d)
 {
 	return d->common->msi_desc;
+}
+
+/* Test to see if a driver has successfully requested an irq */
+static inline int irq_desc_has_action(struct irq_desc *desc)
+{
+	return desc->action != NULL;
+}
+
+static inline int irq_has_action(unsigned int irq)
+{
+	return irq_desc_has_action(irq_to_desc(irq));
 }
 
 #endif /* _LEGO_IRQDESC_H_ */

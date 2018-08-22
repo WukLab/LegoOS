@@ -11,6 +11,8 @@
 #include <asm/page.h>
 
 #include <lego/bug.h>
+#include <lego/wait.h>
+#include <lego/sched.h>
 #include <lego/kernel.h>
 #include <lego/resource.h>
 #include <lego/spinlock.h>
@@ -42,6 +44,25 @@ static struct resource *next_resource(struct resource *p, bool sibling_only)
 	while (!p->sibling && p->parent)
 		p = p->parent;
 	return p->sibling;
+}
+
+static int __release_resource(struct resource *old)
+{
+	struct resource *tmp, **p;
+
+	p = &old->parent->child;
+	for (;;) {
+		tmp = *p;
+		if (!tmp)
+			break;
+		if (tmp == old) {
+			*p = tmp->sibling;
+			old->parent = NULL;
+			return 0;
+		}
+		p = &tmp->sibling;
+	}
+	return -EINVAL;
 }
 
 /* Return the conflict entry if you can't request it */
@@ -104,6 +125,20 @@ int request_resource(struct resource *root, struct resource *new)
 
 	conflict = request_resource_conflict(root, new);
 	return conflict ? -EBUSY : 0;
+}
+
+/**
+ * release_resource - release a previously reserved resource
+ * @old: resource pointer
+ */
+int release_resource(struct resource *old)
+{
+	int retval;
+
+	spin_lock(&resource_lock);
+	retval = __release_resource(old);
+	spin_unlock(&resource_lock);
+	return retval;
 }
 
 /**
@@ -224,6 +259,64 @@ int insert_resource(struct resource *parent, struct resource *new)
 	return conflict ? -EBUSY : 0;
 }
 
+static int __adjust_resource(struct resource *res, resource_size_t start,
+				resource_size_t size)
+{
+	struct resource *tmp, *parent = res->parent;
+	resource_size_t end = start + size - 1;
+	int result = -EBUSY;
+
+	if (!parent)
+		goto skip;
+
+	if ((start < parent->start) || (end > parent->end))
+		goto out;
+
+	if (res->sibling && (res->sibling->start <= end))
+		goto out;
+
+	tmp = parent->child;
+	if (tmp != res) {
+		while (tmp->sibling != res)
+			tmp = tmp->sibling;
+		if (start <= tmp->end)
+			goto out;
+	}
+
+skip:
+	for (tmp = res->child; tmp; tmp = tmp->sibling)
+		if ((tmp->start < start) || (tmp->end > end))
+			goto out;
+
+	res->start = start;
+	res->end = end;
+	result = 0;
+
+ out:
+	return result;
+}
+
+/**
+ * adjust_resource - modify a resource's start and size
+ * @res: resource to modify
+ * @start: new start value
+ * @size: new size
+ *
+ * Given an existing resource, change its start and size to match the
+ * arguments.  Returns 0 on success, -EBUSY if it can't fit.
+ * Existing children of the resource are assumed to be immutable.
+ */
+int adjust_resource(struct resource *res, resource_size_t start,
+			resource_size_t size)
+{
+	int result;
+
+	spin_lock(&resource_lock);
+	result = __adjust_resource(res, start, size);
+	spin_unlock(&resource_lock);
+	return result;
+}
+
 /*
  * Finds the lowest iomem resource existing within [res->start.res->end).
  * The caller must specify res->start, res->end, res->flags, and optionally
@@ -305,3 +398,150 @@ int walk_system_ram_range(unsigned long start_pfn, unsigned long nr_pages,
 	return ret;
 }
 
+/*
+ * This is compatibility stuff for IO resources.
+ *
+ * Note how this, unlike the above, knows about
+ * the IO flag meanings (busy etc).
+ *
+ * request_region creates a new busy region.
+ *
+ * check_region returns non-zero if the area is already busy.
+ *
+ * release_region releases a matching busy region.
+ */
+
+static DEFINE_WAIT_QUEUE_HEAD(muxed_resource_wait);
+
+/**
+ * __request_region - create a new busy resource region
+ * @parent: parent resource descriptor
+ * @start: resource start address
+ * @n: resource region size
+ * @name: reserving caller's ID string
+ * @flags: IO resource flags
+ */
+struct resource * __request_region(struct resource *parent,
+				   resource_size_t start, resource_size_t n,
+				   const char *name, int flags)
+{
+	DEFINE_WAITQUEUE(wait, current);
+	struct resource *res;
+
+	res = kzalloc(sizeof(*res), GFP_KERNEL);
+	if (!res)
+		return NULL;
+
+	res->name = name;
+	res->start = start;
+	res->end = start + n - 1;
+	res->flags = IORESOURCE_BUSY;
+	res->flags |= flags;
+
+	spin_lock(&resource_lock);
+
+	for (;;) {
+		struct resource *conflict;
+
+		conflict = __request_resource(parent, res);
+		if (!conflict)
+			break;
+		if (conflict != parent) {
+			parent = conflict;
+			if (!(conflict->flags & IORESOURCE_BUSY))
+				continue;
+		}
+		if (conflict->flags & flags & IORESOURCE_MUXED) {
+			add_wait_queue(&muxed_resource_wait, &wait);
+			spin_unlock(&resource_lock);
+			set_current_state(TASK_UNINTERRUPTIBLE);
+			schedule();
+			remove_wait_queue(&muxed_resource_wait, &wait);
+			spin_lock(&resource_lock);
+			continue;
+		}
+		/* Uhhuh, that didn't work out.. */
+		kfree(res);
+		res = NULL;
+		break;
+	}
+	spin_unlock(&resource_lock);
+	return res;
+}
+
+/**
+ * __check_region - check if a resource region is busy or free
+ * @parent: parent resource descriptor
+ * @start: resource start address
+ * @n: resource region size
+ *
+ * Returns 0 if the region is free at the moment it is checked,
+ * returns %-EBUSY if the region is busy.
+ *
+ * NOTE:
+ * This function is deprecated because its use is racy.
+ * Even if it returns 0, a subsequent call to request_region()
+ * may fail because another driver etc. just allocated the region.
+ * Do NOT use it.  It will be removed from the kernel.
+ */
+int __check_region(struct resource *parent, resource_size_t start,
+			resource_size_t n)
+{
+	struct resource * res;
+
+	res = __request_region(parent, start, n, "check-region", 0);
+	if (!res)
+		return -EBUSY;
+
+	release_resource(res);
+	kfree(res);
+	return 0;
+}
+
+/**
+ * __release_region - release a previously reserved resource region
+ * @parent: parent resource descriptor
+ * @start: resource start address
+ * @n: resource region size
+ *
+ * The described resource region must match a currently busy region.
+ */
+void __release_region(struct resource *parent, resource_size_t start,
+			resource_size_t n)
+{
+	struct resource **p;
+	resource_size_t end;
+
+	p = &parent->child;
+	end = start + n - 1;
+
+	spin_lock(&resource_lock);
+
+	for (;;) {
+		struct resource *res = *p;
+
+		if (!res)
+			break;
+		if (res->start <= start && res->end >= end) {
+			if (!(res->flags & IORESOURCE_BUSY)) {
+				p = &res->child;
+				continue;
+			}
+			if (res->start != start || res->end != end)
+				break;
+			*p = res->sibling;
+			spin_unlock(&resource_lock);
+			if (res->flags & IORESOURCE_MUXED)
+				wake_up(&muxed_resource_wait);
+			kfree(res);
+			return;
+		}
+		p = &res->sibling;
+	}
+
+	spin_unlock(&resource_lock);
+
+	printk(KERN_WARNING "Trying to free nonexistent resource "
+		"<%016llx-%016llx>\n", (unsigned long long)start,
+		(unsigned long long)end);
+}

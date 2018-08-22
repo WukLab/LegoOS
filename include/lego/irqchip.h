@@ -153,6 +153,8 @@ int irq_set_chip(unsigned int irq, struct irq_chip *chip);
 void __irq_set_handler(unsigned int irq, irq_flow_handler_t handle,
 		       int is_chained, const char *name);
 
+int irq_set_msi_desc(unsigned int irq, struct msi_desc *entry);
+
 void irq_disable(struct irq_desc *desc);
 void irq_enable(struct irq_desc *desc);
 

@@ -99,12 +99,16 @@ int sg_nents_for_len(struct scatterlist *sg, u64 len)
  **/
 struct scatterlist *sg_last(struct scatterlist *sgl, unsigned int nents)
 {
+#ifndef ARCH_HAS_SG_CHAIN
+	struct scatterlist *ret = &sgl[nents - 1];
+#else
 	struct scatterlist *sg, *ret = NULL;
 	unsigned int i;
 
 	for_each_sg(sgl, sg, nents, i)
 		ret = sg;
 
+#endif
 #ifdef CONFIG_DEBUG_SG
 	BUG_ON(sgl[0].sg_magic != SG_MAGIC);
 	BUG_ON(!sg_is_last(ret));
@@ -154,33 +158,18 @@ void sg_init_one(struct scatterlist *sg, const void *buf, unsigned int buflen)
  */
 static struct scatterlist *sg_kmalloc(unsigned int nents, gfp_t gfp_mask)
 {
-#if 0
 	if (nents == SG_MAX_SINGLE_ALLOC) {
-		/*
-		 * Kmemleak doesn't track page allocations as they are not
-		 * commonly used (in a raw form) for kernel data structures.
-		 * As we chain together a list of pages and then a normal
-		 * kmalloc (tracked by kmemleak), in order to for that last
-		 * allocation not to become decoupled (and thus a
-		 * false-positive) we need to inform kmemleak of all the
-		 * intermediate allocations.
-		 */
 		void *ptr = (void *) __get_free_page(gfp_mask);
-		kmemleak_alloc(ptr, PAGE_SIZE, 1, gfp_mask);
 		return ptr;
 	} else
-#endif
 		return kmalloc(nents * sizeof(struct scatterlist), gfp_mask);
 }
 
 static void sg_kfree(struct scatterlist *sg, unsigned int nents)
 {
-#if 0
 	if (nents == SG_MAX_SINGLE_ALLOC) {
-		kmemleak_free(sg);
 		free_page((unsigned long) sg);
 	} else
-#endif
 		kfree(sg);
 }
 
@@ -276,7 +265,7 @@ int __sg_alloc_table(struct sg_table *table, unsigned int nents,
 
 	if (nents == 0)
 		return -EINVAL;
-#ifndef CONFIG_ARCH_HAS_SG_CHAIN
+#ifndef ARCH_HAS_SG_CHAIN
 	if (WARN_ON_ONCE(nents > max_ents))
 		return -EINVAL;
 #endif
@@ -294,12 +283,7 @@ int __sg_alloc_table(struct sg_table *table, unsigned int nents,
 
 		left -= sg_size;
 
-		if (first_chunk) {
-			sg = first_chunk;
-			first_chunk = NULL;
-		} else {
-			sg = alloc_fn(alloc_size, gfp_mask);
-		}
+		sg = alloc_fn(alloc_size, gfp_mask);
 		if (unlikely(!sg)) {
 			/*
 			 * Adjust entry count to reflect that the last
@@ -456,283 +440,3 @@ bool __sg_page_iter_next(struct sg_page_iter *piter)
 
 	return true;
 }
-
-#if 0
-/**
- * sg_miter_start - start mapping iteration over a sg list
- * @miter: sg mapping iter to be started
- * @sgl: sg list to iterate over
- * @nents: number of sg entries
- *
- * Description:
- *   Starts mapping iterator @miter.
- *
- * Context:
- *   Don't care.
- */
-void sg_miter_start(struct sg_mapping_iter *miter, struct scatterlist *sgl,
-		    unsigned int nents, unsigned int flags)
-{
-	memset(miter, 0, sizeof(struct sg_mapping_iter));
-
-	__sg_page_iter_start(&miter->piter, sgl, nents, 0);
-	WARN_ON(!(flags & (SG_MITER_TO_SG | SG_MITER_FROM_SG)));
-	miter->__flags = flags;
-}
-
-static bool sg_miter_get_next_page(struct sg_mapping_iter *miter)
-{
-	if (!miter->__remaining) {
-		struct scatterlist *sg;
-		unsigned long pgoffset;
-
-		if (!__sg_page_iter_next(&miter->piter))
-			return false;
-
-		sg = miter->piter.sg;
-		pgoffset = miter->piter.sg_pgoffset;
-
-		miter->__offset = pgoffset ? 0 : sg->offset;
-		miter->__remaining = sg->offset + sg->length -
-				(pgoffset << PAGE_SHIFT) - miter->__offset;
-		miter->__remaining = min_t(unsigned long, miter->__remaining,
-					   PAGE_SIZE - miter->__offset);
-	}
-
-	return true;
-}
-
-/**
- * sg_miter_skip - reposition mapping iterator
- * @miter: sg mapping iter to be skipped
- * @offset: number of bytes to plus the current location
- *
- * Description:
- *   Sets the offset of @miter to its current location plus @offset bytes.
- *   If mapping iterator @miter has been proceeded by sg_miter_next(), this
- *   stops @miter.
- *
- * Context:
- *   Don't care if @miter is stopped, or not proceeded yet.
- *   Otherwise, preemption disabled if the SG_MITER_ATOMIC is set.
- *
- * Returns:
- *   true if @miter contains the valid mapping.  false if end of sg
- *   list is reached.
- */
-bool sg_miter_skip(struct sg_mapping_iter *miter, off_t offset)
-{
-	sg_miter_stop(miter);
-
-	while (offset) {
-		off_t consumed;
-
-		if (!sg_miter_get_next_page(miter))
-			return false;
-
-		consumed = min_t(off_t, offset, miter->__remaining);
-		miter->__offset += consumed;
-		miter->__remaining -= consumed;
-		offset -= consumed;
-	}
-
-	return true;
-}
-
-/**
- * sg_miter_next - proceed mapping iterator to the next mapping
- * @miter: sg mapping iter to proceed
- *
- * Description:
- *   Proceeds @miter to the next mapping.  @miter should have been started
- *   using sg_miter_start().  On successful return, @miter->page,
- *   @miter->addr and @miter->length point to the current mapping.
- *
- * Context:
- *   Preemption disabled if SG_MITER_ATOMIC.  Preemption must stay disabled
- *   till @miter is stopped.  May sleep if !SG_MITER_ATOMIC.
- *
- * Returns:
- *   true if @miter contains the next mapping.  false if end of sg
- *   list is reached.
- */
-bool sg_miter_next(struct sg_mapping_iter *miter)
-{
-	sg_miter_stop(miter);
-
-	/*
-	 * Get to the next page if necessary.
-	 * __remaining, __offset is adjusted by sg_miter_stop
-	 */
-	if (!sg_miter_get_next_page(miter))
-		return false;
-
-	miter->page = sg_page_iter_page(&miter->piter);
-	miter->consumed = miter->length = miter->__remaining;
-
-	if (miter->__flags & SG_MITER_ATOMIC)
-		miter->addr = kmap_atomic(miter->page) + miter->__offset;
-	else
-		miter->addr = kmap(miter->page) + miter->__offset;
-
-	return true;
-}
-
-/**
- * sg_miter_stop - stop mapping iteration
- * @miter: sg mapping iter to be stopped
- *
- * Description:
- *   Stops mapping iterator @miter.  @miter should have been started
- *   using sg_miter_start().  A stopped iteration can be resumed by
- *   calling sg_miter_next() on it.  This is useful when resources (kmap)
- *   need to be released during iteration.
- *
- * Context:
- *   Preemption disabled if the SG_MITER_ATOMIC is set.  Don't care
- *   otherwise.
- */
-void sg_miter_stop(struct sg_mapping_iter *miter)
-{
-	WARN_ON(miter->consumed > miter->length);
-
-	/* drop resources from the last iteration */
-	if (miter->addr) {
-		miter->__offset += miter->consumed;
-		miter->__remaining -= miter->consumed;
-
-		if ((miter->__flags & SG_MITER_TO_SG) &&
-		    !PageSlab(miter->page))
-			flush_kernel_dcache_page(miter->page);
-
-		if (miter->__flags & SG_MITER_ATOMIC) {
-			WARN_ON_ONCE(preemptible());
-			kunmap_atomic(miter->addr);
-		} else
-			kunmap(miter->page);
-
-		miter->page = NULL;
-		miter->addr = NULL;
-		miter->length = 0;
-		miter->consumed = 0;
-	}
-}
-
-/**
- * sg_copy_buffer - Copy data between a linear buffer and an SG list
- * @sgl:		 The SG list
- * @nents:		 Number of SG entries
- * @buf:		 Where to copy from
- * @buflen:		 The number of bytes to copy
- * @skip:		 Number of bytes to skip before copying
- * @to_buffer:		 transfer direction (true == from an sg list to a
- *			 buffer, false == from a buffer to an sg list
- *
- * Returns the number of copied bytes.
- *
- **/
-size_t sg_copy_buffer(struct scatterlist *sgl, unsigned int nents, void *buf,
-		      size_t buflen, off_t skip, bool to_buffer)
-{
-	unsigned int offset = 0;
-	struct sg_mapping_iter miter;
-	unsigned long flags;
-	unsigned int sg_flags = SG_MITER_ATOMIC;
-
-	if (to_buffer)
-		sg_flags |= SG_MITER_FROM_SG;
-	else
-		sg_flags |= SG_MITER_TO_SG;
-
-	sg_miter_start(&miter, sgl, nents, sg_flags);
-
-	if (!sg_miter_skip(&miter, skip))
-		return false;
-
-	local_irq_save(flags);
-
-	while (sg_miter_next(&miter) && offset < buflen) {
-		unsigned int len;
-
-		len = min(miter.length, buflen - offset);
-
-		if (to_buffer)
-			memcpy(buf + offset, miter.addr, len);
-		else
-			memcpy(miter.addr, buf + offset, len);
-
-		offset += len;
-	}
-
-	sg_miter_stop(&miter);
-
-	local_irq_restore(flags);
-	return offset;
-}
-
-/**
- * sg_copy_from_buffer - Copy from a linear buffer to an SG list
- * @sgl:		 The SG list
- * @nents:		 Number of SG entries
- * @buf:		 Where to copy from
- * @buflen:		 The number of bytes to copy
- *
- * Returns the number of copied bytes.
- *
- **/
-size_t sg_copy_from_buffer(struct scatterlist *sgl, unsigned int nents,
-			   const void *buf, size_t buflen)
-{
-	return sg_copy_buffer(sgl, nents, (void *)buf, buflen, 0, false);
-}
-
-/**
- * sg_copy_to_buffer - Copy from an SG list to a linear buffer
- * @sgl:		 The SG list
- * @nents:		 Number of SG entries
- * @buf:		 Where to copy to
- * @buflen:		 The number of bytes to copy
- *
- * Returns the number of copied bytes.
- *
- **/
-size_t sg_copy_to_buffer(struct scatterlist *sgl, unsigned int nents,
-			 void *buf, size_t buflen)
-{
-	return sg_copy_buffer(sgl, nents, buf, buflen, 0, true);
-}
-
-/**
- * sg_pcopy_from_buffer - Copy from a linear buffer to an SG list
- * @sgl:		 The SG list
- * @nents:		 Number of SG entries
- * @buf:		 Where to copy from
- * @buflen:		 The number of bytes to copy
- * @skip:		 Number of bytes to skip before copying
- *
- * Returns the number of copied bytes.
- *
- **/
-size_t sg_pcopy_from_buffer(struct scatterlist *sgl, unsigned int nents,
-			    const void *buf, size_t buflen, off_t skip)
-{
-	return sg_copy_buffer(sgl, nents, (void *)buf, buflen, skip, false);
-}
-
-/**
- * sg_pcopy_to_buffer - Copy from an SG list to a linear buffer
- * @sgl:		 The SG list
- * @nents:		 Number of SG entries
- * @buf:		 Where to copy to
- * @buflen:		 The number of bytes to copy
- * @skip:		 Number of bytes to skip before copying
- *
- * Returns the number of copied bytes.
- *
- **/
-size_t sg_pcopy_to_buffer(struct scatterlist *sgl, unsigned int nents,
-			  void *buf, size_t buflen, off_t skip)
-{
-	return sg_copy_buffer(sgl, nents, buf, buflen, skip, true);
-}
-#endif

@@ -8,6 +8,7 @@
  */
 
 #include <lego/irq.h>
+#include <lego/slab.h>
 #include <lego/kernel.h>
 #include <lego/bitmap.h>
 #include <lego/irqdesc.h>
@@ -815,4 +816,92 @@ int __irq_set_affinity(unsigned int irq, const struct cpumask *mask, bool force)
 	ret = irq_set_affinity_locked(irq_desc_get_irq_data(desc), mask, force);
 	spin_unlock_irqrestore(&desc->lock, flags);
 	return ret;
+}
+
+/**
+ *	request_threaded_irq - allocate an interrupt line
+ *	@irq: Interrupt line to allocate
+ *	@handler: Function to be called when the IRQ occurs.
+ *		  Primary handler for threaded interrupts
+ *		  If NULL and thread_fn != NULL the default
+ *		  primary handler is installed
+ *	@thread_fn: Function called from the irq handler thread
+ *		    If NULL, no irq thread is created
+ *	@irqflags: Interrupt type flags
+ *	@devname: An ascii name for the claiming device
+ *	@dev_id: A cookie passed back to the handler function
+ *
+ *	This call allocates interrupt resources and enables the
+ *	interrupt line and IRQ handling. From the point this
+ *	call is made your handler function may be invoked. Since
+ *	your handler function must clear any interrupt the board
+ *	raises, you must take care both to initialise your hardware
+ *	and to set up the interrupt handler in the right order.
+ *
+ *	If you want to set up a threaded irq handler for your device
+ *	then you need to supply @handler and @thread_fn. @handler is
+ *	still called in hard interrupt context and has to check
+ *	whether the interrupt originates from the device. If yes it
+ *	needs to disable the interrupt on the device and return
+ *	IRQ_WAKE_THREAD which will wake up the handler thread and run
+ *	@thread_fn. This split handler design is necessary to support
+ *	shared interrupts.
+ *
+ *	Dev_id must be globally unique. Normally the address of the
+ *	device data structure is used as the cookie. Since the handler
+ *	receives this value it makes sense to use it.
+ *
+ *	If your interrupt is shared you must pass a non NULL dev_id
+ *	as this is required when freeing the interrupt.
+ *
+ *	Flags:
+ *
+ *	IRQF_SHARED		Interrupt is shared
+ *	IRQF_TRIGGER_*		Specify active edge(s) or level
+ *
+ */
+int request_threaded_irq(unsigned int irq, irq_handler_t handler,
+			 irq_handler_t thread_fn, unsigned long irqflags,
+			 const char *devname, void *dev_id)
+{
+	struct irqaction *action;
+	struct irq_desc *desc;
+	int retval;
+
+	pr_info("%s(): irq=%d handler=%pS devname=%s\n",
+		__func__, irq, handler, devname);
+
+	/*
+	 * Sanity-check: shared interrupts must pass in a real dev-ID,
+	 * otherwise we'll have trouble later trying to figure out
+	 * which interrupt is which (messes up the interrupt freeing
+	 * logic etc).
+	 */
+	if ((irqflags & IRQF_SHARED) && !dev_id)
+		return -EINVAL;
+
+	desc = irq_to_desc(irq);
+	if (!desc)
+		return -EINVAL;
+
+	if (!handler) {
+		if (!thread_fn)
+			return -EINVAL;
+		handler = irq_default_primary_handler;
+	}
+
+	action = kzalloc(sizeof(struct irqaction), GFP_KERNEL);
+	if (!action)
+		return -ENOMEM;
+
+	action->handler = handler;
+	action->thread_fn = thread_fn;
+	action->flags = irqflags;
+	action->name = devname;
+	action->dev_id = dev_id;
+
+	retval = __setup_irq(irq, desc, action);
+	if (retval)
+		kfree(action);
+	return retval;
 }

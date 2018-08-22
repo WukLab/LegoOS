@@ -39,7 +39,7 @@ struct ib_pd *ctx_pd;
 
 static void ibv_add_one(struct ib_device *device)
 {
-	FIT_ctx = (struct lego_context *)kmalloc(sizeof(struct lego_context), GFP_KERNEL);
+	FIT_ctx = kmalloc(sizeof(struct lego_context), GFP_KERNEL);
 	ibapi_dev = device;
 	
 	ctx_pd = ib_alloc_pd(device);

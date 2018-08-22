@@ -13,8 +13,8 @@
 #include <asm/io.h>
 #include <lego/pci.h>
 
-struct dma_pool *dma_pool_create(const char *name, struct pci_dev *pdev,
-				 size_t size, size_t align, size_t allocation);
+struct dma_pool *dma_pool_create(const char *name, struct device *dev,
+				 size_t size, size_t align, size_t boundary);
 
 void dma_pool_destroy(struct dma_pool *pool);
 

@@ -175,7 +175,7 @@ struct mlx4_icm *mlx4_alloc_icm(struct mlx4_dev *dev, int npages,
 		if (coherent)
 			++chunk->nsg;
 		else if (chunk->npages == MLX4_ICM_CHUNK_LEN) {
- 			chunk->nsg = dma_map_sg(dev->pdev, chunk->mem,
+ 			chunk->nsg = dma_map_sg(&dev->pdev->dev, chunk->mem,
 						chunk->npages,
 						PCI_DMA_BIDIRECTIONAL);
 
@@ -190,7 +190,7 @@ struct mlx4_icm *mlx4_alloc_icm(struct mlx4_dev *dev, int npages,
 	}
 
 	if (!coherent && chunk) {
- 		chunk->nsg = dma_map_sg(dev->pdev, chunk->mem,
+ 		chunk->nsg = dma_map_sg(&dev->pdev->dev, chunk->mem,
 					chunk->npages,
 					PCI_DMA_BIDIRECTIONAL);
 
@@ -229,7 +229,8 @@ int mlx4_UNMAP_ICM_AUX(struct mlx4_dev *dev)
 
 int mlx4_table_get(struct mlx4_dev *dev, struct mlx4_icm_table *table, int obj)
 {
-	int i = (obj & (table->num_obj - 1)) / (MLX4_TABLE_CHUNK_SIZE / table->obj_size);
+	u32 i = (obj & (table->num_obj - 1)) /
+			(MLX4_TABLE_CHUNK_SIZE / table->obj_size);
 	int ret = 0;
 
 	mutex_lock(&table->mutex);

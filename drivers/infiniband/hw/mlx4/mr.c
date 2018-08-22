@@ -49,8 +49,6 @@ struct ib_mr *mlx4_ib_get_dma_mr(struct ib_pd *pd, int acc)
 	struct mlx4_ib_mr *mr;
 	int err;
 
-	//pr_debug("%s pd %p\n", __func__, pd);
-	//pr_debug("%s pd %p dev %p\n", __func__, pd, pd->device);
 	mr = kmalloc(sizeof *mr, GFP_KERNEL);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
@@ -60,18 +58,16 @@ struct ib_mr *mlx4_ib_get_dma_mr(struct ib_pd *pd, int acc)
 	if (err)
 		goto err_free;
 
-	//pr_debug("%s allocated\n", __func__);
 	err = mlx4_mr_enable(to_mdev(pd->device)->dev, &mr->mmr);
 	if (err)
 		goto err_mr;
 
 	mr->ibmr.rkey = mr->ibmr.lkey = mr->mmr.key;
 
-	//pr_debug("%s exit\n", __func__);
 	return &mr->ibmr;
 
 err_mr:
-	mlx4_mr_free(to_mdev(pd->device)->dev, &mr->mmr);
+	(void) mlx4_mr_free(to_mdev(pd->device)->dev, &mr->mmr);
 
 err_free:
 	kfree(mr);
@@ -82,11 +78,50 @@ err_free:
 int mlx4_ib_dereg_mr(struct ib_mr *ibmr)
 {
 	struct mlx4_ib_mr *mr = to_mmr(ibmr);
+	int ret;
 
-	mlx4_mr_free(to_mdev(ibmr->device)->dev, &mr->mmr);
+	ret = mlx4_mr_free(to_mdev(ibmr->device)->dev, &mr->mmr);
+	if (ret)
+		return ret;
 	kfree(mr);
 
 	return 0;
 }
 
+struct ib_mr *mlx4_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
+				  u64 virt_addr, int access_flags)
+{
+	BUG();
+}
 
+struct ib_mr *mlx4_ib_alloc_fast_reg_mr(struct ib_pd *pd,
+					int max_page_list_len)
+{
+	struct mlx4_ib_dev *dev = to_mdev(pd->device);
+	struct mlx4_ib_mr *mr;
+	int err;
+
+	mr = kmalloc(sizeof *mr, GFP_KERNEL);
+	if (!mr)
+		return ERR_PTR(-ENOMEM);
+
+	err = mlx4_mr_alloc(dev->dev, to_mpd(pd)->pdn, 0, 0, 0,
+			    max_page_list_len, 0, &mr->mmr);
+	if (err)
+		goto err_free;
+
+	err = mlx4_mr_enable(dev->dev, &mr->mmr);
+	if (err)
+		goto err_mr;
+
+	mr->ibmr.rkey = mr->ibmr.lkey = mr->mmr.key;
+
+	return &mr->ibmr;
+
+err_mr:
+	(void) mlx4_mr_free(dev->dev, &mr->mmr);
+
+err_free:
+	kfree(mr);
+	return ERR_PTR(err);
+}

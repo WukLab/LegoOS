@@ -32,6 +32,8 @@
  * SOFTWARE.
  */
 
+#define pr_fmt(fmt) "mlx4_core: " fmt
+
 #include <lego/sched.h>
 #include <lego/slab.h>
 #include <lego/pci.h>
@@ -47,6 +49,10 @@
 #include "mlx4.h"
 
 #define CMD_POLL_TOKEN 0xffff
+#define INBOX_MASK	0xffffffffffffff00ULL
+
+#define CMD_CHAN_VER 1
+#define CMD_CHAN_IF_REV 1
 
 enum {
 	/* command completed successfully: */
@@ -112,6 +118,7 @@ struct mlx4_cmd_context {
 	int			next;
 	u64			out_param;
 	u16			token;
+	u8			fw_status;
 };
 
 static int mlx4_status_to_errno(u8 status)
@@ -144,6 +151,120 @@ static int mlx4_status_to_errno(u8 status)
 	return trans_table[status];
 }
 
+static int comm_pending(struct mlx4_dev *dev)
+{
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	u32 status = readl(&priv->mfunc.comm->slave_read);
+
+	return (swab32(status) >> 31) != priv->cmd.comm_toggle;
+}
+
+static void mlx4_comm_cmd_post(struct mlx4_dev *dev, u8 cmd, u16 param)
+{
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	u32 val;
+
+	priv->cmd.comm_toggle ^= 1;
+	val = param | (cmd << 16) | (priv->cmd.comm_toggle << 31);
+	__raw_writel((__force u32) cpu_to_be32(val),
+		     &priv->mfunc.comm->slave_write);
+	mmiowb();
+}
+
+__used static int mlx4_comm_cmd_poll(struct mlx4_dev *dev, u8 cmd, u16 param,
+		       unsigned long timeout)
+{
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	unsigned long end;
+	int err = 0;
+	int ret_from_pending = 0;
+
+	/* First, verify that the master reports correct status */
+	if (comm_pending(dev)) {
+		mlx4_warn(dev, "Communication channel is not idle."
+			  "my toggle is %d (cmd:0x%x)\n",
+			  priv->cmd.comm_toggle, cmd);
+		return -EAGAIN;
+	}
+
+	/* Write command */
+	down(&priv->cmd.poll_sem);
+	mlx4_comm_cmd_post(dev, cmd, param);
+
+	end = msecs_to_jiffies(timeout) + jiffies;
+	while (comm_pending(dev) && time_before(jiffies, end))
+		cond_resched();
+	ret_from_pending = comm_pending(dev);
+	if (ret_from_pending) {
+		/* check if the slave is trying to boot in the middle of
+		 * FLR process. The only non-zero result in the RESET command
+		 * is MLX4_DELAY_RESET_SLAVE*/
+		if ((MLX4_COMM_CMD_RESET == cmd)) {
+			err = MLX4_DELAY_RESET_SLAVE;
+		} else {
+			mlx4_warn(dev, "Communication channel timed out\n");
+			err = -ETIMEDOUT;
+		}
+	}
+
+	up(&priv->cmd.poll_sem);
+	return err;
+}
+
+__used static int mlx4_comm_cmd_wait(struct mlx4_dev *dev, u8 op,
+			      u16 param, unsigned long timeout)
+{
+	struct mlx4_cmd *cmd = &mlx4_priv(dev)->cmd;
+	struct mlx4_cmd_context *context;
+	unsigned long end;
+	int err = 0;
+
+	down(&cmd->event_sem);
+
+	spin_lock(&cmd->context_lock);
+	BUG_ON(cmd->free_head < 0);
+	context = &cmd->context[cmd->free_head];
+	context->token += cmd->token_mask + 1;
+	cmd->free_head = context->next;
+	spin_unlock(&cmd->context_lock);
+
+	init_completion(&context->done);
+
+	mlx4_comm_cmd_post(dev, op, param);
+
+	if (!wait_for_completion_timeout(&context->done,
+					 msecs_to_jiffies(timeout))) {
+		mlx4_warn(dev, "communication channel command 0x%x timed out\n",
+			  op);
+		err = -EBUSY;
+		goto out;
+	}
+
+	err = context->result;
+	if (err && context->fw_status != CMD_STAT_MULTI_FUNC_REQ) {
+		mlx4_err(dev, "command 0x%x failed: fw status = 0x%x\n",
+			 op, context->fw_status);
+		goto out;
+	}
+
+out:
+	/* wait for comm channel ready
+	 * this is necessary for prevention the race
+	 * when switching between event to polling mode
+	 */
+	end = msecs_to_jiffies(timeout) + jiffies;
+	while (comm_pending(dev) && time_before(jiffies, end))
+		cond_resched();
+
+	spin_lock(&cmd->context_lock);
+	context->next = cmd->free_head;
+	cmd->free_head = context - cmd->context;
+	spin_unlock(&cmd->context_lock);
+
+	up(&cmd->event_sem);
+	return err;
+}
+
 static int cmd_pending(struct mlx4_dev *dev)
 {
 	u32 status = readl(mlx4_priv(dev)->cmd.hcr + HCR_STATUS_OFFSET);
@@ -162,8 +283,6 @@ static int mlx4_cmd_post(struct mlx4_dev *dev, u64 in_param, u64 out_param,
 	int ret = -EAGAIN;
 	unsigned long end;
 
-	//pr_debug("%s\n", __func__); 
-	//pr_info("%s():%d  preempt_count: %d\n", __func__, __LINE__, preempt_count());
 	mutex_lock(&cmd->hcr_mutex);
 
 	end = jiffies;
@@ -171,15 +290,17 @@ static int mlx4_cmd_post(struct mlx4_dev *dev, u64 in_param, u64 out_param,
 		end += msecs_to_jiffies(GO_BIT_TIMEOUT_MSECS);
 
 	while (cmd_pending(dev)) {
-		if (time_after_eq(jiffies, end))
+		if (time_after_eq(jiffies, end)) {
+			mlx4_err(dev, "%s:cmd_pending failed\n", __func__);
 			goto out;
-		//cond_resched();
-		//schedule();
-		udelay(1000);
-	}
+		}
 
-	while (cmd_pending(dev)) 
-		ret = -EAGAIN;
+		/*
+		 * You should know the semantic of cond_resched().
+		 * If it is a non-preempt kernel, this is just a no-op.
+		 */
+		cond_resched();
+	}
 
 	/*
 	 * We use writel (instead of something like memcpy_toio)
@@ -212,7 +333,6 @@ static int mlx4_cmd_post(struct mlx4_dev *dev, u64 in_param, u64 out_param,
 	cmd->toggle = cmd->toggle ^ 1;
 
 	ret = 0;
-	//pr_debug("%s ret 0\n", __func__);
 
 out:
 	mutex_unlock(&cmd->hcr_mutex);
@@ -227,8 +347,8 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	void __iomem *hcr = priv->cmd.hcr;
 	int err = 0;
 	unsigned long end;
+	u32 stat;
 
-	//pr_debug("%s in_modifier %d %x\n", __func__, in_modifier, in_modifier);
 	down(&priv->cmd.poll_sem);
 
 	err = mlx4_cmd_post(dev, in_param, out_param ? *out_param : 0,
@@ -238,28 +358,30 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 
 	end = msecs_to_jiffies(timeout) + jiffies;
 	while (cmd_pending(dev) && time_before(jiffies, end)) {
-		// cond_resched();
-		//schedule();
-		udelay(1000);
+		cond_resched();
 	}
 
 	if (cmd_pending(dev)) {
-		pr_debug("%s cmd pending\n", __func__);
+		mlx4_warn(dev, "command 0x%x timed out (go bit not cleared)\n", op);
 		err = -ETIMEDOUT;
 		goto out;
 	}
 
-	if (out_is_imm)
+	if (out_is_imm) {
 		*out_param =
 			(u64) be32_to_cpu((__force __be32)
 					  __raw_readl(hcr + HCR_OUT_PARAM_OFFSET)) << 32 |
 			(u64) be32_to_cpu((__force __be32)
 					  __raw_readl(hcr + HCR_OUT_PARAM_OFFSET + 4));
+	}
 
-	err = mlx4_status_to_errno(be32_to_cpu((__force __be32)
-					       __raw_readl(hcr + HCR_STATUS_OFFSET)) >> 24);
+	stat = be32_to_cpu((__force __be32)
+			   __raw_readl(hcr + HCR_STATUS_OFFSET)) >> 24;
+	err = mlx4_status_to_errno(stat);
+	if (err)
+		mlx4_err(dev, "command 0x%x failed: fw status = 0x%x\n",
+			 op, stat);
 
-	//pr_debug("%s return %d\n", __func__, err);
 out:
 	up(&priv->cmd.poll_sem);
 	return err;
@@ -303,14 +425,22 @@ static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	mlx4_cmd_post(dev, in_param, out_param ? *out_param : 0,
 		      in_modifier, op_modifier, op, context->token, 1);
 
-	if (!wait_for_completion_timeout(&context->done, msecs_to_jiffies(timeout))) {
+	pr_info("%s(): going to sleep\n", __func__);
+	if (!wait_for_completion_timeout(&context->done,
+					 msecs_to_jiffies(timeout))) {
+		mlx4_warn(dev, "command 0x%x timed out (go bit not cleared)\n",
+			  op);
 		err = -EBUSY;
 		goto out;
 	}
+	pr_info("%s(): after sleep\n", __func__);
 
 	err = context->result;
-	if (err)
+	if (err) {
+		mlx4_err(dev, "command 0x%x failed: fw status = 0x%x\n",
+			 op, context->fw_status);
 		goto out;
+	}
 
 	if (out_is_imm)
 		*out_param = context->out_param;
@@ -325,49 +455,64 @@ out:
 	return err;
 }
 
+/*
+ * HACK!!!
+ *
+ * Here, using both poll or wait both seem OKAY.
+ * However, if there are events generated by HW itself, then we have to
+ * have interrupt handlers to handle it. Otherwise, I don't know what will happen.
+ */
 int __mlx4_cmd(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	       int out_is_imm, u32 in_modifier, u8 op_modifier,
 	       u16 op, unsigned long timeout)
 {
-	//pr_debug("%s in_param %lx in_modifier %x op_modifier %x op %x\n",
-	//		__func__, in_param, in_modifier, op_modifier, op);
-	//if (mlx4_priv(dev)->cmd.use_events)
-	//	return mlx4_cmd_wait(dev, in_param, out_param, out_is_imm,
-	//			     in_modifier, op_modifier, op, timeout);
-	//else
-		return mlx4_cmd_poll(dev, in_param, out_param, out_is_imm,
-				     in_modifier, op_modifier, op, timeout);
+	if (!mlx4_is_mfunc(dev)) {
+		if (mlx4_priv(dev)->cmd.use_events)
+			return mlx4_cmd_wait(dev, in_param, out_param,
+					     out_is_imm, in_modifier,
+					     op_modifier, op, timeout);
+		else
+			return mlx4_cmd_poll(dev, in_param, out_param,
+					     out_is_imm, in_modifier,
+					     op_modifier, op, timeout);
+	}
+	panic("mlx4_slave_cmd() needed. Why?");
+	return 0;
 }
 
 int mlx4_cmd_init(struct mlx4_dev *dev)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
 
-	//pr_debug("%s enter\n", __func__);
-
 	mutex_init(&priv->cmd.hcr_mutex);
+	mutex_init(&priv->cmd.slave_cmd_mutex);
 	sema_init(&priv->cmd.poll_sem, 1);
 	priv->cmd.use_events = 0;
 	priv->cmd.toggle     = 1;
 
-	//pr_debug("%s ioremap %lx size %d\n",
-	//		__func__, pci_resource_start(dev->pdev, 0) + MLX4_HCR_BASE,
-	//		MLX4_HCR_SIZE);
-	priv->cmd.hcr = ioremap(pci_resource_start(dev->pdev, 0) + MLX4_HCR_BASE,
-				MLX4_HCR_SIZE);
-	if (!priv->cmd.hcr) {
-		mlx4_err(dev, "Couldn't map command register.");
-		return -ENOMEM;
+	priv->cmd.hcr = NULL;
+
+	if (!mlx4_is_slave(dev)) {
+		priv->cmd.hcr = ioremap(pci_resource_start(dev->pdev, 0) +
+					MLX4_HCR_BASE, MLX4_HCR_SIZE);
+		if (!priv->cmd.hcr) {
+			mlx4_err(dev, "Couldn't map command register.\n");
+			return -ENOMEM;
+		}
+		pr_info("%s(): ioremap base: %#lx\n", __func__,
+			(unsigned long)(pci_resource_start(dev->pdev, 0) + MLX4_HCR_BASE));
 	}
 
-	priv->cmd.pool = dma_pool_create("mlx4_cmd", dev->pdev,  
+	if (mlx4_is_mfunc(dev))
+		panic("Not supported now. Need more port.\n");
+
+	priv->cmd.pool = dma_pool_create("mlx4_cmd", &(dev->pdev->dev),
 					 MLX4_MAILBOX_SIZE,
 					 MLX4_MAILBOX_SIZE, 0);
 	if (!priv->cmd.pool) {
 		iounmap(priv->cmd.hcr);
 		return -ENOMEM;
 	}
-	//pr_debug("%s exit\n", __func__);
 
 	return 0;
 }
@@ -386,16 +531,10 @@ void mlx4_cmd_cleanup(struct mlx4_dev *dev)
  */
 int mlx4_cmd_use_events(struct mlx4_dev *dev)
 {
-/*
- * NOTE!!!
- * Lego does not use interruptes. Lego uses polling.
- *
- * This function will introduce unnecessary semaphore deadlock, because
- * our __mlx4_cmd does not use mlx4_cmd_wait().
- */
 #if 0
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	int i;
+	int err = 0;
 
 	priv->cmd.context = kmalloc(priv->cmd.max_cmds *
 				   sizeof (struct mlx4_cmd_context),
@@ -420,12 +559,17 @@ int mlx4_cmd_use_events(struct mlx4_dev *dev)
 		; /* nothing */
 	--priv->cmd.token_mask;
 
+	down(&priv->cmd.poll_sem);
 	priv->cmd.use_events = 1;
 
-	down(&priv->cmd.poll_sem);
-#endif
-
+	return err;
+#else
+	pr_info("****           FAT NOTE\n");
+	pr_info("****  Lego is not able to setup IRQ.\n");
+	pr_info("****  mlx4en will use polling to issue FW cmd.\n");
+	pr_info("****\n");
 	return 0;
+#endif
 }
 
 /*

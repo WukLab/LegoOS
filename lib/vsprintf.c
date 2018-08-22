@@ -12,10 +12,80 @@
 #include <lego/ctype.h>
 #include <lego/string.h>
 #include <lego/kernel.h>
+#include <lego/resource.h>
 #include <lego/kallsyms.h>
 #include <lego/tracepoint.h>
 #include <lego/comp_memory.h>
 #include <processor/pcache.h>
+
+/**
+ * simple_strtoull - convert a string to an unsigned long long
+ * @cp: The start of the string
+ * @endp: A pointer to the end of the parsed string will be placed here
+ * @base: The number base to use
+ *
+ * This function is obsolete. Please use kstrtoull instead.
+ */
+unsigned long long simple_strtoull(const char *cp, char **endp, unsigned int base)
+{
+	unsigned long long result;
+	unsigned int rv;
+
+	cp = _parse_integer_fixup_radix(cp, &base);
+	rv = _parse_integer(cp, base, &result);
+	/* FIXME */
+	cp += (rv & ~KSTRTOX_OVERFLOW);
+
+	if (endp)
+		*endp = (char *)cp;
+
+	return result;
+}
+
+/**
+ * simple_strtoul - convert a string to an unsigned long
+ * @cp: The start of the string
+ * @endp: A pointer to the end of the parsed string will be placed here
+ * @base: The number base to use
+ *
+ * This function is obsolete. Please use kstrtoul instead.
+ */
+unsigned long simple_strtoul(const char *cp, char **endp, unsigned int base)
+{
+	return simple_strtoull(cp, endp, base);
+}
+
+/**
+ * simple_strtol - convert a string to a signed long
+ * @cp: The start of the string
+ * @endp: A pointer to the end of the parsed string will be placed here
+ * @base: The number base to use
+ *
+ * This function is obsolete. Please use kstrtol instead.
+ */
+long simple_strtol(const char *cp, char **endp, unsigned int base)
+{
+	if (*cp == '-')
+		return -simple_strtoul(cp + 1, endp, base);
+
+	return simple_strtoul(cp, endp, base);
+}
+
+/**
+ * simple_strtoll - convert a string to a signed long long
+ * @cp: The start of the string
+ * @endp: A pointer to the end of the parsed string will be placed here
+ * @base: The number base to use
+ *
+ * This function is obsolete. Please use kstrtoll instead.
+ */
+long long simple_strtoll(const char *cp, char **endp, unsigned int base)
+{
+	if (*cp == '-')
+		return -simple_strtoull(cp + 1, endp, base);
+
+	return simple_strtoull(cp, endp, base);
+}
 
 static __noinline_for_stack
 int skip_atoi(const char **s)
@@ -626,6 +696,109 @@ char *symbol_string(char *buf, char *end, void *ptr,
 }
 
 static __noinline_for_stack
+char *resource_string(char *buf, char *end, struct resource *res,
+		      struct printf_spec spec, const char *fmt)
+{
+#ifndef IO_RSRC_PRINTK_SIZE
+#define IO_RSRC_PRINTK_SIZE	6
+#endif
+
+#ifndef MEM_RSRC_PRINTK_SIZE
+#define MEM_RSRC_PRINTK_SIZE	10
+#endif
+	static const struct printf_spec io_spec = {
+		.base = 16,
+		.field_width = IO_RSRC_PRINTK_SIZE,
+		.precision = -1,
+		.flags = SPECIAL | SMALL | ZEROPAD,
+	};
+	static const struct printf_spec mem_spec = {
+		.base = 16,
+		.field_width = MEM_RSRC_PRINTK_SIZE,
+		.precision = -1,
+		.flags = SPECIAL | SMALL | ZEROPAD,
+	};
+	static const struct printf_spec bus_spec = {
+		.base = 16,
+		.field_width = 2,
+		.precision = -1,
+		.flags = SMALL | ZEROPAD,
+	};
+	static const struct printf_spec dec_spec = {
+		.base = 10,
+		.precision = -1,
+		.flags = 0,
+	};
+	static const struct printf_spec str_spec = {
+		.field_width = -1,
+		.precision = 10,
+		.flags = LEFT,
+	};
+	static const struct printf_spec flag_spec = {
+		.base = 16,
+		.precision = -1,
+		.flags = SPECIAL | SMALL,
+	};
+
+	/* 32-bit res (sizeof==4): 10 chars in dec, 10 in hex ("0x" + 8)
+	 * 64-bit res (sizeof==8): 20 chars in dec, 18 in hex ("0x" + 16) */
+#define RSRC_BUF_SIZE		((2 * sizeof(resource_size_t)) + 4)
+#define FLAG_BUF_SIZE		(2 * sizeof(res->flags))
+#define DECODED_BUF_SIZE	sizeof("[mem - 64bit pref window disabled]")
+#define RAW_BUF_SIZE		sizeof("[mem - flags 0x]")
+	char sym[max(2*RSRC_BUF_SIZE + DECODED_BUF_SIZE,
+		     2*RSRC_BUF_SIZE + FLAG_BUF_SIZE + RAW_BUF_SIZE)];
+
+	char *p = sym, *pend = sym + sizeof(sym);
+	int decode = (fmt[0] == 'R') ? 1 : 0;
+	const struct printf_spec *specp;
+
+	*p++ = '[';
+	if (res->flags & IORESOURCE_IO) {
+		p = string(p, pend, "io  ", str_spec);
+		specp = &io_spec;
+	} else if (res->flags & IORESOURCE_MEM) {
+		p = string(p, pend, "mem ", str_spec);
+		specp = &mem_spec;
+	} else if (res->flags & IORESOURCE_IRQ) {
+		p = string(p, pend, "irq ", str_spec);
+		specp = &dec_spec;
+	} else if (res->flags & IORESOURCE_DMA) {
+		p = string(p, pend, "dma ", str_spec);
+		specp = &dec_spec;
+	} else if (res->flags & IORESOURCE_BUS) {
+		p = string(p, pend, "bus ", str_spec);
+		specp = &bus_spec;
+	} else {
+		p = string(p, pend, "??? ", str_spec);
+		specp = &mem_spec;
+		decode = 0;
+	}
+	p = number(p, pend, res->start, *specp);
+	if (res->start != res->end) {
+		*p++ = '-';
+		p = number(p, pend, res->end, *specp);
+	}
+	if (decode) {
+		if (res->flags & IORESOURCE_MEM_64)
+			p = string(p, pend, " 64bit", str_spec);
+		if (res->flags & IORESOURCE_PREFETCH)
+			p = string(p, pend, " pref", str_spec);
+		if (res->flags & IORESOURCE_WINDOW)
+			p = string(p, pend, " window", str_spec);
+		if (res->flags & IORESOURCE_DISABLED)
+			p = string(p, pend, " disabled", str_spec);
+	} else {
+		p = string(p, pend, " flags ", str_spec);
+		p = number(p, pend, res->flags, flag_spec);
+	}
+	*p++ = ']';
+	*p = '\0';
+
+	return string(buf, end, sym, spec);
+}
+
+static __noinline_for_stack
 char *address_val(char *buf, char *end, const void *addr, const char *fmt)
 {
 	unsigned long long num;
@@ -863,6 +1036,9 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 	case 's':
 	case 'B':
 		return symbol_string(buf, end, ptr, spec, fmt);
+	case 'R':
+	case 'r':
+		return resource_string(buf, end, ptr, spec, fmt);
 	case 'h':
 		return hex_string(buf, end, ptr, spec, fmt);
 	case 'b':
@@ -877,6 +1053,16 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 					/* [mM]F (FDDI) */
 					/* [mM]R (Reverse order; Bluetooth) */
 		return mac_address_string(buf, end, ptr, spec, fmt);
+	case 'V':
+		{
+			va_list va;
+
+			va_copy(va, *((struct va_format *)ptr)->va);
+			buf += vsnprintf(buf, end > buf ? end - buf : 0,
+					 ((struct va_format *)ptr)->fmt, va);
+			va_end(va);
+			return buf;
+		}
 	case 'a':
 		return address_val(buf, end, ptr, fmt);
 	case 'G':
@@ -1390,6 +1576,251 @@ int sprintf(char *buf, const char *fmt, ...)
 
 	va_start(args, fmt);
 	i = vsnprintf(buf, INT_MAX, fmt, args);
+	va_end(args);
+
+	return i;
+}
+
+/**
+ * vsscanf - Unformat a buffer into a list of arguments
+ * @buf:	input buffer
+ * @fmt:	format of buffer
+ * @args:	arguments
+ */
+int vsscanf(const char *buf, const char *fmt, va_list args)
+{
+	const char *str = buf;
+	char *next;
+	char digit;
+	int num = 0;
+	u8 qualifier;
+	unsigned int base;
+	union {
+		long long s;
+		unsigned long long u;
+	} val;
+	s16 field_width;
+	bool is_sign;
+
+	while (*fmt) {
+		/* skip any white space in format */
+		/* white space in format matchs any amount of
+		 * white space, including none, in the input.
+		 */
+		if (isspace(*fmt)) {
+			fmt = skip_spaces(++fmt);
+			str = skip_spaces(str);
+		}
+
+		/* anything that is not a conversion must match exactly */
+		if (*fmt != '%' && *fmt) {
+			if (*fmt++ != *str++)
+				break;
+			continue;
+		}
+
+		if (!*fmt)
+			break;
+		++fmt;
+
+		/* skip this conversion.
+		 * advance both strings to next white space
+		 */
+		if (*fmt == '*') {
+			if (!*str)
+				break;
+			while (!isspace(*fmt) && *fmt != '%' && *fmt)
+				fmt++;
+			while (!isspace(*str) && *str)
+				str++;
+			continue;
+		}
+
+		/* get field width */
+		field_width = -1;
+		if (isdigit(*fmt)) {
+			field_width = skip_atoi(&fmt);
+			if (field_width <= 0)
+				break;
+		}
+
+		/* get conversion qualifier */
+		qualifier = -1;
+		if (*fmt == 'h' || _tolower(*fmt) == 'l' ||
+		    _tolower(*fmt) == 'z') {
+			qualifier = *fmt++;
+			if (unlikely(qualifier == *fmt)) {
+				if (qualifier == 'h') {
+					qualifier = 'H';
+					fmt++;
+				} else if (qualifier == 'l') {
+					qualifier = 'L';
+					fmt++;
+				}
+			}
+		}
+
+		if (!*fmt)
+			break;
+
+		if (*fmt == 'n') {
+			/* return number of characters read so far */
+			*va_arg(args, int *) = str - buf;
+			++fmt;
+			continue;
+		}
+
+		if (!*str)
+			break;
+
+		base = 10;
+		is_sign = 0;
+
+		switch (*fmt++) {
+		case 'c':
+		{
+			char *s = (char *)va_arg(args, char*);
+			if (field_width == -1)
+				field_width = 1;
+			do {
+				*s++ = *str++;
+			} while (--field_width > 0 && *str);
+			num++;
+		}
+		continue;
+		case 's':
+		{
+			char *s = (char *)va_arg(args, char *);
+			if (field_width == -1)
+				field_width = SHRT_MAX;
+			/* first, skip leading white space in buffer */
+			str = skip_spaces(str);
+
+			/* now copy until next white space */
+			while (*str && !isspace(*str) && field_width--)
+				*s++ = *str++;
+			*s = '\0';
+			num++;
+		}
+		continue;
+		case 'o':
+			base = 8;
+			break;
+		case 'x':
+		case 'X':
+			base = 16;
+			break;
+		case 'i':
+			base = 0;
+		case 'd':
+			is_sign = 1;
+		case 'u':
+			break;
+		case '%':
+			/* looking for '%' in str */
+			if (*str++ != '%')
+				return num;
+			continue;
+		default:
+			/* invalid format; stop here */
+			return num;
+		}
+
+		/* have some sort of integer conversion.
+		 * first, skip white space in buffer.
+		 */
+		str = skip_spaces(str);
+
+		digit = *str;
+		if (is_sign && digit == '-')
+			digit = *(str + 1);
+
+		if (!digit
+		    || (base == 16 && !isxdigit(digit))
+		    || (base == 10 && !isdigit(digit))
+		    || (base == 8 && (!isdigit(digit) || digit > '7'))
+		    || (base == 0 && !isdigit(digit)))
+			break;
+
+		if (is_sign)
+			val.s = qualifier != 'L' ?
+				simple_strtol(str, &next, base) :
+				simple_strtoll(str, &next, base);
+		else
+			val.u = qualifier != 'L' ?
+				simple_strtoul(str, &next, base) :
+				simple_strtoull(str, &next, base);
+
+		if (field_width > 0 && next - str > field_width) {
+			if (base == 0)
+				_parse_integer_fixup_radix(str, &base);
+			while (next - str > field_width) {
+				if (is_sign)
+					val.s = div_s64(val.s, base);
+				else
+					val.u = div_u64(val.u, base);
+				--next;
+			}
+		}
+
+		switch (qualifier) {
+		case 'H':	/* that's 'hh' in format */
+			if (is_sign)
+				*va_arg(args, signed char *) = val.s;
+			else
+				*va_arg(args, unsigned char *) = val.u;
+			break;
+		case 'h':
+			if (is_sign)
+				*va_arg(args, short *) = val.s;
+			else
+				*va_arg(args, unsigned short *) = val.u;
+			break;
+		case 'l':
+			if (is_sign)
+				*va_arg(args, long *) = val.s;
+			else
+				*va_arg(args, unsigned long *) = val.u;
+			break;
+		case 'L':
+			if (is_sign)
+				*va_arg(args, long long *) = val.s;
+			else
+				*va_arg(args, unsigned long long *) = val.u;
+			break;
+		case 'Z':
+		case 'z':
+			*va_arg(args, size_t *) = val.u;
+			break;
+		default:
+			if (is_sign)
+				*va_arg(args, int *) = val.s;
+			else
+				*va_arg(args, unsigned int *) = val.u;
+			break;
+		}
+		num++;
+
+		if (!next)
+			break;
+		str = next;
+	}
+
+	return num;
+}
+/**
+ * sscanf - Unformat a buffer into a list of arguments
+ * @buf:	input buffer
+ * @fmt:	formatting of buffer
+ * @...:	resulting arguments
+ */
+int sscanf(const char *buf, const char *fmt, ...)
+{
+	va_list args;
+	int i;
+
+	va_start(args, fmt);
+	i = vsscanf(buf, fmt, args);
 	va_end(args);
 
 	return i;

@@ -33,6 +33,8 @@
  * SOFTWARE.
  */
 
+#define pr_fmt(fmt) "ib_cache: " fmt
+
 #include <lego/errno.h>
 #include <lego/slab.h>
 #include <lego/workqueue.h>
@@ -50,12 +52,6 @@ struct ib_pkey_cache {
 struct ib_gid_cache {
 	int             table_len;
 	union ib_gid    table[0];
-};
-
-struct ib_update_work {
-	struct work_struct work;
-	struct ib_device  *device;
-	u8                 port_num;
 };
 
 static inline int start_port(struct ib_device *device)
@@ -81,7 +77,6 @@ int ib_get_cached_gid(struct ib_device *device,
 	if (port_num < start_port(device) || port_num > end_port(device))
 		return -EINVAL;
 
-//	read_lock_irqsave(&device->cache.lock, flags);
 	spin_lock_irqsave(&device->cache.lock, flags);
 
 	cache = device->cache.gid_cache[port_num - start_port(device)];
@@ -91,7 +86,6 @@ int ib_get_cached_gid(struct ib_device *device,
 	else
 		*gid = cache->table[index];
 
-//	read_unlock_irqrestore(&device->cache.lock, flags);
 	spin_unlock_irqrestore(&device->cache.lock, flags);
 
 	return ret;
@@ -111,7 +105,6 @@ int ib_find_cached_gid(struct ib_device *device,
 	if (index)
 		*index = -1;
 
-//	read_lock_irqsave(&device->cache.lock, flags);
 	spin_lock_irqsave(&device->cache.lock, flags);
 
 	for (p = 0; p <= end_port(device) - start_port(device); ++p) {
@@ -127,7 +120,6 @@ int ib_find_cached_gid(struct ib_device *device,
 		}
 	}
 found:
-//	read_unlock_irqrestore(&device->cache.lock, flags);
 	spin_unlock_irqrestore(&device->cache.lock, flags);
 
 	return ret;
@@ -145,7 +137,6 @@ int ib_get_cached_pkey(struct ib_device *device,
 	if (port_num < start_port(device) || port_num > end_port(device))
 		return -EINVAL;
 
-//	read_lock_irqsave(&device->cache.lock, flags);
 	spin_lock_irqsave(&device->cache.lock, flags);
 
 	cache = device->cache.pkey_cache[port_num - start_port(device)];
@@ -155,7 +146,6 @@ int ib_get_cached_pkey(struct ib_device *device,
 	else
 		*pkey = cache->table[index];
 
-//	read_unlock_irqrestore(&device->cache.lock, flags);
 	spin_unlock_irqrestore(&device->cache.lock, flags);
 
 	return ret;
@@ -174,7 +164,6 @@ int ib_find_cached_pkey(struct ib_device *device,
 	if (port_num < start_port(device) || port_num > end_port(device))
 		return -EINVAL;
 
-//	read_lock_irqsave(&device->cache.lock, flags);
 	spin_lock_irqsave(&device->cache.lock, flags);
 
 	cache = device->cache.pkey_cache[port_num - start_port(device)];
@@ -188,7 +177,6 @@ int ib_find_cached_pkey(struct ib_device *device,
 			break;
 		}
 
-//	read_unlock_irqrestore(&device->cache.lock, flags);
 	spin_unlock_irqrestore(&device->cache.lock, flags);
 
 	return ret;
@@ -204,10 +192,8 @@ int ib_get_cached_lmc(struct ib_device *device,
 	if (port_num < start_port(device) || port_num > end_port(device))
 		return -EINVAL;
 
-//	read_lock_irqsave(&device->cache.lock, flags);
 	spin_lock_irqsave(&device->cache.lock, flags);
 	*lmc = device->cache.lmc_cache[port_num - start_port(device)];
-//	read_unlock_irqrestore(&device->cache.lock, flags);
 	spin_unlock_irqrestore(&device->cache.lock, flags);
 
 	return ret;
@@ -221,6 +207,9 @@ static void ib_cache_update(struct ib_device *device,
 	struct ib_gid_cache       *gid_cache = NULL, *old_gid_cache;
 	int                        i;
 	int                        ret;
+
+	pr_debug("%s(): Updating port %u of dev %s\n",
+		__func__, port, dev_name(device->dma_device));
 
 	tprops = kmalloc(sizeof *tprops, GFP_KERNEL);
 	if (!tprops)
@@ -265,7 +254,6 @@ static void ib_cache_update(struct ib_device *device,
 		}
 	}
 
-//	write_lock_irq(&device->cache.lock);
 	spin_lock_irq(&device->cache.lock);
 
 	old_pkey_cache = device->cache.pkey_cache[port - start_port(device)];
@@ -276,34 +264,29 @@ static void ib_cache_update(struct ib_device *device,
 
 	device->cache.lmc_cache[port - start_port(device)] = tprops->lmc;
 
-//	write_unlock_irq(&device->cache.lock);
 	spin_unlock_irq(&device->cache.lock);
 
-	kfree(old_pkey_cache);
-	kfree(old_gid_cache);
-	kfree(tprops);
+	if (old_pkey_cache)
+		kfree(old_pkey_cache);
+	if (old_gid_cache)
+		kfree(old_gid_cache);
+	if (tprops)
+		kfree(tprops);
 	return;
 
 err:
-	kfree(pkey_cache);
-	kfree(gid_cache);
-	kfree(tprops);
-}
-
-static void ib_cache_task(struct work_struct *_work)
-{
-	struct ib_update_work *work =
-		container_of(_work, struct ib_update_work, work);
-
-	ib_cache_update(work->device, work->port_num);
-	kfree(work);
+	if (old_pkey_cache)
+		kfree(old_pkey_cache);
+	if (old_gid_cache)
+		kfree(old_gid_cache);
+	if (tprops)
+		kfree(tprops);
 }
 
 static void ib_cache_event(struct ib_event_handler *handler,
 			   struct ib_event *event)
 {
-	struct ib_update_work *work;
-
+	pr_info("%s(): Got one event\n", __func__);
 	if (event->event == IB_EVENT_PORT_ERR    ||
 	    event->event == IB_EVENT_PORT_ACTIVE ||
 	    event->event == IB_EVENT_LID_CHANGE  ||
@@ -311,13 +294,14 @@ static void ib_cache_event(struct ib_event_handler *handler,
 	    event->event == IB_EVENT_SM_CHANGE   ||
 	    event->event == IB_EVENT_CLIENT_REREGISTER ||
 	    event->event == IB_EVENT_GID_CHANGE) {
-		work = kmalloc(sizeof *work, GFP_ATOMIC);
-		if (work) {
-			INIT_WORK(&work->work, ib_cache_task);
-			work->device   = event->device;
-			work->port_num = event->element.port_num;
-			queue_work(ib_wq, &work->work);
-		}
+	    	/*
+		 * HACK!!!
+		 *
+		 * We do it differently. Because at the time of porting
+		 * we don't have workqueue. Instead, we just use this
+		 * thread to do the dirty work:
+		 */
+		ib_cache_update(event->device, event->element.port_num);
 	}
 }
 
@@ -325,7 +309,8 @@ static void ib_cache_setup_one(struct ib_device *device)
 {
 	int p;
 
-//	rwlock_init(&device->cache.lock);
+	pr_info("%s(): dev: %s\n", __func__, dev_name(device->dma_device));
+
 	spin_lock_init(&device->cache.lock);
 
 	device->cache.pkey_cache =
@@ -377,8 +362,6 @@ static void ib_cache_cleanup_one(struct ib_device *device)
 	int p;
 
 	ib_unregister_event_handler(&device->cache.event_handler);
-pr_info("%s need workqueue back\n", __func__);
-//	flush_workqueue(ib_wq);
 
 	for (p = 0; p <= end_port(device) - start_port(device); ++p) {
 		kfree(device->cache.pkey_cache[p]);
@@ -396,7 +379,7 @@ static struct ib_client cache_client = {
 	.remove = ib_cache_cleanup_one
 };
 
-int ib_cache_setup(void)
+int __init ib_cache_setup(void)
 {
 	return ib_register_client(&cache_client);
 }

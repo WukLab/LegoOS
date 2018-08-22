@@ -69,7 +69,6 @@ static struct ib_ah *create_ib_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr,
 	ah->av.ib.g_slid  = ah_attr->src_path_bits;
 	ah->av.ib.sl_tclass_flowlabel = cpu_to_be32(ah_attr->sl << 28);
 	if (ah_attr->ah_flags & IB_AH_GRH) {
-		pr_info("%s IB_AH_GRH\n", __func__);
 		ah->av.ib.g_slid   |= 0x80;
 		ah->av.ib.gid_index = ah_attr->grh.sgid_index;
 		ah->av.ib.hop_limit = ah_attr->grh.hop_limit;
@@ -80,8 +79,6 @@ static struct ib_ah *create_ib_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr,
 	}
 
 	ah->av.ib.dlid    = cpu_to_be16(ah_attr->dlid);
-	//pr_info("%s ah port_pd %p g_slid %x dlid %d\n",
-	//		__func__, ah->av.ib.port_pd, ah->av.ib.g_slid, ah->av.ib.dlid);
 	if (ah_attr->static_rate) {
 		ah->av.ib.stat_rate = ah_attr->static_rate + MLX4_STAT_RATE_OFFSET;
 		while (ah->av.ib.stat_rate > IB_RATE_2_5_GBPS + MLX4_STAT_RATE_OFFSET &&
@@ -95,11 +92,13 @@ static struct ib_ah *create_ib_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr,
 struct ib_ah *mlx4_ib_create_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr)
 {
 	struct mlx4_ib_ah *ah;
-	struct ib_ah *ret;
 
 	ah = kzalloc(sizeof *ah, GFP_ATOMIC);
 	if (!ah)
 		return ERR_PTR(-ENOMEM);
+
+	if (rdma_port_get_link_layer(pd->device, ah_attr->port_num) == IB_LINK_LAYER_ETHERNET)
+		panic("Port!");
 
 	return create_ib_ah(pd, ah_attr, ah); /* never fails */
 }
@@ -107,12 +106,13 @@ struct ib_ah *mlx4_ib_create_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr)
 int mlx4_ib_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
 {
 	struct mlx4_ib_ah *ah = to_mah(ibah);
+	enum rdma_link_layer ll;
 
 	memset(ah_attr, 0, sizeof *ah_attr);
-	ah_attr->port_num = be32_to_cpu(ah->av.ib.port_pd) >> 24;
 	ah_attr->sl = be32_to_cpu(ah->av.ib.sl_tclass_flowlabel) >> 28;
-
-	ah_attr->dlid = be16_to_cpu(ah->av.ib.dlid);
+	ah_attr->port_num = be32_to_cpu(ah->av.ib.port_pd) >> 24;
+	ll = rdma_port_get_link_layer(ibah->device, ah_attr->port_num);
+	ah_attr->dlid = ll == IB_LINK_LAYER_INFINIBAND ? be16_to_cpu(ah->av.ib.dlid) : 0;
 	if (ah->av.ib.stat_rate)
 		ah_attr->static_rate = ah->av.ib.stat_rate - MLX4_STAT_RATE_OFFSET;
 	ah_attr->src_path_bits = ah->av.ib.g_slid & 0x7F;

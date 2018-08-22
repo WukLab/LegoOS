@@ -79,6 +79,8 @@ enum acpi_irq_model_id {
 #define ACPI_SIG_HPET	"HPET"		/* High Precision Event Timer table */
 #define ACPI_SIG_BOOT	"BOOT"		/* Simple Boot Flag Table */
 
+#define ACPI_SIG_MCFG           "MCFG"	/* PCI Memory Mapped Configuration table */
+
 /*
  * All tables and structures must be byte-packed to match the ACPI
  * specification, since the tables are provided by the system BIOS
@@ -865,5 +867,29 @@ int acpi_isa_irq_to_gsi(unsigned isa_irq, u32 *gsi);
 extern int acpi_ioapic;
 
 extern struct acpi_table_fadt acpi_gbl_FADT;
+
+/*******************************************************************************
+ *
+ * MCFG - PCI Memory Mapped Configuration table and sub-table
+ *        Version 1
+ *
+ * Conforms to "PCI Firmware Specification", Revision 3.0, June 20, 2005
+ *
+ ******************************************************************************/
+
+struct acpi_table_mcfg {
+	struct acpi_table_header header;	/* Common ACPI table header */
+	u8 reserved[8];
+};
+
+/* Subtable */
+
+struct acpi_mcfg_allocation {
+	u64 address;		/* Base address, processor-relative */
+	u16 pci_segment;	/* PCI segment group number */
+	u8 start_bus_number;	/* Starting PCI Bus number */
+	u8 end_bus_number;	/* Final PCI Bus number */
+	u32 reserved;
+};
 
 #endif /* _LEGO_ACPI_H_ */

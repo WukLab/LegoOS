@@ -279,7 +279,22 @@ int scnprintf(char *buf, size_t size, const char *fmt, ...);
 __printf(3, 0)
 int vscnprintf(char *buf, size_t size, const char *fmt, va_list args);
 
+int sscanf(const char *buf, const char *fmt, ...);
+
 int num_to_str(char *buf, int size, unsigned long long num);
+
+/* Obsolete, do not use.  Use kstrto<foo> instead */
+extern unsigned long simple_strtoul(const char *,char **,unsigned int);
+extern long simple_strtol(const char *,char **,unsigned int);
+extern unsigned long long simple_strtoull(const char *,char **,unsigned int);
+extern long long simple_strtoll(const char *,char **,unsigned int);
+
+/*
+ * lib/kstrtox.c
+ */
+#define KSTRTOX_OVERFLOW	(1U << 31)
+const char *_parse_integer_fixup_radix(const char *s, unsigned int *base);
+unsigned int _parse_integer(const char *s, unsigned int base, unsigned long long *res);
 
 /*
  * lib/sort.c

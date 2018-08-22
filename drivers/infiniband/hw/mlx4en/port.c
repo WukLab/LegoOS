@@ -144,7 +144,7 @@ int mlx4_register_mac(struct mlx4_dev *dev, u8 port, u64 mac, int *qpn, u8 wrap)
 {
 	struct mlx4_port_info *info = &mlx4_priv(dev)->port[port];
 	struct mlx4_mac_table *table = &info->mac_table;
-	struct mlx4_mac_entry *entry;
+	//struct mlx4_mac_entry *entry;
 	int i, err = 0;
 	int free = -1;
 
@@ -230,24 +230,12 @@ static int validate_index(struct mlx4_dev *dev,
 	return err;
 }
 
-static int find_index(struct mlx4_dev *dev,
-		      struct mlx4_mac_table *table, u64 mac)
-{
-	int i;
-	for (i = 0; i < MLX4_MAX_MAC_NUM; i++) {
-		if (mac == (MLX4_MAC_MASK & be64_to_cpu(table->entries[i])))
-			return i;
-	}
-	/* Mac not found */
-	return -EINVAL;
-}
-
 void mlx4_unregister_mac(struct mlx4_dev *dev, u8 port, int qpn)
 {
 	struct mlx4_port_info *info = &mlx4_priv(dev)->port[port];
 	struct mlx4_mac_table *table = &info->mac_table;
 	int index = qpn - info->base_qpn;
-	struct mlx4_mac_entry *entry;
+	//struct mlx4_mac_entry *entry;
 
 #if 0
 	if (dev->caps.flags & MLX4_DEV_CAP_FLAG_VEP_UC_STEER) {
@@ -281,7 +269,7 @@ int mlx4_replace_mac(struct mlx4_dev *dev, u8 port, int qpn, u64 new_mac, u8 wra
 	struct mlx4_port_info *info = &mlx4_priv(dev)->port[port];
 	struct mlx4_mac_table *table = &info->mac_table;
 	int index = qpn - info->base_qpn;
-	struct mlx4_mac_entry *entry;
+	//struct mlx4_mac_entry *entry;
 	int err;
 
 #if 0
@@ -512,10 +500,19 @@ int mlx4_check_ext_port_caps(struct mlx4_dev *dev, u8 port)
 	return err;
 }
 
-int mlx4_SET_PORT(struct mlx4_dev *dev, u8 port)
+/* bit locations for set port command with zero op modifier */
+enum {
+	MLX4_SET_PORT_VL_CAP	 = 4, /* bits 7:4 */
+	MLX4_SET_PORT_MTU_CAP	 = 12, /* bits 15:12 */
+	MLX4_CHANGE_PORT_PKEY_TBL_SZ = 20,
+	MLX4_CHANGE_PORT_VL_CAP	 = 21,
+	MLX4_CHANGE_PORT_MTU_CAP = 22,
+};
+
+int mlx4_SET_PORT(struct mlx4_dev *dev, u8 port, int pkey_tbl_sz)
 {
 	struct mlx4_cmd_mailbox *mailbox;
-	int err;
+	int err, vl_cap, pkey_tbl_flag = 0;
 
 	if (dev->caps.port_type[port] == MLX4_PORT_TYPE_ETH)
 		return 0;
@@ -527,9 +524,27 @@ int mlx4_SET_PORT(struct mlx4_dev *dev, u8 port)
 	memset(mailbox->buf, 0, 256);
 
 	((__be32 *) mailbox->buf)[1] = dev->caps.ib_port_def_cap[port];
-	err = mlx4_cmd(dev, mailbox->dma, port, 0, MLX4_CMD_SET_PORT,
-		       MLX4_CMD_TIME_CLASS_B);
+
+	if (pkey_tbl_sz >= 0 && mlx4_is_master(dev)) {
+		pkey_tbl_flag = 1;
+		((__be16 *) mailbox->buf)[20] = cpu_to_be16(pkey_tbl_sz);
+	}
+
+	/* IB VL CAP enum isn't used by the firmware, just numerical values */
+	for (vl_cap = 8; vl_cap >= 1; vl_cap >>= 1) {
+		((__be32 *) mailbox->buf)[0] = cpu_to_be32(
+			(1 << MLX4_CHANGE_PORT_MTU_CAP) |
+			(1 << MLX4_CHANGE_PORT_VL_CAP)  |
+			(pkey_tbl_flag << MLX4_CHANGE_PORT_PKEY_TBL_SZ) |
+			(dev->caps.port_ib_mtu[port] << MLX4_SET_PORT_MTU_CAP) |
+			(vl_cap << MLX4_SET_PORT_VL_CAP));
+		err = mlx4_cmd(dev, mailbox->dma, port, 0, MLX4_CMD_SET_PORT,
+				MLX4_CMD_TIME_CLASS_B);
+		if (err != -ENOMEM)
+			break;
+	}
 
 	mlx4_free_cmd_mailbox(dev, mailbox);
 	return err;
 }
+

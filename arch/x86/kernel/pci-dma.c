@@ -16,64 +16,70 @@
 #include <asm/dma.h>
 #include <asm/page_types.h>
 
+/* Dummy device used for NULL arguments (normally ISA). */
+struct device x86_dma_fallback_dev = {
+	.coherent_dma_mask = ISA_DMA_BIT_MASK,
+	.dma_mask = &x86_dma_fallback_dev.coherent_dma_mask,
+};
+
+/*
+ * HACK!!!
+ *
+ * This dma_ops is used everywhere in Lego. And this is the only
+ * dma_ops in Lego as well. We don't have IOMMU support now.
+ */
 struct dma_map_ops *dma_ops = &nommu_dma_ops;
 
-void *dma_generic_alloc_coherent(struct pci_dev *pcid, size_t size,
+void *dma_generic_alloc_coherent(struct device *dev, size_t size,
 				 dma_addr_t *dma_addr, gfp_t flag,
-				 unsigned long attrs)
+				 struct dma_attrs *attrs)
 {
 	unsigned long dma_mask;
 	struct page *page;
 	dma_addr_t addr;
 
-	//pr_debug("%s\n", __func__);
-	dma_mask = dma_alloc_coherent_mask(pcid, flag);
+	dma_mask = dma_alloc_coherent_mask(dev, flag);
 
-	flag &= ~__GFP_ZERO;
-
-	page = alloc_pages(flag, get_order(size));
+	flag |= __GFP_ZERO;
+again:
+	page = alloc_pages_node(dev_to_node(dev), flag, get_order(size));
 	if (!page)
 		return NULL;
-/*
-	pr_debug("%s mask %lx size %d got page %p\n", 
-			__func__, dma_mask, size, page);
-*/
+
 	addr = page_to_phys(page);
 	if (addr + size > dma_mask) {
-/*
-		pr_debug("addr %lx + size %lx bigger than dma_mask %lx\n",
-				addr, addr+size, dma_mask);
-*/
-	//	__free_pages(page, get_order(size));
+		__free_pages(page, get_order(size));
 
-	//	if (dma_mask < DMA_BIT_MASK(32) && !(flag & GFP_DMA)) {
-	//		flag = (flag & ~GFP_DMA32) | GFP_DMA;
-	//		goto again;
-	//	}
+		if (dma_mask < DMA_BIT_MASK(32) && !(flag & GFP_DMA)) {
+			flag = (flag & ~GFP_DMA32) | GFP_DMA;
+			goto again;
+		}
 
-	//	return NULL;
+		return NULL;
 	}
-	memset(page_address(page), 0, size);
+
 	*dma_addr = addr;
 	return page_address(page);
 }
 
-void dma_generic_free_coherent(struct pci_dev *pcid, size_t size, void *vaddr,
-			       dma_addr_t dma_addr, unsigned long attrs)
+void dma_generic_free_coherent(struct device *dev, size_t size, void *vaddr,
+			       dma_addr_t dma_addr, struct dma_attrs *attrs)
 {
 	free_pages((unsigned long)vaddr, get_order(size));
 }
 
-bool arch_dma_alloc_attrs(struct pci_dev **pcid, gfp_t *gfp)
+int dma_supported(struct device *dev, u64 mask)
 {
-	BUG_ON(!*pcid);
+	struct dma_map_ops *ops = get_dma_ops(dev);
 
-	*gfp &= ~(__GFP_DMA | __GFP_HIGHMEM | __GFP_DMA32);
-	*gfp = dma_alloc_coherent_gfp_flags(*pcid, *gfp);
+	if (ops->dma_supported)
+		return ops->dma_supported(dev, mask);
 
-	//pr_debug("%s\n", __func__);
-//	if (!is_device_dma_capable(*pcid))
-//		return false;
-	return true;
+	/* Copied from i386. Doesn't make much sense, because it will
+	   only work for pci_alloc_coherent.
+	   The caller just has to use GFP_DMA in this case. */
+	if (mask < DMA_BIT_MASK(24))
+		return 0;
 
+	return 1;
 }

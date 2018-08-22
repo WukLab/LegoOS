@@ -40,7 +40,8 @@
  * Increment this value if any changes that break userspace ABI
  * compatibility are made.
  */
-#define MLX4_IB_UVERBS_ABI_VERSION	3
+#define MLX4_IB_UVERBS_NO_DEV_CAPS_ABI_VERSION	3
+#define MLX4_IB_UVERBS_ABI_VERSION	4
 
 /*
  * Make sure that all structs defined in this file remain laid out so

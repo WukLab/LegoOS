@@ -147,4 +147,38 @@ void print_hex_dump_bytes(const char *prefix_str, int prefix_type,
 #define pr_info_ratelimited(fmt, ...)					\
 	printk_ratelimited(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
 
+struct va_format {
+	const char *fmt;
+	va_list *va;
+};
+
+struct device;
+
+extern __printf(3, 4)
+int dev_printk(const char *level, const struct device *dev,
+	       const char *fmt, ...);
+extern __printf(2, 3)
+int dev_emerg(const struct device *dev, const char *fmt, ...);
+extern __printf(2, 3)
+int dev_alert(const struct device *dev, const char *fmt, ...);
+extern __printf(2, 3)
+int dev_crit(const struct device *dev, const char *fmt, ...);
+extern __printf(2, 3)
+int dev_err(const struct device *dev, const char *fmt, ...);
+extern __printf(2, 3)
+int dev_warn(const struct device *dev, const char *fmt, ...);
+extern __printf(2, 3)
+int dev_notice(const struct device *dev, const char *fmt, ...);
+extern __printf(2, 3)
+int _dev_info(const struct device *dev, const char *fmt, ...);
+
+/*
+ * Stupid hackaround for existing uses of non-printk uses dev_info
+ *
+ * Note that the definition of dev_info below is actually _dev_info
+ * and a macro is used to avoid redefining dev_info
+ */
+
+#define dev_info(dev, fmt, arg...) _dev_info(dev, fmt, ##arg)
+
 #endif /* _LEGO_PRINTK_H_ */

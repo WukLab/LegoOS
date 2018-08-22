@@ -36,14 +36,14 @@
  *
  */
 
+#define pr_fmt(fmt) "ib_agent: " fmt
+
 #include <lego/slab.h>
 #include <lego/string.h>
 
 #include "agent.h"
 #include "smi.h"
 #include "mad_priv.h"
-
-#define SPFX "ib_agent: "
 
 struct ib_agent_port_private {
 	struct list_head port_list;
@@ -82,7 +82,6 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 			 struct ib_wc *wc, struct ib_device *device,
 			 int port_num, int qpn)
 {
-	//pr_info("%s qpn %d port %d\n", __func__, qpn, port_num);
 	struct ib_agent_port_private *port_priv;
 	struct ib_mad_agent *agent;
 	struct ib_mad_send_buf *send_buf;
@@ -95,15 +94,14 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 		port_priv = ib_get_agent_port(device, port_num);
 
 	if (!port_priv) {
-		printk(KERN_ERR SPFX "Unable to find port agent\n");
+		pr_err("Unable to find port agent\n");
 		return;
 	}
 
 	agent = port_priv->agent[qpn];
 	ah = ib_create_ah_from_wc(agent->qp->pd, wc, grh, port_num);
 	if (IS_ERR(ah)) {
-		printk(KERN_ERR SPFX "ib_create_ah_from_wc error %ld\n",
-			PTR_ERR(ah));
+		pr_err("ib_create_ah_from_wc error %ld\n", PTR_ERR(ah));
 		return;
 	}
 
@@ -111,7 +109,7 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 				      IB_MGMT_MAD_HDR, IB_MGMT_MAD_DATA,
 				      GFP_KERNEL);
 	if (IS_ERR(send_buf)) {
-		printk(KERN_ERR SPFX "ib_create_send_mad error\n");
+		pr_err("ib_create_send_mad error\n");
 		goto err1;
 	}
 
@@ -126,7 +124,7 @@ void agent_send_response(struct ib_mad *mad, struct ib_grh *grh,
 	}
 
 	if (ib_post_send_mad(send_buf, NULL)) {
-		printk(KERN_ERR SPFX "ib_post_send_mad error\n");
+		pr_err("ib_post_send_mad error\n");
 		goto err2;
 	}
 	return;
@@ -139,7 +137,6 @@ err1:
 static void agent_send_handler(struct ib_mad_agent *mad_agent,
 			       struct ib_mad_send_wc *mad_send_wc)
 {
-	//pr_info("%s\n", __func__);
 	ib_destroy_ah(mad_send_wc->send_buf->ah);
 	ib_free_send_mad(mad_send_wc->send_buf);
 }
@@ -150,15 +147,18 @@ int ib_agent_port_open(struct ib_device *device, int port_num)
 	unsigned long flags;
 	int ret;
 
-	//pr_info("%s\n", __func__);
+	pr_info("%s(): ib_device %s port %d\n",
+		__func__, dev_name(device->dma_device), port_num);
+
 	/* Create new device info */
 	port_priv = kzalloc(sizeof *port_priv, GFP_KERNEL);
 	if (!port_priv) {
-		printk(KERN_ERR SPFX "No memory for ib_agent_port_private\n");
+		pr_err("No memory for ib_agent_port_private\n");
 		ret = -ENOMEM;
 		goto error1;
 	}
 
+	if (rdma_port_get_link_layer(device, port_num) == IB_LINK_LAYER_INFINIBAND) {
 		/* Obtain send only MAD agent for SMI QP */
 		port_priv->agent[0] = ib_register_mad_agent(device, port_num,
 							    IB_QPT_SMI, NULL, 0,
@@ -168,6 +168,7 @@ int ib_agent_port_open(struct ib_device *device, int port_num)
 			ret = PTR_ERR(port_priv->agent[0]);
 			goto error2;
 		}
+	}
 
 	/* Obtain send only MAD agent for GSI QP */
 	port_priv->agent[1] = ib_register_mad_agent(device, port_num,
@@ -203,7 +204,7 @@ int ib_agent_port_close(struct ib_device *device, int port_num)
 	port_priv = __ib_get_agent_port(device, port_num);
 	if (port_priv == NULL) {
 		spin_unlock_irqrestore(&ib_agent_port_list_lock, flags);
-		printk(KERN_ERR SPFX "Port %d not found\n", port_num);
+		pr_err("Port %d not found\n", port_num);
 		return -ENODEV;
 	}
 	list_del(&port_priv->port_list);

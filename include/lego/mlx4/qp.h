@@ -100,7 +100,8 @@ enum {
 
 struct mlx4_qp_path {
 	u8			fl;
-	u8			reserved1[2];
+	u8			vlan_control;
+	u8			disable_pkey_check;
 	u8			pkey_index;
 	u8			counter_index;
 	u8			grh_mylmc;
@@ -113,7 +114,8 @@ struct mlx4_qp_path {
 	u8			rgid[16];
 	u8			sched_queue;
 	u8			vlan_index;
-	u8			reserved3[2];
+	u8			feup;
+	u8			fvl_rx;
 	u8			reserved4[2];
 	u8			dmac[6];
 };
@@ -232,6 +234,11 @@ struct mlx4_wqe_lso_seg {
 	__be32			header[0];
 };
 
+enum mlx4_wqe_bind_seg_flags2 {
+	MLX4_WQE_BIND_ZERO_BASED = (1 << 30),
+	MLX4_WQE_BIND_TYPE_2     = (1 << 31),
+};
+
 struct mlx4_wqe_bind_seg {
 	__be32			flags1;
 	__be32			flags2;
@@ -244,9 +251,9 @@ struct mlx4_wqe_bind_seg {
 enum {
 	MLX4_WQE_FMR_PERM_LOCAL_READ	= 1 << 27,
 	MLX4_WQE_FMR_PERM_LOCAL_WRITE	= 1 << 28,
-	MLX4_WQE_FMR_PERM_REMOTE_READ	= 1 << 29,
-	MLX4_WQE_FMR_PERM_REMOTE_WRITE	= 1 << 30,
-	MLX4_WQE_FMR_PERM_ATOMIC	= 1 << 31
+	MLX4_WQE_FMR_AND_BIND_PERM_REMOTE_READ	= 1 << 29,
+	MLX4_WQE_FMR_AND_BIND_PERM_REMOTE_WRITE	= 1 << 30,
+	MLX4_WQE_FMR_AND_BIND_PERM_ATOMIC	= 1 << 31
 };
 
 struct mlx4_wqe_fmr_seg {

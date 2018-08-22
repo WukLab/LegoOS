@@ -59,7 +59,6 @@ void mlx4_unregister_interface(struct mlx4_interface *intf);
 
 void *mlx4_get_protocol_dev(struct mlx4_dev *dev, enum mlx4_protocol proto, int port);
 
-void *mlx4_ib_add(struct mlx4_dev *dev);
-int mlx4_ib_init(void);
+int __init mlx4_ib_init(void);
 
 #endif /* MLX4_DRIVER_H */

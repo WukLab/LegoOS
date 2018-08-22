@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ */
+
 #ifndef _LEGO_SCATTERLIST_H_
 #define _LEGO_SCATTERLIST_H_
 
@@ -7,6 +16,9 @@
 #include <lego/mm.h>
 #include <asm/io.h>
 
+/* x86 specific */
+#define ARCH_HAS_SG_CHAIN
+
 struct scatterlist {
 #ifdef CONFIG_DEBUG_SG
 	unsigned long	sg_magic;
@@ -15,7 +27,9 @@ struct scatterlist {
 	unsigned int	offset;
 	unsigned int	length;
 	dma_addr_t	dma_address;
+#ifdef CONFIG_NEED_SG_DMA_LENGTH
 	unsigned int	dma_length;
+#endif
 };
 
 /*
