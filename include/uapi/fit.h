@@ -28,6 +28,6 @@ struct fit_machine_info {
 /*
  * Maximum timeout for a ibapi_send_reply_timeout call
  */
-#define FIT_MAX_TIMEOUT_SEC	3600
+#define FIT_MAX_TIMEOUT_SEC	CONFIG_FIT_MAX_RPC_TIMEOUT_SEC
 
 #endif /* _LEGO_UAPI_FIT_H_ */

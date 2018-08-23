@@ -230,6 +230,7 @@ config DEBUG_SIGNAL
 
 	  If unsure, say N.
 
+source "kernel/locking/Kconfig"
 endmenu # Basic Kernel Debug and Trace Options
 
 endmenu
