@@ -12,5 +12,4 @@ obj-y				+= lib/
 
 obj-y				+= common.o
 obj-y				+= pin.o
-obj-y				+= debug.o
 obj-$(CONFIG_SOFT_WATCHDOG)	+= watchdog.o
