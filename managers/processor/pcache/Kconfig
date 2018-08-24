@@ -71,17 +71,19 @@ choice
 endchoice
 
 config PCACHE_EVICT_GENERIC_SWEEP
-	def_bool PCACHE_EVICT_LRU
+	bool "Have a sweep thread to adjust LRU list"
+	default n
 	depends on PCACHE_EVICT_LRU
-	prompt "Pcache: sweep threads for certain eviction algorithms"
 	help
-	  Certain eviction algorithms requires sweep threads, for example LRU.
-	  This option will be enabled if those algorithms are enabled.
+	  Certain eviction algorithms (e.g., LRU) require sweep thread to adjust the list.
+	  However, sweep is not free. It will 1) occupy a cpu core, 2) content lock with
+	  regular running user threads, 3) pollute L1/L2 cpu cache.
 
-	  If unsure, say N.
+	  Thus, personally, I would sugguest you to disable this software-based adjustment.
 
 config PCACHE_EVICT_GENERIC_SWEEP_INTERVAL_MSEC
 	int "Pcache: sweep interval in msec"
+	depends on PCACHE_EVICT_GENERIC_SWEEP
 	range 10 5000
 	default 1000
 	help
