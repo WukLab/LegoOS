@@ -152,7 +152,7 @@
 static inline void victim_debug(const char *fmt, ...) { }
 #endif
 
-struct pcache_victim_meta *pcache_victim_meta_map __read_mostly;
+struct pcache_victim_meta pcache_victim_meta_map[VICTIM_NR_ENTRIES] __read_mostly;
 void *pcache_victim_data_map __read_mostly;
 
 static atomic_t nr_usable_victims = ATOMIC_INIT(0);
@@ -196,6 +196,8 @@ static void __put_victim_nolist(struct pcache_victim_meta *v)
 			     VictimLocked(v), v);
 
 	victim_free_hit_entries(v);
+
+	BUG_ON(spin_is_locked(&v->lock));
 
 	/* Clear all flags */
 	smp_store_mb(v->flags, 0);
@@ -356,6 +358,7 @@ free:
 
 static inline void prep_new_victim(struct pcache_victim_meta *victim)
 {
+	BUG_ON(spin_is_locked(&victim->lock));
 	spin_lock_init(&victim->lock);
 	atomic_set(&victim->nr_fill_pcache, 0);
 
@@ -871,12 +874,6 @@ void __init victim_cache_early_init(void)
 	if (!pcache_victim_data_map)
 		panic("Unable to allocate victim data map!");
 	memset(pcache_victim_data_map, 0, size);
-
-	/* allocate the victim cache meta map */
-	size = VICTIM_NR_ENTRIES * sizeof(struct pcache_victim_meta);
-	pcache_victim_meta_map = memblock_virt_alloc(size, PAGE_SIZE);
-	if (!pcache_victim_meta_map)
-		panic("Unable to allocate victim meta map!");
 
 	victim_cache_init_meta_map();
 }

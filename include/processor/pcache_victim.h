@@ -141,7 +141,7 @@ static inline int victim_ref_freeze(struct pcache_victim_meta *v, int count)
 	return ret;
 }
 
-extern struct pcache_victim_meta *pcache_victim_meta_map;
+extern struct pcache_victim_meta pcache_victim_meta_map[VICTIM_NR_ENTRIES];
 extern void *pcache_victim_data_map;
 
 /*

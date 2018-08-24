@@ -56,9 +56,10 @@ void debug_spin_lock(spinlock_t *lock)
 void debug_spin_unlock(spinlock_t *lock)
 {
 	if (lock->owner_cpu == -1 || lock->owner == NULL) {
-		pr_info("owner   cpu: %2d owner: %p ip: %pF\n",
-			lock->owner_cpu, lock->owner, lock->ip);
-		pr_info("release cpu: %2d owner: %p ip: %pF\n",
+		pr_info("Lock: %pF\n"
+			"owner   cpu: %2d owner: %p ip: %pF\n"
+			"release cpu: %2d owner: %p ip: %pF\n",
+			lock, lock->owner_cpu, lock->owner, lock->ip,
 			lock->release_cpu, lock->release_owner, lock->release_ip);
 		dump_stack();
 	}
