@@ -44,6 +44,8 @@ static inline long COUNTER_nr_bytes_rx(void)
 {
 	return atomic_long_read(&nr_bytes_rx);
 }
+
+void dump_ib_stats(void);
 #else
 static inline long COUNTER_nr_ib_send_reply(void)
 {
@@ -56,6 +58,11 @@ static inline long COUNTER_nr_bytes_tx(void)
 static inline long COUNTER_nr_bytes_rx(void)
 {
 	return 0;
+}
+
+static inline void dump_ib_stats(void)
+{
+
 }
 #endif
 

@@ -74,6 +74,14 @@ static inline void unlock_ib(void) { }
 atomic_long_t	nr_ib_send_reply;
 atomic_long_t	nr_bytes_tx;
 atomic_long_t	nr_bytes_rx;
+
+void dump_ib_stats(void)
+{
+	pr_info("IB Stats:\n");
+	pr_info("    nr_ib_send_reply: %15ld\n", COUNTER_nr_ib_send_reply());
+	pr_info("    nr_bytes_tx:      %15ld\n", COUNTER_nr_bytes_tx());
+	pr_info("    nr_bytes_rx:      %15ld\n", COUNTER_nr_bytes_rx());
+}
 #endif
 
 DEFINE_PROFILE_POINT(ibapi_send_reply)
