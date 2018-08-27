@@ -156,6 +156,7 @@ unlock_lru:
 	return pcm;
 }
 
+#ifdef CONFIG_PCACHE_EVICT_GENERIC_SWEEP
 /*
  * This function determines how "aggressive" the sweep is.
  * It is aggressive if whole LRU list is scanned, cause scan is not free
@@ -335,3 +336,4 @@ void kevict_sweepd_lru(void)
 		mdelay(sysctl_pcache_evict_interval_msec);
 	}
 }
+#endif /* CONFIG_PCACHE_EVICT_GENERIC_SWEEP */
