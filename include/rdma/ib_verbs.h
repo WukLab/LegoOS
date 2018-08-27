@@ -1963,4 +1963,6 @@ int ib_query_mr(struct ib_mr *mr, struct ib_mr_attr *mr_attr);
  */
 int ib_dereg_mr(struct ib_mr *mr);
 
+const char *__attribute_const__ ib_wc_status_msg(enum ib_wc_status status);
+
 #endif /* IB_VERBS_H */
