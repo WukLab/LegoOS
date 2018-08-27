@@ -175,7 +175,12 @@ int init_socket_over_ib(struct lego_context *ctx, int port, int rx_depth, int i)
 	pr_info("%s mynodeid %d remote node %d\n", __func__, ctx->node_id, i);
 
 	ctx->sock_send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
-	//ctx->send_cq[i] = ctx->send_cq[0];
+	if (IS_ERR_OR_NULL(ctx->sock_send_cq[i])) {
+		fit_err("Fail to create sock_send_cq[%d]. Error: %d",
+			i, PTR_ERR_OR_ZERO(ctx->sock_send_cq[i]));
+		return -EIO;
+	}
+
 	struct ib_qp_attr attr;
 	struct ib_qp_init_attr init_attr = {
 		.send_cq = ctx->sock_send_cq[i],
@@ -192,11 +197,13 @@ int init_socket_over_ib(struct lego_context *ctx, int port, int rx_depth, int i)
 	};
 
 	ctx->sock_qp[i] = ib_create_qp(ctx->pd, &init_attr);
-	if(!ctx->sock_qp[i])
+	if(IS_ERR_OR_NULL(ctx->sock_qp[i]))
 	{
-		printk(KERN_ALERT "Fail to create sock_qp\n");
+		printk(KERN_ALERT "Fail to create sock_qp. Error: %d\n",
+			PTR_ERR_OR_ZERO(ctx->sock_qp[i]));
 		return -EINVAL;
 	}
+
 	ib_query_qp(ctx->sock_qp[i], &attr, IB_QP_CAP, &init_attr);
 	//if(init_attr.cap.max_inline_data >= size)
 	//{
@@ -301,16 +308,21 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	for(i = 0; i < num_total_connections; i++)
 		ctx->atomic_buffer_cur_length[i]=-1;
 
-	ctx->cq = (struct ib_cq **)kmalloc(NUM_POLLING_THREADS * sizeof(struct ib_cq *), GFP_KERNEL);
-	for(i = 0; i < NUM_POLLING_THREADS; i++)
-	{
+	ctx->cq = kmalloc(NUM_POLLING_THREADS * sizeof(struct ib_cq *), GFP_KERNEL);
+	if (!ctx->cq) {
+		pr_err("OOM\n");
+		return NULL;
+	}
+
+	for(i = 0; i < NUM_POLLING_THREADS; i++) {
 		ctx->cq[i]=ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth*4+1, 0);
-		if(!ctx->cq[i])
-		{
-			printk(KERN_ALERT "Fail to create cq at %d/ ctx->cq\n", i);
+		if(IS_ERR_OR_NULL(ctx->cq[i])) {
+			fit_err("Fail to create recv_cq %d. Error: %d",
+				i, PTR_ERR_OR_ZERO(ctx->cq[i]));
 			return NULL;
 		}
 	}
+
 	ctx->send_cq = (struct ib_cq **)kmalloc(num_total_connections * sizeof(struct ib_cq *), GFP_KERNEL);
 	ctx->connection_count = (atomic_t *)kmalloc(num_total_connections * sizeof(atomic_t), GFP_KERNEL);
 	for(i = 0; i < num_total_connections; i++)
@@ -338,7 +350,6 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	BUG_ON(!ctx->sock_send_cq || !ctx->sock_recv_cq || !ctx->sock_qp);
 #endif
 
-	//ctx->send_cq[0] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
 	for(i=0;i<num_total_connections;i++) {
 		struct ib_qp_attr attr;
 		struct ib_qp_init_attr init_attr;
@@ -367,7 +378,8 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 
 		ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
 		if (IS_ERR_OR_NULL(ctx->send_cq[i])) {
-			fit_err("Fail to create send_CQ-%d\n", i);
+			fit_err("Fail to create send_CQ-%d Error: %d\n",
+				i, PTR_ERR_OR_ZERO(ctx->send_cq[i]));
 			return NULL;
 		}
 
@@ -382,7 +394,6 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 		 * and we remove it from cpu_active_mask, which
 		 * means scheduler won't schedule to it.
 		 */
-		init_attr.cap.max_send_wr	= MAX_OUTSTANDING_SEND;
 		init_attr.cap.max_send_wr	= MAX_OUTSTANDING_SEND,
 		init_attr.cap.max_recv_wr	= rx_depth,
 		init_attr.cap.max_send_sge	= 16,
@@ -390,7 +401,8 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
 		if (IS_ERR_OR_NULL(ctx->qp[i])) {
-			printk(KERN_ALERT "Fail to create qp[%d]\n", i);
+			fit_err("Fail to create qp[%d]. Error: %d",
+				i, PTR_ERR_OR_ZERO(ctx->qp[i]));
 			return NULL;
 		}
 
