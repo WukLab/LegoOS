@@ -1010,10 +1010,10 @@ inline int fit_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 }
 
 /*
- * If we can not get the CQE within 10 seconds
+ * If we can not get the CQE within 20 seconds
  * There should be something wrong.
  */
-#define FIT_POLL_SENDCQ_TIMEOUT_NS	(10000000000L)
+#define FIT_POLL_SENDCQ_TIMEOUT_NS	(20000000000L)
 
 /*
  * HACK!!!
@@ -1098,10 +1098,12 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 		if (unlikely(sched_clock() - start_ns > FIT_POLL_SENDCQ_TIMEOUT_NS)) {
 			pr_info_once("\n"
 				"*****\n"
-				"***** Fail to to get the CQE from send_cq after %ld seconds\n!"
+				"***** Fail to to get the CQE from send_cq after %ld seconds!\n"
 				"***** This means the packet was lost and something went wrong\n"
-				"***** with your NIC. Please report!\n"
-				"*****\n", FIT_POLL_SENDCQ_TIMEOUT_NS/NSEC_PER_SEC);
+				"***** with your NIC...\n"
+				"***** connection_id: %d dest node: %d\n"
+				"*****\n", FIT_POLL_SENDCQ_TIMEOUT_NS/NSEC_PER_SEC,
+				connection_id, connection_id/NUM_PARALLEL_CONNECTION);
 			WARN_ON_ONCE(1);
 		}
 	} while (ne < 1);
