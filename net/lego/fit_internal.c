@@ -352,7 +352,6 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 
 	for(i=0;i<num_total_connections;i++) {
 		struct ib_qp_attr attr;
-		struct ib_qp_init_attr init_attr;
 
 		memset(&attr, 0, sizeof(attr));
 
@@ -383,21 +382,25 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 			return NULL;
 		}
 
-		init_attr.send_cq	= ctx->send_cq[i];
-		init_attr.recv_cq	= ctx->cq[i % NUM_POLLING_THREADS];
-		init_attr.qp_type	= IB_QPT_RC;
-		init_attr.sq_sig_type	= IB_SIGNAL_REQ_WR;
-
-		/*
-		 * Stands for concurrent outgoing requests?
-		 * We always have 1 IB polling thread running,
-		 * and we remove it from cpu_active_mask, which
-		 * means scheduler won't schedule to it.
-		 */
-		init_attr.cap.max_send_wr	= MAX_OUTSTANDING_SEND,
-		init_attr.cap.max_recv_wr	= rx_depth,
-		init_attr.cap.max_send_sge	= 16,
-		init_attr.cap.max_recv_sge	= 16,
+		{
+                struct ib_qp_init_attr init_attr = {
+                        .send_cq = ctx->send_cq[i],//ctx->cq
+                        .recv_cq = ctx->cq[i%NUM_POLLING_THREADS],
+                        .cap = {
+                                /*   
+                                 * Stands for concurrent outgoing requests?
+                                 * We always have 1 IB polling thread running,
+                                 * and we remove it from cpu_active_mask, which
+                                 * means scheduler won't schedule to it.
+                                 */
+                                .max_send_wr = MAX_OUTSTANDING_SEND,
+                                .max_recv_wr = rx_depth,
+                                .max_send_sge = 16,
+                                .max_recv_sge = 16 
+                        },   
+                        .qp_type = IB_QPT_RC,
+                        .sq_sig_type = IB_SIGNAL_REQ_WR
+                }; 
 
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
 		if (IS_ERR_OR_NULL(ctx->qp[i])) {
@@ -409,6 +412,8 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 		ib_query_qp(ctx->qp[i], &attr, IB_QP_CAP, &init_attr);
 		if(init_attr.cap.max_inline_data >= size)
 			ctx->send_flags |= IB_SEND_INLINE;
+
+		}
 
 		{
 			struct ib_qp_attr attr1 = {
