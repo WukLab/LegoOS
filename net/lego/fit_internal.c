@@ -36,6 +36,10 @@
 #else
 static inline void fit_debug(const char *fmt, ...) { }
 #endif
+
+#define fit_err(fmt, ...) \
+	pr_debug("%s():%d " fmt, __func__, __LINE__, __VA_ARGS__)
+
 atomic_t global_sock_avail_recv_bufs;
 
 enum ib_mtu fit_mtu_to_enum(int mtu)
@@ -232,8 +236,7 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	ppc *ctx;
 	int rem_node_id;
 
-	printk(KERN_CRIT "%s\n", __func__);
-	ctx = (struct lego_context*)kzalloc(sizeof(struct lego_context), GFP_KERNEL);
+	ctx = kzalloc(sizeof(struct lego_context), GFP_KERNEL);
 	if(!ctx)
 	{
 		printk(KERN_ALERT "FAIL to initialize ctx in fit_init_ctx\n");
@@ -336,8 +339,12 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 #endif
 
 	//ctx->send_cq[0] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
-	for(i=0;i<num_total_connections;i++)
-	{
+	for(i=0;i<num_total_connections;i++) {
+		struct ib_qp_attr attr;
+		struct ib_qp_init_attr init_attr;
+
+		memset(&attr, 0, sizeof(attr));
+
 #ifdef CONFIG_SOCKET_O_IB
 		rem_node_id = i/(NUM_PARALLEL_CONNECTION+1);
 		fit_debug("sock enabled mynodeid %d i %d connecting node %d NUM_PARALLEL_CONNECTION %d \n", 
@@ -359,62 +366,61 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 		ctx->recv_state[i] = RS_INIT;
 
 		ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
-		//ctx->send_cq[i] = ctx->send_cq[0];
-		struct ib_qp_attr attr;
-		struct ib_qp_init_attr init_attr = {
-			.send_cq = ctx->send_cq[i],//ctx->cq
-			.recv_cq = ctx->cq[i%NUM_POLLING_THREADS],
-			.cap = {
-				/*
-				 * Stands for concurrent outgoing requests?
-				 * We always have 1 IB polling thread running,
-				 * and we remove it from cpu_active_mask, which
-				 * means scheduler won't schedule to it.
-				 */
-				.max_send_wr = MAX_OUTSTANDING_SEND,
-				.max_recv_wr = rx_depth,
-				.max_send_sge = 16,
-				.max_recv_sge = 16
-			},
-			.qp_type = IB_QPT_RC,
-			.sq_sig_type = IB_SIGNAL_REQ_WR
-		};
+		if (IS_ERR_OR_NULL(ctx->send_cq[i])) {
+			fit_err("Fail to create send_CQ-%d\n", i);
+			return NULL;
+		}
 
-		fit_debug("init_attr cq %d %p\n", i%NUM_POLLING_THREADS, init_attr.recv_cq);
+		init_attr.send_cq	= ctx->send_cq[i];
+		init_attr.recv_cq	= ctx->cq[i % NUM_POLLING_THREADS];
+		init_attr.qp_type	= IB_QPT_RC;
+		init_attr.sq_sig_type	= IB_SIGNAL_REQ_WR;
+
+		/*
+		 * Stands for concurrent outgoing requests?
+		 * We always have 1 IB polling thread running,
+		 * and we remove it from cpu_active_mask, which
+		 * means scheduler won't schedule to it.
+		 */
+		init_attr.cap.max_send_wr	= MAX_OUTSTANDING_SEND;
+		init_attr.cap.max_send_wr	= MAX_OUTSTANDING_SEND,
+		init_attr.cap.max_recv_wr	= rx_depth,
+		init_attr.cap.max_send_sge	= 16,
+		init_attr.cap.max_recv_sge	= 16,
+
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
-		if(!ctx->qp[i])
-		{
+		if (IS_ERR_OR_NULL(ctx->qp[i])) {
 			printk(KERN_ALERT "Fail to create qp[%d]\n", i);
 			return NULL;
 		}
+
 		ib_query_qp(ctx->qp[i], &attr, IB_QP_CAP, &init_attr);
 		if(init_attr.cap.max_inline_data >= size)
-		{
 			ctx->send_flags |= IB_SEND_INLINE;
-		}
 
-		struct ib_qp_attr attr1 = {
-			.qp_state = IB_QPS_INIT,
-			.pkey_index = 0,
-			.port_num = port,
-			.qp_access_flags = IB_ACCESS_REMOTE_WRITE|IB_ACCESS_REMOTE_READ|IB_ACCESS_LOCAL_WRITE|IB_ACCESS_REMOTE_ATOMIC,
-			.path_mtu = IB_MTU_2048,
-			.retry_cnt = 7,
-			.rnr_retry = 7
-		};
-		if(ib_modify_qp(ctx->qp[i], &attr1,
-					IB_QP_STATE		|
-					IB_QP_PKEY_INDEX	|
-					IB_QP_PORT		|
-					IB_QP_ACCESS_FLAGS))
 		{
-			printk(KERN_ALERT "Fail to modify qp[%d]\n", i);
-			ib_destroy_qp(ctx->qp[i]);
-			return NULL;
+			struct ib_qp_attr attr1 = {
+				.qp_state = IB_QPS_INIT,
+				.pkey_index = 0,
+				.port_num = port,
+				.qp_access_flags = IB_ACCESS_REMOTE_WRITE|IB_ACCESS_REMOTE_READ|
+						   IB_ACCESS_LOCAL_WRITE|IB_ACCESS_REMOTE_ATOMIC,
+				.path_mtu = IB_MTU_2048,
+				.retry_cnt = 7,
+				.rnr_retry = 7
+			};
+	
+			if (ib_modify_qp(ctx->qp[i], &attr1,
+						IB_QP_STATE		|
+						IB_QP_PKEY_INDEX	|
+						IB_QP_PORT		|
+						IB_QP_ACCESS_FLAGS)) {
+				printk(KERN_ALERT "Fail to modify qp[%d]\n", i);
+				ib_destroy_qp(ctx->qp[i]);
+				return NULL;
+			}
 		}
-		fit_debug("created qp %d\n", i);
 	}
-
 
 	//Do IMM local ring setup (imm-send-reply)
 	ctx->reply_ready_indicators = (void **)kmalloc(sizeof(void*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
@@ -677,6 +683,7 @@ int fit_post_receives_message_with_buffer(ppc *ctx, int connection_id, int depth
 #endif
 	for (i = 0; i < depth; i++) {
 		struct ib_sge sge[2];
+		struct ib_recv_wr wr, *bad_wr = NULL;
 
 		buf = kmalloc(size, GFP_KERNEL);		
 		addr = fit_ib_reg_mr_addr(ctx, buf, size);
@@ -695,7 +702,6 @@ int fit_post_receives_message_with_buffer(ppc *ctx, int connection_id, int depth
 		sge[1].length = size;
 		sge[1].lkey = ctx->proc->lkey;
 
-		struct ib_recv_wr wr, *bad_wr = NULL;
 		wr.wr_id = (uint64_t)p_r_i_struct;
 		wr.next = NULL;
 		wr.sg_list = sge;
@@ -986,6 +992,19 @@ inline int fit_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 	return -1;
 }
 
+/*
+ * If we can not get the CQE within 10 seconds
+ * There should be something wrong.
+ */
+#define FIT_POLL_SENDCQ_TIMEOUT_NS	(10000000000L)
+
+/*
+ * HACK!!!
+ *
+ * This is a BLOCKING function call.
+ * It will keep polling send_cq until we got the CQE for the just-sent-out WQE.
+ * If you find dead loop here, ugh, I don't know what to do.
+ */
 int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, int *check, int if_poll_now)
 {
 #ifdef SEPARATE_SEND_POLL_THREAD
@@ -1006,8 +1025,6 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 	ctx->send_cq_queued_sends[connection_id]++;
 	fit_debug("poll send cq conn %d queued sends %d\n", 
 			connection_id, ctx->send_cq_queued_sends[connection_id]);
-	//pr_info("poll send cq conn %d queued sends %d\n", 
-	//		connection_id, ctx->send_cq_queued_sends[connection_id]);
 	if (!if_poll_now && ctx->send_cq_queued_sends[connection_id] < MAX_OUTSTANDING_SEND/2)
 		return 0;
 
@@ -1027,7 +1044,6 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 	} while(ne<1);
 
 	fit_debug("got pollcq %d\n", ne);
-	//pr_info("got pollcq %d\n", ne);
 
 	for (i = 0; i < ne; i++)
 	{
@@ -1043,33 +1059,41 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 
 	fit_debug("new queued sends %d on conn %d\n", 
 			ctx->send_cq_queued_sends[connection_id], connection_id);
-	//pr_info("new queued sends %d on conn %d\n", 
-	//		ctx->send_cq_queued_sends[connection_id], connection_id);
 	return 0;
 #else
+
 	/*
-	 * use same send thread to poll send cq
+	 * This is the safest version.
+	 * No batching, no any optimization.
 	 */
 	int ne, i;
 	struct ib_wc wc[2];
+	unsigned long start_ns;
 
-	//printk(KERN_CRIT "%s\n", __func__);
+	start_ns = sched_clock();
 	do{
 		ne = ib_poll_cq(tar_cq, 1, wc);
-		if(ne < 0)
-		{
-			printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
+		if (unlikely(ne < 0)) {
+			fit_err("Fail to poll send_cq. Err: %d", ne);
 			return 1;
 		}
-	}while(ne<1);
-	for(i=0;i<ne;i++)
-	{
-		if(wc[i].status!=IB_WC_SUCCESS)
-		{
-			printk(KERN_ALERT "send request failed at connection %d as %d\n", connection_id, wc[i].status);
-			return 2;
+
+		if (unlikely(sched_clock() - start_ns > FIT_POLL_SENDCQ_TIMEOUT_NS)) {
+			pr_info_once("\n"
+				"*****\n"
+				"***** Fail to to get the CQE from send_cq after %ld seconds\n!"
+				"***** This means the packet was lost and something went wrong\n"
+				"***** with your NIC. Please report!\n"
+				"*****\n", FIT_POLL_SENDCQ_TIMEOUT_NS/NSEC_PER_SEC);
+			WARN_ON_ONCE(1);
 		}
-		else
+	} while (ne < 1);
+
+	for (i = 0; i < ne; i++) {
+		if(wc[i].status!=IB_WC_SUCCESS) {
+			fit_err("wc.status: %s", ib_wc_status_msg(wc[i].status));
+			return 2;
+		} else
 			break;
 	}
 	return 0;
@@ -1819,7 +1843,11 @@ void *fit_alloc_memory_for_mr(unsigned int length)
 }
 
 /*
- * main polling function for all non-socket requests
+ * HACK!!!
+ *
+ * This function or thread, will poll the only recv_cq Lego has.
+ * This recv_cq includes all incoming messages.
+ * This thread is pinned to a cpu core and keep running.
  */
 int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 {
@@ -1834,46 +1862,38 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 #ifdef NOTIFY_MODEL
 	int test_result=0;
 #endif
-	struct imm_header_from_cq_to_port *tmp;
 	int reply_data, private_bits;
 
 	if (pin_current_thread())
 		panic("Fail to pin poll_cq");
 
 	while(1) {
+		/* We keep polling this CQ */
 		do {
-			//set_current_state(TASK_RUNNING);
 			ne = ib_poll_cq(target_cq, NUM_PARALLEL_CONNECTION, wc);
 			if (unlikely(ne < 0)) {
-				printk(KERN_ALERT "poll CQ failed %d\n", ne);
-				return 1;
+				fit_err("poll_cq error: %d", ne);
+				return ne;
 			}
-			if (ne == 0) {
-				schedule();
-				//cpu_relax();
-				//set_current_state(TASK_INTERRUPTIBLE);
-				//if(kthread_should_stop())
-				//{
-				//	printk(KERN_ALERT "Stop cq and return\n");
-				//	return 0;
-				//}
-			}
-			//msleep(1);
-		} while(ne < 1);
+		} while (ne < 1);
 
 		for (i = 0; i < ne; i++) {
+			if (wc[i].status != IB_WC_SUCCESS) {
+				pr_err("wc.status: %s, wr_id %d",
+					ib_wc_status_msg(wc[i].status), wc[i].wr_id);
+				continue;
+			}
+
 			connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
-			if (connection_id == -1) {
+			if (unlikely(connection_id == -1)) {
 				pr_crit("Error: cannot find qp number %d\n", wc[i].qp->qp_num);
 				continue;
 			}
+
 			fit_debug("%s: conn %d got one recv cq status %d opcode %d",
 					__func__, connection_id, wc[i].status, wc[i].opcode);
 
-			if (wc[i].status != IB_WC_SUCCESS)
-				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
-
-			if ((int) wc[i].opcode == IB_WC_RECV) {
+			if (wc[i].opcode == IB_WC_RECV) {
 				struct ibapi_post_receive_intermediate_struct *p_r_i_struct = (void *)wc[i].wr_id;
 				struct ibapi_header temp_header;
 
@@ -1894,11 +1914,9 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
 							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
 				}
-			} else if ((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM) {
+			} else if (wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM) {
 				node_id = GET_NODE_ID_FROM_POST_RECEIVE_ID(wc[i].wr_id);
-				//printk(KERN_CRIT "%s got imm from node %d immdata %x\n", __func__, node_id, wc[i].ex.imm_data);
-				if(wc[i].wc_flags&&IB_WC_WITH_IMM)
-				{
+				if (wc[i].wc_flags && IB_WC_WITH_IMM) {
 					fit_debug("wc[i].ex.imm_data: %#lx wc[i].byte_len: %#lx\n", wc[i].ex.imm_data, wc[i].byte_len);
 					if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND && wc[i].ex.imm_data & IMM_SEND_REPLY_RECV)//opcode
 					{
@@ -1924,13 +1942,15 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
                                                                 tmp1->size, node_id, offset);
 						}
 #else
-						//printk(KERN_CRIT "%s: from node %d access to port %d imm-%x\n", __func__, node_id, port, wc[i].ex.imm_data);
-						tmp = (struct imm_header_from_cq_to_port *)kmalloc(sizeof(struct imm_header_from_cq_to_port), GFP_KERNEL); //kmem_cache_alloc(imm_header_from_cq_to_port_cache, GFP_KERNEL);
+						{
+						struct imm_header_from_cq_to_port *tmp;
+						tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
 						tmp->source_node_id = node_id;
 						tmp->offset = offset;
 						spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
 						list_add_tail(&(tmp->list), &ctx->imm_waitqueue_perport[port].list);
 						spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
+						}
 #endif
 					}
 					/* handle internal acknoledgement of new MR offset */
@@ -3224,7 +3244,13 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	//Initialize multicast spin_lock
 	spin_lock_init(&multicast_lock);
 
-	//Start handling completion cq
+	/*
+	 * HACK!!!
+	 *
+	 * This is the only recv_cq we have
+	 * This is determined by NUM_POLLING_THREADS
+	 * Confusing.
+	 */
 	thread_pass_poll_cq.ctx = ctx;
 	thread_pass_poll_cq.target_cq = ctx->cq[0];
 	kthread_run(fit_poll_cq_pass, &thread_pass_poll_cq, "recvpollcq");
