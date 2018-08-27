@@ -1104,7 +1104,6 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 				"***** connection_id: %d dest node: %d\n"
 				"*****\n", FIT_POLL_SENDCQ_TIMEOUT_NS/NSEC_PER_SEC,
 				connection_id, DIV_ROUND_UP(connection_id, NUM_PARALLEL_CONNECTION));
-			dump_ib_stats();
 			WARN_ON_ONCE(1);
 		}
 	} while (ne < 1);
