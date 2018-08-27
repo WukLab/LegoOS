@@ -301,7 +301,20 @@ static int thpool_worker_func(void *_worker)
 	complete(&thpool_init_completion);
 	set_cpu_thpool_worker(w, smp_processor_id());
 
+	/*
+	 * HACK!!!
+	 *
+	 * We want to disable interrupt at this cpu core for better perf,
+	 * because this thpool is pinned and is the only thread running.
+	 *
+	 * However, if our software watchdog is enabled, we want to enable
+	 * the interrupt, so whenever watchdog noticed a dead thread, it
+	 * will be able to send interrupt and dump the current stack.
+	 */
+#ifndef CONFIG_SOFT_WATCHDOG
 	local_irq_disable();
+#endif
+
 	preempt_disable();
 	while (1) {
 		/* Check comments on enqueue */
@@ -357,7 +370,11 @@ static int thpool_worker_func(void *_worker)
 		spin_unlock(&w->lock);
 	}
 	preempt_enable();
+
+#ifndef CONFIG_SOFT_WATCHDOG
 	local_irq_enable();
+#endif
+
 	BUG();
 	return 0;
 }

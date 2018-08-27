@@ -681,7 +681,6 @@ void handle_p2m_mremap(struct p2m_mremap_struct *payload,
 out:
 	up_write(&tsk->mm->mmap_sem);
 
-out_nolock:
 	mmap_debug("status: %s, new_addr: %#Lx, line: %u",
 		   ret_to_string(reply->status), reply->new_addr,
 		   (reply->status != RET_OKAY) ? reply->line : 0);
