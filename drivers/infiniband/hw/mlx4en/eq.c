@@ -399,6 +399,49 @@ static int mlx4_eq_int(struct mlx4_dev *dev, struct mlx4_eq *eq)
 			cqn = be32_to_cpu(eqe->event.comp.cqn) & 0xffffff;
 			mlx4_cq_completion(dev, cqn);
 			break;
+
+		case MLX4_EVENT_TYPE_PATH_MIG:
+		case MLX4_EVENT_TYPE_COMM_EST:
+		case MLX4_EVENT_TYPE_SQ_DRAINED:
+		case MLX4_EVENT_TYPE_SRQ_QP_LAST_WQE:
+		case MLX4_EVENT_TYPE_WQ_CATAS_ERROR:
+		case MLX4_EVENT_TYPE_PATH_MIG_FAILED:
+		case MLX4_EVENT_TYPE_WQ_INVAL_REQ_ERROR:
+		case MLX4_EVENT_TYPE_WQ_ACCESS_ERROR:
+			mlx4_dbg(dev, "event %d arrived\n", eqe->type);
+			if (mlx4_is_master(dev))
+				panic("Not supported");
+			mlx4_qp_event(dev, be32_to_cpu(eqe->event.qp.qpn) &
+				      0xffffff, eqe->type);
+			break;
+
+		case MLX4_EVENT_TYPE_CMD:
+			mlx4_dbg(dev, "CMD arrived\n");
+			mlx4_cmd_event(dev,
+				       be16_to_cpu(eqe->event.cmd.token),
+				       eqe->event.cmd.status,
+				       be64_to_cpu(eqe->event.cmd.out_param));
+			break;
+
+		case MLX4_EVENT_TYPE_CQ_ERROR:
+			mlx4_warn(dev, "CQ %s on CQN %06x\n",
+				  eqe->event.cq_err.syndrome == 1 ?
+				  "overrun" : "access violation",
+				  be32_to_cpu(eqe->event.cq_err.cqn) & 0xffffff);
+			if (mlx4_is_master(dev))
+				panic("Not supported");
+			mlx4_cq_event(dev,
+				      be32_to_cpu(eqe->event.cq_err.cqn)
+				      & 0xffffff,
+				      eqe->type);
+			break;
+
+		case MLX4_EVENT_TYPE_EQ_OVERFLOW:
+			mlx4_warn(dev, "EQ overrun on EQN %d\n", eq->eqn);
+			break;
+
+		case MLX4_EVENT_TYPE_EEC_CATAS_ERROR:
+		case MLX4_EVENT_TYPE_ECC_DETECT:
 		default:
 			mlx4_warn(dev, "Unhandled event %02x(%02x) on EQ %d at "
 				  "index %u. owner=%x, nent=0x%x, slave=%x, "
