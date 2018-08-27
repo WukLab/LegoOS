@@ -294,4 +294,4 @@ static void __exit lego_ib_cleanup(void)
 
 module_init(lego_ib_init);
 module_exit(lego_ib_cleanup);
-MODULE_LICENSE("GPLv3");
+MODULE_LICENSE("GPL");
