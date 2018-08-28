@@ -22,6 +22,22 @@
 
 #include <asm/pci.h>
 
+/*
+ * The PCI interface treats multi-function devices as independent
+ * devices.  The slot/function address of each device is encoded
+ * in a single byte as follows:
+ *
+ *	7:3 = slot
+ *	2:0 = function
+ *
+ * PCI_DEVFN(), PCI_SLOT(), and PCI_FUNC() are defined in uapi/linux/pci.h.
+ * In the interest of not exposing interfaces to user-space unnecessarily,
+ * the following kernel-only defines are being added here.
+ */
+#define PCI_DEVID(bus, devfn)  ((((u16)(bus)) << 8) | (devfn))
+/* return bus from PCI devid = ((u16)bus_number) << 8) | devfn */
+#define PCI_BUS_NUM(x) (((x) >> 8) & 0xff)
+
 #define PCI_CFG_SPACE_SIZE	256
 #define PCI_CFG_SPACE_EXP_SIZE	4096
 

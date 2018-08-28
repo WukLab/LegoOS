@@ -93,4 +93,7 @@ static inline int arch_irqs_disabled(void)
 	return arch_irqs_disabled_flags(flags);
 }
 
+struct irq_domain;
+void arch_init_msi_domain(struct irq_domain *parent);
+
 #endif /* _ASM_X86_IRQ_H_ */

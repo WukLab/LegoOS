@@ -180,6 +180,23 @@ int irq_set_msi_desc(unsigned int irq, struct msi_desc *entry)
 	return irq_set_msi_desc_off(irq, 0, entry);
 }
 
+/**
+ *	irq_set_handler_data - set irq handler data for an irq
+ *	@irq:	Interrupt number
+ *	@data:	Pointer to interrupt specific data
+ *
+ *	Set the hardware irq controller data for an irq
+ */
+int irq_set_handler_data(unsigned int irq, void *data)
+{
+	struct irq_desc *desc = irq_to_desc(irq);
+
+	if (!desc)
+		return -EINVAL;
+	desc->irq_common_data.handler_data = data;
+	return 0;
+}
+
 void __enable_irq(struct irq_desc *desc)
 {
 	switch (desc->depth) {
@@ -349,4 +366,44 @@ void irq_chip_ack_parent(struct irq_data *data)
 {
 	data = data->parent_data;
 	data->chip->irq_ack(data);
+}
+
+/**
+ * irq_chip_retrigger_hierarchy - Retrigger an interrupt in hardware
+ * @data:	Pointer to interrupt specific data
+ *
+ * Iterate through the domain hierarchy of the interrupt and check
+ * whether a hw retrigger function exists. If yes, invoke it.
+ */
+int irq_chip_retrigger_hierarchy(struct irq_data *data)
+{
+	for (data = data->parent_data; data; data = data->parent_data)
+		if (data->chip && data->chip->irq_retrigger)
+			return data->chip->irq_retrigger(data);
+
+	return 0;
+}
+
+/**
+ * irq_chip_compose_msi_msg - Componse msi message for a irq chip
+ * @data:	Pointer to interrupt specific data
+ * @msg:	Pointer to the MSI message
+ *
+ * For hierarchical domains we find the first chip in the hierarchy
+ * which implements the irq_compose_msi_msg callback. For non
+ * hierarchical we use the top level chip.
+ */
+int irq_chip_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
+{
+	struct irq_data *pos = NULL;
+
+	for (; data; data = data->parent_data)
+		if (data->chip && data->chip->irq_compose_msi_msg)
+			pos = data;
+	if (!pos)
+		return -ENOSYS;
+
+	pos->chip->irq_compose_msi_msg(pos, msg);
+
+	return 0;
 }

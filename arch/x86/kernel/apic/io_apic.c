@@ -856,7 +856,7 @@ int acpi_get_override_irq(u32 gsi, int *trigger, int *polarity)
 	return 0;
 }
 
-static void copy_irq_alloc_info(struct irq_alloc_info *dst, struct irq_alloc_info *src)
+void copy_irq_alloc_info(struct irq_alloc_info *dst, struct irq_alloc_info *src)
 {
 	if (src)
 		*dst = *src;
@@ -1471,7 +1471,7 @@ void __init setup_IO_APIC(void)
 		BUG_ON(!ip->irqdomain->linear_revmap);
 
 		/* Just one single parent */
-		ip->irqdomain->parent = &x86_vector_domain;
+		ip->irqdomain->parent = x86_vector_domain;
 
 		if (cfg->type == IOAPIC_DOMAIN_LEGACY ||
 		    cfg->type == IOAPIC_DOMAIN_STRICT)
@@ -1814,7 +1814,7 @@ static int mp_irqdomain_alloc(struct irq_domain *domain, unsigned int virq,
 
 	INIT_LIST_HEAD(&data->irq_2_pin);
 	irq_data->hwirq = info->ioapic_pin;
-	irq_data->chip = (domain->parent == &x86_vector_domain) ?
+	irq_data->chip = (domain->parent == x86_vector_domain) ?
 			  &ioapic_chip : &ioapic_ir_chip;
 	irq_data->chip_data = data;
 

@@ -16,6 +16,13 @@
 
 #include <lego/irqdomain.h>
 
+enum {
+	/* Allocate contiguous CPU vectors */
+	X86_IRQ_ALLOC_CONTIGUOUS_VECTORS		= 0x1,
+};
+
+struct pci_dev;
+
 enum irq_alloc_type {
 	X86_IRQ_ALLOC_TYPE_IOAPIC = 1,
 	X86_IRQ_ALLOC_TYPE_HPET,
@@ -38,6 +45,12 @@ struct irq_alloc_info {
 			void		*hpet_data;
 		};
 #endif
+#ifdef	CONFIG_PCI_MSI
+		struct {
+			struct pci_dev	*msi_dev;
+			irq_hw_number_t	msi_hwirq;
+		};
+#endif
 #ifdef	CONFIG_X86_IO_APIC
 		struct {
 			int		ioapic_id;
@@ -51,6 +64,11 @@ struct irq_alloc_info {
 #endif
 	};
 };
+
+extern void init_irq_alloc_info(struct irq_alloc_info *info,
+				const struct cpumask *mask);
+extern void copy_irq_alloc_info(struct irq_alloc_info *dst,
+				struct irq_alloc_info *src);
 
 /* I/O Unit Redirection Table */
 #define IO_APIC_REDIR_VECTOR_MASK	0x000FF
