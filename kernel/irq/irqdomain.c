@@ -28,8 +28,10 @@ void dump_irq_domain_list(void)
 
 	mutex_lock(&irq_domain_mutex);
 	list_for_each_entry(domain, &irq_domain_list, link) {
-		pr_info(" IRQ_DOMAIN[%d]: %s\n",
-			i++, domain->name);
+		pr_info(" IRQ_DOMAIN[%d]: %s\n", i++, domain->name);
+		pr_info("    hwirq_max:             %lu\n", domain->hwirq_max);
+		pr_info("    revmap_direct_max_irq: %u\n", domain->revmap_direct_max_irq);
+		pr_info("    revmap_size:           %u\n", domain->revmap_size);
 	}
 	mutex_unlock(&irq_domain_mutex);
 }
@@ -55,10 +57,17 @@ struct irq_domain *__irq_domain_add(void *fwnode, int size,
 	struct irq_domain *domain;
 
 	/*
-	 * Anyway, in Lego's case, this funciton is invoked
-	 * by x86_vector_domain and pci_msi_domain.
-	 * size is always 0
+	 * HACK!!!
+	 *
+	 * XXX: We do this because we don't have radix tree now
+	 * so everything has to be contained within the linear map.
+	 * The write safety is protected by inset_irq part.
 	 */
+	if (size == 0) {
+		size = NR_IRQS;
+		pr_info("%s(): adjust size 0 to NR_IRQS\n", __func__);
+	}
+
 	domain = kzalloc(sizeof(*domain) + (sizeof(unsigned int) * size), GFP_KERNEL);
 	if (WARN_ON(!domain))
 		return NULL;
@@ -75,7 +84,6 @@ struct irq_domain *__irq_domain_add(void *fwnode, int size,
 	list_add(&domain->link, &irq_domain_list);
 	mutex_unlock(&irq_domain_mutex);
 
-	pr_debug("Added IRQ domain %s\n", domain->name);
 	return domain;
 }
 
@@ -158,8 +166,9 @@ unsigned int irq_find_mapping(struct irq_domain *domain,
 		return domain->linear_revmap[hwirq];
 
 	/*
-	 * TODO: it also check radix tree
-	 * we don't need this?
+	 * XXX:
+	 * We omitted radix tree here.
+	 * It should be catched when we do insert
 	 */
 	return 0;
 }
@@ -200,8 +209,10 @@ static void irq_domain_insert_irq(int virq)
 		if (hwirq < domain->revmap_size) {
 			domain->linear_revmap[hwirq] = virq;
 		} else {
-			WARN(1, "Need radix tree for hwirq: %lu revmap_size: %u\n",
-				hwirq, domain->revmap_size);
+			pr_info("****\n"
+				"**** Domain: %s revmap_size: %u hwirq: %lu\n"
+				"**** Either adjust revmap_size, or port radix-tree!\n"
+				"****\n", domain->name, domain->revmap_size, hwirq);
 			return;
 		}
 	}
