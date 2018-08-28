@@ -54,6 +54,7 @@ static int pirq_enable_irq(struct pci_dev *dev)
 						 irq);
 				dev = bridge;
 			}
+			dev = temp_dev;
 			if (irq >= 0) {
 				dev->irq_managed = 1;
 				dev->irq = irq;
