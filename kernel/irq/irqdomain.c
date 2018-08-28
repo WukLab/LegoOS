@@ -208,6 +208,8 @@ static void irq_domain_insert_irq(int virq)
 
 		if (hwirq < domain->revmap_size) {
 			domain->linear_revmap[hwirq] = virq;
+			pr_debug("%s: domain: %s hwirq: %lu virq: %d\n",
+				__func__, domain->name, hwirq, virq);
 		} else {
 			pr_info("****\n"
 				"**** Domain: %s revmap_size: %u hwirq: %lu\n"

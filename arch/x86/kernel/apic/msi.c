@@ -121,3 +121,53 @@ void arch_init_msi_domain(struct irq_domain *parent)
 		pr_warn("failed to initialize irqdomain for MSI/MSI-x.\n");
 	set_irq_domain_name(msi_default_domain, "x86_msi");
 }
+
+/**
+ * irq_remapping_get_irq_domain - Get the irqdomain serving the request @info
+ * @info: interrupt allocation information, used to identify the IOMMU device
+ *
+ * There will be one PCI MSI/MSIX irqdomain associated with each interrupt
+ * remapping device, so this interface is used to retrieve the PCI MSI/MSIX
+ * irqdomain serving request @info.
+ * Returns pointer to IRQ domain, or NULL on failure.
+ */
+/*
+ * TODO: IOMMU related stuff
+ */
+struct irq_domain *
+irq_remapping_get_irq_domain(struct irq_alloc_info *info)
+{
+	return NULL;
+}
+
+int native_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
+{
+	struct irq_domain *domain;
+	struct irq_alloc_info info;
+
+	init_irq_alloc_info(&info, NULL);
+	info.type = X86_IRQ_ALLOC_TYPE_MSI;
+	info.msi_dev = dev;
+
+	domain = irq_remapping_get_irq_domain(&info);
+	if (domain == NULL)
+		domain = msi_default_domain;
+	if (domain == NULL)
+		return -ENOSYS;
+
+	return pci_msi_domain_alloc_irqs(domain, dev, nvec, type);
+}
+
+void native_teardown_msi_irq(unsigned int irq)
+{
+	WARN_ONCE(1, "Not finished!");
+}
+
+/*
+ * This is the arch setup callback, when you try to
+ * enable msix on a pci device.
+ */
+struct x86_msi_ops x86_msi = {
+	.setup_msi_irqs		= native_setup_msi_irqs,
+	.teardown_msi_irq	= native_teardown_msi_irq,
+};

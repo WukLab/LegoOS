@@ -333,6 +333,10 @@ static int x86_vector_alloc_irqs(struct irq_domain *domain, unsigned int virq,
 	struct irq_data *irq_data;
 	int i, ret, node;
 
+	/* Currently vector allocator can't guarantee contiguous allocations */
+	if ((info->flags & X86_IRQ_ALLOC_CONTIGUOUS_VECTORS) && nr_irqs > 1)
+		return -ENOSYS;
+
 	for (i = 0; i < nr_irqs; i++) {
 		irq_data = irq_domain_get_irq_data(domain, virq + i);
 		BUG_ON(!irq_data);
@@ -369,14 +373,6 @@ static const struct irq_domain_ops x86_vector_domain_ops = {
 	.free		= x86_vector_free_irqs,
 };
 
-#if 0
-struct irq_domain x86_vector_domain = {
-	.name		= "x86-vector",
-	.ops		= &x86_vector_domain_ops,
-	.hwirq_max	= NR_IRQS,
-	.revmap_size	= NR_IRQS,
-};
-#endif
 struct irq_domain *x86_vector_domain;
 
 /*

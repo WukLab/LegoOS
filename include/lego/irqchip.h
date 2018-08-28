@@ -159,6 +159,8 @@ irq_set_handler(unsigned int irq, irq_flow_handler_t handle)
 	__irq_set_handler(irq, handle, 0, NULL);
 }
 
+int irq_set_msi_desc_off(unsigned int irq_base, unsigned int irq_offset,
+			 struct msi_desc *entry);
 int irq_set_msi_desc(unsigned int irq, struct msi_desc *entry);
 int irq_set_handler_data(unsigned int irq, void *data);
 

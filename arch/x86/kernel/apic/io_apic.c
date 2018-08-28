@@ -1913,22 +1913,3 @@ const struct irq_domain_ops mp_ioapic_irqdomain_ops = {
 	.alloc		= mp_irqdomain_alloc,
 	.activate	= mp_irqdomain_activate,
 };
-
-#if defined(CONFIG_PCI_MSI)
-
-int native_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
-{
-	WARN_ONCE(1, "Not finished!");
-	return -ENODEV;
-}
-
-void native_teardown_msi_irq(unsigned int irq)
-{
-
-}
-
-struct x86_msi_ops x86_msi = {
-	.setup_msi_irqs		= native_setup_msi_irqs,
-	.teardown_msi_irq	= native_teardown_msi_irq,
-};
-#endif

@@ -13,8 +13,10 @@
 #include <lego/irq.h>
 #include <lego/types.h>
 #include <lego/cpumask.h>
-
+#include <asm/io_apic.h>
 #include <asm/msi.h>
+
+typedef struct irq_alloc_info msi_alloc_info_t;
 
 struct msi_msg {
 	u32	address_lo;	/* low 32 bits of msi message address */
@@ -62,6 +64,9 @@ struct msi_desc {
 
 #define first_pci_msi_entry(pdev)	first_msi_entry(pdev)
 
+#define for_each_msi_entry(desc, pdev)	\
+	list_for_each_entry((desc), (&(pdev)->msi_list), list)
+
 /* Helper functions */
 struct irq_data;
 struct msi_desc;
@@ -96,8 +101,6 @@ enum {
 	/* Needs early activate, required for PCI */
 	MSI_FLAG_ACTIVATE_EARLY		= (1 << 4),
 };
-
-typedef struct irq_alloc_info msi_alloc_info_t;
 
 /**
  * struct msi_domain_ops - MSI interrupt domain callbacks
@@ -176,5 +179,11 @@ u32 __pci_msix_desc_mask_irq(struct msi_desc *desc, u32 flag);
 u32 __pci_msi_desc_mask_irq(struct msi_desc *desc, u32 mask, u32 flag);
 void pci_msi_mask_irq(struct irq_data *data);
 void pci_msi_unmask_irq(struct irq_data *data);
+
+int pci_msi_domain_alloc_irqs(struct irq_domain *domain, struct pci_dev *dev,
+			      int nvec, int type);
+
+int msi_domain_alloc_irqs(struct irq_domain *domain, struct device *dev,
+			  int nvec);
 
 #endif /* _LEGO_MSI_H_ */
