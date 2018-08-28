@@ -494,8 +494,13 @@ static irqreturn_t mlx4_interrupt(int irq, void *dev_ptr)
 
 static irqreturn_t mlx4_msi_x_interrupt(int irq, void *eq_ptr)
 {
+	struct mlx4_eq  *eq  = eq_ptr;
+	struct mlx4_dev *dev = eq->dev;
+
 	pr_info("%s(): irq %d\n", __func__, irq);
-	WARN_ON(1);
+	mlx4_eq_int(dev, eq);
+
+	/* MSI-X vectors always belong to us */
 	return IRQ_HANDLED;
 }
 

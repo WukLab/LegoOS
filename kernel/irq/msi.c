@@ -74,6 +74,30 @@ static void msi_domain_update_dom_ops(struct msi_domain_info *info)
 		ops->set_desc = msi_domain_ops_default.set_desc;
 }
 
+static inline void irq_chip_write_msi_msg(struct irq_data *data,
+					  struct msi_msg *msg)
+{
+	data->chip->irq_write_msi_msg(data, msg);
+}
+
+static void msi_domain_activate(struct irq_domain *domain,
+				struct irq_data *irq_data)
+{
+	struct msi_msg msg;
+
+	BUG_ON(irq_chip_compose_msi_msg(irq_data, &msg));
+	irq_chip_write_msi_msg(irq_data, &msg);
+}
+
+static void msi_domain_deactivate(struct irq_domain *domain,
+				  struct irq_data *irq_data)
+{
+	struct msi_msg msg;
+
+	memset(&msg, 0, sizeof(msg));
+	irq_chip_write_msi_msg(irq_data, &msg);
+}
+
 /**
  * msi_domain_set_affinity - Generic affinity setter function for MSI domains
  * @irq_data:	The irq data associated to the interrupt
@@ -86,8 +110,17 @@ static void msi_domain_update_dom_ops(struct msi_domain_info *info)
 int msi_domain_set_affinity(struct irq_data *irq_data,
 			    const struct cpumask *mask, bool force)
 {
-	panic("TODO");
-	return 0;
+	struct irq_data *parent = irq_data->parent_data;
+	struct msi_msg msg;
+	int ret;
+
+	ret = parent->chip->irq_set_affinity(parent, mask, force);
+	if (ret >= 0 && ret != IRQ_SET_MASK_OK_DONE) {
+		BUG_ON(irq_chip_compose_msi_msg(irq_data, &msg));
+		irq_chip_write_msi_msg(irq_data, &msg);
+	}
+
+	return ret;
 }
 
 static void msi_domain_update_chip_ops(struct msi_domain_info *info)
@@ -140,30 +173,6 @@ static void msi_domain_free(struct irq_domain *domain, unsigned int virq,
 			info->ops->msi_free(domain, info, virq + i);
 	}
 	irq_domain_free_irqs_top(domain, virq, nr_irqs);
-}
-
-static inline void irq_chip_write_msi_msg(struct irq_data *data,
-					  struct msi_msg *msg)
-{
-	data->chip->irq_write_msi_msg(data, msg);
-}
-
-static void msi_domain_activate(struct irq_domain *domain,
-				struct irq_data *irq_data)
-{
-	struct msi_msg msg;
-
-	BUG_ON(irq_chip_compose_msi_msg(irq_data, &msg));
-	irq_chip_write_msi_msg(irq_data, &msg);
-}
-
-static void msi_domain_deactivate(struct irq_domain *domain,
-				  struct irq_data *irq_data)
-{
-	struct msi_msg msg;
-
-	memset(&msg, 0, sizeof(msg));
-	irq_chip_write_msi_msg(irq_data, &msg);
 }
 
 static const struct irq_domain_ops msi_domain_ops = {

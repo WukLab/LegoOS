@@ -957,7 +957,13 @@ int pci_get_interrupt_pin(struct pci_dev *dev, struct pci_dev **bridge);
 
 void pci_intx(struct pci_dev *pdev, int enable);
 
-
+struct msix_entry {
+        u32     vector; /* kernel uses to write allocated vector */
+        u16     entry;  /* driver uses to specify entry, OS writes */
+};
+int pci_enable_msix(struct pci_dev *dev, struct msix_entry *entries, int nvec);
+int pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
+			       int minvec, int maxvec);
 
 
 
@@ -972,14 +978,5 @@ int pci_func_attach_E1000(struct pci_dev *f);
 int pci_transmit_packet(const void * src,size_t n);
 int pci_receive_packet(void * dst);
 #endif
-
-static inline void pci_func_enable(struct pci_dev *f) { }
-static inline u32 pci_conf_read(struct pci_dev *f, u32 off, int len) { return 0; }
-static inline void pci_conf_write(struct pci_dev *f, u32 off, u32 v, int len) { }
-
-struct msix_entry {
-        u32     vector; /* kernel uses to write allocated vector */
-        u16     entry;  /* driver uses to specify entry, OS writes */
-};
 
 #endif /* _LEGO_PCI_H_ */
