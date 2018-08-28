@@ -408,9 +408,13 @@ void __init x86_apic_ioapic_init(void)
 
 	x86_vector_domain = irq_domain_add_tree(NULL, &x86_vector_domain_ops, NULL);
 	BUG_ON(!x86_vector_domain);
+	set_irq_domain_name(x86_vector_domain, "x86_vector");
 
+#if 0
+	/* XXX: How to handle linear_revmap */
 	x86_vector_domain->linear_revmap =
 		kzalloc(sizeof(unsigned int) * NR_IRQS, GFP_KERNEL);
+#endif
 
 	irq_set_default_host(x86_vector_domain);
 	arch_init_msi_domain(x86_vector_domain);

@@ -62,6 +62,8 @@ static void desc_set_defaults(unsigned int irq, struct irq_desc *desc, int node,
 	desc->irq_data.irq = irq;
 	desc->irq_data.chip = &no_irq_chip;
 	desc->irq_data.chip_data = NULL;
+	irq_settings_clr_and_set(desc, ~0, _IRQ_DEFAULT_INIT_FLAGS);
+	irqd_set(&desc->irq_data, IRQD_IRQ_DISABLED);
 	desc->handle_irq = handle_bad_irq;
 	desc->depth = 1;
 	desc->irq_count = 0;
@@ -87,7 +89,7 @@ static void free_desc(unsigned int irq)
  * @from:	Free base
  * @cnt:	number of irqs to free
  */
-void __irq_number_free(unsigned int from, unsigned int cnt)
+void irq_free_descs(unsigned int from, unsigned int cnt)
 {
 	int i;
 
@@ -103,19 +105,16 @@ void __irq_number_free(unsigned int from, unsigned int cnt)
 }
 
 /**
- * __irq_number_alloc
+ * irq_alloc_descs - allocate and initialize a range of irq descriptors
  * @irq:	Allocate for specific irq number if irq >= 0
  * @from:	Start the search from this irq number
  * @cnt:	Number of consecutive irqs to allocate.
  * @node:	Preferred node on which the irq descriptor should be allocated
- * @affinity:	Optional pointer to an affinity mask array of size @cnt which
- *		hints where the irq descriptors should be allocated and which
- *		default affinities to use
+ * @owner:	Owning module (can be NULL)
  *
  * Returns the first irq number or error code
  */
-int  __irq_number_alloc(int irq, unsigned int from, unsigned int cnt, int node,
-			const struct cpumask *affinity)
+int irq_alloc_descs(int irq, unsigned int from, unsigned int cnt, int node)
 {
 	int start, ret;
 
@@ -343,6 +342,7 @@ void check_irq_resend(struct irq_desc *desc)
 static int
 setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
 {
+	WARN_ONCE(1, "Patch me");
 	return 0;
 }
 

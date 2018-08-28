@@ -659,9 +659,6 @@ struct irq_domain *pci_msi_create_irq_domain(void *fwnode,
 {
 	struct irq_domain *domain;
 
-	/* Lego does not support this */
-	BUG_ON(!fwnode);
-
 	if (info->flags & MSI_FLAG_USE_DEF_DOM_OPS)
 		pci_msi_domain_update_dom_ops(info);
 	if (info->flags & MSI_FLAG_USE_DEF_CHIP_OPS)

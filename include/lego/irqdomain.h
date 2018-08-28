@@ -85,9 +85,10 @@ enum ioapic_domain_type {
  * @revmap_tree: Radix map tree for hwirqs that don't fit in the linear map
  * @linear_revmap: Linear table of hwirq->virq reverse mappings
  */
+#define IRQ_DOMAIN_NAME_LEN		(32)
 struct irq_domain {
 	struct list_head		link;
-	const char			*name;
+	char				name[IRQ_DOMAIN_NAME_LEN];
 	struct irq_domain		*parent;
 	const struct irq_domain_ops	*ops;
 	void				*host_data;
@@ -97,14 +98,19 @@ struct irq_domain {
 	irq_hw_number_t			hwirq_max;
 	unsigned int			revmap_direct_max_irq;
 	unsigned int			revmap_size;
-	unsigned int			*linear_revmap;
+	unsigned int			linear_revmap[];
 };
+
+static inline void set_irq_domain_name(struct irq_domain *domain, const char *new)
+{
+	strncpy(domain->name, new, IRQ_DOMAIN_NAME_LEN);
+}
 
 unsigned int irq_find_mapping(struct irq_domain *host, irq_hw_number_t hwirq);
 
 int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 			   unsigned int nr_irqs, int node, void *arg,
-			   bool realloc, const struct cpumask *affinity);
+			   bool realloc);
 
 int irq_domain_alloc_IRQ_number(int virq, unsigned int cnt, irq_hw_number_t hwirq,
 			   int node, const struct cpumask *affinity);
@@ -121,6 +127,7 @@ extern int irq_domain_alloc_irqs_parent(struct irq_domain *domain,
 extern void irq_domain_reset_irq_data(struct irq_data *irq_data);
 
 extern void irq_domain_activate_irq(struct irq_data *irq_data);
+extern void irq_domain_deactivate_irq(struct irq_data *irq_data);
 
 struct irq_chip;
 int irq_domain_set_hwirq_and_chip(struct irq_domain *domain, unsigned int virq,
@@ -140,11 +147,43 @@ struct irq_domain *__irq_domain_add(void *fwnode, int size,
 				    const struct irq_domain_ops *ops,
 				    void *host_data);
 
+/**
+ * irq_domain_add_linear() - Allocate and register a linear revmap irq_domain.
+ * @of_node: pointer to interrupt controller's device tree node.
+ * @size: Number of interrupts in the domain.
+ * @ops: map/unmap domain callbacks
+ * @host_data: Controller private data pointer
+ */
+static inline struct irq_domain *irq_domain_add_linear(void *of_node,
+					 unsigned int size,
+					 const struct irq_domain_ops *ops,
+					 void *host_data)
+{
+	return __irq_domain_add(NULL, size, size, 0, ops, host_data);
+}
+
 static inline struct irq_domain *irq_domain_add_tree(void *of_node,
 					 const struct irq_domain_ops *ops,
 					 void *host_data)
 {
 	return __irq_domain_add(NULL, 0, ~0, 0, ops, host_data);
 }
+
+static inline struct irq_domain *irq_domain_create_linear(void *fwnode,
+					 unsigned int size,
+					 const struct irq_domain_ops *ops,
+					 void *host_data)
+{
+	return __irq_domain_add(NULL, size, size, 0, ops, host_data);
+}
+
+static inline struct irq_domain *irq_domain_create_tree(void *fwnode,
+					 const struct irq_domain_ops *ops,
+					 void *host_data)
+{
+	return __irq_domain_add(NULL, 0, ~0, 0, ops, host_data);
+}
+
+void dump_irq_domain_list(void);
 
 #endif /* _LEGO_IRQDOMAIN_H_ */

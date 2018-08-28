@@ -119,4 +119,5 @@ void arch_init_msi_domain(struct irq_domain *parent)
 					&pci_msi_domain_info, parent);
 	if (!msi_default_domain)
 		pr_warn("failed to initialize irqdomain for MSI/MSI-x.\n");
+	set_irq_domain_name(msi_default_domain, "x86_msi");
 }

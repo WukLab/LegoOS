@@ -9,6 +9,7 @@
 
 #include <lego/irqdesc.h>
 #include <lego/irqchip.h>
+#include <lego/irqdomain.h>
 
 static irqreturn_t bad_chained_irq(int irq, void *dev_id)
 {
@@ -307,6 +308,7 @@ int irq_startup(struct irq_desc *desc, bool resend)
 	irq_state_clr_disabled(desc);
 	desc->depth = 0;
 
+	irq_domain_activate_irq(&desc->irq_data);
 	if (desc->irq_data.chip->irq_startup) {
 		ret = desc->irq_data.chip->irq_startup(&desc->irq_data);
 		irq_state_clr_masked(desc);
