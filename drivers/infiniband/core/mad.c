@@ -670,6 +670,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	list_add_tail(&local->completion_list, &mad_agent_priv->local_list);
 	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 
+	WARN(1, "We need this local_work back");
 	queue_work(mad_agent_priv->qp_info->port_priv->wq,
 		   &mad_agent_priv->local_work);
 	ret = 1;
@@ -1925,9 +1926,6 @@ static void adjust_timeout(struct ib_mad_agent_private *mad_agent_priv)
 				delay = 1;
 			pr_info("adjust_timeout queue_work\n");
 			WARN_ONCE(1, "Checkme!");
-//			queue_delayed_work(mad_agent_priv->qp_info->
-//					   port_priv->wq,
-//					   &mad_agent_priv->timed_work, delay);
 			queue_work(mad_agent_priv->qp_info->
 					   port_priv->wq,
 					   &mad_agent_priv->timed_work);
@@ -2474,10 +2472,7 @@ static void timeout_sends(struct work_struct *work)
 			delay = mad_send_wr->timeout - jiffies;
 			if ((long)delay <= 0)
 				delay = 1;
-		pr_info("%s queue work\n", __func__);
-		//	queue_delayed_work(mad_agent_priv->qp_info->
-		//			   port_priv->wq,
-		//			   &mad_agent_priv->timed_work, delay);
+			WARN(1, "We need this timed_work back");
 			queue_work(mad_agent_priv->qp_info->
 					   port_priv->wq,
 					   &mad_agent_priv->timed_work);
