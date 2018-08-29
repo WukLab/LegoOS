@@ -776,14 +776,20 @@ static void mlx4_ib_remove(struct mlx4_dev *dev, void *ibdev_ptr)
 	ib_dealloc_device(&ibdev->ib_dev);
 }
 
+void handle_port_mgmt_change_event(struct mlx4_eqe *eqe, struct mlx4_ib_dev *dev);
+
 static void mlx4_ib_event(struct mlx4_dev *dev, void *ibdev_ptr,
 			  enum mlx4_dev_event event, int port)
 {
 	struct ib_event ibev;
 	struct mlx4_ib_dev *ibdev = to_mdev((struct ib_device *) ibdev_ptr);
+	struct mlx4_eqe *eqe = NULL;
 	int p = 0;
 
-	p = (int) port;
+	if (event == MLX4_DEV_EVENT_PORT_MGMT_CHANGE)
+		eqe = (struct mlx4_eqe *)(unsigned long)port;
+	else
+		p = (int) port;
 
 	switch (event) {
 	case MLX4_DEV_EVENT_PORT_UP:
@@ -804,8 +810,8 @@ static void mlx4_ib_event(struct mlx4_dev *dev, void *ibdev_ptr,
 		break;
 
 	case MLX4_DEV_EVENT_PORT_MGMT_CHANGE:
-		pr_info("%s(): port mgmt TODO\n", __func__);
-		break;
+		handle_port_mgmt_change_event(eqe, ibdev);
+		return;
 
 	default:
 		pr_info("%s(): unhandled event: %d\n", __func__, event);

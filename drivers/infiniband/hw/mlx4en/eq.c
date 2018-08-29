@@ -445,9 +445,9 @@ static int mlx4_eq_int(struct mlx4_dev *dev, struct mlx4_eq *eq)
 			break;
 
 		case MLX4_EVENT_TYPE_PORT_CHANGE:
-			mlx4_dbg(dev, "event PORT_CHANGE arrived\n");
 			port = be32_to_cpu(eqe->event.port_change.port) >> 28;
 			if (eqe->subtype == MLX4_PORT_CHANGE_SUBTYPE_DOWN) {
+				mlx4_dbg(dev, "event PORT_CHANGE_DOWN arrived\n");
 				mlx4_dispatch_event(dev, MLX4_DEV_EVENT_PORT_DOWN,
 						    port);
 				mlx4_priv(dev)->sense.do_sense_port[port] = 1;
@@ -455,6 +455,7 @@ static int mlx4_eq_int(struct mlx4_dev *dev, struct mlx4_eq *eq)
 					break;
 				BUG();
 			} else {
+				mlx4_dbg(dev, "event PORT_CHANGE_UP arrived\n");
 				mlx4_dispatch_event(dev, MLX4_DEV_EVENT_PORT_UP, port);
 
 				mlx4_priv(dev)->sense.do_sense_port[port] = 0;
