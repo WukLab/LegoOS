@@ -44,16 +44,6 @@
 
 #include "core_priv.h"
 
-struct ib_pkey_cache {
-	int             table_len;
-	u16             table[0];
-};
-
-struct ib_gid_cache {
-	int             table_len;
-	union ib_gid    table[0];
-};
-
 static inline int start_port(struct ib_device *device)
 {
 	return (device->node_type == RDMA_NODE_IB_SWITCH) ? 0 : 1;
@@ -140,6 +130,12 @@ int ib_get_cached_pkey(struct ib_device *device,
 	spin_lock_irqsave(&device->cache.lock, flags);
 
 	cache = device->cache.pkey_cache[port_num - start_port(device)];
+	if (!cache) {
+		pr_info("%s(): device: %p(%s) cache: %p port %d\n",
+			__func__, device, dev_name(device->dma_device),
+			&device->cache, port_num);
+		BUG();
+	}
 
 	if (index < 0 || index >= cache->table_len)
 		ret = -EINVAL;
@@ -208,9 +204,6 @@ static void ib_cache_update(struct ib_device *device,
 	int                        i;
 	int                        ret;
 
-	pr_debug("%s(): Updating port %u of dev %s\n",
-		__func__, port, dev_name(device->dma_device));
-
 	tprops = kmalloc(sizeof *tprops, GFP_KERNEL);
 	if (!tprops)
 		return;
@@ -224,15 +217,21 @@ static void ib_cache_update(struct ib_device *device,
 
 	pkey_cache = kmalloc(sizeof *pkey_cache + tprops->pkey_tbl_len *
 			     sizeof *pkey_cache->table, GFP_KERNEL);
-	if (!pkey_cache)
+	if (!pkey_cache) {
+		pr_debug("%s(): pkey %zu %d %zu\n", __func__,
+			sizeof *pkey_cache, tprops->pkey_tbl_len, sizeof *pkey_cache->table);
 		goto err;
+	}
 
 	pkey_cache->table_len = tprops->pkey_tbl_len;
 
 	gid_cache = kmalloc(sizeof *gid_cache + tprops->gid_tbl_len *
 			    sizeof *gid_cache->table, GFP_KERNEL);
-	if (!gid_cache)
+	if (!gid_cache) {
+		pr_debug("%s(): gid %zu %d %zu\n", __func__,
+			sizeof *gid_cache, tprops->gid_tbl_len, sizeof *gid_cache->table);
 		goto err;
+	}
 
 	gid_cache->table_len = tprops->gid_tbl_len;
 
@@ -266,6 +265,11 @@ static void ib_cache_update(struct ib_device *device,
 
 	spin_unlock_irq(&device->cache.lock);
 
+	pr_debug("%s(): Updated port %u of dev %s. pkey_cache[%d] (%p) = %p gid_cache[%d] (%p) = %p\n",
+		__func__, port, dev_name(device->dma_device),
+		port - start_port(device), &(device->cache.pkey_cache[port - start_port(device)]), pkey_cache,
+		port - start_port(device), &(device->cache.gid_cache [port - start_port(device)]), gid_cache);
+
 	if (old_pkey_cache)
 		kfree(old_pkey_cache);
 	if (old_gid_cache)
@@ -275,6 +279,8 @@ static void ib_cache_update(struct ib_device *device,
 	return;
 
 err:
+	pr_debug("%s(): Fail to update port %u of dev %s\n",
+		__func__, port, dev_name(device->dma_device));
 	if (old_pkey_cache)
 		kfree(old_pkey_cache);
 	if (old_gid_cache)

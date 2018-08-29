@@ -529,7 +529,7 @@ void mlx4_cmd_cleanup(struct mlx4_dev *dev)
  */
 int mlx4_cmd_use_events(struct mlx4_dev *dev)
 {
-#if 1
+#if 0
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	int i;
 	int err = 0;
@@ -563,7 +563,6 @@ int mlx4_cmd_use_events(struct mlx4_dev *dev)
 	return err;
 #else
 	pr_info("****           FAT NOTE\n");
-	pr_info("****  Lego is not able to setup IRQ.\n");
 	pr_info("****  mlx4en will use polling to issue FW cmd.\n");
 	pr_info("****\n");
 	return 0;

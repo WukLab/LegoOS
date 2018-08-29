@@ -1086,6 +1086,16 @@ enum ib_mad_result {
 
 #define IB_DEVICE_NAME_MAX 64
 
+struct ib_pkey_cache {
+	int             table_len;
+	u16             table[0];
+};
+
+struct ib_gid_cache {
+	int             table_len;
+	union ib_gid    table[0];
+};
+
 struct ib_cache {
 	spinlock_t                lock;
 	struct ib_event_handler event_handler;
