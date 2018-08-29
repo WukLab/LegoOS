@@ -781,16 +781,20 @@ static void mlx4_ib_event(struct mlx4_dev *dev, void *ibdev_ptr,
 {
 	struct ib_event ibev;
 	struct mlx4_ib_dev *ibdev = to_mdev((struct ib_device *) ibdev_ptr);
+	int p = 0;
 
-	if (port > ibdev->num_ports)
-		return;
+	p = (int) port;
 
 	switch (event) {
 	case MLX4_DEV_EVENT_PORT_UP:
+		if (p > ibdev->num_ports)
+			return;
 		ibev.event = IB_EVENT_PORT_ACTIVE;
 		break;
 
 	case MLX4_DEV_EVENT_PORT_DOWN:
+		if (p > ibdev->num_ports)
+			return;
 		ibev.event = IB_EVENT_PORT_ERR;
 		break;
 
@@ -799,7 +803,13 @@ static void mlx4_ib_event(struct mlx4_dev *dev, void *ibdev_ptr,
 		ibev.event = IB_EVENT_DEVICE_FATAL;
 		break;
 
+	case MLX4_DEV_EVENT_PORT_MGMT_CHANGE:
+		pr_info("%s(): port mgmt TODO\n", __func__);
+		break;
+
 	default:
+		pr_info("%s(): unhandled event: %d\n", __func__, event);
+		WARN_ON(1);
 		return;
 	}
 

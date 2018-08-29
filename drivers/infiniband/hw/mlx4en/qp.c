@@ -153,6 +153,10 @@ void mlx4_qp_event(struct mlx4_dev *dev, u32 qpn, int event_type)
 		return;
 	}
 
+	/*
+	 * This is actually mlx4_ib_qp_event()
+	 * Set when you create the QP.
+	 */
 	qp->event(qp, event_type);
 
 	if (atomic_dec_and_test(&qp->refcount))

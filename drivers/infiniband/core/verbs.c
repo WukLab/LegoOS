@@ -818,6 +818,11 @@ int ib_destroy_qp(struct ib_qp *qp)
 
 /* Completion queues */
 
+/*
+ * comp_handler will be invoked when NIC generate a MLX4_EVENT_TYPE_COMP.
+ * The interrupt handler will call mlx4_ib_cq_comp() first, which eventually
+ * call back to @comp_handler().
+ */
 struct ib_cq *ib_create_cq(struct ib_device *device,
 			   ib_comp_handler comp_handler,
 			   void (*event_handler)(struct ib_event *, void *),

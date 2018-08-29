@@ -38,6 +38,11 @@
 #include "mlx4_ib.h"
 //#include "user.h"
 
+/*
+ * This is the callback for interrupt handler.
+ * Whenever it got a MLX4_EVENT_TYPE_COMP, it will call here.
+ * The comp_handler is provied by user, when they do ib_create_cq().
+ */
 static void mlx4_ib_cq_comp(struct mlx4_cq *cq)
 {
 	struct ib_cq *ibcq = &to_mibcq(cq)->ibcq;
