@@ -685,8 +685,6 @@ void mlx4_cq_event(struct mlx4_dev *dev, u32 cqn, int event_type);
 
 void mlx4_qp_event(struct mlx4_dev *dev, u32 qpn, int event_type);
 
-void mlx4_srq_event(struct mlx4_dev *dev, u32 srqn, int event_type);
-
 void mlx4_handle_catas_err(struct mlx4_dev *dev);
 
 int mlx4_SENSE_PORT(struct mlx4_dev *dev, int port,

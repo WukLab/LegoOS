@@ -116,6 +116,10 @@ enum {
 };
 
 enum {
+	MLX4_FATAL_WARNING_SUBTYPE_WARMING = 0,
+};
+
+enum {
 	MLX4_DEV_CAP_FLAG_RC		= 1LL <<  0,
 	MLX4_DEV_CAP_FLAG_UC		= 1LL <<  1,
 	MLX4_DEV_CAP_FLAG_UD		= 1LL <<  2,
