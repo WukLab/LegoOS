@@ -331,6 +331,16 @@ static inline unsigned int irq_desc_get_irq(struct irq_desc *desc)
 	return desc->irq_data.irq;
 }
 
+static inline struct irq_chip *irq_desc_get_chip(struct irq_desc *desc)
+{
+	return desc->irq_data.chip;
+}
+
+static inline void *irq_desc_get_chip_data(struct irq_desc *desc)
+{
+	return desc->irq_data.chip_data;
+}
+
 /**
  *	irq_set_chip_data - set irq chip data for an irq
  *	@irq:	Interrupt number

@@ -19,21 +19,72 @@
 static LIST_HEAD(irq_domain_list);
 static DEFINE_MUTEX(irq_domain_mutex);
 
+static DEFINE_MUTEX(revmap_trees_mutex);
 static struct irq_domain *irq_default_domain;
 
 void dump_irq_domain_list(void)
 {
+	unsigned long flags;
+	struct irq_desc *desc;
 	struct irq_domain *domain;
-	int i = 0;
+	struct radix_tree_iter iter;
+	void *data, **slot;
+	int i;
+
+	pr_info(" %-16s  %-6s  %-10s  %-10s  %s\n",
+		   "name", "mapped", "linear-max", "direct-max", "devtree-node");
 
 	mutex_lock(&irq_domain_mutex);
 	list_for_each_entry(domain, &irq_domain_list, link) {
-		pr_info(" IRQ_DOMAIN[%d]: %s\n", i++, domain->name);
-		pr_info("    hwirq_max:             %lu\n", domain->hwirq_max);
-		pr_info("    revmap_direct_max_irq: %u\n", domain->revmap_direct_max_irq);
-		pr_info("    revmap_size:           %u\n", domain->revmap_size);
+		int count = 0;
+		radix_tree_for_each_slot(slot, &domain->revmap_tree, &iter, 0)
+			count++;
+		pr_info("%c%-16s  %6u  %10u  %10u  %s\n",
+			   domain == irq_default_domain ? '*' : ' ', domain->name,
+			   domain->revmap_size + count, domain->revmap_size,
+			   domain->revmap_direct_max_irq, "");
 	}
 	mutex_unlock(&irq_domain_mutex);
+
+	pr_info("%-5s  %-7s  %-15s  %-*s  %6s  %-14s  %s\n", "irq", "hwirq",
+		      "chip name", (int)(2 * sizeof(void *) + 2), "chip data",
+		      "active", "type", "domain");
+
+	for (i = 1; i < nr_irqs; i++) {
+		desc = irq_to_desc(i);
+		if (!desc)
+			continue;
+
+		spin_lock_irqsave(&desc->lock, flags);
+		domain = desc->irq_data.domain;
+
+		if (domain) {
+			struct irq_chip *chip;
+			int hwirq = desc->irq_data.hwirq;
+			bool direct;
+
+			pr_info("%5d  ", i);
+			pr_cont("0x%05x  ", hwirq);
+
+			chip = irq_desc_get_chip(desc);
+			pr_cont("%-15s  ", (chip && chip->name) ? chip->name : "none");
+
+			data = irq_desc_get_chip_data(desc);
+			if (data)
+				pr_cont("0x%p", data);
+			else
+				pr_cont("  %p  ", data);
+
+			pr_cont("   %c    ", (desc->action && desc->action->handler) ? '*' : ' ');
+			direct = (i == hwirq) && (i < domain->revmap_direct_max_irq);
+			pr_cont("%6s%-8s  ",
+				   (hwirq < domain->revmap_size) ? "LINEAR" : "RADIX",
+				   direct ? "(DIRECT)" : "");
+			pr_cont("%s\n", desc->irq_data.domain->name);
+		}
+
+		spin_unlock_irqrestore(&desc->lock, flags);
+	}
 }
 
 /**
@@ -56,24 +107,12 @@ struct irq_domain *__irq_domain_add(void *fwnode, int size,
 {
 	struct irq_domain *domain;
 
-	/*
-	 * HACK!!!
-	 *
-	 * XXX: We do this because we don't have radix tree now
-	 * so everything has to be contained within the linear map.
-	 * The write safety is protected by inset_irq part.
-	 */
-	if (size == 0) {
-		size = NR_IRQS;
-		pr_info("%s(): adjust size 0 to NR_IRQS\n", __func__);
-	}
-
 	domain = kzalloc(sizeof(*domain) + (sizeof(unsigned int) * size), GFP_KERNEL);
 	if (WARN_ON(!domain))
 		return NULL;
 
 	/* Fill structure */
-	//INIT_RADIX_TREE(&domain->revmap_tree, GFP_KERNEL);
+	INIT_RADIX_TREE(&domain->revmap_tree, GFP_KERNEL);
 	domain->ops = ops;
 	domain->host_data = host_data;
 	domain->hwirq_max = hwirq_max;
@@ -166,11 +205,16 @@ unsigned int irq_find_mapping(struct irq_domain *domain,
 		return domain->linear_revmap[hwirq];
 
 	/*
-	 * XXX:
-	 * We omitted radix tree here.
-	 * It should be catched when we do insert
+	 * HACK!!!
+	 *
+	 * We don't have RCU, so have to use mutex to sync
+	 * with concurrent writers. Fortunately, the write
+	 * will NOT happen frequently (at least in current codebase).
 	 */
-	return 0;
+	mutex_lock(&revmap_trees_mutex);
+	data = radix_tree_lookup(&domain->revmap_tree, hwirq);
+	mutex_unlock(&revmap_trees_mutex);
+	return data ? data->irq : 0;
 }
 
 static void irq_domain_free_irq_data(unsigned int virq, unsigned int nr_irqs)
@@ -208,15 +252,15 @@ static void irq_domain_insert_irq(int virq)
 
 		if (hwirq < domain->revmap_size) {
 			domain->linear_revmap[hwirq] = virq;
-			pr_debug("%s: domain: %s hwirq: %lu virq: %d\n",
-				__func__, domain->name, hwirq, virq);
 		} else {
-			pr_info("****\n"
-				"**** Domain: %s revmap_size: %u hwirq: %lu\n"
-				"**** Either adjust revmap_size, or port radix-tree!\n"
-				"****\n", domain->name, domain->revmap_size, hwirq);
-			return;
+			mutex_lock(&revmap_trees_mutex);
+			radix_tree_insert(&domain->revmap_tree, hwirq, data);
+			mutex_unlock(&revmap_trees_mutex);
 		}
+
+		pr_debug("%s: Domain: %s HW-IRQ: %lu IRQ: %d (Mapping: %s)\n",
+			__func__, domain->name, hwirq, virq,
+			hwirq < domain->revmap_size ? "linear" : "radix");
 	}
 
 	irq_clear_status_flags(virq, IRQ_NOREQUEST);

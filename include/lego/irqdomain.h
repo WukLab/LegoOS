@@ -11,6 +11,7 @@
 #define _LEGO_IRQDOMAIN_H_
 
 #include <lego/types.h>
+#include <lego/radixtree.h>
 
 /* Irq domain flags */
 enum {
@@ -98,6 +99,7 @@ struct irq_domain {
 	irq_hw_number_t			hwirq_max;
 	unsigned int			revmap_direct_max_irq;
 	unsigned int			revmap_size;
+	struct radix_tree_root		revmap_tree;
 	unsigned int			linear_revmap[];
 };
 

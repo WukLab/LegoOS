@@ -38,6 +38,7 @@
 #include <lego/spinlock.h>
 #include <lego/irqdomain.h>
 #include <lego/fit_ibapi.h>
+#include <lego/radixtree.h>
 #include <lego/workqueue.h>
 #include <lego/completion.h>
 #include <lego/stop_machine.h>
@@ -134,6 +135,7 @@ static int kernel_init(void *unused)
 	 */
 	pci_subsys_init();
 	device_init();
+	dump_irq_domain_list();
 
 #if defined(CONFIG_INFINIBAND) && defined(CONFIG_FIT)
 	init_socket();
@@ -269,6 +271,11 @@ asmlinkage void __init start_kernel(void)
 	 */
 	memory_init();
 
+	/*
+	 * IRQ subsystem is the first user of radix tree
+	 * If we have something come up, good luck remmebering this..
+	 */
+	radix_tree_init();
 	irq_init();
 
 	/*
