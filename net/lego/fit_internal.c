@@ -1894,6 +1894,8 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				fit_err("poll_cq error: %d", ne);
 				return ne;
 			}
+			if (ne == 0)
+				schedule();
 		} while (ne < 1);
 
 		for (i = 0; i < ne; i++) {
