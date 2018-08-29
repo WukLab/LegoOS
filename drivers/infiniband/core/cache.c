@@ -265,10 +265,8 @@ static void ib_cache_update(struct ib_device *device,
 
 	spin_unlock_irq(&device->cache.lock);
 
-	pr_debug("%s(): Updated port %u of dev %s. pkey_cache[%d] (%p) = %p gid_cache[%d] (%p) = %p\n",
-		__func__, port, dev_name(device->dma_device),
-		port - start_port(device), &(device->cache.pkey_cache[port - start_port(device)]), pkey_cache,
-		port - start_port(device), &(device->cache.gid_cache [port - start_port(device)]), gid_cache);
+	pr_debug("%s(): Updated port %u of dev %s\n",
+		__func__, port, dev_name(device->dma_device));
 
 	if (old_pkey_cache)
 		kfree(old_pkey_cache);
@@ -281,6 +279,8 @@ static void ib_cache_update(struct ib_device *device,
 err:
 	pr_debug("%s(): Fail to update port %u of dev %s\n",
 		__func__, port, dev_name(device->dma_device));
+	WARN_ON(1);
+
 	if (old_pkey_cache)
 		kfree(old_pkey_cache);
 	if (old_gid_cache)
@@ -292,7 +292,6 @@ err:
 static void ib_cache_event(struct ib_event_handler *handler,
 			   struct ib_event *event)
 {
-	pr_info("%s(): Got one event\n", __func__);
 	if (event->event == IB_EVENT_PORT_ERR    ||
 	    event->event == IB_EVENT_PORT_ACTIVE ||
 	    event->event == IB_EVENT_LID_CHANGE  ||

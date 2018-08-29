@@ -329,8 +329,8 @@ static int cm_init_av_by_path(struct ib_sa_path_rec *path, struct cm_av *av)
 		return ret;
 
 	av->port = port;
-	ib_init_ah_from_path(cm_dev->ib_device, port->port_num, path,
-			     &av->ah_attr);
+	//ib_init_ah_from_path(cm_dev->ib_device, port->port_num, path,
+	//		     &av->ah_attr);
 	av->timeout = path->packet_life_time + 1;
 	return 0;
 }

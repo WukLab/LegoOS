@@ -529,36 +529,36 @@ void handle_port_mgmt_change_event(struct mlx4_eqe *eqe, struct mlx4_ib_dev *dev
 			u16 lid = be16_to_cpu(eqe->event.port_mgmt_change.params.port_info.mstr_sm_lid);
 			u8 sl = eqe->event.port_mgmt_change.params.port_info.mstr_sm_sl & 0xf;
 
-			pr_info("%s(): update sm ah\n", __func__);
+			pr_info("update sm ah\n");
 			update_sm_ah(dev, port, lid, sl);
 		}
 
 		/* Check if it is a lid change event */
 		if (changed_attr & MLX4_EQ_PORT_INFO_LID_CHANGE_MASK) {
-			pr_info("%s(): lid change\n", __func__);
+			pr_info("lid change\n");
 			handle_lid_change_event(dev, port);
 		}
 
 		/* Generate GUID changed event */
 		if (changed_attr & MLX4_EQ_PORT_INFO_GID_PFX_CHANGE_MASK) {
-			pr_info("%s(): gid change 1\n", __func__);
+			pr_info("gid change 1\n");
 			mlx4_ib_dispatch_event(dev, port, IB_EVENT_GID_CHANGE);
 		}
 
 		if (changed_attr & MLX4_EQ_PORT_INFO_CLIENT_REREG_MASK) {
-			pr_info("%s(): rereg \n", __func__);
+			pr_info("rereg \n");
 			handle_client_rereg_event(dev, port);
 		}
 		break;
 
 	case MLX4_DEV_PMC_SUBTYPE_PKEY_TABLE:
-		pr_info("%s(): pkey change\n", __func__);
+		pr_info("pkey change\n");
 		mlx4_ib_dispatch_event(dev, port, IB_EVENT_PKEY_CHANGE);
 		break;
 	case MLX4_DEV_PMC_SUBTYPE_GUID_INFO:
 		/* paravirtualized master's guid is guid 0 -- does not change */
 		if (!mlx4_is_master(dev->dev)) {
-			pr_info("%s(): gid change 2\n", __func__);
+			pr_info("gid change 2\n");
 			mlx4_ib_dispatch_event(dev, port, IB_EVENT_GID_CHANGE);
 		}
 		break;
