@@ -425,7 +425,6 @@ static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	mlx4_cmd_post(dev, in_param, out_param ? *out_param : 0,
 		      in_modifier, op_modifier, op, context->token, 1);
 
-	pr_info("%s(): going to sleep\n", __func__);
 	if (!wait_for_completion_timeout(&context->done,
 					 msecs_to_jiffies(timeout))) {
 		mlx4_warn(dev, "command 0x%x timed out (go bit not cleared)\n",
@@ -433,7 +432,6 @@ static int mlx4_cmd_wait(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 		err = -EBUSY;
 		goto out;
 	}
-	pr_info("%s(): after sleep\n", __func__);
 
 	err = context->result;
 	if (err) {

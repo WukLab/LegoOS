@@ -437,7 +437,7 @@ static int mlx4_eq_int(struct mlx4_dev *dev, struct mlx4_eq *eq)
 			break;
 
 		case MLX4_EVENT_TYPE_CMD:
-			mlx4_dbg(dev, "event CMD arrived\n");
+			//mlx4_dbg(dev, "event CMD arrived\n");
 			mlx4_cmd_event(dev,
 				       be16_to_cpu(eqe->event.cmd.token),
 				       eqe->event.cmd.status,
