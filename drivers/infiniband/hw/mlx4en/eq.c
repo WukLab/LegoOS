@@ -403,7 +403,7 @@ static int mlx4_eq_int(struct mlx4_dev *dev, struct mlx4_eq *eq)
 
 		switch (eqe->type) {
 		case MLX4_EVENT_TYPE_COMP:
-			mlx4_dbg(dev, "event cq_completion arrived\n");
+			//mlx4_dbg(dev, "event cq_completion arrived\n");
 			cqn = be32_to_cpu(eqe->event.comp.cqn) & 0xffffff;
 			mlx4_cq_completion(dev, cqn);
 			break;
@@ -586,7 +586,7 @@ static irqreturn_t mlx4_msi_x_interrupt(int irq, void *eq_ptr)
 	struct mlx4_eq  *eq  = eq_ptr;
 	struct mlx4_dev *dev = eq->dev;
 
-	pr_info("%s(): IRQ: %d CPU: %d\n", __func__, irq, smp_processor_id());
+	//pr_info("%s(): IRQ: %d CPU: %d\n", __func__, irq, smp_processor_id());
 	mlx4_eq_int(dev, eq);
 
 	/* MSI-X vectors always belong to us */

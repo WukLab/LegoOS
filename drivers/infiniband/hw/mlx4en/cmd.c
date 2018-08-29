@@ -531,7 +531,7 @@ void mlx4_cmd_cleanup(struct mlx4_dev *dev)
  */
 int mlx4_cmd_use_events(struct mlx4_dev *dev)
 {
-#if 0
+#if 1
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	int i;
 	int err = 0;
