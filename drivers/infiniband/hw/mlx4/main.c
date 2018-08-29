@@ -779,7 +779,7 @@ static void mlx4_ib_remove(struct mlx4_dev *dev, void *ibdev_ptr)
 void handle_port_mgmt_change_event(struct mlx4_eqe *eqe, struct mlx4_ib_dev *dev);
 
 static void mlx4_ib_event(struct mlx4_dev *dev, void *ibdev_ptr,
-			  enum mlx4_dev_event event, int port)
+			  enum mlx4_dev_event event, unsigned long param)
 {
 	struct ib_event ibev;
 	struct mlx4_ib_dev *ibdev = to_mdev((struct ib_device *) ibdev_ptr);
@@ -787,9 +787,9 @@ static void mlx4_ib_event(struct mlx4_dev *dev, void *ibdev_ptr,
 	int p = 0;
 
 	if (event == MLX4_DEV_EVENT_PORT_MGMT_CHANGE)
-		eqe = (struct mlx4_eqe *)(unsigned long)port;
+		eqe = (struct mlx4_eqe *)param;
 	else
-		p = (int) port;
+		p = (int) param;
 
 	switch (event) {
 	case MLX4_DEV_EVENT_PORT_UP:
@@ -820,7 +820,7 @@ static void mlx4_ib_event(struct mlx4_dev *dev, void *ibdev_ptr,
 	}
 
 	ibev.device	      = ibdev_ptr;
-	ibev.element.port_num = port;
+	ibev.element.port_num = (u8) p;
 
 	ib_dispatch_event(&ibev);
 }
