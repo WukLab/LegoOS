@@ -63,9 +63,9 @@ void dump_pcache_victim_hits(struct pcache_victim_meta *victim)
 
 static void __dump_pcache_victim_simple(struct pcache_victim_meta *victim)
 {
-	vdump(" victim:%p index:%d refcount:%d nr_fill:%d max_fill:%d locked:%d flags:(%#lx)(%pGV) "
+	vdump(" victim[%d]:%p refcount:%d nr_fill:%d max_fill:%d locked:%d flags:(%#lx)(%pGV) "
 		 "pcm:%p pset:%p\n",
-		victim, victim_index(victim), atomic_read(&victim->_refcount),
+		victim_index(victim), victim, atomic_read(&victim->_refcount),
 		atomic_read(&victim->nr_fill_pcache), atomic_read(&victim->max_nr_fill_pcache),
 		spin_is_locked(&victim->lock),
 		victim->flags, &victim->flags, victim->pcm, victim->pset);
@@ -83,7 +83,7 @@ static void __dump_pcache_victim(struct pcache_victim_meta *victim,
 {
 	__dump_pcache_victim_simple(victim);
 	dump_pcache_victim_hits(victim);
-	__dump_pcache_victim_simple(victim);
+	//__dump_pcache_victim_simple(victim);
 
 	if (victim->pcm)
 		dump_pcache_meta(victim->pcm, "dump_victim");
@@ -105,8 +105,6 @@ void dump_pcache_victim(struct pcache_victim_meta *victim, const char *reason)
 	spin_unlock(&victim_dump_lock);
 }
 
-static bool victim_dumped = false;
-
 static int nr_dumped_all_victim;
 static int nr_dumped_flush_queue;
 
@@ -115,14 +113,12 @@ static void __dump_all_victim(void)
 	struct pcache_victim_meta *v;
 	int index;
 
-	if (!victim_dumped)
-		victim_dumped = true;
-	else
-		return;
+	vdump("  --   Start Dump Victim Cache [%d] total: %d\n",
+		nr_dumped_all_victim, VICTIM_NR_ENTRIES);
 
-	vdump("  --   Start Dump Victim Cache [%d]\n", nr_dumped_all_victim);
 	for_each_victim(v, index)
 		__dump_pcache_victim(v, NULL);
+
 	vdump("  --   End Dump Victim Cache [%d]\n\n", nr_dumped_all_victim++);
 }
 

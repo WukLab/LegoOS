@@ -380,7 +380,7 @@ static inline void prep_new_victim(struct pcache_victim_meta *victim)
 	INIT_LIST_HEAD(&victim->hits);
 }
 
-static struct pcache_victim_meta *
+static __always_inline struct pcache_victim_meta *
 victim_alloc_fastpath(void)
 {
 	int index;
@@ -409,8 +409,12 @@ victim_alloc_fastpath(void)
  */
 unsigned long sysctl_victim_alloc_timeout_sec __read_mostly = 20;
 
+/*
+ * @pset: the pcache set that is asking us to do eviction
+ * @address: the fault user VA who started whole thing
+ */
 static struct pcache_victim_meta *
-victim_alloc_slowpath(struct pcache_set *pset)
+victim_alloc_slowpath(struct pcache_set *pset, unsigned long address)
 {
 	struct pcache_victim_meta *victim;
 	int ret;
@@ -427,13 +431,14 @@ retry:
 		 * In fact, it must equal to (PCACHE_ASSOCIATIVITY - 1).
 		 * Because one @pcm has been removed from list as the eviction candidate.
 		 */
-		pr_info("CPU%d PID:%d Abort victim alloc (%ums) nr_usable_victims: %d "
-		        "req from pset:%p, pset_idx:%lu, nr_lru:%d\n",
+		pr_info("CPU%d PID%d Abort victim alloc (%ums) nr_usable_victims: %d. "
+		        "From pset_idx:%lu nr_lru:%d fault_uva: %#lx\n",
 			smp_processor_id(), current->pid,
 			jiffies_to_msecs(jiffies - alloc_start),
 			atomic_read(&nr_usable_victims),
-			pset, pcache_set_to_set_index(pset),
-			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0);
+			pcache_set_to_set_index(pset),
+			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0,
+			address);
 		dump_victim_lines_and_queue();
 		return NULL;
 	}
@@ -444,7 +449,8 @@ retry:
 	return victim;
 }
 
-static struct pcache_victim_meta *victim_alloc(struct pcache_set *pset)
+static __always_inline struct pcache_victim_meta *
+victim_alloc(struct pcache_set *pset, unsigned long address)
 {
 	struct pcache_victim_meta *v;
 
@@ -452,7 +458,7 @@ static struct pcache_victim_meta *victim_alloc(struct pcache_set *pset)
 	if (likely(v))
 		return v;
 
-	v = victim_alloc_slowpath(pset);
+	v = victim_alloc_slowpath(pset, address);
 	if (likely(v))
 		return v;
 	return NULL;
@@ -559,7 +565,8 @@ victim_insert_hit_entries(struct pcache_victim_meta *victim, struct pcache_meta 
  * back to pcache, therefore, there is no need to check duplication here.
  */
 struct pcache_victim_meta *
-victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
+victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm,
+		      unsigned long address)
 {
 	int ret;
 	struct pcache_victim_meta *victim;
@@ -572,7 +579,7 @@ victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm)
 	 */
 	inc_pcache_event(PCACHE_VICTIM_PREPARE_INSERT);
 
-	victim = victim_alloc(pset);
+	victim = victim_alloc(pset, address);
 	if (!victim)
 		return ERR_PTR(-ENOMEM);
 	victim->pset = pset;

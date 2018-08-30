@@ -274,7 +274,7 @@ static inline void set_victim_usable(struct pcache_victim_meta *victim)
 }
 
 struct pcache_victim_meta *
-victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm);
+victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm, unsigned long address);
 void victim_finish_insert(struct pcache_victim_meta *victim, bool dirty);
 
 static inline unsigned int victim_index(struct pcache_victim_meta *victim)
