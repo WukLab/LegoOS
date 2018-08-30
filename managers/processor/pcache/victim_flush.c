@@ -189,8 +189,6 @@ static int victim_flush_async(void *unused)
 	if (pin_current_thread())
 		panic("Fail to pin victim flush");
 
-	local_irq_disable();
-	preempt_disable();
 	for (;;) {
 		while (!nr_flush_queue_jobs())
 			cpu_relax();
@@ -210,8 +208,6 @@ static int victim_flush_async(void *unused)
 		}
 		spin_unlock(&victim_flush_lock);
 	}
-	local_irq_enable();
-	preempt_enable();
 	return 0;
 }
 
