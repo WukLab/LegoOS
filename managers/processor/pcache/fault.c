@@ -113,8 +113,9 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 
 	/*
 	 * Callback to specific fill function, which can be
-	 * 1) remote memory, or
+	 * 1) remote memory
 	 * 2) victim cache
+	 * 3) zerofill
 	 */
 	ret = fill_func(address, flags, pcm, arg);
 	if (unlikely(ret)) {

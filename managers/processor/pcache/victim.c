@@ -358,7 +358,14 @@ free:
 
 static inline void prep_new_victim(struct pcache_victim_meta *victim)
 {
-	BUG_ON(spin_is_locked(&victim->lock));
+	PCACHE_BUG_ON_VICTIM(spin_is_locked(&victim->lock), victim);
+
+	if (unlikely((victim->flags & (1 << PCACHE_VICTIM_allocated)) !=
+		     (1 << PCACHE_VICTIM_allocated))) {
+		dump_pcache_victim(victim, "corrupted victim flag @ prep");
+		BUG();
+	}
+
 	spin_lock_init(&victim->lock);
 	atomic_set(&victim->nr_fill_pcache, 0);
 
@@ -607,7 +614,8 @@ void victim_finish_insert(struct pcache_victim_meta *victim, bool dirty)
 
 	victim_debug("pcm: %p v%u", pcm, victim_index(victim));
 
-	BUG_ON(!pcm);
+	PCACHE_BUG_ON_VICTIM(!pcm, victim);
+
 	PCACHE_BUG_ON_PCM(pcache_mapped(pcm), pcm);
 	PCACHE_BUG_ON_PCM(!PcacheLocked(pcm), pcm);
 	PCACHE_BUG_ON_VICTIM(!VictimAllocated(victim) ||
