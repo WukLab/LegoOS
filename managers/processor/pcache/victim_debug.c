@@ -89,8 +89,8 @@ static void __dump_pcache_victim(struct pcache_victim_meta *victim,
 		dump_pcache_meta(victim->pcm, "dump_victim");
 
 	if (victim->pset) {
-		vdump("    rmap to pset:%p set_idx: %lu nr_lru:%d\n",
-			victim->pset, pcache_set_to_set_index(victim->pset),
+		vdump("    rmap to pset_idx: %lu nr_hint_victims: %d nr_lru: %d\n",
+			pcache_set_to_set_index(victim->pset), pcache_set_victim_nr(victim->pset),
 			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&victim->pset->nr_lru) : 0);
 	}
 

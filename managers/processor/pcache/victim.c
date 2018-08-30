@@ -430,11 +430,11 @@ retry:
 		 * Because one @pcm has been removed from list as the eviction candidate.
 		 */
 		pr_info("CPU%d PID%d Abort victim alloc (%ums) nr_usable_victims: %d. "
-		        "From pset_idx:%lu nr_lru:%d fault_uva: %#lx\n",
+		        "From pset_idx:%lu nr_hint_victim:%d nr_lru:%d fault_uva: %#lx\n",
 			smp_processor_id(), current->pid,
 			jiffies_to_msecs(jiffies - alloc_start),
 			atomic_read(&nr_usable_victims),
-			pcache_set_to_set_index(pset),
+			pcache_set_to_set_index(pset), pcache_set_victim_nr(pset),
 			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0,
 			address);
 		dump_victim_lines_and_queue();

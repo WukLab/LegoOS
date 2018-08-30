@@ -327,6 +327,11 @@ static inline void pcache_set_victim_dec(struct pcache_set *pset)
 	atomic_dec(&pset->nr_victims);
 }
 
+static inline int pcache_set_victim_nr(struct pcache_set *pset)
+{
+	return atomic_read(&pset->nr_victims);
+}
+
 static inline bool pcache_set_has_victims(struct pcache_set *pset)
 {
 	if (atomic_read(&pset->nr_victims) > 0)
