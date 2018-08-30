@@ -1021,6 +1021,9 @@ inline int fit_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
  * This is a BLOCKING function call.
  * It will keep polling send_cq until we got the CQE for the just-sent-out WQE.
  * If you find dead loop here, ugh, I don't know what to do.
+ *
+ *
+ * Return: -ETIMEDOUT if we fail to get the CQE in FIT_POLL_SENDCQ_TIMEOUT_NS.
  */
 int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, int *check, int if_poll_now)
 {
@@ -1100,11 +1103,11 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 				"*****\n"
 				"***** Fail to to get the CQE from send_cq after %ld seconds!\n"
 				"***** This means the packet was lost and something went wrong\n"
-				"***** with your NIC...\n"
 				"***** connection_id: %d dest node: %d\n"
 				"*****\n", FIT_POLL_SENDCQ_TIMEOUT_NS/NSEC_PER_SEC,
-				connection_id, DIV_ROUND_UP(connection_id, NUM_PARALLEL_CONNECTION));
+				connection_id, connection_id / NUM_PARALLEL_CONNECTION);
 			WARN_ON_ONCE(1);
+			return -ETIMEDOUT;
 		}
 	} while (ne < 1);
 
@@ -1129,13 +1132,10 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 	struct ib_send_wr wr, *bad_wr = NULL;
 	struct ib_sge sge[2];
 	int ret;
-	uintptr_t temp_addr;
-	uintptr_t temp_header_addr;
+	uintptr_t temp_addr = 0;
+	uintptr_t temp_header_addr = 0;
 	int poll_status = SEND_REPLY_WAIT;
 
-	//printk(KERN_CRIT "%s conn %d rkey %d mraddr %lx addr %p size %d offset %d imm %d\n", 
-	//		__func__, connection_id, input_mr_rkey, input_mr_addr, addr, size, offset, imm);
-//retry_send_imm_request:
 	memset(&wr, 0, sizeof(struct ib_send_wr));
 	memset(&sge, 0, sizeof(struct ib_sge));
 	
@@ -1146,48 +1146,42 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 	fit_debug("wr: remotr_addr: %p, rkey: %#lx\n",
 		wr.wr.rdma.remote_addr, wr.wr.rdma.rkey);
 
-	if(s_mode == FIT_SEND_MESSAGE_HEADER_AND_IMM)
-	{
+	if (s_mode == FIT_SEND_MESSAGE_HEADER_AND_IMM) {
 		if (header->reply_indicator_index == -1)
 			wr.wr_id = -1;
 		else
-			wr.wr_id = (uint64_t)ctx->reply_ready_indicators[header->reply_indicator_index];//get the real local_reply_ready_checker address from inbox information
+			/* get the real local_reply_ready_checker address from inbox information */
+			wr.wr_id = (uint64_t)ctx->reply_ready_indicators[header->reply_indicator_index];
+
+		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 		wr.send_flags = IB_SEND_SIGNALED;
 		wr.num_sge = 2;
-		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 
 		temp_header_addr = fit_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
 		wr.ex.imm_data = imm;
-		
+
 		sge[0].addr = temp_header_addr;
 		sge[0].length = sizeof(struct imm_message_metadata);
 		sge[0].lkey = ctx->proc->lkey;
+
 		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
 		fit_debug("temp_addr: %#lx\n", temp_addr);
 		sge[1].addr = temp_addr;
 		sge[1].length = size;
 		sge[1].lkey = ctx->proc->lkey;
-	}
-	else if(s_mode == FIT_SEND_MESSAGE_IMM_ONLY)
-	{
-		wr.wr_id = (uint64_t)&poll_status;
-		wr.send_flags = IB_SEND_SIGNALED;
-
-		wr.num_sge = 1;
+	} else if(s_mode == FIT_SEND_MESSAGE_IMM_ONLY) {
 		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+		wr.send_flags = IB_SEND_SIGNALED;
+		wr.wr_id = (uint64_t)&poll_status;
+		wr.num_sge = 1;
 
 		wr.ex.imm_data = imm;
 		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
 		fit_debug("temp_addr: %#lx\n", temp_addr);
-		//pr_info("reply temp_addr: %#lx length %d\n", temp_addr, size);
-		//if (size == 20)
-		//	pr_info("val status %d ip 0x%x sp 0x%x\n", *((__u32 *)addr), *((__u64 *)(addr+4)), *((__u64 *)(addr+12)));
 		sge[0].addr = temp_addr;
 		sge[0].length = size;
 		sge[0].lkey = ctx->proc->lkey;
-	}
-	else if(s_mode == FIT_SEND_ACK_IMM_ONLY)
-	{
+	} else if(s_mode == FIT_SEND_ACK_IMM_ONLY) {
 		wr.wr_id = (uint64_t)&poll_status;
 		wr.send_flags = IB_SEND_SIGNALED;
 
@@ -1206,13 +1200,22 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 	fit_debug("about to post send conn %d wr_id %d num_sge %d\n",
 			connection_id, wr.wr_id, wr.num_sge);
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
-	
-	if(!ret)
-	{
-		fit_internal_poll_sendcq(ctx, ctx->send_cq[connection_id], connection_id, &poll_status, if_poll_now);
-	}
-	else
-	{
+	if (likely(!ret)) {
+		int poll_ret;
+
+		poll_ret = fit_internal_poll_sendcq(ctx, ctx->send_cq[connection_id],
+						    connection_id, &poll_status, if_poll_now);
+
+		/*
+		 * This means we fail to get CQE within certain time.
+		 * We want to dump something useful.
+		 */
+		if (unlikely(poll_ret == -ETIMEDOUT)) {
+			pr_debug("mode: %d remote addr: %p, rkey: %#lx. local addr: %p header: %p lkey: %#lx\n",
+				s_mode, wr.wr.rdma.remote_addr, wr.wr.rdma.rkey,
+				temp_addr, temp_header_addr, ctx->proc->lkey);
+		}
+	} else {
 		spin_unlock(&connection_lock[connection_id]);
 		printk(KERN_INFO "%s: send fail %d ret %d\n", __func__, connection_id, ret);
 	}
