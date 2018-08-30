@@ -251,8 +251,6 @@ find_victim_to_evict(void)
 		 */
 		if (unlikely(victim_is_filling(v)))
 			goto loop_unlock_victim;
-		if (unlikely(VictimFillfree(v)))
-			goto loop_unlock_victim;
 
 		/*
 		 * Skip victim that has not been flushed back,
@@ -746,7 +744,6 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
 			 * Increment the fill counter
 			 * We are no longer an eviction candidate
 			 */
-			SetVictimFillfree(victim);
 			inc_victim_filling(victim);
 			result = VICTIM_HIT;
 			break;
