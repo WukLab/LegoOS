@@ -239,16 +239,16 @@ static inline void check_class_changed(struct rq *rq, struct task_struct *p,
 }
 
 /*
- * task_rq_lock - lock the rq @p resides on
- * NOTE: Return with interrupt disabled
+ * task_rq_lock - lock p->pi_lock and lock the rq @p resides on.
  */
-static struct rq *task_rq_lock(struct task_struct *p, unsigned long *flags)
+static inline struct rq *task_rq_lock(struct task_struct *p, unsigned long *flags)
+	__acquires(p->pi_lock)
 	__acquires(rq->lock)
 {
 	struct rq *rq;
 
 	for (;;) {
-		local_irq_save(*flags);
+		spin_lock_irqsave(&p->pi_lock, *flags);
 		rq = task_rq(p);
 		spin_lock(&rq->lock);
 		/*
@@ -264,29 +264,18 @@ static struct rq *task_rq_lock(struct task_struct *p, unsigned long *flags)
 		 * If we observe the old cpu in task_rq_lock, the acquire of
 		 * the old rq->lock will fully serialize against the stores.
 		 *
-		 * If we observe the new CPU in task_rq_lock, the acquire will
+		 * If we observe the new cpu in task_rq_lock, the acquire will
 		 * pair with the WMB to ensure we must then also see migrating.
 		 */
 		if (likely(rq == task_rq(p) && !task_on_rq_migrating(p))) {
 			return rq;
 		}
 		spin_unlock(&rq->lock);
-		local_irq_restore(*flags);
+		spin_unlock_irqrestore(&p->pi_lock, *flags);
 
 		while (unlikely(task_on_rq_migrating(p)))
 			cpu_relax();
 	}
-}
-
-/*
- * task_rq_unlock - unlock the rq @p resides on
- * NOTE: Return with interrupt restored
- */
-static void task_rq_unlock(struct rq *rq, struct task_struct *p,
-			   unsigned long *flags) __releases(rq->lock)
-{
-	spin_unlock(&rq->lock);
-	local_irq_restore(*flags);
 }
 
 /*
@@ -317,6 +306,15 @@ static inline void __task_rq_unlock(struct rq *rq)
 				    __releases(rq->lock)
 {
 	spin_unlock(&rq->lock);
+}
+
+static inline void
+task_rq_unlock(struct rq *rq, struct task_struct *p, unsigned long *flags)
+	__releases(rq->lock)
+	__releases(p->pi_lock)
+{
+	spin_unlock(&rq->lock);
+	spin_unlock_irqrestore(&p->pi_lock, *flags);
 }
 
 static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
@@ -426,6 +424,7 @@ static int migration_cpu_stop(void *data)
 	 */
 	sched_ttwu_pending();
 
+	spin_lock(&p->pi_lock);
 	spin_lock(&rq->lock);
 	/*
 	 * If task_rq(p) != rq, it cannot be migrated here, because we're
@@ -439,6 +438,7 @@ static int migration_cpu_stop(void *data)
 			p->wake_cpu = arg->dest_cpu;
 	}
 	spin_unlock(&rq->lock);
+	spin_unlock(&p->pi_lock);
 
 	local_irq_enable();
 	return 0;
@@ -693,6 +693,7 @@ out:
 long sched_getaffinity(pid_t pid, struct cpumask *mask)
 {
 	struct task_struct *p;
+	unsigned long flags;
 	int retval;
 
 	if (pid == 0)
@@ -706,7 +707,9 @@ long sched_getaffinity(pid_t pid, struct cpumask *mask)
 	}
 
 	retval = 0;
+	spin_lock_irqsave(&p->pi_lock, flags);
 	cpumask_and(mask, &p->cpus_allowed, cpu_active_mask);
+	spin_unlock_irqrestore(&p->pi_lock, flags);
 out:
 	return retval;
 }
@@ -1444,8 +1447,17 @@ void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
  */
 int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {
+	unsigned long flags;
 	int cpu, success = 0;
 
+	/*
+	 * If we are going to wake up a thread waiting for CONDITION we
+	 * need to ensure that CONDITION=1 done by the caller can not be
+	 * reordered with p->state check below. This pairs with mb() in
+	 * set_current_state() the waiting thread does.
+	 */
+	smp_mb__before_spinlock();
+	spin_lock_irqsave(&p->pi_lock, flags);
 	if (!(p->state & state))
 		goto out;
 
@@ -1519,6 +1531,7 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 
 	ttwu_queue(p, cpu, wake_flags);
 out:
+	spin_unlock_irqrestore(&p->pi_lock, flags);
 	return success;
 }
 
@@ -1553,7 +1566,10 @@ int wake_up_state(struct task_struct *p, unsigned int state)
  */
 void wake_up_new_task(struct task_struct *p)
 {
+	unsigned long flags;
 	struct rq *rq;
+
+	spin_lock_irqsave(&p->pi_lock, flags);
 
 	p->state = TASK_RUNNING;
 
@@ -1574,7 +1590,7 @@ void wake_up_new_task(struct task_struct *p)
 	/* preempt current if needed */
 	check_preempt_curr(rq, p, WF_FORK);
 
-	__task_rq_unlock(rq);
+	task_rq_unlock(rq, p, &flags);
 }
 
 /*
@@ -1858,6 +1874,10 @@ char *get_task_comm(char *buf, struct task_struct *tsk)
 void __init sched_init_idle(struct task_struct *idle, int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
+	unsigned long flags;
+
+	spin_lock_irqsave(&idle->pi_lock, flags);
+	spin_lock(&rq->lock);
 
 	__sched_fork(0, idle);
 
@@ -1880,6 +1900,8 @@ void __init sched_init_idle(struct task_struct *idle, int cpu)
 #ifdef CONFIG_SMP
 	idle->on_cpu = 1;
 #endif
+	spin_unlock(&rq->lock);
+	spin_unlock_irqrestore(&idle->pi_lock, flags);
 
 	/*
 	 * Reset preempt count and in turn enable preemption

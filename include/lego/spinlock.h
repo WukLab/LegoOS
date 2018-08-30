@@ -175,4 +175,17 @@ static inline int spin_is_locked(spinlock_t *lock)
 	return arch_spin_is_locked(&lock->arch_lock);
 }
 
+/*
+ * Despite its name it doesn't necessarily has to be a full barrier.
+ * It should only guarantee that a STORE before the critical section
+ * can not be reordered with LOADs and STOREs inside this section.
+ * spin_lock() is the one-way barrier, this LOAD can not escape out
+ * of the region. So the default implementation simply ensures that
+ * a STORE can not move into the critical section, smp_wmb() should
+ * serialize it with another STORE done by spin_lock().
+ */
+#ifndef smp_mb__before_spinlock
+#define smp_mb__before_spinlock()	smp_wmb()
+#endif
+
 #endif /* _LEGO_SPINLOCK_H_ */

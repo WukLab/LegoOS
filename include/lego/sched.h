@@ -474,6 +474,9 @@ struct task_struct {
 /* Open file information */
 	struct files_struct *files;
 
+	/* Protection of the PI data structures: */
+	spinlock_t pi_lock;
+
 	struct wake_q_node wake_q;
 
 	/*
