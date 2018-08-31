@@ -166,6 +166,7 @@ static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 	 * We simply use the page itself.
 	 *
 	 * TODO
+	 * This is too costly. We must remove this!
 	 */
 	memcpy(tb->tx, (void *)new_page, PCACHE_LINE_SIZE);
 	tb->tx_size = PCACHE_LINE_SIZE;
