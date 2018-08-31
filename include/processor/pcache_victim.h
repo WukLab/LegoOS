@@ -21,8 +21,15 @@
 #define VICTIM_NR_ENTRIES \
 	((unsigned int)CONFIG_PCACHE_EVICTION_VICTIM_NR_ENTRIES)
 
+struct victim_padding {
+	char x[0];
+} ____cacheline_aligned_in_smp;
+#define VICTIM_PADDING(name)	struct victim_padding name;
+
 struct pcache_victim_meta {
 	unsigned long		flags;
+	VICTIM_PADDING(_pad1_);
+
 	spinlock_t		lock;		/* protect list operations */
 
 	/*
@@ -49,7 +56,8 @@ struct pcache_victim_meta {
 
 	/* Link to next allocated victim cache */
 	struct list_head	next;
-};
+
+} ____cacheline_aligned_in_smp;
 
 struct pcache_victim_hit_entry {
 	unsigned long		address;	/* page aligned */
@@ -177,6 +185,11 @@ extern void *pcache_victim_data_map;
  * PCACHE_VICTIM_reclaim:	victim cache is selected to be evicted, but not yet
  *
  * PCACHE_VICTIM_fillfree:	victim cache can only be freed by fill path.
+ * 				Eviction routine should skip this line!
+ *
+ * PCACHE_VICTIM_nohit:		victim is going to be freed by a concurrent thread.
+ * 				It does not allow any hit anymore. Whatever the result is,
+ * 				the caller should skip checking victim.
  *
  * Hack: remember to update the victimflag_names array in debug file.
  */
@@ -190,6 +203,7 @@ enum pcache_victim_flags {
 	PCACHE_VICTIM_flushed,
 	PCACHE_VICTIM_reclaim,
 	PCACHE_VICTIM_fillfree,
+	PCACHE_VICTIM_nohit,
 
 	NR_PCACHE_VICTIM_FLAGS
 };
@@ -254,6 +268,7 @@ VICTIM_FLAGS(Waitflush, waitflush)
 VICTIM_FLAGS(Flushed, flushed)
 VICTIM_FLAGS(Reclaim, reclaim)
 VICTIM_FLAGS(Fillfree, fillfree)
+VICTIM_FLAGS(Nohit, nohit)
 
 static inline void lock_victim(struct pcache_victim_meta *victim)
 {

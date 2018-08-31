@@ -95,7 +95,7 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 	int ret;
 
 	pcm = pcache_alloc(address);
-	if (!pcm)
+	if (unlikely(!pcm))
 		return VM_FAULT_OOM;
 
 	/* TODO: Need right permission bits */

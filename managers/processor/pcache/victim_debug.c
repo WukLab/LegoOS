@@ -34,7 +34,8 @@ static DEFINE_SPINLOCK(victim_dump_lock);
 	{1UL << PCACHE_VICTIM_waitflush,	"waitflush"	},	\
 	{1UL << PCACHE_VICTIM_flushed,		"flushed"	},	\
 	{1UL << PCACHE_VICTIM_reclaim,		"reclaim"	},	\
-	{1UL << PCACHE_VICTIM_fillfree,		"fillfree"	},
+	{1UL << PCACHE_VICTIM_fillfree,		"fillfree"	},	\
+	{1UL << PCACHE_VICTIM_fillfree,		"nohit"		},
 
 const struct trace_print_flags victimflag_names[] = {
 	__def_victimflag_names
@@ -83,7 +84,7 @@ static void __dump_pcache_victim(struct pcache_victim_meta *victim,
 {
 	__dump_pcache_victim_simple(victim);
 	dump_pcache_victim_hits(victim);
-	//__dump_pcache_victim_simple(victim);
+	__dump_pcache_victim_simple(victim);
 
 	if (victim->pcm)
 		dump_pcache_meta(victim->pcm, "dump_victim");

@@ -36,10 +36,6 @@ typedef struct spinlock {
 	int magic, owner_cpu;
 	void *owner;
 	void *ip;
-
-	int release_cpu;
-	void *release_owner;
-	void *release_ip;
 #endif
 } spinlock_t;
 

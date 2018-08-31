@@ -18,18 +18,21 @@
  * So we should only use arch_spin_*() within them.
  */
 
+static DEFINE_SPINLOCK(dump_lock);
+
 void report_deadlock(spinlock_t *lock)
 {
+	arch_spin_lock(&dump_lock.arch_lock);
+
 	pr_info("------------------- cut here -------------------\n");
-	pr_info("Possible deadlock happend\n");
+	pr_info("Possible deadlock happend locker_cpu: %d\n", lock->owner_cpu);
 	pr_info("Current call stack:\n");
 	dump_stack();
 
-	pr_info("Owner CPU %d:\n", lock->owner_cpu);
-	if (!cpu_online(lock->owner_cpu))
-		pr_info("  BUG! The CPU is offline\n");
+	arch_spin_unlock(&dump_lock.arch_lock);
 
-	cpu_dumpstack(lock->owner_cpu);
+	if (lock->owner_cpu != -1)
+		cpu_dumpstack(lock->owner_cpu);
 }
 
 void debug_spin_lock(spinlock_t *lock)
@@ -45,33 +48,13 @@ void debug_spin_lock(spinlock_t *lock)
 			hlt();
 		}
 	}
-
-	/* Got it. Setup */
+	smp_wmb();
 	lock->owner_cpu = smp_processor_id();
-	lock->owner = current;
-	lock->ip = __builtin_return_address(0);
-	barrier();
 }
 
 void debug_spin_unlock(spinlock_t *lock)
 {
-	if (lock->owner_cpu == -1 || lock->owner == NULL) {
-		pr_info("Lock: %pF\n"
-			"owner   cpu: %2d owner: %p ip: %pF\n"
-			"release cpu: %2d owner: %p ip: %pF\n",
-			lock, lock->owner_cpu, lock->owner, lock->ip,
-			lock->release_cpu, lock->release_owner, lock->release_ip);
-		dump_stack();
-	}
-
 	lock->owner_cpu = -1;
-	lock->owner = NULL;
-	lock->ip = 0;
-
-	lock->release_cpu = smp_processor_id();
-	lock->release_owner = current;
-	lock->release_ip = __builtin_return_address(0);
-	barrier();
-
+	smp_wmb();
 	arch_spin_unlock(&lock->arch_lock);
 }

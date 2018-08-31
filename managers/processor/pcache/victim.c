@@ -251,6 +251,8 @@ find_victim_to_evict(void)
 		 */
 		if (unlikely(victim_is_filling(v)))
 			goto loop_unlock_victim;
+		if (unlikely(VictimFillfree(v)))
+			goto loop_unlock_victim;
 
 		/*
 		 * Skip victim that has not been flushed back,
@@ -400,6 +402,43 @@ victim_alloc_fastpath(void)
 	return NULL;
 }
 
+enum victim_check_status {
+	VICTIM_MISS,
+	VICTIM_HIT,
+	VICTIM_HIT_FREED,
+};
+
+static enum victim_check_status
+victim_check_hit_entry(struct pcache_victim_meta *victim,
+		       unsigned long address, struct task_struct *tsk,
+		       bool inc_counter);
+
+static void check_victim_starving(struct pcache_set *pset, unsigned long address)
+{
+	struct pcache_victim_meta *v, *safer;
+	enum victim_check_status result;
+
+	spin_lock(&usable_victims_lock);
+	list_for_each_entry_safe(v, safer, &usable_victims, next) {
+		result = victim_check_hit_entry(v, address, current, true);
+		if (result != VICTIM_HIT)
+			continue;
+
+		pr_info("\n"
+			"***\n"
+			"*** The original fault uva (%#lx) has its hit @ victim.\n"
+			"*** If this comes from victim_try_fill_pcache(),\n"
+			"*** the fill counter has already been incremented,\n"
+			"*** thus we won't be able to evict itself.\n"
+			"*** This leads to potential starving.\n"
+			"*** Check dump message carefully.\n"
+			"***\n", address);
+		dump_stack();
+		break;
+	}
+	spin_unlock(&usable_victims_lock);
+}
+
 /**
  * sysctl_victim_alloc_timeout_sec
  *
@@ -437,6 +476,12 @@ retry:
 			pcache_set_to_set_index(pset), pcache_set_victim_nr(pset),
 			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0,
 			address);
+
+		/*
+		 * Before do the depressed dump, let's take a closer
+		 * look at if we are having some serious starving issue:
+		 */
+		check_victim_starving(pset, address);
 		dump_victim_lines_and_queue();
 		return NULL;
 	}
@@ -712,19 +757,14 @@ victim_fill_pcache(struct mm_struct *mm, unsigned long address,
 			__victim_fill_pcache, victim, RMAP_VICTIM_FILL);
 }
 
-enum victim_check_status {
-	VICTIM_MISS,
-	VICTIM_HIT,
-	VICTIM_HIT_FREED,
-};
-
 /*
  * Check if @victim belongs to @address+@tsk
  * Return TRUE if hit, FALSE on miss.
  */
 static enum victim_check_status
 victim_check_hit_entry(struct pcache_victim_meta *victim,
-		       unsigned long address, struct task_struct *tsk)
+		       unsigned long address, struct task_struct *tsk,
+		       bool inc_counter)
 {
 	struct pcache_victim_hit_entry *entry;
 	enum victim_check_status result;
@@ -733,6 +773,10 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
 	address &= PAGE_MASK;
 
 	spin_lock(&victim->lock);
+
+	if (unlikely(VictimNohit(victim)))
+		goto out;
+
 	list_for_each_entry(entry, &victim->hits, next) {
 		victim_debug("    v%d[%#lx %d] u[%#lx %d]",
 			victim_index(victim), entry->address, entry->tgid,
@@ -744,11 +788,16 @@ victim_check_hit_entry(struct pcache_victim_meta *victim,
 			 * Increment the fill counter
 			 * We are no longer an eviction candidate
 			 */
-			inc_victim_filling(victim);
+			if (likely(inc_counter)) {
+				SetVictimFillfree(victim);
+				inc_victim_filling(victim);
+			}
 			result = VICTIM_HIT;
 			break;
 		}
 	}
+
+out:
 	spin_unlock(&victim->lock);
 	return result;
 }
@@ -767,26 +816,15 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 	enum victim_check_status result;
 	int ret = 1;
 
-	victim_debug("checking uva: %#lx tgid: %d", address, current->tgid);
-
 	inc_pcache_event(PCACHE_VICTIM_LOOKUP);
 
 	spin_lock(&usable_victims_lock);
 	list_for_each_entry_safe(v, safer, &usable_victims, next) {
+		PCACHE_BUG_ON_VICTIM(VictimReclaim(v), v);
 		if (unlikely(!get_victim_unless_zero(v)))
 			continue;
 
-		/*
-		 * If there is a victim cache hit, we mark the victim
-		 * as filling back to pcache state, it will not be
-		 * selected to be evicted under this state:
-		 */
-		result = victim_check_hit_entry(v, address, current);
-
-		victim_debug("v%u: %s for uva:%#lx. nr_usable: %d",
-			victim_index(v), result ? "hit" : "miss",
-			address, atomic_read(&nr_usable_victims));
-
+		result = victim_check_hit_entry(v, address, current, true);
 		if (result == VICTIM_HIT) {
 			/*
 			 * victim_fill_pcache will call back to pcache fill code,
@@ -802,33 +840,64 @@ int victim_try_fill_pcache(struct mm_struct *mm, unsigned long address,
 			ret = victim_fill_pcache(mm, address, page_table, orig_pte,
 						 pmd, flags, v);
 
-			/*
-			 * In case one victim is hit by multiple CPUs, one fast CPU
-			 * may reach the underlying dec_and_test_victim_filling() first
-			 * and tried to free the victim. Thus we can have ref=1 when
-			 * we reach here. If that happens, simply do the work and return.
-			 */
+			/* Return the ref we grabbed above */
 			if (unlikely(put_victim_testzero(v))) {
+				WARN_ONCE(1, "BUG!");
 				__put_victim(v);
 				goto out;
 			}
 
 			/*
-			 * VICTIM Policy:
+			 * 1)
+			 * Victim Policy:
 			 * Drop the victim once hit by pcache and refill succeed.
 			 *
-			 * If concurrent fill happen to the same victim, only
-			 * the last one that drop the victim filling counter
-			 * will do the following put_victim.
+			 * This victim can be hit concurrently by multiple CPUs,
+			 * because we released the big lock above. Meanwhile, this
+			 * victim could be held by flush thread as well.
 			 *
-			 * However, victim_flush may still hold another reference.
-			 * This ensure us that a victim has to be flushed upon free.
-			 * But this should be rare.
+			 * Ground rule is: only one thread can free the victim,
+			 * if it is hit by multiple threads. To ensure that, we need
+			 * to use spin_lock and another Nohit flag, to synchronize
+			 * with the victim_check_hit_entry(). Besides, we need to use
+			 * Fillfree flag to ensure it will not be selected to be evicted,
+			 * right after we dec the fill clunter to 0.
+			 *
+			 * 2)
+			 * The put_victim below normally should lead to the final free
+			 * of this victim. But occasinally, this victim may still under
+			 * Waitflush state, which means it is held by flush thread.
+			 * The put of flush will lead to the final free.
 			 */
+			spin_lock(&v->lock);
 			if (likely(dec_and_test_victim_filling(v))) {
-				if (!ret)
+				if (unlikely(TestSetVictimNohit(v))) {
+					dump_pcache_victim(v, "Double free");
+					BUG();
+				}
+
+				if (likely(!ret)) {
+					/*
+					 * Once we have dec the fill counter to 0
+					 * this guy can be selected to be evicted
+					 * Because we are not holding the lock.
+					 *
+					 * This is where Fillfree flag comes to picture.
+					 * This flag was set, so eviction will skip.
+					 * And the below put should lead to eventual free.
+					 */
+					spin_unlock(&v->lock);
 					put_victim(v);
+					goto out;
+				} else {
+					/*
+					 * What cleanup of the victim do we need here?
+					 * Depends on error code?
+					 */
+					WARN_ON(1);
+				}
 			}
+			spin_unlock(&v->lock);
 			goto out;
 		} else if (result == VICTIM_MISS) {
 			/*
