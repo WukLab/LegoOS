@@ -1125,28 +1125,43 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 #endif /* SEPARATE_SEND_POLL_THREAD */
 }
 
+/*
+ * This function is used a lot.
+ * ibapi_send_reply uses this function to SEND msg to remote (then start polling).
+ * and fit_ack_reply_callback() uses this function to REPLY.
+ *
+ * Basically, this will be used twice by one ibapi_send_reply().
+ * Once at sender side, once at reply side.
+ */
 int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_id, uint32_t input_mr_rkey,
 		uintptr_t input_mr_addr, void *addr, int size, int offset, uint32_t imm, enum mode s_mode,
-		struct imm_message_metadata *header, int userspace_flag, int if_poll_now)
+		struct imm_message_metadata *header, int if_poll_now)
 {
 	struct ib_send_wr wr, *bad_wr = NULL;
 	struct ib_sge sge[2];
-	int ret;
 	uintptr_t temp_addr = 0;
 	uintptr_t temp_header_addr = 0;
 	int poll_status = SEND_REPLY_WAIT;
+	int ret, poll_ret;
 
-	memset(&wr, 0, sizeof(struct ib_send_wr));
-	memset(&sge, 0, sizeof(struct ib_sge));
+	/* XXX: not necessary. check and remove */
+	memset(&wr, 0, sizeof(wr));
+	memset(&sge, 0, sizeof(sge));
 
 	wr.sg_list = sge;
-	wr.wr.rdma.remote_addr = (uintptr_t) (input_mr_addr+offset);
+	wr.wr.rdma.remote_addr = (uintptr_t)(input_mr_addr + offset);
 	wr.wr.rdma.rkey = input_mr_rkey;
 
 	fit_debug("wr: remotr_addr: %p, rkey: %#lx\n",
 		wr.wr.rdma.remote_addr, wr.wr.rdma.rkey);
 
 	if (s_mode == FIT_SEND_MESSAGE_HEADER_AND_IMM) {
+		/*
+		 * HACK!!!
+		 *
+		 * ibapi_send_reply() uses this mode to SEND.
+		 * Check fit_send_reply_with_rdma_write_with_imm().
+		 */
 		if (header->reply_indicator_index == -1)
 			wr.wr_id = -1;
 		else
@@ -1154,73 +1169,75 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 			wr.wr_id = (uint64_t)ctx->reply_ready_indicators[header->reply_indicator_index];
 
 		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+		wr.ex.imm_data = imm;
 		wr.send_flags = IB_SEND_SIGNALED;
 		wr.num_sge = 2;
 
-		temp_header_addr = fit_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
-		wr.ex.imm_data = imm;
-
+		/* Get the physical address of header */
+		temp_header_addr = fit_ib_reg_mr_addr(ctx, header, sizeof(*header));
 		sge[0].addr = temp_header_addr;
 		sge[0].length = sizeof(struct imm_message_metadata);
 		sge[0].lkey = ctx->proc->lkey;
 
+		/* Get the physical address of user message */
 		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
-		fit_debug("temp_addr: %#lx\n", temp_addr);
 		sge[1].addr = temp_addr;
 		sge[1].length = size;
 		sge[1].lkey = ctx->proc->lkey;
+
 	} else if(s_mode == FIT_SEND_MESSAGE_IMM_ONLY) {
-		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
-		wr.send_flags = IB_SEND_SIGNALED;
+		/*
+		 * HACK!!!
+		 *
+		 * fit_ack_reply_callback(), which is the REPLY part of
+		 * ibapi_send_reply(), uses this mode to REPLY back!
+		 *
+		 * REPLY is the same as SEND, they are both RDMA_WRITE_IMM.
+		 */
 		wr.wr_id = (uint64_t)&poll_status;
+
+		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+		wr.ex.imm_data = imm;
+		wr.send_flags = IB_SEND_SIGNALED;
 		wr.num_sge = 1;
 
-		wr.ex.imm_data = imm;
+		/* Get the physical address of user message */
 		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
-		fit_debug("temp_addr: %#lx\n", temp_addr);
 		sge[0].addr = temp_addr;
 		sge[0].length = size;
 		sge[0].lkey = ctx->proc->lkey;
+
 	} else if(s_mode == FIT_SEND_ACK_IMM_ONLY) {
 		wr.wr_id = (uint64_t)&poll_status;
-		wr.send_flags = IB_SEND_SIGNALED;
-
-		wr.num_sge = 0;
 		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
-
 		wr.ex.imm_data = imm;
-	}
-	else
-	{
-		printk(KERN_CRIT "%s: wrong mode %d - testing function\n", __func__, s_mode);
-		return -1;
-	}
-
-	spin_lock(&connection_lock[connection_id]);
-	fit_debug("about to post send conn %d wr_id %d num_sge %d\n",
-			connection_id, wr.wr_id, wr.num_sge);
-	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
-	if (likely(!ret)) {
-		int poll_ret;
-
-		poll_ret = fit_internal_poll_sendcq(ctx, ctx->send_cq[connection_id],
-						    connection_id, &poll_status, if_poll_now);
-
-		/*
-		 * This means we fail to get CQE within certain time.
-		 * We want to dump something useful.
-		 */
-		if (unlikely(poll_ret == -ETIMEDOUT)) {
-			pr_debug("mode: %d remote addr: %p, rkey: %#lx. local addr: %p header: %p lkey: %#lx\n",
-				s_mode, wr.wr.rdma.remote_addr, wr.wr.rdma.rkey,
-				temp_addr, temp_header_addr, ctx->proc->lkey);
-		}
+		wr.send_flags = IB_SEND_SIGNALED;
+		wr.num_sge = 0;
 	} else {
-		spin_unlock(&connection_lock[connection_id]);
-		printk(KERN_INFO "%s: send fail %d ret %d\n", __func__, connection_id, ret);
+		fit_err("wrong mode: %d", s_mode);
+		BUG();
 	}
+
+	/* XXX: we do NOT' need this lock! */
+	spin_lock(&connection_lock[connection_id]);
+	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
 	spin_unlock(&connection_lock[connection_id]);
 
+	if (unlikely(ret)) {
+		pr_info_once("Fail to post send to con:%d ret:%d\n",
+			connection_id, ret);
+		WARN_ON_ONCE(1);
+		return ret;
+	}
+
+	poll_ret = fit_internal_poll_sendcq(ctx, ctx->send_cq[connection_id],
+				    connection_id, &poll_status, if_poll_now);
+	if (unlikely(poll_ret == -ETIMEDOUT)) {
+		pr_debug("mode: %d remote addr: %p, rkey: %#lx. "
+			 "local addr: %p header: %p lkey: %#lx\n",
+			s_mode, wr.wr.rdma.remote_addr, wr.wr.rdma.rkey,
+			temp_addr, temp_header_addr, ctx->proc->lkey);
+	}
 	return 0;
 }
 
@@ -1372,9 +1389,14 @@ void fit_ack_reply_callback(struct thpool_buffer *b)
 	 * Reply message
 	 */
         reply_connection_id = fit_get_connection_by_atomic_number(ctx, node_id, LOW_PRIORITY);
-        fit_send_message_with_rdma_write_with_imm_request(ctx, reply_connection_id, request_metadata->reply_rkey,
-                        request_metadata->reply_addr, reply_data, reply_size, 0, request_metadata->reply_indicator_index | IMM_SEND_REPLY_RECV,
-                        FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG, 1);
+
+	/* Send it out. It is really a mess. */
+	fit_send_message_with_rdma_write_with_imm_request(ctx, reply_connection_id,
+			request_metadata->reply_rkey,
+                        request_metadata->reply_addr,
+			reply_data, reply_size, 0,
+			request_metadata->reply_indicator_index | IMM_SEND_REPLY_RECV,
+                        FIT_SEND_MESSAGE_IMM_ONLY, NULL, 1);
 }
 
 /*
@@ -1497,7 +1519,7 @@ int fit_reply_message(ppc *ctx, void *addr, int size, uintptr_t descriptor, int 
 	/* Notice: if if_poll_now is 0, the message sent out here will not be polled and no guarantee of delivery */
 	fit_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->reply_rkey,
 			tmp->reply_addr, addr, size, 0, tmp->reply_indicator_index | IMM_SEND_REPLY_RECV,
-			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG, if_poll_now);
+			FIT_SEND_MESSAGE_IMM_ONLY, NULL, if_poll_now);
 	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);
 	kfree(tmp);
 
@@ -1517,7 +1539,7 @@ int fit_reply_message_w_extra_bits(ppc *ctx, void *addr, int size, int private_b
 	/* Notice: if if_poll_now is 0, the message sent out here will not be polled and no guarantee of delivery */
 	fit_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->reply_rkey,
 			tmp->reply_addr, addr, size, 0, imm_data,
-			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG, if_poll_now);
+			FIT_SEND_MESSAGE_IMM_ONLY, NULL, if_poll_now);
 	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);
 	kfree(tmp);
 
@@ -2313,10 +2335,10 @@ int waiting_queue_handler(void *in)
 					//printk(KERN_CRIT "%s sending ack offset %d targetnode %d imm %x\n", __func__, offset, target_node, imm_data);
 #ifdef CONFIG_SOCKET_O_IB
 					fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * (NUM_PARALLEL_CONNECTION + 1),
-							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG, 0);
+							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, 0);
 #else
 					fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * NUM_PARALLEL_CONNECTION,
-							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG, 0);
+							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, 0);
 #endif
 					break;
 				}
@@ -2537,12 +2559,15 @@ int fit_send_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
 	/* for send reply, no need to poll the send now, since we have reply already */
 	ret = fit_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey,
 			(uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data,
-			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, FIT_KERNELSPACE_FLAG, 0);
+			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, 0);
 
 	return ret;
 }
 
 /*
+ * This is one major function, it is used by ibapi_send_reply().
+ * This function is blocking, it uses busy polling to get reply.
+ *
  * Return:
  * Negative values on failues
  * Positive values indicate the reply message length
@@ -2566,34 +2591,33 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 	unsigned long start_time;
 	int reply_length;
 
-	real_size = size + sizeof(struct imm_message_metadata);
-	if (real_size > IMM_MAX_SIZE)
-	{
-		printk(KERN_CRIT "%s: message size %d + header is larger than max size %d\n", __func__, size, IMM_MAX_SIZE);
-		return -1;
+	if (unlikely(!addr)) {
+		fit_err("BUG: NULL addr. Caller: %pS", caller);
+		return -EINVAL;
 	}
-	if(!addr)
-	{
-		printk(KERN_CRIT "%s: null input addr\n", __func__);
-		return -2;
+
+	real_size = size + sizeof(struct imm_message_metadata);
+	if (unlikely(real_size > IMM_MAX_SIZE)) {
+		fit_err("Size %d + header > %d", size, IMM_MAX_SIZE);
+		return -EINVAL;
 	}
 
 	spin_lock(&ctx->remote_imm_offset_lock[target_node]);
-	if(ctx->remote_rdma_ring_mrs_offset[target_node] + real_size >= RDMA_RING_SIZE)//If hits the end of ring, write start from 0 directly
-		ctx->remote_rdma_ring_mrs_offset[target_node] = real_size;//Record the last point
+	/* If hits the end of ring, write start from 0 directly */
+	if (ctx->remote_rdma_ring_mrs_offset[target_node] + real_size >= RDMA_RING_SIZE)
+		/* Record the last point */
+		ctx->remote_rdma_ring_mrs_offset[target_node] = real_size;
 	else
 		ctx->remote_rdma_ring_mrs_offset[target_node] += real_size;
-	tar_offset_start = ctx->remote_rdma_ring_mrs_offset[target_node] - real_size;//Trace back to the real starting point
+
+	/* Trace back to the real starting point */
+	tar_offset_start = ctx->remote_rdma_ring_mrs_offset[target_node] - real_size;
 	spin_unlock(&ctx->remote_imm_offset_lock[target_node]);
 
-	//printk(KERN_CRIT "%s tar_offset_start %d real_size %d last_ack_index %d\n",
-	//		__func__, tar_offset_start, real_size, ctx->remote_last_ack_index[target_node]);
-
-	/* make sure we do not write beyond lastack */
-	while(1)
-	{
+	/* Make sure we do not write beyond lastack */
+	while (1) {
 		last_ack = ctx->remote_last_ack_index[target_node];
-		if(tar_offset_start < last_ack && tar_offset_start + real_size > last_ack)
+		if (tar_offset_start < last_ack && tar_offset_start + real_size > last_ack)
 			schedule();
 		else
 			break;
@@ -2621,20 +2645,21 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 	fit_debug("send imm-%x addr-%x rkey-%x oaddr-%x orkey-%x\n",
 		imm_data, remote_addr, remote_rkey, msg_header.reply_addr, msg_header.reply_rkey);
 
-#ifdef SCHEDULE_MODEL
-	ctx->thread_waiting_for_reply[reply_indicator_index] = get_current();
-	set_current_state(TASK_INTERRUPTIBLE);
-#endif
 	/* for send reply, no need to poll the send now, since we have reply already */
 	fit_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey,
 			(uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data,
-			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, FIT_KERNELSPACE_FLAG, 0);
+			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, 0);
 
-#ifdef SCHEDULE_MODEL
-	schedule();
-	set_current_state(TASK_RUNNING);
-#endif
-
+	/*
+	 * Default model
+	 *
+	 * And we don't want to stuck here forever.
+	 * So we add timeout checking here.
+	 *
+	 * Side note:
+	 * This is where make our network requests all synchronous.
+	 * If we want to change the behaviour, we need to change here.
+	 */
 #ifdef CPURELAX_MODEL
 	/* Caller does not specify an timeout, use the maximum */
 	if (timeout_sec == 0)
@@ -2646,8 +2671,8 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 	start_time = jiffies;
 
 	/*
-	 * the local_reply_ready_checker will be set by the polling thread
-	 * when it gets the reply
+	 * The local_reply_ready_checker will be set by
+	 * recv_cq polling thread, when it gets the reply.
 	 */
 	while (local_reply_ready_checker == SEND_REPLY_WAIT) {
 		cpu_relax();
@@ -2661,42 +2686,10 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 	reply_length = local_reply_ready_checker;
 #endif
 
-#ifdef ADAPTIVE_MODEL
-	//If size is small, it should do busy wait here, or the waiting time is too long, it should jump to sleep queue
-	if(size<=IMM_SEND_SLEEP_SIZE_THRESHOLD)
-	{
-		unsigned long j0,j1;
-		j0 = jiffies;
-		j1 = j0 + usecs_to_jiffies(IMM_SEND_SLEEP_TIME_THRESHOLD);
-		while(local_reply_ready_checker==SEND_REPLY_WAIT && time_before(jiffies, j1))
-			//cpu_relax();
-			schedule();
+	if (unlikely(reply_length < 0)) {
+		fit_err("connection-%d inbox-%d reply-length-%d",
+			connection_id, reply_indicator_index, reply_length);
 	}
-
-	/*
-	 * check if reply is ready
-	 * If the size is small and time is short,
-	 * it should get local_reply_ready_checker from the above if loop;
-	 * Else do wait here.
-	*/
-	if (local_reply_ready_checker == SEND_REPLY_WAIT)
-	{
-		while (local_reply_ready_checker == SEND_REPLY_WAIT)
-		{
-			if (wait_event_interruptible_timeout(ctx->imm_inbox_block_queue[reply_indicator_index],
-					local_reply_ready_checker != SEND_REPLY_WAIT, msecs_to_jiffies(3000)))
-				break;
-		}
-	}
-	reply_length = local_reply_ready_checker;
-#endif
-
-	if (reply_length < 0)
-	{
-		printk(KERN_CRIT "%s: [significant error] send-reply-imm fail with connection-%d inbox-%d reply-length-%d\n",
-				__func__, connection_id, reply_indicator_index, reply_length);
-	}
-
 	return reply_length;
 }
 
@@ -2782,7 +2775,7 @@ int fit_send_reply_with_rdma_write_with_imm_reply_extra_bits(ppc *ctx, int targe
 	/* for send reply, no need to poll the send now, since we have reply already */
 	fit_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey,
 			(uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data,
-			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, FIT_KERNELSPACE_FLAG, 0);
+			FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header, 0);
 
 #ifdef SCHEDULE_MODEL
 	schedule();
@@ -2952,7 +2945,7 @@ int fit_multicast_send_reply(ppc *ctx, int num_nodes, int *target_node,
 		/* for send reply, no need to poll the send now, since we have reply already */
 		fit_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey,
 				(uintptr_t)remote_addr, sglist[i].addr, sglist[i].len, tar_offset_start, imm_data,
-				FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header[i], FIT_KERNELSPACE_FLAG, 0);
+				FIT_SEND_MESSAGE_HEADER_AND_IMM, &msg_header[i], 0);
 	}
 
 	/* Caller does not specify an timeout, use the maximum */
@@ -2995,7 +2988,9 @@ out:
 	return ret;
 }
 
-int fit_send_request_without_polling(ppc *ctx, int connection_id, enum mode s_mode, struct fit_ibv_mr *input_mr, void *addr, int size, int offset, int wr_id)
+int fit_send_request_without_polling(ppc *ctx, int connection_id, enum mode s_mode,
+				     struct fit_ibv_mr *input_mr, void *addr,
+				     int size, int offset, int wr_id)
 {
 	struct ib_send_wr wr, *bad_wr = NULL;
 	struct ib_sge sge;
