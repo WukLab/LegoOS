@@ -16,6 +16,8 @@
 #include <lego/compiler.h>
 #include <asm/extable.h>
 #include <asm/bitops.h>
+#include <asm/barrier.h>
+#include <asm/processor-features-flags.h>
 
 /*
  * both i386 and x86_64 returns 64-bit value in edx:eax, but gcc's "A"
@@ -129,9 +131,8 @@ static __always_inline unsigned long long rdtsc_ordered(void)
 	 * ordering guarantees as reading from a global memory location
 	 * that some other imaginary CPU is updating continuously with a
 	 * time stamp.
-	 *
-	 * TODO: fence before rdtsc()?
 	 */
+	barrier_nospec();
 	return rdtsc();
 }
 

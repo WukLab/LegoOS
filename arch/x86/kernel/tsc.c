@@ -571,7 +571,7 @@ sched_clock(void) __attribute__((alias("native_sched_clock")));
  */
 static u64 read_tsc(struct clocksource *cs)
 {
-	return (u64)rdtsc();
+	return (u64)rdtsc_ordered();
 }
 
 static struct clocksource clocksource_tsc = {
