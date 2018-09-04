@@ -383,10 +383,10 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 }
 
 #ifdef CONFIG_SMP
-static int nr_pick = 0;
+atomic_t nr_pick;
 static int find_next_rr_cpu(struct task_struct *p, int old_cpu)
 {
-	return nr_pick++ % nr_cpus;
+	return atomic_fetch_add(1, &nr_pick) % nr_cpus;
 }
 
 static int
