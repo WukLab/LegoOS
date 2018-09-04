@@ -14,8 +14,6 @@
 #ifndef _LEGO_PROCESSOR_PCACHE_VICTIM_H_
 #define _LEGO_PROCESSOR_PCACHE_VICTIM_H_
 
-#ifdef CONFIG_PCACHE_EVICTION_VICTIM
-
 #include <lego/completion.h>
 
 #define VICTIM_NR_ENTRIES \
@@ -73,6 +71,8 @@ struct victim_flush_job {
 	bool wait;
 	struct list_head next;
 };
+
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
 
 static inline int victim_ref_count(struct pcache_victim_meta *v)
 {

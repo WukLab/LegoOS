@@ -160,6 +160,12 @@ static inline void pcache_fill_update_stat(struct pcache_meta *pcm)
 static inline void pcache_fill_update_stat(struct pcache_meta *pcm) { }
 #endif
 
+#ifdef CONFIG_PCACHE_EVICTION_VICTIM
+/*
+ * If we have victim cache present, we could have one optimization here.
+ * At each pcache miss time, we could steal one job from the flush thread
+ * and send it to memory along with the pcache miss.
+ */
 static inline void prepare_combined_msg(struct p2m_pcache_miss_flush_combine_msg *msg,
 					struct victim_flush_job *job)
 {
@@ -196,6 +202,18 @@ static inline void finish_combined_msg_notify(struct victim_flush_job *job)
 		complete(done);
 	kfree(job);
 }
+#else
+static inline void prepare_combined_msg(struct p2m_pcache_miss_flush_combine_msg *msg,
+					struct victim_flush_job *job)
+{
+	BUG();
+}
+
+static inline void finish_combined_msg_notify(struct victim_flush_job *job)
+{
+	BUG();
+}
+#endif
 
 DEFINE_PROFILE_POINT(__pcache_fill_remote)
 DEFINE_PROFILE_POINT(__pcache_fill_remote_net)
