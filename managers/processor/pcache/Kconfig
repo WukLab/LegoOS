@@ -94,7 +94,7 @@ config PCACHE_EVICT_GENERIC_SWEEP_INTERVAL_MSEC
 #
 choice
 	prompt "Pcache: Atomic Eviction Mechanism"
-	default PCACHE_EVICTION_VICTIM
+	default PCACHE_EVICTION_PERSET_LIST
 	help
 	 Allows you to select pcache eviction mechasims.
 	 This happens after the line to evict is selected by evict algorithm.
