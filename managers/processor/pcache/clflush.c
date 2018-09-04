@@ -122,7 +122,7 @@ static int __pcache_flush_one(struct pcache_meta *pcm,
  */
 int pcache_flush_one(struct pcache_meta *pcm)
 {
-	int nr_flushed;
+	int nr_flushed = 0;
 	struct rmap_walk_control rwc = {
 		.arg = &nr_flushed,
 		.rmap_one = __pcache_flush_one,

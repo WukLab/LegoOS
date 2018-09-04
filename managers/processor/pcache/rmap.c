@@ -953,7 +953,7 @@ static int pcache_try_to_unmap_reserve_one(struct pcache_meta *pcm,
 
 	pteval = ptep_get_and_clear(0, pte);
 
-	if (pte_present(pteval))
+	if (likely(pte_present(pteval)))
 		flush_tlb_mm_range(rmap->owner_mm,
 				   rmap->address,
 				   rmap->address + PAGE_SIZE -1);
