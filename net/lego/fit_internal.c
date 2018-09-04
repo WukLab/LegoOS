@@ -3274,7 +3274,7 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	 */
 	thread_pass_poll_cq.ctx = ctx;
 	thread_pass_poll_cq.target_cq = ctx->cq[0];
-	kthread_run(fit_poll_cq_pass, &thread_pass_poll_cq, "fit_PollRecvCQ");
+	kthread_run(fit_poll_cq_pass, &thread_pass_poll_cq, "FIT_PollRecvCQ");
 
 #ifdef CONFIG_SOCKET_SYSCALL
 	if (1) {
