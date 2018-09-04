@@ -39,6 +39,11 @@ struct pset_eviction_entry {
 };
 #endif
 
+struct pset_padding {
+	char x[0];
+} ____cacheline_aligned_in_smp;
+#define PSET_PADDING(name)	struct pset_padding name;
+
 /**
  * struct pcache_set	- Metadata for each cache set
  * @lock: protect (de-)allocation of all ways within this set
@@ -57,9 +62,11 @@ struct pcache_set {
 	 */
 
 #ifdef CONFIG_PCACHE_EVICT_LRU
-	spinlock_t		lru_lock;
 	struct list_head	lru_list;
 	atomic_t		nr_lru;
+
+	PSET_PADDING(_pad_lru_lock)
+	spinlock_t		lru_lock;
 #endif
 
 	/*
@@ -77,6 +84,8 @@ struct pcache_set {
 
 #elif defined (CONFIG_PCACHE_EVICTION_PERSET_LIST)
 	struct list_head	eviction_list;
+
+	PSET_PADDING(_pad_elist_lock)
 	spinlock_t		eviction_list_lock;
 #endif
 } ____cacheline_aligned;
@@ -99,6 +108,11 @@ static inline void unlock_pset(struct pcache_set *pset)
 #endif
 }
 
+struct pcm_pad {
+	char x[0];
+} ____cacheline_aligned_in_smp;
+#define PCM_PADDING(name)	struct pcm_pad name;
+
 /**
  * struct pcache_meta	- Metadata about one pcache line
  * @bits: various state bits (see below)
@@ -116,9 +130,11 @@ static inline void unlock_pset(struct pcache_set *pset)
  */
 struct pcache_meta {
 	unsigned long		bits;
-	struct list_head	rmap;
 	atomic_t		mapcount;
 	atomic_t		_refcount;
+
+	PCM_PADDING(_pad1_)
+	struct list_head	rmap;
 
 #ifdef CONFIG_DEBUG_PCACHE
 	struct task_struct	*locker;

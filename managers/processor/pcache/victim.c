@@ -431,7 +431,7 @@ static void check_victim_starving(struct pcache_set *pset, unsigned long address
 			"*** the fill counter has already been incremented,\n"
 			"*** thus we won't be able to evict itself.\n"
 			"*** This leads to potential starving.\n"
-			"*** Check dump message carefully.\n"
+			"*** Increase NR_VICTIMS, make it larger than number of CPUs you have.\n"
 			"***\n", address);
 		dump_stack();
 		break;
