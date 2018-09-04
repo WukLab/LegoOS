@@ -51,6 +51,10 @@ void __init arch_irq_init(void)
 {
 	int i;
 
+	/*
+	 * This function will register x86_vector_domain
+	 * and pci_msi_domain. 
+	 */
 	x86_apic_ioapic_init();
 
 #if defined(CONFIG_X86_64) || defined(CONFIG_X86_LOCAL_APIC)

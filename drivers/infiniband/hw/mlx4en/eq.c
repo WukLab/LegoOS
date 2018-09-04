@@ -380,12 +380,19 @@ XXX
 #endif
 }
 
+static inline void mlx4_srq_event(struct mlx4_dev *dev, u32 srqn, int event_type)
+{
+	WARN_ONCE(1, "We need SRQ back");
+}
+
 static int mlx4_eq_int(struct mlx4_dev *dev, struct mlx4_eq *eq)
 {
 	struct mlx4_eqe *eqe;
 	int cqn;
 	int eqes_found = 0;
 	int set_ci = 0;
+	int port;
+	u32 flr_slave;
 
 	while ((eqe = next_eqe_sw(eq, dev->caps.eqe_factor))) {
 		/*
@@ -396,9 +403,134 @@ static int mlx4_eq_int(struct mlx4_dev *dev, struct mlx4_eq *eq)
 
 		switch (eqe->type) {
 		case MLX4_EVENT_TYPE_COMP:
+			mlx4_dbg(dev, "event cq_completion arrived\n");
 			cqn = be32_to_cpu(eqe->event.comp.cqn) & 0xffffff;
 			mlx4_cq_completion(dev, cqn);
 			break;
+
+		case MLX4_EVENT_TYPE_PATH_MIG:
+		case MLX4_EVENT_TYPE_COMM_EST:
+		case MLX4_EVENT_TYPE_SQ_DRAINED:
+		case MLX4_EVENT_TYPE_SRQ_QP_LAST_WQE:
+		case MLX4_EVENT_TYPE_WQ_CATAS_ERROR:
+		case MLX4_EVENT_TYPE_PATH_MIG_FAILED:
+		case MLX4_EVENT_TYPE_WQ_INVAL_REQ_ERROR:
+		case MLX4_EVENT_TYPE_WQ_ACCESS_ERROR:
+			if (mlx4_is_master(dev))
+				panic("Not supported");
+
+			mlx4_dbg(dev, "event qp_event arrived\n");
+			mlx4_qp_event(dev, be32_to_cpu(eqe->event.qp.qpn) &
+				      0xffffff, eqe->type);
+			break;
+
+		case MLX4_EVENT_TYPE_SRQ_LIMIT:
+			mlx4_dbg(dev, "%s: MLX4_EVENT_TYPE_SRQ_LIMIT\n",
+				 __func__);
+		case MLX4_EVENT_TYPE_SRQ_CATAS_ERROR:
+			if (mlx4_is_master(dev))
+				panic("not supported");
+
+			mlx4_dbg(dev, "event srq_event arrived\n");
+			mlx4_srq_event(dev, be32_to_cpu(eqe->event.srq.srqn) &
+				       0xffffff, eqe->type);
+			break;
+
+		case MLX4_EVENT_TYPE_CMD:
+			mlx4_dbg(dev, "event CMD arrived\n");
+			mlx4_cmd_event(dev,
+				       be16_to_cpu(eqe->event.cmd.token),
+				       eqe->event.cmd.status,
+				       be64_to_cpu(eqe->event.cmd.out_param));
+			break;
+
+		case MLX4_EVENT_TYPE_PORT_CHANGE:
+			port = be32_to_cpu(eqe->event.port_change.port) >> 28;
+			if (eqe->subtype == MLX4_PORT_CHANGE_SUBTYPE_DOWN) {
+				mlx4_dbg(dev, "event PORT_CHANGE_DOWN arrived\n");
+				mlx4_dispatch_event(dev, MLX4_DEV_EVENT_PORT_DOWN,
+						    port);
+				mlx4_priv(dev)->sense.do_sense_port[port] = 1;
+				if (!mlx4_is_master(dev))
+					break;
+				BUG();
+			} else {
+				mlx4_dbg(dev, "event PORT_CHANGE_UP arrived\n");
+				mlx4_dispatch_event(dev, MLX4_DEV_EVENT_PORT_UP, port);
+
+				mlx4_priv(dev)->sense.do_sense_port[port] = 0;
+
+				if (!mlx4_is_master(dev))
+					break;
+				BUG();
+			}
+			break;
+
+		case MLX4_EVENT_TYPE_CQ_ERROR:
+			if (mlx4_is_master(dev))
+				panic("Not supported");
+
+			mlx4_warn(dev, "CQ_ERROR CQ %s on CQN %06x\n",
+				  eqe->event.cq_err.syndrome == 1 ?
+				  "overrun" : "access violation",
+				  be32_to_cpu(eqe->event.cq_err.cqn) & 0xffffff);
+			mlx4_cq_event(dev,
+				      be32_to_cpu(eqe->event.cq_err.cqn)
+				      & 0xffffff,
+				      eqe->type);
+			break;
+
+		case MLX4_EVENT_TYPE_EQ_OVERFLOW:
+			mlx4_warn(dev, "EQ overrun on EQN %d\n", eq->eqn);
+			break;
+
+		case MLX4_EVENT_TYPE_COMM_CHANNEL:
+			if (!mlx4_is_master(dev)) {
+				mlx4_warn(dev, "Received comm channel event "
+					       "for non master device\n");
+				break;
+			}
+			BUG();
+			break;
+
+		case MLX4_EVENT_TYPE_FLR_EVENT:
+			flr_slave = be32_to_cpu(eqe->event.flr_event.slave_id);
+			if (!mlx4_is_master(dev)) {
+				mlx4_warn(dev, "Non-master function received"
+					       "FLR event\n");
+				break;
+			}
+
+			BUG();
+			break;
+
+		case MLX4_EVENT_TYPE_FATAL_WARNING:
+			if (eqe->subtype == MLX4_FATAL_WARNING_SUBTYPE_WARMING) {
+				mlx4_err(dev, "Temperature Threshold was reached! "
+					"Threshold: %d celsius degrees; "
+					"Current Temperature: %d\n",
+					be16_to_cpu(eqe->event.warming.warning_threshold),
+					be16_to_cpu(eqe->event.warming.current_temperature));
+			} else
+				mlx4_warn(dev, "Unhandled event FATAL WARNING (%02x), "
+					  "subtype %02x on EQ %d at index %u. owner=%x, "
+					  "nent=0x%x, slave=%x, ownership=%s\n",
+					  eqe->type, eqe->subtype, eq->eqn,
+					  eq->cons_index, eqe->owner, eq->nent,
+					  eqe->slave_id,
+					  !!(eqe->owner & 0x80) ^
+					  !!(eq->cons_index & eq->nent) ? "HW" : "SW");
+
+			break;
+
+		case MLX4_EVENT_TYPE_PORT_MNG_CHG_EVENT:
+			mlx4_dbg(dev, "event PORT_MNG_CHG arrived\n");
+			mlx4_dispatch_event(dev, MLX4_DEV_EVENT_PORT_MGMT_CHANGE,
+					    (unsigned long) eqe);
+			break;
+
+		case MLX4_EVENT_TYPE_EEC_CATAS_ERROR:
+		case MLX4_EVENT_TYPE_ECC_DETECT:
 		default:
 			mlx4_warn(dev, "Unhandled event %02x(%02x) on EQ %d at "
 				  "index %u. owner=%x, nent=0x%x, slave=%x, "
@@ -440,7 +572,7 @@ static irqreturn_t mlx4_interrupt(int irq, void *dev_ptr)
 	int work = 0;
 	int i;
 
-	pr_info("%s(): irq %d\n", __func__, irq);
+	pr_info("%s(): IRQ: %d CPU: %d\n", __func__, irq, smp_processor_id());
 	writel(priv->eq_table.clr_mask, priv->eq_table.clr_int);
 
 	for (i = 0; i < dev->caps.num_comp_vectors + 1; ++i)
@@ -451,8 +583,13 @@ static irqreturn_t mlx4_interrupt(int irq, void *dev_ptr)
 
 static irqreturn_t mlx4_msi_x_interrupt(int irq, void *eq_ptr)
 {
-	pr_info("%s(): irq %d\n", __func__, irq);
-	WARN_ON(1);
+	struct mlx4_eq  *eq  = eq_ptr;
+	struct mlx4_dev *dev = eq->dev;
+
+	pr_info("%s(): IRQ: %d CPU: %d\n", __func__, irq, smp_processor_id());
+	mlx4_eq_int(dev, eq);
+
+	/* MSI-X vectors always belong to us */
 	return IRQ_HANDLED;
 }
 

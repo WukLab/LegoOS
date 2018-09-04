@@ -331,6 +331,16 @@ static inline unsigned int irq_desc_get_irq(struct irq_desc *desc)
 	return desc->irq_data.irq;
 }
 
+static inline struct irq_chip *irq_desc_get_chip(struct irq_desc *desc)
+{
+	return desc->irq_data.chip;
+}
+
+static inline void *irq_desc_get_chip_data(struct irq_desc *desc)
+{
+	return desc->irq_data.chip_data;
+}
+
 /**
  *	irq_set_chip_data - set irq chip data for an irq
  *	@irq:	Interrupt number
@@ -575,13 +585,24 @@ unsigned int arch_dynirq_lower_bound(unsigned int from);
 /*
  * Allocate unique IRQ numbers from Lego
  */
-int  __irq_number_alloc(int irq, unsigned int from, unsigned int cnt, int node,
-			const struct cpumask *affinity);
+int irq_alloc_descs(int irq, unsigned int from, unsigned int cnt, int node);
+
+#define irq_alloc_desc(node)			\
+	irq_alloc_descs(-1, 0, 1, node)
+
+#define irq_alloc_desc_at(at, node)		\
+	irq_alloc_descs(at, at, 1, node)
+
+#define irq_alloc_desc_from(from, node)		\
+	irq_alloc_descs(-1, from, 1, node)
+
+#define irq_alloc_descs_from(from, cnt, node)	\
+	irq_alloc_descs(-1, from, cnt, node)
 
 /*
  * Fee unique IRQ numbers to Lego
  */
-void __irq_number_free(unsigned int irq, unsigned int cnt);
+void irq_free_descs(unsigned int from, unsigned int cnt);
 
 /*
  * For IRQ number lookup

@@ -1086,6 +1086,16 @@ enum ib_mad_result {
 
 #define IB_DEVICE_NAME_MAX 64
 
+struct ib_pkey_cache {
+	int             table_len;
+	u16             table[0];
+};
+
+struct ib_gid_cache {
+	int             table_len;
+	union ib_gid    table[0];
+};
+
 struct ib_cache {
 	spinlock_t                lock;
 	struct ib_event_handler event_handler;
@@ -1962,5 +1972,7 @@ int ib_query_mr(struct ib_mr *mr, struct ib_mr_attr *mr_attr);
  * @mr: The memory region to deregister.
  */
 int ib_dereg_mr(struct ib_mr *mr);
+
+const char *__attribute_const__ ib_wc_status_msg(enum ib_wc_status status);
 
 #endif /* IB_VERBS_H */

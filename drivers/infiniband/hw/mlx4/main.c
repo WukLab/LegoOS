@@ -776,21 +776,31 @@ static void mlx4_ib_remove(struct mlx4_dev *dev, void *ibdev_ptr)
 	ib_dealloc_device(&ibdev->ib_dev);
 }
 
+void handle_port_mgmt_change_event(struct mlx4_eqe *eqe, struct mlx4_ib_dev *dev);
+
 static void mlx4_ib_event(struct mlx4_dev *dev, void *ibdev_ptr,
-			  enum mlx4_dev_event event, int port)
+			  enum mlx4_dev_event event, unsigned long param)
 {
 	struct ib_event ibev;
 	struct mlx4_ib_dev *ibdev = to_mdev((struct ib_device *) ibdev_ptr);
+	struct mlx4_eqe *eqe = NULL;
+	int p = 0;
 
-	if (port > ibdev->num_ports)
-		return;
+	if (event == MLX4_DEV_EVENT_PORT_MGMT_CHANGE)
+		eqe = (struct mlx4_eqe *)param;
+	else
+		p = (int) param;
 
 	switch (event) {
 	case MLX4_DEV_EVENT_PORT_UP:
+		if (p > ibdev->num_ports)
+			return;
 		ibev.event = IB_EVENT_PORT_ACTIVE;
 		break;
 
 	case MLX4_DEV_EVENT_PORT_DOWN:
+		if (p > ibdev->num_ports)
+			return;
 		ibev.event = IB_EVENT_PORT_ERR;
 		break;
 
@@ -799,12 +809,18 @@ static void mlx4_ib_event(struct mlx4_dev *dev, void *ibdev_ptr,
 		ibev.event = IB_EVENT_DEVICE_FATAL;
 		break;
 
+	case MLX4_DEV_EVENT_PORT_MGMT_CHANGE:
+		handle_port_mgmt_change_event(eqe, ibdev);
+		return;
+
 	default:
+		pr_info("%s(): unhandled event: %d\n", __func__, event);
+		WARN_ON(1);
 		return;
 	}
 
 	ibev.device	      = ibdev_ptr;
-	ibev.element.port_num = port;
+	ibev.element.port_num = (u8) p;
 
 	ib_dispatch_event(&ibev);
 }

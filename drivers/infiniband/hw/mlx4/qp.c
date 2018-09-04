@@ -253,6 +253,10 @@ static inline unsigned pad_wraparound(struct mlx4_ib_qp *qp, int ind)
 	return ind;
 }
 
+/*
+ * This function will be called when interrupt handler
+ * received certain events. 
+ */
 static void mlx4_ib_qp_event(struct mlx4_qp *qp, enum mlx4_event type)
 {
 	struct ib_event event;
@@ -295,6 +299,9 @@ static void mlx4_ib_qp_event(struct mlx4_qp *qp, enum mlx4_event type)
 			return;
 		}
 
+		/*
+		 * Callback to core or user provied handlers
+		 */
 		ibqp->event_handler(&event, ibqp->qp_context);
 	}
 }

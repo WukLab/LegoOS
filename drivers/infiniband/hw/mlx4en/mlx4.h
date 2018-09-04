@@ -664,7 +664,7 @@ void mlx4_catas_init(void);
 int mlx4_restart_one(struct pci_dev *pdev);
 int mlx4_register_device(struct mlx4_dev *dev);
 void mlx4_unregister_device(struct mlx4_dev *dev);
-void mlx4_dispatch_event(struct mlx4_dev *dev, enum mlx4_dev_event type, int port);
+void mlx4_dispatch_event(struct mlx4_dev *dev, enum mlx4_dev_event type, unsigned long param);
 
 struct mlx4_dev_cap;
 struct mlx4_init_hca_param;
@@ -684,8 +684,6 @@ void mlx4_cq_completion(struct mlx4_dev *dev, u32 cqn);
 void mlx4_cq_event(struct mlx4_dev *dev, u32 cqn, int event_type);
 
 void mlx4_qp_event(struct mlx4_dev *dev, u32 qpn, int event_type);
-
-void mlx4_srq_event(struct mlx4_dev *dev, u32 srqn, int event_type);
 
 void mlx4_handle_catas_err(struct mlx4_dev *dev);
 

@@ -41,7 +41,7 @@ static void ibv_add_one(struct ib_device *device)
 {
 	FIT_ctx = kmalloc(sizeof(struct lego_context), GFP_KERNEL);
 	ibapi_dev = device;
-	
+
 	ctx_pd = ib_alloc_pd(device);
 	if (!ctx_pd) {
 		printk(KERN_ALERT "Couldn't allocate PD\n");
@@ -74,6 +74,14 @@ static inline void unlock_ib(void) { }
 atomic_long_t	nr_ib_send_reply;
 atomic_long_t	nr_bytes_tx;
 atomic_long_t	nr_bytes_rx;
+
+void dump_ib_stats(void)
+{
+	pr_info("IB Stats:\n");
+	pr_info("    nr_ib_send_reply: %15ld\n", COUNTER_nr_ib_send_reply());
+	pr_info("    nr_bytes_tx:      %15ld\n", COUNTER_nr_bytes_tx());
+	pr_info("    nr_bytes_rx:      %15ld\n", COUNTER_nr_bytes_rx());
+}
 #endif
 
 DEFINE_PROFILE_POINT(ibapi_send_reply)
@@ -176,7 +184,7 @@ int ibapi_send(int target_node, void *addr, int size)
  * @output_msg: array of reply message buffer
  * @timeout_sec: timeout value in seconds
  */
-int ibapi_multicast_send_reply_timeout(int num_nodes, int *target_node, 
+int ibapi_multicast_send_reply_timeout(int num_nodes, int *target_node,
 				struct fit_sglist *sglist, struct fit_sglist *output_msg,
 				int max_ret_size, int if_use_ret_phys_addr, unsigned long timeout_sec)
 {
@@ -189,14 +197,14 @@ int ibapi_multicast_send_reply_timeout(int num_nodes, int *target_node,
 	return ret;
 }
 
-inline int ibapi_receive_message(unsigned int designed_port, 
+inline int ibapi_receive_message(unsigned int designed_port,
 		void *ret_addr, int receive_size, uintptr_t *descriptor)
 {
 	ppc *ctx = FIT_ctx;
 	return fit_receive_message(ctx, designed_port, ret_addr, receive_size, descriptor, 0);
 }
 
-int ibapi_receive_message_no_reply(unsigned int designed_port, 
+int ibapi_receive_message_no_reply(unsigned int designed_port,
 		void *ret_addr, int receive_size)
 {
 	ppc *ctx = FIT_ctx;
@@ -261,7 +269,7 @@ int ibapi_unregister_application(unsigned int designed_port)
 }
 
 int ibapi_query_port(int target_node, int designed_port, int requery_flag)
-{	
+{
 	ppc *ctx = FIT_ctx;
 	return fit_query_port(ctx, target_node, designed_port, requery_flag);
 }
@@ -306,7 +314,7 @@ void ibapi_free_recv_buf(void *input_buf)
 int ibapi_num_connected_nodes(void)
 {
 	if(!FIT_ctx)
-	{	
+	{
 		printk(KERN_CRIT "%s: using FIT ctx directly since ctx is NULL\n", __func__);
 		return atomic_read(&FIT_ctx->num_alive_nodes);
 	}
@@ -327,15 +335,15 @@ int ibapi_get_node_id(void)
 int ibapi_establish_conn(int ib_port, int mynodeid)
 {
 	ppc *ctx;
-	
+
 	//printk(KERN_CRIT "Start calling rc_internal to create FIT based on %p\n", ibapi_dev);
-	
+
 	ctx = fit_establish_conn(ibapi_dev, ib_port, mynodeid);
-	
+
 	if(!ctx)
 	{
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
-		return 0;	
+		return 0;
 	}
 
 	FIT_ctx = ctx;

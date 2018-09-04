@@ -157,8 +157,8 @@ evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm)
 DEFINE_PROFILE_POINT(evict_line_victim_prepare)
 DEFINE_PROFILE_POINT(evict_line_victim_unmap)
 DEFINE_PROFILE_POINT(evict_line_victim_finish)
-static inline int
-evict_line_victim(struct pcache_set *pset, struct pcache_meta *pcm)
+static inline int evict_line_victim(struct pcache_set *pset,
+				    struct pcache_meta *pcm, unsigned long address)
 {
 	struct pcache_victim_meta *victim;
 	bool dirty;
@@ -167,7 +167,7 @@ evict_line_victim(struct pcache_set *pset, struct pcache_meta *pcm)
 	PROFILE_POINT_TIME(evict_line_victim_finish)
 
 	PROFILE_START(evict_line_victim_prepare);
-	victim = victim_prepare_insert(pset, pcm);
+	victim = victim_prepare_insert(pset, pcm, address);
 	PROFILE_LEAVE(evict_line_victim_prepare);
 	if (IS_ERR(victim))
 		return PTR_ERR(victim);
@@ -208,14 +208,14 @@ evict_line_wrprotect(struct pcache_set *pset, struct pcache_meta *pcm)
 #endif
 
 static inline int
-evict_line(struct pcache_set *pset, struct pcache_meta *pcm)
+evict_line(struct pcache_set *pset, struct pcache_meta *pcm, unsigned long address)
 {
 #ifdef CONFIG_PCACHE_EVICTION_WRITE_PROTECT
 	return evict_line_wrprotect(pset, pcm);
 #elif defined(CONFIG_PCACHE_EVICTION_PERSET_LIST)
 	return evict_line_perset_list(pset, pcm);
 #elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
-	return evict_line_victim(pset, pcm);
+	return evict_line_victim(pset, pcm, address);
 #endif
 }
 
@@ -285,7 +285,7 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	BUG_ON(nr_mapped < 1);
 
 	PROFILE_START(pcache_evict_do_evict);
-	ret = evict_line(pset, pcm);
+	ret = evict_line(pset, pcm, address);
 	PROFILE_LEAVE(pcache_evict_do_evict);
 	if (ret) {
 		/*

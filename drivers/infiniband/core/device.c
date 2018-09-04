@@ -697,6 +697,7 @@ int ib_find_pkey(struct ib_device *device,
 }
 
 int __init mlx4_init(void);
+int __init ib_sa_init(void);
 
 /*
  * This is the only IB layer init entry point.
@@ -714,6 +715,7 @@ void __init ib_core_init(void)
 	ib_mad_init();
 	ib_cm_init();
 	ib_cache_setup();
+	ib_sa_init();
 
 	mlx4_init();
 }

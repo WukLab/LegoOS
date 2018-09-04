@@ -307,7 +307,7 @@ static void x86_vector_free_irqs(struct irq_domain *domain,
 	int i;
 
 	for (i = 0; i < nr_irqs; i++) {
-		irq_data = irq_domain_get_irq_data(&x86_vector_domain, virq + i);
+		irq_data = irq_domain_get_irq_data(x86_vector_domain, virq + i);
 		if (irq_data && irq_data->chip_data) {
 			spin_lock_irqsave(&vector_lock, flags);
 			clear_irq_vector(virq + i, irq_data->chip_data);
@@ -332,6 +332,10 @@ static int x86_vector_alloc_irqs(struct irq_domain *domain, unsigned int virq,
 	struct apic_chip_data *chip_data;
 	struct irq_data *irq_data;
 	int i, ret, node;
+
+	/* Currently vector allocator can't guarantee contiguous allocations */
+	if ((info->flags & X86_IRQ_ALLOC_CONTIGUOUS_VECTORS) && nr_irqs > 1)
+		return -ENOSYS;
 
 	for (i = 0; i < nr_irqs; i++) {
 		irq_data = irq_domain_get_irq_data(domain, virq + i);
@@ -369,12 +373,7 @@ static const struct irq_domain_ops x86_vector_domain_ops = {
 	.free		= x86_vector_free_irqs,
 };
 
-struct irq_domain x86_vector_domain = {
-	.name		= "x86-vector",
-	.ops		= &x86_vector_domain_ops,
-	.hwirq_max	= NR_IRQS,
-	.revmap_size	= NR_IRQS,
-};
+struct irq_domain *x86_vector_domain;
 
 /*
  * This functin link or allocate data structures used
@@ -403,10 +402,18 @@ void __init x86_apic_ioapic_init(void)
 		irq_set_chip_data(i, data);
 	}
 
-	x86_vector_domain.linear_revmap =
-		kzalloc(sizeof(unsigned int) * NR_IRQS, GFP_KERNEL);
+	x86_vector_domain = irq_domain_add_tree(NULL, &x86_vector_domain_ops, NULL);
+	BUG_ON(!x86_vector_domain);
+	set_irq_domain_name(x86_vector_domain, "x86_vector");
 
-	irq_set_default_host(&x86_vector_domain);
+#if 0
+	/* XXX: How to handle linear_revmap */
+	x86_vector_domain->linear_revmap =
+		kzalloc(sizeof(unsigned int) * NR_IRQS, GFP_KERNEL);
+#endif
+
+	irq_set_default_host(x86_vector_domain);
+	arch_init_msi_domain(x86_vector_domain);
 
 	arch_ioapic_init();
 }

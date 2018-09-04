@@ -22,6 +22,22 @@
 
 #include <asm/pci.h>
 
+/*
+ * The PCI interface treats multi-function devices as independent
+ * devices.  The slot/function address of each device is encoded
+ * in a single byte as follows:
+ *
+ *	7:3 = slot
+ *	2:0 = function
+ *
+ * PCI_DEVFN(), PCI_SLOT(), and PCI_FUNC() are defined in uapi/linux/pci.h.
+ * In the interest of not exposing interfaces to user-space unnecessarily,
+ * the following kernel-only defines are being added here.
+ */
+#define PCI_DEVID(bus, devfn)  ((((u16)(bus)) << 8) | (devfn))
+/* return bus from PCI devid = ((u16)bus_number) << 8) | devfn */
+#define PCI_BUS_NUM(x) (((x) >> 8) & 0xff)
+
 #define PCI_CFG_SPACE_SIZE	256
 #define PCI_CFG_SPACE_EXP_SIZE	4096
 
@@ -941,7 +957,13 @@ int pci_get_interrupt_pin(struct pci_dev *dev, struct pci_dev **bridge);
 
 void pci_intx(struct pci_dev *pdev, int enable);
 
-
+struct msix_entry {
+        u32     vector; /* kernel uses to write allocated vector */
+        u16     entry;  /* driver uses to specify entry, OS writes */
+};
+int pci_enable_msix(struct pci_dev *dev, struct msix_entry *entries, int nvec);
+int pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
+			       int minvec, int maxvec);
 
 
 
@@ -956,14 +978,5 @@ int pci_func_attach_E1000(struct pci_dev *f);
 int pci_transmit_packet(const void * src,size_t n);
 int pci_receive_packet(void * dst);
 #endif
-
-static inline void pci_func_enable(struct pci_dev *f) { }
-static inline u32 pci_conf_read(struct pci_dev *f, u32 off, int len) { return 0; }
-static inline void pci_conf_write(struct pci_dev *f, u32 off, u32 v, int len) { }
-
-struct msix_entry {
-        u32     vector; /* kernel uses to write allocated vector */
-        u16     entry;  /* driver uses to specify entry, OS writes */
-};
 
 #endif /* _LEGO_PCI_H_ */

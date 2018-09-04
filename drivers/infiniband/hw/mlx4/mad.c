@@ -157,14 +157,26 @@ static void update_sm_ah(struct mlx4_ib_dev *dev, u8 port_num, u16 lid, u8 sl)
 	spin_unlock_irqrestore(&dev->sm_lock, flags);
 }
 
+void mlx4_ib_dispatch_event(struct mlx4_ib_dev *dev, u8 port_num,
+			    enum ib_event_type type)
+{
+	struct ib_event event;
+
+	event.device		= &dev->ib_dev;
+	event.element.port_num	= port_num;
+	event.event		= type;
+
+	ib_dispatch_event(&event);
+}
+
 static void handle_client_rereg_event(struct mlx4_ib_dev *dev, u8 port_num)
 {
-	BUG();
+	mlx4_ib_dispatch_event(dev, port_num, IB_EVENT_CLIENT_REREGISTER);
 }
 
 static void handle_lid_change_event(struct mlx4_ib_dev *dev, u8 port_num)
 {
-	BUG();
+	mlx4_ib_dispatch_event(dev, port_num, IB_EVENT_LID_CHANGE);
 }
 
 static void __propagate_pkey_ev(struct mlx4_ib_dev *dev, int port_num,
@@ -184,18 +196,6 @@ void mlx4_ib_notify_slaves_on_guid_change(struct mlx4_ib_dev *dev,
 					  u8 *p_data)
 {
 	BUG();
-}
-
-void mlx4_ib_dispatch_event(struct mlx4_ib_dev *dev, u8 port_num,
-			    enum ib_event_type type)
-{
-	struct ib_event event;
-
-	event.device		= &dev->ib_dev;
-	event.element.port_num	= port_num;
-	event.event		= type;
-
-	ib_dispatch_event(&event);
 }
 
 /*
@@ -454,7 +454,6 @@ int mlx4_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 static void send_handler(struct ib_mad_agent *agent,
 			 struct ib_mad_send_wc *mad_send_wc)
 {
-	WARN_ONCE(1, "Checkme!");
 	if (mad_send_wc->send_buf->context[0])
 		ib_destroy_ah(mad_send_wc->send_buf->context[0]);
 	ib_free_send_mad(mad_send_wc->send_buf);
@@ -512,5 +511,59 @@ void mlx4_ib_mad_cleanup(struct mlx4_ib_dev *dev)
 
 		if (dev->sm_ah[p])
 			ib_destroy_ah(dev->sm_ah[p]);
+	}
+}
+
+void handle_port_mgmt_change_event(struct mlx4_eqe *eqe, struct mlx4_ib_dev *dev)
+{
+	u8 port = eqe->event.port_mgmt_change.port;
+	u32 changed_attr;
+
+	switch (eqe->subtype) {
+	case MLX4_DEV_PMC_SUBTYPE_PORT_INFO:
+		changed_attr = be32_to_cpu(eqe->event.port_mgmt_change.params.port_info.changed_attr);
+
+		/* Update the SM ah - This should be done before handling
+		   the other changed attributes so that MADs can be sent to the SM */
+		if (changed_attr & MSTR_SM_CHANGE_MASK) {
+			u16 lid = be16_to_cpu(eqe->event.port_mgmt_change.params.port_info.mstr_sm_lid);
+			u8 sl = eqe->event.port_mgmt_change.params.port_info.mstr_sm_sl & 0xf;
+
+			pr_info("update sm ah\n");
+			update_sm_ah(dev, port, lid, sl);
+		}
+
+		/* Check if it is a lid change event */
+		if (changed_attr & MLX4_EQ_PORT_INFO_LID_CHANGE_MASK) {
+			pr_info("lid change\n");
+			handle_lid_change_event(dev, port);
+		}
+
+		/* Generate GUID changed event */
+		if (changed_attr & MLX4_EQ_PORT_INFO_GID_PFX_CHANGE_MASK) {
+			pr_info("gid change 1\n");
+			mlx4_ib_dispatch_event(dev, port, IB_EVENT_GID_CHANGE);
+		}
+
+		if (changed_attr & MLX4_EQ_PORT_INFO_CLIENT_REREG_MASK) {
+			pr_info("rereg \n");
+			handle_client_rereg_event(dev, port);
+		}
+		break;
+
+	case MLX4_DEV_PMC_SUBTYPE_PKEY_TABLE:
+		pr_info("pkey change\n");
+		mlx4_ib_dispatch_event(dev, port, IB_EVENT_PKEY_CHANGE);
+		break;
+	case MLX4_DEV_PMC_SUBTYPE_GUID_INFO:
+		/* paravirtualized master's guid is guid 0 -- does not change */
+		if (!mlx4_is_master(dev->dev)) {
+			pr_info("gid change 2\n");
+			mlx4_ib_dispatch_event(dev, port, IB_EVENT_GID_CHANGE);
+		}
+		break;
+	default:
+		pr_warn("Unsupported subtype 0x%x for "
+			"Port Management Change event\n", eqe->subtype);
 	}
 }

@@ -883,6 +883,12 @@ inline int fit_find_node_id_by_qpnum(struct lego_context *ctx, uint32_t qp_num)
 	return -1;
 }
 
+/*
+ * If we can not get the CQE within 20 seconds
+ * There should be something wrong.
+ */
+#define FIT_POLL_SENDCQ_TIMEOUT_NS	(20000000000L)
+
 int fit_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check)
 {
 #if SEPARATE_SEND_POLL_THREAD
@@ -900,14 +906,27 @@ int fit_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check
 	 */
 	int ne, i;
 	struct ib_wc wc[2];
+	unsigned long start_ns;
 
-	//printk(KERN_CRIT "%s\n", __func__);
+	start_ns = sched_clock();
 	do{
 		ne = ib_poll_cq(tar_cq, 1, wc);
 		if(ne < 0)
 		{
 			printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
 			return 1;
+		}
+
+		if (unlikely(sched_clock() - start_ns > FIT_POLL_SENDCQ_TIMEOUT_NS)) {
+			pr_info_once("\n"
+				"*****\n"
+				"***** Fail to to get the CQE from send_cq after %ld seconds!\n"
+				"***** This means the packet was lost and something went wrong\n"
+				"***** with your NIC...\n"
+				"***** connection_id: %d dest node: %d\n"
+				"*****\n", FIT_POLL_SENDCQ_TIMEOUT_NS/NSEC_PER_SEC,
+				connection_id, connection_id / NUM_PARALLEL_CONNECTION);
+			WARN_ON_ONCE(1);
 		}
 	}while(ne<1);
 	for(i=0;i<ne;i++)

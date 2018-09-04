@@ -35,6 +35,7 @@ typedef struct spinlock {
 #ifdef CONFIG_DEBUG_SPINLOCK
 	int magic, owner_cpu;
 	void *owner;
+	void *ip;
 #endif
 } spinlock_t;
 
@@ -66,17 +67,42 @@ typedef struct spinlock {
 		*(lock) = __SPIN_LOCK_UNLOCKED((lock));	\
 	} while (0)
 
+#ifndef CONFIG_DEBUG_SPINLOCK
+static __always_inline void __arch_spin_lock(spinlock_t *lock)
+{
+	arch_spin_lock(&lock->arch_lock);
+}
+
+static __always_inline void __arch_spin_unlock(spinlock_t *lock)
+{
+	arch_spin_unlock(&lock->arch_lock);
+}
+#else
+void debug_spin_lock(spinlock_t *lock);
+void debug_spin_unlock(spinlock_t *lock);
+
+static __always_inline void __arch_spin_lock(spinlock_t *lock)
+{
+	debug_spin_lock(lock);
+}
+
+static __always_inline void __arch_spin_unlock(spinlock_t *lock)
+{
+	debug_spin_unlock(lock);
+}
+#endif
+
 static inline void spin_lock(spinlock_t *lock)
 {
 	preempt_disable();
-	arch_spin_lock(&lock->arch_lock);
+	__arch_spin_lock(lock);
 }
 
 static inline void spin_lock_irq(spinlock_t *lock)
 {
 	local_irq_disable();
 	preempt_disable();
-	arch_spin_lock(&lock->arch_lock);
+	__arch_spin_lock(lock);
 }
 
 #define spin_lock_irqsave(lock, flags)			\
@@ -84,25 +110,25 @@ static inline void spin_lock_irq(spinlock_t *lock)
 		typecheck(unsigned long, (flags));	\
 		local_irq_save((flags));		\
 		preempt_disable();			\
-		arch_spin_lock(&(lock)->arch_lock);	\
+		__arch_spin_lock((lock));		\
 	} while (0)
 
 static inline void spin_unlock(spinlock_t *lock)
 {
-	arch_spin_unlock(&lock->arch_lock);
+	__arch_spin_unlock(lock);
 	preempt_enable();
 }
 
 static inline void spin_unlock_irq(spinlock_t *lock)
 {
-	arch_spin_unlock(&lock->arch_lock);
+	__arch_spin_unlock(lock);
 	local_irq_enable();
 	preempt_enable();
 }
 
 static inline void spin_unlock_irqrestore(spinlock_t *lock,  unsigned long flags)
 {
-	arch_spin_unlock(&lock->arch_lock);
+	__arch_spin_unlock(lock);
 	local_irq_restore(flags);
 	preempt_enable();
 }
@@ -144,5 +170,18 @@ static inline int spin_is_locked(spinlock_t *lock)
 {
 	return arch_spin_is_locked(&lock->arch_lock);
 }
+
+/*
+ * Despite its name it doesn't necessarily has to be a full barrier.
+ * It should only guarantee that a STORE before the critical section
+ * can not be reordered with LOADs and STOREs inside this section.
+ * spin_lock() is the one-way barrier, this LOAD can not escape out
+ * of the region. So the default implementation simply ensures that
+ * a STORE can not move into the critical section, smp_wmb() should
+ * serialize it with another STORE done by spin_lock().
+ */
+#ifndef smp_mb__before_spinlock
+#define smp_mb__before_spinlock()	smp_wmb()
+#endif
 
 #endif /* _LEGO_SPINLOCK_H_ */

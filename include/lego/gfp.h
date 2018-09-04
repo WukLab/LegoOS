@@ -97,6 +97,10 @@
 #define GFP_DMA		__GFP_DMA
 #define GFP_DMA32	__GFP_DMA32
 
+/* Room for N __GFP_FOO bits */
+#define __GFP_BITS_SHIFT 26
+#define __GFP_BITS_MASK ((__force gfp_t)((1 << __GFP_BITS_SHIFT) - 1))
+
 #ifdef CONFIG_HIGHMEM
 #define OPT_ZONE_HIGHMEM ZONE_HIGHMEM
 #else

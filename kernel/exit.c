@@ -463,6 +463,18 @@ void __noreturn do_exit(long code)
 	 */
 	smp_mb();
 
+	{
+		unsigned long start_ns = sched_clock();
+
+		while (spin_is_locked(&tsk->pi_lock)) {
+			if (sched_clock() - start_ns > 5 * NSEC_PER_SEC) {
+				WARN_ON_ONCE(1);
+				break;
+			}
+			continue;
+		}
+	}
+
 	if (unlikely(in_atomic())) {
 		pr_info("note: %s[%d] exited with preempt_count %d\n",
 			current->comm, current->pid,

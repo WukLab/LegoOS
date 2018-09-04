@@ -12,6 +12,16 @@ config FIT
 	default y
 	depends on INFINIBAND
 
+config FIT_MAX_RPC_TIMEOUT_SEC
+	int "Max send_reply timeout in seconds"
+	range 1 300
+	default 60
+	help
+	  Internally, LITE will do polling for outstanding RPC.
+	  This is the maximum time in seconds that LITE will give up polling
+	  and return.
+
+
 config FIT_MAX_OUTSTANDING_SEND
 	int "Max outstanding send requests"
 	range 1 24

@@ -35,6 +35,7 @@
 
 #define pr_fmt(fmt) "mlx4_core: " fmt
 
+#include <lego/msi.h>
 #include <lego/init.h>
 #include <lego/errno.h>
 #include <lego/pci.h>
@@ -1155,15 +1156,55 @@ err:
 static void mlx4_enable_msi_x(struct mlx4_dev *dev)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
+	struct msix_entry *entries;
 	int i;
 
+	if (msi_x) {
+		int nreq = dev->caps.num_ports * num_online_cpus() + 1;
+
+		nreq = min_t(int, dev->caps.num_eqs - dev->caps.reserved_eqs,
+			     nreq);
+		if (nreq > MAX_MSIX)
+			nreq = MAX_MSIX;
+
+		entries = kcalloc(nreq, sizeof *entries, GFP_KERNEL);
+		if (!entries)
+			goto no_msi;
+
+		for (i = 0; i < nreq; ++i)
+			entries[i].entry = i;
+
+		nreq = pci_enable_msix_range(dev->pdev, entries, 2, nreq);
+		if (nreq < 0) {
+			WARN_ON_ONCE(1);
+			kfree(entries);
+			goto no_msi;
+		}
+
+		if (nreq <
+		    MSIX_LEGACY_SZ + dev->caps.num_ports * MIN_MSIX_P_PORT) {
+			/*Working in legacy mode , all EQ's shared*/
+			dev->caps.comp_pool           = 0;
+			dev->caps.num_comp_vectors = nreq - 1;
+		} else {
+			dev->caps.comp_pool           = nreq - MSIX_LEGACY_SZ;
+			dev->caps.num_comp_vectors = MSIX_LEGACY_SZ - 1;
+		}
+		for (i = 0; i < nreq; ++i)
+			priv->eq_table.eq[i].irq = entries[i].vector;
+
+		dev->flags |= MLX4_FLAG_MSI_X;
+
+		kfree(entries);
+		return;
+	}
+
+no_msi:
 	dev->caps.num_comp_vectors = 1;
 	dev->caps.comp_pool	   = 0;
 
 	for (i = 0; i < 2; ++i)
 		priv->eq_table.eq[i].irq = dev->pdev->irq;
-
-	pr_info("%s(): nomsi by default.\n", __func__);
 }
 
 int mlx4_get_base_qpn(struct mlx4_dev *dev, u8 port)

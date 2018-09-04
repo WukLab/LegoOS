@@ -153,7 +153,16 @@ int irq_set_chip(unsigned int irq, struct irq_chip *chip);
 void __irq_set_handler(unsigned int irq, irq_flow_handler_t handle,
 		       int is_chained, const char *name);
 
+static inline void
+irq_set_handler(unsigned int irq, irq_flow_handler_t handle)
+{
+	__irq_set_handler(irq, handle, 0, NULL);
+}
+
+int irq_set_msi_desc_off(unsigned int irq_base, unsigned int irq_offset,
+			 struct msi_desc *entry);
 int irq_set_msi_desc(unsigned int irq, struct msi_desc *entry);
+int irq_set_handler_data(unsigned int irq, void *data);
 
 void irq_disable(struct irq_desc *desc);
 void irq_enable(struct irq_desc *desc);
@@ -168,7 +177,9 @@ int irq_startup(struct irq_desc *desc, bool resend);
 void irq_shutdown(struct irq_desc *desc);
 
 extern void irq_chip_ack_parent(struct irq_data *data);
+int irq_chip_retrigger_hierarchy(struct irq_data *data);
 
 extern struct irqaction chained_action;
 
+int irq_chip_compose_msi_msg(struct irq_data *data, struct msi_msg *msg);
 #endif /* _LEGO_IRQCHIP_H_ */

@@ -454,6 +454,6 @@ void pci_intx(struct pci_dev *pdev, int enable)
 	}
 
 	if (new != pci_command) {
-		WARN_ONCE(1, "Patchme");
+		pci_write_config_word(pdev, PCI_COMMAND, new);
 	}
 }

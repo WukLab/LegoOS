@@ -23,3 +23,5 @@ obj-y += ratelimit.o
 obj-y += kstrtox.o
 obj-y += random.o
 obj-y += sched.o
+obj-y += dump_remote_cpustack.o
+obj-y += radix-tree.o

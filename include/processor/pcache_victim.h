@@ -21,8 +21,15 @@
 #define VICTIM_NR_ENTRIES \
 	((unsigned int)CONFIG_PCACHE_EVICTION_VICTIM_NR_ENTRIES)
 
+struct victim_padding {
+	char x[0];
+} ____cacheline_aligned_in_smp;
+#define VICTIM_PADDING(name)	struct victim_padding name;
+
 struct pcache_victim_meta {
 	unsigned long		flags;
+	VICTIM_PADDING(_pad1_);
+
 	spinlock_t		lock;		/* protect list operations */
 
 	/*
@@ -49,7 +56,8 @@ struct pcache_victim_meta {
 
 	/* Link to next allocated victim cache */
 	struct list_head	next;
-};
+
+} ____cacheline_aligned_in_smp;
 
 struct pcache_victim_hit_entry {
 	unsigned long		address;	/* page aligned */
@@ -141,7 +149,7 @@ static inline int victim_ref_freeze(struct pcache_victim_meta *v, int count)
 	return ret;
 }
 
-extern struct pcache_victim_meta *pcache_victim_meta_map;
+extern struct pcache_victim_meta pcache_victim_meta_map[VICTIM_NR_ENTRIES];
 extern void *pcache_victim_data_map;
 
 /*
@@ -177,6 +185,11 @@ extern void *pcache_victim_data_map;
  * PCACHE_VICTIM_reclaim:	victim cache is selected to be evicted, but not yet
  *
  * PCACHE_VICTIM_fillfree:	victim cache can only be freed by fill path.
+ * 				Eviction routine should skip this line!
+ *
+ * PCACHE_VICTIM_nohit:		victim is going to be freed by a concurrent thread.
+ * 				It does not allow any hit anymore. Whatever the result is,
+ * 				the caller should skip checking victim.
  *
  * Hack: remember to update the victimflag_names array in debug file.
  */
@@ -190,6 +203,7 @@ enum pcache_victim_flags {
 	PCACHE_VICTIM_flushed,
 	PCACHE_VICTIM_reclaim,
 	PCACHE_VICTIM_fillfree,
+	PCACHE_VICTIM_nohit,
 
 	NR_PCACHE_VICTIM_FLAGS
 };
@@ -254,6 +268,7 @@ VICTIM_FLAGS(Waitflush, waitflush)
 VICTIM_FLAGS(Flushed, flushed)
 VICTIM_FLAGS(Reclaim, reclaim)
 VICTIM_FLAGS(Fillfree, fillfree)
+VICTIM_FLAGS(Nohit, nohit)
 
 static inline void lock_victim(struct pcache_victim_meta *victim)
 {
@@ -274,7 +289,7 @@ static inline void set_victim_usable(struct pcache_victim_meta *victim)
 }
 
 struct pcache_victim_meta *
-victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm);
+victim_prepare_insert(struct pcache_set *pset, struct pcache_meta *pcm, unsigned long address);
 void victim_finish_insert(struct pcache_victim_meta *victim, bool dirty);
 
 static inline unsigned int victim_index(struct pcache_victim_meta *victim)
@@ -325,6 +340,11 @@ static inline void pcache_set_victim_inc(struct pcache_set *pset)
 static inline void pcache_set_victim_dec(struct pcache_set *pset)
 {
 	atomic_dec(&pset->nr_victims);
+}
+
+static inline int pcache_set_victim_nr(struct pcache_set *pset)
+{
+	return atomic_read(&pset->nr_victims);
 }
 
 static inline bool pcache_set_has_victims(struct pcache_set *pset)

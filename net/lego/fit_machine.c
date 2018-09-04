@@ -44,9 +44,9 @@ struct fit_machine_info *lego_cluster[CONFIG_FIT_NR_NODES];
  * NOTE: always start vm1 first, then vm2, etc.
  */
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	= 	"vm1",
-	[1]	= 	"vm2",
-	[2]	= 	"vm3",
+	[0]	=	"vm1",
+	[1]	=	"vm2",
+	[2]	=	"vm3",
 };
 
 static struct fit_machine_info WUKLAB_CLUSTER[] = {
@@ -56,9 +56,9 @@ static struct fit_machine_info WUKLAB_CLUSTER[] = {
 };
 #else
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	= 	"wuklab14",
-	[1]	= 	"wuklab09",
-	[2]	= 	"wuklab12",
+	[0]	=	"wuklab14",
+	[1]	=	"wuklab09",
+	[2]	=	"wuklab12",
 };
 
 static struct fit_machine_info WUKLAB_CLUSTER[] = {

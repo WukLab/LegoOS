@@ -723,6 +723,9 @@ struct task_struct *copy_process(unsigned long clone_flags,
 	if (!p)
 		return ERR_PTR(-ENOMEM);
 
+	/* rt_mutex and PI stuff */
+	spin_lock_init(&p->pi_lock);
+
 	p->flags &= ~(PF_SUPERPRIV | PF_WQ_WORKER | PF_IDLE);
 	p->flags |= PF_FORKNOEXEC;
 	INIT_LIST_HEAD(&p->children);

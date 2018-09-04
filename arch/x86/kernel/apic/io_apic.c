@@ -856,7 +856,7 @@ int acpi_get_override_irq(u32 gsi, int *trigger, int *polarity)
 	return 0;
 }
 
-static void copy_irq_alloc_info(struct irq_alloc_info *dst, struct irq_alloc_info *src)
+void copy_irq_alloc_info(struct irq_alloc_info *dst, struct irq_alloc_info *src)
 {
 	if (src)
 		*dst = *src;
@@ -970,15 +970,41 @@ static void add_pin_to_irq_node(struct mp_chip_data *data,
 		panic("IO-APIC: failed to add irq-pin. Can not proceed\n");
 }
 
-static int alloc_irq_from_domain(struct irq_domain *domain, int ioapic, u32 gsi,
-				 struct irq_alloc_info *info)
-{
-	return 0;
-}
-
 static int ioapic_alloc_attr_node(struct irq_alloc_info *info)
 {
 	return (info && info->ioapic_valid) ? info->ioapic_node : NUMA_NO_NODE;
+}
+
+static int alloc_irq_from_domain(struct irq_domain *domain, int ioapic, u32 gsi,
+				 struct irq_alloc_info *info)
+{
+	bool legacy = false;
+	int irq = -1;
+	int type = ioapics[ioapic].irqdomain_cfg.type;
+
+	switch (type) {
+	case IOAPIC_DOMAIN_LEGACY:
+		/*
+		 * Dynamically allocate IRQ number for non-ISA IRQs in the first
+		 * 16 GSIs on some weird platforms.
+		 */
+		if (!ioapic_initialized || gsi >= nr_legacy_irqs())
+			irq = gsi;
+		legacy = mp_is_legacy_irq(irq);
+		break;
+	case IOAPIC_DOMAIN_STRICT:
+		irq = gsi;
+		break;
+	case IOAPIC_DOMAIN_DYNAMIC:
+		break;
+	default:
+		WARN(1, "ioapic: unknown irqdomain type %d\n", type);
+		return -1;
+	}
+
+	return __irq_domain_alloc_irqs(domain, irq, 1,
+				       ioapic_alloc_attr_node(info),
+				       info, legacy);
 }
 
 /*
@@ -1011,7 +1037,7 @@ static int alloc_isa_irq_from_domain(struct irq_domain *domain,
 					  info->ioapic_pin))
 			return -ENOMEM;
 	} else {
-		irq = __irq_domain_alloc_irqs(domain, irq, 1, node, info, true, NULL);
+		irq = __irq_domain_alloc_irqs(domain, irq, 1, node, info, true);
 		if (irq >= 0) {
 			data = irq_data->chip_data;
 			data->isa_irq = true;
@@ -1102,10 +1128,9 @@ static void __init setup_IO_APIC_irqs(void)
 			apic_printk(APIC_VERBOSE,
 				" ioapic[%d] apic %d pin: %d not connected\n",
 				ioapic, mpc_ioapic_id(ioapic), pin);
-			continue;
-		}
-
-		pin_2_irq(idx, ioapic, pin, ioapic ? 0 : IOAPIC_MAP_ALLOC);
+		} else
+			pin_2_irq(idx, ioapic, pin,
+				ioapic ? 0 : IOAPIC_MAP_ALLOC);
 	}
 }
 
@@ -1439,6 +1464,62 @@ out:
 	local_irq_restore(flags);
 }
 
+/**
+ * irq_remapping_get_ir_irq_domain - Get the irqdomain associated with the IOMMU
+ *				     device serving request @info
+ * @info: interrupt allocation information, used to identify the IOMMU device
+ *
+ * It's used to get parent irqdomain for HPET and IOAPIC irqdomains.
+ * Returns pointer to IRQ domain, or NULL on failure.
+ */
+/*
+ * TODO: IOMMU related stuff
+ */
+struct irq_domain *
+irq_remapping_get_ir_irq_domain(struct irq_alloc_info *info)
+{
+	return NULL;
+}
+
+static int mp_irqdomain_create(int ioapic)
+{
+	struct irq_alloc_info info;
+	struct irq_domain *parent;
+	int hwirqs = mp_ioapic_pin_count(ioapic);
+	struct ioapic *ip = &ioapics[ioapic];
+	struct ioapic_domain_cfg *cfg = &ip->irqdomain_cfg;
+	struct mp_ioapic_gsi *gsi_cfg = mp_ioapic_gsi_routing(ioapic);
+	char name[IRQ_DOMAIN_NAME_LEN];
+
+	if (cfg->type == IOAPIC_DOMAIN_INVALID)
+		return 0;
+
+	init_irq_alloc_info(&info, NULL);
+	info.type = X86_IRQ_ALLOC_TYPE_IOAPIC;
+	info.ioapic_id = mpc_ioapic_id(ioapic);
+
+	parent = irq_remapping_get_ir_irq_domain(&info);
+	if (!parent)
+		parent = x86_vector_domain;
+
+	ip->irqdomain = irq_domain_add_linear(NULL, hwirqs, cfg->ops,
+					      (void *)(long)ioapic);
+	if (!ip->irqdomain)
+		return -ENOMEM;
+
+	snprintf(name, IRQ_DOMAIN_NAME_LEN, "x86_ioapic-%d", ioapic);
+	set_irq_domain_name(ip->irqdomain, name);
+
+	ip->irqdomain->parent = parent;
+
+	if (cfg->type == IOAPIC_DOMAIN_LEGACY ||
+	    cfg->type == IOAPIC_DOMAIN_STRICT)
+		ioapic_dynirq_base = max(ioapic_dynirq_base,
+					 gsi_cfg->gsi_end + 1);
+
+	return 0;
+}
+
 void __init setup_IO_APIC(void)
 {
 	int i;
@@ -1448,36 +1529,10 @@ void __init setup_IO_APIC(void)
 	apic_printk(APIC_VERBOSE, "ENABLING IO-APIC IRQs\n");
 
 	/* Allocate IRQ_DOMAIN object for each IO-APIC */
-	for_each_ioapic(i) {
-		struct ioapic *ip = &ioapics[i];
-		struct ioapic_domain_cfg *cfg = &ip->irqdomain_cfg;
-		struct mp_ioapic_gsi *gsi_cfg = mp_ioapic_gsi_routing(i);
-		int hwirqs = mp_ioapic_pin_count(i);
-		size_t size;
+	for_each_ioapic(i)
+		BUG_ON(mp_irqdomain_create(i));
 
-		if (cfg->type == IOAPIC_DOMAIN_INVALID)
-			continue;
-
-		ip->irqdomain = kzalloc(sizeof(struct irq_domain), GFP_KERNEL);
-		BUG_ON(!ip->irqdomain);
-		ip->irqdomain->ops = cfg->ops;
-		ip->irqdomain->host_data = (void *)(unsigned long)i;
-		ip->irqdomain->hwirq_max = hwirqs;
-
-		/* For reverse map */
-		ip->irqdomain->revmap_size = hwirqs;
-		size = sizeof(unsigned int) * hwirqs;
-		ip->irqdomain->linear_revmap = kzalloc(size, GFP_KERNEL);
-		BUG_ON(!ip->irqdomain->linear_revmap);
-
-		/* Just one single parent */
-		ip->irqdomain->parent = &x86_vector_domain;
-
-		if (cfg->type == IOAPIC_DOMAIN_LEGACY ||
-		    cfg->type == IOAPIC_DOMAIN_STRICT)
-		    	ioapic_dynirq_base = max(ioapic_dynirq_base, gsi_cfg->gsi_end + 1);
-	}
-
+	dump_irq_domain_list();
 	sync_Arb_IDs();
 
 	/* Setup pin <-> IRQ mapping */
@@ -1814,7 +1869,7 @@ static int mp_irqdomain_alloc(struct irq_domain *domain, unsigned int virq,
 
 	INIT_LIST_HEAD(&data->irq_2_pin);
 	irq_data->hwirq = info->ioapic_pin;
-	irq_data->chip = (domain->parent == &x86_vector_domain) ?
+	irq_data->chip = (domain->parent == x86_vector_domain) ?
 			  &ioapic_chip : &ioapic_ir_chip;
 	irq_data->chip_data = data;
 
@@ -1858,22 +1913,3 @@ const struct irq_domain_ops mp_ioapic_irqdomain_ops = {
 	.alloc		= mp_irqdomain_alloc,
 	.activate	= mp_irqdomain_activate,
 };
-
-#if defined(CONFIG_PCI_MSI)
-
-int native_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
-{
-	WARN_ONCE(1, "Not finished!");
-	return -ENODEV;
-}
-
-void native_teardown_msi_irq(unsigned int irq)
-{
-
-}
-
-struct x86_msi_ops x86_msi = {
-	.setup_msi_irqs		= native_setup_msi_irqs,
-	.teardown_msi_irq	= native_teardown_msi_irq,
-};
-#endif

@@ -10,11 +10,157 @@
 #include <lego/irq.h>
 #include <lego/slab.h>
 #include <lego/irqdesc.h>
+#include <lego/irqchip.h>
 #include <lego/irqdomain.h>
 #include <lego/kernel.h>
 #include <lego/cpumask.h>
+#include <lego/mutex.h>
 
+static LIST_HEAD(irq_domain_list);
+static DEFINE_MUTEX(irq_domain_mutex);
+
+static DEFINE_MUTEX(revmap_trees_mutex);
 static struct irq_domain *irq_default_domain;
+
+void dump_irq_domain_list(void)
+{
+	unsigned long flags;
+	struct irq_desc *desc;
+	struct irq_domain *domain;
+	struct radix_tree_iter iter;
+	void *data, **slot;
+	int i;
+
+	pr_info(" %-16s  %-6s  %-10s  %-10s  %s\n",
+		   "name", "mapped", "linear-max", "direct-max", "devtree-node");
+
+	mutex_lock(&irq_domain_mutex);
+	list_for_each_entry(domain, &irq_domain_list, link) {
+		int count = 0;
+		radix_tree_for_each_slot(slot, &domain->revmap_tree, &iter, 0)
+			count++;
+		pr_info("%c%-16s  %6u  %10u  %10u  %s\n",
+			   domain == irq_default_domain ? '*' : ' ', domain->name,
+			   domain->revmap_size + count, domain->revmap_size,
+			   domain->revmap_direct_max_irq, "");
+	}
+	mutex_unlock(&irq_domain_mutex);
+
+	pr_info("%-5s  %-7s  %-15s  %-*s  %6s  %-14s  %s\n", "irq", "hwirq",
+		      "chip name", (int)(2 * sizeof(void *) + 2), "chip data",
+		      "active", "type", "domain");
+
+	for (i = 1; i < nr_irqs; i++) {
+		desc = irq_to_desc(i);
+		if (!desc)
+			continue;
+
+		spin_lock_irqsave(&desc->lock, flags);
+		domain = desc->irq_data.domain;
+
+		if (domain) {
+			struct irq_chip *chip;
+			int hwirq = desc->irq_data.hwirq;
+			bool direct;
+
+			pr_info("%5d  ", i);
+			pr_cont("0x%05x  ", hwirq);
+
+			chip = irq_desc_get_chip(desc);
+			pr_cont("%-15s  ", (chip && chip->name) ? chip->name : "none");
+
+			data = irq_desc_get_chip_data(desc);
+			if (data)
+				pr_cont("0x%p", data);
+			else
+				pr_cont("  %p  ", data);
+
+			pr_cont("   %c    ", (desc->action && desc->action->handler) ? '*' : ' ');
+			direct = (i == hwirq) && (i < domain->revmap_direct_max_irq);
+			pr_cont("%6s%-8s  ",
+				   (hwirq < domain->revmap_size) ? "LINEAR" : "RADIX",
+				   direct ? "(DIRECT)" : "");
+			pr_cont("%s\n", desc->irq_data.domain->name);
+		}
+
+		spin_unlock_irqrestore(&desc->lock, flags);
+	}
+}
+
+/**
+ * __irq_domain_add() - Allocate a new irq_domain data structure
+ * @of_node: optional device-tree node of the interrupt controller
+ * @size: Size of linear map; 0 for radix mapping only
+ * @hwirq_max: Maximum number of interrupts supported by controller
+ * @direct_max: Maximum value of direct maps; Use ~0 for no limit; 0 for no
+ *              direct mapping
+ * @ops: domain callbacks
+ * @host_data: Controller private data pointer
+ *
+ * Allocates and initialize and irq_domain structure.
+ * Returns pointer to IRQ domain, or NULL on failure.
+ */
+struct irq_domain *__irq_domain_add(void *fwnode, int size,
+				    irq_hw_number_t hwirq_max, int direct_max,
+				    const struct irq_domain_ops *ops,
+				    void *host_data)
+{
+	struct irq_domain *domain;
+
+	domain = kzalloc(sizeof(*domain) + (sizeof(unsigned int) * size), GFP_KERNEL);
+	if (WARN_ON(!domain))
+		return NULL;
+
+	/* Fill structure */
+	INIT_RADIX_TREE(&domain->revmap_tree, GFP_KERNEL);
+	domain->ops = ops;
+	domain->host_data = host_data;
+	domain->hwirq_max = hwirq_max;
+	domain->revmap_size = size;
+	domain->revmap_direct_max_irq = direct_max;
+
+	mutex_lock(&irq_domain_mutex);
+	list_add(&domain->link, &irq_domain_list);
+	mutex_unlock(&irq_domain_mutex);
+
+	return domain;
+}
+
+/**
+ * irq_domain_create_hierarchy - Add a irqdomain into the hierarchy
+ * @parent:	Parent irq domain to associate with the new domain
+ * @flags:	Irq domain flags associated to the domain
+ * @size:	Size of the domain. See below
+ * @fwnode:	Optional fwnode of the interrupt controller
+ * @ops:	Pointer to the interrupt domain callbacks
+ * @host_data:	Controller private data pointer
+ *
+ * If @size is 0 a tree domain is created, otherwise a linear domain.
+ *
+ * If successful the parent is associated to the new domain and the
+ * domain flags are set.
+ * Returns pointer to IRQ domain, or NULL on failure.
+ */
+struct irq_domain *irq_domain_create_hierarchy(struct irq_domain *parent,
+					    unsigned int flags,
+					    unsigned int size,
+					    void *fwnode,
+					    const struct irq_domain_ops *ops,
+					    void *host_data)
+{
+	struct irq_domain *domain;
+
+	if (size)
+		domain = irq_domain_create_linear(fwnode, size, ops, host_data);
+	else
+		domain = irq_domain_create_tree(fwnode, ops, host_data);
+	if (domain) {
+		domain->parent = parent;
+		domain->flags |= flags;
+	}
+
+	return domain;
+}
 
 /**
  * irq_set_default_host() - Set a "default" irq domain
@@ -27,6 +173,8 @@ static struct irq_domain *irq_default_domain;
  */
 void irq_set_default_host(struct irq_domain *domain)
 {
+	pr_debug("Default domain set to @0x%p\n", domain);
+
 	irq_default_domain = domain;
 }
 
@@ -38,37 +186,35 @@ void irq_set_default_host(struct irq_domain *domain)
 unsigned int irq_find_mapping(struct irq_domain *domain,
 			      irq_hw_number_t hwirq)
 {
+	struct irq_data *data;
+
 	/* Look for default domain if nececssary */
 	if (domain == NULL)
 		domain = irq_default_domain;
 	if (domain == NULL)
 		return 0;
 
+	if (hwirq < domain->revmap_direct_max_irq) {
+		data = irq_domain_get_irq_data(domain, hwirq);
+		if (data && data->hwirq == hwirq)
+			return hwirq;
+	}
+
 	/* Check if the hwirq is in the linear revmap. */
 	if (hwirq < domain->revmap_size)
 		return domain->linear_revmap[hwirq];
 
-	return 0;
-}
-
-int irq_domain_alloc_IRQ_number(int virq, unsigned int cnt, irq_hw_number_t hwirq,
-			   int node, const struct cpumask *affinity)
-{
-	unsigned int hint;
-
-	if (virq >= 0) {
-		virq = __irq_number_alloc(virq, virq, cnt, node, affinity);
-	} else {
-		hint = hwirq % nr_irqs;
-		if (hint == 0)
-			hint++;
-		virq = __irq_number_alloc(-1, hint, cnt, node, affinity);
-		if (virq <= 0 && hint > 1) {
-			virq = __irq_number_alloc(-1, 1, cnt, node, affinity);
-		}
-	}
-
-	return virq;
+	/*
+	 * HACK!!!
+	 *
+	 * We don't have RCU, so have to use mutex to sync
+	 * with concurrent writers. Fortunately, the write
+	 * will NOT happen frequently (at least in current codebase).
+	 */
+	mutex_lock(&revmap_trees_mutex);
+	data = radix_tree_lookup(&domain->revmap_tree, hwirq);
+	mutex_unlock(&revmap_trees_mutex);
+	return data ? data->irq : 0;
 }
 
 static void irq_domain_free_irq_data(unsigned int virq, unsigned int nr_irqs)
@@ -88,6 +234,36 @@ static void irq_domain_free_irq_data(unsigned int virq, unsigned int nr_irqs)
 			kfree(irq_data);
 		}
 	}
+}
+
+/**
+ * irq_domain_insert_irq
+ *
+ * Insert virq and its hwirq mapping into domain reverse map.
+ * All parent domains are updated as well.
+ */
+static void irq_domain_insert_irq(int virq)
+{
+	struct irq_data *data;
+
+	for (data = irq_get_irq_data(virq); data; data = data->parent_data) {
+		struct irq_domain *domain = data->domain;
+		irq_hw_number_t hwirq = data->hwirq;
+
+		if (hwirq < domain->revmap_size) {
+			domain->linear_revmap[hwirq] = virq;
+		} else {
+			mutex_lock(&revmap_trees_mutex);
+			radix_tree_insert(&domain->revmap_tree, hwirq, data);
+			mutex_unlock(&revmap_trees_mutex);
+		}
+
+		pr_debug("%s: Domain: %s HW-IRQ: %lu IRQ: %d (Mapping: %s)\n",
+			__func__, domain->name, hwirq, virq,
+			hwirq < domain->revmap_size ? "linear" : "radix");
+	}
+
+	irq_clear_status_flags(virq, IRQ_NOREQUEST);
 }
 
 static struct irq_data *irq_domain_insert_irq_data(struct irq_domain *domain,
@@ -131,45 +307,60 @@ static int irq_domain_alloc_irq_data(struct irq_domain *domain,
 	return 0;
 }
 
-/**
- * irq_domain_insert_irq
- *
- * Insert virq and its hwirq mapping into domain reverse map.
- * All parent domains are updated as well.
- *
- * TODO: Known BUG:
- *	In x86, different IO-APICs have the same hwirq from 0-23
- *	So for the IO-APIC domain itself, it is okay to just insert.
- *	Since each IO-APIC has its own domain structure.
- *	But, since all IO-APIC domain share the same x86_vector_domain,
- *	so it is BUG to insert directly into the parent domain.
- *
- *	We have this issue because the reverse mapping in lego is much
- *	simiplified and different from Linux's original implementation.
- *
- *	Just pay attention to this and fix this oneday.
- */
-static void irq_domain_insert_irq(int virq)
+static int irq_domain_alloc_descs(int virq, unsigned int cnt,
+				  irq_hw_number_t hwirq, int node)
 {
-	struct irq_data *data;
+	unsigned int hint;
 
-	for (data = irq_get_irq_data(virq); data; data = data->parent_data) {
-		struct irq_domain *domain = data->domain;
-		irq_hw_number_t hwirq = data->hwirq;
-
-		if (hwirq < domain->revmap_size) {
-			domain->linear_revmap[hwirq] = virq;
-		} else {
-			WARN(1, "Invalid hwirq: %lu\n", hwirq);
-			return;
-		}
-
-		/* If not already assigned, give the domain the chip's name */
-		if (!domain->name && data->chip)
-			domain->name = data->chip->name;
+	if (virq >= 0) {
+		virq = irq_alloc_descs(virq, virq, cnt, node);
+	} else {
+		hint = hwirq % nr_irqs;
+		if (hint == 0)
+			hint++;
+		virq = irq_alloc_descs_from(hint, cnt, node);
+		if (virq <= 0 && hint > 1)
+			virq = irq_alloc_descs_from(1, cnt, node);
 	}
 
-	irq_clear_status_flags(virq, IRQ_NOREQUEST);
+	return virq;
+}
+
+static bool irq_domain_is_auto_recursive(struct irq_domain *domain)
+{
+	return domain->flags & IRQ_DOMAIN_FLAG_AUTO_RECURSIVE;
+}
+
+static void irq_domain_free_irqs_recursive(struct irq_domain *domain,
+					   unsigned int irq_base,
+					   unsigned int nr_irqs)
+{
+	domain->ops->free(domain, irq_base, nr_irqs);
+	if (irq_domain_is_auto_recursive(domain)) {
+		BUG_ON(!domain->parent);
+		irq_domain_free_irqs_recursive(domain->parent, irq_base,
+					       nr_irqs);
+	}
+}
+
+static int irq_domain_alloc_irqs_recursive(struct irq_domain *domain,
+					   unsigned int irq_base,
+					   unsigned int nr_irqs, void *arg)
+{
+	int ret = 0;
+	struct irq_domain *parent = domain->parent;
+	bool recursive = irq_domain_is_auto_recursive(domain);
+
+	BUG_ON(recursive && !parent);
+	if (recursive)
+		ret = irq_domain_alloc_irqs_recursive(parent, irq_base,
+						      nr_irqs, arg);
+	if (ret >= 0)
+		ret = domain->ops->alloc(domain, irq_base, nr_irqs, arg);
+	if (ret < 0 && recursive)
+		irq_domain_free_irqs_recursive(parent, irq_base, nr_irqs);
+
+	return ret;
 }
 
 /**
@@ -180,7 +371,6 @@ static void irq_domain_insert_irq(int virq)
  * @node:	NUMA node id for memory allocation
  * @arg:	domain specific argument
  * @realloc:	IRQ descriptors have already been allocated if true
- * @affinity:	Optional irq affinity mask for multiqueue devices
  *
  * Allocate IRQ numbers and initialized all data structures to support
  * hierarchy IRQ domains.
@@ -196,7 +386,7 @@ static void irq_domain_insert_irq(int virq)
  */
 int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 			    unsigned int nr_irqs, int node, void *arg,
-			    bool realloc, const struct cpumask *affinity)
+			    bool realloc)
 {
 	int virq, ret, i;
 
@@ -215,7 +405,7 @@ int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 	if (realloc && irq_base >= 0) {
 		virq = irq_base;
 	} else {
-		virq = irq_domain_alloc_IRQ_number(irq_base, nr_irqs, 0, node, affinity);
+		virq = irq_domain_alloc_descs(irq_base, nr_irqs, 0, node);
 		if (virq < 0) {
 			pr_debug("cannot allocate IRQ(base %d, count %d)\n",
 				 irq_base, nr_irqs);
@@ -226,7 +416,7 @@ int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 	if (irq_domain_alloc_irq_data(domain, virq, nr_irqs)) {
 		pr_debug("cannot allocate memory for IRQ%d\n", virq);
 		ret = -ENOMEM;
-		goto out;
+		goto out_free_desc;
 	}
 
 	/*
@@ -234,19 +424,22 @@ int __irq_domain_alloc_irqs(struct irq_domain *domain, int irq_base,
 	 * It will allocate irq_data->chip_data and
 	 * do other necessary chip specific settings:
 	 */
-	ret = domain->ops->alloc(domain, virq, nr_irqs, arg);
-	if (ret < 0)
-		goto out_free;
-
+	mutex_lock(&irq_domain_mutex);
+	ret = irq_domain_alloc_irqs_recursive(domain, virq, nr_irqs, arg);
+	if (ret < 0) {
+		mutex_unlock(&irq_domain_mutex);
+		goto out_free_irq_data;
+	}
 	for (i = 0; i < nr_irqs; i++)
 		irq_domain_insert_irq(virq + i);
+	mutex_unlock(&irq_domain_mutex);
 
 	return virq;
 
-out_free:
+out_free_irq_data:
 	irq_domain_free_irq_data(virq, nr_irqs);
-out:
-	__irq_number_free(virq, nr_irqs);
+out_free_desc:
+	irq_free_descs(virq, nr_irqs);
 	return ret;
 }
 
@@ -323,4 +516,83 @@ void irq_domain_activate_irq(struct irq_data *irq_data)
 		if (domain->ops->activate)
 			domain->ops->activate(domain, irq_data);
 	}
+}
+
+/**
+ * irq_domain_set_hwirq_and_chip - Set hwirq and irqchip of @virq at @domain
+ * @domain:	Interrupt domain to match
+ * @virq:	IRQ number
+ * @hwirq:	The hwirq number
+ * @chip:	The associated interrupt chip
+ * @chip_data:	The associated chip data
+ */
+int irq_domain_set_hwirq_and_chip(struct irq_domain *domain, unsigned int virq,
+				  irq_hw_number_t hwirq, struct irq_chip *chip,
+				  void *chip_data)
+{
+	struct irq_data *irq_data = irq_domain_get_irq_data(domain, virq);
+
+	if (!irq_data)
+		return -ENOENT;
+
+	irq_data->hwirq = hwirq;
+	irq_data->chip = chip ? chip : &no_irq_chip;
+	irq_data->chip_data = chip_data;
+
+	return 0;
+}
+
+/**
+ * irq_domain_free_irqs_parent - Free interrupts from parent domain
+ * @irq_base:	Base IRQ number
+ * @nr_irqs:	Number of IRQs to free
+ *
+ * Check whether the domain has been setup recursive. If not free
+ * through the parent domain.
+ */
+void irq_domain_free_irqs_parent(struct irq_domain *domain,
+				 unsigned int irq_base, unsigned int nr_irqs)
+{
+	/* irq_domain_free_irqs_recursive() will call parent's free */
+	if (!irq_domain_is_auto_recursive(domain) && domain->parent)
+		irq_domain_free_irqs_recursive(domain->parent, irq_base,
+					       nr_irqs);
+}
+
+/**
+ * irq_domain_free_irqs_common - Clear irq_data and free the parent
+ * @domain:	Interrupt domain to match
+ * @virq:	IRQ number to start with
+ * @nr_irqs:	The number of irqs to free
+ */
+void irq_domain_free_irqs_common(struct irq_domain *domain, unsigned int virq,
+				 unsigned int nr_irqs)
+{
+	struct irq_data *irq_data;
+	int i;
+
+	for (i = 0; i < nr_irqs; i++) {
+		irq_data = irq_domain_get_irq_data(domain, virq + i);
+		if (irq_data)
+			irq_domain_reset_irq_data(irq_data);
+	}
+	irq_domain_free_irqs_parent(domain, virq, nr_irqs);
+}
+
+/*
+ * irq_domain_free_irqs_top - Clear handler and handler data, clear irqdata and free parent
+ * @domain:	Interrupt domain to match
+ * @virq:	IRQ number to start with
+ * @nr_irqs:	The number of irqs to free
+ */
+void irq_domain_free_irqs_top(struct irq_domain *domain, unsigned int virq,
+			      unsigned int nr_irqs)
+{
+	int i;
+
+	for (i = 0; i < nr_irqs; i++) {
+		irq_set_handler_data(virq + i, NULL);
+		irq_set_handler(virq + i, NULL);
+	}
+	irq_domain_free_irqs_common(domain, virq, nr_irqs);
 }

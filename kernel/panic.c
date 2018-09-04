@@ -31,9 +31,14 @@ struct warn_args {
 	va_list args;
 };
 
+static DEFINE_SPINLOCK(warn_lock);
+
 static void __warn(const char *file, int line, void *caller,
 		   struct pt_regs *regs, struct warn_args *args)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&warn_lock, flags);
 	pr_warn("------------[ cut here ]------------\n");
 
 	if (file)
@@ -53,6 +58,7 @@ static void __warn(const char *file, int line, void *caller,
 		dump_stack();
 
 	print_oops_end_marker();
+	spin_unlock_irqrestore(&warn_lock, flags);
 }
 
 void warn_slowpath_fmt(const char *file, int line, const char *fmt, ...)

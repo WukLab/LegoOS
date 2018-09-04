@@ -412,4 +412,18 @@ do {									\
 #define smp_store_mb(var, value)	do { WRITE_ONCE(var, value); barrier(); } while (0)
 #endif
 
+/**
+ * lockless_dereference() - safely load a pointer for later dereference
+ * @p: The pointer to load
+ *
+ * Similar to rcu_dereference(), but for situations where the pointed-to
+ * object's lifetime is managed by something other than RCU.  That
+ * "something other" might be reference counting or simple immortality.
+ */
+#define lockless_dereference(p) \
+({ \
+	typeof(p) _________p1 = READ_ONCE(p); \
+	(_________p1); \
+})
+
 #endif /* _LEGO_COMPILER_H_ */
