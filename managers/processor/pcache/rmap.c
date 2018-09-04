@@ -959,7 +959,6 @@ static int pcache_try_to_unmap_reserve_one(struct pcache_meta *pcm,
 				   rmap->address + PAGE_SIZE -1);
 
 	SetRmapReserved(rmap);
-	atomic_dec(&pcm->mapcount);
 
 	spin_unlock(ptl);
 	return ret;
@@ -1054,9 +1053,7 @@ static int pcache_free_reserved_rmap_one(struct pcache_meta *pcm,
 	PCACHE_BUG_ON_RMAP(!RmapReserved(rmap), rmap);
 	ClearRmapReserved(rmap);
 
-	list_del(&rmap->next);
-	free_pcache_rmap(rmap);
-
+	__pcache_remove_rmap(pcm, rmap);
 	return PCACHE_RMAP_AGAIN;
 }
 

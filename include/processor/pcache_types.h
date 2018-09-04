@@ -83,10 +83,10 @@ struct pcache_set {
 	atomic_t		nr_victims;
 
 #elif defined (CONFIG_PCACHE_EVICTION_PERSET_LIST)
-	struct list_head	eviction_list;
-
-	PSET_PADDING(_pad_elist_lock)
+	PSET_PADDING(_pad2_)
 	spinlock_t		eviction_list_lock;
+	struct list_head	eviction_list;
+	atomic_t		nr_eviction_entries;
 #endif
 } ____cacheline_aligned;
 

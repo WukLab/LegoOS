@@ -170,10 +170,10 @@ static void init_pcache_set_map(void)
 		 */
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 		atomic_set(&pset->nr_victims, 0);
-#endif
-#ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
+#elif CONFIG_PCACHE_EVICTION_PERSET_LIST
 		INIT_LIST_HEAD(&pset->eviction_list);
 		spin_lock_init(&pset->eviction_list_lock);
+		atomic_set(&pset->nr_eviction_entries, 0);
 #endif
 
 		for (j = 0; j < NR_PSET_STAT_ITEMS; j++)

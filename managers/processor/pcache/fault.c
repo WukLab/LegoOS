@@ -546,13 +546,9 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 			 * Wait until cache line is fully flushed
 			 * back to memory.
 			 */
-			bool counted = false;
-			while (pset_find_eviction(address, current)) {
+			while (unlikely(pset_find_eviction(address, current))) {
 				cpu_relax();
-				if (!counted) {
-					counted = true;
-					inc_pcache_event(PCACHE_FAULT_CONCUR_EVICTION);
-				}
+				inc_pcache_event(PCACHE_PSET_LIST_LOOKUP);
 			}
 #elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
 			/*

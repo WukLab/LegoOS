@@ -44,28 +44,6 @@ evict_find_line(struct pcache_set *pset)
 /* per set eviction status: for fast lookup */
 unsigned long *pcache_set_eviction_bitmap __read_mostly;
 
-bool __pset_find_eviction(unsigned long uvaddr, struct task_struct *tsk)
-{
-	struct pcache_set *pset;
-	struct pset_eviction_entry *pos;
-	bool found = false;
-
-	pset = user_vaddr_to_pcache_set(uvaddr);
-	uvaddr &= PAGE_MASK;
-
-	spin_lock(&pset->eviction_list_lock);
-	list_for_each_entry(pos, &pset->eviction_list, next) {
-		if (uvaddr == pos->address &&
-		   same_thread_group(tsk, pos->owner)) {
-			found = true;
-			break;
-		}
-	}
-	spin_unlock(&pset->eviction_list_lock);
-
-	return found;
-}
-
 static inline struct pset_eviction_entry *
 alloc_pset_eviction_entry(void)
 {
@@ -78,6 +56,56 @@ alloc_pset_eviction_entry(void)
 	return entry;
 }
 
+static inline void free_pset_eviction_entry(struct pset_eviction_entry *p)
+{
+	kfree(p);
+}
+
+static inline void __pset_add_eviction_entry(struct pset_eviction_entry *new,
+					     struct pcache_set *pset)
+{
+	list_add(&new->next, &pset->eviction_list);
+	atomic_inc(&pset->nr_eviction_entries);
+}
+
+static inline void __pset_del_eviction_entry(struct pset_eviction_entry *p,
+					     struct pcache_set *pset)
+{
+	list_del(&p->next);
+	atomic_dec(&pset->nr_eviction_entries);
+}
+
+static inline void
+pset_add_eviction_entry(struct pset_eviction_entry *new, struct pcache_set *pset)
+{
+	spin_lock(&pset->eviction_list_lock);
+	__pset_add_eviction_entry(new, pset);
+	spin_unlock(&pset->eviction_list_lock);
+}
+
+bool __pset_find_eviction(struct pcache_set *pset, unsigned long uvaddr,
+			  struct task_struct *tsk)
+{
+	struct pset_eviction_entry *pos;
+	bool found = false;
+
+	uvaddr &= PAGE_MASK;
+
+	spin_lock(&pset->eviction_list_lock);
+	list_for_each_entry(pos, &pset->eviction_list, next) {
+		if (uvaddr == pos->address &&
+		   same_thread_group(tsk, pos->owner)) {
+			found = true;
+
+			inc_pcache_event(PCACHE_PSET_LIST_HIT);
+			break;
+		}
+	}
+	spin_unlock(&pset->eviction_list_lock);
+
+	return found;
+}
+
 static int pset_add_eviction_one(struct pcache_meta *pcm,
 				 struct pcache_rmap *rmap, void *arg)
 {
@@ -86,59 +114,81 @@ static int pset_add_eviction_one(struct pcache_meta *pcm,
 	struct pset_eviction_entry *new;
 
 	new = alloc_pset_eviction_entry();
-	if (!new)
+	if (unlikely(!new)) {
+		WARN_ON_ONCE(1);
 		return PCACHE_RMAP_FAILED;
+	}
 
+	/* Already page aligned */
 	new->address = rmap->address;
 	new->owner = rmap->owner_process;
 	new->pcm = pcm;
 
-	spin_lock(&pset->eviction_list_lock);
-	list_add(&new->next, &pset->eviction_list);
-	__set_bit(pcache_set_to_set_index(pset), pcache_set_eviction_bitmap);
-	spin_unlock(&pset->eviction_list_lock);
+	/* Do the insetion */
+	pset_add_eviction_entry(new, pset);
 
 	(*nr_added)++;
 	return PCACHE_RMAP_AGAIN;
 }
 
+/*
+ * Add pcm rmap information to pset's eviction list.
+ * These entries will be looked up upon pcache fault time.
+ *
+ * Return number of entries added.
+ */
 static int pset_add_eviction(struct pcache_set *pset, struct pcache_meta *pcm)
 {
-	int nr_added;
+	int nr_added = 0;
 	struct rmap_walk_control rwc = {
 		.arg = &nr_added,
 		.rmap_one = pset_add_eviction_one,
 	};
 
-	if (!pcache_mapped(pcm))
-		return 0;
+	/*
+	 * This pcm was already locked and cannot be unmapped
+	 * in the middle. Check comment in top function.
+	 */
+	BUG_ON(!pcache_mapped(pcm));
+
 	rmap_walk(pcm, &rwc);
 	return nr_added;
 }
 
-static void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pcm)
+static void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pcm,
+				 int nr_added)
 {
-	struct pset_eviction_entry *pos, *keeper;
+	struct pset_eviction_entry *pos;
 
 	spin_lock(&pset->eviction_list_lock);
-	list_for_each_entry_safe(pos, keeper, &pset->eviction_list, next) {
+	list_for_each_entry(pos, &pset->eviction_list, next) {
 		if (pos->pcm == pcm) {
-			list_del(&pos->next);
-			kfree(pos);
+			__pset_del_eviction_entry(pos, pset);
+			free_pset_eviction_entry(pos);
+			nr_added--;
 		}
 	}
-
-	if (list_empty(&pset->eviction_list))
-		clear_bit(pcache_set_to_set_index(pset),
-			  pcache_set_eviction_bitmap);
 	spin_unlock(&pset->eviction_list_lock);
+
+	BUG_ON(nr_added);
 }
 
 static inline int
 evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm)
 {
-	/* 1) add entries to per set list */
-	pset_add_eviction(pset, pcm);
+	int nr_added;
+
+	/*
+	 * Add entries to pset
+	 * This has to be performed before we do unmap, thus concurrent
+	 * pgfault can look up the eviction entries, and hold until we finished.
+	 */
+	nr_added = pset_add_eviction(pset, pcm);
+	if (unlikely(!nr_added)) {
+		dump_pset(pset);
+		dump_pcache_meta(pcm, NULL);
+		BUG();
+	}
 
 	/* 2.1) Remove unmap, but don't free rmap */
 	pcache_try_to_unmap_reserve(pcm);
@@ -147,16 +197,18 @@ evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm)
 	pcache_free_reserved_rmap(pcm);
 
 	/* 3) remove entries */
-	pset_remove_eviction(pset, pcm);
+	pset_remove_eviction(pset, pcm, nr_added);
 
 	return 0;
 }
 #endif /* CONFIG_PCACHE_EVICTION_PERSET_LIST */
 
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
+
 DEFINE_PROFILE_POINT(evict_line_victim_prepare)
 DEFINE_PROFILE_POINT(evict_line_victim_unmap)
 DEFINE_PROFILE_POINT(evict_line_victim_finish)
+
 static inline int evict_line_victim(struct pcache_set *pset,
 				    struct pcache_meta *pcm, unsigned long address)
 {

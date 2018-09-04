@@ -555,18 +555,32 @@ void __clflush_one(pid_t tgid, unsigned long user_va,
 int pcache_evict_line(struct pcache_set *pset, unsigned long address);
 
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
-bool __pset_find_eviction(unsigned long, struct task_struct *);
-static inline bool
-pset_has_eviction(unsigned long uvaddr)
-{
-	return test_bit(user_vaddr_to_set_index(uvaddr), pcache_set_eviction_bitmap);
-}
+bool __pset_find_eviction(struct pcache_set *, unsigned long, struct task_struct *);
+
 static inline bool
 pset_find_eviction(unsigned long uvaddr, struct task_struct *p)
 {
-	if (likely(!pset_has_eviction(uvaddr)))
+	struct pcache_set *pset = user_vaddr_to_pcache_set(uvaddr);
+
+	/*
+	 * HACK!!!
+	 *
+	 * We are safe to JUST check counter here. The reason is simple:
+	 * we first do insert and update counter, then we do unmap.
+	 *
+	 * This code path happen at pgfault time. It basically means
+	 * either 1) the page has never been established, 2) the page
+	 * has just been evicted. According to above, we are safe
+	 * at both cases.
+	 */
+	if (likely(atomic_read(&pset->nr_eviction_entries) == 0))
 		return false;
-	return __pset_find_eviction(uvaddr, p);
+
+	/*
+	 * We may have some false-positive here due to set-associated pcache.
+	 * Should be fine...
+	 */
+	return __pset_find_eviction(pset, uvaddr, p);
 }
 #endif
 
