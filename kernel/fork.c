@@ -48,6 +48,12 @@ static inline void free_task_struct(struct task_struct *tsk)
 	free_pages((unsigned long)tsk, arch_task_struct_order);
 }
 
+static inline void put_signal_struct(struct signal_struct *sig)
+{
+	if (atomic_dec_and_test(&sig->sigcnt))
+		kfree(sig);
+}
+
 static inline unsigned long *
 alloc_thread_stack_node(struct task_struct *tsk, int node)
 {
