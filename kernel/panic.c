@@ -13,6 +13,7 @@
 #include <lego/ptrace.h>
 #include <lego/atomic.h>
 #include <lego/profile.h>
+#include <lego/fit_ibapi.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
@@ -128,6 +129,7 @@ void panic(const char *fmt, ...)
 		exit_processor_strace(current);
 		print_pcache_events();
 		print_profile_points();
+		dump_ib_stats();
 	}
 
 	for (;;)
