@@ -1886,6 +1886,8 @@ void *fit_alloc_memory_for_mr(unsigned int length)
 	return tempptr;
 }
 
+extern unsigned long	nr_recvcq_cqes[NUM_POLLING_THREADS];
+
 /*
  * HACK!!!
  *
@@ -1893,10 +1895,14 @@ void *fit_alloc_memory_for_mr(unsigned int length)
  * This recv_cq includes all incoming messages.
  * This thread is pinned to a cpu core and keep running.
  */
-int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
+int fit_poll_recv_cq(void *_info)
 {
+	struct thread_pass_struct *info = _info;
+	ppc *ctx;
+	int recvcq_id;
+	struct ib_cq *target_cq;
+	struct ib_wc *wc;
 	int ne;
-	struct ib_wc wc[NUM_PARALLEL_CONNECTION];
 	int i, connection_id;
 	int node_id, port, offset;
 	int reply_indicator_index, length, opcode;
@@ -1907,6 +1913,14 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 	int test_result=0;
 #endif
 	int reply_data, private_bits;
+
+	/* Info passwd by creater */
+	ctx = info->ctx;
+	target_cq = info->target_cq;
+	recvcq_id = info->recvcq_id;
+
+	wc = kmalloc(sizeof(*wc) * NUM_PARALLEL_CONNECTION, GFP_KERNEL);
+	BUG_ON(!wc);
 
 	if (pin_current_thread())
 		panic("Fail to pin poll_cq");
@@ -1923,6 +1937,7 @@ int fit_poll_cq(ppc *ctx, struct ib_cq *target_cq)
 				schedule();
 		} while (ne < 1);
 
+		nr_recvcq_cqes[recvcq_id] += ne;
 		for (i = 0; i < ne; i++) {
 			if (wc[i].status != IB_WC_SUCCESS) {
 				pr_err("wc.status: %s, wr_id %d",
@@ -2263,18 +2278,6 @@ int sock_poll_cq(void *in)
 	return 0;
 }
 #endif
-
-int fit_poll_cq_pass(void *in)
-{
-	struct thread_pass_struct *input = (struct thread_pass_struct *)in;
-	//printk(KERN_CRIT "%s: target_cq %p\n", __func__, input->target_cq);
-
-	fit_poll_cq(input->ctx, input->target_cq);
-
-	kfree(input);
-	//printk(KERN_CRIT "%s: kill ctx %p cq %p\n", __func__, (void *)input->ctx, (void *)input->target_cq);
-	return 0;
-}
 
 int waiting_queue_handler(void *in)
 {
@@ -3224,7 +3227,7 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
         int temp_ctx_number;
 	ppc *ctx;
 	struct fit_ibv_mr *ret_mr;
-	struct thread_pass_struct thread_pass_poll_cq;
+	struct thread_pass_struct *info;
 	int num_connected_nodes = 0;
 	num_recvd_rdma_ring_mrs = 0;
 
@@ -3265,16 +3268,16 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	//Initialize multicast spin_lock
 	spin_lock_init(&multicast_lock);
 
-	/*
-	 * HACK!!!
-	 *
-	 * This is the only recv_cq we have
-	 * This is determined by NUM_POLLING_THREADS
-	 * Confusing.
-	 */
-	thread_pass_poll_cq.ctx = ctx;
-	thread_pass_poll_cq.target_cq = ctx->cq[0];
-	kthread_run(fit_poll_cq_pass, &thread_pass_poll_cq, "FIT_PollRecvCQ");
+	info = kmalloc(sizeof(*info) * NUM_POLLING_THREADS, GFP_KERNEL);
+	if (!info)
+		return NULL;
+
+	for (i = 0; i < NUM_POLLING_THREADS; i++) {
+		info[i].recvcq_id = i;
+		info[i].ctx = ctx;
+		info[i].target_cq = ctx->cq[i];
+		kthread_run(fit_poll_recv_cq, &info[i], "FIT_RecvCQ-%d", i);
+	}
 
 #ifdef CONFIG_SOCKET_SYSCALL
 	if (1) {

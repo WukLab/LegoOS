@@ -516,6 +516,7 @@ struct thread_pass_struct{
 	struct ib_cq *target_cq;
 	char *msg;
 	struct send_and_reply_format *sr_request;
+	int recvcq_id;
 };
 
 #endif
