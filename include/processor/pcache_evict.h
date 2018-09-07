@@ -152,4 +152,11 @@ static inline struct pcache_meta *
 evict_find_line_random(struct pcache_set *pset) { BUG(); }
 #endif /* EVICT_RANDOM */
 
+#ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
+int evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm);
+#else
+static inline int
+evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm) { BUG(); }
+#endif
+
 #endif /* _LEGO_PROCESSOR_PCACHE_SWEEP_H_ */
