@@ -341,7 +341,10 @@ static int thpool_worker_func(void *_worker)
 			set_wip_buffer_thpool_worker(w, b);
 
 			PROFILE_START(thpool_worker_handler);
-			b->tx_size = 0;
+
+			/* Invoke the real handler */
+			tb_reset_tx_size(b);
+			tb_reset_private_tx(b);
 			thpool_worker_handler(w, b);
 
 			/*

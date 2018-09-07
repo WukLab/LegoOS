@@ -110,21 +110,20 @@ struct thpool_buffer {
 	int			fit_node_id;
 	int			fit_offset;
 
+	/*
+	 * Handler supplied tx buffer
+	 * Only valid if privateTX flag is set
+	 */
+	void			*private_tx;
 	int			tx_size;
 
 	THPOOL_PADDING(_pad1);
 	char			tx[THPOOL_TX_SIZE];
 };
 
-static inline void tb_set_tx_size(struct thpool_buffer *tb, int size)
-{
-	if (unlikely(size >= THPOOL_TX_SIZE))
-		panic("Size: %d\n", size);
-	tb->tx_size = size;
-}
-
 enum thpool_buffer_flags {
 	THPOOL_BUFFER_used,
+	THPOOL_BUFFER_privateTX,
 
 	NR_THPOOL_BUFFER_FLAGS,
 };
@@ -167,6 +166,35 @@ static inline void __ClearThpoolBuffer##uname(struct thpool_buffer *p)	\
 	__CLEAR_THPOOL_BUFFER_FLAGS(uname, lname)
 
 THPOOL_BUFFER_FLAGS(Used, used)
+THPOOL_BUFFER_FLAGS(PrivateTX, privateTX)
+
+static inline void tb_set_tx_size(struct thpool_buffer *tb, int size)
+{
+	if (unlikely(size >= THPOOL_TX_SIZE))
+		panic("Size: %d\n", size);
+	tb->tx_size = size;
+}
+
+static inline void tb_reset_tx_size(struct thpool_buffer *tb)
+{
+	tb->tx_size = 0;
+}
+
+/*
+ * Both set/clear are using the thread-local thpool buffer
+ * thus non-atomic bitops are fine here.
+ */
+static inline void tb_set_private_tx(struct thpool_buffer *tb, void *private_tx)
+{
+	tb->private_tx = private_tx;
+	__SetThpoolBufferPrivateTX(tb);
+}
+
+static inline void tb_reset_private_tx(struct thpool_buffer *tb)
+{
+	tb->private_tx = NULL;
+	__ClearThpoolBufferPrivateTX(tb);
+}
 
 static inline void *thpool_buffer_rx(struct thpool_buffer *tb)
 {

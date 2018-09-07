@@ -162,14 +162,11 @@ static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 	}
 
 	/*
-	 * For normal pcache miss, we do not use the rx buffer.
-	 * We simply use the page itself.
-	 *
-	 * TODO
-	 * This is too costly. We must remove this!
+	 * For normal pcache miss, we do not use the tx.
+	 * We simply use the page itself (use private_tx).
 	 */
-	memcpy(tb->tx, (void *)new_page, PCACHE_LINE_SIZE);
-	tb->tx_size = PCACHE_LINE_SIZE;
+	tb_set_private_tx(tb, (void *)new_page);
+	tb_set_tx_size(tb, PCACHE_LINE_SIZE);
 }
 
 static void do_combined_flush(void *_msg, struct lego_task_struct *p)

@@ -1352,7 +1352,10 @@ void fit_ack_reply_callback(struct thpool_buffer *b)
 	node_id = b->fit_node_id;
 	offset = b->fit_offset;
 
-	reply_data = b->tx;
+	if (ThpoolBufferPrivateTX(b))
+		reply_data = b->private_tx;
+	else
+		reply_data = b->tx;
 	reply_size = b->tx_size;
 
 	/*
