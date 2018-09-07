@@ -72,6 +72,7 @@ static struct pcache_rmap *alloc_pcache_rmap(struct pcache_meta *pcm)
 	index = __pcache_meta_index(pcm);
 	rmap = index_to_pcache_rmap(index);
 
+	/* Atomic test-and-set is a sync point */
 	if (unlikely(TestSetRmapUsed(rmap))) {
 		rmap = kmalloc(sizeof(*rmap), GFP_KERNEL);
 		if (unlikely(!rmap))
