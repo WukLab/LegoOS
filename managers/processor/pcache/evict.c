@@ -41,9 +41,6 @@ evict_find_line(struct pcache_set *pset)
 }
 
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
-/* per set eviction status: for fast lookup */
-unsigned long *pcache_set_eviction_bitmap __read_mostly;
-
 static inline struct pset_eviction_entry *
 alloc_pset_eviction_entry(void)
 {

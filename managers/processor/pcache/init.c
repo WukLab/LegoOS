@@ -68,14 +68,6 @@ static void __init alloc_pcache_set_map(void)
 {
 	u64 size;
 
-#ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
-	/* the eviction bitmap */
-	size = nr_cachesets / BITS_PER_BYTE;
-	pcache_set_eviction_bitmap = memblock_virt_alloc(size, PAGE_SIZE);
-	if (!pcache_set_eviction_bitmap)
-		panic("Unable to allocate pcache set bitmap!");
-#endif
-
 	/* the pset array */
 	size = nr_cachesets * sizeof(struct pcache_set);
 	pcache_set_map = memblock_virt_alloc(size, PAGE_SIZE);

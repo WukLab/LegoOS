@@ -54,7 +54,6 @@ extern u64 pcache_way_cache_stride;
 /* pcache_set and pcache_meta array base */
 extern struct pcache_set *pcache_set_map;
 extern struct pcache_meta *pcache_meta_map;
-extern unsigned long *pcache_set_eviction_bitmap;
 
 /**
  * user_vaddr_to_set_index

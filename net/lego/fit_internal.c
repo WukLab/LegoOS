@@ -24,8 +24,10 @@
 #include <lego/kernel.h>
 #include <lego/fit_ibapi.h>
 #include <lego/comp_common.h>
+#include <lego/profile.h>
 #include <rdma/ib_verbs.h>
 
+#include <processor/pcache.h>
 #include <memory/thread_pool.h>
 
 #include "fit_internal.h"
@@ -2683,6 +2685,9 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 			pr_warn("ibapi_send_reply() CPU:%d PID:%d timeout (%u ms), caller: %pS\n",
 				smp_processor_id(), current->pid,
 				jiffies_to_msecs(jiffies - start_time), caller);
+			print_pcache_events();
+			print_profile_points();
+			dump_ib_stats();
 			return -ETIMEDOUT;
 		}
 	}
