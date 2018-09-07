@@ -196,6 +196,8 @@ static void init_pcache_meta_map(void)
 	}
 }
 
+void __init init_pcache_clflush_buffer(void);
+
 /*
  * Post init is called after system has fully initialized.
  * We do array init and threads creation here.
@@ -230,6 +232,8 @@ void __init pcache_post_init(void)
 	init_pcache_meta_map();
 
 	init_pcache_set_map();
+
+	init_pcache_clflush_buffer();
 
 	/* Create victim_flush thread if configured */
 	victim_cache_post_init();

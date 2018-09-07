@@ -8,6 +8,7 @@
  */
 
 #include <lego/mm.h>
+#include <lego/smp.h>
 #include <lego/wait.h>
 #include <lego/slab.h>
 #include <lego/log2.h>
@@ -30,7 +31,9 @@
 static inline void clflush_debug(const char *fmt, ...) { }
 #endif
 
-DEFINE_PROFILE_POINT(pcache_flush)
+static struct p2m_flush_msg *clflush_msg_array;
+
+DEFINE_PROFILE_POINT(pcache_flush_net)
 
 /*
  * Ultimate flush function.
@@ -39,33 +42,41 @@ DEFINE_PROFILE_POINT(pcache_flush)
  * executed async from the normal code path. Task/mm structure may be freed already.
  *
  * Replication is done the at the end, if configured.
+ *
+ * TODO:
+ * Instead of having a per-cpu message array and doing a memcpy,
+ * we should use IB sg list to send both metadate and in-place cache data out.
  */
 void __clflush_one(pid_t tgid, unsigned long user_va,
 		   unsigned int m_nid, unsigned int rep_nid, void *cache_addr)
 {
-	int reply;
+	int reply, cpu;
 	struct p2m_flush_msg *msg;
-	PROFILE_POINT_TIME(pcache_flush)
+	PROFILE_POINT_TIME(pcache_flush_net)
 
-	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
-	if (!msg)
-		return;
+	/*
+	 * Okay the trick here is: we are using sync network API
+	 * which means each CPU should only have 1 outstanding request.
+	 * A static message array will work.
+	 */
+	cpu = get_cpu();
+	msg = &clflush_msg_array[cpu];
 
 	/* Fill message */
 	fill_common_header(msg, P2M_PCACHE_FLUSH);
 	msg->pid = tgid;
 	msg->user_va = user_va & PCACHE_LINE_MASK;
 	memcpy(msg->pcacheline, cache_addr, PCACHE_LINE_SIZE);
+	barrier();
 
 	clflush_debug("I m_nid:%d tgid:%u user_va:%#lx cache_kva:%p",
 		m_nid, msg->pid, msg->user_va, cache_addr);
 
 	/* Network */
-	profile_point_start(pcache_flush);
+	PROFILE_START(pcache_flush_net);
 	ibapi_send_reply_timeout(m_nid, msg, sizeof(*msg),
 				 &reply, sizeof(reply), false, DEF_NET_TIMEOUT);
-	profile_point_leave(pcache_flush);
-	kfree(msg);
+	PROFILE_LEAVE(pcache_flush_net);
 	clflush_debug("O tgid:%u user_va:%#lx cache_kva:%p reply:%d %s",
 		msg->pid, msg->user_va, cache_addr, reply, perror(reply));
 
@@ -78,6 +89,8 @@ void __clflush_one(pid_t tgid, unsigned long user_va,
 	 * memory component. If replication is enabled.
 	 */
 	replicate(tgid, user_va, m_nid, rep_nid, cache_addr);
+
+	put_cpu();
 }
 
 /*
@@ -145,4 +158,14 @@ int pcache_flush_one(struct pcache_meta *pcm)
 	ClearPcacheWriteback(pcm);
 
 	return 0;
+}
+
+void __init init_pcache_clflush_buffer(void)
+{
+	clflush_msg_array = kmalloc(sizeof(*clflush_msg_array) * nr_cpus, GFP_KERNEL);
+	if (!clflush_msg_array)
+		panic("Unable to allocate clflush message array");
+
+	pr_info("%s(): clflush array at %p, nr_entries: %d\n",
+		__func__, clflush_msg_array, nr_cpus);
 }
