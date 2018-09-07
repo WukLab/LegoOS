@@ -72,6 +72,11 @@ static const char *const pcache_event_text[] = {
 	"nr_pcache_rmap_alloc_kmalloc",
 	"nr_pcache_rmap_free",
 	"nr_pcache_rmap_free_kmalloc",
+
+	"nr_pcache_pee_alloc",
+	"nr_pcache_pee_alloc_kmalloc",
+	"nr_pcache_pee_free",
+	"nr_pcache_pee_free_kmalloc",
 };
 
 void print_pcache_events(void)

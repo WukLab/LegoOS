@@ -32,12 +32,62 @@ enum pcache_set_stat_item {
 
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
 struct pset_eviction_entry {
-	unsigned long		address;	/* page aligned */
+	unsigned long		flags;
+	unsigned long		address;	/* page aligned UVA */
 	struct task_struct	*owner;
 	struct pcache_meta	*pcm;		/* associated pcm */
 	struct list_head	next;
+} ____cacheline_aligned_in_smp;
+
+/* Pset-Eviction-Entry (pee) Flags */
+enum pcache_pee_flags {
+	PCACHE_PEE_kmalloced,
+	PCACHE_PEE_used,
+
+	NR_PCACHE_PEE_FLAGS
 };
-#endif
+
+#define TEST_PEE_FLAGS(uname, lname)					\
+static inline int Pee##uname(const struct pset_eviction_entry *p)	\
+{									\
+	return test_bit(PCACHE_PEE_##lname, &p->flags);			\
+}
+
+#define SET_PEE_FLAGS(uname, lname)					\
+static inline void SetPee##uname(struct pset_eviction_entry *p)		\
+{									\
+	set_bit(PCACHE_PEE_##lname, &p->flags);				\
+}
+
+#define CLEAR_PEE_FLAGS(uname, lname)					\
+static inline void ClearPee##uname(struct pset_eviction_entry*p)	\
+{									\
+	clear_bit(PCACHE_PEE_##lname, &p->flags);			\
+}
+
+#define TEST_SET_PEE_FLAGS(uname, lname)				\
+static inline int TestSetPee##uname(struct pset_eviction_entry *p)	\
+{									\
+	return test_and_set_bit(PCACHE_PEE_##lname, &p->flags);		\
+}
+
+#define TEST_CLEAR_PEE_FLAGS(uname, lname)				\
+static inline int TestClearPee##uname(struct pset_eviction_entry *p)	\
+{									\
+	return test_and_clear_bit(PCACHE_PEE_##lname, &p->flags);	\
+}
+
+#define PEE_FLAGS(uname, lname)					\
+	TEST_PEE_FLAGS(uname, lname)					\
+	SET_PEE_FLAGS(uname, lname)					\
+	CLEAR_PEE_FLAGS(uname, lname)					\
+	TEST_SET_PEE_FLAGS(uname, lname)				\
+	TEST_CLEAR_PEE_FLAGS(uname, lname)
+
+PEE_FLAGS(Kmalloced, kmalloced)
+PEE_FLAGS(Used, used)
+
+#endif /* CONFIG_PCACHE_EVICTION_PERSET_LIST */
 
 struct pset_padding {
 	char x[0];

@@ -18,24 +18,64 @@
 #include <lego/random.h>
 #include <lego/jiffies.h>
 #include <lego/profile.h>
+#include <lego/memblock.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
-static inline struct pset_eviction_entry *
-alloc_pset_eviction_entry(void)
-{
-	struct pset_eviction_entry *entry;
+/*
+ * Same as pcache_rmap_map, we use the same trick here.
+ * Check comment there.
+ */
+static struct pset_eviction_entry *pset_eviction_entry_map;
 
-	entry = kmalloc(sizeof(*entry), GFP_KERNEL);
-	if (entry) {
-		INIT_LIST_HEAD(&entry->next);
-	}
-	return entry;
+static inline struct pset_eviction_entry *
+index_to_pee(unsigned long index)
+{
+	return &pset_eviction_entry_map[index];
 }
 
-static inline void free_pset_eviction_entry(struct pset_eviction_entry *p)
+DEFINE_PROFILE_POINT(pcache_pee_alloc)
+
+static inline struct pset_eviction_entry *
+alloc_pset_eviction_entry(struct pcache_meta *pcm)
 {
-	kfree(p);
+	struct pset_eviction_entry *pee;
+	unsigned long index;
+	PROFILE_POINT_TIME(pcache_pee_alloc)
+
+	PROFILE_START(pcache_pee_alloc);
+
+	index = __pcache_meta_index(pcm);
+	pee = index_to_pee(index);
+
+	if (unlikely(TestSetPeeUsed(pee))) {
+		pee = kmalloc(sizeof(*pee), GFP_KERNEL);
+		if (unlikely(!pee))
+			goto out;
+
+		SetPeeKmalloced(pee);
+		inc_pcache_event(PCACHE_PEE_ALLOC_KMALLOC);
+	}
+
+	INIT_LIST_HEAD(&pee->next);
+out:
+	PROFILE_LEAVE(pcache_pee_alloc);
+	inc_pcache_event(PCACHE_PEE_ALLOC);
+	return pee;
+}
+
+static inline void free_pset_eviction_entry(struct pset_eviction_entry *pee)
+{
+	if (unlikely(PeeKmalloced(pee))) {
+		kfree(pee);
+		inc_pcache_event(PCACHE_PEE_FREE_KMALLOC);
+		goto out;
+	}
+
+	if (unlikely(!TestClearPeeUsed(pee)))
+		BUG();
+out:
+	inc_pcache_event(PCACHE_PEE_FREE);
 }
 
 static inline void __pset_add_eviction_entry(struct pset_eviction_entry *new,
@@ -90,7 +130,7 @@ static int pset_add_eviction_one(struct pcache_meta *pcm,
 	struct pcache_set *pset = pcache_meta_to_pcache_set(pcm);
 	struct pset_eviction_entry *new;
 
-	new = alloc_pset_eviction_entry();
+	new = alloc_pset_eviction_entry(pcm);
 	if (unlikely(!new)) {
 		WARN_ON_ONCE(1);
 		return PCACHE_RMAP_FAILED;
@@ -195,4 +235,19 @@ int evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm)
 	PROFILE_LEAVE(evict_line_perset_remove);
 
 	return 0;
+}
+
+void __init alloc_pcache_perset_map(void)
+{
+	size_t size, total;
+
+	size = sizeof(struct pset_eviction_entry);
+	total = size * nr_cachelines;
+
+	pset_eviction_entry_map = memblock_virt_alloc(total, PAGE_SIZE);
+	if (!pset_eviction_entry_map)
+		panic("Unable to allocate pset_eviction_entry_map!");
+
+	pr_info("%s(): eviction entry size: %zu B, total reserved: %zu B, at %p\n",
+		__func__, size, total, pset_eviction_entry_map);
 }

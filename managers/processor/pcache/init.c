@@ -142,6 +142,7 @@ void __init pcache_early_init(void)
 	/* Early allocation that needs memblock */
 	alloc_pcache_set_map();
 	alloc_pcache_rmap_map();
+	alloc_pcache_perset_map();
 	victim_cache_early_init();
 }
 
