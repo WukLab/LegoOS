@@ -157,14 +157,16 @@ enum rmap_caller {
 };
 
 struct pcache_rmap {
-	pte_t			*page_table;
 	unsigned long		flags;
+	pte_t			*page_table;
 	struct mm_struct	*owner_mm;
 	struct task_struct	*owner_process;
 	enum rmap_caller	caller;
 
-	/* page aligned */
+	/* page aligned user virtual address */
 	unsigned long		address;
+
+	/* linked rmaps, belong to the same pcm */
 	struct list_head	next;
 } ____cacheline_aligned;
 
@@ -174,34 +176,52 @@ struct pcache_rmap {
 
 enum pcache_rmap_flags {
 	PCACHE_RMAP_reserved,
+	PCACHE_RMAP_kmalloced,
+	PCACHE_RMAP_used,
 
 	NR_PCACHE_RMAP_FLAGS
 };
 
-#define TEST_RMAP_FLAGS(uname, lname)				\
-static inline int Rmap##uname(const struct pcache_rmap *p)	\
-{								\
-	return test_bit(PCACHE_RMAP_##lname, &p->flags);	\
+#define TEST_RMAP_FLAGS(uname, lname)					\
+static inline int Rmap##uname(const struct pcache_rmap *p)		\
+{									\
+	return test_bit(PCACHE_RMAP_##lname, &p->flags);		\
 }
 
-#define SET_RMAP_FLAGS(uname, lname)				\
-static inline void SetRmap##uname(struct pcache_rmap *p)	\
-{								\
-	set_bit(PCACHE_RMAP_##lname, &p->flags);		\
+#define SET_RMAP_FLAGS(uname, lname)					\
+static inline void SetRmap##uname(struct pcache_rmap *p)		\
+{									\
+	set_bit(PCACHE_RMAP_##lname, &p->flags);			\
 }
 
-#define CLEAR_RMAP_FLAGS(uname, lname)				\
-static inline void ClearRmap##uname(struct pcache_rmap *p)	\
-{								\
-	clear_bit(PCACHE_RMAP_##lname, &p->flags);		\
+#define CLEAR_RMAP_FLAGS(uname, lname)					\
+static inline void ClearRmap##uname(struct pcache_rmap *p)		\
+{									\
+	clear_bit(PCACHE_RMAP_##lname, &p->flags);			\
 }
 
-#define RMAP_FLAGS(uname, lname)				\
-	TEST_RMAP_FLAGS(uname, lname)				\
-	SET_RMAP_FLAGS(uname, lname)				\
-	CLEAR_RMAP_FLAGS(uname, lname)
+#define TEST_SET_RMAP_FLAGS(uname, lname)				\
+static inline int TestSetRmap##uname(struct pcache_rmap *p)		\
+{									\
+	return test_and_set_bit(PCACHE_RMAP_##lname, &p->flags);	\
+}
+
+#define TEST_CLEAR_RMAP_FLAGS(uname, lname)				\
+static inline int TestClearRmap##uname(struct pcache_rmap *p)		\
+{									\
+	return test_and_clear_bit(PCACHE_RMAP_##lname, &p->flags);	\
+}
+
+#define RMAP_FLAGS(uname, lname)					\
+	TEST_RMAP_FLAGS(uname, lname)					\
+	SET_RMAP_FLAGS(uname, lname)					\
+	CLEAR_RMAP_FLAGS(uname, lname)					\
+	TEST_SET_RMAP_FLAGS(uname, lname)				\
+	TEST_CLEAR_RMAP_FLAGS(uname, lname)
 
 RMAP_FLAGS(Reserved, reserved)
+RMAP_FLAGS(Kmalloced, kmalloced)
+RMAP_FLAGS(Used, used)
 
 /*
  * struct pcache_set flags

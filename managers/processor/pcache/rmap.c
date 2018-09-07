@@ -14,6 +14,8 @@
 #include <lego/pgfault.h>
 #include <lego/syscalls.h>
 #include <lego/ratelimit.h>
+#include <lego/memblock.h>
+#include <lego/profile_point.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
@@ -29,35 +31,88 @@ static inline void rmap_debug(const char *fmt, ...) { }
 #endif
 
 /*
- * Our rmap points to PTE directly,
- * and rmap operations are carried out with pcache locked
- *
- * Thus the lock ordering is:
- * 	lock pset (optional)
- * 	lock pcache
- * 	lock pte
+ * FAT NOTE:
+ * Our rmap points to PTE directly, and rmap operations are carried out
+ * with pcache locked. Thus the lock ordering is:
+ * 	- lock pset (optional)
+ * 	- lock pcache
+ * 	- lock pte
  *
  * And due to the rmap design, the lock ordering of pcache and pte can NOT
  * be changed. Other code the breaks this ordering guarantee should be very
  * careful not to introduce deadlock.
  */
 
-static struct pcache_rmap *alloc_pcache_rmap(void)
+/*
+ * This is a pre-allocated pcache_rmap array.
+ * It has a one-to-one mapping to pcache_meta_map.
+ * Both are referenced by the same index.
+ *
+ * What if one pcm requires multiple rmaps (e.g. fork)? We use kmalloc.
+ * Do note commonly each pcm is only mapped to one single process.
+ * Thus this should speed things up a lot.
+ */
+static struct pcache_rmap *rmap_map;
+
+static inline struct pcache_rmap *index_to_pcache_rmap(unsigned long index)
+{
+	return &rmap_map[index];
+}
+
+DEFINE_PROFILE_POINT(pcache_rmap_alloc)
+
+static struct pcache_rmap *alloc_pcache_rmap(struct pcache_meta *pcm)
 {
 	struct pcache_rmap *rmap;
+	unsigned long index;
+	PROFILE_POINT_TIME(pcache_rmap_alloc)
 
-	rmap = kmalloc(sizeof(*rmap), GFP_KERNEL);
-	if (rmap) {
-		INIT_LIST_HEAD(&rmap->next);
-		rmap->flags = 0;
+	PROFILE_START(pcache_rmap_alloc);
+
+	index = __pcache_meta_index(pcm);
+	rmap = index_to_pcache_rmap(index);
+
+	if (unlikely(TestSetRmapUsed(rmap))) {
+		rmap = kmalloc(sizeof(*rmap), GFP_KERNEL);
+		if (unlikely(!rmap))
+			goto out;
+
+		SetRmapKmalloced(rmap);
+		inc_pcache_event(PCACHE_RMAP_ALLOC_KMALLOC);
 	}
+
+	/*
+	 * No need to clear other fields
+	 * because it will soon be filled
+	 */
+	INIT_LIST_HEAD(&rmap->next);
+
+out:
+	PROFILE_LEAVE(pcache_rmap_alloc);
+	inc_pcache_event(PCACHE_RMAP_ALLOC);
 	return rmap;
 }
 
 static void free_pcache_rmap(struct pcache_rmap *rmap)
 {
 	PCACHE_BUG_ON_RMAP(RmapReserved(rmap), rmap);
-	kfree(rmap);
+
+	if (unlikely(RmapKmalloced(rmap))) {
+		kfree(rmap);
+		inc_pcache_event(PCACHE_RMAP_FREE_KMALLOC);
+		goto out;
+	}
+
+	/*
+	 * Otherwise it is from pr-allocated array.
+	 * Just clear the Used flag.
+	 */
+	if (unlikely(!TestClearRmapUsed(rmap))) {
+		dump_pcache_rmap(rmap, NULL);
+		BUG();
+	}
+out:
+	inc_pcache_event(PCACHE_RMAP_FREE);
 }
 
 /*
@@ -360,7 +415,7 @@ int pcache_add_rmap(struct pcache_meta *pcm, pte_t *page_table,
 
 	lock_pcache(pcm);
 
-	rmap = alloc_pcache_rmap();
+	rmap = alloc_pcache_rmap(pcm);
 	if (!rmap) {
 		ret = -ENOMEM;
 		goto out;
@@ -1307,4 +1362,23 @@ int rmap_walk(struct pcache_meta *pcm, struct rmap_walk_control *rwc)
 	}
 
 	return ret;
+}
+
+/*
+ * Called during early boot
+ * where we want to use memblock to reserve large map..
+ */
+void __init alloc_pcache_rmap_map(void)
+{
+	size_t size, total;
+
+	size = sizeof(struct pcache_rmap);
+	total = size * nr_cachelines;
+
+	rmap_map = memblock_virt_alloc(total, PAGE_SIZE);
+	if (!rmap_map)
+		panic("Unable to allocate rmap map!");
+
+	pr_info("%s(): rmap size: %zu B, total reserved: %zu B, at %p\n",
+		__func__, size, total, rmap_map);
 }

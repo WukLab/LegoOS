@@ -83,6 +83,9 @@ static void __init alloc_pcache_set_map(void)
 		panic("Unable to allocate pcache set array!");
 }
 
+void __init init_pcache_clflush_buffer(void);
+void __init alloc_pcache_rmap_map(void);
+
 /*
  * Early init is called before buddy allocator initialization.
  * Some part of pcache init need allocation larger than 4MB, thus we will use
@@ -146,6 +149,7 @@ void __init pcache_early_init(void)
 
 	/* Early allocation that needs memblock */
 	alloc_pcache_set_map();
+	alloc_pcache_rmap_map();
 	victim_cache_early_init();
 }
 
@@ -195,8 +199,6 @@ static void init_pcache_meta_map(void)
 		init_pcache_lru(pcm);
 	}
 }
-
-void __init init_pcache_clflush_buffer(void);
 
 /*
  * Post init is called after system has fully initialized.

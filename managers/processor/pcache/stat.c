@@ -67,6 +67,11 @@ static const char *const pcache_event_text[] = {
 
 	"nr_mremap_pset_same",
 	"nr_mremap_pset_diff",
+
+	"nr_pcache_rmap_alloc",
+	"nr_pcache_rmap_alloc_kmalloc",
+	"nr_pcache_rmap_free",
+	"nr_pcache_rmap_free_kmalloc",
 };
 
 void print_pcache_events(void)

@@ -297,6 +297,19 @@ static inline unsigned long __addr2line_pa(unsigned long address)
 	return phys_start_cacheline + (address & pcache_set_mask);
 }
 
+/*
+ * Return the array index where @pcm maps into @pcache_meta_map
+ * Internal function.
+ */
+static inline unsigned long __pcache_meta_index(struct pcache_meta *pcm)
+{
+	unsigned long offset;
+
+	offset = pcm - pcache_meta_map;
+	BUG_ON(offset >= nr_cachelines);
+	return offset;
+}
+
 /**
  * pcache_meta_to_pcache_set
  * @pcm: pcache meta in question
