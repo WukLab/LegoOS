@@ -12,7 +12,12 @@
 
 #include "fit.h"
 
-#define NUM_POLLING_THREADS 1
+/*
+ * Number of recv_cq
+ * Each recv_cq has its dedicated polling thread.
+ * Configured at compile time.
+ */
+#define NUM_POLLING_THREADS		(CONFIG_FIT_NR_RECVCQ_POLLING_THREADS)
 
 /* THREAD_HANDLER_MODEL - CHOOSE ONE*/
 #define WAITING_QUEUE_IMPLEMENTATION

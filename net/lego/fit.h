@@ -32,9 +32,14 @@
 
 #define LISTEN_PORT 18500
 
+/*
+ * QPs between each node pair
+ * Configured at compile time.
+ */
+#define NUM_PARALLEL_CONNECTION		(CONFIG_FIT_NR_QPS_PER_PAIR)
+
 #define RECV_DEPTH 256
 #define CONNECTION_ID_PUSH_BITS_BASED_ON_RECV_DEPTH 8
-#define NUM_PARALLEL_CONNECTION	12
 #ifdef CONFIG_SOCKET_O_IB
 #define GET_NODE_ID_FROM_POST_RECEIVE_ID(id) (id>>8) / (NUM_PARALLEL_CONNECTION + 1)
 #else

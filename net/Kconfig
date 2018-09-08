@@ -21,6 +21,45 @@ config FIT_MAX_RPC_TIMEOUT_SEC
 	  This is the maximum time in seconds that LITE will give up polling
 	  and return.
 
+config FIT_NR_QPS_PER_PAIR
+	int "Numer of QPs between each node pair"
+	range 4 24
+	default 12
+	help
+	  We have this parameter because of FIT's internal design.
+	  For each pair of nodes, FIT will establish this number of QPs.
+	  For each message transfer, QP will be selected in a RR fashion.
+
+	  In old NIC, if you have a lot QPs, chances are, you will have QP thrashing.
+	  But according to recent study, this is not the case for new NIC, i.e. connectx-4, connectx-5.
+
+	  The default setting 12, just a heuristic number.
+	  The upper limit is heuristic.
+
+	  If unsure, use default.
+
+config FIT_NR_RECVCQ_POLLING_THREADS
+	int "Number of FIT recv_cq polling threads"
+	range 1 4
+	default 1
+	help
+	  We have this parameter because of FIT's internal design.
+	  At each node, FIT create this number of recv_cq, and these recv_cq
+	  will be shared by all the QPs (configured by FIT_NR_QPS_PER_PAIR).
+
+	  Usuallly, the number of QPs is larger than number of recv_cqs.
+	  It means recv_cq is shared by multiple QPs.
+
+	  Each recv_cq has its dedicated polling threads.
+	  Thus the more recv_cq you have, the more CPUs are needed for polling.
+	  Not a good model, in my opinion.
+
+	  If you have multi-threaded applications running, I suggest you have this
+	  number > 1. Otherwise, both throughput and latency will be limited by
+	  one single polling thread.
+
+	  If unsure, use default.
+
 
 config FIT_MAX_OUTSTANDING_SEND
 	int "Max outstanding send requests"
