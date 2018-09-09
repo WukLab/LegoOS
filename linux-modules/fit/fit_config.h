@@ -11,9 +11,16 @@
 #define _LINUX_MODULE_FIT_CONFIG_H_
 
 /* Lego cluster config */
-#define CONFIG_FIT_LOCAL_ID	2
-#define CONFIG_FIT_NR_NODES	3
-#define MAX_NODE		CONFIG_FIT_NR_NODES
+#define CONFIG_FIT_LOCAL_ID		2
+#define CONFIG_FIT_NR_NODES		3
+#define MAX_NODE			CONFIG_FIT_NR_NODES
+
+/*
+ * These configruations must match the numbers in P and M
+ * Otherwise we will fail to connect.
+ */
+#define CONFIG_FIT_FIRST_QPN		(80)
+#define CONFIG_FIT_NR_QPS_PER_PAIR	(12)
 
 //#define CONFIG_SOCKET_O_IB
 

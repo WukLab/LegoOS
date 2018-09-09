@@ -136,6 +136,32 @@ int init_socket_over_ib(struct lego_context *ctx, int port, int rx_depth, int i)
 }
 #endif
 
+int FIRST_QPN = CONFIG_FIT_FIRST_QPN;
+static int aligned = false;
+static void align_first_qpn(struct ib_pd *pd, struct ib_qp_init_attr *init_attr)
+{
+	struct ib_qp *qp;
+
+	if (aligned)
+		return;
+
+next:
+	qp = ib_create_qp(pd, init_attr);
+	if (IS_ERR_OR_NULL(qp))
+		panic("Fail to create QPs to align first QPN.");
+
+	pr_debug("%s(): created QPN: %d\n", __func__, qp->qp_num);
+
+	if (qp->qp_num == (FIRST_QPN - 1)) {
+		aligned = true;
+		return;
+	} else if (qp->qp_num > (FIRST_QPN - 1))
+		panic("Initial alloc qpn: %d. align qpn: %d",
+			qp->qp_num, FIRST_QPN);
+	else
+		goto next;
+}
+
 struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev, int mynodeid)
 {
 	int i;
@@ -278,6 +304,7 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 			.sq_sig_type = IB_SIGNAL_REQ_WR
 		};
 
+		align_first_qpn(ctx->pd, &init_attr);
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
 		if(!ctx->qp[i])
 		{
