@@ -41,7 +41,7 @@ long do_truncate(const char *kname, long length)
 	opcode = msg;
 	payload = msg + sizeof(*opcode);
 	*opcode = P2S_TRUNCATE;
-	strcpy(payload->filename, kname);
+	strncpy(payload->filename, kname, MAX_FILENAME_LENGTH);
 	payload->length = length;
 
 	storage_node = current_storage_home_node();

@@ -362,6 +362,12 @@ struct imm_header_from_cq_to_port
 	struct list_head list;
 };
 
+struct _lego_context_pad {
+	char x[0];
+} ____cacheline_aligned_in_smp;
+
+#define CTX_PADDING(name)	struct _lego_context_pad name;
+
 struct lego_context {
 	struct ib_context	*context;
 	struct ib_comp_channel *channel;
@@ -472,19 +478,23 @@ struct lego_context {
 	//Related to barrier
 	atomic_t dist_barrier_counter;
 	
+	CTX_PADDING(_pad1_)
+	spinlock_t imm_waitqueue_perport_lock[IMM_MAX_PORT];
 	struct imm_header_from_cq_to_port imm_waitqueue_perport[IMM_MAX_PORT];
 	int imm_perport_reg_num[IMM_MAX_PORT];//-1 no registeration, 0 up --> how many
-	spinlock_t imm_waitqueue_perport_lock[IMM_MAX_PORT];
 
 #ifdef CONFIG_SOCKET_O_IB
 	struct imm_header_from_cq_to_port sock_imm_waitqueue_perport[SOCK_MAX_LISTEN_PORTS];
 	spinlock_t sock_imm_waitqueue_perport_lock[SOCK_MAX_LISTEN_PORTS];
 #endif
 	
-	//local reply ready indicator related
-	void **reply_ready_indicators;
-	unsigned long *reply_ready_indicators_bitmap;
-	spinlock_t reply_ready_indicators_lock;
+	CTX_PADDING(_pad2_)
+	spinlock_t	indicators_lock;
+	void		*reply_ready_indicators[IMM_NUM_OF_SEMAPHORE];
+	DECLARE_BITMAP(reply_ready_indicators_bitmap, IMM_NUM_OF_SEMAPHORE);
+
+	CTX_PADDING(_pad3_)
+
 #ifdef ADAPTIVE_MODEL
 	wait_queue_head_t *imm_inbox_block_queue;
 #endif

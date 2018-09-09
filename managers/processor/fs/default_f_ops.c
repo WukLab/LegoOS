@@ -38,6 +38,7 @@ static int p2s_open(struct file *f)
 	void *msg;
 	u32 len_msg, *opcode;
 	struct p2s_open_struct *payload;
+
 	len_msg = sizeof(*opcode) + sizeof(*payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (!msg)
@@ -48,7 +49,7 @@ static int p2s_open(struct file *f)
 
 	payload = msg + sizeof(*opcode);
 	payload->uid = current_uid();
-	strcpy(payload->filename, f->f_name);
+	strncpy(payload->filename, f->f_name, MAX_FILENAME_LENGTH);
 	payload->permission = f->f_mode;
 	payload->flags = f->f_flags;
 

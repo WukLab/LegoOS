@@ -39,8 +39,9 @@
 static inline void fit_debug(const char *fmt, ...) { }
 #endif
 
-#define fit_err(fmt, ...) \
-	pr_debug("%s():%d " fmt, __func__, __LINE__, __VA_ARGS__)
+#define fit_err(fmt, ...)						\
+	pr_debug("%s()-%d CPU%2d " fmt "\n",				\
+		__func__, __LINE__, smp_processor_id(), __VA_ARGS__)
 
 atomic_t global_sock_avail_recv_bufs;
 
@@ -72,6 +73,14 @@ int num_recvd_rdma_ring_mrs;
 
 spinlock_t wq_lock;
 
+/*
+ * HACK!!
+ *
+ * There is NO need to lock ib verb operations.
+ * Each QP, CQ has its own lock, and drivers will use that lock to make sure
+ * things go right. This is some legacy code. But I removed some of them from
+ * important data path.
+ */
 spinlock_t sock_qp_lock[MAX_NODE];
 spinlock_t connection_lock[MAX_CONNECTION];
 spinlock_t connection_lock_pedal[MAX_CONNECTION];
@@ -155,6 +164,82 @@ int fit_check_page_continuous(void *local_addr, int size, unsigned long *answer)
 	return 1;
 }
 
+static inline void *get_reply_ready_ptr(ppc *ctx, unsigned int index)
+{
+	void *ptr;
+	unsigned long *bitmap = ctx->reply_ready_indicators_bitmap;
+
+	if (unlikely(index >= IMM_NUM_OF_SEMAPHORE)) {
+		fit_err("array_size: %d index: %d",
+			IMM_NUM_OF_SEMAPHORE, index);
+		BUG();
+	}
+
+	ptr = ctx->reply_ready_indicators[index];
+
+	if (unlikely(!test_bit(index, bitmap))) {
+		fit_err("index: %d ptr: %p", index, ptr);
+		dump_stack();
+		hlt();
+	}
+
+	if (unlikely(!virt_addr_valid((unsigned long)ptr))) {
+		fit_err("index: %d ptr: %p", index, ptr);
+		BUG();
+	}
+	return ptr;
+}
+
+static inline void free_reply_indicator(ppc *ctx, unsigned int idx)
+{
+	unsigned long *bitmap = ctx->reply_ready_indicators_bitmap;
+
+	if (unlikely(idx >= IMM_NUM_OF_SEMAPHORE)) {
+		fit_err("array_size: %d index: %d",
+			IMM_NUM_OF_SEMAPHORE, idx);
+		BUG();
+	}
+
+	spin_lock(&ctx->indicators_lock);
+	if (likely(test_and_clear_bit(idx, bitmap)))
+		ctx->reply_ready_indicators[idx] = NULL;
+	else {
+		fit_err("index: %d", idx);
+		BUG();
+	}
+	spin_unlock(&ctx->indicators_lock);
+}
+
+/*
+ * @addr: must be a valid kernel virtual address
+ */
+static inline unsigned int alloc_index_and_set_reply_indicator(ppc *ctx, void *addr)
+{
+	int idx;
+	unsigned long *bitmap = ctx->reply_ready_indicators_bitmap;
+
+retry:
+	spin_lock(&ctx->indicators_lock);
+	for_each_clear_bit(idx, bitmap, IMM_NUM_OF_SEMAPHORE) {
+		set_bit(idx, bitmap);
+		ctx->reply_ready_indicators[idx] = addr;
+		spin_unlock(&ctx->indicators_lock);
+		return idx;
+	}
+	spin_unlock(&ctx->indicators_lock);
+
+	/*
+	 * All full? Given the fact that we are using sync RPC,
+	 * the maximum outstanding requests will equal to nr_cpus.
+	 * Show correct warnings here.
+	 */
+	if (likely(IMM_NUM_OF_SEMAPHORE <= nr_cpus)) {
+		WARN_ONCE(1, "Please set a larger IMM_NUM_OF_SEMAPHORE.");
+		goto retry;
+	}
+	BUG();
+}
+
 int fit_find_cq(ppc *ctx, struct ib_cq *tar_cq)
 {
 	int i;
@@ -188,8 +273,7 @@ int init_socket_over_ib(struct lego_context *ctx, int port, int rx_depth, int i)
 		.send_cq = ctx->sock_send_cq[i],
 		.recv_cq = ctx->sock_recv_cq,
 		.cap = {
-			.max_send_wr = 1, //rx_depth + 2,
-			//.max_send_wr = 12000,
+			.max_send_wr = 1,
 			.max_recv_wr = rx_depth,
 			.max_send_sge = 16,
 			.max_recv_sge = 16
@@ -343,33 +427,24 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	}
 
 	for(i = 0; i < NUM_POLLING_THREADS; i++) {
-		ctx->cq[i]=ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth*4+1, 0);
-		if(IS_ERR_OR_NULL(ctx->cq[i])) {
+		/*
+		 * XXX
+		 * why choose rx_depth*4+1 this maginc number? Reason???
+		 */
+		ctx->cq[i] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL,
+					  rx_depth*4+1, 0);
+		if (IS_ERR_OR_NULL(ctx->cq[i])) {
 			fit_err("Fail to create recv_cq %d. Error: %d",
 				i, PTR_ERR_OR_ZERO(ctx->cq[i]));
 			return NULL;
 		}
 	}
 
-	ctx->send_cq = (struct ib_cq **)kmalloc(num_total_connections * sizeof(struct ib_cq *), GFP_KERNEL);
-	ctx->connection_count = (atomic_t *)kmalloc(num_total_connections * sizeof(atomic_t), GFP_KERNEL);
-	for(i = 0; i < num_total_connections; i++)
-	{
+	ctx->qp = kmalloc(num_total_connections * sizeof(struct ib_qp *), GFP_KERNEL);
+	ctx->send_cq = kmalloc(num_total_connections * sizeof(struct ib_cq *), GFP_KERNEL);
+	ctx->connection_count = kmalloc(num_total_connections * sizeof(atomic_t), GFP_KERNEL);
+	for (i = 0; i < num_total_connections; i++)
 		atomic_set(&ctx->connection_count[i], 0);
-	}
-
-#if 0
-	//barrier setup
-	atomic_set(&ctx->dist_barrier_counter, 0);
-#endif
-
-	fit_debug("before create qps total number of connections %d\n", num_total_connections);
-	ctx->qp = (struct ib_qp **)kmalloc(num_total_connections * sizeof(struct ib_qp *), GFP_KERNEL);
-	if(!ctx->qp)
-	{
-		printk(KERN_ALERT "Fail to create master qp / ctx->qp\n");
-		return NULL;
-	}
 
 #ifdef CONFIG_SOCKET_O_IB
 	ctx->sock_send_cq = (struct ib_cq **)kmalloc(MAX_NODE * sizeof(struct ib_cq *), GFP_KERNEL);
@@ -378,7 +453,7 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	BUG_ON(!ctx->sock_send_cq || !ctx->sock_recv_cq || !ctx->sock_qp);
 #endif
 
-	for(i=0;i<num_total_connections;i++) {
+	for (i = 0; i < num_total_connections; i++) {
 		struct ib_qp_attr attr;
 
 		memset(&attr, 0, sizeof(attr));
@@ -403,7 +478,12 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 		ctx->send_state[i] = SS_INIT;
 		ctx->recv_state[i] = RS_INIT;
 
-		ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
+		/*
+		 * XXX
+		 * why rx_depth+1 ???
+		 */
+		ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL,
+						rx_depth+1, 0);
 		if (IS_ERR_OR_NULL(ctx->send_cq[i])) {
 			fit_err("Fail to create send_CQ-%d Error: %d\n",
 				i, PTR_ERR_OR_ZERO(ctx->send_cq[i]));
@@ -412,16 +492,10 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 
 		{
                 struct ib_qp_init_attr init_attr = {
-                        .send_cq = ctx->send_cq[i],//ctx->cq
-                        .recv_cq = ctx->cq[i%NUM_POLLING_THREADS],
+                        .send_cq = ctx->send_cq[i],
+                        .recv_cq = ctx->cq[i % NUM_POLLING_THREADS],
                         .cap = {
-                                /*
-                                 * Stands for concurrent outgoing requests?
-                                 * We always have 1 IB polling thread running,
-                                 * and we remove it from cpu_active_mask, which
-                                 * means scheduler won't schedule to it.
-                                 */
-                                .max_send_wr = MAX_OUTSTANDING_SEND,
+                                .max_send_wr = 24,
                                 .max_recv_wr = rx_depth,
                                 .max_send_sge = 16,
                                 .max_recv_sge = 16
@@ -431,6 +505,7 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
                 };
 
 		align_first_qpn(ctx->pd, &init_attr);
+
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
 		if (IS_ERR_OR_NULL(ctx->qp[i])) {
 			fit_err("Fail to create qp[%d]. Error: %d",
@@ -439,7 +514,7 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 		}
 
 		ib_query_qp(ctx->qp[i], &attr, IB_QP_CAP, &init_attr);
-		if(init_attr.cap.max_inline_data >= size)
+		if (init_attr.cap.max_inline_data >= size)
 			ctx->send_flags |= IB_SEND_INLINE;
 
 		}
@@ -468,10 +543,11 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 		}
 	}
 
-	//Do IMM local ring setup (imm-send-reply)
-	ctx->reply_ready_indicators = (void **)kmalloc(sizeof(void*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
-	ctx->reply_ready_indicators_bitmap = kzalloc(sizeof(unsigned long) * BITS_TO_LONGS(IMM_NUM_OF_SEMAPHORE), GFP_KERNEL);
-	spin_lock_init(&ctx->reply_ready_indicators_lock);
+	/*
+	 * Intentionlly set the 0 bitmap
+	 */
+	set_bit(0, ctx->reply_ready_indicators_bitmap);
+	spin_lock_init(&ctx->indicators_lock);
 
 	for(i=0;i<IMM_MAX_PORT;i++)
 	{
@@ -604,13 +680,11 @@ inline uintptr_t fit_ib_reg_mr_addr_phys(ppc *ctx, void *addr, size_t length)
 	return fit_ib_reg_mr_phys_addr(ctx, addr, length);
 }
 
-inline uintptr_t fit_ib_reg_mr_addr(ppc *ctx, void *addr, size_t length)
+static inline uintptr_t
+fit_ib_reg_mr_addr(ppc *ctx, void *addr, size_t length)
 {
-#ifdef PHYSICAL_ALLOCATION
-	return fit_ib_reg_mr_phys_addr(ctx, (void *)virt_to_phys(addr), length);
-#else
-	return (uintptr_t)ib_dma_map_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL);
-#endif
+	return (uintptr_t)ib_dma_map_single((struct ib_device *)ctx->context,
+					    addr, length, DMA_BIDIRECTIONAL);
 }
 
 void fit_ib_dereg_mr_addr(ppc *ctx, void *addr, size_t length)
@@ -1054,18 +1128,9 @@ inline int fit_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
  *
  * Return: -ETIMEDOUT if we fail to get the CQE in FIT_POLL_SENDCQ_TIMEOUT_NS.
  */
-int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, int *check, int if_poll_now)
+static int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq,
+				    int connection_id, int *check, int if_poll_now)
 {
-#ifdef SEPARATE_SEND_POLL_THREAD
-	/*
-	 * using a separate thread to poll send cq
-	 */
-	while((*check)==SEND_REPLY_WAIT)
-	{
-		cpu_relax();
-	}
-	return 0;
-#else
 #ifdef CONFIG_FIT_NOWAIT
 	/*
 	 * use same send thread to poll send cq
@@ -1120,20 +1185,21 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 	unsigned long start_ns;
 
 	start_ns = sched_clock();
-	do{
+	do {
 		ne = ib_poll_cq(tar_cq, 1, wc);
 		if (unlikely(ne < 0)) {
 			fit_err("Fail to poll send_cq. Err: %d", ne);
-			return 1;
+			return ne;
 		}
 
 		if (unlikely(sched_clock() - start_ns > FIT_POLL_SENDCQ_TIMEOUT_NS)) {
 			pr_info_once("\n"
 				"*****\n"
-				"***** Fail to to get the CQE from send_cq after %ld seconds!\n"
-				"***** This means the packet was lost and something went wrong\n"
+				"***** Fail to to get the CQE from send_cq (%p) after %ld seconds!\n"
 				"***** connection_id: %d dest node: %d\n"
-				"*****\n", FIT_POLL_SENDCQ_TIMEOUT_NS/NSEC_PER_SEC,
+				"*****\n",
+				tar_cq,
+				FIT_POLL_SENDCQ_TIMEOUT_NS/NSEC_PER_SEC,
 				connection_id, connection_id / NUM_PARALLEL_CONNECTION);
 			WARN_ON_ONCE(1);
 			return -ETIMEDOUT;
@@ -1141,17 +1207,14 @@ int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq, int connection_id, 
 	} while (ne < 1);
 
 	for (i = 0; i < ne; i++) {
-		if(wc[i].status!=IB_WC_SUCCESS) {
+		if (wc[i].status != IB_WC_SUCCESS) {
 			fit_err("wc.status: %s", ib_wc_status_msg(wc[i].status));
 			return 2;
 		} else
 			break;
 	}
 	return 0;
-
 #endif /* CONFIG_FIT_NOWAIT */
-
-#endif /* SEPARATE_SEND_POLL_THREAD */
 }
 
 /*
@@ -1195,7 +1258,7 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 			wr.wr_id = -1;
 		else
 			/* get the real local_reply_ready_checker address from inbox information */
-			wr.wr_id = (uint64_t)ctx->reply_ready_indicators[header->reply_indicator_index];
+			wr.wr_id = (u64)get_reply_ready_ptr(ctx, header->reply_indicator_index);
 
 		wr.opcode = IB_WR_RDMA_WRITE_WITH_IMM;
 		wr.ex.imm_data = imm;
@@ -1247,11 +1310,7 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 		BUG();
 	}
 
-	/* XXX: we do NOT' need this lock! */
-	spin_lock(&connection_lock[connection_id]);
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
-	spin_unlock(&connection_lock[connection_id]);
-
 	if (unlikely(ret)) {
 		pr_info_once("Fail to post send to con:%d ret:%d\n",
 			connection_id, ret);
@@ -1937,7 +1996,7 @@ int fit_poll_recv_cq(void *_info)
 	int ne;
 	int i, connection_id;
 	int node_id, port, offset;
-	int reply_indicator_index, length, opcode;
+	int reply_indicator_index, length;
 	char *addr;
 	int type;
 	struct send_and_reply_format *recv;
@@ -1957,6 +2016,9 @@ int fit_poll_recv_cq(void *_info)
 	if (pin_current_thread())
 		panic("Fail to pin poll_cq");
 
+	pr_info("%s(): running on CPU%d CQ: %p\n",
+		__func__, smp_processor_id(), target_cq);
+
 	while(1) {
 		/* We keep polling this CQ */
 		do {
@@ -1965,13 +2027,19 @@ int fit_poll_recv_cq(void *_info)
 				fit_err("poll_cq error: %d", ne);
 				return ne;
 			}
+
+			/*
+			 * XXX:
+			 * weird. When we use cpu_relax() here, we
+			 * will easily have lost CQE issue.
+			 */
 			if (ne == 0)
 				schedule();
 		} while (ne < 1);
 
 		nr_recvcq_cqes[recvcq_id] += ne;
 		for (i = 0; i < ne; i++) {
-			if (wc[i].status != IB_WC_SUCCESS) {
+			if (unlikely(wc[i].status != IB_WC_SUCCESS)) {
 				pr_err("wc.status: %s, wr_id %d",
 					ib_wc_status_msg(wc[i].status), wc[i].wr_id);
 				continue;
@@ -2003,31 +2071,35 @@ int fit_poll_recv_cq(void *_info)
 					memcpy(&ctx->remote_sock_rdma_ring_mrs[temp_header.src_id], addr + sizeof(struct fit_ibv_mr), sizeof(struct fit_ibv_mr));
 #endif
 					num_recvd_rdma_ring_mrs++;
-					fit_debug("node %d remote addr %p remote rkey %d num_recvd_rdma_ring_mrs %d\n",
+					pr_debug("Info from [node %d]: addr %p rkey %d num_recvd_mrs %d\n",
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr,
 							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
 				}
 			} else if (wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM) {
 				node_id = GET_NODE_ID_FROM_POST_RECEIVE_ID(wc[i].wr_id);
 				if (wc[i].wc_flags && IB_WC_WITH_IMM) {
-					fit_debug("wc[i].ex.imm_data: %#lx wc[i].byte_len: %#lx\n", wc[i].ex.imm_data, wc[i].byte_len);
-					if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND && wc[i].ex.imm_data & IMM_SEND_REPLY_RECV)//opcode
-					{
-						//printk(KERN_CRIT "%s: opcode from node %d\n", __func__, node_id);
-						reply_indicator_index = wc[i].ex.imm_data & IMM_GET_REPLY_INDICATOR_INDEX;
-						opcode = IMM_GET_OPCODE_NUMBER(wc[i].ex.imm_data);
-						//printk(KERN_CRIT "%s: case 1 reply_indicator_index-%d\n", __func__, reply_indicator_index);
-						*(int *)(ctx->reply_ready_indicators[reply_indicator_index]) = -(opcode);
-						ctx->reply_ready_indicators[reply_indicator_index] = NULL;
-						clear_bit(reply_indicator_index, ctx->reply_ready_indicators_bitmap);
-					}
-					else if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND) // only send
-					{
+					/* Use some internal flag to check type */
+					if (wc[i].ex.imm_data & IMM_SEND_REPLY_SEND) {
+						/*
+						 * This means there is an incoming request:
+						 * the send part of ibapi_send_reply() from remote.
+						 */
 						offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
 						port = IMM_GET_PORT_NUMBER(wc[i].ex.imm_data);
 
+						/*
+						 * Okay.
+						 * For memory, immediately callback to thpool master.
+						 * Otherwise the model is: we add this guy to a queue.
+						 * Some other caller need to call ibapi_receive_message to get it.
+						 *
+						 * Now I now why previous we have so much high latency. Because
+						 * the memory polling thread keep calling ibapi_receive_message,
+						 * which end up taking the lock for long time. And this guy will
+						 * fail to enqueue. Not a good model. A counter could help.
+						 * But let us stick to this signaled model at memory.
+						 */
 #ifdef CONFIG_COMP_MEMORY
-						/* yy for testing */
 						{
 						struct imm_message_metadata *tmp1;
                                                 tmp1 = (struct imm_message_metadata *)(ctx->local_rdma_recv_rings[node_id] + offset);
@@ -2045,12 +2117,35 @@ int fit_poll_recv_cq(void *_info)
 						spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
 						}
 #endif
-					}
-					/* handle internal acknoledgement of new MR offset */
-					else if (wc[i].ex.imm_data & IMM_ACK || wc[i].byte_len == 0)
-					{
+					} else if (wc[i].ex.imm_data & IMM_SEND_REPLY_RECV) {
+						/*
+						 * This is the sender's handling reply part.
+						 * The incoming message is the reply sent by remote.
+						 */
+						void *dst_ptr;
+
+						length = wc[i].byte_len;
+						reply_indicator_index = wc[i].ex.imm_data & IMM_GET_REPLY_INDICATOR_INDEX;
+						if (unlikely(reply_indicator_index <= 0 ||
+							     reply_indicator_index >= IMM_NUM_OF_SEMAPHORE)) {
+							pr_err("%s(): wrong index: %d\n", __func__,
+								reply_indicator_index);
+							continue;
+						}
+
+						fit_debug("got reply reply_indicator_index-%d len-%d reply_indicator_addr %lx\n",
+							reply_indicator_index, wc[i].byte_len, ctx->reply_ready_indicators[reply_indicator_index]);
+
+						/*
+						 * The thread who did ibapi_send_reply() is busy polling
+						 * this shared memory. This memcpy will release it.
+						 */
+						dst_ptr = get_reply_ready_ptr(ctx, reply_indicator_index);
+						memcpy(dst_ptr, &length, sizeof(int));
+
+					} else if (wc[i].ex.imm_data & IMM_ACK || wc[i].byte_len == 0) {
+						/* handle internal acknoledgement of new MR offset */
 						offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
-						//printk(KERN_CRIT "%s: get ack from node %d offset %d\n", __func__, node_id, offset);
 
 						recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
 						recv->src_id = node_id;
@@ -2064,6 +2159,8 @@ int fit_poll_recv_cq(void *_info)
 					/* handle reply with extra bits */
 					else if (wc[i].ex.imm_data & IMM_REPLY_W_EXTRA_BITS)
 					{
+						void *dst_ptr;
+
 						length = wc[i].byte_len;
 						reply_indicator_index = wc[i].ex.imm_data & IMM_GET_REPLY_INDICATOR_INDEX;
 						private_bits = IMM_GET_PRIVATE_BITS(wc[i].ex.imm_data);
@@ -2073,49 +2170,15 @@ int fit_poll_recv_cq(void *_info)
 						fit_debug("got reply with extra bits reply_indicator_index-%d len-%d bits-%x reply_indicator_addr %lx\n",
 							reply_indicator_index, wc[i].byte_len, private_bits, ctx->reply_ready_indicators[reply_indicator_index]);
 
-						memcpy((void *)ctx->reply_ready_indicators[reply_indicator_index], &reply_data, sizeof(int));
-
-						#ifdef ADAPTIVE_MODEL
-						wake_up_interruptible(&ctx->imm_inbox_block_queue[reply_indicator_index]);//Wakeup waiting queue
-						#endif
-						#ifdef SCHEDULE_MODEL
-						wake_up_process(ctx->thread_waiting_for_reply[reply_indicator_index]);
-						ctx->thread_waiting_for_reply[reply_indicator_index]=NULL;
-						#endif
-
-						ctx->reply_ready_indicators[reply_indicator_index] = NULL;
-						clear_bit(reply_indicator_index, ctx->reply_ready_indicators_bitmap);
-					}
-					/* handle normal reply */
-					else
-					{
-						length = wc[i].byte_len;
-						reply_indicator_index = wc[i].ex.imm_data & IMM_GET_REPLY_INDICATOR_INDEX;
-						if (reply_indicator_index < 0 || reply_indicator_index > IMM_NUM_OF_SEMAPHORE) {
-							printk(KERN_CRIT "%s got wrong reply index %d\n",
-									__func__, reply_indicator_index);
-							continue; //BUG_ON(1);
-						}
-						//printk(KERN_CRIT "%s: case 2 reply_indicator_index-%d len-%d\n", __func__, reply_indicator_index, wc[i].byte_len);
-
-						fit_debug("got reply reply_indicator_index-%d len-%d reply_indicator_addr %lx\n",
-							reply_indicator_index, wc[i].byte_len, ctx->reply_ready_indicators[reply_indicator_index]);
-
-						memcpy((void *)ctx->reply_ready_indicators[reply_indicator_index], &length, sizeof(int));
-
-						#ifdef ADAPTIVE_MODEL
-						wake_up_interruptible(&ctx->imm_inbox_block_queue[reply_indicator_index]);//Wakeup waiting queue
-						#endif
-						#ifdef SCHEDULE_MODEL
-						wake_up_process(ctx->thread_waiting_for_reply[reply_indicator_index]);
-						ctx->thread_waiting_for_reply[reply_indicator_index]=NULL;
-						#endif
-
-						ctx->reply_ready_indicators[reply_indicator_index] = NULL;
-						clear_bit(reply_indicator_index, ctx->reply_ready_indicators_bitmap);
-					}
+						dst_ptr = get_reply_ready_ptr(ctx, reply_indicator_index);
+						memcpy(dst_ptr, &reply_data, sizeof(int));
+					} else
+						WARN_ON(1);
 				}
 
+				/*
+				 * Post more recv_wr if needed.
+				 */
 				if(GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
 				{
 					connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
@@ -2257,26 +2320,17 @@ int sock_poll_cq(void *in)
 					}
 					else //handle reply
 					{
+						void *dst_ptr;
+
 						length = wc[i].byte_len;
 						reply_indicator_index = wc[i].ex.imm_data & IMM_GET_REPLY_INDICATOR_INDEX;
 						//printk(KERN_CRIT "%s: case 2 reply_indicator_index-%d len-%d\n", __func__, reply_indicator_index, wc[i].byte_len);
-						//*(int *)(ctx->reply_ready_indicators[reply_indicator_index]) = wc[i].byte_len;
 
 						fit_debug("case 2 reply_indicator_index-%d len-%d inboxaddr %lx\n",
 							reply_indicator_index, wc[i].byte_len, ctx->reply_ready_indicators[reply_indicator_index]);
 
-						memcpy((void *)ctx->reply_ready_indicators[reply_indicator_index], &length, sizeof(int));
-
-						#ifdef ADAPTIVE_MODEL
-						wake_up_interruptible(&ctx->imm_inbox_block_queue[reply_indicator_index]);//Wakeup waiting queue
-						#endif
-						#ifdef SCHEDULE_MODEL
-						wake_up_process(ctx->thread_waiting_for_reply[reply_indicator_index]);
-						ctx->thread_waiting_for_reply[reply_indicator_index]=NULL;
-						#endif
-
-						ctx->reply_ready_indicators[reply_indicator_index] = NULL;
-						clear_bit(reply_indicator_index, ctx->reply_ready_indicators_bitmap);
+						dst_ptr = get_reply_ready_ptr(ctx, reply_indicator_index);
+						memcpy(dst_ptr, &length, sizeof(int));
 					}
 				}
 
@@ -2503,25 +2557,6 @@ int fit_send_request(ppc *ctx, int connection_id, enum mode s_mode,
 	return 0;
 }
 
-inline int fit_set_reply_indicator_and_get_index(ppc *ctx, void *addr)
-{
-	int tar;
-	spin_lock(&ctx->reply_ready_indicators_lock);
-
-	tar = find_first_zero_bit(ctx->reply_ready_indicators_bitmap, IMM_NUM_OF_SEMAPHORE);
-	while(tar==IMM_NUM_OF_SEMAPHORE)
-	{
-		schedule();
-		tar = find_first_zero_bit(ctx->reply_ready_indicators_bitmap, IMM_NUM_OF_SEMAPHORE);
-	}
-	set_bit(tar, ctx->reply_ready_indicators_bitmap);
-
-	spin_unlock(&ctx->reply_ready_indicators_lock);
-	ctx->reply_ready_indicators[tar] = addr;
-
-	return tar;
-}
-
 /*
  * Return:
  * Negative values on failues
@@ -2616,7 +2651,6 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 	int connection_id;
 	int reply_indicator_index;
 	int imm_data;
-	int local_reply_ready_checker = SEND_REPLY_WAIT;
 	int real_size;
 	void *remote_addr;
 	uint32_t remote_rkey;
@@ -2625,6 +2659,8 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 	int last_ack;
 	unsigned long start_time;
 	int reply_length;
+
+	int local_reply_ready_checker = SEND_REPLY_WAIT;
 
 	if (unlikely(!addr)) {
 		fit_err("BUG: NULL addr. Caller: %pS", caller);
@@ -2661,7 +2697,8 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 	remote_mr = &(ctx->remote_rdma_ring_mrs[target_node]);
 
 	connection_id = fit_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);
-	reply_indicator_index = fit_set_reply_indicator_and_get_index(ctx, &local_reply_ready_checker);
+
+	reply_indicator_index = alloc_index_and_set_reply_indicator(ctx, &local_reply_ready_checker);
 
 	imm_data = IMM_SEND_REPLY_SEND | tar_offset_start;
 
@@ -2721,6 +2758,7 @@ int fit_send_reply_with_rdma_write_with_imm(ppc *ctx, int target_node, void *add
 			return -ETIMEDOUT;
 		}
 	}
+	free_reply_indicator(ctx, reply_indicator_index);
 	reply_length = local_reply_ready_checker;
 #endif
 
@@ -2787,7 +2825,8 @@ int fit_send_reply_with_rdma_write_with_imm_reply_extra_bits(ppc *ctx, int targe
 	remote_mr = &(ctx->remote_rdma_ring_mrs[target_node]);
 
 	connection_id = fit_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);
-	reply_indicator_index = fit_set_reply_indicator_and_get_index(ctx, &local_reply_ready_checker);
+
+	reply_indicator_index = alloc_index_and_set_reply_indicator(ctx, &local_reply_ready_checker);
 
 	imm_data = IMM_SEND_REPLY_SEND | tar_offset_start;
 
@@ -2842,6 +2881,7 @@ int fit_send_reply_with_rdma_write_with_imm_reply_extra_bits(ppc *ctx, int targe
 			return -ETIMEDOUT;
 		}
 	}
+	free_reply_indicator(ctx, reply_indicator_index);
 	reply_length = local_reply_ready_checker >> REPLY_PRIVATE_BITS_CNT;
 	*ret_private_bits = local_reply_ready_checker & 0xff;
 #endif
@@ -2964,7 +3004,7 @@ int fit_multicast_send_reply(ppc *ctx, int num_nodes, int *target_node,
 
 		remote_mr = &(ctx->remote_rdma_ring_mrs[target_node[i]]);
 		connection_id = fit_get_connection_by_atomic_number(ctx, target_node[i], LOW_PRIORITY);
-		reply_indicator_index = fit_set_reply_indicator_and_get_index(ctx, &local_reply_ready_checker[i]);
+		reply_indicator_index = alloc_index_and_set_reply_indicator(ctx, &local_reply_ready_checker[i]);
                 imm_data = IMM_SEND_REPLY_SEND | tar_offset_start;
 
 		if (if_use_ret_phys_addr == 1)
@@ -3019,6 +3059,11 @@ int fit_multicast_send_reply(ppc *ctx, int num_nodes, int *target_node,
 		output_msg[i].len = local_reply_ready_checker[i];
 	}
 
+	if (1) {
+		panic("If used, patch the usage reply_indicator. "
+		      "Similar to send_reply part.");
+	}
+
 out:
 	kfree(local_reply_ready_checker);
 	kfree(msg_header);
@@ -3055,35 +3100,6 @@ int fit_send_request_without_polling(ppc *ctx, int connection_id, enum mode s_mo
 	if(ret)
 		printk("Error in [%s] ret:%d \n", __func__, ret);
 
-	return 0;
-}
-
-int fit_send_request_polling_only(ppc *ctx, int connection_id, int polling_num, struct ib_wc *wc)
-{
-	int ne, i;
-	int cur_num = polling_num;
-	spin_lock(&connection_lock[connection_id]);
-	while (cur_num)
-	{
-		do {
-			ne = ib_poll_cq(ctx->send_cq[connection_id], 12000, wc);
-			if(ne < 0)
-			{
-				printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
-				return 1;
-			}
-		}while(ne<1);
-		for(i=0;i<ne;i++)
-		{
-			if(wc[i].status!=IB_WC_SUCCESS)
-			{
-				printk(KERN_ALERT "send request failed at connection %d as %d\n", connection_id, wc[i].status);
-				return 2;
-			}
-		}
-		cur_num = cur_num - ne;
-	}
-	spin_unlock(&connection_lock[connection_id]);
 	return 0;
 }
 
@@ -3425,13 +3441,14 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	}
 #endif
 
-	fit_debug("node: %d now sending mr info\n", mynodeid);
-	send_rdma_ring_mr_to_other_nodes(ctx);
-	fit_debug("node: %d sent rdma ring mrs\n", mynodeid);
 
 	/*
-	 * Wait until we got MR info from all online nodes.
+	 * TODO:
+	 * change this to contiguously sending info until we got all
+	 * also add necessary info to track what've got.
+	 * This timeout is just too fragile.
 	 */
+	send_rdma_ring_mr_to_other_nodes(ctx);
 	while (num_recvd_rdma_ring_mrs < ctx->num_node - 1)
 		schedule();
 
