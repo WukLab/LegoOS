@@ -337,27 +337,6 @@ int ibapi_get_node_id(void)
 	return 0;
 }
 
-int ibapi_establish_conn(int ib_port, int mynodeid)
-{
-	ppc *ctx;
-
-	//printk(KERN_CRIT "Start calling rc_internal to create FIT based on %p\n", ibapi_dev);
-
-	ctx = fit_establish_conn(ibapi_dev, ib_port, mynodeid);
-
-	if(!ctx)
-	{
-		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
-		return 0;
-	}
-
-	FIT_ctx = ctx;
-
-	pr_info("***  FIT layer ready to go!\n");
-
-	return ctx->node_id;
-}
-
 static struct ib_client ibv_client = {
 	.name   = "ibv_server",
 	.add    = ibv_add_one,
@@ -429,17 +408,25 @@ __initdata DEFINE_COMPLETION(ib_init_done);
 int lego_ib_init(void *unused)
 {
 	int ret;
+	int nr_mad;
 
-	fit_internal_init();
-
-	pr_debug("***\n");
-
-	/* Statically assigned info... */
+	/* Pass statically assigned info */
+	atomic_set(&global_reqid, 0);
 	init_global_lid_qpn();
 	print_gloabl_lid();
 
-	while (mad_got_one < 7)
+	/*
+	 * XXX
+	 * What's the reason to wait again? 7 is magic number here.
+	 *
+	 * The mad_got_one is upated by ib_mad_completion_handler.
+	 * It will be increased if we got a RECV message.
+	 */
+	nr_mad = 7;
+	pr_info("Waiting for enough IB MAD (%d)..\n", nr_mad);
+	while (mad_got_one < nr_mad)
 		schedule();
+	pr_info("Got enough IB MAD!\n");
 
 	ret = ib_register_client(&ibv_client);
 	if (ret) {
@@ -447,16 +434,17 @@ int lego_ib_init(void *unused)
 		return ret;
 	}
 
-	atomic_set(&global_reqid, 0);
-
-	ibapi_establish_conn(1, MY_NODE_ID);
+	/*
+	 * Use port 1
+	 */
+	FIT_ctx = fit_establish_conn(ibapi_dev, 1, MY_NODE_ID);
+	BUG_ON(!FIT_ctx);
+	pr_info("***  FIT layer ready to go!\n");
 
 	lego_ib_test();
 
 	/* notify init that ib has done initialization */
 	complete(&ib_init_done);
-	pr_debug("***\n");
-
 	return 0;
 }
 

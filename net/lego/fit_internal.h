@@ -10,6 +10,9 @@
 #ifndef _INCLUDE_FIT_INTERNAL_H
 #define _INCLUDE_FIT_INTERNAL_H
 
+#undef pr_fmt
+#define pr_fmt(fmt) "fit: " fmt
+
 #include "fit.h"
 
 /*

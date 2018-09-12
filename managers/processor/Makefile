@@ -11,6 +11,7 @@ obj-y += prctl.o
 obj-y += mmap/
 obj-y += fs/
 obj-y += monitor/
+obj-$(CONFIG_PROFILING_BOOT_RPC) += rpc_profile.o
 
 obj-$(CONFIG_VNODE) += vnode.o
 obj-$(CONFIG_REPLICATION_MEMORY) += replication.o

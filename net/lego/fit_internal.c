@@ -59,19 +59,14 @@ enum ib_mtu fit_mtu_to_enum(int mtu)
 
 enum ib_mtu mtu;
 int                     sl;
-static int              page_size;
-int                     rcnt, scnt;
 struct fit_data full_connect_data[MAX_CONNECTION];
 struct fit_data my_QPset[MAX_CONNECTION];
 int                     ib_port = 1;
 //static struct task_struct **thread_poll_cq, *thread_handler;
 
-ppc **Connected_Ctx;
-atomic_t Connected_FIT_Num;
+int num_recvd_rdma_ring_mrs = 0;
 
-int num_recvd_rdma_ring_mrs;
-
-spinlock_t wq_lock;
+static DEFINE_SPINLOCK(wq_lock);
 
 /*
  * HACK!!
@@ -82,9 +77,7 @@ spinlock_t wq_lock;
  * important data path.
  */
 spinlock_t sock_qp_lock[MAX_NODE];
-spinlock_t connection_lock[MAX_CONNECTION];
 spinlock_t connection_lock_pedal[MAX_CONNECTION];
-spinlock_t multicast_lock; //only one multicast can be executed at a single time
 
 struct send_and_reply_format request_list;
 
@@ -348,19 +341,13 @@ next:
 		goto next;
 }
 
-struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev, int mynodeid)
+struct lego_context *fit_init_ctx(ppc *ctx, int size, int rx_depth, int port,
+				  struct ib_device *ib_dev, int mynodeid)
 {
 	int i;
 	int num_total_connections = MAX_CONNECTION;
-	ppc *ctx;
 	int rem_node_id;
 
-	ctx = kzalloc(sizeof(struct lego_context), GFP_KERNEL);
-	if(!ctx)
-	{
-		printk(KERN_ALERT "FAIL to initialize ctx in fit_init_ctx\n");
-		return NULL;
-	}
 	ctx->node_id = mynodeid;
 	ctx->send_flags = IB_SEND_SIGNALED;
 	ctx->rx_depth = rx_depth;
@@ -368,12 +355,8 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	ctx->num_node = MAX_NODE;
 	ctx->num_parallel_connection = NUM_PARALLEL_CONNECTION;
 	ctx->context = (struct ib_context *)ib_dev;
-	if(!ctx->context)
-	{
-		printk(KERN_ALERT "Fail to initialize device / ctx->context\n");
-		return NULL;
-	}
 	ctx->channel = NULL;
+
 	ctx->pd = ib_alloc_pd(ib_dev);
 	if(!ctx->pd)
 	{
@@ -387,7 +370,7 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	if (!ctx->proc) {
 		printk(KERN_CRIT "ERROR! cannot create IB context, something wrong with get_dma_mr\n");
 	}
-	fit_debug("proc lkey %d rkey %d\n", ctx->proc->lkey, ctx->proc->rkey);
+	fit_debug("proc lkey %x rkey %x\n", ctx->proc->lkey, ctx->proc->rkey);
 
 	//Customized part
 	ctx->num_alive_connection = (atomic_t *)kmalloc(ctx->num_node*sizeof(atomic_t), GFP_KERNEL);
@@ -573,66 +556,7 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	ctx->thread_waiting_for_reply = (struct task_struct **)kzalloc(sizeof(struct task_struct*)*IMM_NUM_OF_SEMAPHORE, GFP_KERNEL);
 #endif
 
-	#if 0
-	//Lock related
-	atomic_set(&ctx->lock_num, 0);
-	ctx->lock_data = kzalloc(sizeof(struct fit_lock_form)*FIT_MAX_LOCK_NUM, GFP_KERNEL);
-	#endif
 	return ctx;
-}
-
-ppc *fit_init_interface(int ib_port, struct ib_device *ib_dev, int mynodeid)
-{
-	int	size = 8192;
-	int	rx_depth = RECV_DEPTH;
-	int	ret;
-	ppc *ctx;
-	mtu = IB_MTU_2048;
-	sl = 0;
-
-	page_size = PAGE_SIZE;
-	rcnt = 0;
-	scnt = 0;
-	ctx = fit_init_ctx(size,rx_depth,ib_port, ib_dev, mynodeid);
-	if(!ctx)
-	{
-		printk(KERN_ALERT "Fail to do fit_init_ctx\n");
-		return 0;
-	}
-
-retry:
-	ret = ib_query_port((struct ib_device *)ctx->context, ib_port, &ctx->portinfo);
-	if(ret<0)
-	{
-		printk(KERN_ALERT "Fail to query port\n");
-	}
-
-	if (!ctx->portinfo.lid || ctx->portinfo.state != 4) {
-		//printk(KERN_CRIT "Couldn't get local LID %d state %d\n", ctx->portinfo.lid, ctx->portinfo.state);
-		schedule();
-		goto retry;
-	}
-	else
-		fit_debug("got local LID %d\n", ctx->portinfo.lid);
-
-	/*
-	 * Sanity Check...
-	 *
-	 */
-	if (ctx->portinfo.lid != get_node_global_lid(CONFIG_FIT_LOCAL_ID)) {
-		pr_info("\n"
-			"***\n"
-			"*** ERROR\n"
-			"*** Current LID: %d. Table LID: %d.\n"
-			"*** Other machine will fail to connect.\n"
-			"*** Please update the table to use the latest LID.\n"
-			"***\n", ctx->portinfo.lid,
-			get_node_global_lid(CONFIG_FIT_LOCAL_ID));
-		hlt();
-	}
-
-	return ctx;
-
 }
 
 uintptr_t fit_ib_reg_mr_phys_addr(ppc *ctx, void *addr, size_t length)
@@ -1116,7 +1040,7 @@ inline int fit_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
  * If we can not get the CQE within 20 seconds
  * There should be something wrong.
  */
-#define FIT_POLL_SENDCQ_TIMEOUT_NS	(20000000000L)
+#define FIT_POLL_CQ_TIMEOUT_NS	(20000000000L)
 
 /*
  * HACK!!!
@@ -1126,7 +1050,7 @@ inline int fit_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
  * If you find dead loop here, ugh, I don't know what to do.
  *
  *
- * Return: -ETIMEDOUT if we fail to get the CQE in FIT_POLL_SENDCQ_TIMEOUT_NS.
+ * Return: -ETIMEDOUT if we fail to get the CQE in FIT_POLL_CQ_TIMEOUT_NS.
  */
 static int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq,
 				    int connection_id, int *check, int if_poll_now)
@@ -1192,14 +1116,15 @@ static int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq,
 			return ne;
 		}
 
-		if (unlikely(sched_clock() - start_ns > FIT_POLL_SENDCQ_TIMEOUT_NS)) {
+		if (unlikely(sched_clock() - start_ns > FIT_POLL_CQ_TIMEOUT_NS)) {
 			pr_info_once("\n"
 				"*****\n"
 				"***** Fail to to get the CQE from send_cq (%p) after %ld seconds!\n"
-				"***** connection_id: %d dest node: %d\n"
+				"***** CPU: %d connection_id: %d dest node: %d\n"
 				"*****\n",
 				tar_cq,
-				FIT_POLL_SENDCQ_TIMEOUT_NS/NSEC_PER_SEC,
+				FIT_POLL_CQ_TIMEOUT_NS/NSEC_PER_SEC,
+				smp_processor_id(),
 				connection_id, connection_id / NUM_PARALLEL_CONNECTION);
 			WARN_ON_ONCE(1);
 			return -ETIMEDOUT;
@@ -1488,17 +1413,6 @@ void fit_ack_reply_callback(struct thpool_buffer *b)
 			reply_data, reply_size, 0,
 			request_metadata->reply_indicator_index | IMM_SEND_REPLY_RECV,
                         FIT_SEND_MESSAGE_IMM_ONLY, NULL, 1);
-}
-
-/*
- * Step I
- * Call back to thread pool
- */
-static __always_inline void
-fit_internal_got_message_call_handle_and_reply(ppc *ctx, struct imm_message_metadata *imm,
-					       void *rx, int rx_size, int node_id, int offset)
-{
-	thpool_callback(ctx, imm, rx, rx_size, node_id, offset);
 }
 #endif
 
@@ -2040,7 +1954,7 @@ int fit_poll_recv_cq(void *_info)
 		nr_recvcq_cqes[recvcq_id] += ne;
 		for (i = 0; i < ne; i++) {
 			if (unlikely(wc[i].status != IB_WC_SUCCESS)) {
-				pr_err("wc.status: %s, wr_id %d",
+				fit_err("wc.status: %s, wr_id %d",
 					ib_wc_status_msg(wc[i].status), wc[i].wr_id);
 				continue;
 			}
@@ -2103,7 +2017,10 @@ int fit_poll_recv_cq(void *_info)
 						{
 						struct imm_message_metadata *tmp1;
                                                 tmp1 = (struct imm_message_metadata *)(ctx->local_rdma_recv_rings[node_id] + offset);
-                                                fit_internal_got_message_call_handle_and_reply(ctx, tmp1, (void *)tmp1 + sizeof(struct imm_message_metadata),
+
+						/* Enqueue this request to thpool */
+                                                thpool_callback(ctx, tmp1,
+								(void *)tmp1 + sizeof(struct imm_message_metadata),
                                                                 tmp1->size, node_id, offset);
 						}
 #else
@@ -2179,23 +2096,13 @@ int fit_poll_recv_cq(void *_info)
 				/*
 				 * Post more recv_wr if needed.
 				 */
-				if(GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
-				{
+				if ((GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id) % (ctx->rx_depth/4)) == ((ctx->rx_depth/4)-1)) {
 					connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
 					if (connection_id == -1) {
 						pr_crit("Error: cannot find qp number %d\n", wc[i].qp->qp_num);
 						continue;
 					}
 					fit_post_receives_message(ctx, connection_id, ctx->rx_depth/4);
-
-					recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
-					recv->length = ctx->rx_depth/4;
-					recv->src_id = connection_id;
-					recv->type = MSG_DO_RC_POST_RECEIVE;
-
-					spin_lock(&wq_lock);
-					list_add_tail(&(recv->list), &request_list.list);
-					spin_unlock(&wq_lock);
 				}
 			}
 			else
@@ -2477,38 +2384,6 @@ void fit_setup_ibapi_header(uint32_t src_id, uint64_t reply_addr, uint64_t reply
 	msg_header->length = length;
 	msg_header->priority = priority;
 	msg_header->type = type;
-}
-
-int fit_send_cq_poller(ppc *ctx)
-{
-	int ne, i;
-	struct ib_wc *wc;
-	wc = kmalloc(sizeof(struct ib_wc)*128, GFP_KERNEL);
-	while(1)
-	{
-		do{
-			ne = ib_poll_cq(ctx->send_cq[0], 128, wc);
-			if(ne < 0)
-			{
-				printk(KERN_ALERT "%s: poll send_cq polling failed at connection\n", __func__);
-			}
-			if(ne==0)
-			{
-				schedule();
-			}
-		}while(ne<1);
-		for(i=0;i<ne;i++)
-		{
-			if(wc[i].status!=IB_WC_SUCCESS)
-			{
-				printk(KERN_ALERT "%s: send request failed at id %llu as %d\n", __func__, wc[i].wr_id, wc[i].status);
-			}
-			//else
-			//	printk(KERN_ALERT "%s: send request success at id %llu as %d\n", __func__, wc[i].wr_id, wc[i].status);
-			*(int*)wc[i].wr_id = -wc[i].status;
-		}
-	}
-	return 0;
 }
 
 int fit_send_request(ppc *ctx, int connection_id, enum mode s_mode,
@@ -3118,7 +2993,6 @@ int fit_send_test(ppc *ctx, int connection_id, int type, void *addr, int size, u
 	struct ib_wc wc[2];
 
 	printk(KERN_CRIT "%s conn %d addr %p size %d sendcq %p\n", __func__, connection_id, addr, size, ctx->send_cq[connection_id]);
-	spin_lock(&connection_lock[connection_id]);
 
 	memset(&wr, 0, sizeof(wr));
 
@@ -3141,7 +3015,6 @@ int fit_send_test(ppc *ctx, int connection_id, int type, void *addr, int size, u
 			if(ne < 0)
 			{
 				printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
-				spin_unlock(&connection_lock[connection_id]);
 				return 1;
 			}
 		}while(ne<1);
@@ -3150,7 +3023,6 @@ int fit_send_test(ppc *ctx, int connection_id, int type, void *addr, int size, u
 			if(wc[i].status!=IB_WC_SUCCESS)
 			{
 				printk(KERN_ALERT "send failed at connection %d as %d\n", connection_id, wc[i].status);
-				spin_unlock(&connection_lock[connection_id]);
 				return 2;
 			}
 		}
@@ -3159,7 +3031,6 @@ int fit_send_test(ppc *ctx, int connection_id, int type, void *addr, int size, u
 	{
 		printk(KERN_INFO "%s send fail %d\n", __func__, connection_id);
 	}
-	spin_unlock(&connection_lock[connection_id]);
 	return ret;
 }
 
@@ -3174,12 +3045,13 @@ int fit_send_message_sge(ppc *ctx, int connection_id, int type, void *addr,
 	struct ib_wc wc[2];
 	struct ibapi_header msg_header;
 	void *msg_header_addr;
+	unsigned long start_ns;
 
-	fit_debug("conn %d addr %p size %d sendcq %p type %d\n", connection_id, addr, size, ctx->send_cq[connection_id], type);
-	spin_lock(&connection_lock[connection_id]);
+	fit_debug("conn %d addr %p size %d sendcq %p type %d\n",
+		connection_id, addr, size, ctx->send_cq[connection_id], type);
 
 	memset(&wr, 0, sizeof(wr));
-	memset(sge, 0, sizeof(struct ib_sge)*2);
+	memset(sge, 0, sizeof(sge));
 
 	wr.wr_id = type;
 	wr.opcode = IB_WR_SEND;
@@ -3197,35 +3069,39 @@ int fit_send_message_sge(ppc *ctx, int connection_id, int type, void *addr,
 	sge[1].lkey = ctx->proc->lkey;
 
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
-	fit_debug("headeraddr %p %p bufaddr %p %p lkey %d\n",
-		&msg_header, msg_header_addr, addr, sge[1].addr, ctx->proc->lkey);
-	if(ret==0)
-	{
-		do{
-			ne = ib_poll_cq(ctx->send_cq[connection_id], 1, wc);
-			if(ne < 0)
-			{
-				printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
-				spin_unlock(&connection_lock[connection_id]);
-				return 1;
-			}
-		}while(ne<1);
-		for(i=0;i<ne;i++)
-		{
-			if(wc[i].status!=IB_WC_SUCCESS)
-			{
-				printk(KERN_ALERT "send failed at connection %d as %d\n", connection_id, wc[i].status);
-				spin_unlock(&connection_lock[connection_id]);
-				return 2;
-			}
+	if (ret) {
+		fit_err("Fail to post. ret=%d", ret);
+		return ret;
+	}
+
+	start_ns = sched_clock();
+	do {
+		ne = ib_poll_cq(ctx->send_cq[connection_id], 1, wc);
+		if (ne < 0) {
+			fit_err("Fail to poll CQ. ret=%d", ne);
+			return ne;
 		}
+
+		if (unlikely(sched_clock() - start_ns > FIT_POLL_CQ_TIMEOUT_NS)) {
+			pr_info_once("\n"
+				"*****\n"
+				"***** Fail to to get the CQE from send_cq (%p) after %ld seconds!\n"
+				"***** CPU: %d connection_id: %d dest node: %d\n"
+				"*****\n",
+				ctx->send_cq[connection_id],
+				FIT_POLL_CQ_TIMEOUT_NS/NSEC_PER_SEC,
+				smp_processor_id(),
+				connection_id, connection_id / NUM_PARALLEL_CONNECTION);
+			WARN_ON_ONCE(1);
+			return -ETIMEDOUT;
+		}
+	} while (ne < 1);
+
+	if (wc[i].status!=IB_WC_SUCCESS) {
+		fit_err("wc_status: %s", ib_wc_status_msg(wc[i].status));
+		return -EINVAL;
 	}
-	else
-	{
-		printk(KERN_INFO "%s send fail %d\n", __func__, connection_id);
-	}
-	spin_unlock(&connection_lock[connection_id]);
-	return ret;
+	return 0;
 }
 
 static int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
@@ -3275,35 +3151,64 @@ static int send_rdma_ring_mr_to_other_nodes(ppc *ctx)
 ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 {
 	int     i;
-        int temp_ctx_number;
 	ppc *ctx;
 	struct fit_ibv_mr *ret_mr;
 	struct thread_pass_struct *info;
 	int num_connected_nodes = 0;
-	num_recvd_rdma_ring_mrs = 0;
+	int	size = 8192;
+	int	rx_depth = RECV_DEPTH;
+	int	ret;
 
-        temp_ctx_number = atomic_inc_return(&Connected_FIT_Num);
-        if(temp_ctx_number>=MAX_FIT_NUM)
-        {
-                printk(KERN_CRIT "%s Error: already meet the upper bound of connected FIT %d\n", __func__, temp_ctx_number);
-                atomic_dec(&Connected_FIT_Num);
-                return 0;
-        }
+	mtu = IB_MTU_2048;
+	sl = 0;
 
-	pr_info("***  Start establish connection (mynodeid: %d)\n", mynodeid);
+	ctx = kzalloc(sizeof(struct lego_context), GFP_KERNEL);
+	if (!ctx)
+		return NULL;
 
-	ctx = fit_init_interface(ib_port, ib_dev, mynodeid);
-	if(!ctx)
-	{
-		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
-		return 0;
+	/*
+	 * This is another waiting point..
+	 * We need to wait for the port to change state.
+	 * Seems related to MAD and interrupt events.
+	 */
+retry:
+	ret = ib_query_port(ib_dev, ib_port, &ctx->portinfo);
+	if (ret < 0) {
+		pr_err("Fail to query port\n");
+		return NULL;
 	}
 
-        Connected_Ctx[temp_ctx_number-1] = ctx;
+	if (!ctx->portinfo.lid || ctx->portinfo.state != 4) {
+#if 1
+		mdelay(1000);
+		pr_info("%s() CPU%d port: %d LID: %d state: %d\n",
+			__func__, smp_processor_id(), ib_port,
+			ctx->portinfo.lid, ctx->portinfo.state);
+#endif
+		goto retry;
+	}
+	pr_info("Query returned LID: %d\n", ctx->portinfo.lid);
 
-	for (i = 0; i < MAX_CONNECTION; i++)
-	{
-		spin_lock_init(&connection_lock[i]);
+	/*
+	 * Sanity Check...
+	 */
+	if (ctx->portinfo.lid != get_node_global_lid(CONFIG_FIT_LOCAL_ID)) {
+		pr_info("\n"
+			"***\n"
+			"*** ERROR\n"
+			"*** Current LID: %d. Table LID: %d.\n"
+			"*** Other machine will fail to connect.\n"
+			"*** Please update the table to use the latest LID.\n"
+			"***\n", ctx->portinfo.lid,
+			get_node_global_lid(CONFIG_FIT_LOCAL_ID));
+		hlt();
+	}
+
+	/* This function will create a lot stuff including CQ, QP */
+	ctx = fit_init_ctx(ctx, size, rx_depth, ib_port, ib_dev, mynodeid);
+	if (!ctx) {
+		pr_err("Fail to init ctx\n");
+		return NULL;
 	}
 
 #ifdef CONFIG_SOCKET_O_IB
@@ -3313,11 +3218,7 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 #endif
 
 	//Initialize waiting_queue/request list related items
-	spin_lock_init(&wq_lock);
 	INIT_LIST_HEAD(&(request_list.list));
-
-	//Initialize multicast spin_lock
-	spin_lock_init(&multicast_lock);
 
 	info = kmalloc(sizeof(*info) * NUM_POLLING_THREADS, GFP_KERNEL);
 	if (!info)
@@ -3339,19 +3240,8 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		kthread_run(sock_poll_cq, &sock_thread_pass_poll_cq, "fit_sockrecvpollcq");
 	}
 #endif
-	//wake_up_process(thread);
 
 	kthread_run(waiting_queue_handler, ctx, "FIT_WQ_Handler");
-
-#ifdef SEPARATE_SEND_POLL_THREAD
-	thread = kthread_create((void *)fit_send_cq_poller, ctx, "fit_separate_poll_send");
-	if(IS_ERR(thread))
-	{
-		printk(KERN_ALERT "fail to do send-cq poller\n");
-		return 0;
-	}
-	wake_up_process(thread);
-#endif
 
 	/*
 	 * Allocate and register local RDMA-IMM rings for all nodes
@@ -3406,29 +3296,19 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	}
 #endif
 
-	fit_debug("node: %d allocated local rdma buffers, about to connect qps\n", mynodeid);
-
 	ctx->node_id = mynodeid;
-	for (i = 0; i < mynodeid; i++) {
+	for (i = 0; i < MAX_NODE; i++) {
+		if (i == mynodeid)
+			continue;
 		fit_add_newnode(ctx, i, mynodeid);
 		num_connected_nodes++;
 	}
 
-	//if (num_connected_nodes == mynodeid - 1) {
-		for (i = mynodeid + 1; i < MAX_NODE; i++) {
-			fit_add_newnode(ctx, i, mynodeid);
-			num_connected_nodes ++;
-		}
-	//}
-
 	/*
-	 * HACK!!!
-	 *
-	 * Looks like this is some grace waiting time.
-	 * We wait for few seconds and then send info to others.
-	 *
-	 * If we send the info too soon, others probably has not
-	 * established the handling thraed yet.
+	 * TODO:
+	 * change this to contiguously sending info until we got all
+	 * also add necessary info to track what've got.
+	 * This timeout is just too fragile.
 	 */
 #ifdef CONFIG_FIT_INITIAL_SLEEP_TIMEOUT
 	for (i = 0; i < CONFIG_FIT_INITIAL_SLEEP_TIMEOUT * 1000; i++) {
@@ -3440,35 +3320,17 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 		udelay(1000);
 	}
 #endif
-
-
-	/*
-	 * TODO:
-	 * change this to contiguously sending info until we got all
-	 * also add necessary info to track what've got.
-	 * This timeout is just too fragile.
-	 */
 	send_rdma_ring_mr_to_other_nodes(ctx);
+
+	pr_debug("Now waiting other nodes to join..\n");
 	while (num_recvd_rdma_ring_mrs < ctx->num_node - 1)
 		schedule();
-
-	fit_debug("node: %d return before establish connection with NODE_ID: %d\n",
-		mynodeid, ctx->node_id);
-
 	return ctx;
 }
 
 int fit_cleanup_module(void)
 {
 	printk(KERN_INFO "Ready to remove module\n");
-	return 0;
-}
-
-int fit_internal_init(void)
-{
-        Connected_Ctx = (ppc **)kmalloc(sizeof(ppc*)*MAX_FIT_NUM, GFP_KERNEL);
-        atomic_set(&Connected_FIT_Num, 0);
-	printk(KERN_CRIT "insmod fit_internal module\n");
 	return 0;
 }
 

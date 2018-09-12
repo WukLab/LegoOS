@@ -177,6 +177,18 @@ config PROFILING_BOOT
 
 	  If unsure, say N.
 
+config PROFILING_BOOT_RPC
+	bool "Profile RPC at boot time"
+	default n
+	depends on PROFILING
+	depends on COMP_PROCESSOR
+	help
+	  Enable this if you want to have a predefined boot-time profiling.
+	  This will profile the RPC between processor and memory,
+	  prossor and storage.
+
+	  If unsure, say N.
+
 endmenu #Lego Kernel Profiling
 
 #

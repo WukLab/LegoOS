@@ -72,7 +72,6 @@ struct fit_sglist {
 	int len;
 };
 
-int ibapi_establish_conn(int ib_port, int mynodeid);
 void ibapi_free_recv_buf(void *input_buf);
 
 /* IMM related */

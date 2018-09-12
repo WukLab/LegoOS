@@ -142,6 +142,11 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 	void *tx;
 	unsigned long desc;
 
+	/*
+	 *   | .........| ............. |
+	 *   ^          ^
+	 *  msg(hdr)  payload   
+	 */
 	tx = thpool_buffer_tx(buffer);
 	msg = thpool_buffer_rx(buffer);
 	hdr = to_common_header(msg);
@@ -154,6 +159,9 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 	 * 3) Handler SHOULD NOT call exit()
 	 */
 	switch (hdr->opcode) {
+	case P2M_TEST:
+		handle_p2m_test(msg, buffer);
+		break;
 /* PCACHE */
 	case P2M_PCACHE_MISS:
 		inc_mm_stat(HANDLE_PCACHE_MISS);
@@ -459,7 +467,6 @@ void __init memory_component_init(void)
 #ifdef CONFIG_VMA_MEMORY_UNITTEST
 	mem_vma_unittest();
 #endif
-	pr_info("Memory: manager is up and running.\n");
 }
 
 /*

@@ -20,6 +20,7 @@
 
 #ifdef CONFIG_COMP_PROCESSOR
 
+void __init kick_off_user(void);
 void __init processor_manager_early_init(void);
 void __init processor_manager_init(void);
 int __init pcache_range_register(u64 start, u64 size);
@@ -54,6 +55,7 @@ void open_stdio_files(void);
 static inline void pcache_process_exit(struct task_struct *tsk) { }
 static inline void pcache_thread_exit(struct task_struct *tsk) { }
 
+static inline void kick_off_user(void) { }
 static inline void processor_manager_init(void) { }
 static inline void processor_manager_early_init(void) { }
 static inline void fork_processor_data(struct task_struct *s, struct task_struct *t, unsigned long f) { }
@@ -81,5 +83,13 @@ static inline int do_execve(const char *filename, const char * const *argv,
 }
 
 #endif /* CONFIG_COMP_PROCESSOR */
+
+#ifdef CONFIG_PROFILING_BOOT_RPC
+void rpc_profile(void);
+void wait_rpc_profile(void);
+#else
+static inline void rpc_profile(void) { }
+static inline void wait_rpc_profile(void) { }
+#endif
 
 #endif /* _LEGO_PROCESSOR_PROCESSOR_H_ */

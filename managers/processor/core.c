@@ -47,6 +47,8 @@ static int procmgmt(void *unused)
 	const char *init_filename;
 	int vid __maybe_unused;
 
+	rpc_profile();
+
 	/*
 	 * Use the correct name if a real storage node is used.
 	 * If CONFIG_USE_RAMFS is set, then filename does not matter anyway.
@@ -81,7 +83,7 @@ static int procmgmt(void *unused)
 		(const char *const *)envp_init);
 }
 
-static void run_global_thread(void)
+void __init kick_off_user(void)
 {
 	pid_t pid;
 
@@ -150,13 +152,6 @@ void __init processor_manager_init(void)
 
 	/* Create checkpointing restore thread */
 	checkpoint_init();
-
-	/*
-	 * This is the first user-program we run
-	 */
-	run_global_thread();
-
-	pr_info("Processor manager is running.\n");
 }
 
 /*

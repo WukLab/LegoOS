@@ -13,6 +13,7 @@ obj-y += file_ops.o
 obj-y += missing_syscalls.o
 obj-y += m2s_read_write.o
 obj-y += stat.o
+obj-y += test.o
 
 # Pcache
 obj-y += handle_pcache/

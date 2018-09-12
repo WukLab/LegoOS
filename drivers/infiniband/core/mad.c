@@ -2850,7 +2850,15 @@ static int ib_mad_port_open(struct ib_device *device,
 	}
 
 	snprintf(name, sizeof name, "ib_mad%d", port_num);
-	kthread_run(ib_mad_completion_handler, port_priv, name);
+
+	/*
+	 * FIXME
+	 *
+	 * In our testing, we only have 1 port enabled
+	 * thus we only need to run one guy here..
+	 */
+	if (port_num == 1)
+		kthread_run(ib_mad_completion_handler, port_priv, name);
 
 	port_priv->pd = ib_alloc_pd(device);
 	if (IS_ERR(port_priv->pd)) {

@@ -91,7 +91,15 @@ void __init manager_init(void)
 
 	soft_watchdog_init();
 
-	/* Print scheduablable CPUs */
+	/* Print schedulable CPUs */
 	pin_registered_threads();
 	dump_cpumasks();
+
+	/*
+	 * Start running user threads.
+	 * Now we only run user context at Processor Manager.
+	 * Maybe.. we want memory to do the same in the future ;-)
+	 */
+	kick_off_user();
+	pr_info("Manager is up and running.\n");
 }

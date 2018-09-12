@@ -17,6 +17,13 @@
 
 struct thpool_buffer;
 
+struct p2m_test_msg {
+	struct common_header	header;
+	__u32			send_len;
+	__u32			reply_len;
+};
+void handle_p2m_test(struct p2m_test_msg *msg, struct thpool_buffer *tb);
+
 /*
  * P2M_ZEROFILL
  */

@@ -207,7 +207,6 @@ static inline void *thpool_buffer_tx(struct thpool_buffer *tb)
 }
 
 void handle_bad_request(struct common_header *hdr, u64 desc);
-void handle_p2m_test(void *payload, u64 desc, struct common_header *hdr);
 
 #ifdef CONFIG_COUNTER_THPOOL
 #define THPOOL_WORKER_INHANDLER		0x1UL
