@@ -354,7 +354,7 @@ pcache_copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		if (!pte_present(ptecont)) {
 #ifdef CONFIG_PCACHE_ZEROFILL
 			/*
-			 * If zerofill is configured, chances are we will
+			 * If zerofill is configured, chances are, we will
 			 * see PTE entries with ZEROFILL bit set. But we
 			 * only deal with non-present PTE here. Present ones
 			 * need to callback to pcache, which will copy the bit as well.

@@ -8,9 +8,7 @@
  */
 
 /*
- * Things about bulk pgtable operations, mostly for fork, exit.
- * Probably we also want to move pcache_zap, pcache_move here.
- * Also, the free pool code.
+ * Things related to thread activities, such as fork(), exit().
  */
 
 #include <lego/mm.h>
@@ -24,21 +22,46 @@
 #include <processor/pgtable.h>
 #include <processor/processor.h>
 
+#ifdef CONFIG_DEBUG_FORK
+#define fork_debug(fmt, ...)						\
+	pr_debug("%s(cpu%d): " fmt "\n", __func__, smp_processor_id(),	\
+		__VA_ARGS__)
+#else
+static inline void fork_debug(const char *fmt, ...) { }
+#endif
+
 /*
  * Called when a new process is created.
- * This share the same purpose of dup_lego_mmap() from memory side.
- *
- * TODO:
- * 1) should optimize the walk, only just valid range.
- * 2) Have real vm_flags, so avoid wrprotect shared mapping
+ * This share the same purpose of dup_lego_mmap() at memory side.
+ * Also, the vmainfo array is obtained at p2m_fork().
  */
 int fork_dup_pcache(struct task_struct *dst_task,
-		    struct mm_struct *dst_mm, struct mm_struct *src_mm)
+		    struct mm_struct *dst_mm, struct mm_struct *src_mm,
+		    void *_vmainfo)
 {
-	unsigned long vm_flags;
+	struct fork_reply_struct *fork_reply = _vmainfo;
+	struct fork_vmainfo *vma, *vmas = fork_reply->vmainfos;
+	int ret, i, nr_vmas = fork_reply->vma_count;
+	unsigned long start, end, flags;
 
-	vm_flags = VM_MAYWRITE;
-	pcache_copy_page_range(dst_mm, src_mm, PAGE_SIZE, TASK_SIZE, vm_flags, dst_task);
+	/*
+	 * We walk through pgtable based on vma range and flags.
+	 * We need to wrprotect most of the pte entries..
+	 */
+	for (i = 0; i < nr_vmas; i++) {
+		vma = &vmas[i];
+		start = vma->vm_start;
+		end = vma->vm_end;
+		flags = vma->vm_flags;
+
+		fork_debug("  [%d] [%#lx-%#lx] %#lx %#lx is_cow: %d",
+			i, start, end, flags, (flags & (VM_SHARED | VM_WRITE)),
+			is_cow_mapping(flags));
+		ret = pcache_copy_page_range(dst_mm, src_mm,
+					     start, end, flags, dst_task);
+		if (ret)
+			return ret;
+	}
 	return 0;
 }
 

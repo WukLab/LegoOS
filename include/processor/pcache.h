@@ -631,11 +631,12 @@ void pcache_remove_rmap(struct pcache_meta *pcm, pte_t *ptep, unsigned long addr
 #ifdef CONFIG_COMP_PROCESSOR
 /* Called when fork() happens, duplicate the pcache */
 int fork_dup_pcache(struct task_struct *dst_task,
-		    struct mm_struct *dst_mm, struct mm_struct *src_mm);
+		    struct mm_struct *dst_mm, struct mm_struct *src_mm, void *_vmainfo);
 void __init pcache_print_info(void);
 #else
 static inline int fork_dup_pcache(struct task_struct *t,
-				  struct mm_struct *m1, struct mm_struct *m2)
+				  struct mm_struct *m1, struct mm_struct *m2,
+				  void *_vmainfo)
 {
 	return 0;
 }

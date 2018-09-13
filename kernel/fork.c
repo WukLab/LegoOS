@@ -383,7 +383,6 @@ struct mm_struct *mm_alloc(void)
 static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 {
 	struct mm_struct *mm, *oldmm;
-	int err;
 
 	oldmm = current->mm;
 
@@ -394,14 +393,9 @@ static struct mm_struct *dup_mm_struct(struct task_struct *tsk)
 	memcpy(mm, oldmm, sizeof(*mm));
 
 	if (!mm_init(mm, tsk))
-		return NULL;
-
-	err = fork_dup_pcache(tsk, mm, oldmm);
-	if (err)
 		goto out;
 
 	processor_fork_dup_distvm(tsk, mm, oldmm);
-
 	return mm;
 
 out:
@@ -954,11 +948,22 @@ pid_t do_fork(unsigned long clone_flags,
 	 */
 #ifdef CONFIG_COMP_PROCESSOR
 	if (clone_flags & CLONE_GLOBAL_THREAD) {
+		void *vmainfo;
 		int ret;
 
-		ret = p2m_fork(p, clone_flags);
+		vmainfo = p2m_fork(p, clone_flags);
+		if (IS_ERR(vmainfo)) {
+			WARN_ON_ONCE(1);
+			return PTR_ERR(vmainfo);
+		}
+
+		/*
+		 * This step has to be postponed here after
+		 * we got VMA info from remote memory.
+		 * Walk through page table entries.
+		 */
+		ret = fork_dup_pcache(p, p->mm, current->mm, vmainfo);
 		if (ret) {
-			/* TODO: cleanup */
 			WARN_ON_ONCE(1);
 			return ret;
 		}
