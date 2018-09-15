@@ -190,49 +190,46 @@ static void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pc
 	BUG_ON(nr_added);
 }
 
-DEFINE_PROFILE_POINT(evict_line_perset_add)
 DEFINE_PROFILE_POINT(evict_line_perset_unmap)
 DEFINE_PROFILE_POINT(evict_line_perset_flush)
-DEFINE_PROFILE_POINT(evict_line_perset_remove)
 
 int evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm)
 {
 	int nr_added;
-	PROFILE_POINT_TIME(evict_line_perset_add)
+	bool dirty;
 	PROFILE_POINT_TIME(evict_line_perset_unmap)
 	PROFILE_POINT_TIME(evict_line_perset_flush)
-	PROFILE_POINT_TIME(evict_line_perset_remove)
 
 	/*
 	 * Add entries to pset
 	 * This has to be performed before we do unmap, thus concurrent
 	 * pgfault can look up the eviction entries, and hold until we finished.
 	 */
-	PROFILE_START(evict_line_perset_add);
 	nr_added = pset_add_eviction(pset, pcm);
 	if (unlikely(!nr_added)) {
 		dump_pset(pset);
 		dump_pcache_meta(pcm, NULL);
 		BUG();
 	}
-	PROFILE_LEAVE(evict_line_perset_add);
 
 	/* 2.1) Remove unmap, but don't free rmap */
 	PROFILE_START(evict_line_perset_unmap);
-	pcache_try_to_unmap_reserve(pcm);
+	dirty = pcache_try_to_unmap_reserve_check_dirty(pcm);
+	inc_pcache_event_cond(PCACHE_CLFLUSH_CLEAN_SKIPPED, !dirty);
 	PROFILE_LEAVE(evict_line_perset_unmap);
 
-	PROFILE_START(evict_line_perset_flush);
-	pcache_flush_one(pcm);
-	PROFILE_LEAVE(evict_line_perset_flush);
+	/* Only flush lines that are dirty */
+	if (dirty) {
+		PROFILE_START(evict_line_perset_flush);
+		pcache_flush_one(pcm);
+		PROFILE_LEAVE(evict_line_perset_flush);
+	}
 
 	/* 2.2) free reserved rmap */
 	pcache_free_reserved_rmap(pcm);
 
 	/* 3) remove entries */
-	PROFILE_START(evict_line_perset_remove);
 	pset_remove_eviction(pset, pcm, nr_added);
-	PROFILE_LEAVE(evict_line_perset_remove);
 
 	return 0;
 }

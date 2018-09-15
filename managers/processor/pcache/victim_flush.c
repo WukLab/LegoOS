@@ -87,6 +87,7 @@ int victim_submit_flush(struct pcache_victim_meta *victim, bool wait, bool dirty
 	if (!dirty) {
 		SetVictimFlushed(victim);
 		inc_pcache_event(PCACHE_VICTIM_FLUSH_SUBMITTED_CLEAN);
+		inc_pcache_event(PCACHE_CLFLUSH_CLEAN_SKIPPED);
 		return 0;
 	}
 

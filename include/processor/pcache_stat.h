@@ -29,6 +29,7 @@ enum pcache_event_item {
 	 * If victim cache is configured, all flush come from victim
 	 */
 	PCACHE_CLFLUSH,
+	PCACHE_CLFLUSH_CLEAN_SKIPPED,
 	PCACHE_CLFLUSH_FAIL,
 
 	/*
