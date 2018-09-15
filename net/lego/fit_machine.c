@@ -208,9 +208,9 @@ void print_gloabl_lid(void)
 			get_node_first_qpn(nid));
 
 		if (nid == CONFIG_FIT_LOCAL_ID)
-			pr_cont(" <---\n");
+			printk(KERN_CONT " <---\n");
 		else
-			pr_cont("\n");
+			printk(KERN_CONT "\n");
 	}
 	pr_info("***\n");
 }
