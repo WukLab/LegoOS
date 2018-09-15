@@ -14,23 +14,40 @@
 #define fork_debug(fmt, ...)						\
 	pr_debug("%s(cpu%d): " fmt "\n", __func__, smp_processor_id(),	\
 		__VA_ARGS__)
+
+static void fork_reply_dump(struct fork_reply_struct *reply)
+{
+	int i;
+	struct fork_vmainfo *info = reply->vmainfos;
+
+	fork_debug("Total VMAs: %d", reply->vma_count);
+	for (i = 0; i < reply->vma_count; i++)
+		fork_debug("[vma %d] %lx-%lx, flags: %lx", i,
+			   info[i].vm_start, info[i].vm_end, info[i].vm_flags);
+}
 #else
 static inline void fork_debug(const char *fmt, ...) { }
+static inline void fork_reply_dump(struct fork_reply_struct *reply) { }
 #endif
 
 /*
  * Return 0 on success, -ENOMEM on failure.
  * fork() syscall does not have too many errno options.
+ *
+ * We return the reply struct which contains the vma info array.
+ * The caller is responsible to do the free.
  */
-int p2m_fork(struct task_struct *p, unsigned long clone_flags)
+void *p2m_fork(struct task_struct *p, unsigned long clone_flags)
 {
 	struct p2m_fork_struct payload;
-	int retlen, reply;
-	int retval = -ENOMEM;
+	struct fork_reply_struct *reply;
+	int retlen;
 
 	BUG_ON(!p);
 
-	fork_debug("I cur:%d-%s new:%d", current->pid, current->comm, p->pid);
+	reply = kmalloc(sizeof(struct fork_reply_struct), GFP_KERNEL);
+	if (!reply)
+		return ERR_PTR(-ENOMEM);
 
 	payload.pid = p->pid;
 	payload.tgid = p->tgid;
@@ -39,27 +56,22 @@ int p2m_fork(struct task_struct *p, unsigned long clone_flags)
 	memcpy(payload.comm, p->comm, TASK_COMM_LEN);
 
 	retlen = net_send_reply_timeout(get_memory_home_node(p), P2M_FORK, &payload,
-				sizeof(payload), &reply, sizeof(reply), false,
+				sizeof(payload), reply, sizeof(*reply), false,
 				DEF_NET_TIMEOUT);
 
-	if (retlen != sizeof(reply)) {
-		pr_warn("%s():. net %d:%s cur:%d-%s new:%d\n",
-			FUNC, retlen, perror(retlen),
+	/*
+	 * If there is a non-zero return, the reply
+	 * message might be only four bytes.
+	 */
+	if (reply->ret) {
+		pr_warn("%s():. ret %d:%s cur:%d-%s new:%d\n",
+			FUNC, reply->ret, perror(reply->ret),
 			current->pid, current->comm, p->pid);
-		goto out;
+		return ERR_PTR(reply->ret);
 	}
 
-	if (reply != 0) {
-		pr_warn("%s(): reply %d:%s. cur:%d-%s new:%d\n",
-			FUNC, reply, perror(reply),
-			current->pid, current->comm, p->pid);
-		goto out;
-	}
-
-	fork_debug("O succeed cur:%d-%s new:%d", current->pid, current->comm, p->pid);
-	retval = 0;
-out:
-	return retval;
+	fork_reply_dump(reply);
+	return reply;
 }
 
 static inline int choose_home_mnode_no_parent(struct task_struct *p)

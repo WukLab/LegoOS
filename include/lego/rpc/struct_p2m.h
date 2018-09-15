@@ -13,6 +13,7 @@
 #include <memory/replica_types.h>
 #include <processor/pcache_config.h>
 #include <lego/rpc/struct_common.h>
+#include <lego/mmap.h>
 
 struct thpool_buffer;
 
@@ -129,8 +130,22 @@ struct p2m_fork_struct {
 	__u32	clone_flags;
 	char	comm[LEGO_TASK_COMM_LEN];
 };
+
+/* Below two struct are used in both m2m and p2m */
+struct fork_vmainfo {
+	unsigned long	vm_start;
+	unsigned long	vm_end;
+	unsigned long	vm_flags;
+} __packed;
+
+struct fork_reply_struct {
+	int			ret;
+	u32			vma_count;
+	struct fork_vmainfo	vmainfos[DEFAULT_MAX_MAP_COUNT];
+} __packed;
+
 struct task_struct;
-int p2m_fork(struct task_struct *p, unsigned long clone_flags);
+void *p2m_fork(struct task_struct *p, unsigned long clone_flags);
 void handle_p2m_fork(struct p2m_fork_struct *payload,
 		     struct common_header *hdr, struct thpool_buffer *tb);
 

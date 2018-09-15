@@ -27,19 +27,35 @@
 		dump_all_vmas_simple(mm);	\
 		dump_all_vmas_simple(oldmm);	\
 	} while (0)
+
+static void DUMP(struct lego_mm_struct *mm)
+{
+	dump_all_vmas_simple(mm);
+	dump_all_vmas(mm);
+	dump_lego_mm(mm);
+}
+
+static void debug_fork_dump_mm(struct lego_mm_struct *new_mm,
+			       struct lego_task_struct *child,
+			       struct lego_task_struct *parent)
+{
+	pr_debug("**** Dump Child (%d) mm:\n", child->pid);
+	DUMP(new_mm);
+	pr_debug("**** Finish Dump Child (%d) mm\n", child->pid);
+
+	if (parent) {
+		pr_debug("**** Dump Parent (%d) mm:\n", parent->pid);
+		DUMP(parent->mm);
+		pr_debug("**** Finish Dump Parent (%d) mm:\n", parent->pid);
+	} else
+		pr_debug("**** No Parent, above is brand new mm\n");
+}
 #else
 static inline void fork_debug(const char *fmt, ...) { }
 #define dump_both_vmas(mm, oldmm)	do { } while (0)
+#define debug_fork_dump_mm(foo, bar, a)	do { } while(0)
 #endif
 
-/*
- * This function duplicate mmap layout from parent,
- * which is the basic COW guarantee of fork().
- *
- * The whole lego_mm_struct will be replcaed by a new one
- * when execve() is called. This is also what execve() guarantees.
- * Check managers/memory/loader/vm.c for detail.
- */
 #ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 static void insert_freepool(struct lego_mm_struct *mm, struct vm_pool_struct *new)
 {
@@ -84,9 +100,9 @@ static int dup_lego_mmap_freepool(struct lego_mm_struct *mm,
 	return 0;
 }
 
-static int
-dup_lego_mmap_single_vmatree(struct lego_mm_struct *mm, struct lego_mm_struct *oldmm,
-			     struct vma_tree *oldroot)
+static int dup_lego_mmap_single_vmatree(struct lego_mm_struct *mm,
+					struct lego_mm_struct *oldmm,
+					struct vma_tree *oldroot)
 {
 	int ret = 0;
 	struct vm_area_struct *mpnt, *tmp, *prev, **pprev;
@@ -162,8 +178,8 @@ dup_lego_mmap_single_vmatree(struct lego_mm_struct *mm, struct lego_mm_struct *o
 	return ret;
 }
 
-static int
-dup_lego_mmap_local_vmatree(struct lego_mm_struct *mm, struct lego_mm_struct *oldmm)
+static int dup_lego_mmap_local_vmatree(struct lego_mm_struct *mm,
+				       struct lego_mm_struct *oldmm)
 {
 	int i = 0;
 
@@ -192,27 +208,97 @@ dup_lego_mmap_local_vmatree(struct lego_mm_struct *mm, struct lego_mm_struct *ol
 	return 0;
 }
 
+/*
+ * We send the fork() requests to all non-homenode memory nodes.
+ * All of them will reply the number of VMAs they have, and we
+ * collect them into one big array.
+ */
 static int distribute_m2m_fork(struct lego_task_struct *parent,
-			       struct lego_task_struct *child, u64 mnode)
+			       struct lego_task_struct *child, u64 mnode,
+			       struct fork_reply_struct *p2m_reply)
 {
-	int ret_len, reply;
+	int ret_len, ret, old_vma_count;
 	struct m2m_fork_struct info;
+	struct fork_reply_struct *m2m_reply;
+
+	m2m_reply = kmalloc(sizeof(struct fork_reply_struct), GFP_KERNEL);
+	if (!m2m_reply)
+		return -ENOMEM;
 
 	info.parent_pid = parent->pid;
 	info.child_pid = child->pid;
 	info.prcsr_nid = child->node;
 
 	ret_len = net_send_reply_timeout(mnode, M2M_FORK, &info,
-			sizeof(struct m2m_mmap_struct), &reply,
-			sizeof(reply), false, FIT_MAX_TIMEOUT_SEC);
-	if (ret_len != sizeof(reply))
-		return -EIO;
-
-	if (reply) {
-		pr_debug("%s(): dst_nid: %Lu report %d\n", __func__, mnode, reply);
-		WARN_ON_ONCE(1);
+			sizeof(struct m2m_mmap_struct), m2m_reply,
+			sizeof(struct fork_reply_struct),
+			false, FIT_MAX_TIMEOUT_SEC);
+	if (ret_len == sizeof(int)) {
+		ret = m2m_reply->ret;
+		kfree(m2m_reply);
+		return ret;
 	}
-	return reply;
+
+	/*
+	 * Copy the info from non-home node to the reply
+	 * buffer, that is going to be sent to P.
+	 * This code is executed one by one, no need to lock.
+	 */
+	old_vma_count = p2m_reply->vma_count;
+	p2m_reply->vma_count += m2m_reply->vma_count;
+	BUG_ON(p2m_reply->vma_count >= DEFAULT_MAX_MAP_COUNT);
+
+	memcpy(&p2m_reply->vmainfos[old_vma_count], m2m_reply->vmainfos,
+		m2m_reply->vma_count * sizeof(struct fork_vmainfo));
+
+	kfree(m2m_reply);
+	return 0;
+}
+
+static void get_vmas_onetree(struct vma_tree *root, struct fork_reply_struct *reply)
+{
+	struct vm_area_struct *pos;
+
+	VMA_WARN(!root, "vma tree root given is an empty pointer\n");
+
+	pos = root->mmap;
+	if (!pos) {
+		vma_debug("No vmas in this tree\n");
+		return;
+	}
+
+	for (; pos; pos = pos->vm_next) {
+		WARN_ON_ONCE(reply->vma_count >= DEFAULT_MAX_MAP_COUNT);
+
+		reply->vmainfos[reply->vma_count].vm_start = pos->vm_start;
+		reply->vmainfos[reply->vma_count].vm_end = pos->vm_end;
+		reply->vmainfos[reply->vma_count].vm_flags = pos->vm_flags;
+		fork_debug("vma_count: %d, %lx-%lx, vm_flags: %lx",
+			  reply->vma_count, pos->vm_start, pos->vm_end, pos->vm_flags);
+
+		reply->vma_count++;
+	}
+}
+
+static void get_vmas_onenode(struct lego_mm_struct *mm, struct fork_reply_struct *reply)
+{
+	struct vma_tree **map = mm->vmrange_map;
+	int idx = 0;
+
+	for (idx = 0; idx < VMR_COUNT; idx++) {
+		struct vma_tree *root = map[idx];
+		if (!root)
+			continue;
+
+		/* homenode root may be for other M, no vma info under these roots */
+		BUG_ON(!is_homenode(mm->task) && !is_local(root->mnode));
+		if (!is_local(root->mnode))
+			continue;
+
+		fork_debug("parent pid: %d",mm->task->pid);
+		get_vmas_onetree(root, reply);
+		idx = vmr_idx(VMR_ALIGN(root->end)) - 1;
+	}
 }
 
 /*
@@ -230,25 +316,27 @@ void handle_m2m_fork(struct m2m_fork_struct *payload,
 	u32 parent_pid = payload->parent_pid;
 	u32 child_pid = payload->child_pid;
 	u32 prcsr_nid = payload->prcsr_nid;
+	u32 reply_size;
 	struct lego_task_struct *parent;
 	struct lego_task_struct *child;
-	u32 *reply;
+	struct fork_reply_struct *reply;
 
 	vma_debug("%s, nid: %d, parent_pid: %d, child_pid: %d, prcsr_nid: %d",
 		   __func__, nid, parent_pid, child_pid, prcsr_nid);
 
 	reply = thpool_buffer_tx(tb);
-	tb_set_tx_size(tb, sizeof(*reply));
+	memset(reply, 0, sizeof(*reply));
+	tb_set_tx_size(tb, sizeof(int));
 
 	parent = find_lego_task_by_pid(prcsr_nid, parent_pid);
 	if (unlikely(!parent)) {
-		*reply = -ESRCH;
+		reply->ret = -ESRCH;
 		return;
 	}
 
 	child = alloc_lego_task_struct();
 	if (unlikely(!child)) {
-		*reply = -ENOMEM;
+		reply->ret = -ENOMEM;
 		return;
 	}
 
@@ -259,44 +347,56 @@ void handle_m2m_fork(struct m2m_fork_struct *payload,
 
 	child->mm = lego_mm_alloc(child, NULL);
 	if (!child->mm) {
-		*reply = -ENOMEM;
+		reply->ret = -ENOMEM;
 		free_lego_task_struct(child);
 		return;
 	}
 	/* virtual memory map layout */
 	arch_pick_mmap_layout(child->mm);
 
+	/* initialize buffer and copy parent vma information to processor */
+	reply->vma_count = 0;
+	get_vmas_onenode(parent->mm, reply);
+
 	/* All done, insert into hashtable */
-	*reply = ht_insert_lego_task(child);
-	if (*reply) {
+	reply->ret = ht_insert_lego_task(child);
+	if (reply->ret) {
 		lego_mmput(child->mm);
 		free_lego_task_struct(child);
 
 		/* Same process? */
-		if (likely(*reply == -EEXIST))
-			*reply = 0;
+		if (likely(reply->ret == -EEXIST))
+			reply->ret = 0;
 		return;
 	}
 
 	if (down_write_killable(&parent->mm->mmap_sem)) {
-		*reply = -EINTR;
+		reply->ret = -EINTR;
 		return;
 	}
 
 	down_write(&child->mm->mmap_sem);
 
 	/* task struct is prepared, start duplication */
-	*reply = dup_lego_mmap_local_vmatree(child->mm, parent->mm);
+	reply->ret = dup_lego_mmap_local_vmatree(child->mm, parent->mm);
+	WARN_ON(reply->ret);
 
 	up_write(&child->mm->mmap_sem);
 	up_write(&parent->mm->mmap_sem);
+
+	/* everything is fine, update datasize needs to be sent to homenode */
+	reply_size = sizeof(int) + sizeof(u32) +
+		     reply->vma_count * sizeof(struct fork_vmainfo);
+	tb_set_tx_size(tb, reply_size);
 }
 
 /*
  * @mm belongs to the new children
  * @oldmm belongs to parent. Must not be NULL.
  */
-static int dup_lego_mmap(struct lego_mm_struct *mm, struct lego_mm_struct *oldmm)
+static int dup_lego_mmap(struct lego_mm_struct *mm,
+			 struct lego_mm_struct *oldmm,
+			 struct fork_reply_struct *reply)
 {
 	int ret = 0;
 	u64 mnode = 0;
@@ -319,6 +419,8 @@ static int dup_lego_mmap(struct lego_mm_struct *mm, struct lego_mm_struct *oldmm
 	if (ret)
 		goto out;
 
+	/* initialize reply vma count to 0 */
+	reply->vma_count = 0;
 	for (mnode = 0; mnode < NODE_COUNT; mnode++) {
 		struct distvm_node *node = oldmm->node_map[mnode];
 		struct distvm_node **newnode = &mm->node_map[mnode];
@@ -328,12 +430,24 @@ static int dup_lego_mmap(struct lego_mm_struct *mm, struct lego_mm_struct *oldmm
 
 		/* homenode copys everything */
 		*newnode = kzalloc(sizeof(struct distvm_node), GFP_KERNEL);
-		INIT_LIST_HEAD(&(*newnode)->list);
+		if (*newnode == NULL) {
+			WARN_ON(1);
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		INIT_LIST_HEAD(&((*newnode)->list));
 		dup_lego_mmap_local_vmatree(mm, oldmm);
 
-		/* send request ot other nodes */
-		if (!is_local(mnode))
-			distribute_m2m_fork(oldmm->task, mm->task, mnode);
+		if (!is_local(mnode)) {
+			/* Send request to other nodes */
+			ret = distribute_m2m_fork(oldmm->task, mm->task, mnode, reply);
+			if (ret)
+				goto out;
+		} else {
+			/* Copy local vma info to reply buffer */
+			get_vmas_onenode(oldmm, reply);
+		}
 	}
 
 out:
@@ -342,9 +456,16 @@ out:
 
 	return ret;
 }
+
 #else
+/*
+ * Non-distributed VMA fork() version.
+ * This is the most basic one, and is similar to what Linux
+ * will do in one single machine.
+ */
 static int dup_lego_mmap(struct lego_mm_struct *mm,
-			 struct lego_mm_struct *oldmm)
+			 struct lego_mm_struct *oldmm,
+			 struct fork_reply_struct *reply)
 {
 	struct vm_area_struct *mpnt, *tmp, *prev, **pprev;
 	struct rb_node **rb_link, *rb_parent;
@@ -365,8 +486,10 @@ static int dup_lego_mmap(struct lego_mm_struct *mm,
 	pprev = &mm->mmap;
 
 	prev = NULL;
+	reply->vma_count = 0;
 	for (mpnt = oldmm->mmap; mpnt; mpnt = mpnt->vm_next) {
 		struct lego_file *file;
+		struct fork_vmainfo *vmainfo;
 
 		tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
 		if (!tmp) {
@@ -410,6 +533,13 @@ static int dup_lego_mmap(struct lego_mm_struct *mm,
 
 		if (ret)
 			goto out;
+
+		/* Fill the reply buffer */
+		vmainfo = &reply->vmainfos[reply->vma_count];
+		vmainfo->vm_start = mpnt->vm_start;
+		vmainfo->vm_end = mpnt->vm_end;
+		vmainfo->vm_flags = mpnt->vm_flags;
+		reply->vma_count++;
 	}
 
 	ret = 0;
@@ -418,37 +548,19 @@ out:
 	up_write(&oldmm->mmap_sem);
 	return ret;
 }
-#endif /* CONFIG_DISTRIBUTED_VMA */
+#endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */
 
-#ifdef CONFIG_DEBUG_HANDLE_FORK
-static void DUMP(struct lego_mm_struct *mm)
-{
-	dump_all_vmas_simple(mm);
-	dump_all_vmas(mm);
-	dump_lego_mm(mm);
-}
-
-static void debug_fork_dump_mm(struct lego_mm_struct *new_mm,
-			       struct lego_task_struct *child,
-			       struct lego_task_struct *parent)
-{
-	pr_debug("**** Dump Child (%d) mm:\n", child->pid);
-	DUMP(new_mm);
-	pr_debug("**** Finish Dump Child (%d) mm\n", child->pid);
-
-	if (parent) {
-		pr_debug("**** Dump Parent (%d) mm:\n", parent->pid);
-		DUMP(parent->mm);
-		pr_debug("**** Finish Dump Parent (%d) mm:\n", parent->pid);
-	} else
-		pr_debug("**** No Parent, above is brand new mm\n");
-}
-#else
-#define debug_fork_dump_mm(foo, bar, a)	do { } while(0)
-#endif
-
+/*
+ * This function duplicate mmap layout from parent,
+ * which is the basic COW guarantee of fork().
+ *
+ * The whole lego_mm_struct will be replcaed by a new one
+ * when execve() is called. This is also what execve() guarantees.
+ * Check managers/memory/loader/vm.c for detail.
+ */
 static int dup_lego_mm(struct lego_task_struct *t,
-		       struct lego_task_struct *parent)
+		       struct lego_task_struct *parent,
+		       struct fork_reply_struct *reply)
 {
 	struct lego_mm_struct *mm, *oldmm;
 	int err;
@@ -460,7 +572,7 @@ static int dup_lego_mm(struct lego_task_struct *t,
 
 	if (parent) {
 		oldmm = parent->mm;
-		err = dup_lego_mmap(mm, oldmm);
+		err = dup_lego_mmap(mm, oldmm, reply);
 		if (err)
 			goto out;
 	} else {
@@ -479,20 +591,29 @@ out:
 	return err;
 }
 
+/*
+ * The flow of this function:
+ * 1) allocate task struct, duplicate VMA info
+ * 2) If distributed-VMA is on, and we have active non-home memory node,
+ *    then send requests (m2m_fork) to others.
+ * 3) Reply the VMA info array back to P. P will use this to play with pgtable.
+ */
 void handle_p2m_fork(struct p2m_fork_struct *payload,
 		     struct common_header *hdr, struct thpool_buffer *tb)
 {
 	unsigned int nid = hdr->src_nid;
 	unsigned int tgid = payload->tgid;
 	unsigned int parent_tgid = payload->parent_tgid;
+	unsigned int reply_size;
 	struct lego_task_struct *tsk, *parent;
-	u32 *retbuf;
+	struct fork_reply_struct *reply;
 
 	fork_debug("nid:%u,pid:%u,tgid:%u,parent_tgid:%u",
 		nid, payload->pid, tgid, parent_tgid);
 
-	retbuf = thpool_buffer_tx(tb);
-	tb_set_tx_size(tb, sizeof(*retbuf));
+	reply = thpool_buffer_tx(tb);
+	memset(reply, 0, sizeof(*reply));
+	tb_set_tx_size(tb, sizeof(int));
 
 	parent = find_lego_task_by_pid(nid, parent_tgid);
 	if (!parent && parent_tgid != 1)
@@ -500,7 +621,7 @@ void handle_p2m_fork(struct p2m_fork_struct *payload,
 
 	tsk = alloc_lego_task_struct();
 	if (!tsk) {
-		*retbuf = -ENOMEM;
+		reply->ret = -ENOMEM;
 		return;
 	}
 
@@ -519,22 +640,30 @@ void handle_p2m_fork(struct p2m_fork_struct *payload,
 	lego_set_task_comm(tsk, payload->comm);
 
 	/* Duplicate the mmap from parent */
-	*retbuf = dup_lego_mm(tsk, parent);
-	if (*retbuf) {
+	reply->ret = dup_lego_mm(tsk, parent, reply);
+	if (reply->ret) {
 		WARN_ONCE(1, "Fail to dup mm");
 		free_lego_task_struct(tsk);
 		return;
 	}
 
 	/* All done, insert into hashtable */
-	*retbuf = ht_insert_lego_task(tsk);
-	if (*retbuf) {
+	reply->ret = ht_insert_lego_task(tsk);
+	if (reply->ret) {
 		lego_mmput(tsk->mm);
 		free_lego_task_struct(tsk);
 
 		/* Same process? */
-		if (likely(*retbuf == -EEXIST))
-			*retbuf = 0;
+		if (likely(reply->ret == -EEXIST))
+			reply->ret = 0;
 		return;
 	}
+
+	/*
+	 * This is essentially [struct fork_reply_struct].
+	 * We only want to reply what we got here:
+	 */
+	reply_size = sizeof(int) + sizeof(u32) +
+		     reply->vma_count * sizeof(struct fork_vmainfo);
+	tb_set_tx_size(tb, reply_size);
 }
