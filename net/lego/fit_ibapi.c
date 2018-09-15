@@ -423,10 +423,9 @@ int lego_ib_init(void *unused)
 	 * It will be increased if we got a RECV message.
 	 */
 	nr_mad = 7;
-	pr_info("Waiting for enough IB MAD (%d)..\n", nr_mad);
+	pr_info("Please wait for enough IB MAD (number: %d) ...\n", nr_mad);
 	while (mad_got_one < nr_mad)
 		schedule();
-	pr_info("Got enough IB MAD!\n");
 
 	ret = ib_register_client(&ibv_client);
 	if (ret) {
@@ -439,7 +438,7 @@ int lego_ib_init(void *unused)
 	 */
 	FIT_ctx = fit_establish_conn(ibapi_dev, 1, MY_NODE_ID);
 	BUG_ON(!FIT_ctx);
-	pr_info("***  FIT layer ready to go!\n");
+	pr_info("FIT layer ready to go!\n");
 
 	lego_ib_test();
 

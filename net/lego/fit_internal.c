@@ -320,6 +320,7 @@ static int aligned = false;
 static void align_first_qpn(struct ib_pd *pd, struct ib_qp_init_attr *init_attr)
 {
 	struct ib_qp *qp;
+	int first = true;
 
 	if (aligned)
 		return;
@@ -329,9 +330,14 @@ next:
 	if (IS_ERR_OR_NULL(qp))
 		panic("Fail to create QPs to align first QPN.");
 
-	pr_debug("%s(): created QPN: %d\n", __func__, qp->qp_num);
+	if (first) {
+		pr_debug("To align first QPN, we skipped: #%d", qp->qp_num);
+		first = false;
+	}
+		printk(KERN_CONT " #%d", qp->qp_num);
 
 	if (qp->qp_num == (FIRST_QPN - 1)) {
+		printk(KERN_CONT "\n");
 		aligned = true;
 		return;
 	} else if (qp->qp_num > (FIRST_QPN - 1))
@@ -1900,7 +1906,7 @@ extern unsigned long	nr_recvcq_cqes[NUM_POLLING_THREADS];
  * This recv_cq includes all incoming messages.
  * This thread is pinned to a cpu core and keep running.
  */
-int fit_poll_recv_cq(void *_info)
+static int fit_poll_recv_cq(void *_info)
 {
 	struct thread_pass_struct *info = _info;
 	ppc *ctx;
@@ -1929,9 +1935,6 @@ int fit_poll_recv_cq(void *_info)
 
 	if (pin_current_thread())
 		panic("Fail to pin poll_cq");
-
-	pr_info("%s(): running on CPU%d CQ: %p\n",
-		__func__, smp_processor_id(), target_cq);
 
 	while(1) {
 		/* We keep polling this CQ */
@@ -1984,8 +1987,9 @@ int fit_poll_recv_cq(void *_info)
 #ifdef CONFIG_SOCKET_O_IB
 					memcpy(&ctx->remote_sock_rdma_ring_mrs[temp_header.src_id], addr + sizeof(struct fit_ibv_mr), sizeof(struct fit_ibv_mr));
 #endif
+
 					num_recvd_rdma_ring_mrs++;
-					pr_debug("Info from [node %d]: addr %p rkey %d num_recvd_mrs %d\n",
+					pr_debug(" ... Node [%2d] Joined. addr %p rkey %d num_recvd_mrs %d\n",
 							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr,
 							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
 				}
@@ -2250,6 +2254,7 @@ int sock_poll_cq(void *in)
 					}
 					sock_post_receives_message(ctx, connection_id, ctx->rx_depth/4);
 
+#if 0
 					recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
 					recv->length = ctx->rx_depth/4;
 					recv->src_id = connection_id;
@@ -2258,6 +2263,7 @@ int sock_poll_cq(void *in)
 					spin_lock(&wq_lock);
 					list_add_tail(&(recv->list), &request_list.list);
 					spin_unlock(&wq_lock);
+#endif
 				}
 			}
 			else
@@ -3322,7 +3328,7 @@ retry:
 #endif
 	send_rdma_ring_mr_to_other_nodes(ctx);
 
-	pr_debug("Now waiting other nodes to join..\n");
+	pr_debug("Please wait other nodes to join ...\n");
 	while (num_recvd_rdma_ring_mrs < ctx->num_node - 1)
 		schedule();
 	return ctx;
