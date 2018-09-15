@@ -1568,10 +1568,15 @@ int fit_poll_cq(struct lego_context *ctx, struct ib_cq *target_cq)
 					}
 				}
 				
-				if(GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
+				if (GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
 				{
 					connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);	
+					if (connection_id == -1) {
+						pr_crit("Error: cannot find qp number %d\n", wc[i].qp->qp_num);
+						continue;
+					}
 					fit_post_receives_message(ctx, connection_id, ctx->rx_depth/4);
+#if 0
 					recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
 					recv->length = ctx->rx_depth/4;
 					recv->src_id = connection_id;
@@ -1580,6 +1585,7 @@ int fit_poll_cq(struct lego_context *ctx, struct ib_cq *target_cq)
 					spin_lock(&wq_lock);
 					list_add_tail(&(recv->list), &request_list.list);
 					spin_unlock(&wq_lock);
+#endif
 				}
 			}
 			else
