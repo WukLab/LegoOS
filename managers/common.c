@@ -95,6 +95,8 @@ void __init manager_init(void)
 	pin_registered_threads();
 	dump_cpumasks();
 
+	rpc_profile();
+
 	/*
 	 * Start running user threads.
 	 * Now we only run user context at Processor Manager.

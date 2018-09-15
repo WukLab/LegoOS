@@ -47,8 +47,6 @@ static int procmgmt(void *unused)
 	const char *init_filename;
 	int vid __maybe_unused;
 
-	rpc_profile();
-
 	/*
 	 * Use the correct name if a real storage node is used.
 	 * If CONFIG_USE_RAMFS is set, then filename does not matter anyway.

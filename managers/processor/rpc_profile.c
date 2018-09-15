@@ -32,7 +32,6 @@ static void profile_case(char *desc, int send_len, int reply_len,
 	struct p2m_test_msg *msg;
 	unsigned long start_ns, end_ns, total_ns, avg_ns;
 
-	/* Test 1: pcache miss cache */
 	msg = send_buf;
 	fill_common_header(msg, P2M_TEST);
 	msg->send_len = send_len;
@@ -72,7 +71,7 @@ static int __profile_case_threads(void *_info)
 	/* A simple barrier to sync between threads */
 	atomic_dec(&barrier);
 	while (atomic_read(&barrier))
-		;
+		schedule();
 
 	profile_case(info->desc, info->send_len, info->reply_len,
 		     info->send_buf, info->reply_buf, info->dst_nid);
@@ -125,9 +124,17 @@ profile_case_threads(char *desc, int send_len, int reply_len,
 		}
 	}
 
-	/* Wait until all threads finished profiling */
+	/*
+	 * Wait until all threads finished profiling
+	 * In case we are running on a non-preemptive kernel,
+	 * use schedule() intead of ;, because the worker thread
+	 * may end up running on this same core.
+	 *
+	 * And you know non-preemptive kernel, right? The kernel
+	 * thread will NOT ever got re-scheduled until it yield.
+	 */
 	while (atomic_read(&exit_barrier))
-		;
+		schedule();
 }
 
 static unsigned int send_size[] = {
