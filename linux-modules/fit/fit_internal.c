@@ -518,7 +518,7 @@ static int fit_post_receives_message(struct lego_context *ctx, int connection_id
 		ret = ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
 		if (ret) {
 			pr_err("Fail to post recv\n");
-			WARN_ON_ONCE(1);
+			WARN_ON(1);
 			return ret;
 		}
 	}
@@ -530,7 +530,7 @@ struct page *pp;
 #ifdef CONFIG_SOCKET_O_IB
 int sock_post_receives_message(struct lego_context *ctx, int connection_id, int depth)
 {
-	int i;
+	int i, ret;
 
 	for(i=0;i<depth;i++)
 	{
@@ -540,6 +540,11 @@ int sock_post_receives_message(struct lego_context *ctx, int connection_id, int 
 		wr.sg_list = NULL;
 		wr.num_sge = 0;
 		ib_post_recv(ctx->sock_qp[connection_id], &wr, &bad_wr);
+		if (ret) {
+			pr_err("Fail to post recv\n");
+			WARN_ON(1);
+			return ret;
+		}
 		//printk(KERN_CRIT "%s postrecv %d buffers wr_id %d\n", __func__, depth, wr.wr_id);
 	}
 

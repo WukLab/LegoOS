@@ -626,7 +626,7 @@ static int fit_post_receives_message(ppc *ctx, int connection_id, int depth)
 		ret = ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
 		if (ret) {
 			fit_err("Fail to post recv conn_id: %d", connection_id);
-			WARN_ON_ONCE(1);
+			WARN_ON(1);
 			return ret;
 		}
 	}
@@ -648,7 +648,7 @@ static int sock_post_receives_message(ppc *ctx, int connection_id, int depth)
 		ret = ib_post_recv(ctx->sock_qp[connection_id], &wr, &bad_wr);
 		if (ret) {
 			fit_err("Fail to post recv conn_id: %d", connection_id);
-			WARN_ON_ONCE(1);
+			WARN_ON(1);
 			return ret;
 		}
 	}
@@ -739,6 +739,7 @@ int fit_post_receives_message_with_buffer(ppc *ctx, int connection_id, int depth
 		if (ret) {
 			printk(KERN_CRIT "ERROR: %s post recv error %d conn %d i %d\n",
 				__func__, ret, connection_id, i);
+			WARN_ON(1);
 		}
 		fit_debug("header %p header_addr %p buf %p addr %p lkey %d\n",
 			header, header_addr, buf, addr, ctx->proc->lkey);
