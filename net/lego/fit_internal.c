@@ -209,7 +209,7 @@ int init_socket_over_ib(struct lego_context *ctx, int port, int rx_depth, int i)
 		.send_cq = ctx->sock_send_cq[i],
 		.recv_cq = ctx->sock_recv_cq,
 		.cap = {
-			.max_send_wr = 1,
+			.max_send_wr = MAX_OUTSTANDING_SEND,
 			.max_recv_wr = rx_depth,
 			.max_send_sge = 16,
 			.max_recv_sge = 16
@@ -429,7 +429,7 @@ struct lego_context *fit_init_ctx(ppc *ctx, int size, int rx_depth, int port,
                         .send_cq = ctx->send_cq[i],
                         .recv_cq = ctx->cq[i % NUM_POLLING_THREADS],
                         .cap = {
-                                .max_send_wr = 24,
+                                .max_send_wr = MAX_OUTSTANDING_SEND,
                                 .max_recv_wr = rx_depth,
                                 .max_send_sge = 16,
                                 .max_recv_sge = 16
@@ -977,48 +977,54 @@ inline int fit_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 static int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq,
 				    int connection_id, int *check, int if_poll_now)
 {
-#ifdef CONFIG_FIT_NOWAIT
+#ifdef CONFIG_FIT_BATCH_POLL_SEND_CQ
+	int ne, i;
+	struct ib_wc wc[MAX_OUTSTANDING_SEND];
+	unsigned long start_ns;
+
 	/*
-	 * use same send thread to poll send cq
+	 * use same send thread to poll send_cq
 	 * but only poll once every MAX_OUTSTANDING_SEND/2 sends
 	 */
 	ctx->send_cq_queued_sends[connection_id]++;
-	fit_debug("poll send cq conn %d queued sends %d\n",
-			connection_id, ctx->send_cq_queued_sends[connection_id]);
-	if (!if_poll_now && ctx->send_cq_queued_sends[connection_id] < MAX_OUTSTANDING_SEND/2)
+	if (!if_poll_now &&
+	    ctx->send_cq_queued_sends[connection_id] < MAX_OUTSTANDING_SEND/2)
 		return 0;
 
-	int ne, i;
-	struct ib_wc wc[MAX_OUTSTANDING_SEND];
-
-	do{
+	start_ns = sched_clock();
+	do {
 		if (if_poll_now)
-			ne = ib_poll_cq(tar_cq, MAX_OUTSTANDING_SEND, wc); /* poll everything until the latest (current) send */
+			ne = ib_poll_cq(tar_cq, MAX_OUTSTANDING_SEND, wc);
 		else
 			ne = ib_poll_cq(tar_cq, MAX_OUTSTANDING_SEND/2, wc);
-		if(ne < 0)
-		{
-			printk(KERN_ALERT "poll send_cq failed at connection %d\n", connection_id);
-			return 1;
-		}
-	} while(ne<1);
 
-	fit_debug("got pollcq %d\n", ne);
-
-	for (i = 0; i < ne; i++)
-	{
-		if (wc[i].status != IB_WC_SUCCESS)
-		{
-			printk(KERN_ALERT "send request failed at connection %d as %d\n", connection_id, wc[i].status);
-			return 2;
+		if (ne < 0) {
+			fit_err("Fail to poll send_cq. err=%d", ne);
+			return ne;
 		}
-		else
-			break;
+
+		if (unlikely(sched_clock() - start_ns > FIT_POLL_CQ_TIMEOUT_NS)) {
+			pr_info_once("\n"
+				"*****\n"
+				"***** Fail to to get the CQE from send_cq (%p) after %ld seconds!\n"
+				"***** CPU: %d connection_id: %d dest node: %d\n"
+				"*****\n",
+				tar_cq,
+				FIT_POLL_CQ_TIMEOUT_NS/NSEC_PER_SEC,
+				smp_processor_id(),
+				connection_id, connection_id / NUM_PARALLEL_CONNECTION);
+			WARN_ON_ONCE(1);
+			return -ETIMEDOUT;
+		}
+	} while (ne < 1);
+
+	for (i = 0; i < ne; i++) {
+		if (wc[i].status != IB_WC_SUCCESS) {
+			fit_err("wc.status: %s", ib_wc_status_msg(wc[i].status));
+			return -EIO;
+		}
 	}
 	ctx->send_cq_queued_sends[connection_id] -= ne;
-
-	fit_debug("new queued sends %d on conn %d\n",
-			ctx->send_cq_queued_sends[connection_id], connection_id);
 	return 0;
 #else
 
@@ -1056,12 +1062,11 @@ static int fit_internal_poll_sendcq(ppc *ctx, struct ib_cq *tar_cq,
 	for (i = 0; i < ne; i++) {
 		if (wc[i].status != IB_WC_SUCCESS) {
 			fit_err("wc.status: %s", ib_wc_status_msg(wc[i].status));
-			return 2;
-		} else
-			break;
+			return -EIO;
+		}
 	}
 	return 0;
-#endif /* CONFIG_FIT_NOWAIT */
+#endif /* CONFIG_FIT_BATCH_POLL_SEND_CQ */
 }
 
 /*

@@ -67,20 +67,33 @@ config FIT_NR_RECVCQ_POLLING_THREADS
 
 
 config FIT_MAX_OUTSTANDING_SEND
-	int "Max outstanding send requests"
+	int "max_send_wr"
 	range 1 24
-	default 1  if COMP_PROCESSOR
+	default 24  if COMP_PROCESSOR
 	default 24 if COMP_MEMORY
 	depends on FIT
 	help
 	  This determines the maximum number of concurrent outstanding
-	  reply SEND. (reply is also a SEND.)
-	  
-	  For processor, 1 is good enough. Because it is major doing SEND.
-	  For memory, we tune it to be the number of cores. Our machine
-	  has 24 cores, so 24 it is.
+	  reply SEND (reply is also a SEND).
 
 	  If unsure, follow default.
+
+config FIT_BATCH_POLL_SEND_CQ
+	bool "Poll the send_cq in a batch fashion"
+	default n
+	depends on FIT
+	help
+	  Once enabled, FIT layer will not wait for ACK when
+	  replying a message to sender, and will return to caller immediately.
+	  This means, when the call returns, the reply buffer is not actually
+	  sent out. Thus, the reply buffer has to be there for a certain amount of time.
+	  But we have the ring buffer, so it is been taken care of.
+
+	  This essentially is just converting poll to batch poll.
+
+	  In our testing, this improves ~600ns for fit_ack_reply_callback().
+
+	  If unsure, say Y.
 
 config FIT_DEBUG
 	bool "Enable fit_debug"
@@ -125,22 +138,6 @@ config FIT_LOCAL_ID
 	help
 	  This is the local node id, which has to be unique across connected FIT nodes.
 	  The raneg of FIT_LOCAL_ID is [0, FIT_NR_NODES - 1).
-
-config FIT_NOWAIT
-	bool "FIT use nowait reply mechanism"
-	default y
-	depends on FIT
-	depends on COMP_MEMORY
-	help
-	  Once enabled, FIT layer will not wait for ACK when
-	  replying a message to sender, and will return to caller immediately.
-	  This means, when the call returns, the reply buffer is not actually
-	  sent out. Thus, the reply buffer has to be there for a certain amount of time.
-	  But we have the ring buffer, so it is been taken care of.
-
-	  In our testing, this improves ~600ns for fit_ack_reply_callback().
-
-	  If unsure, say Y.
 
 config SAME_MACHINE_VMS 
 	bool "Enable multiple VMs on the same physical machine"
