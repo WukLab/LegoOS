@@ -503,9 +503,9 @@ void header_cache_UD_free(void *ptr)
 // XXX	kmem_cache_free(header_cache_UD, ptr);
 }
 
-int fit_post_receives_message(struct lego_context *ctx, int connection_id, int depth)
+static int fit_post_receives_message(struct lego_context *ctx, int connection_id, int depth)
 {
-	int i;
+	int i, ret;
 
 	for(i=0;i<depth;i++)
 	{
@@ -514,11 +514,14 @@ int fit_post_receives_message(struct lego_context *ctx, int connection_id, int d
 		wr.next = NULL;
 		wr.sg_list = NULL;
 		wr.num_sge = 0;
-		ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
-		//printk(KERN_CRIT "%s postrecv %d buffers wr_id %d\n", __func__, depth, wr.wr_id);
-	}
 
-	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, fit_internal_stat(0, FIT_STAT_CLEAR));
+		ret = ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
+		if (ret) {
+			pr_err("Fail to post recv\n");
+			WARN_ON_ONCE(1);
+			return ret;
+		}
+	}
 	return depth;
 }
 
@@ -1431,7 +1434,7 @@ void *fit_alloc_memory_for_mr(unsigned int length)
 /*
  * busy polls IMM
  */
-int fit_poll_cq(struct lego_context *ctx, struct ib_cq *target_cq)
+static int fit_poll_cq(struct lego_context *ctx, struct ib_cq *target_cq)
 {
 	int ne;
 	struct ib_wc wc[NUM_PARALLEL_CONNECTION];
@@ -1442,103 +1445,74 @@ int fit_poll_cq(struct lego_context *ctx, struct ib_cq *target_cq)
 	char *addr;
 	int type;
 	struct send_and_reply_format *recv;
-#ifdef NOTIFY_MODEL
-	int test_result=0;
-#endif
 	struct imm_header_from_cq_to_port *tmp;
-	//set_current_state(TASK_INTERRUPTIBLE);
 
-	//printk(KERN_CRIT "%s\n", __func__);
-	while(1)
-	{
-		do{
-			//set_current_state(TASK_RUNNING);
+	while(1) {
+		do {
 			ne = ib_poll_cq(target_cq, NUM_PARALLEL_CONNECTION, wc);
-			if(ne < 0)
-			{
+			if (ne < 0) {
 				printk(KERN_ALERT "poll CQ failed %d\n", ne);
 				return 1;
 			}
-			if(ne==0)
-			{
-				schedule();
-				//cpu_relax();
-				//set_current_state(TASK_INTERRUPTIBLE);
-				//if(kthread_should_stop())
-				//{
-				//	printk(KERN_ALERT "Stop cq and return\n");
-				//	return 0;
-				//}
-			}
-			//msleep(1);
-		}while(ne < 1);
+		} while (ne < 1);
 
-		for(i=0;i<ne;++i)
-		{
-			//printk(KERN_CRIT "%s got one recv cq status %d opcode %d\n",
-			//		__func__, wc[i].status, wc[i].opcode);
-			if(wc[i].status != IB_WC_SUCCESS)
-			{
-				printk(KERN_ALERT "%s: failed status (%d) for wr_id %d\n", __func__, wc[i].status, (int) wc[i].wr_id);
+		for (i = 0; i < ne; i++) {
+			if (wc[i].status != IB_WC_SUCCESS) {
+				pr_err("%s: failed status (%d) for wr_id %d\n",
+					__func__, wc[i].status, (int) wc[i].wr_id);
+				continue;
 			}
 
-			if((int) wc[i].opcode == IB_WC_RECV)
-			{
+			if ((int) wc[i].opcode == IB_WC_RECV) {
 				struct ibapi_post_receive_intermediate_struct *p_r_i_struct = (struct ibapi_post_receive_intermediate_struct*)wc[i].wr_id;
 				struct ibapi_header temp_header;
 
-				printk(KERN_CRIT "%s pristruct %p header %p msg %p\n", __func__, p_r_i_struct, p_r_i_struct->header, p_r_i_struct->msg);
 				memcpy(&temp_header, (void *)p_r_i_struct->header, sizeof(struct ibapi_header));
 				addr = (char *)p_r_i_struct->msg;
 				type = temp_header.type;
-				printk(KERN_CRIT "%s received wr_id %lx type %d\n", __func__, wc[i].wr_id, type);
 
 				if (type == MSG_SEND_RDMA_RING_MR) {
-					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id], addr, sizeof(struct fit_ibv_mr));
+					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id],
+						addr, sizeof(struct fit_ibv_mr));
 #ifdef CONFIG_SOCKET_O_IB
-					memcpy(&ctx->remote_sock_rdma_ring_mrs[temp_header.src_id], addr + sizeof(struct fit_ibv_mr), sizeof(struct fit_ibv_mr));
+					memcpy(&ctx->remote_sock_rdma_ring_mrs[temp_header.src_id],
+						addr + sizeof(struct fit_ibv_mr), sizeof(struct fit_ibv_mr));
 #endif
 					num_recvd_rdma_ring_mrs++;
-					printk(KERN_CRIT "node %d remote addr %p remote rkey %d num_recvd_rdma_ring_mrs %d\n", 
-							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
-							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
+
+					pr_crit(" .. Node [%2d] Joined. Remote addr %p, rkey %d, num_recvd_rdma_ring_mrs %d\n", 
+						temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr, 
+						ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
 				}
-			}
-			else if((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM)
-			{
+			} else if((int) wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM) {
 				node_id = GET_NODE_ID_FROM_POST_RECEIVE_ID(wc[i].wr_id);
-				//printk(KERN_CRIT "%s got imm from node %d immdata %x\n", __func__, node_id, wc[i].ex.imm_data);
-				if(wc[i].wc_flags&&IB_WC_WITH_IMM)
-				{
-					if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND && wc[i].ex.imm_data & IMM_SEND_REPLY_RECV)//opcode
-					{
-						printk(KERN_CRIT "%s: opcode from node %d\n", __func__, node_id);
-						semaphore = wc[i].ex.imm_data & IMM_GET_SEMAPHORE;
-						opcode = IMM_GET_OPCODE_NUMBER(wc[i].ex.imm_data);
-						printk(KERN_CRIT "%s: case 1 semaphore-%d\n", __func__, semaphore);
-						*(int *)(ctx->reply_ready_indicators[semaphore]) = -(opcode);
-						ctx->reply_ready_indicators[semaphore] = NULL;
-						clear_bit(semaphore, ctx->reply_ready_indicators_bitmap);
-					}
-					else if(wc[i].ex.imm_data & IMM_SEND_REPLY_SEND) // only send
-					{
+
+				if(wc[i].wc_flags&&IB_WC_WITH_IMM) {
+					if (wc[i].ex.imm_data & IMM_SEND_REPLY_SEND) {
 						offset = wc[i].ex.imm_data & IMM_GET_OFFSET; 
 						port = IMM_GET_PORT_NUMBER(wc[i].ex.imm_data);
 
-						//printk(KERN_CRIT "%s: from node %d access to port %d imm-%x\n", __func__, node_id, port, wc[i].ex.imm_data);
-						tmp = (struct imm_header_from_cq_to_port *)kmalloc(sizeof(struct imm_header_from_cq_to_port), GFP_KERNEL); //kmem_cache_alloc(imm_header_from_cq_to_port_cache, GFP_KERNEL);
+						tmp = kmalloc(sizeof(struct imm_header_from_cq_to_port), GFP_KERNEL);
+						if (!tmp) {
+							WARN_ON(1);
+							return -ENOMEM;
+						}
 						tmp->source_node_id = node_id;
 						tmp->offset = offset;
+
+						/* ibapi_receive_message will dequeue */
 						spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
 						list_add_tail(&(tmp->list), &ctx->imm_waitqueue_perport[port].list);
 						spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
-					}
-					else if(wc[i].ex.imm_data & IMM_ACK || wc[i].byte_len == 0) // ack metadata
-					{
+					} else if (wc[i].ex.imm_data & IMM_ACK || wc[i].byte_len == 0) {
+						/* Internal ACK */
 						offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
-						//printk(KERN_CRIT "%s: get ack from node %d offset %d\n", __func__, node_id, offset);
 
-						recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
+						recv = kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL);
+						if (!recv) {
+							WARN_ON(1);
+							return -ENOMEM;
+						}
 						recv->src_id = node_id;
 						recv->msg = (char *)offset;
 						recv->type = MSG_DO_ACK_REMOTE;
@@ -1546,54 +1520,39 @@ int fit_poll_cq(struct lego_context *ctx, struct ib_cq *target_cq)
 						spin_lock(&wq_lock);
 						list_add_tail(&(recv->list), &request_list.list);
 						spin_unlock(&wq_lock);
-					}
-					else //handle reply
-					{
+					} else if (wc[i].ex.imm_data & IMM_SEND_REPLY_RECV) {
 						length = wc[i].byte_len;
 						semaphore = wc[i].ex.imm_data & IMM_GET_SEMAPHORE;
-						//printk(KERN_CRIT "%s: case 2 semaphore-%d len-%d\n", __func__, semaphore, wc[i].byte_len);
-						//*(int *)(ctx->reply_ready_indicators[semaphore]) = wc[i].byte_len;
+						if (semaphore < 0 || semaphore >= IMM_NUM_OF_SEMAPHORE) {
+							pr_err("Wrong index: %d\n", semaphore);
+							WARN_ON_ONCE(1);
+							continue;
+						}
 						memcpy((void *)ctx->reply_ready_indicators[semaphore], &length, sizeof(int));
-
-						#ifdef ADAPTIVE_MODEL
-                	        		wake_up_interruptible(&ctx->imm_inbox_block_queue[semaphore]);//Wakeup waiting queue
-						#endif
-						#ifdef SCHEDULE_MODEL
-						wake_up_process(ctx->thread_waiting_for_reply[semaphore]);
-						ctx->thread_waiting_for_reply[semaphore]=NULL;
-						#endif
 
 						ctx->reply_ready_indicators[semaphore] = NULL;
 						clear_bit(semaphore, ctx->reply_ready_indicators_bitmap);
+					} else {
+						pr_err("Unknown wc[i].ex.imm_data: %#lx\n", wc[i].ex.imm_data);
+						WARN_ON_ONCE(1);
 					}
+				} else {
+					pr_err("Unknown wc_flags %#lx\n", wc[i].wc_flags);
+					WARN_ON_ONCE(1);
 				}
 				
-				if (GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1))
-				{
+				if (GET_POST_RECEIVE_DEPTH_FROM_POST_RECEIVE_ID(wc[i].wr_id)%(ctx->rx_depth/4) == ((ctx->rx_depth/4)-1)) {
 					connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);	
 					if (connection_id == -1) {
 						pr_crit("Error: cannot find qp number %d\n", wc[i].qp->qp_num);
 						continue;
 					}
 					fit_post_receives_message(ctx, connection_id, ctx->rx_depth/4);
-#if 0
-					recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
-					recv->length = ctx->rx_depth/4;
-					recv->src_id = connection_id;
-					recv->type = MSG_DO_RC_POST_RECEIVE;
-
-					spin_lock(&wq_lock);
-					list_add_tail(&(recv->list), &request_list.list);
-					spin_unlock(&wq_lock);
-#endif
 				}
-			}
-			else
-			{	
+			} else {
 				connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
 				printk(KERN_ALERT "%s: connection %d Recv weird event as %d\n", __func__, connection_id, (int)wc[i].opcode);
 			}
-
 		}
 	}
 	return 0;
