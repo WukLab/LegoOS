@@ -571,23 +571,12 @@ uintptr_t fit_ib_reg_mr_phys_addr(ppc *ctx, void *addr, size_t length)
 	return (uintptr_t)phys_to_dma(ibd->dma_device, (phys_addr_t)addr);
 }
 
-int pr_test=0;
-struct ib_mr *proc_test;
-
 struct fit_ibv_mr *fit_ib_reg_mr(ppc *ctx, void *addr, size_t length, enum ib_access_flags access)
 {
 	struct fit_ibv_mr *ret;
 	struct ib_mr *proc;
 
-	/*
-	if(pr_test==0)
-	{
-		access =IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | IB_ACCESS_REMOTE_ATOMIC;
-		proc_test = ib_get_dma_mr(ctx->pd,access);
-		pr_test++;
-	}
-	*/
-	proc = ctx->proc; //proc_test;
+	proc = ctx->proc;
 
 	ret = (struct fit_ibv_mr *)kmalloc(sizeof(struct fit_ibv_mr), GFP_KERNEL);
 
@@ -620,46 +609,34 @@ fit_ib_reg_mr_addr(ppc *ctx, void *addr, size_t length)
 void fit_ib_dereg_mr_addr(ppc *ctx, void *addr, size_t length)
 {
 	return ib_dma_unmap_single((struct ib_device *)ctx->context, (uint64_t)addr, length, DMA_BIDIRECTIONAL);
-	//return (uintptr_t)ib_dma_unmap_single((struct ib_device *)ctx->context, addr, length, DMA_BIDIRECTIONAL);
 }
 
-void header_cache_free(void *ptr)
+static int fit_post_receives_message(ppc *ctx, int connection_id, int depth)
 {
-	//printk(KERN_CRIT "free %x\n", ptr);
-// XXX	kmem_cache_free(header_cache, ptr);
-}
+	int i, ret;
+	struct ib_recv_wr wr, *bad_wr = NULL;
 
-void header_cache_UD_free(void *ptr)
-{
-	//printk(KERN_CRIT "free %x\n", ptr);
-// XXX	kmem_cache_free(header_cache_UD, ptr);
-}
+	for (i = 0; i < depth; i++) {
 
-int fit_post_receives_message(ppc *ctx, int connection_id, int depth)
-{
-	int i;
-
-	for(i=0;i<depth;i++)
-	{
-		struct ib_recv_wr wr, *bad_wr = NULL;
 		wr.wr_id = i + (connection_id << CONNECTION_ID_PUSH_BITS_BASED_ON_RECV_DEPTH);
 		wr.next = NULL;
 		wr.sg_list = NULL;
 		wr.num_sge = 0;
-		ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
-		//printk(KERN_CRIT "%s postrecv %d buffers wr_id %d\n", __func__, depth, wr.wr_id);
-	}
 
-	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, fit_internal_stat(0, FIT_STAT_CLEAR));
+		ret = ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
+		if (ret) {
+			fit_err("Fail to post recv conn_id: %d", connection_id);
+			WARN_ON_ONCE(1);
+			return ret;
+		}
+	}
 	return depth;
 }
 
-struct page *pp;
-
 #ifdef CONFIG_SOCKET_O_IB
-int sock_post_receives_message(ppc *ctx, int connection_id, int depth)
+static int sock_post_receives_message(ppc *ctx, int connection_id, int depth)
 {
-	int i;
+	int i, ret;
 
 	for(i=0;i<depth;i++)
 	{
@@ -668,11 +645,13 @@ int sock_post_receives_message(ppc *ctx, int connection_id, int depth)
 		wr.next = NULL;
 		wr.sg_list = NULL;
 		wr.num_sge = 0;
-		ib_post_recv(ctx->sock_qp[connection_id], &wr, &bad_wr);
-		//printk(KERN_CRIT "%s postrecv %d buffers wr_id %d\n", __func__, depth, wr.wr_id);
+		ret = ib_post_recv(ctx->sock_qp[connection_id], &wr, &bad_wr);
+		if (ret) {
+			fit_err("Fail to post recv conn_id: %d", connection_id);
+			WARN_ON_ONCE(1);
+			return ret;
+		}
 	}
-
-	//printk(KERN_CRIT "%s: FIT_STAT post-receive %d bytes, %lld ns\n", __func__, POST_RECEIVE_CACHE_SIZE, fit_internal_stat(0, FIT_STAT_CLEAR));
 	return depth;
 }
 
@@ -991,12 +970,17 @@ retry:
 	return 0;
 }
 
-inline int fit_find_qp_id_by_qpnum(ppc *ctx, uint32_t qp_num)
+/*
+ * TODO
+ *
+ * This whole set of operations definetily need optimization.
+ * We should use either rb-tree or radix tree to do the search.
+ */
+static inline int fit_find_qp_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 {
 	int i;
 
-	for(i = 0; i < ctx->num_connections; i++)
-	{
+	for(i = 0; i < ctx->num_connections; i++) {
 #ifdef CONFIG_SOCKET_O_IB
 		if (i / (NUM_PARALLEL_CONNECTION + 1) == ctx->node_id)
 			continue;
@@ -1010,7 +994,6 @@ inline int fit_find_qp_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 		if(ctx->qp[i]->qp_num==qp_num)
 			return i;
 	}
-
 	return -1;
 }
 
@@ -1908,24 +1891,18 @@ extern unsigned long	nr_recvcq_cqes[NUM_POLLING_THREADS];
  */
 static int fit_poll_recv_cq(void *_info)
 {
-	struct thread_pass_struct *info = _info;
 	ppc *ctx;
+	char *addr;
 	int recvcq_id;
-	struct ib_cq *target_cq;
-	struct ib_wc *wc;
-	int ne;
-	int i, connection_id;
+	int ne, i, connection_id;
 	int node_id, port, offset;
 	int reply_indicator_index, length;
-	char *addr;
-	int type;
+	struct ib_wc *wc;
+	struct ib_cq *target_cq;
 	struct send_and_reply_format *recv;
-#ifdef NOTIFY_MODEL
-	int test_result=0;
-#endif
-	int reply_data, private_bits;
+	struct thread_pass_struct *info = _info;
 
-	/* Info passwd by creater */
+	/* Info passedd down by creater */
 	ctx = info->ctx;
 	target_cq = info->target_cq;
 	recvcq_id = info->recvcq_id;
@@ -1944,17 +1921,11 @@ static int fit_poll_recv_cq(void *_info)
 				fit_err("poll_cq error: %d", ne);
 				return ne;
 			}
-
-			/*
-			 * XXX:
-			 * weird. When we use cpu_relax() here, we
-			 * will easily have lost CQE issue.
-			 */
-			if (ne == 0)
-				schedule();
 		} while (ne < 1);
 
+		/* Update stats */
 		nr_recvcq_cqes[recvcq_id] += ne;
+
 		for (i = 0; i < ne; i++) {
 			if (unlikely(wc[i].status != IB_WC_SUCCESS)) {
 				fit_err("wc.status: %s, wr_id %d",
@@ -1964,16 +1935,15 @@ static int fit_poll_recv_cq(void *_info)
 
 			connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
 			if (unlikely(connection_id == -1)) {
-				pr_crit("Error: cannot find qp number %d\n", wc[i].qp->qp_num);
+				fit_err("Fail to find QPN: %d", wc[i].qp->qp_num);
 				continue;
 			}
 
-			fit_debug("%s: conn %d got one recv cq status %d opcode %d",
-					__func__, connection_id, wc[i].status, wc[i].opcode);
-
+			/* IB_WC_RECV is only used at connection time */
 			if (wc[i].opcode == IB_WC_RECV) {
 				struct ibapi_post_receive_intermediate_struct *p_r_i_struct = (void *)wc[i].wr_id;
 				struct ibapi_header temp_header;
+				int type;
 
 				fit_debug("received wr_id %lx type %d header %p",
 					wc[i].wr_id, type, (void *)p_r_i_struct->header);
@@ -1983,118 +1953,114 @@ static int fit_poll_recv_cq(void *_info)
 				type = temp_header.type;
 
 				if (type == MSG_SEND_RDMA_RING_MR) {
-					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id], addr, sizeof(struct fit_ibv_mr));
+					memcpy(&ctx->remote_rdma_ring_mrs[temp_header.src_id],
+					       addr, sizeof(struct fit_ibv_mr));
 #ifdef CONFIG_SOCKET_O_IB
-					memcpy(&ctx->remote_sock_rdma_ring_mrs[temp_header.src_id], addr + sizeof(struct fit_ibv_mr), sizeof(struct fit_ibv_mr));
+					memcpy(&ctx->remote_sock_rdma_ring_mrs[temp_header.src_id],
+					       addr + sizeof(struct fit_ibv_mr), sizeof(struct fit_ibv_mr));
 #endif
 
 					num_recvd_rdma_ring_mrs++;
 					pr_debug(" ... Node [%2d] Joined. addr %p rkey %d num_recvd_mrs %d\n",
-							temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr,
-							ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
+						temp_header.src_id, ctx->remote_rdma_ring_mrs[temp_header.src_id].addr,
+						ctx->remote_rdma_ring_mrs[temp_header.src_id].rkey, num_recvd_rdma_ring_mrs);
 				}
 			} else if (wc[i].opcode == IB_WC_RECV_RDMA_WITH_IMM) {
+				/* IB_WC_WITH_IMM is the ONLY valid flag */
+				if (wc[i].wc_flags != IB_WC_WITH_IMM) {
+					fit_err("Unknown wc.wc_flags: %#lx", wc[i].wc_flags);
+					WARN_ON_ONCE(1);
+					return -EINVAL;
+				}
+
+				/* Following code assume wc_flags = IB_WC_WITH_IMM */
 				node_id = GET_NODE_ID_FROM_POST_RECEIVE_ID(wc[i].wr_id);
-				if (wc[i].wc_flags && IB_WC_WITH_IMM) {
-					/* Use some internal flag to check type */
-					if (wc[i].ex.imm_data & IMM_SEND_REPLY_SEND) {
-						/*
-						 * This means there is an incoming request:
-						 * the send part of ibapi_send_reply() from remote.
-						 */
-						offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
-						port = IMM_GET_PORT_NUMBER(wc[i].ex.imm_data);
+				if (wc[i].ex.imm_data & IMM_SEND_REPLY_SEND) {
+					/*
+					 * This means there is an incoming request:
+					 * the send part of ibapi_send_reply() from remote.
+					 */
+					offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
+					port = IMM_GET_PORT_NUMBER(wc[i].ex.imm_data);
 
-						/*
-						 * Okay.
-						 * For memory, immediately callback to thpool master.
-						 * Otherwise the model is: we add this guy to a queue.
-						 * Some other caller need to call ibapi_receive_message to get it.
-						 *
-						 * Now I now why previous we have so much high latency. Because
-						 * the memory polling thread keep calling ibapi_receive_message,
-						 * which end up taking the lock for long time. And this guy will
-						 * fail to enqueue. Not a good model. A counter could help.
-						 * But let us stick to this signaled model at memory.
-						 */
 #ifdef CONFIG_COMP_MEMORY
-						{
-						struct imm_message_metadata *tmp1;
-                                                tmp1 = (struct imm_message_metadata *)(ctx->local_rdma_recv_rings[node_id] + offset);
-
-						/* Enqueue this request to thpool */
-                                                thpool_callback(ctx, tmp1,
-								(void *)tmp1 + sizeof(struct imm_message_metadata),
-                                                                tmp1->size, node_id, offset);
-						}
-#else
-						{
-						struct imm_header_from_cq_to_port *tmp;
-						tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
-						tmp->source_node_id = node_id;
-						tmp->offset = offset;
-						spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
-						list_add_tail(&(tmp->list), &ctx->imm_waitqueue_perport[port].list);
-						spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
-						}
-#endif
-					} else if (wc[i].ex.imm_data & IMM_SEND_REPLY_RECV) {
-						/*
-						 * This is the sender's handling reply part.
-						 * The incoming message is the reply sent by remote.
-						 */
-						void *dst_ptr;
-
-						length = wc[i].byte_len;
-						reply_indicator_index = wc[i].ex.imm_data & IMM_GET_REPLY_INDICATOR_INDEX;
-						if (unlikely(reply_indicator_index <= 0 ||
-							     reply_indicator_index >= IMM_NUM_OF_SEMAPHORE)) {
-							pr_err("%s(): wrong index: %d\n", __func__,
-								reply_indicator_index);
-							continue;
-						}
-
-						fit_debug("got reply reply_indicator_index-%d len-%d reply_indicator_addr %lx\n",
-							reply_indicator_index, wc[i].byte_len, ctx->reply_ready_indicators[reply_indicator_index]);
-
-						/*
-						 * The thread who did ibapi_send_reply() is busy polling
-						 * this shared memory. This memcpy will release it.
-						 */
-						dst_ptr = get_reply_ready_ptr(ctx, reply_indicator_index);
-						memcpy(dst_ptr, &length, sizeof(int));
-
-					} else if (wc[i].ex.imm_data & IMM_ACK || wc[i].byte_len == 0) {
-						/* handle internal acknoledgement of new MR offset */
-						offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
-
-						recv = (struct send_and_reply_format *)kmalloc(sizeof(struct send_and_reply_format), GFP_KERNEL); //kmem_cache_alloc(s_r_cache, GFP_KERNEL);
-						recv->src_id = node_id;
-						recv->msg = (char *)(long)offset;
-						recv->type = MSG_DO_ACK_REMOTE;
-
-						spin_lock(&wq_lock);
-						list_add_tail(&(recv->list), &request_list.list);
-						spin_unlock(&wq_lock);
-					}
-					/* handle reply with extra bits */
-					else if (wc[i].ex.imm_data & IMM_REPLY_W_EXTRA_BITS)
 					{
-						void *dst_ptr;
+					struct imm_message_metadata *tmp1;
+                                        tmp1 = (struct imm_message_metadata *)(ctx->local_rdma_recv_rings[node_id] + offset);
 
-						length = wc[i].byte_len;
-						reply_indicator_index = wc[i].ex.imm_data & IMM_GET_REPLY_INDICATOR_INDEX;
-						private_bits = IMM_GET_PRIVATE_BITS(wc[i].ex.imm_data);
-						reply_data = length << REPLY_PRIVATE_BITS_CNT | private_bits;
-						//printk(KERN_CRIT "%s: case 2 reply_indicator_index-%d len-%d\n", __func__, reply_indicator_index, wc[i].byte_len);
+					/* Enqueue this request to thpool */
+                                        thpool_callback(ctx, tmp1,
+							(void *)tmp1 + sizeof(struct imm_message_metadata),
+                                                        tmp1->size, node_id, offset);
+					}
+#else
+					{
+					struct imm_header_from_cq_to_port *tmp;
+					tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
+					tmp->source_node_id = node_id;
+					tmp->offset = offset;
+					spin_lock(&ctx->imm_waitqueue_perport_lock[port]);
+					list_add_tail(&(tmp->list), &ctx->imm_waitqueue_perport[port].list);
+					spin_unlock(&ctx->imm_waitqueue_perport_lock[port]);
+					}
+#endif
+				} else if (wc[i].ex.imm_data & IMM_SEND_REPLY_RECV) {
+					/*
+					 * This is the sender's handling reply part.
+					 * The incoming message is the reply sent by remote.
+					 */
+					void *dst_ptr;
 
-						fit_debug("got reply with extra bits reply_indicator_index-%d len-%d bits-%x reply_indicator_addr %lx\n",
-							reply_indicator_index, wc[i].byte_len, private_bits, ctx->reply_ready_indicators[reply_indicator_index]);
+					length = wc[i].byte_len;
+					reply_indicator_index = wc[i].ex.imm_data & IMM_GET_REPLY_INDICATOR_INDEX;
+					if (unlikely(reply_indicator_index <= 0 ||
+						     reply_indicator_index >= IMM_NUM_OF_SEMAPHORE)) {
+						fit_err("Wrong index: %d", reply_indicator_index);
+						WARN_ON_ONCE(1);
+						continue;
+					}
 
-						dst_ptr = get_reply_ready_ptr(ctx, reply_indicator_index);
-						memcpy(dst_ptr, &reply_data, sizeof(int));
-					} else
-						WARN_ON(1);
+					/*
+					 * The thread who did ibapi_send_reply() is busy polling
+					 * this shared memory. This memcpy will release it.
+					 */
+					dst_ptr = get_reply_ready_ptr(ctx, reply_indicator_index);
+					memcpy(dst_ptr, &length, sizeof(int));
+				} else if (wc[i].ex.imm_data & IMM_ACK || wc[i].byte_len == 0) {
+					/* Handle internal acknoledgement of new MR offset */
+					offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
+
+					recv = kmalloc(sizeof(*recv), GFP_KERNEL);
+					if (!recv) {
+						WARN_ON_ONCE(1);
+						return -ENOMEM;
+					}
+					recv->src_id = node_id;
+					recv->msg = (char *)(long)offset;
+					recv->type = MSG_DO_ACK_REMOTE;
+
+					spin_lock(&wq_lock);
+					list_add_tail(&(recv->list), &request_list.list);
+					spin_unlock(&wq_lock);
+				} else if (wc[i].ex.imm_data & IMM_REPLY_W_EXTRA_BITS) {
+					/* Handle reply with extra bits */
+					int reply_data, private_bits;
+					void *dst_ptr;
+
+					length = wc[i].byte_len;
+					reply_indicator_index = wc[i].ex.imm_data & IMM_GET_REPLY_INDICATOR_INDEX;
+					private_bits = IMM_GET_PRIVATE_BITS(wc[i].ex.imm_data);
+					reply_data = length << REPLY_PRIVATE_BITS_CNT | private_bits;
+
+					fit_debug("extra bits index-%d len-%d bits-%x reply_indicator_addr %lx\n",
+						reply_indicator_index, wc[i].byte_len, private_bits,
+						ctx->reply_ready_indicators[reply_indicator_index]);
+
+					dst_ptr = get_reply_ready_ptr(ctx, reply_indicator_index);
+					memcpy(dst_ptr, &reply_data, sizeof(int));
+				} else {
+					fit_err("Unknown wc.ex.imm_data: %#lx", wc[i].ex.imm_data);
+					WARN_ON_ONCE(1);
 				}
 
 				/*
@@ -2108,14 +2074,13 @@ static int fit_poll_recv_cq(void *_info)
 					}
 					fit_post_receives_message(ctx, connection_id, ctx->rx_depth/4);
 				}
-			}
-			else
-			{
+			} else {
+				/* Then it is unknown opcode */
 				connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
-				printk(KERN_ALERT "%s: connection %d Recv weird event as %d\n", __func__, connection_id, (int)wc[i].opcode);
+				fit_err("conn_id: %d Unknown wc.opcode: %d", connection_id, wc[i].opcode);
+				WARN_ON_ONCE(1);
 			}
-
-		}
+		} /* end the loop for wc */
 	}
 	return 0;
 }
