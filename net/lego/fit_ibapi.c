@@ -446,13 +446,3 @@ int lego_ib_init(void *unused)
 	complete(&ib_init_done);
 	return 0;
 }
-
-int lego_ib_cleanup(void)
-{
-	printk(KERN_INFO "Ready to remove module\n");
-	fit_cleanup_module();
-	ib_unregister_client(&ibv_client);
-	fit_internal_cleanup();
-
-	return 0;
-}
