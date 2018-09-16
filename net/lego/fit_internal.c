@@ -625,7 +625,8 @@ static int fit_post_receives_message(ppc *ctx, int connection_id, int depth)
 
 		ret = ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
 		if (ret) {
-			fit_err("Fail to post recv conn_id: %d", connection_id);
+			fit_err("Fail to post_recv conn_id: %d, i: %d, depth: %d",
+				connection_id, i, depth);
 			WARN_ON(1);
 			return ret;
 		}
@@ -942,7 +943,7 @@ retry:
 			fit_post_receives_message_with_buffer(ctx, cur_connection, 1); //ctx->num_node - 1);
 
 		/* post receive buffers for IMM */
-		fit_post_receives_message(ctx, cur_connection, ctx->rx_depth);
+		fit_post_receives_message(ctx, cur_connection, ctx->rx_depth/2);
 
 		atomic_inc(&ctx->num_alive_connection[rem_node_id]);
 		atomic_inc(&ctx->alive_connection);
