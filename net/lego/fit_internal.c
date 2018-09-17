@@ -543,11 +543,15 @@ fit_ib_reg_mr_addr(ppc *ctx, void *addr, size_t length)
 					    addr, length, DMA_BIDIRECTIONAL);
 }
 
+DEFINE_PROFILE_POINT(fit_post_recv)
+
 static int fit_post_receives_message(ppc *ctx, int connection_id, int depth)
 {
 	int i, ret;
 	struct ib_recv_wr wr, *bad_wr = NULL;
+	PROFILE_POINT_TIME(fit_post_recv)
 
+	PROFILE_START(fit_post_recv);
 	for (i = 0; i < depth; i++) {
 		wr.wr_id = i + (connection_id << CONNECTION_ID_PUSH_BITS_BASED_ON_RECV_DEPTH);
 		wr.next = NULL;
@@ -556,12 +560,14 @@ static int fit_post_receives_message(ppc *ctx, int connection_id, int depth)
 
 		ret = ib_post_recv(ctx->qp[connection_id], &wr, &bad_wr);
 		if (ret) {
+			PROFILE_LEAVE(fit_post_recv);
 			fit_err("Fail to post_recv conn_id: %d, i: %d, depth: %d",
 				connection_id, i, depth);
 			WARN_ON(1);
 			return ret;
 		}
 	}
+	PROFILE_LEAVE(fit_post_recv);
 	return depth;
 }
 
@@ -903,31 +909,27 @@ retry:
 	return 0;
 }
 
-/*
- * TODO
- *
- * This whole set of operations definetily need optimization.
- * We should use either rb-tree or radix tree to do the search.
- */
-static inline int fit_find_qp_id_by_qpnum(ppc *ctx, uint32_t qp_num)
+/* XXX:should use radix or rb tree. */
+static inline unsigned int fit_find_qp_id_by_qpnum(ppc *ctx, u32 qp_num)
 {
-	int i;
+        int i;
 
-	for(i = 0; i < ctx->num_connections; i++) {
+        for (i = 0; i < ctx->num_connections; i++) {
 #ifdef CONFIG_SOCKET_O_IB
-		if (i / (NUM_PARALLEL_CONNECTION + 1) == ctx->node_id)
-			continue;
-		/* a socket qp */
-		if (i % (NUM_PARALLEL_CONNECTION + 1) == NUM_PARALLEL_CONNECTION)
-			continue;
+                if (i / (NUM_PARALLEL_CONNECTION + 1) == ctx->node_id)
+                        continue;
+                /* a socket qp */
+                if (i % (NUM_PARALLEL_CONNECTION + 1) == NUM_PARALLEL_CONNECTION)
+                        continue;
 #else
-		if (i / NUM_PARALLEL_CONNECTION == ctx->node_id)
-			continue;
+		/* Skip myself */
+                if (i / NUM_PARALLEL_CONNECTION == ctx->node_id)
+                        continue;
 #endif
-		if(ctx->qp[i]->qp_num==qp_num)
-			return i;
-	}
-	return -1;
+                if (ctx->qp[i]->qp_num == qp_num)
+                        return i;
+        }
+        return -1;
 }
 
 #ifdef CONFIG_SOCKET_O_IB
@@ -947,16 +949,6 @@ inline int fit_find_sock_qp_id_by_qpnum(ppc *ctx, uint32_t qp_num)
 	return -1;
 }
 #endif
-
-inline int fit_find_node_id_by_qpnum(ppc *ctx, uint32_t qp_num)
-{
-	int tmp = fit_find_qp_id_by_qpnum(ctx, qp_num);
-	if(tmp>=0)
-	{
-		return tmp/NUM_PARALLEL_CONNECTION;
-	}
-	return -1;
-}
 
 /*
  * If we can not get the CQE within 20 seconds
@@ -1861,12 +1853,6 @@ static int fit_poll_recv_cq(void *_info)
 			if (unlikely(wc[i].status != IB_WC_SUCCESS)) {
 				fit_err("wc.status: %s, wr_id %d",
 					ib_wc_status_msg(wc[i].status), wc[i].wr_id);
-				continue;
-			}
-
-			connection_id = fit_find_qp_id_by_qpnum(ctx, wc[i].qp->qp_num);
-			if (unlikely(connection_id == -1)) {
-				fit_err("Fail to find QPN: %d", wc[i].qp->qp_num);
 				continue;
 			}
 
