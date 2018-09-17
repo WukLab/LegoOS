@@ -108,8 +108,12 @@ evict_line(struct pcache_set *pset, struct pcache_meta *pcm, unsigned long addre
 #endif
 }
 
-DEFINE_PROFILE_POINT(pcache_evict_do_find)
-DEFINE_PROFILE_POINT(pcache_evict_do_evict)
+/*
+ * These two profile points describes algorithm and mechanism.
+ * They are the majority of this function.
+ */
+DEFINE_PROFILE_POINT(pcache_alloc_evict_do_find)
+DEFINE_PROFILE_POINT(pcache_alloc_evict_do_evict)
 
 /**
  * pcache_evict_line
@@ -138,8 +142,8 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	struct pcache_meta *pcm;
 	int nr_mapped;
 	int ret;
-	PROFILE_POINT_TIME(pcache_evict_do_find)
-	PROFILE_POINT_TIME(pcache_evict_do_evict)
+	PROFILE_POINT_TIME(pcache_alloc_evict_do_find)
+	PROFILE_POINT_TIME(pcache_alloc_evict_do_evict)
 
 	inc_pcache_event(PCACHE_EVICTION_TRIGGERED);
 
@@ -150,11 +154,11 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	 * will try to avoid use it concurrently. Since lock is
 	 * held within evict_find_line(), it is fine to clear it.
 	 */
-	PROFILE_START(pcache_evict_do_find);
+	PROFILE_START(pcache_alloc_evict_do_find);
 	__SetPsetEvicting(pset);
 	pcm = evict_find_line(pset);
 	__ClearPsetEvicting(pset);
-	PROFILE_LEAVE(pcache_evict_do_find);
+	PROFILE_LEAVE(pcache_alloc_evict_do_find);
 
 	if (IS_ERR_OR_NULL(pcm)) {
 		if (likely(PTR_ERR(pcm) == -EAGAIN)) {
@@ -173,9 +177,9 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	nr_mapped = pcache_mapcount(pcm);
 	BUG_ON(nr_mapped < 1);
 
-	PROFILE_START(pcache_evict_do_evict);
+	PROFILE_START(pcache_alloc_evict_do_evict);
 	ret = evict_line(pset, pcm, address);
-	PROFILE_LEAVE(pcache_evict_do_evict);
+	PROFILE_LEAVE(pcache_alloc_evict_do_evict);
 	if (ret) {
 		/*
 		 * Revert what algorithm has done:
