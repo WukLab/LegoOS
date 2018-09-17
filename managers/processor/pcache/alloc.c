@@ -20,6 +20,8 @@
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
+DEFINE_PER_CPU_SHARED_ALIGNED(struct pcache_alloc_hint, alloc_hints);
+
 /**
  * sysctl_pcache_alloc_timeout_sec
  *
@@ -143,22 +145,39 @@ pcache_alloc_fastpath(struct pcache_set *pset)
 {
 	int way;
 	struct pcache_meta *pcm;
+	struct pcache_alloc_hint *hint;
 
-	pcache_for_each_way_set(pcm, pset, way) {
+	hint = this_cpu_ptr(&alloc_hints);
+	inc_per_cpu_alloc(hint);
+	if (likely(hint->pset == pset)) {
+		pcm = hint->pcm;
 		if (likely(!TestSetPcacheAllocated(pcm))) {
-			prep_new_pcache_meta(pcm);
-			add_to_lru_list(pcm, pset);
-
-			/*
-			 * Make the pcache line visible to other
-			 * pcache subsystems:
-			 */
-			set_pcache_usable(pcm);
-			inc_pcache_used();
-			return pcm;
+			inc_per_cpu_alloc_hit(hint);
+			goto prep;
 		}
 	}
+
+	/*
+	 * Walk through the pset. This is only efficient
+	 * if you have small associativity.
+	 */
+	pcache_for_each_way_set(pcm, pset, way) {
+		if (likely(!TestSetPcacheAllocated(pcm)))
+			goto prep;
+	}
 	return NULL;
+
+prep:
+	prep_new_pcache_meta(pcm);
+	add_to_lru_list(pcm, pset);
+
+	/*
+	 * Make the pcache line visible to other
+	 * pcache subsystems:
+	 */
+	set_pcache_usable(pcm);
+	inc_pcache_used();
+	return pcm;
 }
 
 DEFINE_PROFILE_POINT(pcache_alloc)
