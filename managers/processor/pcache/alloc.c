@@ -20,6 +20,8 @@
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
+DEFINE_PER_CPU_SHARED_ALIGNED(struct pcache_alloc_hint, alloc_hints);
+
 /**
  * sysctl_pcache_alloc_timeout_sec
  *
@@ -143,38 +145,92 @@ pcache_alloc_fastpath(struct pcache_set *pset)
 {
 	int way;
 	struct pcache_meta *pcm;
+	struct pcache_alloc_hint *hint;
 
-	pcache_for_each_way_set(pcm, pset, way) {
+	hint = this_cpu_ptr(&alloc_hints);
+	inc_per_cpu_alloc(hint);
+	if (likely(hint->pset == pset)) {
+		pcm = hint->pcm;
 		if (likely(!TestSetPcacheAllocated(pcm))) {
-			prep_new_pcache_meta(pcm);
-			add_to_lru_list(pcm, pset);
-
-			/*
-			 * Make the pcache line visible to other
-			 * pcache subsystems:
-			 */
-			set_pcache_usable(pcm);
-			inc_pcache_used();
-			return pcm;
+			inc_per_cpu_alloc_hit(hint);
+			goto prep;
 		}
 	}
+
+	/*
+	 * Walk through the pset. This is only efficient
+	 * if you have small associativity.
+	 */
+	pcache_for_each_way_set(pcm, pset, way) {
+		if (likely(!TestSetPcacheAllocated(pcm)))
+			goto prep;
+	}
 	return NULL;
+
+prep:
+	prep_new_pcache_meta(pcm);
+	add_to_lru_list(pcm, pset);
+
+	/*
+	 * Make the pcache line visible to other
+	 * pcache subsystems:
+	 */
+	set_pcache_usable(pcm);
+	inc_pcache_used();
+	return pcm;
 }
 
-/*
- * Slowpath: find line to evict and initalize the eviction process,
- * if eviction succeed, try fastpath again. We do have a time limit
- * on this function to avoid livelock.
+DEFINE_PROFILE_POINT(pcache_alloc)
+DEFINE_PROFILE_POINT(pcache_alloc_evict)
+DEFINE_PROFILE_POINT(pcache_alloc_fastpath)
+
+/**
+ * pcache_alloc
+ * @address: user virtual address
+ *
+ * This function will try to allocate a cacheline from the set that @address
+ * belongs to. On success, the returned @pcm has PcaheAllocated set, refcount 1,
+ * and mapcount 0.
+ *
+ * Profile Points:
+ *
+ *	pcache_alloc
+ *	|- pcache_alloc_fastpath
+ *	|- pcache_alloc_evict
+ *	   |- pcache_alloc_evict_do_find
+ *	   |- pcache_alloc_evict_do_evict
  */
-static struct pcache_meta *
-pcache_alloc_slowpath(struct pcache_set *pset, unsigned long address)
+struct pcache_meta *pcache_alloc(unsigned long address)
 {
+	struct pcache_set *pset;
 	struct pcache_meta *pcm;
-	unsigned long alloc_start = jiffies;
 	enum evict_status ret;
+	unsigned long alloc_start, timeout;
+	PROFILE_POINT_TIME(pcache_alloc)
+	PROFILE_POINT_TIME(pcache_alloc_evict)
+	PROFILE_POINT_TIME(pcache_alloc_fastpath)
+
+	PROFILE_START(pcache_alloc);
+
+	alloc_start = jiffies;
+	timeout = alloc_start + sysctl_pcache_alloc_timeout_sec * HZ;
+
+	pset = user_vaddr_to_pcache_set(address);
+	inc_pset_event(pset, PSET_ALLOC);
 
 retry:
+	/* Fastpath try to allocate one directly */
+	PROFILE_START(pcache_alloc_fastpath);
+	pcm = pcache_alloc_fastpath(pset);
+	PROFILE_LEAVE(pcache_alloc_fastpath);
+	if (likely(pcm)) {
+		PROFILE_LEAVE(pcache_alloc);
+		return pcm;
+	}
+
+	PROFILE_START(pcache_alloc_evict);
 	ret = pcache_evict_line(pset, address);
+	PROFILE_LEAVE(pcache_alloc_evict);
 	switch (ret) {
 	case PCACHE_EVICT_FAILURE_FIND:
 	case PCACHE_EVICT_FAILURE_EVICT:
@@ -187,52 +243,13 @@ retry:
 		BUG();
 	};
 
-	/* Do we still have time? */
-	if (time_after(jiffies, alloc_start + sysctl_pcache_alloc_timeout_sec * HZ)) {
-		pr_info("CPU%d PID:%d Abort pcache alloc (%ums) addr:%#lx, pset_idx:%lu, nr_lru:%d\n",
-			smp_processor_id(), current->pid, jiffies_to_msecs(jiffies - alloc_start),
-			address, pcache_set_to_set_index(pset),
-			IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0);
-		if (atomic_read(&pset->nr_lru) < PCACHE_ASSOCIATIVITY)
-			dump_pset(pset);
-		return NULL;
-	}
-
-	pcm = pcache_alloc_fastpath(pset);
-	if (!pcm)
+	if (likely(time_before(jiffies, timeout)))
 		goto retry;
-	return pcm;
-}
 
-DEFINE_PROFILE_POINT(pcache_alloc)
-
-/**
- * pcache_alloc
- * @address: user virtual address
- *
- * This function will try to allocate a cacheline from the set that @address
- * belongs to. On success, the returned @pcm has PcaheAllocated set, refcount 1,
- * and mapcount 0.
- */
-struct pcache_meta *pcache_alloc(unsigned long address)
-{
-	struct pcache_set *pset;
-	struct pcache_meta *pcm;
-	PROFILE_POINT_TIME(pcache_alloc)
-
-	PROFILE_START(pcache_alloc);
-
-	pset = user_vaddr_to_pcache_set(address);
-	inc_pset_event(pset, PSET_ALLOC);
-
-	/* Fastpath: try to allocate one directly */
-	pcm = pcache_alloc_fastpath(pset);
-	if (likely(pcm))
-		goto out;
-
-	/* Slowpath: fallback and try to evict one */
-	pcm = pcache_alloc_slowpath(pset, address);
-out:
-	PROFILE_LEAVE(pcache_alloc);
-	return pcm;
+	/* Then we have a situation */
+	pr_info("# CPU%d PID%d Abort pcache alloc (%ums) addr:%#lx pset:%lu\n",
+		smp_processor_id(), current->pid,
+		jiffies_to_msecs(jiffies - alloc_start),
+		address, pcache_set_to_set_index(pset));
+	return NULL;
 }

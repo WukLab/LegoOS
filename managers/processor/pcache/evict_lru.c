@@ -83,11 +83,14 @@ struct pcache_meta *evict_find_line_lru(struct pcache_set *pset)
 	struct pcache_meta *pcm;
 	bool found = false;
 
+	/*
+	 * We used to check if @pset has free lines in the middle
+	 * of the loop. We no longer do that anymore. The reason is
+	 * we want to leave cushion for each cpu. We don't want
+	 * CPUs to contend for one just-freed-line. Instead, we
+	 * want each CPU do its eviction and allocation on its own.
+	 */
 	spin_lock(&pset->lru_lock);
-
-	if (pset_has_free_lines(pset))
-		goto unlock_lru;
-
 	list_for_each_entry_reverse(pcm, &pset->lru_list, lru) {
 		PCACHE_BUG_ON_PCM(PcacheReclaim(pcm), pcm);
 
@@ -139,13 +142,6 @@ unlock_pcache:
 		unlock_pcache(pcm);
 put_pcache:
 		lru_put_pcache(pcm, pset);
-
-		/*
-		 * Previous lru_put_pcache() *may* free a line
-		 * Someone else *may* free in the middle
-		 */
-		if (pset_has_free_lines(pset))
-			goto unlock_lru;
 	}
 
 unlock_lru:

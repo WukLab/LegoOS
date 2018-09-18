@@ -14,6 +14,20 @@
 #include <lego/comp_memory.h>
 #include <processor/processor.h>
 
+/*
+ * If you see this warning, here is what you should do
+ * 1) If you are planning to have a storage node, disable RAMFS.
+ * 2) If you don't have a storage node, and planning to have
+ *    multiple P and multiple M, ignore this message. You are fine.
+ */
+#ifdef CONFIG_USE_RAMFS
+#if (CONFIG_FIT_NR_NODES > 2)
+#  warning You configured more than two nodes and RAMFS option.	\
+	   This setting disallow a storage manager node.	\
+	   Please make sure of that
+#endif
+#endif
+
 /* Indicate if processor or memory manager is up or not. */
 int manager_state = MANAGER_DOWN;
 

@@ -509,6 +509,17 @@ __pcache_meta_next_way(struct pcache_meta *pcm)
 	return pcm + nr_cachesets;
 }
 
+static inline unsigned long
+pcache_meta_to_way(struct pcache_meta *pcm)
+{
+	unsigned long offset, way;
+
+	offset = pcm - pcache_meta_map;
+	way = offset / nr_cachesets;
+	BUG_ON(way >= PCACHE_ASSOCIATIVITY);
+	return way;
+}
+
 /**
  * pcache_meta_next_way
  * @pcm: pcache meta in question
@@ -665,5 +676,43 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 
 #include <processor/pcache_victim.h>
 #include <processor/pcache_evict.h>
+
+/* pcache alloc hints */
+struct pcache_alloc_hint {
+	struct pcache_set *pset;
+	struct pcache_meta *pcm;
+	unsigned long nr_hit;
+	unsigned long nr_alloc;
+};
+
+extern DEFINE_PER_CPU_SHARED_ALIGNED(struct pcache_alloc_hint, alloc_hints);
+
+/*
+ * This is called by eviction routine after it has successfully
+ * evicted @pcm, which belongs to @pset.
+ */
+static inline void pcache_alloc_update_hint(struct pcache_set *pset,
+					    struct pcache_meta *pcm)
+{
+	struct pcache_alloc_hint *hint = this_cpu_ptr(&alloc_hints);
+
+	hint->pcm = pcm;
+	barrier();
+	hint->pset = pset;
+}
+
+#ifdef CONFIG_COUNTER_PCACHE
+static inline void inc_per_cpu_alloc(struct pcache_alloc_hint *hint)
+{
+	hint->nr_alloc++;
+}
+static inline void inc_per_cpu_alloc_hit(struct pcache_alloc_hint *hint)
+{
+	hint->nr_hit++;
+}
+#else
+static inline void inc_per_cpu_alloc(struct pcache_alloc_hint *hint) { }
+static inline void inc_per_cpu_alloc_hit(struct pcache_alloc_hint *hint) { }
+#endif
 
 #endif /* _LEGO_PROCESSOR_PCACHE_H_ */
