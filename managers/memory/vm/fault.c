@@ -23,18 +23,14 @@ static int do_wp_page(struct vm_area_struct *vma, unsigned long address,
 		      unsigned int flags, pte_t *ptep, pmd_t *pmd, pte_t entry,
 		      spinlock_t *ptl)
 {
-/*
- * TODO:
- *
- * We missed the mprotect() syscall.
- * So the VMA actually has the READ/WRITE permission, so as the PTE.
- */
-
 #if 0
+	/*
+	 * TODO:
+	 * We missed the mprotect() syscall.
+	 * So the VMA actually has the READ/WRITE permission, so as the PTE.
+	 */
 	dump_vma(vma);
 	dump_pte(ptep, NULL);
-	pr_debug("%s address: %lx, flags: %x\n", __func__, address, flags);
-
 	WARN_ON(1);
 #endif
 	spin_unlock(ptl);
@@ -201,6 +197,10 @@ static int handle_pte_fault(struct vm_area_struct *vma, unsigned long address,
 		}
 	}
 
+	/*
+	 * A lot pgfault might do nothing and exit here.
+	 * They are pgfault caused by previous evictions.
+	 */
 unlock:
 	lego_pte_unlock(pte, ptl);
 	return 0;
@@ -227,12 +227,6 @@ unlock:
  *    will need another conversion from pa->va, after this function returns.
  *    (Since memory manager is running in kernel mode only, we have to use
  *     kernel virtual address to reference memory.)
- *
- * TODO:
- *	We are reusing the pud_offset etc. macros, which are using physical
- * 	address to fill page table. This is useless extra cost for us.
- *	Hence, we need special lego_pud_offset etc. macros to use kernel
- *	virtual address only.
  */
 int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 			 unsigned int flags, unsigned long *ret_va, unsigned long *mapping_flags)
@@ -261,11 +255,10 @@ int handle_lego_mm_fault(struct vm_area_struct *vma, unsigned long address,
 
 	/*
 	 * Return the kernel virtual address of the new
-	 * allocated page. Only if called asked.
+	 * allocated page. Only if caller asked.
 	 */
 	if (ret_va)
 		*ret_va = pte_val(*pte) & PTE_VFN_MASK;
-
 	return 0;
 }
 

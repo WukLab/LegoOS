@@ -167,4 +167,9 @@ struct lego_mm_struct {
 #endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */
 };
 
+static inline unsigned long lego_pte_to_virt(pte_t pte)
+{
+	return pte_val(pte) & PTE_VFN_MASK;
+}
+
 #endif /* _LEGO_MEMORY_MM_H_ */

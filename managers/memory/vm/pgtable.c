@@ -339,6 +339,8 @@ lego_copy_one_pte(struct lego_mm_struct *dst_mm, struct lego_mm_struct *src_mm,
 {
 	unsigned long vm_flags = vma->vm_flags;
 	pte_t pte = *src_pte;
+	struct page *page;
+	unsigned long virt;
 
 	/*
 	 * PTE contains position in swap or file?
@@ -363,6 +365,11 @@ lego_copy_one_pte(struct lego_mm_struct *dst_mm, struct lego_mm_struct *src_mm,
 	if (vm_flags & VM_SHARED)
 		pte = pte_mkclean(pte);
 	pte = pte_mkold(pte);
+
+	virt = lego_pte_to_virt(pte);
+	page = virt_to_page(virt);
+	if (page)
+		get_page(page);
 
 pte_set:
 	pte_set(dst_pte, pte);
@@ -464,9 +471,6 @@ static inline int lego_copy_pud_range(struct lego_mm_struct *dst_mm,
  * This function is called during fork() time.
  * It will copy the vma page table mapping from source mm to destination mm.
  * It will make writable && non-shared pages RO for both mm (for COW).
- *
- * TODO:
- * There a lot ways to implement the VM organization besides page-based.
  */
 int lego_copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
 			 struct vm_area_struct *vma)
@@ -495,10 +499,8 @@ int lego_copy_page_range(struct lego_mm_struct *dst, struct lego_mm_struct *src,
 }
 
 /*
- * TODO:
- * This function should
- * 1) Flush back the mmap'ed dirty pages back to storage component
- *    (Or just mark them and let others do?)
+ * And we don't need to flush TLB here
+ * because we are doing emulation at memory manager.
  */
 static unsigned long
 zap_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
@@ -508,13 +510,11 @@ zap_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 	spinlock_t *ptl;
 	pte_t *start_pte;
 	pte_t *pte;
+	unsigned long page;
 
 	start_pte = lego_pte_offset_lock(mm, pmd, addr, &ptl);
 	pte = start_pte;
 
-	/*
-	 * TODO: free the real page itself
-	 */
 	do {
 		pte_t ptent = *pte;
 
@@ -523,6 +523,13 @@ zap_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 
 		if (pte_present(ptent)) {
 			ptent = ptep_get_and_clear_full(pte);
+
+			/*
+			 * Yes, viginia. We encoded VPN into PTE.
+			 * Check comments at handle_lego_mm_fault.
+			 */
+			page = lego_pte_to_virt(ptent);
+			free_page(page);
 			continue;
 		}
 		pte_clear(pte);

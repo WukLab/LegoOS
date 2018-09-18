@@ -15,6 +15,7 @@
 #include <lego/jiffies.h>
 #include <lego/kthread.h>
 #include <lego/profile.h>
+#include <lego/sysinfo.h>
 #include <lego/memblock.h>
 #include <lego/fit_ibapi.h>
 #include <lego/completion.h>
@@ -597,6 +598,10 @@ static void print_thpool_stats(void) { }
 
 void watchdog_print(void)
 {
+	struct manager_sysinfo si;
+
+	manager_meminfo(&si);
+	pr_info("Freeram: %#lx\n", si.freeram);
 	print_thpool_stats();
 	print_memory_manager_stats();
 	print_profile_points();

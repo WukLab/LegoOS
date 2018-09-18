@@ -251,6 +251,12 @@ static inline int put_page_testzero(struct page *page)
 	return atomic_dec_and_test(&page->_refcount);
 }
 
+static inline void get_page(struct page *page)
+{
+	VM_BUG_ON_PAGE(page_ref_count(page) <= 0, page);
+	atomic_inc(&page->_refcount);
+}
+
 /*
  * This function returns the order of a free page in the buddy system. In
  * general, page_zone(page)->lock must be held by the caller to prevent the
