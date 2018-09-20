@@ -47,8 +47,38 @@ static int ib_port = 1;
 enum ib_mtu mtu;
 static int sl;
 static int nr_joined_nodes = 0;
+
+/*
+ * This is used by FIT internal thread: wq_handler
+ * This thread is a background thread that will send async messages
+ * or other actions on behalf of caller. Requests are posted through
+ * enqueue_wq(), and the worker thread uses dequeue_wq().
+ */
 static DEFINE_SPINLOCK(wq_lock);
+static atomic_t nr_wq_jobs;
 static struct send_and_reply_format request_list;
+
+static inline void enqueue_wq(struct send_and_reply_format *new)
+{
+	spin_lock(&wq_lock);
+	list_add_tail(&new->list, &(request_list.list));
+	atomic_inc(&nr_wq_jobs);
+	spin_unlock(&wq_lock);
+}
+
+static inline struct send_and_reply_format *dequeue_wq(void)
+{
+	struct send_and_reply_format *p;
+
+	spin_lock(&wq_lock);
+	p = list_first_entry(&(request_list.list),
+			     struct send_and_reply_format, list);
+	list_del(&p->list);
+	atomic_dec(&nr_wq_jobs);
+	spin_unlock(&wq_lock);
+
+	return p;
+}
 
 /**
  * gets the page table entry for input address
@@ -1255,10 +1285,7 @@ int fit_receive_message_no_reply(ppc *ctx, unsigned int port, void *ret_addr, in
 		pass->length = offset;
 		pass->type = MSG_DO_ACK_INTERNAL;
 
-		//printk(KERN_CRIT "%s add ack req offset %d\n", __func__, offset);
-		spin_lock(&wq_lock);
-		list_add_tail(&(pass->list), &request_list.list);
-		spin_unlock(&wq_lock);
+		enqueue_wq(pass);
 	}
 
 	return get_size;
@@ -1314,9 +1341,7 @@ void fit_ack_reply_callback(struct thpool_buffer *b)
                 pass->length = offset;
                 pass->type = MSG_DO_ACK_INTERNAL;
 
-                spin_lock(&wq_lock);
-                list_add_tail(&(pass->list), &request_list.list);
-                spin_unlock(&wq_lock);
+		enqueue_wq(pass);
         }
 
 	/*
@@ -1422,11 +1447,7 @@ int fit_receive_message(ppc *ctx, unsigned int port, void *ret_addr, int receive
 		pass->msg = (void *)(long)node_id;
 		pass->length = offset;
 		pass->type = MSG_DO_ACK_INTERNAL;
-
-		//printk(KERN_CRIT "%s add ack req offset %d\n", __func__, offset);
-		spin_lock(&wq_lock);
-		list_add_tail(&(pass->list), &request_list.list);
-		spin_unlock(&wq_lock);
+		enqueue_wq(pass);
 	}
 
 	return get_size;
@@ -1581,9 +1602,7 @@ get_next_request:
 		pass->type = MSG_SOCK_DO_ACK_INTERNAL;
 
 		fit_debug("add ack req node %d offset %d\n", node_id, offset);
-		spin_lock(&wq_lock);
-		list_add_tail(&(pass->list), &request_list.list);
-		spin_unlock(&wq_lock);
+		enqueue_wq(pass);
 	}
 
 	if (total_received_size < receive_size) {
@@ -1822,7 +1841,6 @@ static int fit_poll_recv_cq(void *_info)
 	int reply_indicator_index, length;
 	struct ib_wc *wc;
 	struct ib_cq *target_cq;
-	struct send_and_reply_format *recv;
 	struct thread_pass_struct *info = _info;
 
 	/* Info passedd down by creater */
@@ -1944,6 +1962,8 @@ static int fit_poll_recv_cq(void *_info)
 					dst_ptr = get_reply_ready_ptr(ctx, reply_indicator_index);
 					memcpy(dst_ptr, &length, sizeof(int));
 				} else if (wc[i].ex.imm_data & IMM_ACK || wc[i].byte_len == 0) {
+					struct send_and_reply_format *recv;
+
 					/* Handle internal acknoledgement of new MR offset */
 					offset = wc[i].ex.imm_data & IMM_GET_OFFSET;
 
@@ -1956,9 +1976,7 @@ static int fit_poll_recv_cq(void *_info)
 					recv->msg = (char *)(long)offset;
 					recv->type = MSG_DO_ACK_REMOTE;
 
-					spin_lock(&wq_lock);
-					list_add_tail(&(recv->list), &request_list.list);
-					spin_unlock(&wq_lock);
+					enqueue_wq(recv);
 				} else if (wc[i].ex.imm_data & IMM_REPLY_W_EXTRA_BITS) {
 					/* Handle reply with extra bits */
 					int reply_data, private_bits;
@@ -2107,9 +2125,7 @@ int sock_poll_cq(void *in)
 						recv->src_id = node_id;
 						recv->msg = (char *)(long)offset;
 
-						spin_lock(&wq_lock);
-						list_add_tail(&(recv->list), &request_list.list);
-						spin_unlock(&wq_lock);
+						enqueue_wq(recv);
 					}
 					else //handle reply
 					{
@@ -2142,9 +2158,7 @@ int sock_poll_cq(void *in)
 					recv->src_id = connection_id;
 					recv->type = MSG_DO_RC_POST_RECEIVE;
 
-					spin_lock(&wq_lock);
-					list_add_tail(&(recv->list), &request_list.list);
-					spin_unlock(&wq_lock);
+					enqueue_wq(wq);
 #endif
 				}
 			}
@@ -2160,81 +2174,72 @@ int sock_poll_cq(void *in)
 }
 #endif
 
-int waiting_queue_handler(void *in)
+static int waiting_queue_handler(void *_ctx)
 {
 	struct send_and_reply_format *new_request;
 	int local_flag, last_ack, imm_data;
-	ppc *ctx = (ppc *)in;
+	ppc *ctx = _ctx;
 
 	pin_current_thread();
-	while(1)
-	{
-		while(list_empty(&(request_list.list)))
-		{
+	while (1) {
+		while (!atomic_read(&nr_wq_jobs))
 			cpu_relax();
-		}
-		spin_lock(&wq_lock);
-		new_request = list_entry(request_list.list.next, struct send_and_reply_format, list);
 
-		spin_unlock(&wq_lock);
-		if(new_request->src_id == ctx->node_id)
+		new_request = dequeue_wq();
+
+		if (new_request->src_id == ctx->node_id)
 			local_flag = 1;
 		else
 			local_flag = 0;
-		switch(new_request->type)
+
+		switch (new_request->type) {
+		case MSG_DO_RC_POST_RECEIVE:
+			fit_post_receives_message(ctx, new_request->src_id, new_request->length);
+			break;
+		case MSG_DO_ACK_INTERNAL:
 		{
-			case MSG_DO_RC_POST_RECEIVE:
-				fit_post_receives_message(ctx, new_request->src_id, new_request->length);
-				break;
-			case MSG_DO_ACK_INTERNAL:
-				{
-					int offset = new_request->length;
-					int target_node = (int)(long)new_request->msg; //ptr->node;
-					imm_data = IMM_ACK | offset;
+			int offset = new_request->length;
+			int target_node = (int)(long)new_request->msg;
+			imm_data = IMM_ACK | offset;
 #ifdef CONFIG_SOCKET_O_IB
-					fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * (NUM_PARALLEL_CONNECTION + 1),
-							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, 0);
+			fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * (NUM_PARALLEL_CONNECTION + 1),
+					0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, 0);
 #else
-					fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * NUM_PARALLEL_CONNECTION,
-							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, 0);
+			fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * NUM_PARALLEL_CONNECTION,
+					0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, 0);
 #endif
-					break;
-				}
-			case MSG_DO_ACK_REMOTE:
-				{
-					last_ack = (int)(long)new_request->msg;
-					//printk(KERN_CRIT "%s: [receive ACK node-%d offset-%d]\n", __func__, new_request->src_id, last_ack);
-					ctx->remote_last_ack_index[new_request->src_id] = last_ack;
-					break;
-				}
-#ifdef CONFIG_SOCKET_SYSCALL
-			case MSG_SOCK_DO_ACK_INTERNAL:
-				{
-					//First do check again
-					int offset = new_request->length;
-					int target_node = (int)(long)new_request->msg; //ptr->node;
-					//printk(KERN_CRIT "%s: [generate ACK node-%d port-%d offset-%d]\n", __func__, target_node, target_port, offset);
-					imm_data = SOCK_IMM_ACK | offset;
-					//printk(KERN_CRIT "%s sending ack offset %d targetnode %d imm %x\n", __func__, offset, target_node, imm_data);
-					sock_send_message_with_rdma_imm(ctx, target_node, 0, 0, 0, 0, 0, offset, NULL, 0, FIT_SEND_ACK_IMM_ONLY, FIT_KERNELSPACE_FLAG);
-					break;
-				}
-			case MSG_SOCK_DO_ACK_REMOTE:
-				{
-					last_ack = (int)(long)new_request->msg;
-					//printk(KERN_CRIT "%s: [receive ACK node-%d offset-%d]\n", __func__, new_request->src_id, last_ack);
-					ctx->remote_sock_last_ack_index[new_request->src_id] = last_ack;
-					break;
-				}
-#endif
-			default:
-				printk(KERN_ALERT "%s: receive weird event %d\n", __func__, new_request->type);
+			break;
 		}
-		spin_lock(&wq_lock);
-		list_del(&new_request->list);
-		spin_unlock(&wq_lock);
+		case MSG_DO_ACK_REMOTE:
+			last_ack = (int)(long)new_request->msg;
+			ctx->remote_last_ack_index[new_request->src_id] = last_ack;
+			break;
+#ifdef CONFIG_SOCKET_SYSCALL
+		case MSG_SOCK_DO_ACK_INTERNAL:
+		{
+			int offset = new_request->length;
+			int target_node = (int)(long)new_request->msg; //ptr->node;
+			imm_data = SOCK_IMM_ACK | offset;
+			sock_send_message_with_rdma_imm(ctx, target_node, 0, 0, 0, 0, 0,
+							offset, NULL, 0,
+							FIT_SEND_ACK_IMM_ONLY, FIT_KERNELSPACE_FLAG);
+			break;
+		}
+		case MSG_SOCK_DO_ACK_REMOTE:
+			last_ack = (int)(long)new_request->msg;
+			ctx->remote_sock_last_ack_index[new_request->src_id] = last_ack;
+			break;
+#endif
+		default:
+			WARN_ON_ONCE(1);
+			pr_info("%s: receive weird event %d\n", __func__, new_request->type);
+		}
+
+		/* It is our responsilibity to free the request */
 		kfree(new_request);
 	}
+	BUG();
+	return 0;
 }
 
 static void fit_setup_ibapi_header(uint32_t src_id, uint64_t reply_addr,
