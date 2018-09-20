@@ -20,6 +20,7 @@ static const char *const pcache_event_text[] = {
 	"nr_clflush",
 	"nr_clflush_clean_skipped",
 	"nr_clflush_fail",
+	"nr_clflush_piggyback_fallback",
 
 	/* write-protection fault */
 	"nr_pgfault_wp",
@@ -30,7 +31,7 @@ static const char *const pcache_event_text[] = {
 
 	"nr_pcache_fill_zerofill",
 	"nr_pcache_fill_from_memory",
-	"nr_pcache_fill_from_memory_combined_flush",
+	"nr_pcache_fill_from_memory_piggyback",
 	"nr_pcache_fill_from_victim",			/* victim cache specific */
 
 	"nr_pcache_eviction_triggered",

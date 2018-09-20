@@ -51,7 +51,7 @@ static int procmgmt(void *unused)
 	 * Use the correct name if a real storage node is used.
 	 * If CONFIG_USE_RAMFS is set, then filename does not matter anyway.
 	 */
-#if 1
+#if 0
 	init_filename = "/usr/bin/python";
 	argv_init[0] = init_filename;
 	argv_init[1] = "/root/ys/models-1.4.0/official/resnet/imagenet_main.py";
@@ -63,23 +63,12 @@ static int procmgmt(void *unused)
 	argv_init[7] = "1024";
 #endif
 
-#if 0
+#if 1
 	init_filename = "/usr/bin/python";
 	argv_init[0] = init_filename;
 	argv_init[1] = "/root/ys/models-1.4.0/official/resnet/cifar10_main.py";
 #endif
 
-#if 0
-	init_filename = "/usr/bin/python";
-	argv_init[0] = init_filename;
-	argv_init[1] = "/root/ys/models-1.4.0/official/resnet/imagenet_main.py";
-	argv_init[2] = "--data_dir";
-	argv_init[3] = "/mnt/ssd/imagenet/raw-data/tmp/";
-	argv_init[4] = "--model_dir";
-	argv_init[5] = "/tmp/lego_imagenet_model";
-	argv_init[6] = "--batch_size";
-	argv_init[7] = "1024";
-#endif
 	/*
 	 * If vNode is configured, which implies GPM is also configured,
 	 * we should ask GPM what our vNode information will be:

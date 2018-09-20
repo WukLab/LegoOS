@@ -169,18 +169,74 @@ static void do_handle_p2m_pcache_miss(struct lego_task_struct *p,
 	tb_set_tx_size(tb, PCACHE_LINE_SIZE);
 }
 
-static void do_combined_flush(void *_msg, struct lego_task_struct *p)
+DEFINE_PROFILE_POINT(handle_flush)
+
+void handle_p2m_flush_one(struct p2m_flush_msg *msg, struct thpool_buffer *tb)
 {
-	struct p2m_pcache_miss_flush_combine_msg *comb_msg = _msg;
-	struct p2m_flush_msg *flush = &comb_msg->flush;
+	pid_t pid;
+	unsigned long user_vaddr, dst_page;
+	int reply, src_nid, ret;
+	struct lego_task_struct *p;
+	PROFILE_POINT_TIME(handle_flush)
+
+	PROFILE_START(handle_flush);
+
+	src_nid = to_common_header(msg)->src_nid;
+	pid = msg->pid;
+	user_vaddr = msg->user_va;
+
+	p = find_lego_task_by_pid(src_nid, pid);
+	if (unlikely(!p)) {
+		reply = -ESRCH;
+		goto out;
+	}
+
+	down_read(&p->mm->mmap_sem);
+	ret = get_user_pages(p, msg->user_va, 1, 0, &dst_page, NULL);
+	up_read(&p->mm->mmap_sem);
+	if (likely(ret == 1)) {
+		memcpy((void *)dst_page, msg->pcacheline, PCACHE_LINE_SIZE);
+		reply = 0;
+	} else
+		reply = -EFAULT;
+
+out:
+	*(int *)thpool_buffer_tx(tb) = reply;
+	tb_set_tx_size(tb, sizeof(int));
+	PROFILE_LEAVE(handle_flush);
+}
+
+/*
+ * Processor counterpart: __pcache_do_fill_page().
+ * Check how we fill the information.
+ */
+static void do_piggyback_flush(void *_msg, unsigned int src_nid,
+			       struct lego_task_struct *fault_task)
+{
+	struct p2m_pcache_miss_flush_combine_msg *pb_msg = _msg;
+	struct p2m_flush_msg *flush_msg = &pb_msg->flush;
+	struct lego_task_struct *flush_task;
 	unsigned long dst_page;
 	int ret;
 
-	down_read(&p->mm->mmap_sem);
-	ret = get_user_pages(p, flush->user_va, 1, 0, &dst_page, NULL);
-	up_read(&p->mm->mmap_sem);
+	if (flush_msg->pid == fault_task->pid)
+		flush_task = fault_task;
+	else {
+		flush_task = find_lego_task_by_pid(src_nid, flush_msg->pid);
+		if (unlikely(!flush_task)) {
+			WARN_ON_ONCE(1);
+			return;
+		}
+	}
+
+	down_read(&flush_task->mm->mmap_sem);
+	ret = get_user_pages(flush_task, flush_msg->user_va, 1, 0, &dst_page, NULL);
+	up_read(&flush_task->mm->mmap_sem);
+
 	if (likely(ret == 1))
-		memcpy((void *)dst_page, flush->pcacheline, PCACHE_LINE_SIZE);
+		memcpy((void *)dst_page, flush_msg->pcacheline, PCACHE_LINE_SIZE);
+	else
+		WARN_ON_ONCE(1);
 }
 
 static int fault_in_kernel_space(unsigned long address)
@@ -222,7 +278,7 @@ void handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg,
 	PROFILE_START(handle_miss);
 	do_handle_p2m_pcache_miss(p, vaddr, flags, tb);
 	if (msg->has_flush_msg)
-		do_combined_flush(msg, p);
+		do_piggyback_flush(msg, src_nid, p);
 	PROFILE_LEAVE(handle_miss);
 
 	handle_pcache_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
@@ -260,41 +316,4 @@ void handle_p2m_zerofill(struct p2m_zerofill_msg *msg,
 
 	handle_zerofill_debug("O nid:%u pid:%u tgid:%u flags:%x vaddr:%#Lx",
 		src_nid, msg->pid, tgid, flags, vaddr);
-}
-
-DEFINE_PROFILE_POINT(handle_flush)
-
-void handle_p2m_flush_one(struct p2m_flush_msg *msg, struct thpool_buffer *tb)
-{
-	pid_t pid;
-	unsigned long user_vaddr, dst_page;
-	int reply, src_nid, ret;
-	struct lego_task_struct *p;
-	PROFILE_POINT_TIME(handle_flush)
-
-	PROFILE_START(handle_flush);
-
-	src_nid = to_common_header(msg)->src_nid;
-	pid = msg->pid;
-	user_vaddr = msg->user_va;
-
-	p = find_lego_task_by_pid(src_nid, pid);
-	if (unlikely(!p)) {
-		reply = -ESRCH;
-		goto out;
-	}
-
-	down_read(&p->mm->mmap_sem);
-	ret = get_user_pages(p, msg->user_va, 1, 0, &dst_page, NULL);
-	up_read(&p->mm->mmap_sem);
-	if (likely(ret == 1)) {
-		memcpy((void *)dst_page, msg->pcacheline, PCACHE_LINE_SIZE);
-		reply = 0;
-	} else
-		reply = -EFAULT;
-
-out:
-	*(int *)thpool_buffer_tx(tb) = reply;
-	tb_set_tx_size(tb, sizeof(int));
-	PROFILE_LEAVE(handle_flush);
 }
