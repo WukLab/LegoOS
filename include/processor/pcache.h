@@ -65,20 +65,6 @@ static inline unsigned long user_vaddr_to_set_index(unsigned long address)
 	return (address & pcache_set_mask) >> nr_bits_cacheline;
 }
 
-static inline void set_pcache_usable(struct pcache_meta *pcm)
-{
-#ifdef CONFIG_DEBUG_PCACHE
-	/* Paranoid being hacker's nice virtue */
-	if (TestSetPcacheUsable(pcm)) {
-		dump_pcache_meta(pcm, "Memory Corruption in Pcache");
-		BUG();
-	}
-#else
-	SetPcacheUsable(pcm);
-	barrier();
-#endif
-}
-
 static inline int trylock_pcache(struct pcache_meta *pcm)
 {
 #ifdef CONFIG_DEBUG_PCACHE
@@ -127,16 +113,6 @@ static inline void unlock_pcache(struct pcache_meta *pcm)
 #else
 	ClearPcacheLocked(pcm);
 #endif
-}
-
-static inline void pcache_reset_flags(struct pcache_meta *pcm)
-{
-	/*
-	 * Once the Allocated bit is 0, this pcache line is returned
-	 * to free pool. prep_new_pcache_meta() will initialize the
-	 * pcm properly at next allocation time.
-	 */
-	smp_store_mb(pcm->bits, 0);
 }
 
 /* refcount helpers */
@@ -676,43 +652,5 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 
 #include <processor/pcache_victim.h>
 #include <processor/pcache_evict.h>
-
-/* pcache alloc hints */
-struct pcache_alloc_hint {
-	struct pcache_set *pset;
-	struct pcache_meta *pcm;
-	unsigned long nr_hit;
-	unsigned long nr_alloc;
-};
-
-extern DEFINE_PER_CPU_SHARED_ALIGNED(struct pcache_alloc_hint, alloc_hints);
-
-/*
- * This is called by eviction routine after it has successfully
- * evicted @pcm, which belongs to @pset.
- */
-static inline void pcache_alloc_update_hint(struct pcache_set *pset,
-					    struct pcache_meta *pcm)
-{
-	struct pcache_alloc_hint *hint = this_cpu_ptr(&alloc_hints);
-
-	hint->pcm = pcm;
-	barrier();
-	hint->pset = pset;
-}
-
-#ifdef CONFIG_COUNTER_PCACHE
-static inline void inc_per_cpu_alloc(struct pcache_alloc_hint *hint)
-{
-	hint->nr_alloc++;
-}
-static inline void inc_per_cpu_alloc_hit(struct pcache_alloc_hint *hint)
-{
-	hint->nr_hit++;
-}
-#else
-static inline void inc_per_cpu_alloc(struct pcache_alloc_hint *hint) { }
-static inline void inc_per_cpu_alloc_hit(struct pcache_alloc_hint *hint) { }
-#endif
 
 #endif /* _LEGO_PROCESSOR_PCACHE_H_ */

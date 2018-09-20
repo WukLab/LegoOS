@@ -15,6 +15,13 @@
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
+/*
+ * XXX
+ *
+ * This code has not been patched for long and broken.
+ * Don't use this.
+ */
+
 struct pcache_meta *evict_find_line_random(struct pcache_set *pset)
 {
 	struct pcache_meta *pcm;

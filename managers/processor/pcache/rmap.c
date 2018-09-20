@@ -59,15 +59,10 @@ static inline struct pcache_rmap *index_to_pcache_rmap(unsigned long index)
 	return &rmap_map[index];
 }
 
-DEFINE_PROFILE_POINT(pcache_rmap_alloc)
-
 static struct pcache_rmap *alloc_pcache_rmap(struct pcache_meta *pcm)
 {
 	struct pcache_rmap *rmap;
 	unsigned long index;
-	PROFILE_POINT_TIME(pcache_rmap_alloc)
-
-	PROFILE_START(pcache_rmap_alloc);
 
 	index = __pcache_meta_index(pcm);
 	rmap = index_to_pcache_rmap(index);
@@ -89,7 +84,6 @@ static struct pcache_rmap *alloc_pcache_rmap(struct pcache_meta *pcm)
 	INIT_LIST_HEAD(&rmap->next);
 
 out:
-	PROFILE_LEAVE(pcache_rmap_alloc);
 	inc_pcache_event(PCACHE_RMAP_ALLOC);
 	return rmap;
 }

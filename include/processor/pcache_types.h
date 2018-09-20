@@ -104,8 +104,11 @@ struct pset_padding {
  * new field needs to be initialized in init_pcache_set_map().
  */
 struct pcache_set {
-	atomic_t		stat[NR_PSET_STAT_ITEMS];
 	unsigned long		flags;
+
+	/* This links all FREE pcache lines within pset */
+	struct list_head	free_head;
+	spinlock_t		free_lock;
 
 	/*
 	 * Eviction Algorithms Specific
@@ -138,6 +141,8 @@ struct pcache_set {
 	struct list_head	eviction_list;
 	atomic_t		nr_eviction_entries;
 #endif
+
+	atomic_t		stat[NR_PSET_STAT_ITEMS];
 } ____cacheline_aligned;
 
 static inline void lock_pset(struct pcache_set *pset)
@@ -182,6 +187,9 @@ struct pcache_meta {
 	unsigned long		bits;
 	atomic_t		mapcount;
 	atomic_t		_refcount;
+
+	/* This is linked to pset free_head */
+	struct list_head	free_list;
 
 	PCM_PADDING(_pad1_)
 	struct list_head	rmap;
@@ -334,9 +342,6 @@ PSET_FLAGS(Sweeping, sweeping)
  * PC_locked:		Pcacheline is locked. DO NOT TOUCH.
  * 			e.g., under rmap operations
  *
- * PC_allocated:	Pcacheline is allocated, but may not be usable (internal)
- * PC_usable:		Pcacheline is usable, for all users (public)
- *
  * PC_valid:		Pcacheline has a valid mapping and content.
  * 			Depends on if there are rmap, thus set/clear by rmap functions.
  * 			Only valid pcache line can be evicted.
@@ -348,35 +353,11 @@ PSET_FLAGS(Sweeping, sweeping)
  *
  * Hack: remember to update the pcacheflag_names array in debug file.
  *
- * Note:
- * 1) pcache allocator use the PC_allocated bit to guard allocation.
- * Once a cache line is selected, the PC_allocated bit is set. However,
- * allocator still needs to perform some initial setup before return to
- * caller. PC_uable is set once all setuo is done, and it means this
- * cache line can be used safely by all code.
- *
- * 2) PC_valid is more like the traditional cache valid bit. It is set when
+ * 1) PC_valid is more like the traditional cache valid bit. It is set when
  * the pcache line has established a valid mapping to user pgtable.
- * 
- * 3) In a pcache's life time, the transition of different states is:
- *
- *        Locked  Allocated  Usable  Valid  Dirty  Writeback
- * Free:
- *        0       0          0       0      0      0
- * Alloc:
- *        0       1          0       0      0      0	(pcache_alloc_fastpath())
- *        0       1          1       0      0      0	( ..set_pcache_usable())
- *        0       1          1       1      0      0	(common_do_fill_page() after pte_set)
- *
- *        0       0          0       0      0      0
- *
- * 4) In theory, eviction algorithm should pick lines with
- * 	Allocated & Usable & Valid bits set.
  */
 enum pcache_meta_bits {
 	PC_locked,
-	PC_allocated,
-	PC_usable,
 	PC_valid,
 	PC_dirty,
 	PC_reclaim,
@@ -451,8 +432,6 @@ static inline int __TestClearPcache##uname(struct pcache_meta *p)\
 	__TEST_CLEAR_BITS(uname, lname)
 
 PCACHE_META_BITS(Locked, locked)
-PCACHE_META_BITS(Allocated, allocated)
-PCACHE_META_BITS(Usable, usable)
 PCACHE_META_BITS(Valid, valid)
 PCACHE_META_BITS(Dirty, dirty)
 PCACHE_META_BITS(Reclaim, reclaim)
@@ -462,7 +441,6 @@ PCACHE_META_BITS(Writeback, writeback)
  * Flags checked when a pcache is freed.
  * Pcache lines being freed should not have these flags set.
  * It they are, there is a problem.
- * Basically, everything except Allocated & Usable
  */
 #define PCACHE_FLAGS_CHECK_AT_FREE				\
 	(1UL << PC_locked | 1UL << PC_valid | 1UL << PC_dirty |	\

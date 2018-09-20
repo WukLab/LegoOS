@@ -90,16 +90,4 @@ void print_pcache_events(void)
 		pr_info("%s: %lu\n", pcache_event_text[i],
 			atomic_long_read(&pcache_event_stats.event[i]));
 	}
-
-	for_each_online_cpu(i) {
-		struct pcache_alloc_hint *hint;
-		u64 p_i = 0, p_re = 0;
-
-		hint = per_cpu_ptr(&alloc_hints, i);
-
-		if (hint->nr_alloc)
-			p_i = div64_u64_rem(hint->nr_hit * 100UL, hint->nr_alloc, &p_re);
-		pr_info("alloc_hint_cpu%2d: %2Lu%% %lu/%lu\n",
-			i, p_i, hint->nr_hit, hint->nr_alloc);
-	}
 }

@@ -34,16 +34,11 @@ index_to_pee(unsigned long index)
 	return &pset_eviction_entry_map[index];
 }
 
-DEFINE_PROFILE_POINT(pcache_pee_alloc)
-
 static inline struct pset_eviction_entry *
 alloc_pset_eviction_entry(struct pcache_meta *pcm)
 {
 	struct pset_eviction_entry *pee;
 	unsigned long index;
-	PROFILE_POINT_TIME(pcache_pee_alloc)
-
-	PROFILE_START(pcache_pee_alloc);
 
 	index = __pcache_meta_index(pcm);
 	pee = index_to_pee(index);
@@ -59,7 +54,6 @@ alloc_pset_eviction_entry(struct pcache_meta *pcm)
 
 	INIT_LIST_HEAD(&pee->next);
 out:
-	PROFILE_LEAVE(pcache_pee_alloc);
 	inc_pcache_event(PCACHE_PEE_ALLOC);
 	return pee;
 }

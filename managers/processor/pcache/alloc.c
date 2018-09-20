@@ -20,8 +20,6 @@
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
-DEFINE_PER_CPU_SHARED_ALIGNED(struct pcache_alloc_hint, alloc_hints);
-
 /**
  * sysctl_pcache_alloc_timeout_sec
  *
@@ -59,13 +57,6 @@ static void pcache_free_check_bad(struct pcache_meta *pcm)
 	bad_reason = NULL;
 	bad_flags = 0;
 
-	/* This is more critical bug */
-	if (unlikely(!PcacheAllocated(pcm) || !PcacheUsable(pcm))) {
-		bad_reason = "double free";
-		bad_pcache(pcm, bad_reason, bad_flags);
-		return;
-	}
-
 	if (unlikely(atomic_read(&pcm->mapcount) != 0))
 		bad_reason = "nonzero mapcount";
 	if (unlikely(pcache_ref_count(pcm) != 0))
@@ -80,10 +71,6 @@ static void pcache_free_check_bad(struct pcache_meta *pcm)
 static inline bool pcache_expected_state(struct pcache_meta *pcm,
 					 unsigned long check_flags)
 {
-	/* Flags MUST be set */
-	if (unlikely(!PcacheAllocated(pcm) || !PcacheUsable(pcm)))
-		return false;
-
 	/* which implies p->rmap list is empty */
 	if (unlikely(atomic_read(&pcm->mapcount) != 0))
 		return false;
@@ -105,11 +92,37 @@ static inline void pcache_free_check(struct pcache_meta *pcm)
 	pcache_free_check_bad(pcm);
 }
 
-/* Called by sweep function that has lru removed already */
+static inline void
+__enqueue_free_list_head(struct pcache_meta *pcm, struct pcache_set *pset)
+{
+	list_add(&pcm->free_list, &pset->free_head);
+}
+
+static inline struct pcache_meta *
+__dequeue_free_list_head(struct pcache_set *pset)
+{
+	struct pcache_meta *pcm;
+
+	pcm = list_first_entry(&pset->free_head, struct pcache_meta, free_list);
+	list_del(&pcm->free_list);
+	return pcm;
+}
+
+/*
+ * This is the ultimate free function.
+ * At the time of calling, @pcm has been removed from LRU list.
+ */
 void __put_pcache_nolru(struct pcache_meta *pcm)
 {
+	struct pcache_set *pset;
+
 	pcache_free_check(pcm);
-	pcache_reset_flags(pcm);
+
+	pset = pcache_meta_to_pcache_set(pcm);
+	spin_lock(&pset->free_lock);
+	__enqueue_free_list_head(pcm, pset);
+	spin_unlock(&pset->free_lock);
+
 	dec_pcache_used();
 }
 
@@ -123,8 +136,14 @@ void __put_pcache(struct pcache_meta *pcm)
 	__put_pcache_nolru(pcm);
 }
 
+static inline void pcache_reset_flags(struct pcache_meta *pcm)
+{
+	smp_store_mb(pcm->bits, 0);
+}
+
 static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
 {
+	pcache_reset_flags(pcm);
 	INIT_LIST_HEAD(&pcm->rmap);
 	init_pcache_lru(pcm);
 
@@ -136,46 +155,23 @@ static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
 	init_pcache_ref_count(pcm);
 }
 
-/*
- * Fastpath: try to allocate a pcache line from @pset.
- * If succeed, the line is initialized upon return.
- */
-static inline struct pcache_meta *
-pcache_alloc_fastpath(struct pcache_set *pset)
+/* Try to grab one from pset free list */
+static inline struct pcache_meta * pcache_alloc_fastpath(struct pcache_set *pset)
 {
-	int way;
 	struct pcache_meta *pcm;
-	struct pcache_alloc_hint *hint;
 
-	hint = this_cpu_ptr(&alloc_hints);
-	inc_per_cpu_alloc(hint);
-	if (likely(hint->pset == pset)) {
-		pcm = hint->pcm;
-		if (likely(!TestSetPcacheAllocated(pcm))) {
-			inc_per_cpu_alloc_hit(hint);
-			goto prep;
-		}
+	spin_lock(&pset->free_lock);
+	if (list_empty(&pset->free_head)) {
+		spin_unlock(&pset->free_lock);
+		return NULL;
 	}
+	pcm = __dequeue_free_list_head(pset);
+	spin_unlock(&pset->free_lock);
 
-	/*
-	 * Walk through the pset. This is only efficient
-	 * if you have small associativity.
-	 */
-	pcache_for_each_way_set(pcm, pset, way) {
-		if (likely(!TestSetPcacheAllocated(pcm)))
-			goto prep;
-	}
-	return NULL;
-
-prep:
+	/* Prepare the newborn */
 	prep_new_pcache_meta(pcm);
 	add_to_lru_list(pcm, pset);
 
-	/*
-	 * Make the pcache line visible to other
-	 * pcache subsystems:
-	 */
-	set_pcache_usable(pcm);
 	inc_pcache_used();
 	return pcm;
 }
@@ -189,8 +185,7 @@ DEFINE_PROFILE_POINT(pcache_alloc_fastpath)
  * @address: user virtual address
  *
  * This function will try to allocate a cacheline from the set that @address
- * belongs to. On success, the returned @pcm has PcaheAllocated set, refcount 1,
- * and mapcount 0.
+ * belongs to. On success, the returned @pcm has refcount 1, and mapcount 0.
  *
  * Profile Points:
  *

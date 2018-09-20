@@ -242,9 +242,6 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	__ClearPcacheLocked(pcm);
 	__put_pcache_nolru(pcm);
 
-	/* Update the per-cpu allocation hint */
-	pcache_alloc_update_hint(pset, pcm);
-
 	inc_pset_event(pset, PSET_EVICTION);
 	inc_pcache_event(PCACHE_EVICTION_SUCCEED);
 	return PCACHE_EVICT_SUCCEED;

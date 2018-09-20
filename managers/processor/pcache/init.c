@@ -146,25 +146,38 @@ void __init pcache_early_init(void)
 	victim_cache_early_init();
 }
 
+static void __init init_pcache_set_free_list(void)
+{
+	struct pcache_set *pset;
+	struct pcache_meta *pcm;
+	int setidx, way;
+
+	pcache_for_each_set(pset, setidx) {
+		pcache_for_each_way_set(pcm, pset, way) {
+			list_add_tail(&pcm->free_list, &pset->free_head);
+		}
+	}
+}
+
 /* Init pcache_set array */
-static void init_pcache_set_map(void)
+static void __init init_pcache_set_map(void)
 {
 	struct pcache_set *pset;
 	int setidx, j;
 
 	pcache_for_each_set(pset, setidx) {
-		/*
-		 * Eviction Algorithm Specific
-		 */
+		/* Head of free pcache line */
+		INIT_LIST_HEAD(&pset->free_head);
+		spin_lock_init(&pset->free_lock);
+
+		/* Eviction Algorithm Specific */
 #ifdef CONFIG_PCACHE_EVICT_LRU
 		INIT_LIST_HEAD(&pset->lru_list);
 		spin_lock_init(&pset->lru_lock);
 		atomic_set(&pset->nr_lru, 0);
 #endif
 
-		/*
-		 * Eviction Mechanism Specific
-		 */
+		/* Eviction Mechanism Specific */
 #ifdef CONFIG_PCACHE_EVICTION_VICTIM
 		atomic_set(&pset->nr_victims, 0);
 #elif defined(CONFIG_PCACHE_EVICTION_PERSET_LIST)
@@ -179,13 +192,14 @@ static void init_pcache_set_map(void)
 }
 
 /* Init pcache_meta array */
-static void init_pcache_meta_map(void)
+static void __init init_pcache_meta_map(void)
 {
 	struct pcache_meta *pcm;
 	int nr;
 
 	pcache_for_each_way(pcm, nr) {
-		pcache_reset_flags(pcm);
+		pcm->bits = 0;
+		INIT_LIST_HEAD(&pcm->free_list);
 		INIT_LIST_HEAD(&pcm->rmap);
 		pcache_mapcount_reset(pcm);
 		pcache_ref_count_set(pcm, 0);
@@ -224,9 +238,14 @@ void __init pcache_post_init(void)
 	memset((void *)virt_start_cacheline, 0, pcache_registered_size);
 
 	pcache_meta_map = (struct pcache_meta *)(virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE);
-	init_pcache_meta_map();
 
+	/*
+	 * Init our most important data structures
+	 * and free all pcache lines into their set free list
+	 */
+	init_pcache_meta_map();
 	init_pcache_set_map();
+	init_pcache_set_free_list();
 
 	init_pcache_clflush_buffer();
 
