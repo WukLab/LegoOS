@@ -15,6 +15,8 @@
 /* lock to protect pgcache hashtable struct */
 static DEFINE_SPINLOCK(pgcache_hash_lock);
 static DEFINE_HASHTABLE(pgcache_hash, PGCACHE_HASH_BITS);
+static unsigned int lookups = 0;
+static unsigned int walks = 0;
 
 static unsigned int BKDRHash(char *str)
 {
@@ -38,14 +40,17 @@ static unsigned int get_key(char *filename, loff_t _aligned_pos)
 
 	key = BKDRHash(filename);
 	key += (_aligned_pos) >> (PAGE_SHIFT + PGCACHE_PREFETCH_ORDER);
-	
+
 	return key;
 }
 
-
+/*
+ * when this func is invoked, the caller is responsible to do sanity
+ * check if pgc is already exist, we avoid reductant check here
+ * for performance reasons
+ */
 int ht_insert_lego_pgcache_struct(struct lego_pgcache_struct *pgc)
 {
-	struct lego_pgcache_struct *p;
 	unsigned int key;
 
 	BUG_ON(!pgc || strlen(pgc->filepath) == 0);
@@ -56,13 +61,6 @@ int ht_insert_lego_pgcache_struct(struct lego_pgcache_struct *pgc)
 	key = get_key(pgc->filepath, pgc->pos);
 
 	spin_lock(&pgcache_hash_lock);
-	hash_for_each_possible(pgcache_hash, p, link, key) {
-		if (unlikely(p->pos == pgc->pos &&
-			strcmp(p->filepath, pgc->filepath) == 0)) {
-			spin_unlock(&pgcache_hash_lock);
-			return -EEXIST;
-		}
-	}
 	hash_add(pgcache_hash, &pgc->link, key);
 	spin_unlock(&pgcache_hash_lock);
 
@@ -116,9 +114,11 @@ struct lego_pgcache_struct *
 
 	_aligned_pos = aligned_pos(pos);
 	key = get_key(filepath, _aligned_pos);
-	
+
 	spin_lock(&pgcache_hash_lock);
+	lookups++;
 	hash_for_each_possible(pgcache_hash, pgc, link, key) {
+		walks++;
 		if (likely(pgc->pos == _aligned_pos &&
 			strcmp(pgc->filepath, filepath) == 0)) {
 			spin_unlock(&pgcache_hash_lock);
@@ -132,4 +132,32 @@ struct lego_pgcache_struct *
 	spin_unlock(&pgcache_hash_lock);
 
 	return NULL;
+}
+
+int drop_pgcache(void)
+{
+	int bkt;
+	struct lego_pgcache_struct *pgc;
+	struct hlist_node *tmp;
+
+	spin_lock(&pgcache_hash_lock);
+	pr_info("lookups = %u, walks = %u\n", lookups, walks);
+	hash_for_each_safe(pgcache_hash, bkt, tmp, pgc, link) {
+		hash_del(&pgc->link);
+
+		/*
+		 * free lines one by one
+		 */
+		__free_pgcache_struct(pgc);
+	}
+	lookups = 0;
+	walks = 0;
+	spin_unlock(&pgcache_hash_lock);
+
+	if (likely(hash_empty(pgcache_hash))) {
+		pr_info("Successfully drop lego pgcache.\n");
+	} else {
+		pr_warn("Lego pgcache is not dropped entirely");
+	}
+	return 0;
 }

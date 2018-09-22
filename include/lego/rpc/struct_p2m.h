@@ -275,7 +275,7 @@ struct p2m_brk_struct {
 	__u64	brk;
 };
 struct p2m_brk_reply_struct {
-	__u64 	ret_brk;
+	__u64	ret_brk;
 #ifdef CONFIG_DISTRIBUTED_VMA
 	struct vmr_map_reply map;
 #endif
@@ -302,12 +302,15 @@ int handle_p2m_msync(struct p2m_msync_struct *, u64, struct common_header *, voi
  */
 int handle_p2m_checkpint(void *, u64, struct common_header *);
 
+void handle_p2m_drop_page_cache(struct common_header *hdr, struct thpool_buffer *tb);
+
 #ifdef CONFIG_MEM_PAGE_CACHE
 struct p2m_lseek_struct {
 	char filename[MAX_FILENAME_LENGTH];
 	__u32 storage_node;
 };
-int handle_p2m_lseek(struct p2m_lseek_struct*, u64, struct common_header *);
+int handle_p2m_lseek(struct p2m_lseek_struct *payload,
+		     struct common_header *hdr, struct thpool_buffer *tb);
 
 struct p2m_rename_struct {
 	char oldname[MAX_FILENAME_LENGTH];
@@ -315,14 +318,21 @@ struct p2m_rename_struct {
 	__u32 storage_node;
 };
 
-int handle_p2m_rename(struct p2m_rename_struct *, u64,struct common_header *);
+int handle_p2m_rename(struct p2m_rename_struct *payload,
+		      struct common_header *hdr, struct thpool_buffer *tb);
 
 struct p2m_stat_struct {
 	char filename[MAX_FILENAME_LENGTH];
 	int flag;
 	__u32 storage_node;
 };
-int handle_p2m_stat(struct p2m_stat_struct *, u64, struct common_header *);
+int handle_p2m_stat(struct p2m_stat_struct *payload,
+		    struct common_header *hdr, struct thpool_buffer *tb);
 #endif /* CONFIG_MEM_PAGE_CACHE */
+
+struct p2m_fsync_struct {
+	char filename[MAX_FILENAME_LENGTH];
+	__u32 storage_node;
+};
 
 #endif /* _LEGO_RPC_STRUCT_P2M_H */

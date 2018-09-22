@@ -24,7 +24,7 @@ static LIST_HEAD(lirs_stack_s); /* list of stack s of access history */
 static LIST_HEAD(lirs_stack_q); /* list of stack q of victim candidate */
 
 #define IN_QUEUE(pgc, member)					\
-((pgc->member.next != &pgc->member) 				\
+((pgc->member.next != &pgc->member)				\
 	&& (pgc->member.prev != &pgc->member))
 
 /* When accessing a page cacheline, the cacheline is moved to list tail of stack s
@@ -74,7 +74,7 @@ retry:
 	s_bottom = head_entry(s_bottom, &lirs_stack_s, stack_s);
 	if (!HIR(s_bottom))
 		return;
-	
+
 	list_del_init(&s_bottom->stack_s);
 	//INIT_LIST_HEAD(&s_bottom->stack_s);
 	/* TODO:
@@ -90,14 +90,14 @@ void pgcache_evict_one(void)
 
 	victim = head_entry(victim, &lirs_stack_q, stack_q);
 
-	pgcache_debug("victim: %p, filepath: %s, pos: %Lx", 		\
+	pgcache_debug("victim: %p, filepath: %s, pos: %Lx",		\
 		victim, victim->filepath, victim->pos);
-	
+
 	/* flush the dirty cacheline */
 	make_lego_pgcache_clean(victim);
 
 	/* free the cached pages
-	 * remove from pgcache HIRS stack Q 
+	 * remove from pgcache HIRS stack Q
 	 * the victim still marked as HIR in
 	 * Stack S before accessed or cut
 	 */
@@ -110,7 +110,7 @@ void update_lirs_structure(struct lego_pgcache_struct *pgc)
 	struct lego_pgcache_struct *cur_bottom_s;
 
 	spin_lock(&pgcache_lirs_lock);
-	
+
 	/* page blocks that are not in stack S now
 	 */
 	if (!IN_QUEUE(pgc, stack_s)) {
@@ -154,7 +154,7 @@ void update_lirs_structure(struct lego_pgcache_struct *pgc)
 		/* mark current cacheline as LIR */
 		set_pgcache_lir(pgc);
 		move_to_stack_s_top_locked(pgc);
-		
+
 		/* premote another LIR cacheline to HIR */
 		cur_bottom_s = head_entry(pgc, &lirs_stack_s, stack_s);
 		set_pgcache_hir(cur_bottom_s);
@@ -163,7 +163,7 @@ void update_lirs_structure(struct lego_pgcache_struct *pgc)
 
 		cut_stack_s_bottom();
 		goto eviction;
-	} 
+	}
 
 	/* accessing an LIR page, just move to stack S top
 	 * no need for eviction

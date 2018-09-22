@@ -61,6 +61,7 @@
 62	common	kill			sys_kill
 63	common	uname			sys_newuname
 72	common	fcntl			sys_fcntl
+74	common	fsync			sys_fsync
 76	common	truncate		sys_truncate
 77	common	ftruncate		sys_ftruncate
 78	common	getdents		sys_getdents
@@ -123,3 +124,4 @@
 #
 600	common	checkpoint_process	sys_checkpoint_process
 601	common	pcache_stat		sys_pcache_stat
+611	common	drop_page_cache		sys_drop_page_cache

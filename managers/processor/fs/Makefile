@@ -15,6 +15,7 @@ obj-y += statfs.o
 obj-y += pipe.o
 obj-y += lseek.o
 obj-y += default_f_ops.o
+obj-y += drop_cache.o
 
 #
 # To maintain compability with linux

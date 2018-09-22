@@ -196,17 +196,24 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 		handle_p2m_write(payload, hdr, buffer);
 		break;
 
+	case P2M_DROP_CACHE:
+		handle_p2m_drop_page_cache(hdr, buffer);
+		break;
+
 #ifdef CONFIG_MEM_PAGE_CACHE
 	case P2M_LSEEK:
-		handle_p2m_lseek(payload, desc, hdr);
+		handle_p2m_lseek(payload, hdr, buffer);
 		break;
 
 	case P2M_RENAME:
-		handle_p2m_rename(payload, desc, hdr);
+		handle_p2m_rename(payload, hdr, buffer);
 		break;
 
 	case P2M_STAT:
-		handle_p2m_stat(payload, desc, hdr);
+		handle_p2m_stat(payload, hdr, buffer);
+		break;
+	case P2M_FSYNC:
+		handle_p2m_fsync(payload, hdr, buffer);
 		break;
 #endif
 

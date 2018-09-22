@@ -42,6 +42,10 @@ static void handle_bad_request(u32 opcode, uintptr_t desc)
 	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
 }
 
+#ifdef STORAGE_BYPASS_PAGE_CACHE
+static char __user *ubuf;
+#endif
+
 static void storage_dispatch(void *msg, uintptr_t desc)
 {
 	u32 *opcode;
@@ -196,20 +200,33 @@ static int storage_manager(void *unused)
 		storage_dispatch(msg, desc);
 		clear_in_handler();
 	}
-	return 0;	
+	return 0;
 }
 
+/*
+ * If STORAGE_BYPASS_PAGE_CACHE is enabled, we need to have the user
+ * context to do mmap. That means we have use the current insmod thread
+ * to do so. That further means the insmod thread will never return...
+ *
+ * For non-storage-intensive workload, you can disable this.
+ */
 static int __init init_storage_server(void)
 {
+	int ret = 0;
+#ifndef STORAGE_BYPASS_PAGE_CACHE
 	struct task_struct *tsk;
-	int ret;
 
 	tsk = kthread_run(storage_manager, NULL, "lego-storaged");
 	if (IS_ERR(tsk)) {
 		pr_err("ERROR: Fail to create lego_storaged\n");
 		return PTR_ERR(tsk);
 	}
-
+#else
+	unsigned long populate;
+	ubuf = (char __user *)do_mmap_pgoff(NULL, 0, MAX_RXBUF_SIZE,
+			PROT_READ | PROT_WRITE, MAP_SHARED, 0, &populate);
+	storage_manager(NULL);
+#endif
 	ret = init_self_monitor();
 	return ret;
 }

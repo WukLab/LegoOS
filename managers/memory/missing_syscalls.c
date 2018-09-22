@@ -274,3 +274,13 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 {
 	BUG();
 }
+
+SYSCALL_DEFINE0(drop_page_cache)
+{
+	BUG();
+}
+
+SYSCALL_DEFINE1(fsync, unsigned int, fd)
+{
+	BUG();
+}

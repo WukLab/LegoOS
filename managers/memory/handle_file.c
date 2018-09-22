@@ -131,3 +131,17 @@ int handle_p2m_close(struct p2m_close_struct *payload, u64 desc,
 	WARN_ON(1);
 	return 0;
 }
+
+void handle_p2m_drop_page_cache(struct common_header *hdr, struct thpool_buffer *tb)
+{
+	int *retval;
+
+	retval = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*retval));
+
+#ifndef CONFIG_MEM_PAGE_CACHE
+	*retval = -EIO;
+#else
+	*retval = drop_pgcache();
+#endif
+}

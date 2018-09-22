@@ -13,6 +13,21 @@
 #include <linux/sched.h>
 #include <linux/security.h>
 
+#ifdef STORAGE_BYPASS_PAGE_CACHE
+#define ROUND_DOWN_PAGE(x)	(x & PAGE_MASK)
+#define UP_ALIGN_PAGE(x)	(ROUND_DOWN_PAGE(x) + PAGE_SIZE)
+#define IS_PAGE_ALIGNED(x)	(x % PAGE_SIZE)
+
+static inline unsigned long chunk_size(size_t len, loff_t pos)
+{
+	loff_t end;
+	unsigned long ret;
+	end = pos + len;
+	ret = ROUND_DOWN_PAGE(end) - ROUND_DOWN_PAGE(pos) + PAGE_SIZE;
+	return ret;
+}
+#endif /* STORAGE_BYPASS_PAGE_CACHE */
+
 /* ------------------------------------------
  * local_file_open
  *
@@ -20,7 +35,7 @@
  * request parameter. Depedning upon the flags,
  * local_file_open might create a new one if it is not present
  * or through an error back
- * local_file_open has more differences with others since when 
+ * local_file_open has more differences with others since when
  * O_CREAT is set, global metadata needs to be updated.
  *
  * -----------------------------------------
@@ -29,13 +44,17 @@ struct file *local_file_open (request *rq) {
 
 	struct file *filp;
 
+#ifndef STORAGE_BYPASS_PAGE_CACHE
 	filp = filp_open(rq->fileName, rq->flags | O_LARGEFILE, 0755);
+#else
+	filp = filp_open(rq->fileName, rq->flags | O_DIRECT | O_LARGEFILE, 0755);
+#endif
 	if(IS_ERR(filp)){
 		printk("local_file_open : Cannot open required file [%s].\n", rq->fileName);
 	}
 
 	//printk("local_file_open : Open file [%s] success.\n", rq->fileName);
-	return filp; 
+	return filp;
 
 }
 
@@ -64,15 +83,52 @@ int local_file_close(struct file *filp){
  * structure. Returns back SUCCESS or FAILURE of the operation
  * -----------------------------------------
 */
-
-ssize_t local_file_write(struct file *file, const char __user *buf, ssize_t len, loff_t *pos){
-	//printk("local_file_write : Called\n");
+ssize_t local_file_write(struct file *file, const char __user *buf,
+			 ssize_t len, loff_t *pos)
+{
 	ssize_t ret;
 	mm_segment_t old_fs;
+
+#ifdef STORAGE_BYPASS_PAGE_CACHE
+	loff_t aligned_pos, chkoff, end;
+	size_t curr_i_size, chksize;
+
+	BUG_ON(!file->f_inode);
+	chksize = chunk_size(len, *pos);
+	chkoff = (*pos) % PAGE_SIZE;
+	curr_i_size = i_size_read(file->f_inode);
+	aligned_pos = ROUND_DOWN_PAGE(*pos);
+	end = (*pos) + len;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	if (unlikely(chkoff)) {
+		loff_t out = aligned_pos;
+		ret = file->f_op->read(file, ubuf, chksize, &out);
+		if (unlikely(ret < 0)) {
+			pr_warn("Fail to transfer out block before write.\n");
+			return ret;
+		}
+	}
+
+	copy_to_user(ubuf + chkoff, buf, len);
+	ret = file->f_op->write(file, ubuf, chksize, &aligned_pos);
+
+	if (unlikely(ret < 0)) {
+		pr_warn("Fail to perform directIO write");
+		return ret;
+	}
+
+	ret = len;
+	if (unlikely(!IS_PAGE_ALIGNED(end) && end > curr_i_size))
+		vfs_truncate(&file->f_path, end);
+#else
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	ret = file->f_op->write(file, buf, len, pos);
 	set_fs(old_fs);
+#endif
 	return ret;
 }
 
@@ -85,14 +141,39 @@ ssize_t local_file_write(struct file *file, const char __user *buf, ssize_t len,
  * -----------------------------------------
 */
 
-ssize_t local_file_read(struct file *file, char __user *buf, ssize_t len, loff_t *pos){
-	//printk("local_file_read : Called\n");
+ssize_t local_file_read(struct file *file, char __user *buf, ssize_t len, loff_t *pos)
+{
 	ssize_t ret;
 	mm_segment_t old_fs;
+
+#ifdef STORAGE_BYPASS_PAGE_CACHE
+	loff_t aligned_pos, chkoff, end;
+	size_t curr_i_size, chksize;
+
+	BUG_ON(!file->f_inode);
+	chksize = chunk_size(len, *pos);
+	chkoff = (*pos) % PAGE_SIZE;
+	curr_i_size = i_size_read(file->f_inode);
+	aligned_pos = ROUND_DOWN_PAGE(*pos);
+	end = (*pos) + len;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	ret = file->f_op->read(file, ubuf, chksize, &aligned_pos);
+	set_fs(old_fs);
+	if (unlikely(ret + aligned_pos < end)) {
+		ret = ret - chkoff;
+	} else {
+		ret = len;
+	}
+	copy_from_user(buf, ubuf + chkoff, ret);
+#else
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	ret = file->f_op->read(file, buf, len, pos);
 	set_fs(old_fs);
+#endif
 	return ret;
 }
 
@@ -350,7 +431,7 @@ static int filldir(void * __buf, const char * name, int namlen, loff_t offset,
 	return 0;
 }
 
-/* 
+/*
  * port from linux fs/readdir.c
  * @pathname: full pathname of directory to be read
  * @dirent: kernel buffer to hold linux_dirent struct
@@ -463,7 +544,7 @@ retry:
 	error = -EXDEV;
 	if (old_path.mnt != new_path.mnt)
 		goto out_dput;
-	
+
 	error = vfs_link(old_path.dentry, new_path.dentry->d_inode, new_dentry);
 	//error = vfs_link(old_path.dentry, new_path.dentry->d_inode, new_dentry, NULL);
 out_dput:

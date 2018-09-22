@@ -77,7 +77,7 @@ struct p2s_getdents_retval_struct {
 
 struct p2s_readlink_struct {
 	char filename[MAX_FILENAME_LENGTH];
-	int bufsiz;	
+	int bufsiz;
 };
 
 struct p2s_rename_struct {

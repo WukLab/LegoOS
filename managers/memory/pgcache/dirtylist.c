@@ -36,15 +36,15 @@ struct lego_pgcache_file *lego_pgcache_file_open(char *filepath,
 {
 	struct lego_pgcache_file *file;
 	ssize_t tmp_file_size;
-	
+
 	file = kzalloc(sizeof(*file), GFP_KERNEL);
 	if (unlikely(!file)) {
-		return ERR_PTR(-ENOMEM);	
+		return ERR_PTR(-ENOMEM);
 	}
 
 	strcpy(file->filepath, filepath);
 	file->storage_node = storage_node;
-	
+
 	tmp_file_size = get_file_size_from_storage(filepath, storage_node);
 	if (likely(tmp_file_size >= 0))
 		file->f_size = tmp_file_size;
@@ -100,7 +100,7 @@ void free_lego_pgcache_file(struct lego_pgcache_file *file)
 	spin_lock(&hash_dirtylists_lock);
 	hash_for_each_possible(hash_dirtylists, p, hlink, key) {
 		if (likely(strcmp(p->filepath, file->filepath) == 0)) {
-			
+
 			hash_del(&p->hlink);
 			kfree(p);
 			spin_unlock(&hash_dirtylists_lock);
@@ -121,7 +121,7 @@ struct lego_pgcache_file *find_lego_pgcache_file(char *filepath)
 		return NULL;
 
 	key = get_key(filepath);
-	
+
 	spin_lock(&hash_dirtylists_lock);
 	hash_for_each_possible(hash_dirtylists, file, hlink, key) {
 		if (likely(strcmp(file->filepath, filepath) == 0)) {
@@ -163,8 +163,8 @@ void mark_lego_pgcache_dirty(struct lego_pgcache_struct *pgc,
 	return;
 }
 
-/* 
- * make one lego pgcache line clean, flush on dirty 
+/*
+ * make one lego pgcache line clean, flush on dirty
  * should be call on eviction
  */
 void make_lego_pgcache_clean(struct lego_pgcache_struct *pgc)
@@ -179,7 +179,7 @@ void make_lego_pgcache_clean(struct lego_pgcache_struct *pgc)
 
 	file = find_lego_pgcache_file(pgc->filepath);
 	BUG_ON(!file);
-	
+
 	spin_lock(&file->dirtylist_lock);
 
 	/* check again */
@@ -200,7 +200,7 @@ void make_lego_pgcache_clean(struct lego_pgcache_struct *pgc)
 int pgcache_flush_file(struct lego_pgcache_file *file)
 {
 	struct lego_pgcache_struct *pos;
-	
+
 	spin_lock(&file->dirtylist_lock);
 	while(!list_empty(&file->head)) {
 		pos = list_entry(file->head.next,
@@ -221,24 +221,29 @@ int pgcache_flush_file(struct lego_pgcache_file *file)
 	return 0;
 }
 
-int handle_p2s_fsync(char *payload, u64 desc, struct common_header *hdr)
+struct p2m_fsync_reply {
+	long		retval;
+};
+
+int handle_p2m_fsync(char *payload, struct common_header *hdr, struct thpool_buffer *tb)
 {
 	char *filepath = payload;
-	int ret;
+	struct p2m_fsync_reply *retbuf;
 	struct lego_pgcache_file *file;
 
 	pgcache_debug("filepath: %s", filepath);
 
+	retbuf = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*retbuf));
 	file = find_lego_pgcache_file(filepath);
 
 	/* not accessed yet */
 	if (!file) {
-		ret = 0;
+		retbuf->retval = 0;
 		goto out;
 	}
-	
-	ret = pgcache_flush_file(file);
+
+	retbuf->retval = pgcache_flush_file(file);
 out:
-	ibapi_reply_message(&ret, sizeof(int), desc);
-	return ret;
+	return retbuf->retval;
 }

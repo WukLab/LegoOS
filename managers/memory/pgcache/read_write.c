@@ -82,7 +82,7 @@ ssize_t flush_one_cacheline_locked(struct lego_pgcache_struct *pgc)
 	void *msg, *content;
 	ssize_t retval;
 	struct m2s_read_write_payload *payload;
-	
+
 	len_msg = sizeof(*opcode) + sizeof(*payload) + pgc->real_len;
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (!msg)
@@ -114,7 +114,7 @@ static unsigned int __nr_cachelines(loff_t pos, size_t count)
 	unsigned int nr_cachelines, cl_size;
 	loff_t start, end;
 	loff_t _aligned_start, _aligned_end;
-	
+
 	start = pos;
 	end = pos + count - 1;
 	_aligned_start = aligned_pos(start);
@@ -136,7 +136,7 @@ prepare_cacheline(struct lego_pgcache_file *file, loff_t pos, ssize_t *retval)
 {
 	struct lego_pgcache_struct *pgc;
 	char *f_name = file->filepath;
-	
+
 	pgc = find_lego_pgcache_struct(f_name, pos);
 	if (!pgc) {
 		pgc = __alloc_pgcache(f_name, pos, file->storage_node);
@@ -156,7 +156,43 @@ prepare_cacheline(struct lego_pgcache_file *file, loff_t pos, ssize_t *retval)
 			PGCACHE_PREFETCH_ORDER);
 		*retval = pgcache_load(f_name, pgc);
 	}
-		
+
+	pgcache_debug("f_name: %s, cacheline:%p", f_name, pgc->cached_pages);
+
+	return pgc;
+}
+
+/*
+ * paper one cacheline without loading
+ * allow to do so if pos is cacheline aligned, and size = cacheline_size
+ */
+static struct lego_pgcache_struct *
+prepare_cacheline_fast(struct lego_pgcache_file *file, loff_t pos, ssize_t *retval)
+{
+	struct lego_pgcache_struct *pgc;
+	char *f_name = file->filepath;
+
+	printk_once("%s()\n", __func__);
+	pgc = find_lego_pgcache_struct(f_name, pos);
+	if (!pgc) {
+		pgc = __alloc_pgcache(f_name, pos, file->storage_node);
+		if (unlikely(!pgc))
+			return NULL;
+
+		pgcache_debug("alloc cachedline fast: %p", pgc->cached_pages);
+
+		*retval = CL_SIZE;
+		ht_insert_lego_pgcache_struct(pgc);
+		return pgc;
+	}
+
+	/* no-residental HIR pages */
+	if (!pgc->cached_pages) {
+		pgc->cached_pages = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,	\
+			PGCACHE_PREFETCH_ORDER);
+		*retval = CL_SIZE;
+	}
+
 	pgcache_debug("f_name: %s, cacheline:%p", f_name, pgc->cached_pages);
 
 	return pgc;
@@ -211,12 +247,12 @@ ssize_t __read_from_one_cacheline(struct lego_task_struct *tsk,
 	if (unlikely(!pgc))
 		return __storage_read(tsk, f_name, buf, count, pos);
 
-	
+
 	pgcache_debug("pgcache vaddr: %p, content: [%s]", pgc->cached_pages + ckoff,
 			(char *) pgc->cached_pages + ckoff);
 
 
-	/* 
+	/*
 	 * comment: currently reader does not grab lock, since in memory component
 	 * all read/write are handled by one thread, and actually there is no race condition
 	 * on concurrent read/write, if we decided one-thread model, later all page cache locks
@@ -229,7 +265,7 @@ ssize_t __read_from_one_cacheline(struct lego_task_struct *tsk,
 	return len;
 }
 
-/* 
+/*
  * This function is barely called
  */
 ssize_t __read_from_two_cachelines(struct lego_task_struct *tsk,
@@ -284,12 +320,12 @@ ssize_t __read_from_two_cachelines(struct lego_task_struct *tsk,
 		}
 		retval += pgc2->real_len;
 	}
-	
+
 out:
 	return retval;
 }
 
-/* 
+/*
  * lego_pgcache_read: load from storage side, perform pgcache read
  * caller: handle_p2m_read
  * @tsk: legacy, not useful, handle_p2m_read pass NULL
@@ -329,7 +365,7 @@ ssize_t lego_pgcache_read(struct lego_task_struct *tsk, char *f_name,
 
 /* Write operations */
 
-ssize_t __write_to_one_cacheline(struct lego_task_struct *tsk, 
+ssize_t __write_to_one_cacheline(struct lego_task_struct *tsk,
 	struct lego_pgcache_file *file, char __user *buf, size_t count, loff_t *pos)
 {
 	struct lego_pgcache_struct *pgc;
@@ -337,7 +373,10 @@ ssize_t __write_to_one_cacheline(struct lego_task_struct *tsk,
 	ssize_t retval;
 	char *f_name = file->filepath;
 
-	pgc = prepare_cacheline(file, *pos, &retval);
+	if (likely((*pos) % CL_SIZE == 0 && count == CL_SIZE))
+		pgc = prepare_cacheline_fast(file, *pos, &retval);
+	else
+		pgc = prepare_cacheline(file, *pos, &retval);
 	ckoff = chunk_offset(*pos);
 
 	/* NOMEM for caching */
@@ -401,7 +440,7 @@ ssize_t __write_to_two_cachelines(struct lego_task_struct *tsk,
 
 	spin_lock(&pgc1->lock);
 	memcpy(pgc1->cached_pages + ckoff_1, buf, len_1);
-	
+
 	/* extending pgc1 length to cl_size */
 	if (pgc1->real_len < cl_size) {
 		pgc1->real_len = cl_size;
@@ -414,10 +453,10 @@ ssize_t __write_to_two_cachelines(struct lego_task_struct *tsk,
 
 	/* read from cacheline 2 */
 	len_2 = count - len_1;
-	
+
 	spin_lock(&pgc2->lock);
 	memcpy(pgc2->cached_pages, buf + len_1, len_2);
-	
+
 	/* extending pgc2 length to len_2 */
 	if (pgc2->real_len < len_2) {
 		pgc1->real_len = len_2;
@@ -437,7 +476,7 @@ ssize_t __write_to_two_cachelines(struct lego_task_struct *tsk,
 	return count;
 }
 
-/* 
+/*
  * lego_pgcache_write: load from storage side, perform pgcache write
  * caller: handle_p2m_write
  * @tsk: legacy, not useful, handle_p2m_write pass NULL
@@ -453,6 +492,7 @@ ssize_t lego_pgcache_write(struct lego_task_struct *tsk, char *f_name,
 	unsigned int nr_cachelines;
 	struct lego_pgcache_file *file;
 
+	printk_once("cl_size = %lu\n", CL_SIZE);
 	nr_cachelines = __nr_cachelines(*pos, count);
 
 	BUG_ON(nr_cachelines > 2);

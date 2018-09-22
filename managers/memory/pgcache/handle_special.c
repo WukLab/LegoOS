@@ -21,13 +21,13 @@ static long do_m2s_rename(char *oldname, char *newname, __u32 storage_node)
 	struct p2s_rename_struct *payload;
 	int retlen;
 	u32 len_msg = sizeof(*opcode) + sizeof(*payload);
-	
+
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (unlikely(!msg)) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	
+
 	opcode = msg;
 	payload = msg + sizeof(*opcode);
 	*opcode = P2S_RENAME;
@@ -40,7 +40,7 @@ static long do_m2s_rename(char *oldname, char *newname, __u32 storage_node)
 				&ret, sizeof(ret), false);
 	if (unlikely(retlen != sizeof(ret)))
 		ret = -EIO;
-	
+
 	kfree(msg);
 out:
 	return ret;
@@ -56,7 +56,7 @@ static void __do_page_cache_rename(char *oldname, char *newname)
 	/* file has not been touched yet */
 	if (unlikely(!pgfile))
 		return;
-	
+
 	len = file_size_read(pgfile);
 	while (curr < len) {
 		struct lego_pgcache_struct *pgc =
@@ -80,23 +80,24 @@ static void __do_page_cache_rename(char *oldname, char *newname)
 	ht_insert_lego_pgcache_file(pgfile);
 }
 
-int handle_p2m_rename(struct p2m_rename_struct *payload, u64 desc,
-		struct common_header *hdr)
+int handle_p2m_rename(struct p2m_rename_struct *payload, struct common_header *hdr,
+		      struct thpool_buffer *tb)
 {
-	long retval;
+	long *retval;
 
-	retval = do_m2s_rename(payload->oldname,
+	retval = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*retval));
+	*retval = do_m2s_rename(payload->oldname,
 			payload->newname, payload->storage_node);
 	/*
 	 * rename failed at storage side
 	 */
-	if (retval)
-		goto reply;
-	
+	if (*retval)
+		goto out;
+
 	__do_page_cache_rename(payload->oldname, payload->newname);
-reply:
-	ibapi_reply_message(&retval, sizeof(retval), desc);
-	return retval;
+out:
+	return *retval;
 }
 
 /*
@@ -123,33 +124,34 @@ ssize_t get_file_size_from_storage(char *filepath, unsigned int storage_node)
 
 	ibapi_send_reply_imm(storage_node, msg, len_msg, &ret, sizeof(ret), false);
 	kfree(msg);
-	
+
 	return ret;
 }
 
-int handle_p2m_lseek(struct p2m_lseek_struct *payload, u64 desc,
-		struct common_header *hdr)
+int handle_p2m_lseek(struct p2m_lseek_struct *payload, struct common_header *hdr,
+		     struct thpool_buffer *tb)
 {
-	ssize_t retval;
-
+	ssize_t *retval;
 	struct lego_pgcache_file *file;
+
+	retval = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*retval));
 	file = find_lego_pgcache_file(payload->filename);
 
-	/* 
+	/*
 	 * file has never been read/write before
 	 * directly invoking storage component to get file size
 	 */
 	if (unlikely(!file)) {
-		retval = get_file_size_from_storage(payload->filename,
+		*retval = get_file_size_from_storage(payload->filename,
 						    payload->storage_node);
-		goto reply;
+		goto out;
 	}
 
-	retval = file_size_read(file);
+	*retval = file_size_read(file);
 
-reply:
-	ibapi_reply_message(&retval, sizeof(retval), desc);
-	return retval;
+out:
+	return *retval;
 }
 
 /*
@@ -182,38 +184,39 @@ static int do_m2s_stat(char *filepath, struct p2s_stat_ret_struct *retbuf,
 
 	ret = ibapi_send_reply_imm(storage_node, msg, len_msg,
 				   retbuf, sizeof(*retbuf), false);
-	
+
 	if (unlikely(ret != sizeof(*retbuf))) {
 		ret = -EIO;
 		goto free;
 	}
-	
+
 	ret = retbuf->retval;
 free:
 	kfree(msg);
 	return ret;
 }
 
-int handle_p2m_stat(struct p2m_stat_struct *payload, u64 desc,
-		struct common_header *hdr)
+int handle_p2m_stat(struct p2m_stat_struct *payload, struct common_header *hdr,
+		    struct thpool_buffer *tb)
 {
 	int ret;
-	struct p2s_stat_ret_struct retbuf;
+	struct p2s_stat_ret_struct *retbuf;
 	struct lego_pgcache_file *pgcfile;
 
-	ret = do_m2s_stat(payload->filename, &retbuf,
+	retbuf = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*retbuf));
+	ret = do_m2s_stat(payload->filename, retbuf,
 			  payload->flag, payload->storage_node);
-	
+
 	if (ret < 0)
-		goto reply;
+		goto out;
 
 	pgcfile = find_lego_pgcache_file(payload->filename);
 	if (pgcfile) {
 		size_t update = file_size_read(pgcfile);
-		retbuf.statbuf.size = update;
+		retbuf->statbuf.size = update;
 	}
 
-reply:
-	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
+out:
 	return ret;
 }

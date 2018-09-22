@@ -20,4 +20,15 @@
 #define STORAGE_DEBUG_ACCESS
 #define STORAGE_DEBUG_READ_WRITE
 
+/*
+ * If STORAGE_BYPASS_PAGE_CACHE is enabled, we need to have the user
+ * context to do mmap. That means we have use the current insmod thread
+ * to do so. That further means the insmod thread will never return...
+ *
+ * For non-storage-intensive workload, you can disable this.
+ */
+#if 0
+# define STORAGE_BYPASS_PAGE_CACHE
+#endif
+
 #endif /* _LEGO_STORAGE_CONFIG_STORAGE_ */

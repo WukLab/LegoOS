@@ -20,9 +20,9 @@
  *	P2S:	processor <--> storage
  *	M2S:	memory    <--> storage
  *	P2GSM:	processor <--> global storage monitor
- * 	PM2P:	processor monitor -> processor
- * 	P2PM:	processor -> processor monitor
- * 	M2MM:   memory -> memory monitor
+ *	PM2P:	processor monitor -> processor
+ *	P2PM:	processor -> processor monitor
+ *	M2MM:   memory -> memory monitor
  *
  * 2) System calls related:
  *	Follow the original SYSCALL number
@@ -50,6 +50,7 @@
 #define P2M_TEST_NOREPLY	((__u32)0x0ffffff1)
 #define P2M_RENAME		((__u32)__NR_rename)
 #define P2M_STAT		((__u32)__NR_stat)
+#define P2M_DROP_CACHE		((__u32)__NR_drop_page_cache)
 
 /* Processor to Storage directly */
 #define P2S_OPEN		((__u32)__NR_open)	/* open() goes to storage directly */
@@ -64,9 +65,10 @@
 #define P2S_READLINK		((__u32)__NR_readlink)
 #define P2S_RENAME		((__u32)__NR_rename)
 #define P2M_LSEEK		((__u32)__NR_lseek)
+#define P2M_FSYNC		((__u32)__NR_fsync)
 
 /* Homenode Memory to other Memory */
-#define M2M_BASE 		((__u32)0x40000000)
+#define M2M_BASE		((__u32)0x40000000)
 #define M2M_MMAP		(M2M_BASE + 1)
 #define M2M_MUNMAP		(M2M_BASE + 2)
 #define M2M_MREMAP_GROW		(M2M_BASE + 3)
@@ -75,15 +77,13 @@
 #define M2M_FINDVMA		(M2M_BASE + 6)
 #define M2M_MSYNC		(M2M_BASE + 7)
 #define M2M_FORK		(M2M_BASE + 8)
-#ifdef CONFIG_DEBUG_VMA
 #define M2M_VALIDATE		(M2M_BASE + 9)
-#endif
 
 /* Monitor relevant opcode */
 #define MONITOR_BASE			((__u32)0x50000000)
 #define PM2P_START_PROC			(MONITOR_BASE + 1)
 #define P2PM_EXIT_PROC			(MONITOR_BASE + 2)
-#define M2MM_CONSULT	 		(MONITOR_BASE + 3) 
+#define M2MM_CONSULT			(MONITOR_BASE + 3)
 #define M2MM_STATUS_REPORT		(MONITOR_BASE + 4)
 #define P2PM_REQUEST_VNODE		(MONITOR_BASE + 5)
 #define PM2P_BROADCAST_VNODE		(MONITOR_BASE + 6)

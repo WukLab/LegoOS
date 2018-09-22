@@ -15,6 +15,7 @@
 #include <lego/comp_memory.h>
 #include <lego/comp_common.h>
 #include <memory/task.h>
+#include <memory/thread_pool.h>
 #include <lego/types.h>
 
 #ifdef CONFIG_DEBUG_PAGE_CACHE
@@ -80,6 +81,7 @@ void ht_remove_lego_pgcache_struct(struct lego_pgcache_struct *pgc);
 void free_lego_pgcache_struct(struct lego_pgcache_struct *pgc);
 struct lego_pgcache_struct *							\
 	find_lego_pgcache_struct(char *filepath, loff_t pos);
+int drop_pgcache(void);
 
 /* dirtylist.c */
 struct lego_pgcache_file *lego_pgcache_file_open(char *filepath,		\
@@ -93,7 +95,8 @@ struct lego_pgcache_file *find_lego_pgcache_file(char *filepath);
 void mark_lego_pgcache_dirty(struct lego_pgcache_struct *pgc,			\
 			struct lego_pgcache_file *file);
 void make_lego_pgcache_clean(struct lego_pgcache_struct *pgc);
-int handle_p2s_fsync(char *payload, u64 desc, struct common_header *hdr);
+int handle_p2m_fsync(char *payload, struct common_header *hdr, 			\
+		     struct thpool_buffer *tb);
 
 /* read_write.c */
 ssize_t flush_one_cacheline_locked(struct lego_pgcache_struct *pgc);

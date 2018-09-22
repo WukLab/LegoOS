@@ -129,13 +129,13 @@ static long do_rmdir(int dfd, const char __user *pathname)
 	struct p2s_rmdir_struct *payload;
 	u32 len_msg = sizeof(*opcode) + sizeof(*payload);
 	int storage_node;
-	
+
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (unlikely(!msg)) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	
+
 	opcode = msg;
 	payload = msg + sizeof(*opcode);
 	*opcode = P2S_RMDIR;
@@ -175,13 +175,13 @@ static long do_unlinkat(int dfd, const char __user *pathname)
 	struct p2s_unlink_struct *payload;
 	u32 len_msg = sizeof(*opcode) + sizeof(*payload);
 	int storage_node;
-	
+
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (unlikely(!msg)) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	
+
 	opcode = msg;
 	payload = msg + sizeof(*opcode);
 	*opcode = P2S_UNLINK;
@@ -195,7 +195,7 @@ static long do_unlinkat(int dfd, const char __user *pathname)
 
 	storage_node = current_storage_home_node();
 	ibapi_send_reply_imm(storage_node, msg, len_msg, &ret, sizeof(ret), false);
-	
+
 	kfree(msg);
 
 out:
@@ -245,20 +245,20 @@ SYSCALL_DEFINE2(mkdir, const char __user *, pathname, umode_t, mode)
 	struct p2s_mkdir_struct *payload;
 	u32 len_msg = sizeof(*opcode) + sizeof(*payload);
 	int storage_node;
-	
+
 	syscall_filename(pathname);
 	syscall_enter("mode: %u", mode);
-	
+
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (unlikely(!msg)) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	
+
 	opcode = msg;
 	payload = msg + sizeof(*opcode);
 	*opcode = P2S_MKDIR;
-	
+
 	if (strncpy_from_user(payload->filename, pathname, FILENAME_LEN_DEFAULT) < 0) {
 		ret = -EFAULT;
 		kfree(msg);
@@ -293,7 +293,7 @@ SYSCALL_DEFINE3(getdents, unsigned int, fd,
 	struct p2s_getdents_struct *payload;
 	u32 len_msg = sizeof(*opcode) + sizeof(*payload);
 	struct file *f;
-	
+
 	void *retbuf;
 	struct p2s_getdents_retval_struct *retval_struct;
 	u32 len_retbuf = sizeof(*retval_struct) + count;
@@ -301,7 +301,7 @@ SYSCALL_DEFINE3(getdents, unsigned int, fd,
 	int retlen;
 
 	syscall_enter("fd: %d, count: %u\n", fd, count);
-	
+
 	f = fdget(fd);
 	if (!f) {
 		ret = -EBADF;
@@ -313,7 +313,7 @@ SYSCALL_DEFINE3(getdents, unsigned int, fd,
 		ret = -ENOMEM;
 		goto out;
 	}
-	
+
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (unlikely(!msg)) {
 		kfree(retbuf);
@@ -367,13 +367,13 @@ static long do_rename(const char __user *oldname, const char __user *newname)
 	u32 *opcode;
 	struct p2s_rename_struct *payload;
 	u32 len_msg = sizeof(*opcode) + sizeof(*payload);
-	
+
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (unlikely(!msg)) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	
+
 	opcode = msg;
 	payload = msg + sizeof(*opcode);
 	*opcode = P2S_RENAME;
@@ -383,7 +383,7 @@ static long do_rename(const char __user *oldname, const char __user *newname)
 		kfree(msg);
 		goto out;
 	}
-	
+
 	ret = get_absolute_pathname(AT_FDCWD, payload->newname, newname);
 	if (ret) {
 		kfree(msg);
@@ -392,7 +392,7 @@ static long do_rename(const char __user *oldname, const char __user *newname)
 
 	ibapi_send_reply_imm(current_storage_home_node(), msg, len_msg,
 				&ret, sizeof(ret), false);
-	
+
 	kfree(msg);
 
 out:
@@ -411,13 +411,13 @@ static long do_rename(const char __user *oldname, const char __user *newname)
 	struct common_header *hdr;
 	struct p2m_rename_struct *payload;
 	u32 len_msg = sizeof(*hdr) + sizeof(*payload);
-	
+
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if (unlikely(!msg)) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	
+
 	hdr = msg;
 	hdr->opcode = P2S_RENAME;
 	hdr->src_nid = LEGO_LOCAL_NID;
@@ -431,7 +431,7 @@ static long do_rename(const char __user *oldname, const char __user *newname)
 		kfree(msg);
 		goto out;
 	}
-	
+
 	ret = get_absolute_pathname(AT_FDCWD, payload->newname, newname);
 	if (ret) {
 		kfree(msg);
@@ -440,7 +440,7 @@ static long do_rename(const char __user *oldname, const char __user *newname)
 
 	ibapi_send_reply_imm(current_pgcache_home_node(), msg, len_msg,
 				&ret, sizeof(ret), false);
-	
+
 	kfree(msg);
 
 out:
@@ -452,4 +452,56 @@ SYSCALL_DEFINE2(rename, const char __user *, oldname,
 		const char __user *, newname)
 {
 	return do_rename(oldname, newname);
+}
+
+/*
+ * XXX:
+ * The current implementation of fsync is not complete.
+ * Currently we only send fsync() to M if page cache is enabled.
+ * In fact, we should handle all the following cases:
+ * 1) If pgcache is not enabled, send request to Storage
+ * 2) Flush back dirty pcache lines
+ */
+SYSCALL_DEFINE1(fsync, unsigned int, fd)
+{
+#ifdef CONFIG_MEM_PAGE_CACHE
+	long ret;
+	void *msg;
+	struct common_header *hdr;
+	struct file *f;
+	struct p2m_fsync_struct *payload;
+	u32 len_msg = sizeof(*hdr) + sizeof(*payload);
+
+	msg = kmalloc(len_msg, GFP_KERNEL);
+	if (unlikely(!msg)) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	f = fdget(fd);
+	if (unlikely(!f)) {
+		kfree(msg);
+		return -EBADF;
+	}
+
+	hdr = msg;
+	hdr->opcode = P2M_FSYNC;
+	hdr->src_nid = LEGO_LOCAL_NID;
+	hdr->length = len_msg;
+
+	payload = msg + sizeof(*hdr);
+	payload->storage_node = current_storage_home_node();
+	strncpy(payload->filename, f->f_name, MAX_FILENAME_LENGTH);
+
+	ibapi_send_reply_imm(current_pgcache_home_node(), msg, len_msg,
+				&ret, sizeof(ret), false);
+
+	kfree(msg);
+
+out:
+	put_file(f);
+	return ret;
+#else
+	return 0;
+#endif /* CONFIG_MEM_PAGE_CACHE */
 }
