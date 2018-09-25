@@ -106,8 +106,10 @@ unsigned long _lego_copy_to_user(struct lego_task_struct *tsk,
 		down_read(&tsk->mm->mmap_sem);
 		ret = get_user_pages(tsk, first_page, nr_pages, 0, pages, NULL);
 		up_read(&tsk->mm->mmap_sem);
-		if (unlikely(ret != nr_pages))
+		if (unlikely(ret != nr_pages)) {
+			kfree(pages);
 			return 0;
+		}
 
 		/* Copy one by one */
 		start = (unsigned long)to;
@@ -126,6 +128,8 @@ unsigned long _lego_copy_to_user(struct lego_task_struct *tsk,
 			copied += bytes_to_copy;
 			start += bytes_to_copy;
 		}
+
+		kfree(pages);
 		return copied;
 	}
 	return 0;
@@ -199,8 +203,10 @@ unsigned long _lego_copy_from_user(struct lego_task_struct *tsk,
 		down_read(&tsk->mm->mmap_sem);
 		ret = get_user_pages(tsk, first_page, nr_pages, 0, pages, NULL);
 		up_read(&tsk->mm->mmap_sem);
-		if (unlikely(ret != nr_pages))
+		if (unlikely(ret != nr_pages)) {
+			kfree(pages);
 			return 0;
+		}
 
 		/* Copy one by one */
 		start = (unsigned long)from;
@@ -219,6 +225,8 @@ unsigned long _lego_copy_from_user(struct lego_task_struct *tsk,
 			copied += bytes_to_copy;
 			start += bytes_to_copy;
 		}
+
+		kfree(pages);
 		return copied;
 	}
 	return 0;
