@@ -194,21 +194,12 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	struct pcache_set *pset;
 	void *va_cache = pcache_meta_to_kva(pcm);
 	struct piggyback_info *pb = &pcm->pb;
+	struct p2m_pcache_miss_msg msg;
 	PROFILE_POINT_TIME(__pcache_fill_remote_net)
 	PROFILE_POINT_TIME(__pcache_fill_remote_piggyback_net)
 
 	pset = pcache_meta_to_pcache_set(pcm);
 	dst_nid = get_memory_node(current, address);
-
-	/*
-	 * Okay. Flush and miss belong to different nodes.
-	 * There have to be two network requests.
-	 * fallback will clear Piggyback inside.
-	 */
-	if (unlikely(pb->memory_nid != dst_nid)) {
-		piggyback_fallback(pcm);
-		inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY_PIGGYBACK_FB);
-	}
 
 	/*
 	 * Piggyback was set by perset eviction only.
@@ -218,6 +209,17 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	 */
 	if (PcachePiggyback(pcm)) {
 		struct p2m_pcache_miss_flush_combine_msg *pb_msg;
+
+		/*
+		 * Okay. Flush and miss belong to different nodes.
+		 * There have to be two network requests.
+		 * fallback will clear Piggyback inside.
+		 */
+		if (unlikely(pb->memory_nid != dst_nid)) {
+			piggyback_fallback(pcm);
+			inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY_PIGGYBACK_FB);
+			goto fallback;
+		}
 
 		pb_msg = this_cpu_ptr(&pb_msg_array);
 
@@ -253,8 +255,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		ClearPcachePiggyback(pcm);
 		inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY_PIGGYBACK);
 	} else {
-		struct p2m_pcache_miss_msg msg;
-
+fallback:
 		fill_common_header(&msg, P2M_PCACHE_MISS);
 		msg.has_flush_msg = 0;
 		msg.pid = current->pid;
