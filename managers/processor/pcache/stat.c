@@ -32,6 +32,7 @@ static const char *const pcache_event_text[] = {
 	"nr_pcache_fill_zerofill",
 	"nr_pcache_fill_from_memory",
 	"nr_pcache_fill_from_memory_piggyback",
+	"nr_pcache_fill_from_memory_piggyback_fallback",
 	"nr_pcache_fill_from_victim",			/* victim cache specific */
 
 	"nr_pcache_eviction_triggered",

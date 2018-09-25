@@ -13,8 +13,8 @@
  * gracefully back to caller.
  *
  * Locking ordering:
- * 	pcache_lock	(may sleep)
- * 	pte_lock
+ *	pcache_lock	(may sleep)
+ *	pte_lock
  *
  * RMAP operations will lock in this order. Pgfault code below will probably
  * acquire pte_lock first, then it must NOT call lock_pcache() anymore, which
@@ -92,7 +92,7 @@ static void piggyback_fallback(struct pcache_meta *pcm)
 	pset_remove_eviction(pset, pcm, 1);
 	ClearPcachePiggyback(pcm);
 
-	inc_pcache_event(PCACHE_CLFLUSH_PIGGYBACK_FALLBACK);
+	inc_pcache_event(PCACHE_CLFLUSH_PIGGYBACK_FB);
 }
 
 /*
@@ -191,13 +191,24 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		      struct pcache_meta *pcm, void *unused)
 {
 	int ret, len, dst_nid;
- 	void *va_cache = pcache_meta_to_kva(pcm);
 	struct pcache_set *pset;
+	void *va_cache = pcache_meta_to_kva(pcm);
+	struct piggyback_info *pb = &pcm->pb;
 	PROFILE_POINT_TIME(__pcache_fill_remote_net)
 	PROFILE_POINT_TIME(__pcache_fill_remote_piggyback_net)
 
-	dst_nid = get_memory_node(current, address);
 	pset = pcache_meta_to_pcache_set(pcm);
+	dst_nid = get_memory_node(current, address);
+
+	/*
+	 * Okay. Flush and miss belong to different nodes.
+	 * There have to be two network requests.
+	 * fallback will clear Piggyback inside.
+	 */
+	if (unlikely(pb->memory_nid != dst_nid)) {
+		piggyback_fallback(pcm);
+		inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY_PIGGYBACK_FB);
+	}
 
 	/*
 	 * Piggyback was set by perset eviction only.
@@ -207,7 +218,6 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	 */
 	if (PcachePiggyback(pcm)) {
 		struct p2m_pcache_miss_flush_combine_msg *pb_msg;
-		struct piggyback_info *pb = &pcm->pb;
 
 		pb_msg = this_cpu_ptr(&pb_msg_array);
 
@@ -224,9 +234,6 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		pb_msg->flush.user_va = pb->user_addr;
 		memcpy(pb_msg->flush.pcacheline, va_cache, PCACHE_LINE_SIZE);
 		smp_wmb();
-
-		if (unlikely(pb->memory_nid != dst_nid))
-			WARN_ON_ONCE(1);
 
 		PROFILE_START(__pcache_fill_remote_piggyback_net);
 		len = ibapi_send_reply_timeout(dst_nid, pb_msg, sizeof(*pb_msg),

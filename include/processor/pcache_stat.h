@@ -31,7 +31,7 @@ enum pcache_event_item {
 	PCACHE_CLFLUSH,
 	PCACHE_CLFLUSH_CLEAN_SKIPPED,
 	PCACHE_CLFLUSH_FAIL,
-	PCACHE_CLFLUSH_PIGGYBACK_FALLBACK,
+	PCACHE_CLFLUSH_PIGGYBACK_FB,
 
 	/*
 	 * Write-protection fault
@@ -45,6 +45,7 @@ enum pcache_event_item {
 	PCACHE_FAULT_FILL_ZEROFILL,	/* nr of zero fill + async net */
 	PCACHE_FAULT_FILL_FROM_MEMORY,	/* nr of pcache fill from remote memory */
 	PCACHE_FAULT_FILL_FROM_MEMORY_PIGGYBACK,
+	PCACHE_FAULT_FILL_FROM_MEMORY_PIGGYBACK_FB,
 	PCACHE_FAULT_FILL_FROM_VICTIM,	/* nr of pcache fill from victim cache */
 
 	/*
