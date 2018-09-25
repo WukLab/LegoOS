@@ -13,13 +13,11 @@
  * gracefully back to caller.
  *
  * Locking ordering:
- *	pcache_lock	(may sleep)
+ *	pcache_lok
  *	pte_lock
  *
  * RMAP operations will lock in this order. Pgfault code below will probably
- * acquire pte_lock first, then it must NOT call lock_pcache() anymore, which
- * may sleep. The only safe way here is to call trylock_pcache() after pte_lock
- * is acquired.
+ * acquire pte_lock first, then it must NOT call lock_pcache() anymore.
  */
 
 #include <lego/mm.h>
@@ -38,19 +36,20 @@
 #include <asm/tlbflush.h>
 
 #include <processor/pcache.h>
-#include <processor/processor.h>
-#include <processor/zerofill.h>
 #include <processor/distvm.h>
+#include <processor/zerofill.h>
+#include <processor/processor.h>
+#include <processor/replication.h>
 
 #ifdef CONFIG_DEBUG_PCACHE_FILL
 #ifdef CONFIG_DEBUG_PCACHE_FILL_UNLIMITED
-#define pcache_fill_debug(fmt, ...)						\
+#define pcache_fill_debug(fmt, ...)					\
 	pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__)
 #else
 /* 4 msg/sec at most? */
 static DEFINE_RATELIMIT_STATE(pcache_fill_debug_rs, 1, 4);
 
-#define pcache_fill_debug(fmt, ...)						\
+#define pcache_fill_debug(fmt, ...)					\
 ({									\
 	if (__ratelimit(&pcache_fill_debug_rs))				\
 		pr_debug("%s(): " fmt "\n", __func__, __VA_ARGS__);	\
@@ -193,7 +192,6 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	int ret, len, dst_nid;
 	struct pcache_set *pset;
 	void *va_cache = pcache_meta_to_kva(pcm);
-	struct piggyback_info *pb = &pcm->pb;
 	struct p2m_pcache_miss_msg msg;
 	PROFILE_POINT_TIME(__pcache_fill_remote_net)
 	PROFILE_POINT_TIME(__pcache_fill_remote_piggyback_net)
@@ -209,6 +207,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 	 */
 	if (PcachePiggyback(pcm)) {
 		struct p2m_pcache_miss_flush_combine_msg *pb_msg;
+		struct piggyback_info *pb = &pcm->pb;
 
 		/*
 		 * Okay. Flush and miss belong to different nodes.
@@ -220,6 +219,16 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 			inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY_PIGGYBACK_FB);
 			goto fallback;
 		}
+
+		/*
+		 * Yes, Virginia. We need to replicate it.
+		 * This used to be done within __clflush_one().
+		 * Since we skipped it, we need to manually replicate.
+		 *
+		 * Used if CONFIG_REPLICATION_MEMORY is enabled.
+		 */
+		replicate(pb->tgid, pb->user_addr, pb->memory_nid,
+			  pb->replication_nid, va_cache);
 
 		pb_msg = this_cpu_ptr(&pb_msg_array);
 

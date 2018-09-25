@@ -22,6 +22,8 @@
 #include <processor/processor.h>
 #include <processor/distvm.h>
 
+static DEFINE_PER_CPU(struct p2m_replica_msg, p2m_replica_msg_array);
+
 static inline int post_choose_rep(unsigned int m_nid, unsigned int rep_nid)
 {
 	return rep_nid;
@@ -39,9 +41,7 @@ void replicate(pid_t tgid, unsigned long user_va,
 	struct replica_log_meta *meta;
 	int reply;
 
-	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
-	if (!msg)
-		return;
+	msg = this_cpu_ptr(&p2m_replica_msg_array);
 
 	fill_common_header(msg, P2M_PCACHE_REPLICA);
 
@@ -57,8 +57,7 @@ void replicate(pid_t tgid, unsigned long user_va,
 	memcpy(log->data, cache_addr, PCACHE_LINE_SIZE);
 
 	rep_nid = post_choose_rep(m_nid, rep_nid);
+
 	ibapi_send_reply_timeout(rep_nid, msg, sizeof(*msg),
 				 &reply, sizeof(reply), false, DEF_NET_TIMEOUT);
-
-	kfree(msg);
 }
