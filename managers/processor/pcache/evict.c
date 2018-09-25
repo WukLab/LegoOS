@@ -96,13 +96,13 @@ evict_line_wrprotect(struct pcache_set *pset, struct pcache_meta *pcm)
 }
 #endif
 
-static inline int
-evict_line(struct pcache_set *pset, struct pcache_meta *pcm, unsigned long address)
+static inline int evict_line(struct pcache_set *pset, struct pcache_meta *pcm,
+			     unsigned long address, enum piggyback_options piggyback)
 {
 #ifdef CONFIG_PCACHE_EVICTION_WRITE_PROTECT
 	return evict_line_wrprotect(pset, pcm);
 #elif defined(CONFIG_PCACHE_EVICTION_PERSET_LIST)
-	return evict_line_perset_list(pset, pcm);
+	return evict_line_perset_list(pset, pcm, piggyback);
 #elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
 	return evict_line_victim(pset, pcm, address);
 #endif
@@ -137,7 +137,8 @@ DEFINE_PROFILE_POINT(pcache_alloc_evict_do_evict)
  *
  * Return 0 on success, otherwise on failures.
  */
-int pcache_evict_line(struct pcache_set *pset, unsigned long address)
+int pcache_evict_line(struct pcache_set *pset, unsigned long address,
+		      enum piggyback_options piggyback)
 {
 	struct pcache_meta *pcm;
 	int nr_mapped;
@@ -178,7 +179,7 @@ int pcache_evict_line(struct pcache_set *pset, unsigned long address)
 	BUG_ON(nr_mapped < 1);
 
 	PROFILE_START(pcache_alloc_evict_do_evict);
-	ret = evict_line(pset, pcm, address);
+	ret = evict_line(pset, pcm, address, piggyback);
 	PROFILE_LEAVE(pcache_alloc_evict_do_evict);
 	if (ret) {
 		/*

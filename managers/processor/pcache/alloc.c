@@ -20,6 +20,10 @@
 #include <processor/pcache.h>
 #include <processor/processor.h>
 
+#include "piggyback.h"
+
+DEFINE_PER_CPU(struct pcache_meta *, piggybacker);
+
 /**
  * sysctl_pcache_alloc_timeout_sec
  *
@@ -101,29 +105,36 @@ __enqueue_free_list_head(struct pcache_meta *pcm, struct pcache_set *pset)
 static inline struct pcache_meta *
 __dequeue_free_list_head(struct pcache_set *pset)
 {
-	struct pcache_meta *pcm;
+        struct pcache_meta *pcm;
 
-	pcm = list_first_entry(&pset->free_head, struct pcache_meta, free_list);
-	list_del(&pcm->free_list);
-	return pcm;
+        pcm = list_first_entry(&pset->free_head, struct pcache_meta, free_list);
+        list_del(&pcm->free_list);
+        return pcm;
 }
 
 /*
  * This is the ultimate free function.
  * At the time of calling, @pcm has been removed from LRU list.
+ * Upon finish, @pcm will be enqueued into free list.
  */
 void __put_pcache_nolru(struct pcache_meta *pcm)
 {
 	struct pcache_set *pset;
 
 	pcache_free_check(pcm);
+	dec_pcache_used();
+
+	/*
+	 * This @pcm is pushed into per-cpu cached
+	 * piggyback candidate. Skip enqueuing.
+	 */
+	if (PcachePiggybackCached(pcm))
+		return;
 
 	pset = pcache_meta_to_pcache_set(pcm);
 	spin_lock(&pset->free_lock);
 	__enqueue_free_list_head(pcm, pset);
 	spin_unlock(&pset->free_lock);
-
-	dec_pcache_used();
 }
 
 /*
@@ -143,7 +154,6 @@ static inline void pcache_reset_flags(struct pcache_meta *pcm)
 
 static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
 {
-	pcache_reset_flags(pcm);
 	INIT_LIST_HEAD(&pcm->rmap);
 	init_pcache_lru(pcm);
 
@@ -155,10 +165,18 @@ static inline void prep_new_pcache_meta(struct pcache_meta *pcm)
 	init_pcache_ref_count(pcm);
 }
 
-/* Try to grab one from pset free list */
-static inline struct pcache_meta * pcache_alloc_fastpath(struct pcache_set *pset)
+static inline struct pcache_meta *
+pcache_alloc_fastpath(struct pcache_set *pset)
 {
 	struct pcache_meta *pcm;
+
+	pcm = get_per_cpu_piggybacker();
+	if (pcm) {
+		/* Also clear the Cached flag */
+		pcache_reset_flags(pcm);
+		SetPcachePiggyback(pcm);
+		goto prep;
+	}
 
 	spin_lock(&pset->free_lock);
 	if (list_empty(&pset->free_head)) {
@@ -168,10 +186,10 @@ static inline struct pcache_meta * pcache_alloc_fastpath(struct pcache_set *pset
 	pcm = __dequeue_free_list_head(pset);
 	spin_unlock(&pset->free_lock);
 
-	/* Prepare the newborn */
+	pcache_reset_flags(pcm);
+prep:
 	prep_new_pcache_meta(pcm);
 	add_to_lru_list(pcm, pset);
-
 	inc_pcache_used();
 	return pcm;
 }
@@ -183,6 +201,9 @@ DEFINE_PROFILE_POINT(pcache_alloc_fastpath)
 /**
  * pcache_alloc
  * @address: user virtual address
+ * @piggyback: if this is true, underlying pcache eviction routine will enable
+ *             piggyback optimization. We only have one single caller is able
+ *             to use this opt, which is pcache fault on remote.
  *
  * This function will try to allocate a cacheline from the set that @address
  * belongs to. On success, the returned @pcm has refcount 1, and mapcount 0.
@@ -195,7 +216,8 @@ DEFINE_PROFILE_POINT(pcache_alloc_fastpath)
  *	   |- pcache_alloc_evict_do_find
  *	   |- pcache_alloc_evict_do_evict
  */
-struct pcache_meta *pcache_alloc(unsigned long address)
+struct pcache_meta *pcache_alloc(unsigned long address,
+				 enum piggyback_options piggyback)
 {
 	struct pcache_set *pset;
 	struct pcache_meta *pcm;
@@ -219,12 +241,14 @@ retry:
 	pcm = pcache_alloc_fastpath(pset);
 	PROFILE_LEAVE(pcache_alloc_fastpath);
 	if (likely(pcm)) {
+		if (piggyback == DISABLE_PIGGYBACK && PcachePiggyback(pcm))
+			BUG();
 		PROFILE_LEAVE(pcache_alloc);
 		return pcm;
 	}
 
 	PROFILE_START(pcache_alloc_evict);
-	ret = pcache_evict_line(pset, address);
+	ret = pcache_evict_line(pset, address, piggyback);
 	PROFILE_LEAVE(pcache_alloc_evict);
 	switch (ret) {
 	case PCACHE_EVICT_FAILURE_FIND:

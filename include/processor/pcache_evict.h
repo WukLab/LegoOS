@@ -153,12 +153,20 @@ evict_find_line_random(struct pcache_set *pset) { BUG(); }
 #endif /* EVICT_RANDOM */
 
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
-int evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm);
+void pset_remove_eviction(struct pcache_set *pset,
+			  struct pcache_meta *pcm, int nr_added);
+int evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm,
+			   enum piggyback_options piggyback);
 void __init alloc_pcache_perset_map(void);
 #else
 static inline int
-evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm) { BUG(); }
+evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm,
+			enum piggyback_options piggyback) { BUG(); }
 static inline void __init alloc_pcache_perset_map(void) { }
+
+static inline void pset_remove_eviction(struct pcache_set *pset,
+			  struct pcache_meta *pcm, int nr_added)
+{ }
 #endif
 
 #endif /* _LEGO_PROCESSOR_PCACHE_SWEEP_H_ */

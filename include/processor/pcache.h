@@ -542,8 +542,14 @@ pcache_meta_next_way(struct pcache_meta *pcm)
 	     way < PCACHE_ASSOCIATIVITY;				\
 	     pcm = __pcache_meta_next_way(pcm), way++)
 
+enum piggyback_options {
+	DISABLE_PIGGYBACK,
+	ENABLE_PIGGYBACK,
+};
+
 /* Allocate one pcache line from the pset @address maps to */
-struct pcache_meta *pcache_alloc(unsigned long address);
+struct pcache_meta *pcache_alloc(unsigned long address,
+				 enum piggyback_options piggyback);
 
 int pcache_flush_one(struct pcache_meta *pcm);
 void clflush_one(struct task_struct *tsk, unsigned long user_va, void *cache_addr);
@@ -551,7 +557,8 @@ void __clflush_one(pid_t tgid, unsigned long user_va,
 		   unsigned int m_nid, unsigned int rep_nid, void *cache_addr);
 
 /* eviction */
-int pcache_evict_line(struct pcache_set *pset, unsigned long address);
+int pcache_evict_line(struct pcache_set *pset, unsigned long address,
+		      enum piggyback_options piggyback);
 
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
 bool __pset_find_eviction(struct pcache_set *, unsigned long, struct task_struct *);
@@ -648,7 +655,7 @@ typedef int (*fill_func_t)(unsigned long, unsigned long, struct pcache_meta *, v
 int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 			pte_t *page_table, pte_t orig_pte, pmd_t *pmd,
 			unsigned long flags, fill_func_t fill_func, void *arg,
-			enum rmap_caller caller);
+			enum rmap_caller caller, enum piggyback_options piggyback);
 
 #include <processor/pcache_victim.h>
 #include <processor/pcache_evict.h>

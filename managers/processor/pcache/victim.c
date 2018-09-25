@@ -754,7 +754,8 @@ victim_fill_pcache(struct mm_struct *mm, unsigned long address,
 		   struct pcache_victim_meta *victim)
 {
 	return common_do_fill_page(mm, address, page_table, orig_pte, pmd, flags,
-			__victim_fill_pcache, victim, RMAP_VICTIM_FILL);
+			__victim_fill_pcache, victim, RMAP_VICTIM_FILL,
+			DISABLE_PIGGYBACK);
 }
 
 /*

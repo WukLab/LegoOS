@@ -14,12 +14,16 @@
 #include <lego/tracepoint.h>
 #include <processor/pcache.h>
 
+#include "piggyback.h"
+
 #define __def_pcacheflag_names					\
 	{1UL << PC_locked,		"locked"	},	\
 	{1UL << PC_valid,		"valid"		},	\
 	{1UL << PC_dirty,		"dirty"		},	\
 	{1UL << PC_reclaim,		"reclaim"	},	\
-	{1UL << PC_writeback,		"writeback"	}
+	{1UL << PC_writeback,		"writeback"	},	\
+	{1UL << PC_piggyback,		"piggyback"	},	\
+	{1UL << PC_piggyback,		"piggybackC"	}
 
 const struct trace_print_flags pcacheflag_names[] = {
 	__def_pcacheflag_names,
@@ -94,23 +98,38 @@ void dump_pcache_rmaps(struct pcache_meta *pcm)
 	unlock_pcache(pcm);
 }
 
+static DEFINE_SPINLOCK(dump_pset_lock);
+
 void dump_pset(struct pcache_set *pset)
 {
 	struct pcache_meta *pcm;
-	int way;
 
-	lock_pset(pset);
+	spin_lock(&dump_pset_lock);
 
 	pr_debug("pset:%p set_idx: %lu nr_lru:%d\n",
 		pset, pcache_set_to_set_index(pset),
 		IS_ENABLED(CONFIG_PCACHE_EVICT_LRU) ? atomic_read(&pset->nr_lru) : 0);
 
-	pcache_for_each_way_set(pcm, pset, way) {
+	pcm = this_cpu_read(piggybacker);
+	if (pcm)
+		dump_pcache_meta(pcm, "This is piggybacker");
+
+	pr_info("Free List\n");
+	spin_lock(&pset->free_lock);
+	list_for_each_entry(pcm, &pset->free_head, free_list) {
 		dump_pcache_meta(pcm, NULL);
 		dump_pcache_rmaps(pcm);
 	}
+	spin_unlock(&pset->free_lock);
 
-	unlock_pset(pset);
+	pr_info("LRU List\n");
+	spin_lock(&pset->lru_lock);
+	list_for_each_entry(pcm, &pset->lru_list, lru) {
+		dump_pcache_meta(pcm, NULL);
+		dump_pcache_rmaps(pcm);
+	}
+	spin_unlock(&pset->lru_lock);
+	spin_unlock(&dump_pset_lock);
 }
 
 /**

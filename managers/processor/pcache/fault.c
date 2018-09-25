@@ -23,6 +23,7 @@
  */
 
 #include <lego/mm.h>
+#include <lego/smp.h>
 #include <lego/slab.h>
 #include <lego/log2.h>
 #include <lego/kernel.h>
@@ -75,6 +76,26 @@ static void print_bad_pte(struct mm_struct *mm, unsigned long addr, pte_t pte,
 }
 
 /*
+ * @pcm is just newly allocated and untouched
+ * Similar to what we do at __pcache_do_fill_page.
+ */
+static void piggyback_fallback(struct pcache_meta *pcm)
+{
+	struct pcache_set *pset;
+	struct piggyback_info *pb = &pcm->pb;
+	void *va_cache = pcache_meta_to_kva(pcm);
+
+	__clflush_one(pb->tgid, pb->user_addr, pb->memory_nid,
+		      pb->replication_nid, va_cache);
+
+	pset = pcache_meta_to_pcache_set(pcm);
+	pset_remove_eviction(pset, pcm, 1);
+	ClearPcachePiggyback(pcm);
+
+	inc_pcache_event(PCACHE_CLFLUSH_PIGGYBACK_FALLBACK);
+}
+
+/*
  * This is a shared common function to setup PTE.
  * The pcache line allocation and post-setup are standard.
  * But the specific fill_func may differ:
@@ -87,14 +108,14 @@ static void print_bad_pte(struct mm_struct *mm, unsigned long addr, pte_t pte,
 int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 			pte_t *page_table, pte_t orig_pte, pmd_t *pmd,
 			unsigned long flags, fill_func_t fill_func, void *arg,
-			enum rmap_caller caller)
+			enum rmap_caller caller, enum piggyback_options piggyback)
 {
 	struct pcache_meta *pcm;
 	spinlock_t *ptl;
 	pte_t entry;
 	int ret;
 
-	pcm = pcache_alloc(address);
+	pcm = pcache_alloc(address, piggyback);
 	if (unlikely(!pcm))
 		return VM_FAULT_OOM;
 
@@ -107,6 +128,15 @@ int common_do_fill_page(struct mm_struct *mm, unsigned long address,
 	 */
 	page_table = pte_offset_lock(mm, pmd, address, &ptl);
 	if (unlikely(!pte_same(*page_table, orig_pte))) {
+		/*
+		 * Concurrent faults, and all of them tried to
+		 * piggyback-capable pcache_alloc. Only one of
+		 * them will do the actual net. So the other
+		 * guys need to manually flush the dirty cache back.
+		 */
+		if (PcachePiggyback(pcm))
+			piggyback_fallback(pcm);
+
 		ret = 0;
 		goto out;
 	}
@@ -147,77 +177,10 @@ out:
 	return ret;
 }
 
-#ifdef CONFIG_COUNTER_PCACHE
-static inline void pcache_fill_update_stat(struct pcache_meta *pcm)
-{
-	struct pcache_set *pset;
-
-	pset = pcache_meta_to_pcache_set(pcm);
-	inc_pset_event(pset, PSET_FILL_MEMORY);
-	inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY);
-}
-#else
-static inline void pcache_fill_update_stat(struct pcache_meta *pcm) { }
-#endif
-
-#ifdef CONFIG_PCACHE_EVICTION_VICTIM
-/*
- * If we have victim cache present, we could have one optimization here.
- * At each pcache miss time, we could steal one job from the flush thread
- * and send it to memory along with the pcache miss.
- */
-static inline void prepare_combined_msg(struct p2m_pcache_miss_flush_combine_msg *msg,
-					struct victim_flush_job *job)
-{
-	struct p2m_flush_msg *flush = &msg->flush;
-	struct pcache_victim_meta *victim = job->victim;
-	struct pcache_victim_hit_entry *hit;
-	void *victim_kva;
-
-	__SetVictimWriteback(victim);
-	victim_kva = pcache_victim_to_kva(victim);
-	memcpy(flush->pcacheline, victim_kva, PCACHE_LINE_SIZE);
-
-	/* should be just 1 */
-	list_for_each_entry(hit, &victim->hits, next) {
-		flush->pid = hit->tgid;
-		flush->user_va = hit->address;
-		return;
-	}
-}
-
-/* Same cleanup as __victim_flush_func */
-static inline void finish_combined_msg_notify(struct victim_flush_job *job)
-{
-	bool wait = job->wait;
-	struct completion *done = &job->done;
-	struct pcache_victim_meta *victim = job->victim;
-
-	__ClearVictimWriteback(victim);
-	__ClearVictimWaitflush(victim);
-	SetVictimFlushed(victim);
-	put_victim(victim);
-
-	if (unlikely(wait))
-		complete(done);
-	kfree(job);
-}
-#else
-static inline void prepare_combined_msg(struct p2m_pcache_miss_flush_combine_msg *msg,
-					struct victim_flush_job *job)
-{
-	BUG();
-}
-
-static inline void finish_combined_msg_notify(struct victim_flush_job *job)
-{
-	BUG();
-}
-#endif
-
-DEFINE_PROFILE_POINT(__pcache_fill_remote)
 DEFINE_PROFILE_POINT(__pcache_fill_remote_net)
-DEFINE_PROFILE_POINT(__pcache_fill_remote_combined_net)
+DEFINE_PROFILE_POINT(__pcache_fill_remote_piggyback_net)
+
+static DEFINE_PER_CPU(struct p2m_pcache_miss_flush_combine_msg, pb_msg_array);
 
 /*
  * Callback for common fill code
@@ -228,54 +191,74 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		      struct pcache_meta *pcm, void *unused)
 {
 	int ret, len, dst_nid;
-	void *va_cache = pcache_meta_to_kva(pcm);
-	struct p2m_pcache_miss_msg msg;
-	struct p2m_pcache_miss_flush_combine_msg *comb_msg = NULL;
-	struct victim_flush_job *flush_job;
-	PROFILE_POINT_TIME(__pcache_fill_remote)
+ 	void *va_cache = pcache_meta_to_kva(pcm);
+	struct pcache_set *pset;
 	PROFILE_POINT_TIME(__pcache_fill_remote_net)
-	PROFILE_POINT_TIME(__pcache_fill_remote_combined_net)
+	PROFILE_POINT_TIME(__pcache_fill_remote_piggyback_net)
 
-	PROFILE_START(__pcache_fill_remote);
+	dst_nid = get_memory_node(current, address);
+	pset = pcache_meta_to_pcache_set(pcm);
 
-	//flush_job = steal_victim_flush_job();
-	flush_job = NULL;
-	if (flush_job) {
-		comb_msg = kmalloc(sizeof(*comb_msg), GFP_KERNEL);
-		if (!comb_msg)
-			return -ENOMEM;
+	/*
+	 * Piggyback was set by perset eviction only.
+	 * And we are very strict on this. This dirty line
+	 * can only be mapped into one address space. All the
+	 * necessary information has been saved into piggyback_info.
+	 */
+	if (PcachePiggyback(pcm)) {
+		struct p2m_pcache_miss_flush_combine_msg *pb_msg;
+		struct piggyback_info *pb = &pcm->pb;
 
-		fill_common_header(&comb_msg->miss, P2M_PCACHE_MISS);
-		comb_msg->miss.has_flush_msg = 1;
-		comb_msg->miss.pid = current->pid;
-		comb_msg->miss.tgid = current->tgid;
-		comb_msg->miss.flags = flags;
-		comb_msg->miss.missing_vaddr = address;
-		dst_nid = get_memory_node(current, address);
+		pb_msg = this_cpu_ptr(&pb_msg_array);
 
-		/* Cook the message */
-		prepare_combined_msg(comb_msg, flush_job);
+		/* The pcache miss part */
+		fill_common_header(&pb_msg->miss, P2M_PCACHE_MISS);
+		pb_msg->miss.has_flush_msg = 1;
+		pb_msg->miss.pid = current->pid;
+		pb_msg->miss.tgid = current->tgid;
+		pb_msg->miss.flags = flags;
+		pb_msg->miss.missing_vaddr = address;
 
-		PROFILE_START(__pcache_fill_remote_combined_net);
-		len = ibapi_send_reply_timeout(dst_nid, comb_msg, sizeof(*comb_msg),
-					       va_cache, PCACHE_LINE_SIZE, false, DEF_NET_TIMEOUT);
-		PROFILE_LEAVE(__pcache_fill_remote_combined_net);
+		/* The piggyback flush part */
+		pb_msg->flush.pid = pb->tgid;
+		pb_msg->flush.user_va = pb->user_addr;
+		memcpy(pb_msg->flush.pcacheline, va_cache, PCACHE_LINE_SIZE);
+		smp_wmb();
 
-		/* Notify victim about stealed flush */
-		finish_combined_msg_notify(flush_job);
-		inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY_FLUSH_COMBINED);
+		if (unlikely(pb->memory_nid != dst_nid))
+			WARN_ON_ONCE(1);
+
+		PROFILE_START(__pcache_fill_remote_piggyback_net);
+		len = ibapi_send_reply_timeout(dst_nid, pb_msg, sizeof(*pb_msg),
+					       va_cache, PCACHE_LINE_SIZE, false,
+					       DEF_NET_TIMEOUT);
+		PROFILE_LEAVE(__pcache_fill_remote_piggyback_net);
+
+		/*
+		 * Remove the eviction entries from the pset
+		 * also clear the piggyback flag
+		 *
+		 * Optimization is good for performance. But usually end up
+		 * making the code much more complex. And we need to use
+		 * APIs that are used to internal.
+		 */
+		pset_remove_eviction(pset, pcm, 1);
+		ClearPcachePiggyback(pcm);
+		inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY_PIGGYBACK);
 	} else {
+		struct p2m_pcache_miss_msg msg;
+
 		fill_common_header(&msg, P2M_PCACHE_MISS);
 		msg.has_flush_msg = 0;
 		msg.pid = current->pid;
 		msg.tgid = current->tgid;
 		msg.flags = flags;
 		msg.missing_vaddr = address;
-		dst_nid = get_memory_node(current, address);
 
 		PROFILE_START(__pcache_fill_remote_net);
 		len = ibapi_send_reply_timeout(dst_nid, &msg, sizeof(msg),
-					       va_cache, PCACHE_LINE_SIZE, false, DEF_NET_TIMEOUT);
+					       va_cache, PCACHE_LINE_SIZE, false,
+					       DEF_NET_TIMEOUT);
 		PROFILE_LEAVE(__pcache_fill_remote_net);
 	}
 
@@ -291,6 +274,7 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 			 * ETIMEDOUT: timeout for reply
 			 */
 			ret = len;
+			WARN_ON_ONCE(1);
 			goto out;
 		} else {
 			WARN(1, "Invalid reply length: %d\n", len);
@@ -299,10 +283,10 @@ __pcache_do_fill_page(unsigned long address, unsigned long flags,
 		}
 	}
 
-	pcache_fill_update_stat(pcm);
 	ret = 0;
 out:
-	PROFILE_LEAVE(__pcache_fill_remote);
+	inc_pset_event(pset, PSET_FILL_MEMORY);
+	inc_pcache_event(PCACHE_FAULT_FILL_FROM_MEMORY);
 	return ret;
 }
 
@@ -315,7 +299,8 @@ pcache_do_fill_page(struct mm_struct *mm, unsigned long address,
 		    pte_t *page_table, pte_t orig_pte, pmd_t *pmd, unsigned long flags)
 {
 	return common_do_fill_page(mm, address, page_table, orig_pte, pmd, flags,
-			__pcache_do_fill_page, NULL, RMAP_FILL_PAGE_REMOTE);
+			__pcache_do_fill_page, NULL, RMAP_FILL_PAGE_REMOTE,
+			ENABLE_PIGGYBACK);
 }
 
 #ifdef CONFIG_PCACHE_ZEROFILL
@@ -361,7 +346,8 @@ pcache_do_zerofill_page(struct mm_struct *mm, unsigned long address,
 		return VM_FAULT_SIGBUS;
 	}
 	return common_do_fill_page(mm, address, page_table, orig_pte, pmd, flags,
-			__pcache_do_zerofill_page, NULL, RMAP_ZEROFILL);
+			__pcache_do_zerofill_page, NULL, RMAP_ZEROFILL,
+			DISABLE_PIGGYBACK);
 }
 #else
 /*
@@ -477,7 +463,7 @@ static int pcache_do_wp_page(struct mm_struct *mm, unsigned long address,
 		struct pcache_meta *new_pcm;
 		pte_t entry;
 
-		new_pcm = pcache_alloc(address);
+		new_pcm = pcache_alloc(address, DISABLE_PIGGYBACK);
 		if (!new_pcm) {
 			ret = VM_FAULT_OOM;
 			goto unlock_all;
@@ -541,14 +527,27 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 	if (likely(!pte_present(entry))) {
 		if (pte_none(entry)) {
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
+			unsigned long start = sched_clock();
+			bool printed = false;
+
 			/*
 			 * Check per-set's current eviction list.
 			 * Wait until cache line is fully flushed
 			 * back to memory.
 			 */
-			while (unlikely(pset_find_eviction(address, current))) {
+			while (pset_find_eviction(address, current)) {
 				cpu_relax();
 				inc_pcache_event(PCACHE_PSET_LIST_LOOKUP);
+
+				if ((sched_clock() - start) > 20 * NSEC_PER_SEC) {
+					if (!printed) {
+						pr_info("Timeout addr%#lx set %p\n",
+							address, user_vaddr_to_pcache_set(address));
+						dump_pset(user_vaddr_to_pcache_set(address));
+						dump_stack();
+						printed = true;
+					}
+				}
 			}
 #elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
 			/*

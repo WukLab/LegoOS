@@ -36,6 +36,7 @@ struct pset_eviction_entry {
 	unsigned long		address;	/* page aligned UVA */
 	struct task_struct	*owner;
 	struct pcache_meta	*pcm;		/* associated pcm */
+	int			cpu;
 	struct list_head	next;
 } ____cacheline_aligned_in_smp;
 
@@ -163,6 +164,22 @@ static inline void unlock_pset(struct pcache_set *pset)
 #endif
 }
 
+/*
+ * Necessary piggyback information cooked by perset eviction, used by pgfault
+ * routine. Also, We don't want to make piggyback too complex. Just speed up
+ * the normal case where a page is only mapped to one address space.
+ *
+ * So at the time of setup, if it is mapped to more than two address spaces
+ * we just let perset eviction routine to do the flush. Trust me, this kind
+ * of case is VERY rare.
+ */
+struct piggyback_info {
+	pid_t		tgid;
+	unsigned long	user_addr;
+	unsigned int	memory_nid;
+	unsigned int	replication_nid;
+};
+
 struct pcm_pad {
 	char x[0];
 } ____cacheline_aligned_in_smp;
@@ -184,6 +201,10 @@ struct pcm_pad {
  * new field needs to be initialized in init_pcache_meta_map().
  */
 struct pcache_meta {
+	/*
+	 * The bits remain unchanged when pcm is freed.
+	 * They are reset when pcm is allocated.
+	 */
 	unsigned long		bits;
 	atomic_t		mapcount;
 	atomic_t		_refcount;
@@ -191,8 +212,8 @@ struct pcache_meta {
 	/* This is linked to pset free_head */
 	struct list_head	free_list;
 
-	PCM_PADDING(_pad1_)
 	struct list_head	rmap;
+	struct piggyback_info	pb;
 
 #ifdef CONFIG_DEBUG_PCACHE
 	struct task_struct	*locker;
@@ -350,6 +371,10 @@ PSET_FLAGS(Sweeping, sweeping)
  * PC_reclaim:		Pcacheline was selected to be evicted
  * PC_writeback:	Pcacheline is being writtern back to memory
  * 			Only set/clear by flush routine
+ * PC_piggyback:	If piggyback is set, it means this
+ *			pcm has been just freed but yet not
+ * 			been flushed back. The following pgfault
+ * 			routine MUST carry its dirty content back to memory.
  *
  * Hack: remember to update the pcacheflag_names array in debug file.
  *
@@ -362,6 +387,8 @@ enum pcache_meta_bits {
 	PC_dirty,
 	PC_reclaim,
 	PC_writeback,
+	PC_piggyback,
+	PC_piggyback_cached,
 
 	__NR_PCLBITS,
 };
@@ -436,14 +463,16 @@ PCACHE_META_BITS(Valid, valid)
 PCACHE_META_BITS(Dirty, dirty)
 PCACHE_META_BITS(Reclaim, reclaim)
 PCACHE_META_BITS(Writeback, writeback)
+PCACHE_META_BITS(Piggyback, piggyback)
+PCACHE_META_BITS(PiggybackCached, piggyback_cached)
 
 /*
  * Flags checked when a pcache is freed.
  * Pcache lines being freed should not have these flags set.
  * It they are, there is a problem.
  */
-#define PCACHE_FLAGS_CHECK_AT_FREE				\
-	(1UL << PC_locked | 1UL << PC_valid | 1UL << PC_dirty |	\
-	 1UL << PC_reclaim | 1UL << PC_writeback )
+#define PCACHE_FLAGS_CHECK_AT_FREE					\
+	(1UL << PC_locked | 1UL << PC_valid | 1UL << PC_dirty |		\
+	 1UL << PC_reclaim | 1UL << PC_writeback | 1UL << PC_piggyback)
 
 #endif /* _LEGO_PROCESSOR_PCACHE_TYPES_H_ */

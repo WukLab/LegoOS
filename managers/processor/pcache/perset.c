@@ -19,8 +19,12 @@
 #include <lego/jiffies.h>
 #include <lego/profile.h>
 #include <lego/memblock.h>
+#include <processor/node.h>
+#include <processor/distvm.h>
 #include <processor/pcache.h>
 #include <processor/processor.h>
+
+#include "piggyback.h"
 
 /*
  * Same as pcache_rmap_map, we use the same trick here.
@@ -44,7 +48,7 @@ alloc_pset_eviction_entry(struct pcache_meta *pcm)
 	pee = index_to_pee(index);
 
 	if (unlikely(TestSetPeeUsed(pee))) {
-		pee = kmalloc(sizeof(*pee), GFP_KERNEL);
+		pee = kzalloc(sizeof(*pee), GFP_KERNEL);
 		if (unlikely(!pee))
 			goto out;
 
@@ -75,8 +79,8 @@ out:
 static inline void __pset_add_eviction_entry(struct pset_eviction_entry *new,
 					     struct pcache_set *pset)
 {
-	list_add(&new->next, &pset->eviction_list);
 	atomic_inc(&pset->nr_eviction_entries);
+	list_add(&new->next, &pset->eviction_list);
 }
 
 static inline void __pset_del_eviction_entry(struct pset_eviction_entry *p,
@@ -123,6 +127,9 @@ static int pset_add_eviction_one(struct pcache_meta *pcm,
 	int *nr_added = arg;
 	struct pcache_set *pset = pcache_meta_to_pcache_set(pcm);
 	struct pset_eviction_entry *new;
+	struct piggyback_info *pb = &pcm->pb;
+	struct task_struct *tsk;
+	unsigned long address;
 
 	new = alloc_pset_eviction_entry(pcm);
 	if (unlikely(!new)) {
@@ -130,15 +137,29 @@ static int pset_add_eviction_one(struct pcache_meta *pcm,
 		return PCACHE_RMAP_FAILED;
 	}
 
-	/* Already page aligned */
-	new->address = rmap->address;
-	new->owner = rmap->owner_process;
-	new->pcm = pcm;
+	tsk = rmap->owner_process;
+	address = rmap->address;
 
 	/* Do the insetion */
+	new->owner = tsk;
+	new->address = address;
+	new->pcm = pcm;
+	new->cpu = smp_processor_id();
 	pset_add_eviction_entry(new, pset);
 
 	(*nr_added)++;
+
+	/*
+	 * We don't want to make piggyback too complex
+	 * Just speed up the normal case where a page is
+	 * only mapped to one address space.
+	 */
+	if (likely(*nr_added == 1)) {
+		pb->tgid = tsk->tgid;
+		pb->user_addr = address;
+		pb->memory_nid = get_memory_node(tsk, address);
+		pb->replication_nid = get_replica_node_by_addr(tsk, address);
+	}
 	return PCACHE_RMAP_AGAIN;
 }
 
@@ -166,14 +187,18 @@ static int pset_add_eviction(struct pcache_set *pset, struct pcache_meta *pcm)
 	return nr_added;
 }
 
-static void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pcm,
-				 int nr_added)
+void pset_remove_eviction(struct pcache_set *pset,
+			  struct pcache_meta *pcm, int nr_added)
 {
 	struct pset_eviction_entry *pos;
+	int cpu = smp_processor_id();
 
 	spin_lock(&pset->eviction_list_lock);
 	list_for_each_entry(pos, &pset->eviction_list, next) {
 		if (pos->pcm == pcm) {
+			if (unlikely(pos->cpu != cpu))
+				BUG();
+
 			__pset_del_eviction_entry(pos, pset);
 			free_pset_eviction_entry(pos);
 			nr_added--;
@@ -187,7 +212,14 @@ static void pset_remove_eviction(struct pcache_set *pset, struct pcache_meta *pc
 DEFINE_PROFILE_POINT(evict_line_perset_unmap)
 DEFINE_PROFILE_POINT(evict_line_perset_flush)
 
-int evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm)
+/*
+ * @piggyback: if caller wishes to have piggyback
+ *
+ * Only pcache fault on remote memory can have piggyback enabled.
+ * All other callers such as COW, mremap can NOT use this.
+ */
+int evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm,
+			   enum piggyback_options piggyback)
 {
 	int nr_added;
 	bool dirty;
@@ -195,9 +227,17 @@ int evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm)
 	PROFILE_POINT_TIME(evict_line_perset_flush)
 
 	/*
-	 * Add entries to pset
-	 * This has to be performed before we do unmap, thus concurrent
-	 * pgfault can look up the eviction entries, and hold until we finished.
+	 * Add entries to pset. This has to be performed before we do unmap,
+	 * thus concurrent pgfault can look up the eviction entries,
+	 * and hold until we finished.
+	 *
+	 * This is *necessary* because if we don't cache this info, concurrent
+	 * pgfault MAY reach the remote memory before the dirty cache line
+	 * is flushed back. Thus it may end up using stale data.
+	 *
+	 * Also we have to do this no matter pcm is dirty or clean. If we want
+	 * to skip this just to optimize clean case, we need two rmap walk.
+	 * I don't think that's gonna worth it.
 	 */
 	nr_added = pset_add_eviction(pset, pcm);
 	if (unlikely(!nr_added)) {
@@ -206,25 +246,33 @@ int evict_line_perset_list(struct pcache_set *pset, struct pcache_meta *pcm)
 		BUG();
 	}
 
-	/* 2.1) Remove unmap, but don't free rmap */
 	PROFILE_START(evict_line_perset_unmap);
 	dirty = pcache_try_to_unmap_reserve_check_dirty(pcm);
-	inc_pcache_event_cond(PCACHE_CLFLUSH_CLEAN_SKIPPED, !dirty);
 	PROFILE_LEAVE(evict_line_perset_unmap);
 
-	/* Only flush lines that are dirty */
-	if (dirty) {
+	if (likely(dirty)) {
+		if (likely((nr_added == 1) && (piggyback == ENABLE_PIGGYBACK))) {
+			set_per_cpu_piggybacker(pcm);
+
+			/* We already saved into pb_info */
+			pcache_free_reserved_rmap(pcm);
+			return 0;
+		}
+
 		PROFILE_START(evict_line_perset_flush);
 		pcache_flush_one(pcm);
 		PROFILE_LEAVE(evict_line_perset_flush);
 	}
 
-	/* 2.2) free reserved rmap */
+	/*
+	 * If the pcm was clean, or we already performed the
+	 * flush above, then we need to free those reserved rmap
+	 * and remove eviction entries from pset. Concurrent
+	 * pgfault is now safe to go.
+	 */ 
 	pcache_free_reserved_rmap(pcm);
-
-	/* 3) remove entries */
 	pset_remove_eviction(pset, pcm, nr_added);
-
+	inc_pcache_event_cond(PCACHE_CLFLUSH_CLEAN_SKIPPED, !dirty);
 	return 0;
 }
 

@@ -69,7 +69,7 @@ static struct pcache_rmap *alloc_pcache_rmap(struct pcache_meta *pcm)
 
 	/* Atomic test-and-set is a sync point */
 	if (unlikely(TestSetRmapUsed(rmap))) {
-		rmap = kmalloc(sizeof(*rmap), GFP_KERNEL);
+		rmap = kzalloc(sizeof(*rmap), GFP_KERNEL);
 		if (unlikely(!rmap))
 			goto out;
 
@@ -744,7 +744,7 @@ static int pcache_move_pte_slowpath(struct mm_struct *mm,
 	BUG_ON(!old_pcm);
 
 	/* Alloc a line in the new set */
-	new_pcm = pcache_alloc(new_addr);
+	new_pcm = pcache_alloc(new_addr, DISABLE_PIGGYBACK);
 	if (unlikely(!new_pcm)) {
 		ret = -ENOMEM;
 		goto out;
@@ -1410,6 +1410,6 @@ void __init alloc_pcache_rmap_map(void)
 	if (!rmap_map)
 		panic("Unable to allocate rmap map!");
 
-	pr_info("%s(): rmap size: %zu B, total reserved: %zu B, at %p\n",
-		__func__, size, total, rmap_map);
+	pr_info("%s(): rmap size: %zu B, total reserved: %zu B, at %p - %p\n",
+		__func__, size, total, rmap_map, rmap_map + total);
 }
