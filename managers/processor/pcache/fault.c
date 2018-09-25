@@ -527,9 +527,6 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 	if (likely(!pte_present(entry))) {
 		if (pte_none(entry)) {
 #ifdef CONFIG_PCACHE_EVICTION_PERSET_LIST
-			unsigned long start = sched_clock();
-			bool printed = false;
-
 			/*
 			 * Check per-set's current eviction list.
 			 * Wait until cache line is fully flushed
@@ -538,16 +535,6 @@ static int pcache_handle_pte_fault(struct mm_struct *mm, unsigned long address,
 			while (pset_find_eviction(address, current)) {
 				cpu_relax();
 				inc_pcache_event(PCACHE_PSET_LIST_LOOKUP);
-
-				if ((sched_clock() - start) > 20 * NSEC_PER_SEC) {
-					if (!printed) {
-						pr_info("Timeout addr%#lx set %p\n",
-							address, user_vaddr_to_pcache_set(address));
-						dump_pset(user_vaddr_to_pcache_set(address));
-						dump_stack();
-						printed = true;
-					}
-				}
 			}
 #elif defined(CONFIG_PCACHE_EVICTION_VICTIM)
 			/*

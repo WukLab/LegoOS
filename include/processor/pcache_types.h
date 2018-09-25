@@ -36,7 +36,6 @@ struct pset_eviction_entry {
 	unsigned long		address;	/* page aligned UVA */
 	struct task_struct	*owner;
 	struct pcache_meta	*pcm;		/* associated pcm */
-	int			cpu;
 	struct list_head	next;
 } ____cacheline_aligned_in_smp;
 

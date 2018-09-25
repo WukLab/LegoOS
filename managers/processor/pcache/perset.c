@@ -144,7 +144,6 @@ static int pset_add_eviction_one(struct pcache_meta *pcm,
 	new->owner = tsk;
 	new->address = address;
 	new->pcm = pcm;
-	new->cpu = smp_processor_id();
 	pset_add_eviction_entry(new, pset);
 
 	(*nr_added)++;
@@ -191,14 +190,10 @@ void pset_remove_eviction(struct pcache_set *pset,
 			  struct pcache_meta *pcm, int nr_added)
 {
 	struct pset_eviction_entry *pos;
-	int cpu = smp_processor_id();
 
 	spin_lock(&pset->eviction_list_lock);
 	list_for_each_entry(pos, &pset->eviction_list, next) {
 		if (pos->pcm == pcm) {
-			if (unlikely(pos->cpu != cpu))
-				BUG();
-
 			__pset_del_eviction_entry(pos, pset);
 			free_pset_eviction_entry(pos);
 			nr_added--;
