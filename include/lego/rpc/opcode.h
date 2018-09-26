@@ -75,6 +75,9 @@
 #define M2M_FINDVMA		(M2M_BASE + 6)
 #define M2M_MSYNC		(M2M_BASE + 7)
 #define M2M_FORK		(M2M_BASE + 8)
+#ifdef CONFIG_DEBUG_VMA
+#define M2M_VALIDATE		(M2M_BASE + 9)
+#endif
 
 /* Monitor relevant opcode */
 #define MONITOR_BASE			((__u32)0x50000000)
