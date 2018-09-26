@@ -25,6 +25,32 @@
 #define MAX_REPLY_LEN	(PAGE_SIZE * 4)
 #define NR_TESTS	(100000)
 
+static void profile_case_noreply(char *desc, int send_len, int reply_len,
+				 void *send_buf, void *reply_buf,
+				 unsigned int dst_nid)
+{
+	int i;
+	struct p2m_test_msg *msg;
+	unsigned long start_ns, end_ns, total_ns, avg_ns;
+
+	msg = send_buf;
+	fill_common_header(msg, P2M_TEST_NOREPLY);
+	msg->send_len = send_len;
+	msg->reply_len = reply_len;
+
+	start_ns = sched_clock();
+	for (i = 0; i < NR_TESTS; i++) {
+		ibapi_send(dst_nid, msg, msg->send_len);
+	}
+	end_ns = sched_clock();
+
+	total_ns = end_ns - start_ns;
+	avg_ns = total_ns / NR_TESTS;
+
+	pr_info("    CPU%2d Profile: %s. Avg: %lu ns.\n",
+		smp_processor_id(), desc, avg_ns);
+}
+
 static void profile_case(char *desc, int send_len, int reply_len,
 		      void *send_buf, void *reply_buf, unsigned int dst_nid)
 {
@@ -73,7 +99,10 @@ static int __profile_case_threads(void *_info)
 	while (atomic_read(&barrier))
 		schedule();
 
+
 	profile_case(info->desc, info->send_len, info->reply_len,
+		     info->send_buf, info->reply_buf, info->dst_nid);
+	profile_case_noreply(info->desc, info->send_len, info->reply_len,
 		     info->send_buf, info->reply_buf, info->dst_nid);
 
 	atomic_dec(&exit_barrier);

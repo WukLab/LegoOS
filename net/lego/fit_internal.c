@@ -1125,8 +1125,10 @@ int fit_send_message_with_rdma_write_with_imm_request(ppc *ctx, int connection_i
 		/*
 		 * HACK!!!
 		 *
-		 * ibapi_send_reply() uses this mode to SEND.
+		 * ibapi_send_reply() and ibapi_send() uses this mode to SEND.
 		 * Check fit_send_reply_with_rdma_write_with_imm().
+		 *
+		 * If reply_indicator_index is -1, means this is ibapi_send()
 		 */
 		if (header->reply_indicator_index == -1)
 			wr.wr_id = -1;
@@ -1343,6 +1345,10 @@ void fit_ack_reply_callback(struct thpool_buffer *b)
 
 		enqueue_wq(pass);
         }
+
+	/* Comes from ibapi_send() */
+	if (ThpoolBufferNoreply(b))
+		return;
 
 	/*
 	 * Step III
@@ -2307,7 +2313,7 @@ int fit_send_request(ppc *ctx, int connection_id, enum mode s_mode,
  * zero for succeed
  */
 int fit_send_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
-					       int size, int userspace_flag)
+				      int size, int userspace_flag)
 {
 	int tar_offset_start;
 	int connection_id;
@@ -2320,34 +2326,30 @@ int fit_send_with_rdma_write_with_imm(ppc *ctx, int target_node, void *addr,
 	int last_ack;
 	int ret;
 
+	BUG_ON(!addr);
+
 	real_size = size + sizeof(struct imm_message_metadata);
-	if (real_size > IMM_MAX_SIZE)
-	{
-		printk(KERN_CRIT "%s: message size %d + header is larger than max size %d\n", __func__, size, IMM_MAX_SIZE);
-		return -1;
-	}
-	if(!addr)
-	{
-		printk(KERN_CRIT "%s: null input addr\n", __func__);
-		return -2;
+	if (unlikely(real_size > IMM_MAX_SIZE)) {
+		fit_err("Size %d + header > %d", size, IMM_MAX_SIZE);
+		return -EINVAL;
 	}
 
 	spin_lock(&ctx->remote_imm_offset_lock[target_node]);
-	if(ctx->remote_rdma_ring_mrs_offset[target_node] + real_size >= RDMA_RING_SIZE)//If hits the end of ring, write start from 0 directly
-		ctx->remote_rdma_ring_mrs_offset[target_node] = real_size;//Record the last point
+	/* If hits the end of ring, write start from 0 directly */
+	if (ctx->remote_rdma_ring_mrs_offset[target_node] + real_size >= RDMA_RING_SIZE)
+		/* Record the last point */
+		ctx->remote_rdma_ring_mrs_offset[target_node] = real_size;
 	else
 		ctx->remote_rdma_ring_mrs_offset[target_node] += real_size;
-	tar_offset_start = ctx->remote_rdma_ring_mrs_offset[target_node] - real_size;//Trace back to the real starting point
+
+	/* Trace back to the real starting point */
+	tar_offset_start = ctx->remote_rdma_ring_mrs_offset[target_node] - real_size;
 	spin_unlock(&ctx->remote_imm_offset_lock[target_node]);
 
-	//printk(KERN_CRIT "%s tar_offset_start %d real_size %d last_ack_index %d\n",
-	//		__func__, tar_offset_start, real_size, ctx->remote_last_ack_index[target_node]);
-
-	/* make sure we do not write beyond lastack */
-	while(1)
-	{
+	/* Make sure we do not write beyond lastack */
+	while (1) {
 		last_ack = ctx->remote_last_ack_index[target_node];
-		if(tar_offset_start < last_ack && tar_offset_start + real_size > last_ack)
+		if (tar_offset_start < last_ack && tar_offset_start + real_size > last_ack)
 			schedule();
 		else
 			break;

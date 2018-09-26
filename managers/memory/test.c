@@ -34,3 +34,8 @@ void handle_p2m_test(struct p2m_test_msg *msg, struct thpool_buffer *tb)
 {
 	tb_set_tx_size(tb, msg->reply_len);
 }
+
+void handle_p2m_test_noreply(struct p2m_test_msg *msg, struct thpool_buffer *tb)
+{
+	tb_set_tx_size(tb, msg->reply_len);
+}

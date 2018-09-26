@@ -73,6 +73,7 @@ static inline void unlock_ib(void) { }
 unsigned long	nr_recvcq_cqes[NUM_POLLING_THREADS];
 #ifdef CONFIG_COUNTER_FIT_IB
 atomic_long_t	nr_ib_send_reply;
+atomic_long_t	nr_ib_send;
 atomic_long_t	nr_bytes_tx;
 atomic_long_t	nr_bytes_rx;
 
@@ -82,6 +83,7 @@ void dump_ib_stats(void)
 
 	pr_info("IB Stats:\n");
 	pr_info("    nr_ib_send_reply: %15ld\n", COUNTER_nr_ib_send_reply());
+	pr_info("    nr_ib_send:       %15ld\n", COUNTER_nr_ib_send());
 	for (i = 0; i < NUM_POLLING_THREADS; i++)
 		pr_info("      recvcq[0] CQEs: %15lu\n", nr_recvcq_cqes[i]);
 	pr_info("    nr_bytes_tx:      %15ld\n", COUNTER_nr_bytes_tx());
@@ -175,9 +177,22 @@ __ibapi_send_reply_timeout_w_private_bits(int target_node, void *addr, int size,
 	return ret;
 }
 
+DEFINE_PROFILE_POINT(ibapi_send)
+
 int ibapi_send(int target_node, void *addr, int size)
 {
-	return fit_send_with_rdma_write_with_imm(FIT_ctx, target_node, addr, size, 0);
+	int ret;
+	PROFILE_POINT_TIME(ibapi_send)
+
+#ifdef CONFIG_COUNTER_FIT_IB
+	atomic_long_inc(&nr_ib_send);
+	atomic_long_add(size, &nr_bytes_tx);
+#endif
+
+	PROFILE_START(ibapi_send);
+	ret = fit_send_with_rdma_write_with_imm(FIT_ctx, target_node, addr, size, 0);
+	PROFILE_LEAVE(ibapi_send);
+	return ret;
 }
 
 /**

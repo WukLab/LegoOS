@@ -375,6 +375,11 @@ PSET_FLAGS(Sweeping, sweeping)
  * 			been flushed back. The following pgfault
  * 			routine MUST carry its dirty content back to memory.
  *
+ * PC_piggyback_cached:
+ * 			This pcm has been cached at per-cpu piggybacker.
+ * 			A following pcache_alloc from the same CPU, with
+ * 			ENABLE_PIGGYBACK will get it. Check piggyback.h
+ *
  * Hack: remember to update the pcacheflag_names array in debug file.
  *
  * 1) PC_valid is more like the traditional cache valid bit. It is set when

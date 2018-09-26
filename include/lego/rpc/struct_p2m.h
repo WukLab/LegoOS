@@ -23,6 +23,7 @@ struct p2m_test_msg {
 	__u32			reply_len;
 };
 void handle_p2m_test(struct p2m_test_msg *msg, struct thpool_buffer *tb);
+void handle_p2m_test_noreply(struct p2m_test_msg *msg, struct thpool_buffer *tb);
 
 /*
  * P2M_ZEROFILL

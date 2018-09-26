@@ -46,7 +46,8 @@
 #define P2M_FORK		((__u32)__NR_fork)
 #define P2M_EXECVE		((__u32)__NR_execve)
 #define P2M_CHECKPOINT		((__u32)__NR_checkpoint_process)
-#define P2M_TEST		((__u32)0x0fffffff)
+#define P2M_TEST		((__u32)0x0ffffff0)
+#define P2M_TEST_NOREPLY	((__u32)0x0ffffff1)
 #define P2M_RENAME		((__u32)__NR_rename)
 #define P2M_STAT		((__u32)__NR_stat)
 

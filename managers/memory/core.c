@@ -113,7 +113,10 @@ alloc_thpool_buffer(void)
 	 * - buffer is not big enough
 	 * - handler are too slow
 	 */
-	WARN_ON(ThpoolBufferUsed(tb));
+	while (ThpoolBufferUsed(tb)) {
+		WARN_ON_ONCE(1);
+		cpu_relax();
+	}
 
 	__SetThpoolBufferUsed(tb);
 	return tb;
@@ -163,6 +166,12 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 	case P2M_TEST:
 		handle_p2m_test(msg, buffer);
 		break;
+
+	case P2M_TEST_NOREPLY:
+		__SetThpoolBufferNoreply(buffer);
+		handle_p2m_test_noreply(msg, buffer);
+		break;
+
 /* PCACHE */
 	case P2M_PCACHE_MISS:
 		inc_mm_stat(HANDLE_PCACHE_MISS);
@@ -174,12 +183,6 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 		break;
 	case P2M_PCACHE_ZEROFILL:
 		handle_p2m_zerofill(msg, buffer);
-		break;
-
-/* clflush REPLICA */
-	case P2M_PCACHE_REPLICA:
-		inc_mm_stat(HANDLE_PCACHE_REPLICA);
-		handle_p2m_replica(msg, buffer);
 		break;
 
 /* SYSCALL */
@@ -287,6 +290,20 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 		break;
 #endif
 
+	/*
+	 * Below include handlers for ibapi_send()
+	 * They will all have Noreply set and the
+	 * fit layer will skip reply part.
+	 */
+
+	/* clflush REPLICA */
+	case P2M_PCACHE_REPLICA:
+		inc_mm_stat(HANDLE_PCACHE_REPLICA);
+
+		__SetThpoolBufferNoreply(buffer);
+		handle_p2m_replica(msg, buffer);
+		break;
+
 	default:
 		handle_bad_request(hdr, desc);
 	}
@@ -375,7 +392,9 @@ static int thpool_worker_func(void *_worker)
 			clear_in_handler_thpool_worker(w);
 
 			/* Return buffer to free pool */
+			__ClearThpoolBufferNoreply(b);
 			__ClearThpoolBufferUsed(b);
+
 			inc_thpool_worker_nr_handled(w);
 			spin_lock(&w->lock);
 		}

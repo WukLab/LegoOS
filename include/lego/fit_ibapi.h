@@ -27,12 +27,18 @@
 
 #ifdef CONFIG_COUNTER_FIT_IB
 extern atomic_long_t	nr_ib_send_reply;
+extern atomic_long_t	nr_ib_send;
 extern atomic_long_t	nr_bytes_tx;
 extern atomic_long_t	nr_bytes_rx;
 
 static inline long COUNTER_nr_ib_send_reply(void)
 {
 	return atomic_long_read(&nr_ib_send_reply);
+}
+
+static inline long COUNTER_nr_ib_send(void)
+{
+	return atomic_long_read(&nr_ib_send);
 }
 
 static inline long COUNTER_nr_bytes_tx(void)
@@ -48,6 +54,10 @@ static inline long COUNTER_nr_bytes_rx(void)
 void dump_ib_stats(void);
 #else
 static inline long COUNTER_nr_ib_send_reply(void)
+{
+	return 0;
+}
+static inline long COUNTER_nr_ib_send(void)
 {
 	return 0;
 }

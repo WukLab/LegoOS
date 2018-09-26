@@ -21,8 +21,7 @@
  */
 #define THPOOL_TX_SIZE		(PAGE_SIZE * 1024)
 
-/* TODO: use IB macro */
-#define NR_THPOOL_BUFFER	(4*24)
+#define NR_THPOOL_BUFFER	(256)
 
 #define NR_THPOOL_WORKERS	CONFIG_THPOOL_NR_WORKERS
 
@@ -123,6 +122,7 @@ struct thpool_buffer {
 
 enum thpool_buffer_flags {
 	THPOOL_BUFFER_used,
+	THPOOL_BUFFER_noreply,
 	THPOOL_BUFFER_privateTX,
 
 	NR_THPOOL_BUFFER_FLAGS,
@@ -166,6 +166,7 @@ static inline void __ClearThpoolBuffer##uname(struct thpool_buffer *p)	\
 	__CLEAR_THPOOL_BUFFER_FLAGS(uname, lname)
 
 THPOOL_BUFFER_FLAGS(Used, used)
+THPOOL_BUFFER_FLAGS(Noreply, noreply)
 THPOOL_BUFFER_FLAGS(PrivateTX, privateTX)
 
 static inline void tb_set_tx_size(struct thpool_buffer *tb, int size)

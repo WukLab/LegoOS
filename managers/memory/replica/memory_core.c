@@ -344,6 +344,7 @@ static inline int append_replica_log(struct replica_struct *r,
 	return 0;
 }
 
+/* From ibapi_send() */
 void handle_p2m_replica(void *_msg, struct thpool_buffer *tb)
 {
 	struct p2m_replica_msg *msg;
