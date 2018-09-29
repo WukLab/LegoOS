@@ -10,7 +10,7 @@
 #ifndef _LEGO_MEMORY_DISTRIBUTED_VM_H_
 #define _LEGO_MEMORY_DISTRIBUTED_VM_H_
 
-#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY 
+#ifdef CONFIG_DISTRIBUTED_VMA_MEMORY
 
 #include <lego/rbtree.h>
 #include <lego/string.h>
@@ -22,10 +22,10 @@
 #include <monitor/common.h>
 
 /*
- * this struct keeps track of unmap vm area in with granularity of 
- * VM_GRANULARITY, the range is [pool_start, pool_end), root is in 
- * lego_mm_struct, this struct should always corresponding to vm 
- * range array. More precisely, it's the inverse of vm range array. 
+ * this struct keeps track of unmap vm area in with granularity of
+ * VM_GRANULARITY, the range is [pool_start, pool_end), root is in
+ * lego_mm_struct, this struct should always corresponding to vm
+ * range array. More precisely, it's the inverse of vm range array.
  */
 struct vm_pool_struct {
 	struct rb_node vmr_rb;
@@ -43,7 +43,7 @@ struct vm_pool_struct {
 #define is_local(node)		(node == LEGO_LOCAL_NID)
 
 static inline void
-set_vmrange_map(struct lego_mm_struct *mm, unsigned long addr, 
+set_vmrange_map(struct lego_mm_struct *mm, unsigned long addr,
 		unsigned long len, struct vma_tree *vma_tree)
 {
 	struct vma_tree **map = mm->vmrange_map;
@@ -81,54 +81,54 @@ void distvm_exit_homenode(struct lego_mm_struct *mm);
 
 /* vm pool API */
 int vmpool_retrieve(struct rb_root *root, unsigned long start, unsigned long end);
-unsigned long vmpool_alloc(struct rb_root *root, unsigned long addr, 
+unsigned long vmpool_alloc(struct rb_root *root, unsigned long addr,
 			   unsigned long len, unsigned long flag);
 
 /* homenode handle API */
-unsigned long 
-distvm_mmap_homenode_noconsult(struct lego_mm_struct *mm, struct lego_file *file, 
-		     unsigned long addr, unsigned long len, unsigned long prot, 
+unsigned long
+distvm_mmap_homenode_noconsult(struct lego_mm_struct *mm, struct lego_file *file,
+		     unsigned long addr, unsigned long len, unsigned long prot,
 		     unsigned long flag, unsigned long pgoff);
-unsigned long 
-distvm_mmap_homenode(struct lego_mm_struct *mm, struct lego_file *file, 
-		     unsigned long addr, unsigned long len, unsigned long prot, 
+unsigned long
+distvm_mmap_homenode(struct lego_mm_struct *mm, struct lego_file *file,
+		     unsigned long addr, unsigned long len, unsigned long prot,
 		     unsigned long flag, unsigned long pgoff);
 int
 distvm_brk_homenode(struct lego_mm_struct *mm, unsigned long addr, unsigned long len);
-int 
+int
 distvm_munmap_homenode(struct lego_mm_struct *mm, unsigned long begin, unsigned long len);
-unsigned long 
-distvm_mremap_homenode(struct lego_mm_struct *mm, unsigned long old_addr, 
-		       unsigned long old_len, unsigned long new_len, 
+unsigned long
+distvm_mremap_homenode(struct lego_mm_struct *mm, unsigned long old_addr,
+		       unsigned long old_len, unsigned long new_len,
 		       unsigned long flag, unsigned long new_addr);
 
 /* non-homenode handle API */
-int map_vmatrees(struct lego_mm_struct *mm, int mnode, unsigned long addr, 
+int map_vmatrees(struct lego_mm_struct *mm, int mnode, unsigned long addr,
 		 unsigned long len, unsigned long flag);
-unsigned long 
+unsigned long
 do_dist_mmap(struct lego_mm_struct *mm, struct lego_file *file,
-	     int mnode, unsigned long new_range, unsigned long addr, 
-	     unsigned long len, unsigned long prot, unsigned long flag, 
+	     int mnode, unsigned long new_range, unsigned long addr,
+	     unsigned long len, unsigned long prot, unsigned long flag,
 	     vm_flags_t vm_flags, unsigned long pgoff, unsigned long *max_gap);
-int distvm_munmap(struct lego_mm_struct *mm, unsigned long begin, 
+int distvm_munmap(struct lego_mm_struct *mm, unsigned long begin,
 		  unsigned long len, unsigned long *max_gap);
-unsigned long 
-distvm_mremap_grow(struct lego_task_struct *tsk, unsigned long addr, 
+unsigned long
+distvm_mremap_grow(struct lego_task_struct *tsk, unsigned long addr,
 		   unsigned long old_len, unsigned long new_len);
-unsigned long 
-do_dist_mremap_move(struct lego_mm_struct *mm, int mnode, unsigned long old_addr, 
-		    unsigned long old_len, unsigned long new_len, 
-		    unsigned long new_range, unsigned long *old_max_gap, 
+unsigned long
+do_dist_mremap_move(struct lego_mm_struct *mm, int mnode, unsigned long old_addr,
+		    unsigned long old_len, unsigned long new_len,
+		    unsigned long new_range, unsigned long *old_max_gap,
 		    unsigned long *new_max_gap);
-unsigned long 
-do_dist_mremap_move_split(struct lego_mm_struct *mm, unsigned long old_addr, 
-			  unsigned long old_len, unsigned long new_addr, 
-			  unsigned long new_len, unsigned long *old_max_gap, 
+unsigned long
+do_dist_mremap_move_split(struct lego_mm_struct *mm, unsigned long old_addr,
+			  unsigned long old_len, unsigned long new_addr,
+			  unsigned long new_len, unsigned long *old_max_gap,
 			  unsigned long *new_max_gap);
 
 /* some helper functions */
 void max_gap_update(struct vma_tree *root);
-int find_dist_vma_intersection(struct lego_mm_struct *mm, 
+int find_dist_vma_intersection(struct lego_mm_struct *mm,
 			       unsigned long begin, unsigned long end);
 /* only use this function at homenode */
 void sort_node_gaps(struct lego_mm_struct *mm, struct vma_tree *root);
@@ -165,7 +165,7 @@ get_available_reply_entry(struct lego_mm_struct *mm)
 }
 
 /* some context switch functions for compatible with original vma */
-static inline void 
+static inline void
 load_vma_context(struct lego_mm_struct *mm, struct vma_tree *root)
 {
 	mm->mm_rb = root->vm_rb;
@@ -177,14 +177,14 @@ load_vma_context(struct lego_mm_struct *mm, struct vma_tree *root)
 	dump_new_context(mm);
 #endif
 }
-static inline void 
+static inline void
 save_vma_context(struct lego_mm_struct *mm, struct vma_tree *root)
 {
 	root->vm_rb = mm->mm_rb;
 	root->mmap = mm->mmap;
 	root->highest_vm_end = mm->highest_vm_end;
 }
-static inline void 
+static inline void
 save_update_vma_context(struct lego_mm_struct *mm, struct vma_tree *root)
 {
 	save_vma_context(mm, root);

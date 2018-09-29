@@ -12,7 +12,7 @@
  */
 #include <lego/mm.h>
 #include <memory/mm.h>
-#include <memory/distvm.h> 
+#include <memory/distvm.h>
 
 void dump_vmas_onetree(struct vma_tree *root)
 {
@@ -32,7 +32,7 @@ void dump_vmas_onetree(struct vma_tree *root)
 	for (; pos; pos = pos->vm_next) {
 		vma_debug("[VMAS] start: %lx, end: %lx, "
 			  "gap: %lx, vm_flags: %lx\n",
-			  pos->vm_start, pos->vm_end, 
+			  pos->vm_start, pos->vm_end,
 			  pos->rb_subtree_gap, pos->vm_flags);
 	}
 }
@@ -47,7 +47,7 @@ void dump_vmas_onenode(struct lego_mm_struct *mm)
 		struct vma_tree *root = map[idx];
 		if (!root)
 			continue;
-		
+
 		dump_vmas_onetree(root);
 		idx = vmr_idx(VMR_ALIGN(root->end)) - 1;
 	}
@@ -75,10 +75,10 @@ void dump_gaps_onenode(struct lego_mm_struct *mm, unsigned long id)
 		vma_debug("[GAP] given node doesn't exist\n");
 		return;
 	}
-	
+
 	head = &node->list;
 	list_for_each_entry(pos, head, list)
-		vma_debug("[GAP] max_gap: %lx, is_fixed: %lx\n", 
+		vma_debug("[GAP] max_gap: %lx, is_fixed: %lx\n",
 			  pos->max_gap, pos->flag & MAP_FIXED);
 }
 
@@ -95,11 +95,11 @@ void dump_reply(struct vmr_map_reply *reply)
 		return;
 
 	vma_debug("[REPLY] ************** reply print start **************\n");
-	vma_debug("[REPLY] reply count: %d, max count: %d\n", 
+	vma_debug("[REPLY] reply count: %d, max count: %d\n",
 				reply->nr_entry, MAX_VMA_REPLY_ENTRY);
 	entry = reply->map;
 	for (i = 0; i < reply->nr_entry; i++) {
-		vma_debug("[REPLY] mnode: %d, start: %lx, len: %lx\n", 
+		vma_debug("[REPLY] mnode: %d, start: %lx, len: %lx\n",
 			entry[i].mnode, entry[i].start, entry[i].len);
 	}
 	vma_debug("[REPLY] ************** reply print done ***************\n");
@@ -141,21 +141,45 @@ void dump_vmpool(struct lego_mm_struct *mm)
 		return;
 	}
 	for (pos = rb_first(&mm->vmpool_rb); pos; pos = rb_next(pos)) {
-		struct vm_pool_struct *ent = rb_entry(pos, 
+		struct vm_pool_struct *ent = rb_entry(pos,
 					struct vm_pool_struct, vmr_rb);
-		vma_debug("[VMPOOL][%d]: begin: %lx, end: %lx\n", 
+		vma_debug("[VMPOOL][%d]: begin: %lx, end: %lx\n",
 				pid, ent->pool_start, ent->pool_end);
 	}
 }
 
-void mmap_brk_validate(struct lego_mm_struct *mm, unsigned long addr, unsigned long len)
+#ifdef CONFIG_DEBUG_VMA
+static int distribute_validation(struct lego_task_struct *tsk, unsigned long addr,
+				 unsigned long len, int mnode)
+{
+	int ret, reply = 0;
+	struct m2m_validate_struct send;
+
+	send.pid = tsk->pid;
+	send.prcsr_nid = tsk->node;
+	send.addr = addr;
+	send.len = len;
+
+	ret = net_send_reply_timeout(mnode, M2M_VALIDATE, (void *)&send,
+			sizeof(struct m2m_validate_struct), (void *)&reply,
+			sizeof(int), false, DEF_NET_TIMEOUT);
+
+	if (ret != sizeof(reply))
+		return -EIO;
+
+	return reply;
+}
+#endif
+
+void mmap_brk_validate_local(struct lego_mm_struct *mm, unsigned long addr, unsigned long len)
 {
 #ifdef CONFIG_DEBUG_VMA
 	const unsigned long end = addr + len;
 	struct vm_area_struct *vma, *prev = NULL;
-	
-	vma_debug("Validate addr: %lx, end: %lx\n", addr, end);
-	
+
+	vma_trace("nid: %d, pid: %d, Validate addr: %lx, end: %lx\n",
+		  mm->task->node, mm->task->node, addr, end);
+
 new_tree:
 	vma = find_vma(mm, addr);
 	if (!vma || vma->vm_start > addr) {
@@ -178,10 +202,83 @@ new_tree:
 		if (vma->vm_end >= end)
 			return;
 
-		prev = vma; 
+		prev = vma;
 		if (root->end == vma->vm_end) {
-			/* 
-			 * out of current tree range, 
+			/*
+			 * out of current tree range,
+			 * proceed to next vma tree
+			 */
+			addr = vma->vm_end;
+			goto new_tree;
+		} else if (root->end < vma->vm_end) {
+			vma_debug("vma exceeds vma tree range, root->end: %lx,"
+			          "vma->vm_end: %lx\n", root->end, vma->vm_end);
+			dump_all_vmas_simple(mm);
+			BUG();
+		} else {
+			vma = vma->vm_next;
+		}
+	}
+#endif
+}
+
+void mmap_brk_validate(struct lego_mm_struct *mm, unsigned long addr, unsigned long len)
+{
+#ifdef CONFIG_DEBUG_VMA
+	const unsigned long end = addr + len;
+	struct vm_area_struct *vma, *prev = NULL;
+	struct vma_tree *root;
+
+	vma_trace("nid: %d, pid: %d, Validate addr: %lx, end: %lx\n",
+		  mm->task->node, mm->task->pid, addr, end);
+
+new_tree:
+	root = get_vmatree_by_addr(mm, addr);
+	vma = find_vma(mm, addr);
+	/* vma is not local, we need to send the validation to remote */
+	if (!vma && root) {
+		unsigned long send_len = min(root->end, end) - addr;
+		int ret;
+
+		ret = distribute_validation(mm->task, addr, send_len, root->mnode);
+		if (ret) {
+			vma_debug("Return result: %d\n", ret);
+			dump_all_vmas_simple(mm);
+			BUG();
+		}
+
+		addr += send_len;
+		if (addr == end)
+			return;
+
+		goto new_tree;
+	}
+
+	/* vma is local to homenode, check it now */
+	if (!vma || vma->vm_start > addr) {
+		vma_debug("Addr: %lx not found\n", addr);
+		dump_all_vmas_simple(mm);
+		BUG();
+	}
+
+	while (vma && vma->vm_end < end) {
+		struct vma_tree *root = mm->vmrange_map[vmr_idx(vma->vm_start)];
+
+		/* if there is prev, check continuity */
+		if (prev && prev->vm_end != vma->vm_start) {
+			vma_debug("Addr: %lx not found\n", prev->vm_end);
+			dump_all_vmas_simple(mm);
+			BUG();
+		}
+
+		/* good, return */
+		if (vma->vm_end >= end)
+			return;
+
+		prev = vma;
+		if (root->end == vma->vm_end) {
+			/*
+			 * out of current tree range,
 			 * proceed to next vma tree
 			 */
 			addr = vma->vm_end;

@@ -1011,14 +1011,16 @@ void handle_m2m_mremap_move(struct m2m_mremap_move_struct *payload,
 
 	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!tsk)) {
-		reply->new_addr = RET_ESRCH;
+		WARN_ON_ONCE(1);
+		reply->new_addr = -ESRCH;
 		return;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
 	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
-		reply->new_addr = RET_EINTR;
+		WARN_ON_ONCE(1);
+		reply->new_addr = -EINTR;
 		return;
 	}
 
@@ -1053,14 +1055,16 @@ void handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *payload,
 
 	tsk = find_lego_task_by_pid(prcsr_nid, pid);
 	if (unlikely(!tsk)) {
-		reply->new_addr = RET_ESRCH;
+		WARN_ON_ONCE(1);
+		reply->new_addr = -ESRCH;
 		return;
 	}
 	debug_dump_vm_all(tsk->mm, 1);
 
 	mm = tsk->mm;
 	if (down_write_killable(&mm->mmap_sem)) {
-		reply->new_addr = RET_EINTR;
+		WARN_ON_ONCE(1);
+		reply->new_addr = -EINTR;
 		return;
 	}
 
@@ -1072,4 +1076,47 @@ void handle_m2m_mremap_move_split(struct m2m_mremap_move_split_struct *payload,
 
 	debug_dump_vm_all(tsk->mm, 0);
 }
+
+#ifdef CONFIG_DEBUG_VMA
+void handle_m2m_validate(struct m2m_validate_struct *payload,
+			 struct common_header *hdr, struct thpool_buffer *tb)
+{
+	u32 nid = hdr->src_nid;
+	u32 pid = payload->pid;
+	u32 prcsr_nid = payload->prcsr_nid;
+	unsigned long addr = payload->addr;
+	unsigned long len = payload->len;
+	struct lego_task_struct *tsk;
+	struct lego_mm_struct *mm;
+	int *reply;
+
+	mmap_debug("src_nid:%u, pid:%u, addr:%#lx, len:&%lx, ",
+		   nid, pid, addr, len);
+
+	reply = thpool_buffer_tx(tb);
+	tb_set_tx_size(tb, sizeof(*reply));
+
+	tsk = find_lego_task_by_pid(prcsr_nid, pid);
+	if (unlikely(!tsk)) {
+		WARN_ON_ONCE(1);
+		*reply = -ESRCH;
+		return;
+	}
+	debug_dump_vm_all(tsk->mm, 1);
+
+	mm = tsk->mm;
+	if (down_write_killable(&mm->mmap_sem)) {
+		WARN_ON_ONCE(1);
+		*reply = -EINTR;
+		return;
+	}
+
+	mmap_brk_validate_local(mm, addr, len);
+	*reply = 0;
+
+	up_write(&mm->mmap_sem);
+	debug_dump_vm_all(tsk->mm, 0);
+}
 #endif
+
+#endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */

@@ -340,6 +340,8 @@ void dump_reply(struct vmr_map_reply *reply);
 void dump_alloc_schemes(int count, struct alloc_scheme *scheme);
 void mmap_brk_validate(struct lego_mm_struct *mm, unsigned long addr, 
 		       unsigned long len);
+void mmap_brk_validate_local(struct lego_mm_struct *mm, unsigned long addr,
+			     unsigned long len);
 
 #define VM_BUG_ON_MM(cond, mm)						\
 	do {								\

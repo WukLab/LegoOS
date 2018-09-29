@@ -129,6 +129,17 @@ struct m2m_fork_struct {
 void handle_m2m_fork(struct m2m_fork_struct *payload,
 		     struct common_header *hdr, struct thpool_buffer *tb);
 
+#ifdef CONFIG_DEBUG_VMA
+struct m2m_validate_struct {
+	u32		prcsr_nid;
+	u32		pid;
+	unsigned long	addr;
+	unsigned long	len;
+};
+void handle_m2m_validate(struct m2m_validate_struct *payload,
+			 struct common_header *hdr, struct thpool_buffer *tb);
+#endif
+
 #endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */
 
 #endif /* _LEGO_RPC_STRUCT_M2M_H_ */

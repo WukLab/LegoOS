@@ -149,7 +149,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 	/*
 	 *   | .........| ............. |
 	 *   ^          ^
-	 *  msg(hdr)  payload   
+	 *  msg(hdr)  payload
 	 */
 	tx = thpool_buffer_tx(buffer);
 	msg = thpool_buffer_rx(buffer);
@@ -288,7 +288,14 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 	case M2M_FORK:
 		handle_m2m_fork(payload, hdr, buffer);
 		break;
+
+#ifdef CONFIG_DEBUG_VMA
+	case M2M_VALIDATE:
+		handle_m2m_validate(payload, hdr, buffer);
+		break;
 #endif
+
+#endif /* CONFIG_DISTRIBUTED_VMA_MEMORY */
 
 	/*
 	 * Below include handlers for ibapi_send()
