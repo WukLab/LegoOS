@@ -2,7 +2,7 @@
 
 ![Status](https://img.shields.io/badge/Version-Experimental-green.svg)
 ![License](https://img.shields.io/aur/license/yaourt.svg?style=popout)
-![ISA](https://img.shields.io/badge/ISA-x86--64-orange.svg)
+![ISA](https://img.shields.io/badge/ISA-x86--64-yellow.svg)
 ![Platform](https://img.shields.io/badge/Platform-Linux-red.svg)
 
 LegoOS is a disseminated, distributed operating system designed and built for resoucre disaggregation. LegoOS is one of the implementation of the Splitkernel. The OSDI'18 paper has more interesting design details.
@@ -20,7 +20,7 @@ Several terms in this repository are used differently from the paper description
 
 Let's first get familiar with the codebase. If you have played with Linux kernel, welcome home. LegoOS has a similar directory organization: 1) `arch/` is for low-level ISA-specific hooks, 2) `drivers/` has `acpi`, `infiniband`, `pci`, and `tty` drivers, 3) `init/`, `kernel/`, `lib/`, and `mm/` are shared essential core kernel utilities. 4) `linux-modules/` are Linux kernel modules for storage manager and global resource monitors. We reused most of Linux code to ease our own porting of infiniband drivers.
 
-This code repository also many __major__ subsystems (e.g., managers, monitors, networking) and the following table describes where you can find the corresponding code:
+This code repository has many __major__ subsystems (e.g., managers, monitors, networking) and the following table describes where you can find the corresponding code:
 
 | Major Subsystems | Directory |
 |:---------|:-----------|
@@ -60,6 +60,30 @@ As for the memory manager, it has the following subsystems:
 Storage manager and global resource monitors are not LegoOS's main focus at this stage, each of them has one simple task just as their name suggested.
 
 ## Platform Requirement
+LegoOS has been tested __only__ in the following hardware setting:
+
+|Hardware| Vendor and Model|
+|:--|:--|
+|Server| Dell PowerEdge R730|
+|CPU| [Intel Xeon E5-2620 v3](https://ark.intel.com/products/83352/Intel-Xeon-Processor-E5-2620-v3-15M-Cache-2-40-GHz-)|
+|NIC|[Mellanox MCX354A-TCBT ConnectX-3 VPI](https://store.mellanox.com/products/mellanox-mcx354a-tcbt-connectx-3-vpi-adapter-card-dual-port-qsfp-fdr10-ib-40gb-s-and-10gbe-pcie3-0-x8-8gt-s-rohs-r6.html?sku=MCX354A-TCBT&gclid=Cj0KCQjwl9zdBRDgARIsAL5Nyn0_Fiuw4-8TGIOE7lNr07YZmKz-CxXvBz1lV8FsTJ3rZwCeeSetF2saAnfmEALw_wcB)|
+
+And the following toolchains:
+
+|Software|Version|
+|:--|:--|
+|CentOS|7.2|
+|GCC|4.8.5 20150623 (Red Hat 4.8.5-16)|
+|GNU assembler|2.23.52.0.1 (x86_64-redhat-linux)|
+|GNU ld|2.23.52.0.1-55.el7 20130226|
+|GNU libc|2.17|
+|GRUB2|2.02|
+
+Of all the above hardware and software requirments, __the CPU and the NIC are the hard requirement__. Currently, LegoOS can only run on `Intel x86` CPUs. As for the NIC card, LegoOS has ported an `mlx4_ib` driver, which _probably_ can run on other Mellanox cards, but we have not tested other than the one we used. As long as you have the CPU and the NIC, we think you can run LegoOS on top your platform.
+
+We understand that the key for an OS to be successful is let people be able to try it out. We are deeply sorry that we can not provide any technique support if you are using a different platform.
+
+## Configuration
 asd
 
 ## Config and Build
