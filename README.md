@@ -1,3 +1,12 @@
+# LegoOS
+
+![Status](https://img.shields.io/badge/Version-Experimental-green.svg)
+![License](https://img.shields.io/aur/license/yaourt.svg?style=popout)
+
+LegoOS is a disseminated, distributed operating system designed and built for resoucre disaggregation. LegoOS is one of the implementation of the Splitkernel. We can find more internal design of LegoOS from our OSDI'18 paper.
+
+[[Paper](https://engineering.purdue.edu/~yiying/LegoOS-OSDI18.pdf)] [[Slides]()]
+
 ## Config and Build
 
 Build in current source tree:
