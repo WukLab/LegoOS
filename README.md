@@ -3,7 +3,8 @@
 ![Status](https://img.shields.io/badge/Version-Experimental-green.svg)
 ![License](https://img.shields.io/aur/license/yaourt.svg?style=popout)
 ![ISA](https://img.shields.io/badge/ISA-x86--64-yellow.svg)
-![Platform](https://img.shields.io/badge/Platform-Linux-red.svg)
+
+[//]: “%![Platform](https://img.shields.io/badge/Platform-Linux-red.svg)%”
 
 LegoOS is a disseminated, distributed operating system designed and built for resoucre disaggregation. LegoOS is one of the implementation of the Splitkernel. The OSDI'18 paper has more interesting design details.
 
@@ -81,25 +82,31 @@ And the following toolchains:
 
 Of all the above hardware and software requirments, __the CPU and the NIC are the hard requirement__. Currently, LegoOS can only run on `Intel x86` CPUs. As for the NIC card, LegoOS has ported an `mlx4_ib` driver, which _probably_ can run on other Mellanox cards, but we have not tested other than the one we used. As long as you have the CPU and the NIC, we think you can run LegoOS on top your platform.
 
-We understand that the key for an OS to be successful is let people be able to try it out. We are deeply sorry that we can not provide any technique support if you are using a different platform.
+We understand that one key for an OS to be successful is let people be able to try it out. We are deeply sorry that we can not provide further technical support if you are using a different platform.
 
-## Configuration
-asd
+## Config and Compile
 
-## Config and Build
+For process and memory manager, LegoOS uses the standard `Kconfig` way. For storage and global resouce managers, which are built as Linux kernel modues, LegoOS uses a header file to manually typeset all configurations. We will describe the details below.
 
-Build in current source tree:
-- `$ make defconfig`
-        This will generate a default `.config` file in your current directory.
-        You can change the configurations by modifying the `.config` file.
-- `$ make`
-        This will build our vmImage: `arch/x86/boot/bzImage`
+### Process and Memory Manager
+The default setting of LegoOS won't require any knowledge of Kconfig. If you want to hack the default setting, we recommend you to read the [documentation](https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt) from Linux kernel and some other online resources.
 
-## Testing
-### 1. With QEMU
-- `$ ./scripts/run.sh`
-        This will run the standalone kernel image in QEMU.
-        Those `printk()` messages will go into `test-output/ttyS1`.
+1. `make defconfig`
+
+2.
+
+### Storage Manager
+
+### Global Resource Monitors
+
+## Run
+
+### One Process Manager and One Memory Manager (_1P-1M_)
+
+### One Processor Manager, one Memory Manager, and one Storage Manager (_1P-1M-1S_)
+
+### Multiple
+
 
 ### 2. With physical machine
 - `$ make install`
