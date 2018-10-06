@@ -85,15 +85,12 @@ Of all the above hardware and software requirments, __the CPU and the NIC are th
 
 We understand that one key for an OS to be successful is let people be able to try it out. We are deeply sorry that we can not provide further technical support if you are using a different platform.
 
-## Config and Compile
+## Configure and Compile
 __CAVEAT:__ Configure, compile, and run a LegoOS kernel is similar to test a new Linux kernel. You need to have root access the machine. And the whole process may involve multiple machine power cycles. __Before you proceed, make sure you have method (e.g., `IPMI`) to monitor and reboot _remote_ physical machine.__ It is possible to just use virtual machines, but with a constrained setting (described below). If you running into any issues, please don’t hesitate to contact us!
 
 For processor and memory manager, LegoOS uses the standard `Kconfig` way. For storage and global resource managers, which are built as Linux kernel modules, LegoOS uses a header file to manually typeset all configurations. We will describe the details below.
 
 Each manager or monitor should be configured and complied at its own machine's directory. To be able to run LegoOS, you need at least two physical machines.
-
-### Network
-TODO
 
 ### Processor and Memory Manager
 The default setting of LegoOS won't require any knowledge of Kconfig, all you need to do is changing the generated `.config` file. If you want to hack those Kconfig files, we recommend you to read the [documentation](https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt) from Linux kernel and some other online resources.
@@ -139,6 +136,56 @@ Once you have switched `Linux-3.11.1`, just go to `linux-modules/` and type `mak
 |Global Resource Monitors|`linux-modules/monitor/include/monitor_config.h`|
 |FIT| `linux-modules/fit/fit_config.h`|
 
+### Network
+TODO
+
+### Configure LegoOS's Output
+
+#### `printk()`
+LegoOS output debug messages (`printk()`) to two sources: 1) serial port, 2) VGA terminal. Mostly only the output to serial port is useful, because this can be saved and later being examined. The output to VGA is useful when we run LegoOS with virtual machine (VM).
+
+Both of them are controlled by the following options in Kconfig:
+```
+#
+# TTY Layer Configurations
+#
+# CONFIG_TTY_VT is not set
+CONFIG_TTY_SERIAL=y
+# CONFIG_TTY_SERIAL_TTYS0 is not set
+CONFIG_TTY_SERIAL_TTYS1=y
+# CONFIG_TTY_SERIAL_BAUD9600 is not set
+CONFIG_TTY_SERIAL_BAUD115200=y
+```
+
+To enable VGA output, enable `CONFIG_TTY_VT`.
+
+To enable serial output, enable `CONFIG_TTY_SERIAL`.
+- Two ports are supported: `ttyS0` and `ttyS1`, they map to `CONFIG_TTY_SERIAL_TTYS0` and `CONFIG_TTY_SERIAL_TTYS1`, respectively. Only one of them can be enabled at one time.
+- Two baud rate are supported: `9600` and `115200`, they map to `CONFIG_TTY_SERIAL_BAUD9600` and `CONFIG_TTY_SERIAL_BAUD115200`, respectively. Only one of them can be enabled at one time.
+
+#### Setup Serial Connection
+
+__Option 1: VM__
+
+If LegoOS is running within a VM, you will be able to configure your hypervisor to save the serial output from LegoOS to a local host's file. For `virsh` environment, you can add the following script to VM's description file. Other hypervisors' setting is out the scope of this tutorial.
+```
+<serial type='file'>
+  <source path='/root/LegoOS-ttyS0'/>
+  <target port='0'/>
+</serial>
+<serial type='file'>
+  <source path='/root/LegoOS-ttyS1'/>
+  <target port='1'/>
+</serial>
+
+(Choose any pathname you see fit)
+```
+
+__Option 2: Physical Machine__
+
+If LegoOS is running directly on a physical machine, you will need another machine to catch the serial output. These two servers can either be 1) directly connected by serial cable, or 2) connected through a __serial switch__.
+
+In a direct serial connection setting, each LegoOS machine will need one peer physical machine to catch its output. This essentially increases the machine usage by 2x. Based on our own experience, we recommend you to setup a serial switch. The setup of serial switch is out the scope of this tutorial.
 ## Install and Run
 
 LegoOS's processor and memory manager _pretend_ as a Linux kernel by having all the necessary magic numbers at image header. Thus, GRUB2 will treat LegoOS kernel as a normal Linux kernel. By doing so, LegoOS can leverage all existing boot options available.
@@ -176,7 +223,7 @@ This section describes the case where we run LegoOS with one processor manager, 
     - At memory manager,
 
 2. Make sure `CONFIG_USE_RAMFS` is __not__ configured at both processor and memory manager.
-3. At processor manager, open `managers/processor/core.c` file, and fine the function `procmgmt()`, type the name and arguments of the user program that you wish to run. The user program is at the storage node, you have to use the `absolute pathname` from the storage node. For example, to run TensorFlow:
+3. At processor manager, open `managers/processor/core.c` file, and find the function `procmgmt()`, type the name and arguments of the user program that you wish to run. The user program is at the storage node, you have to use the `absolute pathname` from the storage node. For example, to run TensorFlow:
 ```
 static int procmgmt(void *unused)
 {
@@ -196,22 +243,6 @@ To be able to run multiple managers, you will need at least five physical machin
 We will provide detailed tutorial on this soon.
 
 ### Virtual Machine
-In general, you will be able run both processor and memory manager on virtual machine (VM) without any issue. But we can not run storage manager within a VM. The reason is our network setting. We need to know peer's QP number (QPN) beforehand. While the QPN generated by a Linux which is running inside a VM, is not stable.
+In general, you will be able run both processor and memory manager on VM without any issue. But we can not run storage manager within a VM. The reason is our network setting. We need to know peer's QP number (QPN) beforehand. While the QPN generated by a Linux which is running inside a VM, is not stable.
 
 Overall, 1P-1M can be tested with VM only. With 1P-1M-1S setting, the processor and memory manager can run inside VM, while storage manager has to run on physical machine.
-
-## Debug
-LegoOS output debug messages (`printk()`) to two sources: 1) serial port, 2) VGA terminal. Mostly only the output to serial port is useful, because this can be saved and later being examined. The output to VGA is useful when we run LegoOS with VM.
-
-Both of them are controlled by the following options in Kconfig, make sure to select the correct serial port and baud rate:
-```
-#
-# TTY Layer Configurations
-#
-# CONFIG_TTY_VT is not set
-CONFIG_TTY_SERIAL=y
-# CONFIG_TTY_SERIAL_TTYS0 is not set
-CONFIG_TTY_SERIAL_TTYS1=y
-# CONFIG_TTY_SERIAL_BAUD9600 is not set
-CONFIG_TTY_SERIAL_BAUD115200=y
-```
