@@ -6,9 +6,9 @@
 
 [//]: “%![Platform](https://img.shields.io/badge/Platform-Linux-red.svg)%”
 
-LegoOS is a disseminated, distributed operating system designed and built for resoucre disaggregation. LegoOS is one of the implementation of the Splitkernel. The OSDI'18 paper has more interesting design details.
+LegoOS is a disseminated, distributed operating system built for hardware resource disaggregation. LegoOS is a research operating system being built from scratch and released by researchers from Purdue University. LegoOS splits traditional operating system functionalities into loosely-coupled monitors, and run those monitors directly on hardware device. You can find more details from our OSDI'18 paper.
 
-[[Paper]](https://engineering.purdue.edu/~yiying/LegoOS-OSDI18.pdf) [[Slides]]()
+[[Paper]](https://engineering.purdue.edu/~yiying/LegoOS-OSDI18.pdf) [[Slides]](https://www.usenix.org/conference/osdi18/presentation/shan)
 
 ## Codebase Organization
 Several terms in this repository are used differently from the paper description. And in all the documentations here, we will use the code term.
@@ -85,6 +85,7 @@ Of all the above hardware and software requirments, __the CPU and the NIC are th
 We understand that one key for an OS to be successful is let people be able to try it out. We are deeply sorry that we can not provide further technical support if you are using a different platform.
 
 ## Config and Compile
+__CAVEAT:__ Configure, compile, and run a LegoOS kernel is similar to test a new Linux kernel. You need to have root access the machine. And the whole process may involve multiple machine power cycles. __Before you proceed, make sure you have method (e.g., `IPMI`) to monitor and reboot _remote_ physical machine.__ It is possible to just use virtual machines, but with a constrained setting (described below). If you running into any issues, please don’t hesitate to contact us!
 
 For process and memory manager, LegoOS uses the standard `Kconfig` way. For storage and global resource managers, which are built as Linux kernel modules, LegoOS uses a header file to manually typeset all configurations. We will describe the details below.
 
@@ -132,7 +133,17 @@ Once you have switched `Linux-3.11.1`, just go to `linux-modules/` and type `mak
 |Global Resource Monitors|`linux-modules/monitor/include/monitor_config.h`|
 |FIT| `linux-modules/fit/fit_config.h`|
 
-## Run
+## Install and Run
+
+LegoOS's processor and memory manager _pretend_ as a Linux kernel by having all the necessary magic numbers at image header. Thus, GRUB2 will treat LegoOS kernel as a normal Linux kernel. By doing so, LegoOS can leverage all existing boot options available.
+
+Once you have successfully compiled the processor or memory manager, you can install the image simply by typing `make install`. After this, you will be able to find the LegoOS kernel image installed at `/boot` directory. For example:
+```
+[LegoOS git:(master)] $ ll /boot/vmlinuz-4.0.0-lego+
+-rw-r--r--. 1 root root 1941056 Sep 27 17:41 /boot/vmlinuz-4.0.0-lego+
+```
+
+We pretend as `Linux-4.0.0` to fool `glibc-2.17`, which somehow requires a pretty high version Linux kernel. To run LegoOS, you need to __reboot__ machine, and then boot into LegoOS kernel.
 
 ### One Process Manager and One Memory Manager (_1P-1M_)
 
