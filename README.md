@@ -34,28 +34,28 @@ This code repository has many __major__ subsystems (e.g., managers, monitors, ne
 |Global Memory Monitor |`linux-modules/monitor/gmm/`|
 |Monitors' Network Stack|`linux-modules/fit/`|
 
-As for the __Processor Manager__, it has the following subsystems:
+As for the __Processor Manager__ (PM), it has the following subsystems:
 
-| Processor Manager Internal | Purpose |Directory|
+| PM Internal | Purpose |Directory|
 |:---------------------------|:--------|:---------|
 |pcache|Virtual Cache Management|`managers/processor/pcache/`|
 |strace|Syscall Tracer|`managers/processor/strace/`|
 |fs|Filesystem State Layer|`managers/processor/fs/`|
-|mmap|Cached Distributed Memory Information|`managers/processor/mmap/`|
+|mmap|Virtual Memory State Layer |`managers/processor/mmap/`|
 |replication|Memory Replication|`managers/processor/replication.c`|
 |fork|Process Creation Notification|`managers/processor/fork.c`|
 |exec|Execute Notification|`managers/processor/exec.`c|
 |misc|misc|all others|
 
-As for the __Memory Manager__, it has the following subsystems:
+As for the __Memory Manager__ (MM), it has the following subsystems:
 
-| Memory Manager Internal| Purpose | Directory|
+| MM Internal| Purpose | Directory|
 |:-----------------------|:--------|:---------|
 |pcache|Handle pcache Events|`managers/memory/handle_pcache/`|
 |loader|Program Loader|`managers/memory/loader/`|
 |pgcache|Page Cache|`managers/memory/pgcache/`|
 |replication|Handle Memory Replication|`managers/memory/replica/`|
-|vm|Distributed Virtual Memory Management|`managers/memory/vm/`|
+|vm|Virtual Memory|`managers/memory/vm/`|
 |fs|Filesystem Operations|`managers/memory/m2s_read_write.c`|
 |misc|misc| all others|
 
