@@ -25,37 +25,37 @@ This code repository has many __major__ subsystems (e.g., managers, monitors, ne
 
 | Major Subsystems | Directory |
 |:---------|:-----------|
-|Processor Manager| managers/processor/|
-|Memory Manager |managers/memory/|
-|Storage Manager |linux-modules/storage/|
-|Managers' Network Stack|net/|
-|Global Process Monitor |linux-modules/monitor/gpm/|
-|Global Memory Monitor |linux-modules/monitor/gmm/|
-|Monitors' Network Stack|linux-modules/fit/|
+|Processor Manager| `managers/processor/`|
+|Memory Manager |`managers/memory/`|
+|Storage Manager |`linux-modules/storage/`|
+|Managers' Network Stack|`net/`|
+|Global Process Monitor |`linux-modules/monitor/gpm/`|
+|Global Memory Monitor |`linux-modules/monitor/gmm/`|
+|Monitors' Network Stack|`linux-modules/fit/`|
 
 As for the processor manager, it has the following subsystems:
 
 | Processor Manager Internal | Purpose |Directory|
 |:---------------------------|:--------|:---------|
-|pcache|Virtual Cache Management|managers/processor/pcache/|
-|strace|Syscall Tracer|managers/processor/strace/|
-|fs|Filesystem State Layer|managers/processor/fs/|
-|mmap|Cached Distributed Memory Information|managers/processor/mmap/|
-|replication|Memory Replication|managers/processor/replication.c|
-|fork|Process Creation Notification|managers/processor/fork.c|
-|exec|Execute Notification|managers/processor/exec.c|
+|pcache|Virtual Cache Management|`managers/processor/pcache/`|
+|strace|Syscall Tracer|`managers/processor/strace/`|
+|fs|Filesystem State Layer|`managers/processor/fs/`|
+|mmap|Cached Distributed Memory Information|`managers/processor/mmap/`|
+|replication|Memory Replication|`managers/processor/replication.c`|
+|fork|Process Creation Notification|`managers/processor/fork.c`|
+|exec|Execute Notification|`managers/processor/exec.`c|
 |misc|misc|all others|
 
 As for the memory manager, it has the following subsystems:
 
 | Memory Manager Internal| Purpose | Directory|
 |:-----------------------|:--------|:---------|
-|pcache|Handle pcache Events|managers/memory/handle_pcache/|
-|loader|Program Loader|managers/memory/loader/|
-|pgcache|Page Cache|managers/memory/pgcache/|
-|replication|Handle Memory Replication|managers/memory/replica/|
-|vm|Distributed Virtual Memory Management|managers/memory/vm/|
-|fs|Filesystem Operations|managers/memory/m2s_read_write.c|
+|pcache|Handle pcache Events|`managers/memory/handle_pcache/`|
+|loader|Program Loader|`managers/memory/loader/`|
+|pgcache|Page Cache|`managers/memory/pgcache/`|
+|replication|Handle Memory Replication|`managers/memory/replica/`|
+|vm|Distributed Virtual Memory Management|`managers/memory/vm/`|
+|fs|Filesystem Operations|`managers/memory/m2s_read_write.c`|
 |misc|misc| all others|
 
 Storage manager and global resource monitors are not LegoOS's main focus at this stage, each of them has one simple task just as their name suggested.
@@ -86,18 +86,49 @@ We understand that one key for an OS to be successful is let people be able to t
 
 ## Config and Compile
 
-For process and memory manager, LegoOS uses the standard `Kconfig` way. For storage and global resouce managers, which are built as Linux kernel modues, LegoOS uses a header file to manually typeset all configurations. We will describe the details below.
+For process and memory manager, LegoOS uses the standard `Kconfig` way. For storage and global resource managers, which are built as Linux kernel modules, LegoOS uses a header file to manually typeset all configurations. We will describe the details below.
 
 ### Process and Memory Manager
-The default setting of LegoOS won't require any knowledge of Kconfig. If you want to hack the default setting, we recommend you to read the [documentation](https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt) from Linux kernel and some other online resources.
+The default setting of LegoOS won't require any knowledge of Kconfig, all you need to do is change the generated `.config` file. If you want to hack those Kconfig files, we recommend you to read the [documentation](https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt) from Linux kernel and some other online resources.
 
-1. `make defconfig`
+1. `make defconfig`: After this doing, a `.config` file will be created locally.
 
-2.
+2. Configure Process Manager: Open `.config`, find and delete the following line:
+	```
+	# CONFIG_COMP_PROCESSOR is not set
+	```
 
-### Storage Manager
+3. Configure Memory Manager: Open `.config`, find and delete the following line:
+	```
+	# CONFIG_COMP_MEMORY is not set
+	```
 
-### Global Resource Monitors
+4. Step 2) and Step 3) are exclusive, you only need to configure one type of manager. After you finished one of them, type `make`. If you did step 2), you will see the following lines promoted, type `Y` and `Enter`. You can just type `Enter` till the end. Default settings works well.
+	```
+	[LegoOS git:(master)] $ make
+	scripts/kconfig/conf  --silentoldconfig Kconfig
+	*
+	* Restart config...
+	*
+	*
+	* Lego Processor Component Configurations
+	*
+	Configure Lego as processor component (COMP_PROCESSOR) [N/y/?] (NEW) y
+	  Enable Process Checkpoint (CHECKPOINT) [N/y/?] (NEW)
+	```
+
+After doing above steps, the LegoOS kernel will be ready at `arch/x86/boot/bzImage`.
+
+### Linux Modules
+Storage manager, global resource monitors, and their network stack are linux kernel modules. They can only run on `Linux-3.11.1`. Because their network stack is only supported at this kernel version.
+
+Once you have switched `Linux-3.11.1`, just go to `linux-modules/` and type `make`, which will compile all the following modules (and their config files):
+
+| Module | Config File|
+|:--|:--|
+|Storage Manager|`linux-modules/storage/CONFIG_LEGO_STORAGE.h`|
+|Global Resource Monitors|`linux-modules/monitor/include/monitor_config.h`|
+|FIT| `linux-modules/fit/fit_config.h`|
 
 ## Run
 
