@@ -33,7 +33,7 @@ This code repository has many __major__ subsystems (e.g., managers, monitors, ne
 |Global Memory Monitor |`linux-modules/monitor/gmm/`|
 |Monitors' Network Stack|`linux-modules/fit/`|
 
-As for the processor manager, it has the following subsystems:
+As for the __Processor Manager__, it has the following subsystems:
 
 | Processor Manager Internal | Purpose |Directory|
 |:---------------------------|:--------|:---------|
@@ -46,7 +46,7 @@ As for the processor manager, it has the following subsystems:
 |exec|Execute Notification|`managers/processor/exec.`c|
 |misc|misc|all others|
 
-As for the memory manager, it has the following subsystems:
+As for the __Memory Manager__, it has the following subsystems:
 
 | Memory Manager Internal| Purpose | Directory|
 |:-----------------------|:--------|:---------|
@@ -67,7 +67,7 @@ LegoOS has been tested __only__ in the following hardware setting:
 |:--|:--|
 |Server| Dell PowerEdge R730|
 |CPU| [Intel Xeon E5-2620 v3](https://ark.intel.com/products/83352/Intel-Xeon-Processor-E5-2620-v3-15M-Cache-2-40-GHz-)|
-|NIC|[Mellanox MCX354A-TCBT ConnectX-3 VPI](https://store.mellanox.com/products/mellanox-mcx354a-tcbt-connectx-3-vpi-adapter-card-dual-port-qsfp-fdr10-ib-40gb-s-and-10gbe-pcie3-0-x8-8gt-s-rohs-r6.html?sku=MCX354A-TCBT&gclid=Cj0KCQjwl9zdBRDgARIsAL5Nyn0_Fiuw4-8TGIOE7lNr07YZmKz-CxXvBz1lV8FsTJ3rZwCeeSetF2saAnfmEALw_wcB)|
+|InfiniBand NIC|[Mellanox MCX354A-TCBT ConnectX-3 VPI](https://store.mellanox.com/products/mellanox-mcx354a-tcbt-connectx-3-vpi-adapter-card-dual-port-qsfp-fdr10-ib-40gb-s-and-10gbe-pcie3-0-x8-8gt-s-rohs-r6.html?sku=MCX354A-TCBT&gclid=Cj0KCQjwl9zdBRDgARIsAL5Nyn0_Fiuw4-8TGIOE7lNr07YZmKz-CxXvBz1lV8FsTJ3rZwCeeSetF2saAnfmEALw_wcB)|
 
 And the following toolchains:
 
@@ -80,7 +80,7 @@ And the following toolchains:
 |GNU libc|2.17|
 |GRUB2|2.02|
 
-Of all the above hardware and software requirments, __the CPU and the NIC are the hard requirement__. Currently, LegoOS can only run on `Intel x86` CPUs. As for the NIC card, LegoOS has ported an `mlx4_ib` driver, which _probably_ can run on other Mellanox cards, but we have not tested other than the one we used. As long as you have the CPU and the NIC, we think you can run LegoOS on top your platform.
+Of all the above hardware and software requirments, __the CPU and the NIC are the hard requirement__. Currently, LegoOS can only run on `Intel x86` CPUs. As for the NIC card, LegoOS has ported an `mlx4_ib` driver, which _probably_ can run on other Mellanox cards, but we have not tested other than the one we used. As long as you have the CPU and the NIC, we think you can run LegoOS on top your platform. You need __at least two machines__, connected by either InfiniBand switch or direct connection.
 
 We understand that one key for an OS to be successful is let people be able to try it out. We are deeply sorry that we can not provide further technical support if you are using a different platform.
 
@@ -88,8 +88,10 @@ We understand that one key for an OS to be successful is let people be able to t
 
 For process and memory manager, LegoOS uses the standard `Kconfig` way. For storage and global resource managers, which are built as Linux kernel modules, LegoOS uses a header file to manually typeset all configurations. We will describe the details below.
 
-### Process and Memory Manager
-The default setting of LegoOS won't require any knowledge of Kconfig, all you need to do is change the generated `.config` file. If you want to hack those Kconfig files, we recommend you to read the [documentation](https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt) from Linux kernel and some other online resources.
+Each manager or monitor should be configured and complied at its own machine's directory. To be able to run LegoOS, you need at least two physical machines.
+
+### Processor and Memory Manager
+The default setting of LegoOS won't require any knowledge of Kconfig, all you need to do is changing the generated `.config` file. If you want to hack those Kconfig files, we recommend you to read the [documentation](https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt) from Linux kernel and some other online resources.
 
 1. `make defconfig`: After this doing, a `.config` file will be created locally.
 
