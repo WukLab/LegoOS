@@ -86,13 +86,13 @@ Of all the above hardware and software requirments, __the CPU and the NIC are th
 We understand that one key for an OS to be successful is let people be able to try it out. We are deeply sorry that we can not provide further technical support if you are using a different platform.
 
 ## Configure and Compile
-__CAVEAT:__ Configure, compile, and run a LegoOS kernel is similar to test a new Linux kernel. You need to have root access the machine. And the whole process may involve multiple machine power cycles. __Before you proceed, make sure you have method (e.g., `IPMI`) to monitor and reboot _remote_ physical machine.__ It is possible to just use virtual machines, but with a constrained setting (described below). If you running into any issues, please don’t hesitate to contact us!
+__CAVEAT:__ Configure, compile, and run a LegoOS kernel is similar to test a new Linux kernel. You need to have root access the machine. And the whole process may involve multiple machine power cycles. __Before you proceed, make sure you have some methods (e.g., `IPMI`) to monitor and reboot _remote_ physical machine.__ It is possible to just use virtual machines, but with a constrained setting (described below). If you running into any issues, please don’t hesitate to contact us!
 
 For processor and memory manager, LegoOS uses the standard `Kconfig` way. For storage and global resource managers, which are built as Linux kernel modules, LegoOS uses a header file to manually typeset all configurations. We will describe the details below.
 
 Each manager or monitor should be configured and complied at its own machine's directory. To be able to run LegoOS, you need at least two physical machines.
 
-### Processor and Memory Manager
+### Configure Processor and Memory Manager
 The default setting of LegoOS won't require any knowledge of Kconfig, all you need to do is changing the generated `.config` file. If you want to hack those Kconfig files, we recommend you to read the [documentation](https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt) from Linux kernel and some other online resources.
 
 And note that this is just the __general__ configuration steps. If you want to configure for specific settings, such as running with only one processor and one memory manager, please refer to the following sections for more detailed steps.
@@ -109,7 +109,7 @@ And note that this is just the __general__ configuration steps. If you want to c
 	# CONFIG_COMP_MEMORY is not set
 	```
 
-4. Step 2) and Step 3) are exclusive, you only need to configure one type of manager. After you finished one of them, type `make`. If you did step 2), you will see the following lines promoted, type `Y` and `Enter`. You can just type `Enter` till the end. Default settings works well.
+4. Step 2) and Step 3) are exclusive, you only need to configure one type of manager. After you finished one of them, type `make`. If you did step 2), you will see the following lines promoted, type `Y` and `Enter`. You can type `Enter` for all Kconfig options. Except the ones such as setting up default home memory ID, which will be covered by Network section below. For now, just set the ID to a random number (e.g., 0). All default settings works well.
 	```
 	[LegoOS git:(master)] $ make
 	scripts/kconfig/conf  --silentoldconfig Kconfig
@@ -125,7 +125,7 @@ And note that this is just the __general__ configuration steps. If you want to c
 
 After doing above steps, the LegoOS kernel will be ready at `arch/x86/boot/bzImage`.
 
-### Linux Modules
+### Configure Linux Modules
 Storage manager, global resource monitors, and their network stack are linux kernel modules. They can only run on `Linux-3.11.1`. Because their network stack is only supported at this kernel version.
 
 Once you have switched `Linux-3.11.1`, just go to `linux-modules/` and type `make`, which will compile all the following modules (and their config files):
@@ -136,12 +136,12 @@ Once you have switched `Linux-3.11.1`, just go to `linux-modules/` and type `mak
 |Global Resource Monitors|`linux-modules/monitor/include/monitor_config.h`|
 |FIT| `linux-modules/fit/fit_config.h`|
 
-### Network
-TODO
+### Configure Network
+Network setup is essential to have a successful connection. The detailed tutorial on this topic will available soon.
 
 ### Configure LegoOS's Output
 
-#### `printk()`
+#### Configure `printk()`
 LegoOS output debug messages (`printk()`) to two sources: 1) serial port, 2) VGA terminal. Mostly only the output to serial port is useful, because this can be saved and later being examined. The output to VGA is useful when we run LegoOS with virtual machine (VM).
 
 Both of them are controlled by the following options in Kconfig:
@@ -186,6 +186,7 @@ __Option 2: Physical Machine__
 If LegoOS is running directly on a physical machine, you will need another machine to catch the serial output. These two servers can either be 1) directly connected by serial cable, or 2) connected through a __serial switch__.
 
 In a direct serial connection setting, each LegoOS machine will need one peer physical machine to catch its output. This essentially increases the machine usage by 2x. Based on our own experience, we recommend you to setup a serial switch. The setup of serial switch is out the scope of this tutorial.
+
 ## Install and Run
 
 LegoOS's processor and memory manager _pretend_ as a Linux kernel by having all the necessary magic numbers at image header. Thus, GRUB2 will treat LegoOS kernel as a normal Linux kernel. By doing so, LegoOS can leverage all existing boot options available.
