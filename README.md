@@ -8,7 +8,8 @@
 
 LegoOS is a disseminated, distributed operating system built for hardware resource disaggregation. LegoOS is a research operating system being built from scratch and released by researchers from Purdue University. LegoOS splits traditional operating system functionalities into loosely-coupled monitors, and run those monitors directly on hardware device. You can find more details from our OSDI'18 paper.
 
-[[Paper]](https://engineering.purdue.edu/~yiying/LegoOS-OSDI18.pdf) [[Slides]](https://www.usenix.org/conference/osdi18/presentation/shan)
+[[Paper]](https://www.usenix.org/conference/osdi18/presentation/shan)
+[[Slides]](https://www.usenix.org/conference/osdi18/presentation/shan)
 [[Tech Notes]](http://lastweek.io)
 
 ## Codebase Organization
@@ -19,10 +20,11 @@ Several terms in this repository are used differently from the paper description
 | Resource _Monitor_    | Resource _Manager_  |
 | Global Resource _Manager_    | Global Resource _Monitor_  |
 | ExCache    | pcache   |
+|p-local|zerofill|
 
-Let's first get familiar with the codebase. If you have played with Linux kernel, welcome home. LegoOS has a similar directory organization: 1) `arch/` is for low-level ISA-specific hooks, 2) `drivers/` has `acpi`, `infiniband`, `pci`, and `tty` drivers, 3) `init/`, `kernel/`, `lib/`, and `mm/` are shared essential core kernel utilities. 4) `linux-modules/` are Linux kernel modules for storage manager and global resource monitors. We reused most of Linux code to ease our own porting of infiniband drivers.
+Let's first get familiar with the codebase. If you have played with Linux kernel, welcome home. LegoOS has a similar directory organization: 1) `arch/` is for low-level ISA-specific hooks, 2) `drivers/` has `acpi`, `infiniband`, `pci`, and `tty` drivers, 3) `init/`, `kernel/`, `lib/`, and `mm/` are shared essential core kernel utilities. 4) `linux-modules/` are Linux kernel modules for storage manager and global resource monitors. We reused most of Linux code to ease our own porting of InfiniBand drivers. The consequence is now LegoOS supports almost all _essential_ Linux kernel functionalities.
 
-This code repository has many __major__ subsystems (e.g., managers, monitors, networking) and the following table describes where you can find the corresponding code:
+This code repository has many __major__ subsystems (e.g., managers, monitors, networking). The following table describes where you can find the corresponding code:
 
 | Major Subsystems | Directory |
 |:---------|:-----------|
