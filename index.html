@@ -1,1 +1,99 @@
-Coming soon.
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <title>LegoOS: A Disseminated, Distributed OS for Hardware Resource Disaggregation</title>
+
+    <!-- Bootstrap core CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+
+    <!-- Custom styles for this template -->
+    <link href="css/legoos.css" rel="stylesheet">
+
+</head>
+
+<body>
+
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <img src="pics/logo.png" class="img-fluid">
+            </a>
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarResponsive">
+                <ul class="navbar-nav ml-auto">
+                    <li class="nav-item">
+                        <a class="nav-link nav-item-fmt" href="publications.html">Publications</a>
+                    </li>
+                    <li class="nav-item nav-item-fmt">
+                        <a class="nav-link" target="_blank" href="https://github.com/Wuklab/LegoOS">Source code</a>
+                    </li>
+                    <li class="nav-item nav-item-fmt">
+                        <a class="nav-link" href="people.html">People</a>
+                    </li>
+                    <li class="nav-item nav-item-fmt">
+                        <a class="nav-link" href="contact.html">Contact</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Content - Image -->
+    <div class="container first-container">
+        <img src="pics/legoos.jpg" class="img-fluid">
+    </div>
+
+    <!-- Page Content - Text -->
+    <div class="container">
+
+	<!--
+        <p class="lead">The monolithic server model where a server is the unit of deployment, operation, and failure is meeting its limits in the face of several recent hardware and application trends. To improve resource utilization, elasticity, heterogeneity, and failure handling in datacenters, we believe that datacenters should break monolithic servers into disaggregated, network-attached hardware components. Despite the promising benefits of hardware resource disaggregation, no existing OSes or software systems can properly manage it.
+        </p>
+        <p class="lead">
+            We propose a new OS model called the splitkernel to manage disaggregated systems. Splitkernel disseminates traditional OS functionalities into loosely-coupled monitors, each of which runs on and manages a hardware component. A splitkernel also performs resource allocation and failure handling of a distributed set of hardware components. Using the splitkernel model, we built LegoOS, a new OS designed for hardware resource disaggregation. LegoOS appears to users as a set of distributed servers. Internally, a user application can span multiple processor, memory, and storage hardware components. We implemented LegoOS on x86-64 and evaluated it by emulating hardware components using commodity servers. Our evaluation results show that LegoOS’ performance is comparable to monolithic Linux servers, while largely improving resource packing and reducing failure rate over monolithic clusters.
+        </p>
+    	-->
+
+	<p class="lead"> LegoOS is a disseminated, distributed operating system designed for hardware resource disaggregation. It is an open-source project built by researchers from Purdue University. LegoOS splits traditional operating system functionalities into loosely-coupled monitors and run them directly on disggregated hardware devices. LegoOS also manages distributed resources and handles hardware component failures in a disaggregated cluster. For more information, please check out our recent <a target="_blank" href="https://engineering.purdue.edu/WukLab/LegoOS-OSDI18.pdf">paper</a>. You can get LegoOS <a target="_blank" href="https://github.com/Wuklab/LegoOS">here</a>.
+	</p>
+    </div>
+
+    <div class="container last-container">
+        <div class="row">
+            <div class="col-sm">
+                <a href="https://engineering.purdue.edu/ECE" target="_blank">
+                    <img src="pics/purdue_ece.png" class="img-fluid logo-img rounded mx-auto d-block" >
+                </a>
+            </div>
+            <div class="col-sm align-content-center">
+                <a href="https://engineering.purdue.edu/WukLab/" target="_blank">
+                    <img src="pics/wuklab.jpg" class="img-fluid logo-img rounded mx-auto d-block">
+                </a>
+            </div>
+        </div>
+    </div>
+
+
+    <footer class="footer">
+        <div class="container">
+            © 2018 WukLab, Purdue University
+        </div>
+    </footer>
+
+
+
+    <!-- Bootstrap core JavaScript -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+</body>
+
+</html>

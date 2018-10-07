@@ -1,0 +1,124 @@
+/*!
+ * Start Bootstrap - Portfolio Item (https://startbootstrap.com/template-overviews/portfolio-item)
+ * Copyright 2013-2017 Start Bootstrap
+ * Licensed under MIT (https://github.com/BlackrockDigital/startbootstrap-portfolio-item/blob/master/LICENSE)
+ */
+
+/* Sticky footer styles
+-------------------------------------------------- */
+html {
+    position: relative;
+    min-height: 100%;
+}
+
+body {
+    /* Margin bottom by footer height */
+    margin-bottom: 60px;
+}
+
+.footer {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    /* Set the fixed height of the footer here */
+    height: 60px;
+    line-height: 60px;
+    /* Vertically center the text there */
+    background-color: #f5f5f5;
+}
+
+
+/* Custom page CSS
+-------------------------------------------------- */
+/* Not required for template or sticky footer method. */
+
+body > .container {
+    padding-top: 15px;
+    padding-bottom: 15px;
+}
+
+.footer > .container {
+    border-top: 15px;
+    padding-right: 15px;
+    padding-left: 15px;
+}
+
+code {
+    font-size: 80%;
+}
+
+body {
+    padding-top: 54px;
+}
+
+@media (min-width: 992px) {
+    body {
+        padding-top: 56px;
+    }
+}
+
+.navbar-brand {
+    padding: 20px 15px;
+}
+
+.first-container {
+    margin-top: 60px;
+}
+
+body > .last-container {
+    padding-bottom: 40px;
+}
+
+.nav-item-fmt {
+    margin-left: 15px;
+    margin-right: 15px;
+    font-weight: 600 !important;
+    font-size: 1.05em;
+}
+
+p {
+    font-weight: 400 !important;
+}
+
+.lego-intro::first-letter {
+    font-family: Georgia;
+    color: #903;
+    font-size: 75px;
+    padding-top: 0px;
+    padding-right: 20px;
+    padding-left: 10px;
+    float: left;
+    font-size: 200%;
+    font-weight: bold !important;
+}
+
+.pub-title {
+    padding-top: 30px;
+    padding-bottom: 10px;
+}
+
+.logo-img {
+    height: 80px;
+    width: auto;
+}
+
+div.polaroid {
+    width: 80%;
+    margin-bottom: 25px;
+}
+
+.pics-frame {
+    max-height: 250px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.pics-text {
+    text-align: center;
+    padding: 10px 20px;
+}
+
+.title-text {
+    padding: 20px 10px;
+}
