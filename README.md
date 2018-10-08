@@ -9,7 +9,7 @@
 LegoOS is a disseminated, distributed operating system built for hardware resource disaggregation. LegoOS is a research operating system being built from scratch and released by researchers from Purdue University. LegoOS splits traditional operating system functionalities into loosely-coupled monitors, and run those monitors directly on hardware device. You can find more details from our OSDI'18 paper.
 
 [[Paper]](https://www.usenix.org/conference/osdi18/presentation/shan)
-[[Slides]](https://www.usenix.org/conference/osdi18/presentation/shan)
+[[Keynote]](https://github.com/WukLab/LegoOS/tree/master/Documentation/LegoOS-OSDI-Slides.key)
 [[Tech Notes]](http://lastweek.io)
 
 ## Codebase Organization
