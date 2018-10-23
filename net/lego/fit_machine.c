@@ -28,37 +28,19 @@
 
 #include "fit_internal.h"
 
+/* Built based on node id */
+struct fit_machine_info *lego_cluster[CONFIG_FIT_NR_NODES];
+
 /*
  * NOTE:
  * This array specifies hostname of machines you want to use in Lego cluster.
  * Hostnames are listed by the order of FIT node ID. Any wrong configuration
- * lead to an early panic.
- */
-/* Built based on node id */
-struct fit_machine_info *lego_cluster[CONFIG_FIT_NR_NODES];
-
-#ifdef CONFIG_SAME_MACHINE_VMS
-/*
- * multiple VMs on the same machine
- * only need to change lid below
- * NOTE: always start vm1 first, then vm2, etc.
+ * lead to an early panic. Using hostname is more convenient that just using
+ * raw numbers.
  */
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	=	"vm1",
-	[1]	=	"vm2",
-	[2]	=	"vm3",
-};
-
-static struct fit_machine_info WUKLAB_CLUSTER[] = {
-[0]	= {	.hostname =	"vm1",	.lid =	21,	.first_qpn =	72,	},
-[1]	= {	.hostname =	"vm2",	.lid =	21,	.first_qpn =	72,	},
-[2]	= {	.hostname =	"vm3",	.lid =	21,	.first_qpn =	72,	},
-};
-#else
-static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	=	"wuklab14",
-	[1]	=	"wuklab09",
-	[2]	=	"wuklab12",
+	[0]	=	"wuklab00",
+	[1]	=	"wuklab01",
 };
 
 static struct fit_machine_info WUKLAB_CLUSTER[] = {
@@ -89,7 +71,6 @@ static struct fit_machine_info WUKLAB_CLUSTER[] = {
 [24]	= {	.hostname =	"wuklab24",	.lid =	31,	},
 [25]	= {	.hostname =	"wuklab25",	.lid =	26,	},
 };
-#endif
 
 /* Indicate machines that are used by lego */
 static DECLARE_BITMAP(cluster_used_machines, 32);
