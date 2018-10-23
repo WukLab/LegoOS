@@ -12,6 +12,24 @@ LegoOS is a disseminated, distributed operating system built for hardware resour
 [[Keynote]](https://github.com/WukLab/LegoOS/tree/master/Documentation/LegoOS-OSDI-Slides.key)
 [[Tech Notes]](http://lastweek.io)
 
+Table of Contents
+=================
+
+* [Codebase Organization](#codebase-organization)
+* [Platform Requirement](#platform-requirement)
+* [Configure and Compile](#configure-and-compile)
+   * [Configure Processor or Memory Manager](#configure-processor-or-memory-manager)
+   * [Configure Linux Modules](#configure-linux-modules)
+   * [Configure Network](#configure-network)
+   * [Configure Output](#configure-output)
+      * [Setup printk()](#setup-printk)
+      * [Setup Serial Connection](#setup-serial-connection)
+* [Install and Run](#install-and-run)
+   * [1P-1M](#1p-1m)
+   * [1P-1M-1S](#1p-1m-1s)
+   * [Multiple Managers](#multiple-managers)
+   * [Virtual Machine](#virtual-machine)
+
 ## Codebase Organization
 Several terms in this repository are used differently from the paper description. And in all the documentations here, we will use the code term.
 
@@ -83,25 +101,25 @@ And the following toolchains:
 |GNU libc|2.17|
 |GRUB2|2.02|
 
-Of all the above hardware and software requirments, __the CPU and the NIC are the hard requirement__. Currently, LegoOS can only run on `Intel x86` CPUs. As for the NIC card, LegoOS has ported an `mlx4_ib` driver, which _probably_ can run on other Mellanox cards, but we have not tested other than the one we used. As long as you have the CPU and the NIC, we think you can run LegoOS on top your platform. You need __at least two machines__, connected by either InfiniBand switch or direct connection.
+Of all the above hardware and software requirments, __the CPU and the NIC are the hard requirements__. Currently, LegoOS can only run on `Intel x86` CPUs. As for the NIC card, LegoOS has ported an `mlx4_ib` driver, which _probably_ can run on other Mellanox cards, but we have not tested other than the one we used. As long as you have the CPU and the NIC, we think you can run LegoOS on top your platform. You need __at least two machines__, connected by either InfiniBand switch or direct connection.
 
 We understand that one key for an OS to be successful is let people be able to try it out. We are deeply sorry that we can not provide further technical support if you are using a different platform.
 
 ## Configure and Compile
-__CAVEAT:__ Configure, compile, and run a LegoOS kernel is similar to test a new Linux kernel. You need to have root access the machine. And the whole process may involve multiple machine power cycles. __Before you proceed, make sure you have some methods (e.g., `IPMI`) to monitor and reboot _remote_ physical machine.__ It is possible to just use virtual machines, but with a constrained setting (described below). If you running into any issues, please don’t hesitate to contact us!
+__CAVEAT:__ Configure, compile, and run a LegoOS kernel is similar to test a new Linux kernel. You need to have root access to the machine. The whole process may involve multiple machine power cycles. __Before you proceed, make sure you have some methods (e.g., `IPMI`) to monitor and reboot _remote_ physical machine.__ It is possible to just use virtual machines, but with a constrained setting (described below). If you running into any issues, please don’t hesitate to contact us!
 
 For processor and memory manager, LegoOS uses the standard `Kconfig` way. For storage and global resource managers, which are built as Linux kernel modules, LegoOS uses a header file to manually typeset all configurations. We will describe the details below.
 
 Each manager or monitor should be configured and complied at its own machine's directory. To be able to run LegoOS, you need at least two physical machines.
 
-### Configure Processor and Memory Manager
-The default setting of LegoOS won't require any knowledge of Kconfig, all you need to do is changing the generated `.config` file. If you want to hack those Kconfig files, we recommend you to read the [documentation](https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt) from Linux kernel and some other online resources.
+### Configure Processor or Memory Manager
+The default setting of LegoOS won't require any knowledge of Kconfig, all you need to do is changing the generated `.config` file. If you want to hack those Kconfig files, we recommend you read the [documentation](https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt) from Linux kernel and some other online resources.
 
 And note that this is just the __general__ configuration steps. If you want to configure for specific settings, such as running with only one processor and one memory manager, please refer to the following sections for more detailed steps.
 
 1. `make defconfig`: After this doing, a `.config` file will be created locally.
 
-2. Configure Process Manager: Open `.config`, find and delete the following line:
+2. Configure Processor Manager: Open `.config`, find and delete the following line:
 	```
 	# CONFIG_COMP_PROCESSOR is not set
 	```
@@ -141,12 +159,12 @@ Once you have switched `Linux-3.11.1`, just go to `linux-modules/` and type `mak
 ### Configure Network
 Network setup is essential to have a successful connection. The detailed tutorial on this topic will available soon.
 
-### Configure LegoOS's Output
+### Configure Output
 
-#### Configure `printk()`
-LegoOS output debug messages (`printk()`) to two sources: 1) serial port, 2) VGA terminal. Mostly only the output to serial port is useful, because this can be saved and later being examined. The output to VGA is useful when we run LegoOS with virtual machine (VM).
+#### Setup `printk()`
+LegoOS output debug messages (`printk()`) to two sources: 1) `serial port`, 2) `VGA terminal`. Mostly only the output to serial port is useful, because this can be saved and later being examined. The output to VGA is useful when we run LegoOS with virtual machine (VM), so we are able to know what's going on (pretty old school, right?).
 
-Both of them are controlled by the following options in Kconfig:
+They are controlled by the following options in `Kconfig`:
 ```
 #
 # TTY Layer Configurations
@@ -159,17 +177,19 @@ CONFIG_TTY_SERIAL_TTYS1=y
 CONFIG_TTY_SERIAL_BAUD115200=y
 ```
 
-To enable VGA output, enable `CONFIG_TTY_VT`.
+To enable VGA output, enable __`CONFIG_TTY_VT`__.
 
-To enable serial output, enable `CONFIG_TTY_SERIAL`.
-- Two ports are supported: `ttyS0` and `ttyS1`, they map to `CONFIG_TTY_SERIAL_TTYS0` and `CONFIG_TTY_SERIAL_TTYS1`, respectively. Only one of them can be enabled at one time.
+To enable serial output, enable __`CONFIG_TTY_SERIAL`__.
+- Two ports are supported: `ttyS0` and `ttyS1`, they map to `CONFIG_TTY_SERIAL_TTYS0` and `CONFIG_TTY_SERIAL_TTYS1`, respectively. Only one of them should be enabled at one time.
 - Two baud rate are supported: `9600` and `115200`, they map to `CONFIG_TTY_SERIAL_BAUD9600` and `CONFIG_TTY_SERIAL_BAUD115200`, respectively. Only one of them can be enabled at one time.
+- For example, if the other end of serial cable is a Linux host that uses `/dev/ttyS1, 115200`, then the serial config at LegoOS side should use the combination of `CONFIG_TTY_SERIAL_TTYS1` and `CONFIG_TTY_SERIAL_BAUD115200`.
 
 #### Setup Serial Connection
 
-__Option 1: VM__
+__Option 1: Virtual Machine__
 
-If LegoOS is running within a VM, you will be able to configure your hypervisor to save the serial output from LegoOS to a local host's file. For `virsh` environment, you can add the following script to VM's description file. Other hypervisors' setting is out the scope of this tutorial.
+If LegoOS is running within a virtual machine, you will be able to configure your hypervisor to save the serial output from LegoOS to a local host's file. In this setting, each port maps to one specific file, and baud rate does not matter. For `virsh + qemu` environment, you can add the following script to VM's description file. Please refer to other hypervisors' manual if you are not using `virsh + qemu`.
+
 ```
 <serial type='file'>
   <source path='/root/LegoOS-ttyS0'/>
@@ -187,11 +207,11 @@ __Option 2: Physical Machine__
 
 If LegoOS is running directly on a physical machine, you will need another machine to catch the serial output. These two servers can either be 1) directly connected by serial cable, or 2) connected through a __serial switch__.
 
-In a direct serial connection setting, each LegoOS machine will need one peer physical machine to catch its output. This essentially increases the machine usage by 2x. Based on our own experience, we recommend you to setup a serial switch. The setup of serial switch is out the scope of this tutorial.
+In a direct serial connection setting, each LegoOS machine will need one peer physical machine to catch its output. This essentially increases the machine usage by 2x. Based on our own experience, __we highly recommend you setup a serial switch__.
 
 ## Install and Run
 
-LegoOS's processor and memory manager _pretend_ as a Linux kernel by having all the necessary magic numbers at image header. Thus, GRUB2 will treat LegoOS kernel as a normal Linux kernel. By doing so, LegoOS can leverage all existing boot options available.
+LegoOS's processor and memory manager _pretend_ as a Linux kernel by having all the necessary magic numbers at `bzimage` header. Thus, GRUB2 will treat LegoOS kernel as a normal Linux kernel. By doing so, LegoOS can leverage all existing boot options available.
 
 Once you have successfully compiled the processor or memory manager, you can install the image simply by typing `make install`. After this, you will be able to find the LegoOS kernel image installed at `/boot` directory. For example:
 ```
@@ -202,7 +222,7 @@ Once you have successfully compiled the processor or memory manager, you can ins
 LegoOS pretends as a `Linux-4.0.0` to fool `glibc-2.17`, which somehow requires a pretty high version Linux kernel. To run LegoOS, you need to __reboot__ machine, and then boot into LegoOS kernel.
 
 ### 1P-1M
-This section describes the case where we run LegoOS with only one processor manager and one memory manager, or __1P-1M__ setting. This setting requires a special `Kconfig` option: `CONFIG_USE_RAMFS`, at both processor and memory. And this setting requires two physical machines.
+This section describes the case where we run LegoOS with only one processor manager and one memory manager, or __1P-1M__ setting. This setting requires a special `Kconfig` option: `CONFIG_USE_RAMFS`, at both processor and memory. And this setting requires two physical machines (or virtual machines). There is no need to have linux kernel modules in this setting.
 
 1. Network setting:
     - Set node ID properly at both processor and memory manager
