@@ -12,27 +12,31 @@ LegoOS is a disseminated, distributed operating system built for hardware resour
 [[Keynote]](https://github.com/WukLab/LegoOS/tree/master/Documentation/LegoOS-OSDI-Slides.key)
 [[Tech Notes]](http://lastweek.io)
 
-## Table of Contents
+Table of Contents
+=================
 
-* [Codebase Organization](#codebase-organization)
-* [Platform Requirement](#platform-requirement)
-* [Configure and Compile](#configure-and-compile)
-   * [Configure Processor or Memory Manager](#configure-processor-or-memory-manager)
-      * [Configure Processor ExCache Size](#configure-processor-excache-size)
-   * [Configure Linux Modules](#configure-linux-modules)
-   * [Configure Network](#configure-network)
-      * [FIT](#fit)
-      * [QPN](#qpn)
-      * [LID](#lid)
-      * [Node ID and Number of Machines](#node-id-and-number-of-machines)
-   * [Configure Output](#configure-output)
-      * [Setup printk()](#setup-printk)
-      * [Setup Serial Connection](#setup-serial-connection)
-* [Install and Run](#install-and-run)
-   * [1P-1M](#1p-1m)
-   * [1P-1M-1S](#1p-1m-1s)
-   * [Multiple Managers](#multiple-managers)
-   * [Virtual Machine](#virtual-machine)
+   * [LegoOS](#legoos)
+      * [Codebase Organization](#codebase-organization)
+      * [Platform Requirement](#platform-requirement)
+      * [Configure and Compile](#configure-and-compile)
+         * [Configure Processor or Memory Manager](#configure-processor-or-memory-manager)
+            * [Configure Processor ExCache Size](#configure-processor-excache-size)
+         * [Configure Linux Modules](#configure-linux-modules)
+         * [Configure Network](#configure-network)
+            * [FIT](#fit)
+            * [QPN](#qpn)
+            * [LID](#lid)
+            * [Node ID and Number of Machines](#node-id-and-number-of-machines)
+         * [Configure Output](#configure-output)
+            * [Setup printk()](#setup-printk)
+            * [Setup Serial Connection](#setup-serial-connection)
+      * [Install and Run](#install-and-run)
+         * [1P-1M](#1p-1m)
+            * [.config samples](#config-samples)
+         * [1P-1M-1S](#1p-1m-1s)
+         * [Multiple Managers](#multiple-managers)
+         * [Virtual Machine](#virtual-machine)
+
 
 ## Codebase Organization
 Several terms in this repository are used differently from the paper description. Some of them might be used interchangeably here.
@@ -115,7 +119,7 @@ We understand that one key for an OS to be successful is let people be able to t
 
 ## Configure and Compile
 
-__The README is still raw and scratchy, it might not be complete and it might also seems confusing. The whole tutorial can only be improved only if there are people trying out LegoOS and give us feedback. If you have any issues, pleas don't hesitate to contact us (Github Issue is preferred). We really appreciate your input here.__
+__The README is still raw and scratchy, it might not be complete and it might also seems confusing. The whole tutorial can be improved only if there are people trying out LegoOS and give us feedback. If you have any issues, please don't hesitate to contact us (Github Issue is preferred). We really appreciate your input here.__
 
 __CAVEAT:__ Configure, compile, and run a LegoOS kernel is similar to test a new Linux kernel. You need to have root access to the machine. The whole process may involve multiple machine power cycles. __Before you proceed, make sure you have some methods (e.g., `IPMI`) to monitor and reboot _remote_ physical machine.__ It is possible to just use virtual machines, but with a constrained setting (described below). If you running into any issues, please don’t hesitate to contact us!
 
@@ -337,6 +341,18 @@ CONFIG_RAMFS_OBJECT_FILE="usr/general.o"
 ```
 
 In 1P-1M setting, the above user program set at memory manager (`usr/general.o` here) will be executed automatically when processor and memory manager connected. Current LegoOS's ramfs option is limited to include only one user program.
+
+#### `.config` samples
+
+We provid two `.config` samples for `1P-1M` setting. In these samples, we are using `usr/general.o` and `ttyS1 115200`. VGA terminal output is also enabled. You can find processor manager's output log [here](https://github.com/WukLab/LegoOS/tree/master/Documentation/configs/1P-1M-Processor-Output) (recorded while running LegoOS processor manager within VM).
+- Processor
+    - `make defconfig`
+    - `cp Documentation/configs/1P-1M-Processor .config`
+    - `make`
+- Memory .config
+    - `make defconfig`
+    - `cp Documentation/configs/1P-1M-Memory .config`
+    - `make`
 
 ### 1P-1M-1S
 This section describes the case where we run LegoOS with one processor manager, one memory manager, and one storage manager, or __1P-1M-1S__ setting. This setting emulates the effect of breaking one monolithic server and connect the CPU, memory, and disk by network. And this setting requires three physical machines.

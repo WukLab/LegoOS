@@ -1,0 +1,593 @@
+[    0.000000] LegoOS version 4.0.0-lego-pComponent+ (root@wuklab14-s3131-w5910.localdomain) (gcc version 4.8.5 20150623 (Red Hat 4.8.5-11) (GCC) ) #3 SMP Wed Oct 24 20:57:09 EDT 2018
+[    0.000000] Command line: BOOT_IMAGE=/vmlinuz-4.0.0-lego-pComponent+ root=/dev/mapper/cl-root ro crashkernel=auto rd.lvm.lv=cl/root rd.lvm.lv=cl/swap rhgb quiet memmap=4G$4G LANG=en_US.UTF-8
+[    0.000000] e820: BIOS-provided physical RAM map:
+[    0.000000] BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+[    0.000000] BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+[    0.000000] BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+[    0.000000] BIOS-e820: [mem 0x0000000000100000-0x00000000bfffcfff] usable
+[    0.000000] BIOS-e820: [mem 0x00000000bfffd000-0x00000000bfffffff] reserved
+[    0.000000] BIOS-e820: [mem 0x00000000feffc000-0x00000000feffffff] reserved
+[    0.000000] BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+[    0.000000] BIOS-e820: [mem 0x0000000100000000-0x000000083fffffff] usable
+[    0.000000] x86/fpu: cpu has FXSR
+[    0.000000] x86/fpu: cpu has XMM
+[    0.000000] fpu_user_xstate_size(fpu_kernel_xstate_size): size=512
+[    0.000000] x86/fpu: cpu has XSAVE
+[    0.000000] x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
+[    0.000000] x86/fpu: Supporting XSAVE feature 0x002: 'SSE registers'
+[    0.000000] x86/fpu: Supporting XSAVE feature 0x004: 'AVX registers'
+[    0.000000] x86/fpu: xstate_offset[2]:  576, xstate_sizes[2]:  256
+[    0.000000] x86/fpu: Enabled xstate features 0x7, context size: 832 bytes, using 'standard' format.
+[    0.000000] x86/fpu: Using 'eager' FPU context switches.
+[    0.000000] fixmap: [0xffffffffff57d000 - 0xffffffffff7ff000]
+[    0.000000] early_ioremap: [0xffffffffff200000 - 0xffffffffff3ff000]
+[    0.000000] vsyscall: va: 0xffffffffff600000 pa: 0x10b0000
+[    0.000000] e820: user-defined physical RAM map:
+[    0.000000] user: [mem 0x0000000000000000-0x000000000009fbff] usable
+[    0.000000] user: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+[    0.000000] user: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+[    0.000000] user: [mem 0x0000000000100000-0x00000000bfffcfff] usable
+[    0.000000] user: [mem 0x00000000bfffd000-0x00000000bfffffff] reserved
+[    0.000000] user: [mem 0x00000000feffc000-0x00000000feffffff] reserved
+[    0.000000] user: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+[    0.000000] user: [mem 0x0000000100000000-0x000000083fffffff] usable
+[    0.000000] e820: last_pfn = 0x840000 max_arch_pfn = 0x400000000
+[    0.000000] init_memory_mapping: [mem 0x00000000-0x000fffff]
+[    0.000000]  [mem 0x00000000-0x000fffff] page 4k
+[    0.000000] BRK [0x0120c000, 0x0120cfff] PGTABLE
+[    0.000000] BRK [0x0120d000, 0x0120dfff] PGTABLE
+[    0.000000] BRK [0x0120e000, 0x0120efff] PGTABLE
+[    0.000000] init_memory_mapping: [mem 0x83fe00000-0x83fffffff]
+[    0.000000]  [mem 0x83fe00000-0x83fffffff] page 2M
+[    0.000000] BRK [0x0120f000, 0x0120ffff] PGTABLE
+[    0.000000] max_pfn_mapped: 0x840000 -> 0xffff880840000000
+[    0.000000] init_memory_mapping: [mem 0x820000000-0x83fdfffff]
+[    0.000000]  [mem 0x820000000-0x83fdfffff] page 2M
+[    0.000000] max_pfn_mapped: 0x840000 -> 0xffff880840000000
+[    0.000000] init_memory_mapping: [mem 0x00100000-0xbfffcfff]
+[    0.000000]  [mem 0x00100000-0x001fffff] page 4k
+[    0.000000]  [mem 0x00200000-0xbfdfffff] page 2M
+[    0.000000]  [mem 0xbfe00000-0xbfffcfff] page 4k
+[    0.000000] init_memory_mapping: [mem 0x100000000-0x81fffffff]
+[    0.000000]  [mem 0x100000000-0x81fffffff] page 2M
+[    0.000000] BRK [0x01210000, 0x01210fff] PGTABLE
+[    0.000000] BRK [0x01211000, 0x01211fff] PGTABLE
+[    0.000000] max_pfn_mapped: 0x840000 -> 0xffff880840000000
+[    0.000000] LAPIC: x2apic: disabled by your BIOS
+[    0.000000] ACPI: RSDP was not found from ffffffffff200c00 + 0x400
+[    0.000000] ACPI: RSDP 0x00000000000F1EF0 000014 (v00 BOCHS )
+[    0.000000] ACPI: RSDT 0x00000000BFFFFB42 000034 (v01 BOCHS  BXPCRSDT 00000001 BXPC 00000001)
+[    0.000000] ACPI: FACP 0x00000000BFFFEEC0 000074 (v01 BOCHS  BXPCFACP 00000001 BXPC 00000001)
+[    0.000000] ACPI: SSDT 0x00000000BFFFEF34 000B5E (v01 BOCHS  BXPCSSDT 00000001 BXPC 00000001)
+[    0.000000] ACPI: APIC 0x00000000BFFFFA92 0000B0 (v01 BOCHS  BXPCAPIC 00000001 BXPC 00000001)
+[    0.000000] ACPI: RSDT 0x00000000BFFFFB42 000034 (v01 BOCHS  BXPCRSDT 00000001 BXPC 00000001)
+[    0.000000] ACPI: Local APIC address 0xfee00000
+[    0.000000] LAPIC: Mapped APIC to 0xffffffffff5ff000 (      0xfee00000)
+[    0.000000] ACPI: LAPIC (acpi_id[0x00] lapic_id[0x00] enabled)
+[    0.000000] ACPI: LAPIC (acpi_id[0x01] lapic_id[0x01] enabled)
+[    0.000000] ACPI: LAPIC (acpi_id[0x02] lapic_id[0x02] enabled)
+[    0.000000] ACPI: LAPIC (acpi_id[0x03] lapic_id[0x03] enabled)
+[    0.000000] ACPI: LAPIC (acpi_id[0x04] lapic_id[0x04] enabled)
+[    0.000000] ACPI: LAPIC (acpi_id[0x05] lapic_id[0x05] enabled)
+[    0.000000] ACPI: LAPIC (acpi_id[0x06] lapic_id[0x06] enabled)
+[    0.000000] ACPI: LAPIC (acpi_id[0x07] lapic_id[0x07] enabled)
+[    0.000000] ACPI: LAPIC_NMI (acpi_id[0xff] dfl dfl lint[0x1])
+[    0.000000] ACPI: IOAPIC (id[0x00] address[0xfec00000] gsi_base[0])
+[    0.000000] IO-APIC: IOAPIC[0]: apic_id 0, version 17, address 0xfec00000, nr_redir_entries 24, GSI 0-23
+[    0.000000] ACPI: INT_SRC_OVR (bus 0 bus_irq 0 global_irq 2 dfl dfl)
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 00, APIC ID 0, APIC INT 02
+[    0.000000] ACPI: INT_SRC_OVR (bus 0 bus_irq 5 global_irq 5 high level)
+[    0.000000] IO-APIC: Int: type 0, pol 1, trig 3, bus 00, IRQ 05, APIC ID 0, APIC INT 05
+[    0.000000] ACPI: INT_SRC_OVR (bus 0 bus_irq 9 global_irq 9 high level)
+[    0.000000] IO-APIC: Int: type 0, pol 1, trig 3, bus 00, IRQ 09, APIC ID 0, APIC INT 09
+[    0.000000] ACPI: INT_SRC_OVR (bus 0 bus_irq 10 global_irq 10 high level)
+[    0.000000] IO-APIC: Int: type 0, pol 1, trig 3, bus 00, IRQ 0a, APIC ID 0, APIC INT 0a
+[    0.000000] ACPI: INT_SRC_OVR (bus 0 bus_irq 11 global_irq 11 high level)
+[    0.000000] IO-APIC: Int: type 0, pol 1, trig 3, bus 00, IRQ 0b, APIC ID 0, APIC INT 0b
+[    0.000000] ACPI: Bus #0 is ISA
+[    0.000000] ACPI: IRQ0 used by override.
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 01, APIC ID 0, APIC INT 01
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 03, APIC ID 0, APIC INT 03
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 04, APIC ID 0, APIC INT 04
+[    0.000000] ACPI: IRQ5 used by override.
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 06, APIC ID 0, APIC INT 06
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 07, APIC ID 0, APIC INT 07
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 08, APIC ID 0, APIC INT 08
+[    0.000000] ACPI: IRQ9 used by override.
+[    0.000000] ACPI: IRQ10 used by override.
+[    0.000000] ACPI: IRQ11 used by override.
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 0c, APIC ID 0, APIC INT 0c
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 0d, APIC ID 0, APIC INT 0d
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 0e, APIC ID 0, APIC INT 0e
+[    0.000000] IO-APIC: Int: type 0, pol 0, trig 0, bus 00, IRQ 0f, APIC ID 0, APIC INT 0f
+[    0.000000] ACPI: Using ACPI (MADT) for SMP configuration
+[    0.000000] SRAT: NUMA Disabled, because no SRAT table found
+[    0.000000] No NUMA configuration found
+[    0.000000] Faking a node at [mem 0x0000000000000000-0x000000083fffffff]
+[    0.000000] NODE_DATA(0) allocated [mem 0x83ffe0000-0x83ffe2fff]
+[    0.000000] Copy Trampoline Code: [ffffffff811d6e40 - ffffffff811d7000] -> [0x90000 - 0x901c0]
+[    0.000000] x86/nops: ideal_nops is k8_nops+0x0/0x60
+[    0.000000] Last level iTLB entries: 4KB 0, 2MB 0, 4MB 0
+[    0.000000] Last level dTLB entries: 4KB 0, 2MB 0, 4MB 0, 1GB 0
+[    0.000000] Intel Core Processor (Haswell) (family: 0x6, model: 0x3c, stepping: 0x1)
+[    0.000000] x86: setup_arch done
+[    0.000000] NR_CPUS:64 nr_cpumask_bits:64 nr_cpu_ids:8 nr_node_ids:1
+[    0.000000] per cpu data for cpu0 2097152 bytes on node0 at PA: 000000083fc00000
+[    0.000000] Embedded 15 pages/cpu @ffff88083fc00000 s30032 r0 d31408 u262144
+[    0.000000] pcpu-alloc: s30032 r0 d31408 u262144 alloc=1*2097152
+[    0.000000] pcpu-alloc: [0] 0 1 2 3 4 5 6 7 
+[    0.000000] pid: pid_task_map: ffff88083ff5dd40, size: 0x7fff8
+[    0.000000] fork: arch_task_struct_size: 1920, order: 0 task_struct: 5184
+[    0.000000] Sorting __ex_table...
+[    0.000000] futex hash table entries: 16 (order: -2, 1024 bytes)
+[    0.000000] futex_cmpxchg_enabled: 1
+[    0.000000] alloc_pcache_rmap_map(): rmap size: 64 B, total reserved: 33554432 B, at ffff88083dc00000 - ffff8808bdc00000
+[    0.000000] alloc_pcache_perset_map(): eviction entry size: 64 B, total reserved: 33554432 B, at ffff88083bc00000
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000000000000-0x0000000000ffffff]
+[    0.000000]   DMA32    [mem 0x0000000001000000-0x00000000ffffffff]
+[    0.000000]   Normal   [mem 0x0000000100000000-0x000000083fffffff]
+[    0.000000]   Movable  empty
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x000000000009efff]
+[    0.000000]   node   0: [mem 0x0000000000100000-0x00000000bfffcfff]
+[    0.000000]   node   0: [mem 0x0000000100000000-0x000000083fffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x000000083fffffff]
+[    0.000000] On node 0 totalpages: 8388508
+[    0.000000]   DMA zone: 64 pages used in memmap
+[    0.000000]   DMA zone: 0 pages reserved
+[    0.000000]   DMA32 zone: 12224 pages used in memmap
+[    0.000000]   Normal zone: 118784 pages used in memmap
+[    0.000000] zonelist_order: Node
+[    0.000000] Node 0 Page Allocation Order
+[    0.000000]    zone: node=0, name=Normal 	 [0x100000000 - 0x83fffffff]
+[    0.000000]    zone: node=0, name=DMA32 	 [0x1000000 - 0xffffffff]
+[    0.000000]    zone: node=0, name=DMA 	 [0x0 - 0xffffff]
+[    0.000000] NR_IRQS:4352
+[    0.000000] Default domain set to @0xffff88083fdcf008
+[    0.000000] refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+[    0.000000] Switched to clocksource refined-jiffies
+[    0.000000] i8253 pit clockevent registered
+[    0.000000] TSC: Fast TSC calibration using PIT
+[    4.294967] TSC: Detected 2400.055 MHz processor
+[    4.295511] TSC: tsc_now: 5997992152, ns_now: 0, cyc2ns_mul: 894764348, cyc2ns_shift: 31, cyc2ns_offset: 1795861172
+[    4.296611] tsc: mask: 0xffffffffffffffff max_cycles: 0x22986b7a6a9, max_idle_ns: 440795209785 ns
+[    4.297586] Switched to clocksource tsc
+[    4.298064] Calibrating delay loop (skipped), value calculated using timer frequency.. 
+[    4.298968] 4800.11 BogoMIPS (lpj=24000550)
+[    4.299488] Scheduler is up and running
+[    4.299967] LAPIC: Original APIC routing is logical flat
+[    4.301027]  name              mapped  linear-max  direct-max  devtree-node
+[    4.301791]  x86_ioapic-0          24          24           0  
+[    4.302486]  x86_msi                0           0           0  
+[    4.310008] *x86_vector             0           0           0  
+[    4.310654] irq    hwirq    chip name        chip data           active  type            domain
+[    4.311704] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 1 IRQ: 1 (Mapping: linear)
+[    4.312628] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 1 IRQ: 1 (Mapping: radix)
+[    4.313529] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 2 IRQ: 0 (Mapping: linear)
+[    4.314451] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 0 IRQ: 0 (Mapping: radix)
+[    4.315356] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 3 IRQ: 3 (Mapping: linear)
+[    4.316281] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 3 IRQ: 3 (Mapping: radix)
+[    4.317185] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 4 IRQ: 4 (Mapping: linear)
+[    4.318108] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 4 IRQ: 4 (Mapping: radix)
+[    4.319017] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 5 IRQ: 5 (Mapping: linear)
+[    4.319940] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 5 IRQ: 5 (Mapping: radix)
+[    4.320846] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 6 IRQ: 6 (Mapping: linear)
+[    4.321773] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 6 IRQ: 6 (Mapping: radix)
+[    4.322678] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 7 IRQ: 7 (Mapping: linear)
+[    4.323602] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 7 IRQ: 7 (Mapping: radix)
+[    4.324505] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 8 IRQ: 8 (Mapping: linear)
+[    4.325429] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 8 IRQ: 8 (Mapping: radix)
+[    4.326332] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 9 IRQ: 9 (Mapping: linear)
+[    4.327257] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 9 IRQ: 9 (Mapping: radix)
+[    4.328158] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 10 IRQ: 10 (Mapping: linear)
+[    4.329094] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 10 IRQ: 10 (Mapping: radix)
+[    4.330013] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 11 IRQ: 11 (Mapping: linear)
+[    4.330957] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 11 IRQ: 11 (Mapping: radix)
+[    4.331875] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 12 IRQ: 12 (Mapping: linear)
+[    4.332815] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 12 IRQ: 12 (Mapping: radix)
+[    4.333733] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 13 IRQ: 13 (Mapping: linear)
+[    4.334671] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 13 IRQ: 13 (Mapping: radix)
+[    4.337234] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 14 IRQ: 14 (Mapping: linear)
+[    4.338184] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 14 IRQ: 14 (Mapping: radix)
+[    4.339100] irq_domain_insert_irq: Domain: x86_ioapic-0 HW-IRQ: 15 IRQ: 15 (Mapping: linear)
+[    4.340170] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 15 IRQ: 15 (Mapping: radix)
+[    4.341234] IO-APIC: ..TIMER: vector=0x30 apic1=0 pin1=2 apic2=-1 pin2=-1 irqs_disabled()=1
+[    4.680963] TSC deadline mode is supported by your CPU. But Lego currently does not support one-shot tick mode. Fall back to TSC periodic mode
+[    4.683252] x86: Booting SMP configuration:
+[    4.683852] .... node  #0, CPUs:      #1 #2 #3 #4 #5 #6 #7
+[    4.686556] x86: Booted up 1 node, 8 CPUs
+[    4.687105] kthreadd(pid:2/cpu:0) is running as daemon
+[    4.688371] PCI: Using configuration type 1 for base access
+[    4.689075] PCI: Probing PCI hardware
+[    4.689547] PCI: root bus 00: using default resources
+[    4.690131] PCI: Probing PCI hardware (bus 00)
+[    4.690664] PCI host bridge to bus 0000:00
+[    4.691169] root bus resource [io  0x0000-0xffff]
+[    4.691723] root bus resource [mem 0x00000000-0xffffffffff]
+[    4.692382] No busn resource found for root bus, will use [bus 00-ff]
+[    4.693099] pci_scan_child_bus() pci 0000:00 scanning bus
+[    4.693733] pci 0000:00:00.0: [8086:1237] type 00 class 0x060000
+[    4.694393] pci_fixup_device(): TODO
+[    4.695051] pci_init_capabilities(): TODO
+[    4.695604] pci 0000:00:01.0: [8086:7000] type 00 class 0x060100
+[    4.696647] pci 0000:00:01.1: [8086:7010] type 00 class 0x010180
+[    4.703764]     pci 0000:00:01.1: reg 0x20: [io  0xc1e0-0xc1ef]
+[    4.707189] pci 0000:00:01.3: [8086:7113] type 00 class 0x068000
+[    4.708106] pci 0000:00:02.0: [1013:00b8] type 00 class 0x030000
+[    4.711602]     pci 0000:00:02.0: reg 0x10: [mem 0xfc000000-0xfdffffff pref]
+[    4.715054]     pci 0000:00:02.0: reg 0x14: [mem 0xfeb50000-0xfeb50fff]
+[    4.729453]     pci 0000:00:02.0: reg 0x30: [mem 0xfeb40000-0xfeb4ffff pref]
+[    4.730271] pci 0000:00:03.0: [10ec:8139] type 00 class 0x020000
+[    4.733509]     pci 0000:00:03.0: reg 0x10: [io  0xc000-0xc0ff]
+[    4.736686]     pci 0000:00:03.0: reg 0x14: [mem 0xfeb51000-0xfeb510ff]
+[    4.738639] [tick_handle_noop] jiffies: 4294937323
+[    4.750369]     pci 0000:00:03.0: reg 0x30: [mem 0xfeb00000-0xfeb3ffff pref]
+[    4.751185] pci 0000:00:04.0: [1af4:1003] type 00 class 0x078000
+[    4.754350]     pci 0000:00:04.0: reg 0x10: [io  0xc140-0xc15f]
+[    4.757545]     pci 0000:00:04.0: reg 0x14: [mem 0xfeb52000-0xfeb52fff]
+[    4.770735] pci 0000:00:05.0: [8086:2934] type 00 class 0x0c0300
+[    4.777803]     pci 0000:00:05.0: reg 0x20: [io  0xc160-0xc17f]
+[    4.781036] pci 0000:00:05.1: [8086:2935] type 00 class 0x0c0300
+[    4.789749]     pci 0000:00:05.1: reg 0x20: [io  0xc180-0xc19f]
+[    4.793188] pci 0000:00:05.2: [8086:2936] type 00 class 0x0c0300
+[    4.800284]     pci 0000:00:05.2: reg 0x20: [io  0xc1a0-0xc1bf]
+[    4.803598] pci 0000:00:05.7: [8086:293a] type 00 class 0x0c0320
+[    4.805550]     pci 0000:00:05.7: reg 0x10: [mem 0xfeb53000-0xfeb53fff]
+[    4.813780] pci 0000:00:06.0: [1af4:1001] type 00 class 0x010000
+[    4.817002]     pci 0000:00:06.0: reg 0x10: [io  0xc100-0xc13f]
+[    4.820124]     pci 0000:00:06.0: reg 0x14: [mem 0xfeb54000-0xfeb54fff]
+[    4.833255] pci 0000:00:07.0: [1af4:1002] type 00 class 0x00ff00
+[    4.835199]     pci 0000:00:07.0: reg 0x10: [io  0xc1c0-0xc1df]
+[    4.843706] pci 0000:00:08.0: [15b3:1003] type 00 class 0x028000
+[    4.848771]     pci 0000:00:08.0: reg 0x10: [mem 0xfea00000-0xfeafffff 64bit]
+[    4.852586]     pci 0000:00:08.0: reg 0x18: [mem 0xfe000000-0xfe7fffff 64bit pref]
+[    4.862599] busn_res: [bus 00-ff] end is updated to 00
+[    4.863217] mlx4_core: Initializing 0000:00:08.0
+[    4.863787] pci 0000:00:08.0: current_state 0x0 (D0)
+[    4.864367] pci 0000:00:08.0: already in state 0x0 D0
+[    4.864971] (dev 0000:00:08.0) enable_irq pin: 1
+[    4.865546] (dev 0000:00:08.0)can't find IRQ for PCI INT A; probably buggy MP table
+[    4.866549] pci 0000:00:08.0: enabling bus mastering
+[    5.869892] mlx4_core: mlx4_cmd_init(): ioremap base: 0xfea80680
+[    5.870749] mlx4_core: FW version 2.35.5100 (cmd intf rev 3), max commands 16
+[    5.871615] mlx4_core: Catastrophic error buffer at 0x1f020, size 0x10, BAR 0
+[    5.872473] mlx4_core: Communication vector bar:2 offset:0x800
+[    5.873210] mlx4_core: FW size 385 KB
+[    5.873743] mlx4_core: Internal clock bar:0 offset:0x78f50
+[    5.874447] mlx4_core: Clear int @ f0058, BAR 0
+[    5.877165] mlx4_core: Mapped 26 chunks/6168 KB for FW.
+[   10.233436] mlx4_core: BlueFlame available (reg size 512, regs/page 8)
+[   10.235592] mlx4_core: Base MM extensions: flags 35538ec2, rsvd L_Key 00008000
+[   10.237706] mlx4_core: Max ICM size 4294967296 MB
+[   10.239068] mlx4_core: Max QPs: 16777216, reserved QPs: 64, entry size: 256
+[   10.240873] mlx4_core: Max SRQs: 16777216, reserved SRQs: 64, entry size: 128
+[   10.242719] mlx4_core: Max CQs: 16777216, reserved CQs: 128, entry size: 128
+[   10.244544] mlx4_core: Max EQs: 512, reserved EQs: 8, entry size: 128
+[   10.246227] mlx4_core: reserved MPTs: 256, reserved MTTs: 64
+[   10.247664] mlx4_core: Max PDs: 131072, reserved PDs: 4, reserved UARs: 2
+[   10.249314] mlx4_core: Max QP/MCG: 131072, reserved MGMs: 0
+[   10.250734] mlx4_core: Max CQEs: 4194304, max WQEs: 16384, max SRQ WQEs: 16384
+[   10.252660] mlx4_core: Local CA ACK delay: 15, max MTU: 4096, port width cap: 3
+[   10.254607] mlx4_core: Max SQ desc size: 1008, max SQ S/G: 62
+[   10.256091] mlx4_core: Max RQ desc size: 512, max RQ S/G: 32
+[   10.257431] mlx4_core: Max GSO size: 131072
+[   10.258512] mlx4_core: Max counters: 256
+[   10.259548] mlx4_core: Max RSS Table size: 256
+[   10.260674] mlx4_core: DEV_CAP flags:
+[   10.261663] mlx4_core:     RC transport
+[   10.262683] mlx4_core:     UC transport
+[   10.263710] mlx4_core:     UD transport
+[   10.264733] mlx4_core:     XRC transport
+[   10.265768] mlx4_core:     FCoIB support
+[   10.275007] mlx4_core:     SRQ support
+[   10.275968] mlx4_core:     IPoIB checksum offload
+[   10.277072] mlx4_core:     P_Key violation counter
+[   10.278189] mlx4_core:     Q_Key violation counter
+[   10.279241] mlx4_core:     DPDP
+[   10.280036] mlx4_core:     Big LSO headers
+[   10.280979] mlx4_core:     MW support
+[   10.281852] mlx4_core:     APM support
+[   10.282741] mlx4_core:     Atomic ops support
+[   10.283724] mlx4_core:     Address vector port checking support
+[   10.284950] mlx4_core:     UD multicast support
+[   10.285976] mlx4_core:     Router support
+[   10.289202] mlx4_core:     IBoE support
+[   10.290678] mlx4_core:     Unicast loopback support
+[   10.292152] mlx4_core:     FCS header control
+[   10.293517] mlx4_core:     UDP RSS support
+[   10.294816] mlx4_core:     Unicast VEP steering support
+[   10.296354] mlx4_core:     Multicast VEP steering support
+[   10.297927] mlx4_core:     Counters support
+[   10.299247] mlx4_core:     RSS support
+[   10.300452] mlx4_core:     RSS Toeplitz Hash Function support
+[   10.301975] mlx4_core:     RSS XOR Hash Function support
+[   10.319616] mlx4_core:     Device manage flow steering support
+[   10.321060] mlx4_core:     Automatic MAC reassignment support
+[   10.322414] mlx4_core:     Time stamping support
+[   10.323543] mlx4_core:     VST (control vlan insertion/stripping) support
+[   10.325040] mlx4_core:     FSM (MAC anti-spoofing) support
+[   10.326313] mlx4_core:     Dynamic QP updates support
+[   11.764513] mlx4_core: 64B EQEs/CQEs supported by the device but not enabled
+[   11.765345] mlx4_core: Steering mode is: B0 steering, oper_log_mgm_entry_size = 10, modparam log_num_mgm_entry_size = 10
+[   11.766463] mlx4_core:   profile[ 0] (  CMPT): 2^26 entries @ 0x         0, size 0x 100000000
+[   11.767390] mlx4_core:   profile[ 1] (   MTT): 2^24 entries @ 0x 100000000, size 0x   8000000
+[   11.768318] mlx4_core:   profile[ 2] (RDMARC): 2^21 entries @ 0x 108000000, size 0x   4000000
+[   11.769245] mlx4_core:   profile[ 3] (    QP): 2^17 entries @ 0x 10c000000, size 0x   2000000
+[   11.770173] mlx4_core:   profile[ 4] (  ALTC): 2^17 entries @ 0x 10e000000, size 0x    800000
+[   11.771102] mlx4_core:   profile[ 5] (   SRQ): 2^16 entries @ 0x 10e800000, size 0x    800000
+[   11.772039] mlx4_core:   profile[ 6] (    CQ): 2^16 entries @ 0x 10f000000, size 0x    800000
+[   11.772966] mlx4_core:   profile[ 7] (  DMPT): 2^17 entries @ 0x 10f800000, size 0x    800000
+[   11.773891] mlx4_core:   profile[ 8] (   MCG): 2^13 entries @ 0x 110000000, size 0x    800000
+[   11.774823] mlx4_core:   profile[ 9] (  AUXC): 2^17 entries @ 0x 110800000, size 0x     20000
+[   11.778934] mlx4_core:   profile[10] (    EQ): 2^06 entries @ 0x 110820000, size 0x      2000
+[   11.792496] mlx4_core: HCA context memory: reserving 4464776 KB
+[   11.794152] mlx4_core: 4464776 KB of HCA context requires 8856 KB aux memory.
+[   11.823685] mlx4_core: Mapped 37 chunks/8856 KB for ICM aux.
+[   11.827936] mlx4_core: Mapped 1 chunks/256 KB at 0 for ICM.
+[   11.830696] mlx4_core: Mapped 1 chunks/256 KB at 40000000 for ICM.
+[   11.833516] mlx4_core: Mapped 1 chunks/256 KB at 80000000 for ICM.
+[   11.834947] mlx4_core: Mapped 1 chunks/4 KB at c0000000 for ICM.
+[   11.836385] mlx4_core: Mapped 1 chunks/8 KB at 110820000 for ICM.
+[   11.839109] mlx4_core: Mapped 1 chunks/256 KB at 100000000 for ICM.
+[   11.841926] mlx4_core: Mapped 1 chunks/256 KB at 10f800000 for ICM.
+[   11.844599] mlx4_core: Mapped 1 chunks/256 KB at 10c000000 for ICM.
+[   11.846620] mlx4_core: Mapped 1 chunks/128 KB at 110800000 for ICM.
+[   11.849297] mlx4_core: Mapped 1 chunks/256 KB at 10e000000 for ICM.
+[   11.851968] mlx4_core: Mapped 1 chunks/256 KB at 108000000 for ICM.
+[   11.854573] mlx4_core: Mapped 1 chunks/256 KB at 10f000000 for ICM.
+[   11.857679] mlx4_core: Mapped 1 chunks/256 KB at 10e800000 for ICM.
+[   11.860810] mlx4_core: Mapped 1 chunks/256 KB at 110000000 for ICM.
+[   11.863861] mlx4_core: Mapped 1 chunks/256 KB at 110040000 for ICM.
+[   11.866898] mlx4_core: Mapped 1 chunks/256 KB at 110080000 for ICM.
+[   11.869941] mlx4_core: Mapped 1 chunks/256 KB at 1100c0000 for ICM.
+[   11.872857] mlx4_core: Mapped 1 chunks/256 KB at 110100000 for ICM.
+[   11.875776] mlx4_core: Mapped 1 chunks/256 KB at 110140000 for ICM.
+[   11.878695] mlx4_core: Mapped 1 chunks/256 KB at 110180000 for ICM.
+[   11.881539] mlx4_core: Mapped 1 chunks/256 KB at 1101c0000 for ICM.
+[   11.884354] mlx4_core: Mapped 1 chunks/256 KB at 110200000 for ICM.
+[   11.888355] mlx4_core: Mapped 1 chunks/256 KB at 110240000 for ICM.
+[   11.891233] mlx4_core: Mapped 1 chunks/256 KB at 110280000 for ICM.
+[   11.893955] mlx4_core: Mapped 1 chunks/256 KB at 1102c0000 for ICM.
+[   11.896671] mlx4_core: Mapped 1 chunks/256 KB at 110300000 for ICM.
+[   11.899394] mlx4_core: Mapped 1 chunks/256 KB at 110340000 for ICM.
+[   11.902110] mlx4_core: Mapped 1 chunks/256 KB at 110380000 for ICM.
+[   11.904752] mlx4_core: Mapped 1 chunks/256 KB at 1103c0000 for ICM.
+[   11.907412] mlx4_core: Mapped 1 chunks/256 KB at 110400000 for ICM.
+[   11.910048] mlx4_core: Mapped 1 chunks/256 KB at 110440000 for ICM.
+[   11.912681] mlx4_core: Mapped 1 chunks/256 KB at 110480000 for ICM.
+[   11.915243] mlx4_core: Mapped 1 chunks/256 KB at 1104c0000 for ICM.
+[   11.917828] mlx4_core: Mapped 1 chunks/256 KB at 110500000 for ICM.
+[   11.921649] mlx4_core: Mapped 1 chunks/256 KB at 110540000 for ICM.
+[   11.924218] mlx4_core: Mapped 1 chunks/256 KB at 110580000 for ICM.
+[   11.926719] mlx4_core: Mapped 1 chunks/256 KB at 1105c0000 for ICM.
+[   11.929223] mlx4_core: Mapped 1 chunks/256 KB at 110600000 for ICM.
+[   11.931726] mlx4_core: Mapped 1 chunks/256 KB at 110640000 for ICM.
+[   11.934230] mlx4_core: Mapped 1 chunks/256 KB at 110680000 for ICM.
+[   11.936675] mlx4_core: Mapped 1 chunks/256 KB at 1106c0000 for ICM.
+[   11.939122] mlx4_core: Mapped 1 chunks/256 KB at 110700000 for ICM.
+[   11.941570] mlx4_core: Mapped 1 chunks/256 KB at 110740000 for ICM.
+[   11.944009] mlx4_core: Mapped 1 chunks/256 KB at 110780000 for ICM.
+[   11.946464] mlx4_core: Mapped 1 chunks/256 KB at 1107c0000 for ICM.
+[   12.206335] mlx4_core: map_internal_clock(): offset: 0xfea78f50 size: 0x8
+[   12.208394] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131072 IRQ: 24 (Mapping: radix)
+[   12.210653] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 24 IRQ: 24 (Mapping: radix)
+[   12.212865] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131073 IRQ: 25 (Mapping: radix)
+[   12.214969] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 25 IRQ: 25 (Mapping: radix)
+[   12.217021] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131074 IRQ: 26 (Mapping: radix)
+[   12.219088] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 26 IRQ: 26 (Mapping: radix)
+[   12.221137] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131075 IRQ: 27 (Mapping: radix)
+[   12.223209] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 27 IRQ: 27 (Mapping: radix)
+[   12.225141] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131076 IRQ: 28 (Mapping: radix)
+[   12.227093] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 28 IRQ: 28 (Mapping: radix)
+[   12.229007] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131077 IRQ: 29 (Mapping: radix)
+[   12.230938] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 29 IRQ: 29 (Mapping: radix)
+[   12.232847] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131078 IRQ: 30 (Mapping: radix)
+[   12.234765] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 30 IRQ: 30 (Mapping: radix)
+[   12.236561] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131079 IRQ: 31 (Mapping: radix)
+[   12.238372] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 31 IRQ: 31 (Mapping: radix)
+[   12.240168] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131080 IRQ: 32 (Mapping: radix)
+[   12.249967] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 32 IRQ: 32 (Mapping: radix)
+[   12.251662] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131081 IRQ: 33 (Mapping: radix)
+[   12.253369] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 33 IRQ: 33 (Mapping: radix)
+[   12.255062] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131082 IRQ: 34 (Mapping: radix)
+[   12.256696] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 34 IRQ: 34 (Mapping: radix)
+[   12.258297] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131083 IRQ: 35 (Mapping: radix)
+[   12.259904] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 35 IRQ: 35 (Mapping: radix)
+[   12.261501] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131084 IRQ: 36 (Mapping: radix)
+[   12.263113] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 36 IRQ: 36 (Mapping: radix)
+[   12.264713] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131085 IRQ: 37 (Mapping: radix)
+[   12.266323] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 37 IRQ: 37 (Mapping: radix)
+[   12.267853] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131086 IRQ: 38 (Mapping: radix)
+[   12.269376] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 38 IRQ: 38 (Mapping: radix)
+[   12.270888] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131087 IRQ: 39 (Mapping: radix)
+[   12.272411] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 39 IRQ: 39 (Mapping: radix)
+[   12.273927] irq_domain_insert_irq: Domain: x86_msi HW-IRQ: 131088 IRQ: 40 (Mapping: radix)
+[   12.275448] irq_domain_insert_irq: Domain: x86_vector HW-IRQ: 40 IRQ: 40 (Mapping: radix)
+[   12.276946] (dev 0000:00:08.0) irq 24 for MSI
+[   12.277784] (dev 0000:00:08.0) irq 25 for MSI
+[   12.278616] (dev 0000:00:08.0) irq 26 for MSI
+[   12.279444] (dev 0000:00:08.0) irq 27 for MSI
+[   12.280271] (dev 0000:00:08.0) irq 28 for MSI
+[   12.281099] (dev 0000:00:08.0) irq 29 for MSI
+[   12.281926] (dev 0000:00:08.0) irq 30 for MSI
+[   12.282751] (dev 0000:00:08.0) irq 31 for MSI
+[   12.283578] (dev 0000:00:08.0) irq 32 for MSI
+[   12.284406] (dev 0000:00:08.0) irq 33 for MSI
+[   12.285233] (dev 0000:00:08.0) irq 34 for MSI
+[   12.286062] (dev 0000:00:08.0) irq 35 for MSI
+[   12.286886] (dev 0000:00:08.0) irq 36 for MSI
+[   12.287687] (dev 0000:00:08.0) irq 37 for MSI
+[   12.288474] (dev 0000:00:08.0) irq 38 for MSI
+[   12.289260] (dev 0000:00:08.0) irq 39 for MSI
+[   12.290046] (dev 0000:00:08.0) irq 40 for MSI
+[   12.325712] request_threaded_irq(): irq=24 handler=mlx4_msi_x_interrupt+0x0/0x40 devname=mlx4-comp-0@pci:0000:00:08.0
+[   12.328708] request_threaded_irq(): irq=25 handler=mlx4_msi_x_interrupt+0x0/0x40 devname=mlx4-comp-1@pci:0000:00:08.0
+[   12.332137] request_threaded_irq(): irq=26 handler=mlx4_msi_x_interrupt+0x0/0x40 devname=mlx4-comp-2@pci:0000:00:08.0
+[   12.335571] request_threaded_irq(): irq=27 handler=mlx4_msi_x_interrupt+0x0/0x40 devname=mlx4-async@pci:0000:00:08.0
+[   12.339238] mlx4_core: ****           FAT NOTE
+[   12.340399] mlx4_core: ****  mlx4en will use polling to issue FW cmd.
+[   12.342119] mlx4_core: ****
+[   12.343255] mlx4_core: NOP command IRQ test passed
+[   12.345261] <mlx4_ib> mlx4_ib_add: mlx4_ib: Mellanox ConnectX InfiniBand driver v1.0 (April 4, 2008)
+[   12.348269] ib_mad: ib_mad_init_device(): ib_device 0000:00:08.0
+[   12.364319] ib_mad: ib_mad_port_open(): ib_device 0000:00:08.0 port 1
+[   12.367649] ib_agent: ib_agent_port_open(): ib_device 0000:00:08.0 port 1
+[   12.369154] ib_mad: ib_mad_port_open(): ib_device 0000:00:08.0 port 2
+[   12.374768] ib_agent: ib_agent_port_open(): ib_device 0000:00:08.0 port 2
+[   12.376902] ib_cm: cm_add_one(): device 0000:00:08.0
+[   12.379425] ib_cache: ib_cache_setup_one(): dev: 0000:00:08.0
+[   12.423606] ib_cache: ib_cache_update(): Updated port 1 of dev 0000:00:08.0
+[   12.465429] ib_cache: ib_cache_update(): Updated port 2 of dev 0000:00:08.0
+[   12.467155]  name              mapped  linear-max  direct-max  devtree-node
+[   12.468298]  x86_ioapic-0          24          24           0  
+[   12.469311]  x86_msi               17           0           0  
+[   12.470323] *x86_vector            32           0           0  
+[   12.471326] irq    hwirq    chip name        chip data           active  type            domain
+[   12.472764]     1  0x00001  IO-APIC          0xffff88083fdcf2d8        LINEAR          x86_ioapic-0
+[   12.474617]     3  0x00003  IO-APIC          0xffff88083fdcf3f8        LINEAR          x86_ioapic-0
+[   12.476475]     4  0x00004  IO-APIC          0xffff88083fdcf488        LINEAR          x86_ioapic-0
+[   12.478325]     5  0x00005  IO-APIC          0xffff88083fdcf518        LINEAR          x86_ioapic-0
+[   12.480174]     6  0x00006  IO-APIC          0xffff88083fdcf5a8        LINEAR          x86_ioapic-0
+[   12.482029]     7  0x00007  IO-APIC          0xffff88083fdcf638        LINEAR          x86_ioapic-0
+[   12.483808]     8  0x00008  IO-APIC          0xffff88083fdcf6c8        LINEAR          x86_ioapic-0
+[   12.485578]     9  0x00009  IO-APIC          0xffff88083fdcf758        LINEAR          x86_ioapic-0
+[   12.487347]    10  0x0000a  IO-APIC          0xffff88083fdcf7e8        LINEAR          x86_ioapic-0
+[   12.489110]    11  0x0000b  IO-APIC          0xffff88083fdcf878        LINEAR          x86_ioapic-0
+[   12.490873]    12  0x0000c  IO-APIC          0xffff88083fdcf908        LINEAR          x86_ioapic-0
+[   12.492637]    13  0x0000d  IO-APIC          0xffff88083fdcf998        LINEAR          x86_ioapic-0
+[   12.494357]    14  0x0000e  IO-APIC          0xffff88083fdcfa28        LINEAR          x86_ioapic-0
+[   12.496048]    15  0x0000f  IO-APIC          0xffff88083fdcfab8        LINEAR          x86_ioapic-0
+[   12.497737]    24  0x20000  PCI-MSI                      (null)     *     RADIX          x86_msi
+[   12.499396]    25  0x20001  PCI-MSI                      (null)     *     RADIX          x86_msi
+[   12.501055]    26  0x20002  PCI-MSI                      (null)     *     RADIX          x86_msi
+[   12.502711]    27  0x20003  PCI-MSI                      (null)     *     RADIX          x86_msi
+[   12.504378]    28  0x20004  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.505974]    29  0x20005  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.509192]    30  0x20006  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.510837]    31  0x20007  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.512475]    32  0x20008  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.514075]    33  0x20009  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.515494]    34  0x2000a  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.516698]    35  0x2000b  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.517938]    36  0x2000c  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.519146]    37  0x2000d  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.520350]    38  0x2000e  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.521552]    39  0x2000f  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.522756]    40  0x20010  PCI-MSI                      (null)           RADIX          x86_msi
+[   12.723015] fit: ***
+[   12.723997] fit: ***  FIT_initial_timeout_s:   10
+[   12.725453] fit: ***  FIT_LOCAL_ID:            0
+[   12.726858] fit: ***  FIT_FIRST_QPN:           80
+[   12.728280] fit: ***  FIT_NR_QPS_PER_PAIR:     12
+[   12.729700] fit: ***  FIT_MAX_SEND_WR:         1
+[   12.731105] fit: ***
+[   12.731998] fit: ***    NodeID    Hostname    LID    QPN
+[   12.733538] fit: ***    -------------------------------------
+[   12.735152] fit: ***         0    wuklab14     29     80 <---
+[   12.736764] fit: ***         1    wuklab15     17     80
+[   12.738293] fit: ***
+[   12.739119] fit: Please wait for enough IB MAD (number: 7) ...
+[   38.675477] mlx4_msi_x_interrupt(): IRQ: 24 CPU: 1
+[   38.680282] event cq_completion arrived
+[   38.689214] mlx4_msi_x_interrupt(): IRQ: 27 CPU: 1
+[   38.689764] event PORT_MNG_CHG arrived
+[   38.690226] <mlx4_ib> handle_port_mgmt_change_event: update sm ah
+[   38.690870] <mlx4_ib> handle_port_mgmt_change_event: lid change
+[   38.725980] ib_cache: ib_cache_update(): Updated port 1 of dev 0000:00:08.0
+[   38.726702] ib_sa_event(): TODO
+[   38.727113] <mlx4_ib> handle_port_mgmt_change_event: rereg 
+[   38.760778] ib_cache: ib_cache_update(): Updated port 1 of dev 0000:00:08.0
+[   38.761497] ib_sa_event(): TODO
+[   38.761910] event PORT_CHANGE_UP arrived
+[   38.795667] ib_cache: ib_cache_update(): Updated port 1 of dev 0000:00:08.0
+[   38.796386] ib_sa_event(): TODO
+[   39.790881] fit: fit_establish_conn() CPU1 port: 1 LID: 0 state: 2
+[   39.792349] fit: Query returned LID: 29
+[   39.793436] fit: To align first QPN, we skipped: #72 #72 #73 #74 #75 #76 #77 #78 #79
+[   39.924184] fit: ***  Successfully built QP for node  1 [LID: 17 QPN: 80]
+[   49.926124] fit: Please wait other nodes to join ...
+[   50.949680] fit:  ... Node [ 1] Joined. addr 00000007df800000 rkey 69120 nr_joined_nodes 1
+[   50.951294] fit: FIT layer ready to go!
+[   51.690003] init_pcache_clflush_buffer(): clflush array at ffff8808183b0000, nr_entries: 8
+[   51.695560] Processor LLC Configurations:
+[   51.696089]     PhysStart:         0x100000000
+[   51.696632]     VirtStart:         0xffff880100000000
+[   51.697283]     Registered Size:   0x100000000
+[   51.697829]     Actual Used Size:  0x84000000
+[   51.698364]     NR cachelines:     524288
+[   51.698873]     Associativity:     64
+[   51.699350]     NR Sets:           8192
+[   51.699843]     Cacheline size:    4096 B
+[   51.700350]     Metadata size:     128 B
+[   51.700850]     NR cacheline bits: 12 [ 0 - 11] 0x0000000000000fff
+[   51.701541]     NR set-index bits: 13 [12 - 24] 0x0000000001fff000
+[   51.702236]     NR tag bits:       39 [25 - 63] 0xfffffffffe000000
+[   51.702927]     NR pages for data: 524288
+[   51.703433]     NR pages for meta: 16384
+[   51.703990]     Cacheline (pa) range:   [       0x100000000 -        0x17fffffff]
+[   51.704983]     Metadata (pa) range:    [       0x180000000 -        0x183ffffff]
+[   51.705976]     Cacheline (va) range:   [0xffff880100000000 - 0xffff88017fffffff]
+[   51.706868]     Metadata (va) range:    [  ffff880180000000 - 0xffff880183ffffff]
+[   51.707758]     pcache_set_map(192B):   [  ffff88083fddd000 - 0xffff88083ff5cfff]
+[   51.708656]     Way cache stride:  0x2000000
+[   51.709177]     Memmap $ semantic:       memblock reserved
+[   51.709798]   [0] Thread[FIT_WQ_Handler:14] pinned at CPU 3
+[   51.710423]   [1] Thread[FIT_RecvCQ-0:13] pinned at CPU 2
+[   51.711038]   [2] Thread[ib_mad1:11] pinned at CPU 0
+[   51.711614] Online CPU: 0-7
+[   51.712014] Active CPU: 1,4-7
+[   51.712767] Manager is up and running.
+[   51.713969] STDOUT: ---[
+pid: 15
+ì
+]---
+[   51.716582] STDOUT: ---[
+gettimeofday(): tv_sec: 1540429151, tv_usec: 418989
+Ö
+]---
+[   51.719761] STDOUT: ---[
+time(NULL): 1540429151
+ ä
+]---
+[   51.722455] STDOUT: ---[
+uname(): 
+ë
+]---
+[   51.724935] STDOUT: ---[
+	 sysname: LegoOS
+ç
+]---
+[   51.727626] STDOUT: ---[
+	 nodename: (none)
+æ
+]---
+[   51.730245] STDOUT: ---[
+	 release: 4.0.0-lego-pComponent+
+ß
+]---
+[   51.733075] STDOUT: ---[
+	 version: #3 SMP Wed Oct 24 20:57:09 EDT 2018
+8Ø
+]---
+[   51.736640] STDOUT: ---[
+	 machine: x86_64
+ç
+]---
+[   51.757130] STDOUT: ---[
+getrlimit(): RLIMIT_STACK, cur: 8388608, max: -1
+×
+]---
+[   51.760058] STDOUT: ---[
+set_tid_address(): return tgid: 15
+8Þ
+]---
+[   51.762758] STDOUT: ---[
+gettimeofday(): tv_sec: 1540429151, tv_usec: 465166
+Ö
+]---
+[   51.765693] STDOUT: ---[
+time(NULL): 1540429151
+ ä
+]---
+
