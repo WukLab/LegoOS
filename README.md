@@ -36,6 +36,8 @@ Table of Contents
          * [1P-1M-1S](#1p-1m-1s)
          * [Multiple Managers](#multiple-managers)
          * [Virtual Machine](#virtual-machine)
+            * [VM Setup](#vm-setup)
+            * [InfiniBand](#infiniband)
 
 
 ## Codebase Organization
@@ -113,7 +115,7 @@ And the following toolchains:
 |GNU libc|2.17|
 |GRUB2|2.02|
 
-Of all the above hardware and software requirments, __the CPU and the NIC are the hard requirements__. Currently, LegoOS can only run on `Intel x86` CPUs. As for the NIC card, LegoOS has ported an `mlx4_ib` driver, which _probably_ can run on other Mellanox cards, but we have not tested other than the one we used. As long as you have the CPU and the NIC, we think you can run LegoOS on top your platform. You need __at least two machines__, connected by either InfiniBand switch or direct connection.
+Of all the above hardware and software requirments, __the CPU and the Infiniband NIC are the hard requirements__. Currently, LegoOS can only run on `Intel x86` CPUs. As for the Infiniband NIC card, LegoOS has ported an `mlx4_ib` driver, which _probably_ can run on other Mellanox cards, but we have not tested other than the one we used. As long as you have the CPU and the Infiniband NIC, we think you can run LegoOS on top your platform. You need __at least two machines__, connected by Infiniband switch (back-to-back connection is not supported now).
 
 We understand that one key for an OS to be successful is let people be able to try it out. We are deeply sorry that we can not provide further technical support if you are using a different platform.
 
@@ -163,14 +165,13 @@ And note that this is just the __general__ configuration steps. If you want to c
 After doing above steps, the LegoOS kernel will be ready at `arch/x86/boot/bzImage`.
 
 #### Configure Processor ExCache Size
-There is one more knob for processor managers: the size of ExCache. We reused the old way of reserving DRAM at Linux, the [`memmap=nn[KMG]$ss[KMG]`](https://www.kernel.org/doc/html/v4.14/admin-guide/kernel-parameters.html) way. Due to implementation issues, it does not seem straightforward. Basically, the actual ExCache size is half the size you specified at memmap.
+There is one more knob for processor managers: __ExCache Size__. We reused the old way of reserving DRAM from Linux: the [`memmap=nn[KMG]$ss[KMG]`](https://www.kernel.org/doc/html/v4.14/admin-guide/kernel-parameters.html). Due to implementation issues, the semantic in LegoOS is not very straightforward. Basically, the actual ExCache size is __half__ the size you specified at `memmap`.
 
-Assume you want to reserve contiguous DRAM starting from 4GB:
+Assume you want to reserve contiguous DRAM start from physical address `4GB`:
 - To have a 512MB ExCache, use `memmap=1G$4G`
 - To have a 1GB ExCache, use `memmap=2G$4G`
-- ...
 
-For example, this is how it looks like in a GRUB2 config file if you want to have 1GB ExCache:
+For example, this is how it looks like in a `CentOS 7, /boot/grub2/grub.cfg`  file if `1GB` ExCache is configured. Note that, other OSes or bootloaders may have different semantics, and make sure you modified the right boot menuentry.
 ```
 menuentry 'CentOS Linux (4.0.0-lego+) 7 (Core)' ... {
 	...
@@ -178,7 +179,7 @@ menuentry 'CentOS Linux (4.0.0-lego+) 7 (Core)' ... {
 	...
 ```
 
-The ExCache configuration will be printed at boot time. If you forget to add memmap at processor manager side, there will be a kernel panic.
+The ExCache configuration will be printed at LegoOS boot time at the very beginning, and it has to be something like `memmap=X$X` without any `\` in the middle. Processor manager will complain if `memmap` goes wrong. An example output is [here](https://github.com/WukLab/LegoOS/blob/master/Documentation/configs/1P-1M-Processor-Output#L2).
 
 ### Configure Linux Modules
 Storage manager, global resource monitors, and their network stack are linux kernel modules. They can only run on `Linux-3.11.1`. Because their network stack is only supported at this kernel version.
@@ -243,8 +244,8 @@ From the above snippet, we learn a mapping between hostname and LID (hostname is
 Now we have the LID information, let us hardcode them into a table at both `net/lego/fit_machine.c` and `linux-modules/fit/fit_machine.c`:
 ```
 static struct fit_machine_info WUKLAB_CLUSTER[] = {
-[0]     = {     .hostname =     "wuklab00",     .lid =  8,       },  
-[1]     = {     .hostname =     "wuklab01",     .lid =  27,      },  
+[0]     = {     .hostname =     "wuklab00",     .lid =  8,       },
+[1]     = {     .hostname =     "wuklab01",     .lid =  27,      },
 [2]     = {     .hostname =     "wuklab02",     .lid =  24,      },
 ...
 ```
@@ -325,9 +326,10 @@ Once you have successfully compiled the processor or memory manager, you can ins
 LegoOS pretends as a `Linux-4.0.0` to fool `glibc-2.17`, which somehow requires a pretty high version Linux kernel. To run LegoOS, you need to __reboot__ machine, and then boot into LegoOS kernel.
 
 ### 1P-1M
-This section describes the case where we run LegoOS with only one processor manager and one memory manager, or __1P-1M__ setting. This setting requires a special `Kconfig` option: `CONFIG_USE_RAMFS`, at both processor and memory. And this setting requires two physical machines (or virtual machines).
+This section describes the case where we run LegoOS with only one processor manager and one memory manager, or __1P-1M__ setting. This is the simplest setting in LegoOS. This setting piggybacks a statically-linked user program binary into LegoOS image, thus we don't need another storage manager. The limitation is that only a simple user-program can be staticlly-linked and piggybacked (e.g., programs at `usr/`), because the difficulties of compiling a large program and kernel image size limitation.
 
-There is no need to have any linux kernel modules in this setting.
+This setting requires a special `Kconfig` option: `CONFIG_USE_RAMFS`, at both processor and memory. And this setting requires two physical machines (or virtual machines running on different physical host).
+
 
 1. Network setting:
     - Set `CONFIG_FIT_LOCAL_ID` and `CONFIG_FIT_NR_NODES` properly at both processor and memory manager. For example, processor can use `CONFIG_FIT_LOCAL_ID=0, CONFIG_FIT_NR_NODES=2`, and memory can use `CONFIG_FIT_LOCAL_ID=1, CONFIG_FIT_NR_NODES=2`.
@@ -387,4 +389,14 @@ We will provide detailed tutorial on this soon.
 ### Virtual Machine
 In general, you will be able run both processor and memory manager on VM without any issue. But we can not run storage manager within a VM. The reason is our network setting. We need to know peer's QP number (QPN) beforehand. While the QPN generated by a Linux which is running inside a VM, is not stable.
 
-Overall, 1P-1M can be tested with VM only. With 1P-1M-1S setting, the processor and memory manager can run inside VM, while storage manager has to run on physical machine.
+Overall, `1P-1M` can be tested with VM. With `1P-1M-1S` setting, the processor and memory manager can run inside VM, while storage manager has to run on physical machine.
+
+#### VM Setup
+
+It is recommended to have multiple CPU cores and several GB memory for each VM. The reason is LegoOS need at least two kernel threads which are pinned to cores to do network communication. For processor, if Victim Cache is configured, one more victim flush thread will be created.
+
+For example, a simple basic configuration: 8 vCPUs, and 8GB memory.
+
+#### InfiniBand
+
+In order to run LegoOS on a VM, we need to export IB device from host to VM. And this VM must have exclusive access to this IB device. Please refer to Mellanox tutorials on this topic.
