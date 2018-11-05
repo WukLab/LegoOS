@@ -12,6 +12,8 @@ LegoOS is a disseminated, distributed operating system built for hardware resour
 [[Keynote]](https://github.com/WukLab/LegoOS/tree/master/Documentation/LegoOS-OSDI-Slides.key)
 [[Tech Notes]](http://lastweek.io)
 
+__We are currently looking into the possibility of deploying LegoOS on either CloudLab or Emulab. Stay Tuned!__
+
 Table of Contents
 =================
 
