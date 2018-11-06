@@ -2289,7 +2289,7 @@ static void cm_format_rej_event(struct cm_work *work)
 static struct cm_id_private * cm_acquire_rejected_id(struct cm_rej_msg *rej_msg)
 {
 	struct cm_timewait_info *timewait_info;
-	struct cm_id_private *cm_id_priv;
+	struct cm_id_private *cm_id_priv = NULL;
 	__be32 remote_id;
 	int id;
 

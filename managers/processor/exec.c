@@ -425,7 +425,7 @@ int do_execve(const char __user *filename,
 {
 	int ret;
 	__u32 payload_size, reply_size;
-	unsigned long new_ip, new_sp;
+	unsigned long new_ip = 0, new_sp = 0;
 	struct pt_regs *regs = current_pt_regs();
 	void *payload, *reply;
 

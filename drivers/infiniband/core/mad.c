@@ -1566,9 +1566,11 @@ static inline int rcv_has_same_gid(struct ib_mad_agent_private *mad_agent_priv,
 	struct ib_ah_attr attr;
 	u8 send_resp, rcv_resp;
 	union ib_gid sgid;
-	u8 lmc;
+	u8 lmc = 0;
 	//struct ib_device *device = mad_agent_priv->agent.device;
 	//u8 port_num = mad_agent_priv->agent.port_num;
+
+	memset(&attr, 0, sizeof(attr));
 
 	send_resp = ib_response_mad((struct ib_mad *)wr->send_buf.mad);
 	rcv_resp = ib_response_mad(rwc->recv_buf.mad);
@@ -1577,6 +1579,7 @@ static inline int rcv_has_same_gid(struct ib_mad_agent_private *mad_agent_priv,
 		/* both requests, or both responses. GIDs different */
 		return 0;
 
+	WARN_ON_ONCE(1);
 	pr_info("%s need ib_query_ah back\n", __func__);
 //	if (ib_query_ah(wr->send_buf.ah, &attr))
 		/* Assume not equal, to avoid false positives. */
