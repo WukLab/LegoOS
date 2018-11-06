@@ -1563,10 +1563,10 @@ static inline int rcv_has_same_gid(struct ib_mad_agent_private *mad_agent_priv,
 				   struct ib_mad_send_wr_private *wr,
 				   struct ib_mad_recv_wc *rwc )
 {
-	struct ib_ah_attr attr;
+	struct ib_ah_attr attr = {0};
 	u8 send_resp, rcv_resp;
 	union ib_gid sgid;
-	u8 lmc;
+	u8 lmc = 0;
 	//struct ib_device *device = mad_agent_priv->agent.device;
 	//u8 port_num = mad_agent_priv->agent.port_num;
 

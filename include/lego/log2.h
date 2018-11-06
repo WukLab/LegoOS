@@ -17,7 +17,8 @@
 #include <lego/types.h>
 #include <lego/bitops.h>
 
-__attribute__((const, noreturn)) int ____ilog2_NaN(void);
+//__attribute__((const, noreturn)) int ____ilog2_NaN(void);
+#define ____ilog2_NaN() (~0ULL)
 
 static inline __attribute__((const))
 int __ilog2_u32(u32 n)

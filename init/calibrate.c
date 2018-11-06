@@ -21,7 +21,7 @@ unsigned long loops_per_jiffy = (1<<12);
 
 void __init calibrate_delay(void)
 {
-	unsigned long lpj;
+	unsigned long lpj = 0;
 
 	if (lpj_fine) {
 		lpj = lpj_fine;
