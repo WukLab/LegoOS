@@ -12,8 +12,6 @@ LegoOS is a disseminated, distributed operating system built for hardware resour
 [[Keynote]](https://github.com/WukLab/LegoOS/tree/master/Documentation/LegoOS-OSDI-Slides.key)
 [[Tech Notes]](http://lastweek.io)
 
-__We are currently looking into the possibility of deploying LegoOS on either CloudLab or Emulab. Stay Tuned!__
-
 Table of Contents
 =================
 
@@ -173,15 +171,17 @@ Assume you want to reserve contiguous DRAM start from physical address `4GB`:
 - To have a 512MB ExCache, use `memmap=1G$4G`
 - To have a 1GB ExCache, use `memmap=2G$4G`
 
-For example, this is how it looks like in a `CentOS 7, /boot/grub2/grub.cfg`  file if `1GB` ExCache is configured. Note that, other OSes or bootloaders may have different semantics, and make sure you modified the right boot menuentry.
+For example, this is how it looks like in a `CentOS 7, /boot/grub2/grub.cfg`  file if `1GB` ExCache is configured:
 ```
 menuentry 'CentOS Linux (4.0.0-lego+) 7 (Core)' ... {
 	...
         linux16 /vmlinuz-4.0.0-lego+ memmap=2G\$4G
+        initrd16 ...
 	...
 ```
+[Fat note: 1) Other bootloaders may have different semantics, and make sure you modified the right boot menuentry. 2) In grub2, make sure you are using `linux16/initrd16` instead of `linux/initrd`. The latter pair will load kernel into a physical address where LegoOS does not support.]
 
-The ExCache configuration will be printed at LegoOS boot time at the very beginning, and it has to be something like `memmap=X$X` without any `\` in the middle. Processor manager will complain if `memmap` goes wrong. An example output is [here](https://github.com/WukLab/LegoOS/blob/master/Documentation/configs/1P-1M-Processor-Output#L2).
+At LegoOS boot time, the ExCache configuration will be printed at the very beginning, and it has to be something like `memmap=X$X` without any `\` in the middle. Processor manager will complain if `memmap` goes wrong. An example output is [here](https://github.com/WukLab/LegoOS/blob/master/Documentation/configs/1P-1M-Processor-Output#L2).
 
 ### Configure Linux Modules
 Storage manager, global resource monitors, and their network stack are linux kernel modules. They can only run on `Linux-3.11.1`. Because their network stack is only supported at this kernel version.
