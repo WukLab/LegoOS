@@ -28,6 +28,17 @@
 #endif
 #endif
 
+/*
+ * The default home memory node and storage node must be
+ * smaller than number of connected nodes.
+ */
+#if (CONFIG_DEFAULT_MEM_NODE >= CONFIG_FIT_NR_NODES)
+# error "Please adjust default home memory node."
+#endif
+#if (CONFIG_DEFAULT_STORAGE_NODE >= CONFIG_FIT_NR_NODES)
+# error "Please adjust default storage node."
+#endif
+
 /* Indicate if processor or memory manager is up or not. */
 int manager_state = MANAGER_DOWN;
 
