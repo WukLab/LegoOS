@@ -260,6 +260,9 @@ static void lego_ib_test(void)
 #endif
 }
 
+int fit_state = FIT_MODULE_DOWN;
+EXPORT_SYMBOL(fit_state);
+
 static int __init lego_ib_init(void)
 {
 	int ret;
@@ -281,12 +284,15 @@ static int __init lego_ib_init(void)
 	if (ret == 0)
 		lego_ib_test();
 
+	fit_state = FIT_MODULE_UP;
 	return 0;
 }
 
 static void __exit lego_ib_cleanup(void)
 {
-	printk(KERN_INFO "Ready to remove module\n");
+	fit_state = FIT_MODULE_DOWN;
+
+	pr_info("Removing LegoOS FIT Module...");
 	fit_cleanup_module();
 	ib_unregister_client(&ibv_client);
 	fit_internal_cleanup();

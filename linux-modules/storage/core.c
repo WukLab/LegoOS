@@ -203,6 +203,8 @@ static int storage_manager(void *unused)
 	return 0;
 }
 
+extern int fit_state;
+
 /*
  * If STORAGE_BYPASS_PAGE_CACHE is enabled, we need to have the user
  * context to do mmap. That means we have use the current insmod thread
@@ -213,25 +215,32 @@ static int storage_manager(void *unused)
 static int __init init_storage_server(void)
 {
 	int ret = 0;
-#ifndef STORAGE_BYPASS_PAGE_CACHE
-	struct task_struct *tsk;
+	struct task_struct *tsk __maybe_unused;
+	unsigned long populate __maybe_unused;
 
+	if (fit_state != FIT_MODULE_UP) {
+		pr_err("LegoOS FIT module is not ready.");
+		return -EIO;
+	}
+
+#ifndef STORAGE_BYPASS_PAGE_CACHE
 	tsk = kthread_run(storage_manager, NULL, "lego-storaged");
 	if (IS_ERR(tsk)) {
 		pr_err("ERROR: Fail to create lego_storaged\n");
 		return PTR_ERR(tsk);
 	}
 #else
-	unsigned long populate;
 	ubuf = (char __user *)do_mmap_pgoff(NULL, 0, MAX_RXBUF_SIZE,
 			PROT_READ | PROT_WRITE, MAP_SHARED, 0, &populate);
 	storage_manager(NULL);
 #endif
+
 	ret = init_self_monitor();
 	return ret;
 }
 
-static void __exit stop_storage_server(void) {
+static void __exit stop_storage_server(void)
+{
 	/*
 	 * TODO: DO NOT JUST EXIT
 	 * Cleanup things such as allocated memory,

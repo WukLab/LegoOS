@@ -1772,7 +1772,6 @@ int fit_send_reply_with_rdma_write_with_imm(struct lego_context *ctx, int target
 	uint32_t remote_rkey;
 	struct fit_ibv_mr *remote_mr;
 	struct imm_message_metadata output_header;
-	unsigned long phys_addr;
 	int last_ack;
 	
 	if(size+sizeof(struct imm_message_metadata) > IMM_MAX_SIZE)
@@ -1807,8 +1806,6 @@ int fit_send_reply_with_rdma_write_with_imm(struct lego_context *ctx, int target
 	}
 
 	remote_mr = &(ctx->remote_rdma_ring_mrs[target_node]);
-
-retry_send_reply_with_imm_request:
 
 	connection_id = fit_get_connection_by_atomic_number(ctx, target_node, LOW_PRIORITY);
 	inbox_id = fit_get_inbox_by_addr(ctx, &wait_send_reply_id);
@@ -1873,7 +1870,6 @@ retry_send_reply_with_imm_request:
 	if(wait_send_reply_id < 0)
 	{
 		printk(KERN_CRIT "%s: [significant error] send-reply-imm fail with connection-%d inbox-%d status-%d\n", __func__, connection_id, inbox_id, wait_send_reply_id);
-		//goto retry_send_reply_with_imm_request;
 	}
 
 	return wait_send_reply_id;
@@ -1951,8 +1947,6 @@ int fit_send_test(struct lego_context *ctx, int connection_id, int type, void *a
 	int ret;
 	int ne, i;
 	struct ib_wc wc[2];
-	struct ibapi_header output_header;
-	void *output_header_addr;
 
 	printk(KERN_CRIT "%s conn %d addr %p size %d sendcq %p\n", __func__, connection_id, addr, size, ctx->send_cq[connection_id]);
 	spin_lock(&connection_lock[connection_id]);
@@ -1962,7 +1956,6 @@ int fit_send_test(struct lego_context *ctx, int connection_id, int type, void *a
 	sge.addr = (uintptr_t)fit_ib_reg_mr_addr(ctx, addr, size);
 	sge.length = size;
 	sge.lkey = ctx->proc->lkey;
-	printk(KERN_CRIT "%s registered addr %lx lkey %d\n", sge.addr, sge.lkey);
 
 	wr.wr_id = type;
 	wr.opcode = IB_WR_SEND;
@@ -2032,7 +2025,7 @@ int fit_send_message_sge(struct lego_context *ctx, int connection_id, int type, 
 	sge[1].lkey = ctx->proc->lkey;
 
 	ret = ib_post_send(ctx->qp[connection_id], &wr, &bad_wr);
-	printk(KERN_CRIT "%s headeraddr %p %p bufaddr %p %p lkey %d\n",
+	printk(KERN_CRIT "%s headeraddr %p %p bufaddr %p %#Lx lkey %d\n",
 		__func__, &output_header, output_header_addr, addr, sge[1].addr, ctx->proc->lkey);
 	if(ret==0)
 	{
@@ -2066,7 +2059,7 @@ int send_rdma_ring_mr_to_other_nodes(struct lego_context *ctx)
 	int i;
 	int connection_id;
 	char *msg;
-	int ret;
+	int ret = 0;
 	int size;
 
 #ifdef CONFIG_SOCKET_O_IB
@@ -2086,10 +2079,11 @@ int send_rdma_ring_mr_to_other_nodes(struct lego_context *ctx)
 #else
 		connection_id = NUM_PARALLEL_CONNECTION * i;
 #endif
-		printk(KERN_CRIT "%s send ringmr addr %p lkey %lx rkey %lx conn %d node %d\n",
-				__func__, ctx->local_rdma_ring_mrs[i].addr,
-				ctx->local_rdma_ring_mrs[i].lkey, 
-				ctx->local_rdma_ring_mrs[i].rkey, connection_id, i);
+
+		pr_info("%s(): send ringmr addr %p lkey %x rkey %x conn %d node %d\n",
+			__func__, ctx->local_rdma_ring_mrs[i].addr,
+			ctx->local_rdma_ring_mrs[i].lkey, 
+			ctx->local_rdma_ring_mrs[i].rkey, connection_id, i);
 		//ret = fit_send_test(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct fit_ibv_mr), 0, 0, LOW_PRIORITY);
 		ret = fit_send_message_sge(ctx, connection_id, MSG_SEND_RDMA_RING_MR, msg, sizeof(struct fit_ibv_mr), 0, 0, LOW_PRIORITY);
 	}
@@ -2100,17 +2094,15 @@ int send_rdma_ring_mr_to_other_nodes(struct lego_context *ctx)
 
 struct lego_context *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 {
-	int     ret;
 	int     i;
         int             temp_ctx_number;
 	struct lego_context *ctx;
-        temp_ctx_number = atomic_inc_return(&Connected_FIT_Num);
 	struct fit_ibv_mr *ret_mr;
-	//struct task_struct *thread;
 	struct thread_pass_struct thread_pass_poll_cq;
 	int num_connected_nodes = 0;
 	num_recvd_rdma_ring_mrs = 0;
 
+        temp_ctx_number = atomic_inc_return(&Connected_FIT_Num);
         if(temp_ctx_number>=MAX_FIT_NUM)
         {
                 printk(KERN_CRIT "%s Error: already meet the upper bound of connected FIT %d\n", __func__, temp_ctx_number);

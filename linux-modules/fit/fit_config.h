@@ -10,6 +10,10 @@
 #ifndef _LINUX_MODULE_FIT_CONFIG_H_
 #define _LINUX_MODULE_FIT_CONFIG_H_
 
+/* FIT module state */
+#define FIT_MODULE_DOWN			0
+#define FIT_MODULE_UP			1
+
 /* Lego cluster config */
 #define CONFIG_FIT_LOCAL_ID		2
 #define CONFIG_FIT_NR_NODES		3
