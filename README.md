@@ -32,13 +32,15 @@ Table of Contents
             * [Setup Serial Connection](#setup-serial-connection)
       * [Install and Run](#install-and-run)
          * [1P-1M](#1p-1m)
-            * [.config samples](#config-samples)
+            * [Sample .config](#sample-config)
          * [1P-1M-1S](#1p-1m-1s)
+            * [Configurations](#configurations)
+            * [Boot](#boot)
+            * [Sample .config](#sample-config-1)
          * [Multiple Managers](#multiple-managers)
          * [Virtual Machine](#virtual-machine)
             * [VM Setup](#vm-setup)
             * [InfiniBand](#infiniband)
-
 
 ## Codebase Organization
 Several terms in this repository are used differently from the paper description. Some of them might be used interchangeably here.
@@ -197,7 +199,7 @@ Once you have switched `Linux-3.11.1`, just go to `linux-modules/` and type `mak
 ### Configure Network
 At current stage, setup InfiniBand connection is still a little bit complicated, and it involves hardcoded information. Unlike Ethernet, InfiniBand can not just connect to each other. It needs Ethernet to exchange some initial information first. The initial information includes: Local IDentifier (__LID__) and Queue Pair Number (__QPN__). Unfortunately, we currently do not have decent Ethernet drivers and socket code that could run everywhere. Thus, instead of using Ethernet to exchange LID and QPN, we __manually hardcode them into the source code__, and let InfiniBand layer use this hardcoded information directly. Do note that the hardcoded information is about __remote machines__, which the local machine is trying to connect to.
 
-Also, make sure you have the InfiniBand NIC descibed in [Platform Requirement](#platform-requirement). They can be connected back-to-back or through a InfiniBand switch.
+Also, make sure you have the InfiniBand NIC descibed in [Platform Requirement](#platform-requirement). They must be connected through a InfiniBand switch.
 
 #### FIT
 LegoOS uses a customized network stack named FIT, which is built based on [LITE](https://github.com/WukLab/lite). For more information of LITE, please refer to this [paper](https://dl.acm.org/citation.cfm?id=3132762). Here are some general concepts about FIT in LegoOS:
@@ -209,7 +211,7 @@ LegoOS uses a customized network stack named FIT, which is built based on [LITE]
 
 #### QPN
 
-This subsection tries to explain several Kconfig options related to QP. You don't need to tune any configurations of this subsection for a default run. If a default setting does not work, please create a Github issue with detailed error message.
+This subsection tries to explain several Kconfig options related to QP. You don't need to tune any configurations of this subsection for a default run. If a default setting does not work, please create a Github issue with detailed error message (especially dmesg from linux kernel modules).
 
 The number of QPs between each pair of machine is controlled by: `CONFIG_FIT_NR_QPS_PER_PAIR`. The default is 12, which is the number of CPU cores (one NUMA socket) we have in our platform.
 
@@ -346,40 +348,70 @@ CONFIG_RAMFS_OBJECT_FILE="usr/general.o"
 
 In 1P-1M setting, the above user program set at memory manager (`usr/general.o` here) will be executed automatically when processor and memory manager connected. Current LegoOS's ramfs option is limited to include only one user program.
 
-#### `.config` samples
+#### Sample .config
 
 We provid two `.config` samples for `1P-1M` setting. In these samples, we are using `usr/general.o` and `ttyS1 115200`. VGA terminal output is also enabled. You can find processor manager's output log [here](https://github.com/WukLab/LegoOS/tree/master/Documentation/configs/1P-1M-Processor-Output) (recorded while running LegoOS processor manager within VM).
 - Processor
     - `make defconfig`
     - `cp Documentation/configs/1P-1M-Processor .config`
     - `make`
-- Memory .config
+- Memory
     - `make defconfig`
     - `cp Documentation/configs/1P-1M-Memory .config`
     - `make`
 
 ### 1P-1M-1S
-This section describes the case where we run LegoOS with one processor manager, one memory manager, and one storage manager, or __1P-1M-1S__ setting. This setting emulates the effect of breaking one monolithic server and connect the CPU, memory, and disk by network. And this setting requires three physical machines.
+This section describes the case where we run LegoOS with one processor manager, one memory manager, and one storage manager, or __1P-1M-1S__ setting. This setting emulates the effect of breaking one monolithic server and connect the CPU, memory, and disk by network. This setting requires three physical machines, and there is no need for global resource managers (Note about VM: you will be able to run processor manager and memory manager within VM, but storage can not. Because VM setting produces unstable QPN).
 
-There is no need to setup any global resource managers in this setting.
-
-1. Network setting:
-    - Set node ID properly, at processor, memory, and storage manager
-    - At _both_ processor and memory manager, set the `CONFIG_DEFAULT_MEM_NODE` equals to the node ID of the memory manager, set the `CONFIG_DEFAULT_STORAGE_NODE` equals to the node ID of the storage manager.
-    - At memory manager,
+#### Configurations
+1. Network setting
+    - Set node ID properly, for all processor, memory, and storage managers
+    - At storage manager, modify `linux-modules/fit/fit_config.h`
+    - At _both_ processor and memory manager
+      - set `CONFIG_DEFAULT_MEM_NODE` equals to the node ID of the memory manager
+      - set `CONFIG_DEFAULT_STORAGE_NODE` equals to the node ID of the storage manager
 
 2. Make sure `CONFIG_USE_RAMFS` is __not__ configured at both processor and memory manager.
 3. At processor manager, open `managers/processor/core.c` file, and find the function `procmgmt()`, type the name and arguments of the user program that you wish to run. The user program is at the storage node, you have to use the `absolute pathname` from the storage node. For example, to run TensorFlow:
-```
-static int procmgmt(void *unused)
-{
+   ```
+   static int procmgmt(void *unused)
+   {
+            ...
+         init_filename = "/usr/bin/python";
+         argv_init[0] = init_filename;
+         argv_init[1] = "/root/cifar10_main.py";
          ...
-        init_filename = "/usr/bin/python";
-        argv_init[0] = init_filename;
-        argv_init[1] = "/root/cifar10_main.py";
-        ...
-}
-```
+
+   ```
+
+Our current way of running user program is very raw. Basically we manually specify the user program and arguments during compile time. This limits us to be able to test only one program during each run. LegoOS can not work with `/bin/bash`, but we have tried to use the basic `fork()+wait()` way to serialize testing.
+
+#### Boot
+
+After you have successfully configured and compiled the LegoOS images, you need to install the processor and memory managers and reboot these two machines. The following steps assume you have just finished compiling and tries to reboot:
+
+1. Install processor manager into `/boot` of its own machine.
+2. Install memory manager into `/boot` of its own machine.
+3. Reboot only processor and memory machines into `vmlinux-4.0.0-lego`.
+4. When both processor and memory machines hit `fit: Please wait for enough MAD...`, then at storage manager, do: __`insmod fit.ko`__. This may take around a minute.
+5. At storage manager, after the above command return, do: __`insmod storage.ko`__.
+6. You should be able to see many messages printed out after the above command return.
+
+#### Sample .config
+
+We provid two `.config` and `fit_config.h ` samples for the `1P-1M-1S` setting. To start, you can follow the below steps:
+- Processor
+    - `make defconfig`
+    - `cp Documentation/configs/1P-1M-1S-Processor .config`
+    - `make`
+- Memory
+    - `make defconfig`
+    - `cp Documentation/configs/1P-1M-1S-Memory .config`
+    - `make`
+- Storage
+    - `cp Documentation/configs-1P-1M-1S-fit_config.h linux-modules/fit/fit_config.h`
+    - `cd linux-modules`
+    - `make`
 
 1P-1M-1S perfectly emulates the effect of disaggregating a single monolithic server. Unlike 1P-1M setting, this setting can run any user program, either dynamically-linked or statically-linked, as long as there is no missing syscall. But please be careful and patient while setting things up, any mistakes may lead to an unsuccessful run. Sorry for the inconvenience.
 
