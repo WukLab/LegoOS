@@ -19,7 +19,8 @@ Here comes my favorite feature of LegoOS. LegoOS profile points facility is adde
 
 Setting:
 - Kconfig: `CONFIG_PROFILING_POINTS`
-- Source Code: `kernel/profile/point.c`
+- Source Code: `kernel/profile/point.c` and `include/lego/profile_point.h`
+- Sample Usage: [pcache zerofill](https://github.com/WukLab/LegoOS/blob/master/managers/processor/pcache/fault.c#L324)
 - When: during runtime
 - Impact: will impact all performance
 
@@ -44,6 +45,7 @@ The function names in the source code file pretty much explains eveything. Pleas
 
 <details><summary>Sample Output</summary>
 <p>
+
 ```
 [ 1052.876762] RPC Profile. [Peer node: 1. nr_threads: 1. nr_run/case: 100000. send: 32 reply 4]
 [ 1053.503665]     CPU 8 Profile: s  32-r   4. Avg: 4201 ns.
