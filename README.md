@@ -16,6 +16,7 @@ Table of Contents
 =================
 
    * [LegoOS](#legoos)
+      * [Developers](#developers)
       * [Codebase Organization](#codebase-organization)
       * [Platform Requirement](#platform-requirement)
       * [Configure and Compile](#configure-and-compile)
@@ -41,6 +42,10 @@ Table of Contents
          * [Virtual Machine](#virtual-machine)
             * [VM Setup](#vm-setup)
             * [InfiniBand](#infiniband)
+
+## Developers
+
+[Profiling facilities](https://github.com/WukLab/LegoOS/tree/master/Documentation/profile.md)
 
 ## Codebase Organization
 Several terms in this repository are used differently from the paper description. Some of them might be used interchangeably here.
