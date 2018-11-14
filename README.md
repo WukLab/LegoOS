@@ -45,7 +45,9 @@ Table of Contents
 
 ## Developers
 
-[Profiling facilities](https://github.com/WukLab/LegoOS/tree/master/Documentation/profile.md)
+- [Profiling](https://github.com/WukLab/LegoOS/tree/master/Documentation/profile.md)
+- [strace](https://github.com/WukLab/LegoOS/tree/master/Documentation/strace.md)
+- [Counters and Watchdog](https://github.com/WukLab/LegoOS/tree/master/Documentation/counters.md)
 
 ## Codebase Organization
 Several terms in this repository are used differently from the paper description. Some of them might be used interchangeably here.
