@@ -112,6 +112,7 @@ LegoOS has been tested __only__ in the following hardware setting:
 |Server| Dell PowerEdge R730|
 |CPU| [Intel Xeon E5-2620 v3](https://ark.intel.com/products/83352/Intel-Xeon-Processor-E5-2620-v3-15M-Cache-2-40-GHz-)|
 |InfiniBand NIC|[Mellanox MCX354A-TCBT ConnectX-3 VPI](https://store.mellanox.com/products/mellanox-mcx354a-tcbt-connectx-3-vpi-adapter-card-dual-port-qsfp-fdr10-ib-40gb-s-and-10gbe-pcie3-0-x8-8gt-s-rohs-r6.html?sku=MCX354A-TCBT&gclid=Cj0KCQjwl9zdBRDgARIsAL5Nyn0_Fiuw4-8TGIOE7lNr07YZmKz-CxXvBz1lV8FsTJ3rZwCeeSetF2saAnfmEALw_wcB)|
+|InfiniBand Switch|[Melanox IS5035](http://www.mellanox.com/related-docs/prod_ib_switch_systems/IS5035.pdf)|
 
 And the following toolchains:
 
