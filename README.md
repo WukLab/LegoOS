@@ -348,11 +348,16 @@ This setting requires a special `Kconfig` option: `CONFIG_USE_RAMFS`, at both pr
     - At processor manager, set the `CONFIG_DEFAULT_MEM_NODE` equals to the node ID of the memory manager. The `CONFIG_DEFAULT_STORAGE_NODE` will not have any effect. For example, use `CONFIG_DEFAULT_MEM_NODE=1`.
     - At memory manager, no need to setup default memory/storage node
 2. At both processor and memory manager, open `.config`, find and enable `CONFIG_USE_RAMFS` option.
-3. At memory manager, open `.config`, find `CONFIG_RAMFS_OBJECT_FILE`, and set it to the pathname to your test user program. __The user program has to be statically-complied.__ To start, you can set as follows:
-```
-CONFIG_USE_RAMFS=y
-CONFIG_RAMFS_OBJECT_FILE="usr/general.o"
-```
+3. At memory manager, compile test user programs.
+	```
+	cd usr/
+	make
+	```
+4. At memory manager, open `.config`, find `CONFIG_RAMFS_OBJECT_FILE`, and set it to the pathname to your test user program. __The user program has to be statically-complied.__ To start, you can set as follows:
+	```
+	CONFIG_USE_RAMFS=y
+	CONFIG_RAMFS_OBJECT_FILE="usr/general.o"
+	```
 
 In 1P-1M setting, the above user program set at memory manager (`usr/general.o` here) will be executed automatically when processor and memory manager connected. Current LegoOS's ramfs option is limited to include only one user program.
 
