@@ -31,12 +31,18 @@
 /*
  * The default home memory node and storage node must be
  * smaller than number of connected nodes.
+ *
+ * If user is using 1P-1M setting, there is no need to config
+ * default storage node.
  */
 #if (CONFIG_DEFAULT_MEM_NODE >= CONFIG_FIT_NR_NODES)
 # error "Please adjust default home memory node."
 #endif
+
 #if (CONFIG_DEFAULT_STORAGE_NODE >= CONFIG_FIT_NR_NODES)
+#ifndef CONFIG_USE_RAMFS
 # error "Please adjust default storage node."
+#endif
 #endif
 
 /* Indicate if processor or memory manager is up or not. */
