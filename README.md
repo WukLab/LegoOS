@@ -11,6 +11,7 @@ LegoOS is a disseminated, distributed operating system built for hardware resour
 [[Paper]](https://www.usenix.org/conference/osdi18/presentation/shan)
 [[Keynote]](https://github.com/WukLab/LegoOS/tree/master/Documentation/LegoOS-OSDI-Slides.key)
 [[Tech Notes]](http://lastweek.io)
+[[Google Trace Plot]](https://github.com/WukLab/LegoOS/tree/master/Documentation/google-trace.md)
 
 Table of Contents
 =================
