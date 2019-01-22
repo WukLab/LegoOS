@@ -1,4 +1,11 @@
-# LegoOS
+```
+ _                      ___  ____
+| |    ___  __ _  ___  / _ \/ ___|
+| |   / _ \/ _` |/ _ \| | | \___ \
+| |__|  __/ (_| | (_) | |_| |___) |
+|_____\___|\__, |\___/ \___/|____/
+           |___/
+```
 
 ![Status](https://img.shields.io/badge/Version-Experimental-green.svg)
 ![License](https://img.shields.io/aur/license/yaourt.svg?style=popout)
