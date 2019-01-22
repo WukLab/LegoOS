@@ -199,8 +199,8 @@ static void ib_cache_update(struct ib_device *device,
 			    u8                port)
 {
 	struct ib_port_attr       *tprops = NULL;
-	struct ib_pkey_cache      *pkey_cache = NULL, *old_pkey_cache = NULL;
-	struct ib_gid_cache       *gid_cache = NULL, *old_gid_cache = NULL;
+	struct ib_pkey_cache      *pkey_cache = NULL, *old_pkey_cache;
+	struct ib_gid_cache       *gid_cache = NULL, *old_gid_cache;
 	int                        i;
 	int                        ret;
 
