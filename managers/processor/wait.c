@@ -153,7 +153,7 @@ static int wait_task_zombie(struct wait_opts *wo, struct task_struct *p)
 		struct signal_struct *sig = p->signal;
 		struct signal_struct *psig = current->signal;
 		unsigned long maxrss;
-		cputime_t tgutime = 0, tgstime = 0;
+		cputime_t tgutime, tgstime;
 
 		/*
 		 * The resource counters for the group leader are in its
@@ -603,7 +603,7 @@ SYSCALL_DEFINE5(waitid, int, which, pid_t, upid, struct siginfo __user *,
 		infop, int, options, struct rusage __user *, ru)
 {
 	struct wait_opts wo;
-	pid_t pid = 0;
+	pid_t pid;
 	enum pid_type type;
 	long ret;
 
@@ -674,7 +674,7 @@ SYSCALL_DEFINE4(wait4, pid_t, upid, int __user *, stat_addr,
 		int, options, struct rusage __user *, ru)
 {
 	struct wait_opts wo;
-	pid_t pid = 0;
+	pid_t pid;
 	enum pid_type type;
 	long ret;
 

@@ -2822,7 +2822,7 @@ int fit_send_message_sge(ppc *ctx, int connection_id, int type, void *addr,
 	struct ib_send_wr wr, *bad_wr = NULL;
 	struct ib_sge sge[2];
 	int ret;
-	int ne, i = 0;
+	int ne, i;
 	struct ib_wc wc[2];
 	struct ibapi_header msg_header;
 	void *msg_header_addr;
