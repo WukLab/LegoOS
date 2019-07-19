@@ -7,8 +7,8 @@
            |___/
 ```
 
-![Status](https://img.shields.io/badge/Version-Experimental-green.svg)
-![License](https://img.shields.io/aur/license/yaourt.svg?style=popout)
+![Status](https://img.shields.io/badge/Version-Experimental-blue.svg)
+![License](https://img.shields.io/badge/license-GPLv2-brightgreen.svg)
 ![ISA](https://img.shields.io/badge/ISA-x86--64-yellow.svg)
 
 [//]: “%![Platform](https://img.shields.io/badge/Platform-Linux-red.svg)%”
