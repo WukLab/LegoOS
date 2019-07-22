@@ -306,7 +306,10 @@ int mlx4_QUERY_FUNC_CAP(struct mlx4_dev *dev, u32 gen_or_port,
 		func_cap->flags = field;
 
 		MLX4_GET(field, outbox, QUERY_FUNC_CAP_NUM_PORTS_OFFSET);
+   		pr_info("FUNC_CAP->NUM_PORTS=%d\n", field);
 		func_cap->num_ports = field;
+		func_cap->num_ports = 1;
+
 
 		MLX4_GET(size, outbox, QUERY_FUNC_CAP_PF_BHVR_OFFSET);
 		func_cap->pf_context_behaviour = size;
@@ -549,6 +552,9 @@ int mlx4_QUERY_DEV_CAP(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap)
 	dev_cap->local_ca_ack_delay = field & 0x1f;
 	MLX4_GET(field, outbox, QUERY_DEV_CAP_VL_PORT_OFFSET);
 	dev_cap->num_ports = field & 0xf;
+	 pr_info("DEV_CAP->NUM_PORTS=%d\n", field & 0xf);
+	dev_cap->num_ports = 1;
+
 	MLX4_GET(field, outbox, QUERY_DEV_CAP_MAX_MSG_SZ_OFFSET);
 	dev_cap->max_msg_sz = 1 << (field & 0x1f);
 	MLX4_GET(field, outbox, QUERY_DEV_CAP_FLOW_STEERING_RANGE_EN_OFFSET);

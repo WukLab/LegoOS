@@ -3019,7 +3019,9 @@ static void ib_mad_remove_device(struct ib_device *device)
 {
 	int i, num_ports, cur_port;
 
-	num_ports = device->phys_port_cnt;
+	// num_ports = device->phys_port_cnt;
+	device->phys_port_cnt = 1;
+	num_ports = 1;
 	cur_port = 1;
 	for (i = 0; i < num_ports; i++, cur_port++) {
 		if (ib_agent_port_close(device, cur_port))

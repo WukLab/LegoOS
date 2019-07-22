@@ -466,6 +466,8 @@ int mlx4_ib_mad_init(struct mlx4_ib_dev *dev)
 	int ret;
 	enum rdma_link_layer ll;
 
+	dev->num_ports = 1;
+
 	for (p = 0; p < dev->num_ports; ++p) {
 		ll = rdma_port_get_link_layer(&dev->ib_dev, p + 1);
 		for (q = 0; q <= 1; ++q) {
