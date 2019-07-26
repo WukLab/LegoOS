@@ -166,19 +166,27 @@ static struct file_operations debug_ramfs_f_ops = {
  */
 static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t mode)
 {
+	
+	
+	
 	char kname[FILENAME_LEN_DEFAULT];
 	int fd, ret;
 	struct file *f;
 
+	pr_debug("Starting `do_sys_open`\n");
+
 	fd = get_absolute_pathname(dfd, kname, pathname);
 	if (unlikely(fd < 0))
 		goto out;
+	pr_debug("Getting abs pathname %s from relative pathname %s\n", kname, pathname);
 
 	/*
 	 * Allocate fd and struct file
 	 * and @file has ref set to 1 if succeed
 	 */
 	fd = alloc_fd(current->files, kname);
+
+	pr_debug("Fd allocated = %d\n", fd);
 	if (unlikely(fd < 0))
 		goto out;
 
@@ -207,21 +215,29 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 	 *  - socket
 	 */
 	if (unlikely(proc_file(kname)))
+	{
 		ret = proc_file_open(f, kname);
+		pr_debug("proc_file\n");
+	}
 	else if (unlikely(sys_file(kname)))
-		ret = sys_file_open(f, kname);
+		{ret = sys_file_open(f, kname);
+		pr_debug("sys_file\n");}
 	else if (unlikely(dev_file(kname)))
-		ret = dev_file_open(f, kname);
+		{ret = dev_file_open(f, kname);
+		pr_debug("dev_file\n");}
 	else if (unlikely(socket_file(kname)))
-		ret = socket_file_open(f);
+		{ret = socket_file_open(f); pr_debug("socket_file\n");}
 	else {
 #ifdef CONFIG_USE_RAMFS
 		f->f_op = &debug_ramfs_f_ops;
 		ret = 0;
 #else
 		ret = default_file_open(f, kname);
+		pr_debug("default_file\n");
 #endif
 	}
+
+	pr_debug("ret of file open = %d\n", ret);
 
 	if (unlikely(ret)) {
 		free_fd(current->files, fd);
@@ -230,19 +246,25 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 	}
 
 	if (f->f_op->open) {
+		
 		ret = f->f_op->open(f);
+		pr_debug("ret of f_op_open = %d\n", ret);
 		if (unlikely(ret)) {
 			free_fd(current->files, fd);
 			fd = ret;
 		}
 	}
 
+pr_debug("flags = %x\n", flags);
+
 	if (flags & O_CLOEXEC)
 		__set_close_on_exec(fd, current->files);
 	else
 		__clear_close_on_exec(fd, current->files);
 put:
+	pr_debug("put file start\n");
 	put_file(f);
+	pr_debug("put file success\n");
 out:
 	return fd;
 }
