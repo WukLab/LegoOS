@@ -155,6 +155,40 @@ static struct file_operations debug_ramfs_f_ops = {
 };
 #endif
 
+
+
+static void check_double_dots(char* s){
+	char temp[FILENAME_LEN_DEFAULT];
+	
+	int found = 1;
+	int last_slash = -1;
+	int len = strlen(s);
+	int j;
+	char *dots;
+	memset(temp, 0, FILENAME_LEN_DEFAULT);
+	while (found){
+		found = 0;
+		dots = strstr(s, "/..");
+		if (!dots || dots - s > FILENAME_LEN_DEFAULT || dots - s < 0)
+			break;
+		found = 1;
+		for (j = dots - s - 1; j >= 0; j--){
+			if (s[j] == '/') 
+			{
+				last_slash = j;
+				break;
+			}
+		}
+		memcpy(temp, s, last_slash);
+		memcpy(temp + last_slash, dots + 3, strlen(s) - last_slash - 3);
+		memset(s, 0, FILENAME_LEN_DEFAULT);
+		memcpy(s, temp, strlen(temp));
+		memset(temp, 0, FILENAME_LEN_DEFAULT);
+	}
+}
+
+
+
 /*
  * do_sys_open		- open for pathname as the relative path of dfd
  * @dfd: directory file descriptor to be severed as the base for relative path resolving
@@ -173,20 +207,21 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 	int fd, ret;
 	struct file *f;
 
-	pr_debug("Starting `do_sys_open`\n");
+	pr_info("Starting `do_sys_open`\n");
 
 	fd = get_absolute_pathname(dfd, kname, pathname);
 	if (unlikely(fd < 0))
 		goto out;
-	pr_debug("Getting abs pathname %s from relative pathname %s\n", kname, pathname);
-
+	pr_info("Getting abs pathname %s from relative pathname %s\n", kname, pathname);
+	check_double_dots(kname);
+	pr_info("After earsing .., kname = %s\n", kname);
 	/*
 	 * Allocate fd and struct file
 	 * and @file has ref set to 1 if succeed
 	 */
 	fd = alloc_fd(current->files, kname);
 
-	pr_debug("Fd allocated = %d\n", fd);
+	pr_info("Fd allocated = %d\n", fd);
 	if (unlikely(fd < 0))
 		goto out;
 
@@ -217,27 +252,27 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 	if (unlikely(proc_file(kname)))
 	{
 		ret = proc_file_open(f, kname);
-		pr_debug("proc_file\n");
+		pr_info("proc_file\n");
 	}
 	else if (unlikely(sys_file(kname)))
 		{ret = sys_file_open(f, kname);
-		pr_debug("sys_file\n");}
+		pr_info("sys_file\n");}
 	else if (unlikely(dev_file(kname)))
 		{ret = dev_file_open(f, kname);
-		pr_debug("dev_file\n");}
+		pr_info("dev_file\n");}
 	else if (unlikely(socket_file(kname)))
-		{ret = socket_file_open(f); pr_debug("socket_file\n");}
+		{ret = socket_file_open(f); pr_info("socket_file\n");}
 	else {
 #ifdef CONFIG_USE_RAMFS
 		f->f_op = &debug_ramfs_f_ops;
 		ret = 0;
 #else
 		ret = default_file_open(f, kname);
-		pr_debug("default_file\n");
+		pr_info("default_file\n");
 #endif
 	}
 
-	pr_debug("ret of file open = %d\n", ret);
+	pr_info("ret of file open = %d\n", ret);
 
 	if (unlikely(ret)) {
 		free_fd(current->files, fd);
@@ -248,23 +283,23 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 	if (f->f_op->open) {
 		
 		ret = f->f_op->open(f);
-		pr_debug("ret of f_op_open = %d\n", ret);
+		pr_info("ret of f_op_open = %d\n", ret);
 		if (unlikely(ret)) {
 			free_fd(current->files, fd);
 			fd = ret;
 		}
 	}
 
-pr_debug("flags = %x\n", flags);
+pr_info("flags = %x\n", flags);
 
 	if (flags & O_CLOEXEC)
 		__set_close_on_exec(fd, current->files);
 	else
 		__clear_close_on_exec(fd, current->files);
 put:
-	pr_debug("put file start\n");
+	pr_info("put file start\n");
 	put_file(f);
-	pr_debug("put file success\n");
+	pr_info("put file success\n");
 out:
 	return fd;
 }
