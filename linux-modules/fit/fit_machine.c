@@ -34,21 +34,21 @@
  * lead to an early panic.
  */
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	=	"wuklab14",
-	[1]	=	"wuklab09",
-	[2]	=	"wuklab12",
-	[3]	=	"wuklab13",
-	[4]	=	"wuklab15",
+	[0]	=	"node-0",
+	[1]	=	"node-1",
+	[2]	=	"node-2",
+//	[3]	=	"wuklab13",
+//	[4]	=	"wuklab15",
 };
 
 /* Built based on node id */
 struct fit_machine_info *lego_cluster[CONFIG_FIT_NR_NODES];
 
 static struct fit_machine_info WUKLAB_CLUSTER[] = {
-[0]	= {	.hostname =	"wuklab00",	.lid =	2,	},
-[1]	= {	.hostname =	"wuklab01",	.lid =	6,	},
-[2]	= {	.hostname =	"wuklab02",	.lid =	8,	},
-[3]	= {	.hostname =	"wuklab03",	.lid =	9,	},
+[0]	= {	.hostname =	"node-0",	.lid =	109,	},
+[1]	= {	.hostname =	"node-1",	.lid =	103,	},
+[2]	= {	.hostname =	"node-2",	.lid =	76,	},
+/*[3]	= {	.hostname =	"wuklab03",	.lid =	9,	},
 [4]	= {	.hostname =	"wuklab04",	.lid =	7,	},
 [5]	= {	.hostname =	"wuklab05",	.lid =	3,	},
 [6]	= {	.hostname =	"wuklab06",	.lid =	5,	},
@@ -70,7 +70,7 @@ static struct fit_machine_info WUKLAB_CLUSTER[] = {
 [22]	= {	.hostname =	"wuklab22",	.lid =	29,	},
 [23]	= {	.hostname =	"wuklab23",	.lid =	30,	},
 [24]	= {	.hostname =	"wuklab24",	.lid =	31,	},
-[25]	= {	.hostname =	"wuklab25",	.lid =	26,	},
+[25]	= {	.hostname =	"wuklab25",	.lid =	26,	},*/
 };
 
 /* Indicate machines that are used by lego */
