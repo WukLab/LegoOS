@@ -34,8 +34,6 @@ This is a manual about deploying LegoOS on CloudLab machines. For LegoOS, visit 
 
 ### Some Tricks
 
-- CloudLab may automatically reboot the machines when it believes the machines are not working (though possibly they are). It is recommended to boot all 3 machines into Linux first. When storage node is ready (`ibstat` is *up*), reboot processor and memory nodes.
-
 -  It is recommended to boot into memory node 2 or 3 seconds earlier than processor node, which will make it less likely for the memory node to fail.
 
-  
+- LegoOS installer will modify the boot loader. The default `make install` will attach the image of LegoOS to "Ubuntu" when booting. To enter the real Ubuntu, you may select the `Linux 3.11.1`.
