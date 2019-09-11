@@ -356,6 +356,7 @@ struct task_struct {
 	atomic_t		usage;
 	unsigned int		flags;		/* per-process flags */
 	unsigned int		ptrace;
+	struct file_system fs;
 
 #ifdef CONFIG_SMP
 	int			on_cpu;

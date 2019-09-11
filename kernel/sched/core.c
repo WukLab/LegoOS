@@ -1572,6 +1572,11 @@ void wake_up_new_task(struct task_struct *p)
 	spin_lock_irqsave(&p->pi_lock, flags);
 
 	p->state = TASK_RUNNING;
+	memset(&p->fs, 0, sizeof(p->fs));
+	p->fs.cwd[0] = '/';
+	p->fs.root[0] = '/';
+	//TODO: Bad initialization as 0777.
+	p->fs.umask = 0000;
 
 	/* Select a CPU for new thread to run */
 #ifdef CONFIG_SMP

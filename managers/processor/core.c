@@ -64,9 +64,13 @@ static int procmgmt(void *unused)
 #endif
 
 #if 1
-	init_filename = "/usr/bin/python";
+	init_filename = "/usr/local/pgsql/bin/postgres";
+	// init_filename = "/users/yifancai/testdir";
 	argv_init[0] = init_filename;
-	argv_init[1] = "/root/ys/models-1.4.0/official/resnet/cifar10_main.py";
+	argv_init[1] = "--single";
+	argv_init[2] = "-E";
+	argv_init[3] = "-D";
+	argv_init[4] = "/usr/local/pgsql/data";
 #endif
 
 	/*

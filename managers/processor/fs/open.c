@@ -171,6 +171,7 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 	struct file *f;
 
 	fd = get_absolute_pathname(dfd, kname, pathname);
+	pr_info("Opening %s; abs:%s\n", pathname, kname);
 	if (unlikely(fd < 0))
 		goto out;
 
@@ -234,10 +235,11 @@ static long do_sys_open(int dfd, const char __user *pathname, int flags, umode_t
 		if (unlikely(ret)) {
 			free_fd(current->files, fd);
 			fd = ret;
+			goto put;
 		}
 	}
 
-	if (flags & O_CLOEXEC)
+	if ((flags & O_CLOEXEC) && ret >= 0)
 		__set_close_on_exec(fd, current->files);
 	else
 		__clear_close_on_exec(fd, current->files);

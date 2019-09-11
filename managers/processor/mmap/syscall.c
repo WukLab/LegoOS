@@ -23,6 +23,8 @@
 #include <processor/distvm.h>
 #include <processor/zerofill.h>
 
+#error mmap
+
 #ifdef CONFIG_DEBUG_MMAP
 #define mmap_debug(fmt, ...)						\
 	pr_debug("%s(cpu%d): " fmt "\n", __func__, smp_processor_id(),	\

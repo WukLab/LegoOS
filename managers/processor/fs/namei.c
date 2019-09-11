@@ -16,11 +16,14 @@
 #include <processor/processor.h>
 #include <lego/comp_common.h>
 #include <lego/fit_ibapi.h>
+#include <asm/current.h>
 
 /*
  * Check if a pathname is starts from "/".
  * Return 1 if that is the case.
  */
+
+
 static inline int absolute_pathname(const char *pathname)
 {
 	return !memcmp(pathname, "/", 1);
@@ -29,12 +32,39 @@ static inline int absolute_pathname(const char *pathname)
 /* TODO: implement cwd */
 static inline void do_setcwd(const char *pathname)
 {
+	pr_info("Call setcwd, pathname=%s\n", pathname);
+	if (!absolute_pathname(pathname)){
+		char absolute[FILENAME_LEN_DEFAULT];
+		char relative[FILENAME_LEN_DEFAULT];
+		memcpy(absolute, current->fs.cwd, FILENAME_LEN_DEFAULT);
+		memset(relative, 0, FILENAME_LEN_DEFAULT);
+		if (copy_from_user(relative, pathname, FILENAME_LEN_DEFAULT) < 0){
+			BUG();
+		}
+		if (absolute[strlen(absolute) - 1] != '/')
+			strcat(absolute, "/");
+		strcat(absolute, relative);
+		pr_info("Final set to %s\n", absolute);
+		memcpy(current->fs.cwd, absolute, FILENAME_LEN_DEFAULT);
+	}
+	else {
+		if (copy_from_user(current->fs.cwd, pathname, FILENAME_LEN_DEFAULT) < 0){
+			BUG();
+		}
+	} 
 	return;
+}
+
+SYSCALL_DEFINE1(chdir, const char __user *, pathname)
+{
+	pr_info("Calling chdir, pathname=%s\n", pathname);
+	do_setcwd(pathname);
+	return 0;
 }
 
 static inline const char *do_getcwd(void)
 {
-	return "/";
+	return current->fs.cwd;
 }
 
 /* getcwd: fill user buffer with current working directory
@@ -45,7 +75,7 @@ static inline const char *do_getcwd(void)
 SYSCALL_DEFINE2(getcwd, char __user *, buf, unsigned long, size)
 {
 	long error;
-	unsigned long len = 2;
+	unsigned long len = FILENAME_LEN_DEFAULT;
 
 	syscall_enter("size %lu\n", size);
 
@@ -106,6 +136,8 @@ strcat:
 			 * from open(), creat(), but pathname does not start from "/".
 			 */
 			strncpy(k_pathname, do_getcwd(), FILENAME_LEN_DEFAULT);
+			if (k_pathname[strlen(k_pathname) - 1] != '/')
+				strlcat(k_pathname, "/", FILENAME_LEN_DEFAULT);
 		else {
 			/* from openat() */
 			strncpy(k_pathname, f->f_name, FILENAME_LEN_DEFAULT);
