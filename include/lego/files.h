@@ -81,7 +81,17 @@
 /* File was opened by fanotify and shouldn't generate fanotify events */
 #define FMODE_NONOTIFY		((__force fmode_t)0x4000000)
 
+
+#define FILENAME_LEN_DEFAULT	256
 struct file;
+
+struct file_system{
+	int users;
+	char cwd[FILENAME_LEN_DEFAULT];
+	char root[FILENAME_LEN_DEFAULT];
+	spinlock_t lock;
+	int umask;
+};
 
 struct file_operations {
 	loff_t		(*llseek)(struct file *, loff_t, int);
@@ -92,7 +102,7 @@ struct file_operations {
 	unsigned int	(*poll)(struct file *);
 };
 
-#define FILENAME_LEN_DEFAULT	256
+
 struct file {
 	fmode_t			f_mode;
 	atomic_t		f_count;
