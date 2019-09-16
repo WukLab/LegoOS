@@ -419,7 +419,7 @@ SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
 {
 	char kname[FILENAME_LEN_DEFAULT];
 
-	if (strncpy_from_user(kname, filename, FILENAME_LEN_DEFAULT) < 0)
+	if (get_absolute_pathname(AT_FDCWD, kname, filename) < 0)
 		return -EFAULT;
 
 	syscall_enter("f_name: %s, mode: %x\n", kname, mode);

@@ -247,10 +247,12 @@ SYSCALL_DEFINE2(newstat, const char __user *, filename,
 	struct kstat stat;
 	long ret;
 
-	if (strncpy_from_user(kname, filename, FILENAME_LEN_DEFAULT) < 0) {
+	if (get_absolute_pathname(AT_FDCWD, kname, filename) < 0) {
 		ret = -EFAULT;
 		goto out;
 	}
+
+	pr_info("Stat: %s, abs:%s", filename, kname);
 
 	syscall_enter("filename: %s, statbuf: %p\n", kname, statbuf);
 
