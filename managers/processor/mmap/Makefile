@@ -3,7 +3,6 @@
 #
 
 obj-y := syscall.o
-obj-y += ipc.o
 obj-$(CONFIG_DISTRIBUTED_VMA_PROCESSOR) += distvm.o 
 
 distvm-y := dist_mmap.o
