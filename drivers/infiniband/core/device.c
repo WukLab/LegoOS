@@ -225,8 +225,7 @@ static int read_port_table_lengths(struct ib_device *device)
 	if (!tprops)
 		goto out;
 
-	// num_ports = end_port(device) - start_port(device) + 1;
-	num_ports = 1;
+	num_ports = end_port(device) - start_port(device) + 1;
 
 	device->pkey_tbl_len = kmalloc(sizeof *device->pkey_tbl_len * num_ports,
 				       GFP_KERNEL);
