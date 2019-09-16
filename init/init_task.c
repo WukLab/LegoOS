@@ -113,7 +113,7 @@
 	.thread		= INIT_THREAD,					\
 }
 
-#define GLOBAL_ROOT_UID	1001
+#define GLOBAL_ROOT_UID	0
 #define GLOBAL_ROOT_GID 0
 
 struct cred init_cred = {
