@@ -122,8 +122,10 @@ int get_absolute_pathname(int dfd, char *k_pathname, const char __user *pathname
 		return -EBADF;
 
 strcat:
-	if (likely(absolute_pathname(pathname)))
+	if (likely(absolute_pathname(pathname))){
 		strncpy(k_pathname, k_buff, FILENAME_LEN_DEFAULT);
+	}
+		
 	else {
 		/*
 		 * Manually construct an absolute pathname, either
@@ -135,9 +137,11 @@ strcat:
 			 * TODO: replace with current working directory
 			 * from open(), creat(), but pathname does not start from "/".
 			 */
+		{
 			strncpy(k_pathname, do_getcwd(), FILENAME_LEN_DEFAULT);
 			if (k_pathname[strlen(k_pathname) - 1] != '/')
 				strlcat(k_pathname, "/", FILENAME_LEN_DEFAULT);
+		}
 		else {
 			/* from openat() */
 			strncpy(k_pathname, f->f_name, FILENAME_LEN_DEFAULT);
@@ -147,7 +151,6 @@ strcat:
 
 		strlcat(k_pathname, k_buff, FILENAME_LEN_DEFAULT);
 	}
-
 	if (f)
 		put_file(f);
 	return 0;
@@ -537,3 +540,8 @@ out:
 	return 0;
 #endif /* CONFIG_MEM_PAGE_CACHE */
 }
+
+// SYSCALL_DEFINE1(fdatasync, int, fd){
+// 	pr_info("WARNING: fdatasync not implemented!");
+// 	return 0;
+// }

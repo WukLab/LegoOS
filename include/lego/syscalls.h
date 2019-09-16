@@ -115,6 +115,7 @@ asmlinkage long sys_openat(int dfd, const char __user *filename,
 			int flags, umode_t mode);
 asmlinkage long sys_creat(const char __user *pathname, umode_t mode);
 asmlinkage long sys_close(unsigned int fd);
+// asmlinkage long sys_fdatasync(int fd);
 
 /* stats */
 asmlinkage long sys_newstat(const char __user *filename,
@@ -170,6 +171,9 @@ asmlinkage long sys_execve(const char *filename,
 
 asmlinkage long sys_mmap(unsigned long, unsigned long, unsigned long,
 			 unsigned long, unsigned long, unsigned long);
+// asmlinkage long sys_shmget(int key, size_t size, int shmflg);
+// asmlinkage long sys_shmat(int shmid, char __user * shmaddr, int shmflg);
+// asmlinkage long sys_shmctl(int shmid, int cmd, struct shmid_ds *buf);
 asmlinkage long sys_mprotect(unsigned long start, size_t len,
 			     unsigned long prot);
 asmlinkage long sys_munmap(unsigned long addr, size_t len);
