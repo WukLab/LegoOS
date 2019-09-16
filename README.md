@@ -20,45 +20,44 @@ LegoOS is a disseminated, distributed operating system built for hardware resour
 [[Tech Notes]](http://lastweek.io)
 [[Google Trace Plot]](https://github.com/WukLab/LegoOS/tree/master/Documentation/google-trace.md)
 
-Table of Contents
-=================
+- [1. <a name='Developers'></a>Developers](#1-a-namedevelopersadevelopers)
+- [2. <a name='CodebaseOrganization'></a>Codebase Organization](#2-a-namecodebaseorganizationacodebase-organization)
+- [3. <a name='PlatformRequirement'></a>Platform Requirement](#3-a-nameplatformrequirementaplatform-requirement)
+- [4. <a name='ConfigureandCompile'></a>Configure and Compile](#4-a-nameconfigureandcompileaconfigure-and-compile)
+  - [4.1. <a name='ConfigureProcessororMemoryManager'></a>Configure Processor or Memory Manager](#41-a-nameconfigureprocessorormemorymanageraconfigure-processor-or-memory-manager)
+    - [4.1.1. <a name='ConfigureProcessorExCacheSize'></a>Configure Processor ExCache Size](#411-a-nameconfigureprocessorexcachesizeaconfigure-processor-excache-size)
+  - [4.2. <a name='ConfigureLinuxModules'></a>Configure Linux Modules](#42-a-nameconfigurelinuxmodulesaconfigure-linux-modules)
+  - [4.3. <a name='ConfigureNetwork'></a>Configure Network](#43-a-nameconfigurenetworkaconfigure-network)
+    - [4.3.1. <a name='FIT'></a>FIT](#431-a-namefitafit)
+    - [4.3.2. <a name='QPN'></a>QPN](#432-a-nameqpnaqpn)
+    - [4.3.3. <a name='LID'></a>LID](#433-a-namelidalid)
+    - [4.3.4. <a name='NodeIDandNumberofMachines'></a>Node ID and Number of Machines](#434-a-namenodeidandnumberofmachinesanode-id-and-number-of-machines)
+  - [4.4. <a name='ConfigureOutput'></a>Configure Output](#44-a-nameconfigureoutputaconfigure-output)
+    - [4.4.1. <a name='Setupprintk'></a>Setup `printk()`](#441-a-namesetupprintkasetup-printk)
+    - [4.4.2. <a name='SetupSerialConnection'></a>Setup Serial Connection](#442-a-namesetupserialconnectionasetup-serial-connection)
+- [5. <a name='InstallandRun'></a>Install and Run](#5-a-nameinstallandrunainstall-and-run)
+  - [5.1. <a name='P-1M'></a>1P-1M](#51-a-namep-1ma1p-1m)
+    - [5.1.1. <a name='Sample.config'></a>Sample .config](#511-a-namesampleconfigasample-config)
+  - [5.2. <a name='P-1M-1S'></a>1P-1M-1S](#52-a-namep-1m-1sa1p-1m-1s)
+    - [5.2.1. <a name='Configurations'></a>Configurations](#521-a-nameconfigurationsaconfigurations)
+    - [5.2.2. <a name='Boot'></a>Boot](#522-a-namebootaboot)
+    - [5.2.3. <a name='Sample.config-1'></a>Sample .config](#523-a-namesampleconfig-1asample-config)
+  - [5.3. <a name='P-2M-1Sandmore'></a>1P-2M-1S (and more)](#53-a-namep-2m-1sandmorea1p-2m-1s-and-more)
+    - [5.3.1. <a name='Configurations-1'></a>Configurations](#531-a-nameconfigurations-1aconfigurations)
+    - [5.3.2. <a name='Boot-1'></a>Boot](#532-a-nameboot-1aboot)
+    - [5.3.3. <a name='Sample.confg'></a>Sample `.confg`](#533-a-namesampleconfgasample-confg)
+  - [5.4. <a name='VirtualMachine'></a>Virtual Machine](#54-a-namevirtualmachineavirtual-machine)
+    - [5.4.1. <a name='VMSetup'></a>VM Setup](#541-a-namevmsetupavm-setup)
+    - [5.4.2. <a name='InfiniBand'></a>InfiniBand](#542-a-nameinfinibandainfiniband)
 
-   * [LegoOS](#legoos)
-      * [Developers](#developers)
-      * [Codebase Organization](#codebase-organization)
-      * [Platform Requirement](#platform-requirement)
-      * [Configure and Compile](#configure-and-compile)
-         * [Configure Processor or Memory Manager](#configure-processor-or-memory-manager)
-            * [Configure Processor ExCache Size](#configure-processor-excache-size)
-         * [Configure Linux Modules](#configure-linux-modules)
-         * [Configure Network](#configure-network)
-            * [FIT](#fit)
-            * [QPN](#qpn)
-            * [LID](#lid)
-            * [Node ID and Number of Machines](#node-id-and-number-of-machines)
-         * [Configure Output](#configure-output)
-            * [Setup printk()](#setup-printk)
-            * [Setup Serial Connection](#setup-serial-connection)
-      * [Install and Run](#install-and-run)
-         * [1P-1M](#1p-1m)
-            * [Sample .config](#sample-config)
-         * [1P-1M-1S](#1p-1m-1s)
-            * [Configurations](#configurations)
-            * [Boot](#boot)
-            * [Sample .config](#sample-config-1)
-         * [Multiple Managers](#multiple-managers)
-         * [Virtual Machine](#virtual-machine)
-            * [VM Setup](#vm-setup)
-            * [InfiniBand](#infiniband)
-
-## Developers
+##  1. <a name='Developers'></a>Developers
 
 - [Profiling](https://github.com/WukLab/LegoOS/tree/master/Documentation/profile.md)
 - [strace](https://github.com/WukLab/LegoOS/tree/master/Documentation/strace.md)
 - [Counters and Watchdog](https://github.com/WukLab/LegoOS/tree/master/Documentation/counters.md)
 - [Memory Manager Configurations](https://github.com/WukLab/LegoOS/tree/master/Documentation/mc-config.md)
 
-## Codebase Organization
+##  2. <a name='CodebaseOrganization'></a>Codebase Organization
 Several terms in this repository are used differently from the paper description. Some of them might be used interchangeably here.
 
 | Paper Term | Code Term|
@@ -113,7 +112,7 @@ As for the __Memory Manager__ (MM), it has the following subsystems:
 
 Storage manager and global resource monitors are not LegoOS's main focus at this stage, each of them has one simple task just as their name suggested.
 
-## Platform Requirement
+##  3. <a name='PlatformRequirement'></a>Platform Requirement
 LegoOS has been tested __only__ in the following hardware setting:
 
 |Hardware| Vendor and Model|
@@ -138,7 +137,7 @@ Of all the above hardware and software requirments, __the CPU and the Infiniband
 
 We understand that one key for an OS to be successful is let people be able to try it out. We are deeply sorry that we can not provide further technical support if you are using a different platform.
 
-## Configure and Compile
+##  4. <a name='ConfigureandCompile'></a>Configure and Compile
 
 __The README is still raw and scratchy, it might not be complete and it might also seems confusing. The whole tutorial can be improved only if there are people trying out LegoOS and give us feedback. If you have any issues, please don't hesitate to contact us (Github Issue is preferred). We really appreciate your input here.__
 
@@ -150,7 +149,7 @@ For storage and global resource managers, which are built as Linux kernel module
 
 Each manager or monitor should be configured and complied at its own machine's directory. To be able to run LegoOS, you need at least two physical machines.
 
-### Configure Processor or Memory Manager
+###  4.1. <a name='ConfigureProcessororMemoryManager'></a>Configure Processor or Memory Manager
 The default setting of LegoOS won't require any knowledge of Kconfig, all you need to do is changing the generated `.config` file. If you want to hack those Kconfig files, we recommend you read the [documentation](https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt) from Linux kernel and some other online resources.
 
 And note that this is just the __general__ configuration steps. If you want to configure for specific settings, such as running with only one processor and one memory manager, please refer to the following sections for more detailed steps.
@@ -183,7 +182,7 @@ And note that this is just the __general__ configuration steps. If you want to c
 
 After doing above steps, the LegoOS kernel will be ready at `arch/x86/boot/bzImage`.
 
-#### Configure Processor ExCache Size
+####  4.1.1. <a name='ConfigureProcessorExCacheSize'></a>Configure Processor ExCache Size
 There is one more knob for processor managers: __ExCache Size__. We reused the old way of reserving DRAM from Linux: the [`memmap=nn[KMG]$ss[KMG]`](https://www.kernel.org/doc/html/v4.14/admin-guide/kernel-parameters.html). Due to implementation issues, the semantic in LegoOS is not very straightforward. Basically, the actual ExCache size is __half__ the size you specified at `memmap`.
 
 Assume you want to reserve contiguous DRAM start from physical address `4GB`:
@@ -202,7 +201,7 @@ menuentry 'CentOS Linux (4.0.0-lego+) 7 (Core)' ... {
 
 At LegoOS boot time, the ExCache configuration will be printed at the very beginning, and it has to be something like `memmap=X$X` without any `\` in the middle. Processor manager will complain if `memmap` goes wrong. An example output is [here](https://github.com/WukLab/LegoOS/blob/master/Documentation/configs/1P-1M-Processor-Output#L2).
 
-### Configure Linux Modules
+###  4.2. <a name='ConfigureLinuxModules'></a>Configure Linux Modules
 Storage manager, global resource monitors, and their network stack are linux kernel modules. They can only run on `Linux-3.11.1`. Because their network stack is only supported at this kernel version.
 
 Once you have switched `Linux-3.11.1`, just go to `linux-modules/` and type `make`, which will compile all the following modules (and their config files):
@@ -213,12 +212,12 @@ Once you have switched `Linux-3.11.1`, just go to `linux-modules/` and type `mak
 |Global Resource Monitors|`linux-modules/monitor/include/monitor_config.h`|
 |FIT| `linux-modules/fit/fit_config.h`|
 
-### Configure Network
+###  4.3. <a name='ConfigureNetwork'></a>Configure Network
 At current stage, setup InfiniBand connection is still a little bit complicated, and it involves hardcoded information. Unlike Ethernet, InfiniBand can not just connect to each other. It needs Ethernet to exchange some initial information first. The initial information includes: Local IDentifier (__LID__) and Queue Pair Number (__QPN__). Unfortunately, we currently do not have decent Ethernet drivers and socket code that could run everywhere. Thus, instead of using Ethernet to exchange LID and QPN, we __manually hardcode them into the source code__, and let InfiniBand layer use this hardcoded information directly. Do note that the hardcoded information is about __remote machines__, which the local machine is trying to connect to.
 
 Also, make sure you have the InfiniBand NIC descibed in [Platform Requirement](#platform-requirement). They must be connected through a InfiniBand switch.
 
-#### FIT
+####  4.3.1. <a name='FIT'></a>FIT
 LegoOS uses a customized network stack named FIT, which is built based on [LITE](https://github.com/WukLab/lite). For more information of LITE, please refer to this [paper](https://dl.acm.org/citation.cfm?id=3132762). Here are some general concepts about FIT in LegoOS:
 - FIT is a layer on top of kernel InfiniBand verbs
 - FIT uses one polling thread to handle CQE, and this will not be the performance bottleneck
@@ -226,7 +225,7 @@ LegoOS uses a customized network stack named FIT, which is built based on [LITE]
 - Users of FIT share underlying QPs, multiplexed by FIT
 - LegoOS mostly just uses the `ibapi_send_reply` API
 
-#### QPN
+####  4.3.2. <a name='QPN'></a>QPN
 
 This subsection tries to explain several Kconfig options related to QP. You don't need to tune any configurations of this subsection for a default run. If a default setting does not work, please create a Github issue with detailed error message (especially dmesg from linux kernel modules).
 
@@ -240,7 +239,7 @@ Now, the trick here is, we configure all LegoOS manager's FIT layer to use the s
 
 And this solves the hardcoded QPN issue.
 
-#### LID
+####  4.3.3. <a name='LID'></a>LID
 This subsection tries to explain how LID should be hardcoded. This process involes two steps: 1) get LID information from `iblinkinfo`, 2) build the LID table at `net/lego/fit_machine.c`.
 
 InfiniBand LID can be obtained by running `iblinkinfo` at Linux. A snippet output from our platform would be:
@@ -273,7 +272,7 @@ static struct fit_machine_info WUKLAB_CLUSTER[] = {
 
 Please make sure to fill the correct LID numbers. Any typos here will lead to an unsuccessful connection after early boot and it's hard to debug.
 
-#### Node ID and Number of Machines
+####  4.3.4. <a name='NodeIDandNumberofMachines'></a>Node ID and Number of Machines
 Now we've built the necessary information, it's time to think about the real connection. Currently, LegoOS does not support hotplug a hardware component at runtime (it is important and doable, but requires some extra pure engineering effort). Thus, you need to configure the node ID and number of connected machines at __compile time__.
 
 They are described by these two configurations:
@@ -284,9 +283,9 @@ For one run, all LegoOS instance must have the same `CONFIG_FIT_NR_NODES`. And e
 
 After setting up above configurations, you also need to manually change the `lego_cluster_hostnames` array at `net/fit/fit_machine.c`. The array specifies the machines used in one run, and the array must be built based the ID sequence.
 
-### Configure Output
+###  4.4. <a name='ConfigureOutput'></a>Configure Output
 
-#### Setup `printk()`
+####  4.4.1. <a name='Setupprintk'></a>Setup `printk()`
 LegoOS output debug messages (`printk()`) to two sources: 1) `serial port`, 2) `VGA terminal`. Mostly only the output to serial port is useful, because this can be saved and later being examined. The output to VGA is useful when we run LegoOS with virtual machine (VM), so we are able to know what's going on (pretty old school, right?).
 
 They are controlled by the following options in `Kconfig`:
@@ -309,7 +308,7 @@ To enable serial output, enable __`CONFIG_TTY_SERIAL`__.
 - Two baud rate are supported: `9600` and `115200`, they map to `CONFIG_TTY_SERIAL_BAUD9600` and `CONFIG_TTY_SERIAL_BAUD115200`, respectively. Only one of them can be enabled at one time.
 - For example, if the other end of serial cable is a Linux host that uses `/dev/ttyS1, 115200`, then the serial config at LegoOS side should use the combination of `CONFIG_TTY_SERIAL_TTYS1` and `CONFIG_TTY_SERIAL_BAUD115200`.
 
-#### Setup Serial Connection
+####  4.4.2. <a name='SetupSerialConnection'></a>Setup Serial Connection
 
 __Option 1: Virtual Machine__
 
@@ -334,7 +333,7 @@ If LegoOS is running directly on a physical machine, you will need another machi
 
 In a direct serial connection setting, each LegoOS machine will need one peer physical machine to catch its output. This essentially increases the machine usage by 2x. Based on our own experience, __we highly recommend you setup a serial switch__.
 
-## Install and Run
+##  5. <a name='InstallandRun'></a>Install and Run
 
 LegoOS's processor and memory manager _pretend_ as a Linux kernel by having all the necessary magic numbers at `bzimage` header. Thus, GRUB2 will treat LegoOS kernel as a normal Linux kernel. By doing so, LegoOS can leverage all existing boot options available.
 
@@ -346,7 +345,7 @@ Once you have successfully compiled the processor or memory manager, you can ins
 
 LegoOS pretends as a `Linux-4.0.0` to fool `glibc-2.17`, which somehow requires a pretty high version Linux kernel. To run LegoOS, you need to __reboot__ machine, and then boot into LegoOS kernel.
 
-### 1P-1M
+###  5.1. <a name='P-1M'></a>1P-1M
 This section describes the case where we run LegoOS with only one processor manager and one memory manager, or __1P-1M__ setting. This is the simplest setting in LegoOS. This setting piggybacks a statically-linked user program binary into LegoOS image, thus we don't need another storage manager. The limitation is that only a simple user-program can be staticlly-linked and piggybacked (e.g., programs at `usr/`), because the difficulties of compiling a large program and kernel image size limitation.
 
 This setting requires a special `Kconfig` option: `CONFIG_USE_RAMFS`, at both processor and memory. And this setting requires two physical machines (or virtual machines running on different physical host).
@@ -370,7 +369,7 @@ This setting requires a special `Kconfig` option: `CONFIG_USE_RAMFS`, at both pr
 
 In 1P-1M setting, the above user program set at memory manager (`usr/general.o` here) will be executed automatically when processor and memory manager connected. Current LegoOS's ramfs option is limited to include only one user program.
 
-#### Sample .config
+####  5.1.1. <a name='Sample.config'></a>Sample .config
 
 We provid two `.config` samples for `1P-1M` setting. In these samples, we are using `usr/general.o` and `ttyS1 115200`. VGA terminal output is also enabled. You can find processor manager's output log [here](https://github.com/WukLab/LegoOS/tree/master/Documentation/configs/1P-1M-Processor-Output) (recorded while running LegoOS processor manager within VM).
 - Processor
@@ -382,10 +381,10 @@ We provid two `.config` samples for `1P-1M` setting. In these samples, we are us
     - `cp Documentation/configs/1P-1M-Memory .config`
     - `make`
 
-### 1P-1M-1S
+###  5.2. <a name='P-1M-1S'></a>1P-1M-1S
 This section describes the case where we run LegoOS with one processor manager, one memory manager, and one storage manager, or __1P-1M-1S__ setting. This setting emulates the effect of breaking one monolithic server and connect the CPU, memory, and disk by network. This setting requires three physical machines, and there is no need for global resource managers (Note about VM: you will be able to run processor manager and memory manager within VM, but storage can not. Because VM setting produces unstable QPN).
 
-#### Configurations
+####  5.2.1. <a name='Configurations'></a>Configurations
 1. Network setting
     - Set node ID properly, for all processor, memory, and storage managers
     - At storage manager, modify `linux-modules/fit/fit_config.h`
@@ -408,7 +407,7 @@ This section describes the case where we run LegoOS with one processor manager, 
 
 Our current way of running user program is very raw. Basically we manually specify the user program and arguments during compile time. This limits us to be able to test only one program during each run. LegoOS can not work with `/bin/bash`, but we have tried to use the basic `fork()+wait()` way to serialize testing.
 
-#### Boot
+####  5.2.2. <a name='Boot'></a>Boot
 
 After you have successfully configured and compiled the LegoOS images, you need to install the processor and memory managers and reboot these two machines. The following steps assume you have just finished compiling and tries to reboot:
 
@@ -419,7 +418,7 @@ After you have successfully configured and compiled the LegoOS images, you need 
 5. At storage manager, after the above command return, do: __`insmod storage.ko`__.
 6. You should be able to see many messages printed out after the above command return.
 
-#### Sample .config
+####  5.2.3. <a name='Sample.config-1'></a>Sample .config
 
 We provid two `.config` and `fit_config.h ` samples for the `1P-1M-1S` setting. To start, you can follow the below steps:
 - Processor
@@ -437,22 +436,56 @@ We provid two `.config` and `fit_config.h ` samples for the `1P-1M-1S` setting. 
 
 1P-1M-1S perfectly emulates the effect of disaggregating a single monolithic server. Unlike 1P-1M setting, this setting can run any user program, either dynamically-linked or statically-linked, as long as there is no missing syscall. But please be careful and patient while setting things up, any mistakes may lead to an unsuccessful run. Sorry for the inconvenience.
 
-### Multiple Managers
-To be able to run multiple managers, you will need at least five physical machines. Because now LegoOS will need global resource monitors (multiple monitors can co-exist). And due to our early implementation decisions, storage manager and global resource monitors can __not__ run on one physical server. For example, in a `1P-2M-1S` setting, you will need: one server for processor manager, two servers for memory managers, one for storage manager, and one for global resource monitors.
+###  5.3. <a name='P-2M-1Sandmore'></a>1P-2M-1S (and more)
+To be able to run multiple memory manages or processor managers, you will need at least five physical machines. Because now LegoOS will need global resource monitors (multiple monitors can co-exist). And due to our early implementation decisions, storage manager and global resource monitors can __not__ run on one physical server. For example, in a `1P-2M-1S` setting, you will need: one server for processor manager, two servers for memory managers, one for storage manager, and one for global resource monitors.
 
-We will provide detailed tutorial on this soon.
+Some configurations and steps are similar to 1P-1M-1S.
 
-### Virtual Machine
+####  5.3.1. <a name='Configurations-1'></a>Configurations
+1. Network setting
+    - Set node ID properly, for all processor, memory, and storage managers, as well as global monitos.
+    - For both storage manager and global monitors, modify `linux-modules/fit/fit_config.h`
+    - At _both_ processor and memory manager
+      - set `CONFIG_DEFAULT_MEM_NODE` equals to the node ID of the memory manager
+      - set `CONFIG_DEFAULT_STORAGE_NODE` equals to the node ID of the storage manager
+
+2. Make sure `CONFIG_USE_RAMFS` is __not__ configured at both processor and memory manager.
+3. At processor manager, set the test program. Similar to above.
+4. At processor manager, enable `CONFIG_DISTRIBUTED_VMA` and some sub-configs (use default is fine). This option enables LegoOS to use multiple memory managers. Below is a sample configuration. 
+```
+CONFIG_DISTRIBUTED_VMA=y
+CONFIG_DISTRIBUTED_VMA_PROCESSOR=y
+CONFIG_VM_GRANULARITY_ORDER=30
+CONFIG_MEM_NR_NODES=2
+```
+5. At all memory manages, also enable `CONFIG_DISTRIBUTED_VMA` and some sub-configs. Please keep the `CONFIG_VM_GRANULARITY_ORDER` consist across all managers.
+```
+CONFIG_DISTRIBUTED_VMA=y
+CONFIG_DISTRIBUTED_VMA_MEMORY=y
+CONFIG_VM_GRANULARITY_ORDER=30
+CONFIG_MEM_NR_NODES=2
+```
+6. At global memory monitor, open `linux-modules/monitor/include/monitor_config.h`, change the `mnode_nids[]` array to reflect the current memory node IDs. You can also take a took at `linux-modules/monitor/gmm/lego_gmm.c` to learn more how it works.
+
+####  5.3.2. <a name='Boot-1'></a>Boot
+
+Similar to 1P-1M-1S.
+
+####  5.3.3. <a name='Sample.confg'></a>Sample `.confg`
+
+Fill me in.
+
+###  5.4. <a name='VirtualMachine'></a>Virtual Machine
 In general, you will be able run both processor and memory manager on VM without any issue. But we can not run storage manager within a VM. The reason is our network setting. We need to know peer's QP number (QPN) beforehand. While the QPN generated by a Linux which is running inside a VM, is not stable.
 
 Overall, `1P-1M` can be tested with VM. With `1P-1M-1S` setting, the processor and memory manager can run inside VM, while storage manager has to run on physical machine.
 
-#### VM Setup
+####  5.4.1. <a name='VMSetup'></a>VM Setup
 
 It is recommended to have multiple CPU cores and several GB memory for each VM. The reason is LegoOS need at least two kernel threads which are pinned to cores to do network communication. For processor, if Victim Cache is configured, one more victim flush thread will be created.
 
 For example, a simple basic configuration: 8 vCPUs, and 8GB memory.
 
-#### InfiniBand
+####  5.4.2. <a name='InfiniBand'></a>InfiniBand
 
 In order to run LegoOS on a VM, we need to export IB device from host to VM. And this VM must have exclusive access to this IB device. Please refer to Mellanox tutorials on this topic.
