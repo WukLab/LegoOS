@@ -630,7 +630,6 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 	strlcpy(ibdev->ib_dev.name, "mlx4_%d", IB_DEVICE_NAME_MAX);
 	ibdev->ib_dev.node_type		= RDMA_NODE_IB_CA;
 	ibdev->ib_dev.local_dma_lkey	= dev->caps.reserved_lkey;
-	num_ports = 1;
 	ibdev->num_ports		= num_ports;
 	ibdev->ib_dev.phys_port_cnt     = ibdev->num_ports;
 	ibdev->ib_dev.num_comp_vectors	= dev->caps.num_comp_vectors;
@@ -712,11 +711,9 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 		goto err_map;
 
 	for (i = 0; i < ibdev->num_ports; ++i) {
-		pr_info("AT PORT %d\n",i);
 		if (mlx4_ib_port_link_layer(&ibdev->ib_dev, i + 1) ==
 						IB_LINK_LAYER_ETHERNET) {
-		
-			// panic("no RoCE");
+			panic("no RoCE");
 		} else
 				ibdev->counters[i] = -1;
 	}
