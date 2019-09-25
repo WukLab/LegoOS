@@ -2,6 +2,7 @@
 MONITORS := gmm
 MONITORS += gpm
 MONITORS += gum
+MONITORS += gsm
 MONITORS += gm_dispatcher
 
 # rules
@@ -20,6 +21,7 @@ install:
 	insmod $(shell pwd)/gmm/lego_gmm.ko && \
 	insmod $(shell pwd)/gpm/lego_gpm.ko && \
 	insmod $(shell pwd)/gum/lego_gum.ko && \
+	insmod $(shell pwd)/gsm/lego_gsm.ko && \
 	insmod $(shell pwd)/gm_dispatcher/lego_gm_dispatcher.ko
 
 .PHONY: all $(SUBDIRS) $(CLEAN_SUBDIRS) install
