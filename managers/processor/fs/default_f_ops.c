@@ -109,6 +109,7 @@ static ssize_t p2m_read(struct file *f, char __user *buf, size_t count,
 	payload->flags = f->f_flags;
 	payload->len = count;
 	payload->offset = *off;
+	payload->storage_node = current_storage_home_node();
 
 	mem_node = current_pgcache_home_node();
 	retlen = ibapi_send_reply_imm(mem_node, msg, len_msg,
@@ -179,6 +180,7 @@ static ssize_t __p2m_write(struct file *f, const char __user *buf,
 	payload->uid = current_uid();
 	payload->flags = f->f_flags;
 	payload->len = count;
+	payload->storage_node = current_storage_home_node();
 
 	payload->offset = (*off);
 	strncpy(payload->filename, f->f_name, MAX_FILENAME_LENGTH);

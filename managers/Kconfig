@@ -74,8 +74,8 @@ config GSM
 if GSM
 config GSM_HOMENODE
 	int "GSM homenode ID"
-	depends on FIT_LOCAL_ID || FIT_NR_NODES
-endif #if GSM
+	depends on COMP_PROCESSOR || COMP_MEMORY
+endif # if GSM
 
 endmenu # General Manager Config/Debug
 

@@ -101,6 +101,7 @@ struct p2m_read_write_payload {
 	u32	tgid;
 	char __user *buf;
 	int	uid;
+	__u32	storage_node;
 	char	filename[MAX_FILENAME_LENGTH];
 	int	flags;
 	ssize_t	len;

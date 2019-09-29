@@ -51,7 +51,8 @@ void handle_p2m_read(struct p2m_read_write_payload *payload,
 	ssize_t retval;
 	void *buf;
 	struct p2m_read_reply *retbuf;
-	struct lego_task_struct *tsk;
+	struct lego_task_struct *tsk __maybe_unused;
+	int storage_node __maybe_unused;
 
 	file_debug("pid: %u tgid: %u buf: %p len: %zu, f_name: %s count: %zu",
 		payload->pid, payload->tgid, payload->buf, payload->len,
@@ -67,17 +68,23 @@ void handle_p2m_read(struct p2m_read_write_payload *payload,
 	buf = (char *)retbuf + sizeof(retval);
 	tb_set_tx_size(tb, sizeof(retval) + count);
 
+#ifndef CONFIG_MEM_PAGE_CACHE
 	tsk = find_lego_task_by_pid(hdr->src_nid, payload->tgid);
 	if (unlikely(!tsk)) {
 		retbuf->retval = -ESRCH;
 		return;
 	}
 
-#ifndef CONFIG_MEM_PAGE_CACHE
 	retval = __storage_read(tsk, payload->filename, buf, count, &pos);
 #else
-	retval = lego_pgcache_read(NULL, payload->filename, STORAGE_NODE, buf, count, &pos);
-#endif
+#ifndef CONFIG_GSM
+	storage_node = STORAGE_NODE;
+#else
+	storage_node = payload->storage_node;
+#endif	/* CONFIG_GSM */
+
+	retval = lego_pgcache_read(NULL, payload->filename, storage_node, buf, count, &pos);
+#endif /* CONFIG_MEM_PAGE_CACHE */
 
 	/*
 	 * retval is the number of bytes be read
@@ -97,10 +104,11 @@ void handle_p2m_read(struct p2m_read_write_payload *payload,
 void handle_p2m_write(struct p2m_read_write_payload *payload,
 		      struct common_header *hdr, struct thpool_buffer *tb)
 {
-	struct lego_task_struct *tsk;
+	struct lego_task_struct *tsk __maybe_unused;
 	ssize_t *retval;
 	loff_t offset = payload->offset;
 	void *content = (void *)payload + sizeof(*payload);
+	int storage_node __maybe_unused;
 
 	file_debug("pid: %u tgid: %u buf: %p len: %zu, f_name: %s",
 		payload->pid, payload->tgid, payload->buf, payload->len,
@@ -109,20 +117,28 @@ void handle_p2m_write(struct p2m_read_write_payload *payload,
 	retval = thpool_buffer_tx(tb);
 	tb_set_tx_size(tb, sizeof(*retval));
 
+#ifndef CONFIG_MEM_PAGE_CACHE
+	/*
+	 * If MEM_PAGE_CACHE is unset, this Node is MEM_HOMENODE
+	 * lego_task_struct must exist.
+	 */
 	tsk = find_lego_task_by_pid(hdr->src_nid, payload->tgid);
 	if (unlikely(!tsk)){
 		*retval = -ESRCH;
 		return;
 	}
 
-#ifndef CONFIG_MEM_PAGE_CACHE
 	*retval = __storage_write(tsk, payload->filename,
 				  content, payload->len, &offset);
 #else
-	*retval = lego_pgcache_write(NULL, payload->filename,
-				     STORAGE_NODE, content,
+#ifdef CONFIG_GSM
+	storage_node = payload->storage_node;
+#else
+	storage_node = STORAGE_NODE;
+#endif /* CONFIG_GSM */
+	*retval = lego_pgcache_write(NULL, payload->filename, storage_node, content,
 				     payload->len, &offset);
-#endif
+#endif /* CONFIG_MEM_PAGE_CACHE */
 }
 
 int handle_p2m_close(struct p2m_close_struct *payload, u64 desc,
