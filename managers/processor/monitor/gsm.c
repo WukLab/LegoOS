@@ -10,6 +10,7 @@
 #include <lego/slab.h>
 #include <lego/fit_ibapi.h>
 #include <processor/processor.h>
+#include <lego/rpc/struct_p2gm.h>
 #include <lego/comp_common.h>
 
 #ifdef CONFIG_GSM
@@ -46,7 +47,9 @@ int get_info_from_gsm(int my_vnode_id)
 		return -EIO;
 	}
 
+#ifdef CONFIG_MEM_PAGE_CACHE
 	set_pgcache_home_node(current, retbuf.mid);
+#endif /* CONGIG_MEM_PAGE_CACHE */
 	set_storage_home_node(current, retbuf.sid);
 	kfree(p2gsm_msg);
 	return 0;

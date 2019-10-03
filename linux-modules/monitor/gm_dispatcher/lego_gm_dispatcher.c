@@ -17,6 +17,7 @@
 #include <common.h>
 #include <gmm.h>
 #include <gpm.h>
+#include <gsm.h>
 
 /* 
  * this module act as a linux module ib receiver and dispatcher,
@@ -68,6 +69,10 @@ static int req_dispatcher(void)
 
 	case M2MM_STATUS_REPORT:
 		handle_m2mm_status_report((void *)rcvbuf, desc);
+		break;
+
+	case P2GSM_COMMON:
+		handle_p2sm_alloc_nodes((int *)rcvbuf, desc);
 		break;
 
 	default:

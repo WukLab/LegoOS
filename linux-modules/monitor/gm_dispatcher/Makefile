@@ -6,6 +6,7 @@ ccflags-y += -I$(src)/../../../include
 KBUILD_EXTRA_SYMBOLS += $(shell pwd)/../../fit/Module.symvers
 KBUILD_EXTRA_SYMBOLS += $(shell pwd)/../gpm/Module.symvers
 KBUILD_EXTRA_SYMBOLS += $(shell pwd)/../gmm/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(shell pwd)/../gsm/Module.symvers
 export KBUILD_EXTRA_SYMBOLS
 
 # Targets
