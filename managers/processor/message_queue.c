@@ -34,18 +34,14 @@ SYSCALL_DEFINE4(mq_send, char*, name, unsigned long, name_size, unsigned long, m
 	hdr->opcode = P2M_MQSEND;
 	hdr->src_nid = LEGO_LOCAL_NID;
 	payload=to_payload(msg);
-
-/*
- *  *  * should we use strlen(name)+1, plus 1 really need?
- *   *   */ 
+ 
 	copy_from_user(payload->mq_name, name, name_size+1);
 	copy_from_user(payload->msg, msg_data, msg_size+1);
 	payload->msg_size=msg_size;
 
 	retlen = ibapi_send_reply_imm(current_pgcache_home_node(), msg, len_msg, &retval, sizeof(retval),false);	
 
-	/* check return value
- *  *  	*/
+	/* check return value */
 	if(retlen == -ETIMEDOUT){
 		return -1;
 	}		
@@ -80,19 +76,17 @@ SYSCALL_DEFINE4(mq_receive, char*, name, unsigned long, name_size, unsigned long
 
 	retlen = ibapi_send_reply_imm(current_pgcache_home_node(), msg, len_msg, &retval, sizeof(retval),false);	
 
-	/* check return value
- *  *  	*/
+	/* check return value */
 	if(retlen == -ETIMEDOUT){
 		return -1;
 	}		
 
-/*
- *  * 
- *   *  reply, reply 0 means good
- *    */	
+
+
+	/* reply, reply 0 means good */	
 	if(retval.ret == 0){
-		/* copy data to user space
- * 		*/
+		
+		/* copy data to user space */
 		if(copy_to_user(msg_data, (void*)retval.mq_data, (unsigned long)strlen(retval.mq_data)+1)){
 			kfree(msg);
 			return -EFAULT;

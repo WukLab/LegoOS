@@ -221,8 +221,8 @@ void handle_mq_close_request(struct p2m_mqclose_payload* payload,
 
 
 /* for now we use fixed payload here
- *  * we can make run-time decision about msg_size in the future
- *   */
+ * we can make run-time decision about msg_size in the future
+ */
 #define MAX_MSG_LENGTH 100
 struct p2m_mqsend_payload{
 	int msg_size;
