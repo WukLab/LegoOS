@@ -125,3 +125,8 @@
 600	common	checkpoint_process	sys_checkpoint_process
 601	common	pcache_stat		sys_pcache_stat
 611	common	drop_page_cache		sys_drop_page_cache
+
+612	common  mq_send			sys_mq_send
+613 	common  mq_open			sys_mq_open
+614	common  mq_receive		sys_mq_receive
+615	common  mq_close		sys_mq_close

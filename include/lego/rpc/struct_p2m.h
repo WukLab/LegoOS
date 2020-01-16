@@ -194,6 +194,62 @@ struct m2p_execve_struct {
 void handle_p2m_execve(struct p2m_execve_struct *payload,
 		       struct common_header *hdr, struct thpool_buffer *tb);
 
+
+/*
+ *  message queue api
+ *  open close send receive
+ *  payload structure and handler declaration
+ */
+struct p2m_mqopen_payload{
+	int msg_size;
+	char mq_name[MAX_FILENAME_LENGTH];
+};
+
+/*
+void handle_mq_open_request(struct p2m_mqopen_payload* payload, 
+	struct thpool_buffer*tb);
+*/
+
+struct p2m_mqclose_payload{
+	char mq_name[MAX_FILENAME_LENGTH];
+};
+
+/*
+void handle_mq_close_request(struct p2m_mqclose_payload* payload, 
+	struct thpool_buffer*tb);
+*/
+
+
+/* for now we use fixed payload here
+ *  * we can make run-time decision about msg_size in the future
+ *   */
+#define MAX_MSG_LENGTH 100
+struct p2m_mqsend_payload{
+	int msg_size;
+	char msg[MAX_MSG_LENGTH];
+	char mq_name[MAX_FILENAME_LENGTH];
+};
+
+/*
+void handle_mq_send_request(struct p2m_mqsend_payload* payload, 
+	struct thpool_buffer*tb);
+*/
+
+#define MAX_MSG_LENGTH 100
+struct p2m_mqrecv_payload{
+	char mq_name[MAX_FILENAME_LENGTH];
+};
+
+struct p2m_mqrecv_reply_struct {
+        int     ret;
+        char 	mq_data[MAX_MSG_LENGTH];
+};
+
+/*
+void handle_mq_receive_request(struct p2m_mqrecv_payload* payload, 
+	struct thpool_buffer*tb);
+*/
+
 /*
  * P2M_MMAP
  */
