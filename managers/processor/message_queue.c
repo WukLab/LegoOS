@@ -18,6 +18,8 @@
 #include "processor.h"
 #include <lego/fit_ibapi.h>
 
+#define MSG_RET_SUCCESS 0
+
 SYSCALL_DEFINE4(mq_send, char*, name, unsigned long, name_size, unsigned long, msg_size, const char*, msg_data)
 {
 	ssize_t retval, retlen;
@@ -25,6 +27,7 @@ SYSCALL_DEFINE4(mq_send, char*, name, unsigned long, name_size, unsigned long, m
 	void *msg;
 	struct common_header* hdr;
 	struct p2m_mqsend_payload* payload;
+	
 	len_msg = sizeof(*hdr)+sizeof(*payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if(!msg)
@@ -33,16 +36,17 @@ SYSCALL_DEFINE4(mq_send, char*, name, unsigned long, name_size, unsigned long, m
 	hdr = (struct common_header *)msg;
 	hdr->opcode = P2M_MQSEND;
 	hdr->src_nid = LEGO_LOCAL_NID;
-	payload=to_payload(msg);
+	payload = to_payload(msg);
  
 	copy_from_user(payload->mq_name, name, name_size+1);
 	copy_from_user(payload->msg, msg_data, msg_size+1);
-	payload->msg_size=msg_size;
+	payload->msg_size = msg_size;
 
 	retlen = ibapi_send_reply_imm(current_pgcache_home_node(), msg, len_msg, &retval, sizeof(retval),false);	
 
 	/* check return value */
 	if(retlen == -ETIMEDOUT){
+		kfree(msg);
 		return -1;
 	}		
 
@@ -61,7 +65,8 @@ SYSCALL_DEFINE4(mq_receive, char*, name, unsigned long, name_size, unsigned long
 	void *msg;
 	struct common_header* hdr;
 	struct p2m_mqrecv_payload* payload;
-	len_msg = sizeof(*hdr)+sizeof(*payload);
+	
+	len_msg = sizeof(*hdr) + sizeof(*payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if(!msg)
 		return -ENOMEM;
@@ -69,8 +74,7 @@ SYSCALL_DEFINE4(mq_receive, char*, name, unsigned long, name_size, unsigned long
 	hdr = (struct common_header *)msg;
 	hdr->opcode = P2M_MQRECV;
 	hdr->src_nid = LEGO_LOCAL_NID;
-	payload=to_payload(msg);
-
+	payload = to_payload(msg);
 
 	copy_from_user(payload->mq_name, name, name_size+1);
 
@@ -78,13 +82,13 @@ SYSCALL_DEFINE4(mq_receive, char*, name, unsigned long, name_size, unsigned long
 
 	/* check return value */
 	if(retlen == -ETIMEDOUT){
+		kfree(msg);
 		return -1;
 	}		
 
 
-
 	/* reply, reply 0 means good */	
-	if(retval.ret == 0){
+	if(retval.ret == MSG_RET_SUCCESS){
 		
 		/* copy data to user space */
 		if(copy_to_user(msg_data, (void*)retval.mq_data, (unsigned long)strlen(retval.mq_data)+1)){
@@ -109,7 +113,8 @@ SYSCALL_DEFINE2(mq_close, char*, name, unsigned long, name_size)
 	void *msg;
 	struct common_header* hdr;
 	struct p2m_mqclose_payload* payload;
-	len_msg = sizeof(*hdr)+sizeof(*payload);
+
+	len_msg = sizeof(*hdr) + sizeof(*payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if(!msg)
 		return -ENOMEM;
@@ -126,6 +131,7 @@ SYSCALL_DEFINE2(mq_close, char*, name, unsigned long, name_size)
 	/* check return value
     	*/
 	if(retlen == -ETIMEDOUT){
+		kfree(msg);
 		return -1;
 	}		
 
@@ -143,7 +149,8 @@ SYSCALL_DEFINE3(mq_open, char* , name, unsigned long, name_size, unsigned long, 
 	void *msg;
 	struct common_header* hdr;
 	struct p2m_mqopen_payload* payload;
-	len_msg = sizeof(*hdr)+sizeof(*payload);
+	
+	len_msg = sizeof(*hdr) + sizeof(*payload);
 	msg = kmalloc(len_msg, GFP_KERNEL);
 	if(!msg)
 		return -ENOMEM;
@@ -151,7 +158,7 @@ SYSCALL_DEFINE3(mq_open, char* , name, unsigned long, name_size, unsigned long, 
 	hdr = (struct common_header *)msg;
 	hdr->opcode = P2M_MQOPEN;
 	hdr->src_nid = LEGO_LOCAL_NID;
-	payload=to_payload(msg);
+	payload = to_payload(msg);
 
 	copy_from_user(payload->mq_name, name, name_size+1);
 	payload->msg_size=msg_size;
@@ -159,6 +166,7 @@ SYSCALL_DEFINE3(mq_open, char* , name, unsigned long, name_size, unsigned long, 
 	retlen = ibapi_send_reply_imm(current_pgcache_home_node(), msg, len_msg, &retval, sizeof(retval),false);	
 
 	if(retlen == -ETIMEDOUT){
+		kfree(msg);
 		return -1;
 	}	
 
