@@ -34,6 +34,15 @@
 #define P2M_PCACHE_REPLICA	((__u32)0x30000001)
 #define P2M_PCACHE_ZEROFILL	((__u32)0x30000002)
 
+
+/* 
+ * add our own opcode
+ */
+#define P2M_MQOPEN		((__u32)__NR_mq_open)		
+#define P2M_MQCLOSE		((__u32)__NR_mq_close)		
+#define P2M_MQSEND		((__u32)__NR_mq_send)
+#define P2M_MQRECV		((__u32)__NR_mq_receive)
+
 #define P2M_READ		((__u32)__NR_read)
 #define P2M_WRITE		((__u32)__NR_write)
 #define P2M_CLOSE		((__u32)__NR_close)

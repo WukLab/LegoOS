@@ -287,4 +287,11 @@ config MEM_PAGE_CACHE
 	  requests (e.g. rename) should be sent over to M, instead of S.
 
 	  If unsure, say N.
+
+config MAX_MSG_LENGTH
+	int "maximum message length"
+	default 100
+	help
+	  This config means the maximum length of message queue entry 
+
 endmenu
