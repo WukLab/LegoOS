@@ -161,7 +161,7 @@ SYSCALL_DEFINE3(mq_open, char* , name, unsigned long, name_size, unsigned long, 
 	payload = to_payload(msg);
 
 	copy_from_user(payload->mq_name, name, name_size+1);
-	payload->msg_size=msg_size;
+	payload->msg_size = msg_size;
 
 	retlen = ibapi_send_reply_imm(current_pgcache_home_node(), msg, len_msg, &retval, sizeof(retval),false);	
 
