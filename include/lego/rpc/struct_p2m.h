@@ -82,7 +82,7 @@ void handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg,
 struct p2m_replica_msg {
 	struct common_header	header;
 	struct replica_log	log;
-} __packed;
+} __packed __aligned(8);
 void handle_p2m_replica(void *_msg, struct thpool_buffer *tb);
 
 /*

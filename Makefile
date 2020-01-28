@@ -511,6 +511,12 @@ KBUILD_CFLAGS   += $(call cc-option,-Werror=date-time)
 # enforce correct pointer usage
 KBUILD_CFLAGS   += $(call cc-option,-Werror=incompatible-pointer-types)
 
+# Disable extra warnings from GCC 8
+KBUILD_CFLAGS   += $(call cc-option,-Wno-attribute-alias)
+KBUILD_CFLAGS   += $(call cc-option,-Wno-sizeof-pointer-memaccess)
+KBUILD_CFLAGS   += $(call cc-option,-Wno-format-truncation)
+KBUILD_CFLAGS   += $(call cc-option,-Wno-stringop-truncation)
+
 # use the deterministic mode of AR if available
 KBUILD_ARFLAGS := $(call ar-option,D)
 

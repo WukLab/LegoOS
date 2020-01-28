@@ -36,7 +36,7 @@ struct replica_log_meta {
 struct replica_log {
 	struct replica_log_meta		meta;
 	char				data[PCACHE_LINE_SIZE];
-} __attribute__((packed));
+} __attribute__((packed)) __aligned(8);
 
 static inline int replica_get_hash_key(unsigned int pid, unsigned int vnode_id)
 {
