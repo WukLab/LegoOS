@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2020 Wuklab, Purdue University. All rights reserved.
  *
  * Describes screen information obtained from BIOS at boot time.
  * So we can use the screen smoothly. ..but forget about desktop
