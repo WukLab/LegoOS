@@ -713,7 +713,7 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 	for (i = 0; i < ibdev->num_ports; ++i) {
 		if (mlx4_ib_port_link_layer(&ibdev->ib_dev, i + 1) ==
 						IB_LINK_LAYER_ETHERNET) {
-			panic("no RoCE");
+			pr_info("WARNING: port %d is RoCE.\n", i);
 		} else
 				ibdev->counters[i] = -1;
 	}
