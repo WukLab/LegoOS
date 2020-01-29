@@ -2198,6 +2198,8 @@ static int ib_mad_completion_handler(void *_data)
 
 	pin_current_thread();
 
+	ib_req_notify_cq(port_priv->cq, IB_CQ_NEXT_COMP);
+
 	while (1) {
 		memset(&wc, 0, sizeof(wc));
 		nr_got = ib_poll_cq(port_priv->cq, 1, &wc);
@@ -2229,6 +2231,8 @@ static int ib_mad_completion_handler(void *_data)
 			BUG();
 			break;
 		}
+
+		ib_req_notify_cq(port_priv->cq, IB_CQ_NEXT_COMP);
 	}
 	return 0;
 }

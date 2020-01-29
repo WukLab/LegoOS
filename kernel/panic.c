@@ -121,9 +121,11 @@ void panic(const char *fmt, ...)
 	smp_send_stop();
 	pr_emerg("---[ end Kernel panic - not syncing: %s\n", buf);
 
+#if 0
 	/* Print short info on all tasks */
 	if (scheduler_state == SCHED_UP)
 		show_state_filter(0, true);
+#endif
 
 	if (manager_state == MANAGER_UP) {
 		exit_processor_strace(current);

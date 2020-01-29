@@ -273,8 +273,39 @@ out:
 static int eth_link_query_port(struct ib_device *ibdev, u8 port,
 			       struct ib_port_attr *props, int netw_view)
 {
-	WARN_ONCE(1, "No RoCE");
-	return -EFAULT;
+	struct mlx4_ib_dev *mdev = to_mdev(ibdev);
+	struct mlx4_cmd_mailbox *mailbox;
+	int err = 0;
+
+	mailbox = mlx4_alloc_cmd_mailbox(mdev->dev);
+	if (IS_ERR(mailbox))
+		return PTR_ERR(mailbox);
+
+	err = mlx4_cmd_box(mdev->dev, 0, mailbox->dma, port, 0,
+			   MLX4_CMD_QUERY_PORT, MLX4_CMD_TIME_CLASS_B);
+	if (err)
+		goto out;
+
+	props->active_width	=  (((u8 *)mailbox->buf)[5] == 0x40) ?
+						IB_WIDTH_4X : IB_WIDTH_1X;
+	props->active_speed	= IB_SPEED_QDR;
+	props->port_cap_flags	= IB_PORT_CM_SUP;
+	props->gid_tbl_len	= mdev->dev->caps.gid_table_len[port];
+	props->max_msg_sz	= mdev->dev->caps.max_msg_sz;
+	props->pkey_tbl_len	= 1;
+	props->max_mtu		= IB_MTU_4096;
+	props->max_vl_num	= 2;
+	props->state		= IB_PORT_DOWN;
+	props->active_mtu	= IB_MTU_256;
+
+	/*
+	 * XXX: Always make it DOWN.
+	 */
+	props->state		= IB_PORT_DOWN;
+
+out:
+	mlx4_free_cmd_mailbox(mdev->dev, mailbox);
+	return err;
 }
 
 int __mlx4_ib_query_port(struct ib_device *ibdev, u8 port,
@@ -713,13 +744,16 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 	for (i = 0; i < ibdev->num_ports; ++i) {
 		if (mlx4_ib_port_link_layer(&ibdev->ib_dev, i + 1) ==
 						IB_LINK_LAYER_ETHERNET) {
-			panic("no RoCE");
+			pr_info("WARNING: port %d is RoCE.\n", i);
 		} else
 				ibdev->counters[i] = -1;
 	}
 
 	spin_lock_init(&ibdev->sm_lock);
 	mutex_init(&ibdev->cap_mask_mutex);
+
+	ibdev->num_ports = 1;
+	ibdev->ib_dev.phys_port_cnt = 1;
 
 	if (ib_register_device(&ibdev->ib_dev))
 		goto err_counter;
