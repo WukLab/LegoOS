@@ -359,7 +359,10 @@ struct mlx4_cmd {
 	void __iomem	       *hcr;
 	struct mutex		hcr_mutex;
 	struct mutex		slave_cmd_mutex;
-	struct semaphore	poll_sem;
+
+	//struct semaphore	poll_sem;
+	spinlock_t		poll_lock;
+
 	struct semaphore	event_sem;
 	int			max_cmds;
 	spinlock_t		context_lock;

@@ -188,7 +188,8 @@ __used static int mlx4_comm_cmd_poll(struct mlx4_dev *dev, u8 cmd, u16 param,
 	}
 
 	/* Write command */
-	down(&priv->cmd.poll_sem);
+	//down(&priv->cmd.poll_sem);
+	spin_lock(&priv->cmd.poll_lock);
 	mlx4_comm_cmd_post(dev, cmd, param);
 
 	end = msecs_to_jiffies(timeout) + jiffies;
@@ -207,7 +208,8 @@ __used static int mlx4_comm_cmd_poll(struct mlx4_dev *dev, u8 cmd, u16 param,
 		}
 	}
 
-	up(&priv->cmd.poll_sem);
+	//up(&priv->cmd.poll_sem);
+	spin_unlock(&priv->cmd.poll_lock);
 	return err;
 }
 
@@ -349,7 +351,8 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 	unsigned long end;
 	u32 stat;
 
-	down(&priv->cmd.poll_sem);
+	//down(&priv->cmd.poll_sem);
+	spin_lock(&priv->cmd.poll_lock);
 
 	err = mlx4_cmd_post(dev, in_param, out_param ? *out_param : 0,
 			    in_modifier, op_modifier, op, CMD_POLL_TOKEN, 0);
@@ -383,7 +386,8 @@ static int mlx4_cmd_poll(struct mlx4_dev *dev, u64 in_param, u64 *out_param,
 			 op, stat);
 
 out:
-	up(&priv->cmd.poll_sem);
+	//up(&priv->cmd.poll_sem);
+	spin_unlock(&priv->cmd.poll_lock);
 	return err;
 }
 
@@ -484,7 +488,8 @@ int mlx4_cmd_init(struct mlx4_dev *dev)
 
 	mutex_init(&priv->cmd.hcr_mutex);
 	mutex_init(&priv->cmd.slave_cmd_mutex);
-	sema_init(&priv->cmd.poll_sem, 1);
+	//sema_init(&priv->cmd.poll_sem, 1);
+	spin_lock_init(&priv->cmd.poll_lock);
 	priv->cmd.use_events = 0;
 	priv->cmd.toggle     = 1;
 
@@ -584,7 +589,8 @@ void mlx4_cmd_use_polling(struct mlx4_dev *dev)
 
 	kfree(priv->cmd.context);
 
-	up(&priv->cmd.poll_sem);
+	//up(&priv->cmd.poll_sem);
+	//spin_unlock(&priv->cmd.poll_lock);
 }
 
 struct mlx4_cmd_mailbox *mlx4_alloc_cmd_mailbox(struct mlx4_dev *dev)
