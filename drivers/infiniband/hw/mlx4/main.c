@@ -752,6 +752,9 @@ static void *mlx4_ib_add(struct mlx4_dev *dev)
 	spin_lock_init(&ibdev->sm_lock);
 	mutex_init(&ibdev->cap_mask_mutex);
 
+	ibdev->num_ports = 1;
+	ibdev->ib_dev.phys_port_cnt = 1;
+
 	if (ib_register_device(&ibdev->ib_dev))
 		goto err_counter;
 

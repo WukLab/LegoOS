@@ -2954,12 +2954,17 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	 */
 retry:
 	ret = ib_query_port(ib_dev, ib_port, &ctx->portinfo);
+	pr_info("%s() after query CPU%d port: %d LID: %d state: %d\n",
+		__func__, smp_processor_id(), ib_port,
+		ctx->portinfo.lid, ctx->portinfo.state);
+
 	if (ret < 0) {
 		pr_err("Fail to query port\n");
 		return NULL;
 	}
 
-	if (!ctx->portinfo.lid || ctx->portinfo.state != 4) {
+	if (!ctx->portinfo.lid ||
+	    ctx->portinfo.state != IB_PORT_ACTIVE) {
 #if 1
 		mdelay(1000);
 		pr_info("%s() CPU%d port: %d LID: %d state: %d\n",

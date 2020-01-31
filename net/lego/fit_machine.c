@@ -39,37 +39,15 @@ struct fit_machine_info *lego_cluster[CONFIG_FIT_NR_NODES];
  * raw numbers.
  */
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	=	"wuklab00",
-	[1]	=	"wuklab01",
+	[0]	=	"node0",
+	[1]	=	"node1",
 };
 
 static struct fit_machine_info WUKLAB_CLUSTER[] = {
-[0]	= {	.hostname =	"wuklab00",	.lid =	2,	},
-[1]	= {	.hostname =	"wuklab01",	.lid =	6,	},
-[2]	= {	.hostname =	"wuklab02",	.lid =	8,	},
-[3]	= {	.hostname =	"wuklab03",	.lid =	9,	},
-[4]	= {	.hostname =	"wuklab04",	.lid =	7,	},
-[5]	= {	.hostname =	"wuklab05",	.lid =	3,	},
-[6]	= {	.hostname =	"wuklab06",	.lid =	5,	},
-[7]	= {	.hostname =	"wuklab07",	.lid =	4,	},
-[8]	= {	.hostname =	"wuklab08",	.lid =	10,	},
-[9]	= {	.hostname =	"wuklab09",	.lid =	12,	},
-[10]	= {	.hostname =	"wuklab10",	.lid =	14,	},
-[11]	= {	.hostname =	"wuklab11",	.lid =	11,	},
-[12]	= {	.hostname =	"wuklab12",	.lid =	26,	},
-[13]	= {	.hostname =	"wuklab13",	.lid =	15,	},
-[14]	= {	.hostname =	"wuklab14",	.lid =	16,	},
-[15]	= {	.hostname =	"wuklab15",	.lid =	17,	},
-[16]	= {	.hostname =	"wuklab16",	.lid =	20,	},
-[17]	= {	.hostname =	"wuklab17",	.lid =	21,	},
-[18]	= {	.hostname =	"wuklab18",	.lid =	19,	},
-[19]	= {	.hostname =	"wuklab19",	.lid =	18,	},
-[20]	= {	.hostname =	"wuklab20",	.lid =	27,	},
-[21]	= {	.hostname =	"wuklab21",	.lid =	28,	},
-[22]	= {	.hostname =	"wuklab22",	.lid =	29,	},
-[23]	= {	.hostname =	"wuklab23",	.lid =	30,	},
-[24]	= {	.hostname =	"wuklab24",	.lid =	31,	},
-[25]	= {	.hostname =	"wuklab25",	.lid =	26,	},
+	[0]	= {	.hostname =	"node0",	.lid =	42,	},
+	[1]	= {	.hostname =	"node1",	.lid =	23,	},
+	[2]	= {	.hostname =	"node2",	.lid =	8,	},
+	[3]	= {	.hostname =	"node3",	.lid =	9,	},
 };
 
 /* Indicate machines that are used by lego */
