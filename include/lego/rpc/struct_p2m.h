@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2020 Wuklab, Purdue University. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -82,7 +82,7 @@ void handle_p2m_pcache_miss(struct p2m_pcache_miss_msg *msg,
 struct p2m_replica_msg {
 	struct common_header	header;
 	struct replica_log	log;
-} __packed;
+} __packed __aligned(8);
 void handle_p2m_replica(void *_msg, struct thpool_buffer *tb);
 
 /*

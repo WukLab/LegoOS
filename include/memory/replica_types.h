@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2020 Wuklab, Purdue University. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ struct replica_log_meta {
 struct replica_log {
 	struct replica_log_meta		meta;
 	char				data[PCACHE_LINE_SIZE];
-} __attribute__((packed));
+} __attribute__((packed)) __aligned(8);
 
 static inline int replica_get_hash_key(unsigned int pid, unsigned int vnode_id)
 {

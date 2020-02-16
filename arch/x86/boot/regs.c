@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2020 Wuklab, Purdue University. All rights reserved.
  *
  * Simple helper function for initializing a register set.
  * Note that this sets EFLAGS_CF in the input register set; this

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2020 Wuklab, Purdue University. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -121,9 +121,11 @@ void panic(const char *fmt, ...)
 	smp_send_stop();
 	pr_emerg("---[ end Kernel panic - not syncing: %s\n", buf);
 
+#if 0
 	/* Print short info on all tasks */
 	if (scheduler_state == SCHED_UP)
 		show_state_filter(0, true);
+#endif
 
 	if (manager_state == MANAGER_UP) {
 		exit_processor_strace(current);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2020 Wuklab, Purdue University. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -235,7 +235,9 @@ void __init pcache_post_init(void)
 	 * This may happen if running on QEMU.
 	 * Not sure about physical machine.
 	 */
+	pr_info("before: memset: %#llx %#llx\n", virt_start_cacheline, pcache_registered_size);
 	memset((void *)virt_start_cacheline, 0, pcache_registered_size);
+	pr_info("After: memset: %#llx %#llx\n", virt_start_cacheline, pcache_registered_size);
 
 	pcache_meta_map = (struct pcache_meta *)(virt_start_cacheline + nr_pages_cacheline * PAGE_SIZE);
 
@@ -343,5 +345,6 @@ int __init pcache_range_register(u64 start, u64 size)
 	pcache_registered_start = start;
 	pcache_registered_size = size;
 
+	pr_info("%s(): [%#llx %#llx] size=%#llx\n", __func__, start, start + size, size);
 	return 0;
 }

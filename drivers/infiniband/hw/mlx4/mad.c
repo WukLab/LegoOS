@@ -529,7 +529,7 @@ void handle_port_mgmt_change_event(struct mlx4_eqe *eqe, struct mlx4_ib_dev *dev
 			u16 lid = be16_to_cpu(eqe->event.port_mgmt_change.params.port_info.mstr_sm_lid);
 			u8 sl = eqe->event.port_mgmt_change.params.port_info.mstr_sm_sl & 0xf;
 
-			pr_info("update sm ah\n");
+			pr_info("%s(): update sm ah. lid=%u sl=%u\n", __func__, lid, sl);
 			update_sm_ah(dev, port, lid, sl);
 		}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2020 Wuklab, Purdue University. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +17,12 @@
 #include <lego/types.h>
 #include <lego/bitops.h>
 
-__attribute__((const, noreturn)) int ____ilog2_NaN(void);
+static inline int ____ilog2_NaN(void)
+{
+	WARN_ON_ONCE(1);
+	for (;;);
+	return 0;
+}
 
 static inline __attribute__((const))
 int __ilog2_u32(u32 n)

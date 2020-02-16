@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 Wuklab, Purdue University. All rights reserved.
+ * Copyright (c) 2016-2020 Wuklab, Purdue University. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -388,7 +388,7 @@ out:
  * @bufsiz: user buffer size
  * return value: nrbytes read on success, -errno on fail
  */
-static long do_readlinkat(int dfd, const char __user *pathname,
+__used static long do_readlinkat(int dfd, const char __user *pathname,
 		char __user *buf, int bufsiz)
 {
 	long ret;
@@ -450,11 +450,19 @@ free:
 SYSCALL_DEFINE3(readlink, const char __user *, path, char __user *, buf,
 		int, bufsiz)
 {
+#ifndef CONFIG_USE_RAMFS
 	long ret;
 	syscall_filename(path);
+
 	syscall_enter("bufsiz %d\n", bufsiz);
 	ret = do_readlinkat(AT_FDCWD, path, buf, bufsiz);
-
 	syscall_exit(ret);
+
 	return ret;
+#else
+	const char kbuf[] = "test.o";
+	if (copy_to_user(buf, kbuf, bufsiz))
+		return -EFAULT;
+	return 0;
+#endif
 }

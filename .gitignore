@@ -36,6 +36,7 @@ build/
 
 !.gitignore
 !.mailmap
+!.clang-format
 
 #
 # These are serial output files from QEMU
