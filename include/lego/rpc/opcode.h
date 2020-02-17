@@ -128,6 +128,11 @@
 
 #define RET_ESIGSEGV		((__u32)(RET_SIGNAL_BASE+SIGSEGV)) /* Segmentation fault*/
 
+// State Management
+#define P2M_STATE_BASE          ((__u32)0x70000000)
+#define P2M_STATE_DUMMY_GET     (P2M_STATE_BASE + 1)
+
+
 static inline unsigned int ERR_TO_LEGO_RET(long err)
 {
 	switch (err) {
