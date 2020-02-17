@@ -22,6 +22,9 @@
 
 #include <asm/numa.h>
 
+// State Management
+#include <memory/state.c>
+
 /* Non-implemented system calls get redirected here. */
 asmlinkage long sys_ni_syscall(void)
 {

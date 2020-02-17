@@ -130,3 +130,6 @@
 613 	common  mq_open			sys_mq_open
 614	common  mq_receive		sys_mq_receive
 615	common  mq_close		sys_mq_close
+
+# State Management
+666 common  dummy_get       sys_dummy_get

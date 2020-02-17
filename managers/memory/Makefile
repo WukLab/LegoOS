@@ -34,3 +34,6 @@ obj-y += ramfs/
 
 # Monitor
 obj-y += monitor/
+
+# State Management
+obj-y += state.o

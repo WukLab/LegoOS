@@ -254,4 +254,7 @@ asmlinkage long sys_mq_open(char* mq_name, unsigned long name_size, unsigned lon
 asmlinkage long sys_mq_receive(char* mq_name, unsigned long name_size, unsigned long* msg_size, char* msg);
 asmlinkage long sys_mq_close(char* mq_name, unsigned long name_size);
 
+// State Management
+asmlinkage long sys_dummy_get(long number);
+
 #endif /* _LEGO_SYSCALLS_H_ */
