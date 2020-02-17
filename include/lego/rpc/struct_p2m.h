@@ -398,6 +398,6 @@ struct p2m_state_struct {
     long number;
 };
 
-void handle_p2m_state_dummy_get(struct )
+void handle_p2m_state_dummy_get(struct p2m_state_struct *payload);
 
 #endif /* _LEGO_RPC_STRUCT_P2M_H */
