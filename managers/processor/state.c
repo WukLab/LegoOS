@@ -2,7 +2,7 @@
 #include <lego/comp_common.h>
 #include <lego/fit_ibapi.h>
 
-#include "processor.h"
+#include <processor/processor.h>
 
 SYSCALL_DEFINE1(dummy_get, long, number)
 {
