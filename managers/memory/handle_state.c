@@ -7,5 +7,5 @@
 void handle_p2m_state_dummy_get(struct p2m_state_struct *payload)
 {
     // Print number from payload
-    printk("handling message: %ld", payload->number)
+    printk("handling message: %ld", payload->number);
 }
