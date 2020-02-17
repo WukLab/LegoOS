@@ -29,7 +29,7 @@ SYSCALL_DEFINE1(dummy_get, long, number)
 
     payload->number = number;
 
-    retlen = ibapi_send_reply_imm(current_pgcache_home_node(), msg, len_msg, &retval, sizeof(retval),false);
+    retlen = ibapi_send_reply_imm(current_memory_home_node(), msg, len_msg, &retval, sizeof(retval),false);
 
     /* check return value */
     if(retlen == -ETIMEDOUT){
