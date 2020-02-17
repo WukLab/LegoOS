@@ -10,6 +10,6 @@
 void handle_p2m_state_dummy_get(struct p2m_state_struct *payload)
 {
     // Print number from payload
-    printk("handling message: %ld", payload->number);
-    pr_info("handling message: %ld\n", payload->number);
+    printk("HEYYY! Handling message for state management: %ld", payload->number);
+//    pr_info("handling message: %ld\n", payload->number);
 }

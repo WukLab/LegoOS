@@ -202,7 +202,7 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 
 //	State Management SYSCALL
 	case P2M_STATE_DUMMY_GET:
-	    handle_p2m_state_dummy_get(msg);
+	    handle_p2m_state_dummy_get(payload);
 	    break;
 
 #ifdef CONFIG_MEM_PAGE_CACHE
