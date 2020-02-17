@@ -1,5 +1,5 @@
 #include <lego/syscalls.h>
-
+#include <lego/comp_common.h>
 #include <lego/fit_ibapi.h>
 
 SYSCALL_DEFINE1(dummy_get, long, number)
