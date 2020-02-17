@@ -26,4 +26,4 @@ obj-y += pcache/
 obj-$(CONFIG_PCACHE_ZEROFILL_NOTIFY_MEMORY) += zerofill_notify.o
 
 # State Management
-obj-y += state.o
+# obj-y += state.o
