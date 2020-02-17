@@ -20,6 +20,7 @@ void handle_p2m_state_dummy_get(struct p2m_state_struct *payload, struct thpool_
 //    pr_info("handling message: %ld\n", payload->number);
 
     ssize_t retval = 6666;
+    void *buf;
     struct p2m_read_reply *retbuf;
     retbuf = thpool_buffer_tx(tb);
     buf = (char *)retbuf;
