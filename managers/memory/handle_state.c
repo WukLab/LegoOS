@@ -13,7 +13,7 @@ struct p2m_state_reply {
     ssize_t		retval;
 };
 
-void handle_p2m_state_dummy_get(struct p2m_state_struct *payload)
+void handle_p2m_state_dummy_get(struct p2m_state_struct *payload, struct thpool_buffer *tb)
 {
     // Print number from payload
     printk("HEYYY! Handling message for state management: %ld", payload->number);
