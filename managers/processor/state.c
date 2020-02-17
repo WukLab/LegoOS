@@ -1,4 +1,4 @@
-#ifdef CONFIG_COMP_PROCESSOR
+//#ifdef CONFIG_COMP_PROCESSOR
 
 #include <lego/syscalls.h>
 #include <lego/comp_common.h>
@@ -43,4 +43,4 @@ SYSCALL_DEFINE1(dummy_get, long, number)
     return retval;
 }
 
-#endif /* _LEGO_PROCESSOR_NODE_H_ */
+//#endif /* _LEGO_PROCESSOR_NODE_H_ */
