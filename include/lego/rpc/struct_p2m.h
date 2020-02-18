@@ -403,13 +403,13 @@ void handle_p2m_state_dummy_get(struct p2m_state_struct *payload, struct thpool_
 
 #define MAX_STATE_LENGTH 1024
 struct p2m_state_save_payload {
-    int name_size
+    int name_size;
     int state_size;
     char name[MAX_FILENAME_LENGTH];
     char state[MAX_STATE_LENGTH];
 };
 struct p2m_state_save_reply{
-    int     retval;
+    int retval;
 };
 void handle_p2m_state_save(struct p2m_state_save_payload * payload, struct thpool_buffer *tb);
 
