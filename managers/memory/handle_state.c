@@ -49,7 +49,7 @@ void handle_p2m_state_load(struct p2m_state_load_payload * payload, struct thpoo
     struct p2m_state_load_reply *retbuf;
     retbuf = thpool_buffer_tx(tb);
     buf = (char *)retbuf;
-    tb_set_tx_size(tb, sizeof(p2m_state_load_reply));
+    tb_set_tx_size(tb, sizeof(struct p2m_state_load_reply));
 
     retbuf->retval = retval;
     strcpy(retbuf->state, "This is not your state but OK");
