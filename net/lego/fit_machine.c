@@ -41,12 +41,13 @@ struct fit_machine_info *lego_cluster[CONFIG_FIT_NR_NODES];
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
 	[0]	=	"node0",
 	[1]	=	"node1",
+	[2]	=	"node2",
 };
 
 static struct fit_machine_info WUKLAB_CLUSTER[] = {
-	[0]	= {	.hostname =	"node0",	.lid =	42,	},
-	[1]	= {	.hostname =	"node1",	.lid =	23,	},
-	[2]	= {	.hostname =	"node2",	.lid =	8,	},
+	[0]	= {	.hostname =	"node0",	.lid =	26,	},
+	[1]	= {	.hostname =	"node1",	.lid =	49,	},
+	[2]	= {	.hostname =	"node2",	.lid =	3,	},
 	[3]	= {	.hostname =	"node3",	.lid =	9,	},
 };
 
