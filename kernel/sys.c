@@ -16,6 +16,7 @@
 #include <lego/sysinfo.h>
 #include <lego/waitpid.h>
 #include <lego/timekeeping.h>
+#include <lego/comp_common.h>
 #include <processor/pcache.h>
 #include <processor/fs.h>
 #include <uapi/sysinfo.h>
@@ -47,6 +48,12 @@ SYSCALL_DEFINE0(getpid)
 	debug_syscall_print();
 	return current->group_leader->pid;
 }
+
+SYSCALL_DEFINE0(get_local_nid)
+{
+	return LEGO_LOCAL_NID;
+}
+
 
 /* Thread ID - the internal kernel "pid" */
 SYSCALL_DEFINE0(gettid)

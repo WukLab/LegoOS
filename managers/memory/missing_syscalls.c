@@ -304,3 +304,12 @@ SYSCALL_DEFINE3(mq_open, char*, name, unsigned long, name_size, unsigned long, m
 	BUG();
 }
 
+/*
+SYSCALL_DEFINE0(get_local_nid)
+{
+	BUG();
+}
+*/
+
+
+

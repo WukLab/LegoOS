@@ -256,3 +256,9 @@ unsigned int csum_partial(const void *buff, int len, unsigned int sum)
 {
 	return add32_with_carry(do_csum(buff, len), sum);
 }
+
+/* wrapper for syscall get_local_nid */
+static inline int get_local_nid(void)
+{
+	return syscall(__NR_get_local_nid);
+}

@@ -254,4 +254,6 @@ asmlinkage long sys_mq_open(char* mq_name, unsigned long name_size, unsigned lon
 asmlinkage long sys_mq_receive(char* mq_name, unsigned long name_size, unsigned long* msg_size, char* msg);
 asmlinkage long sys_mq_close(char* mq_name, unsigned long name_size);
 
+/* to get the local nid in pComponent*/
+asmlinkage long sys_get_local_nid(void);
 #endif /* _LEGO_SYSCALLS_H_ */
