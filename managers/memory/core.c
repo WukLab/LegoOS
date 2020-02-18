@@ -204,6 +204,13 @@ static void thpool_worker_handler(struct thpool_worker *worker,
 	case P2M_STATE_DUMMY_GET:
 	    handle_p2m_state_dummy_get(payload, buffer);
 	    break;
+    case P2M_STATE_SAVE:
+        handle_p2m_state_save(payload, buffer);
+        break;
+    case P2M_STATE_LOAD:
+        handle_p2m_state_load(payload, buffer);
+        break;
+
 
 #ifdef CONFIG_MEM_PAGE_CACHE
 	case P2M_LSEEK:

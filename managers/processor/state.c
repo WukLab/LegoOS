@@ -38,9 +38,96 @@ SYSCALL_DEFINE1(dummy_get, long, number)
     }
 
 //    /* free allocated memory */
-//    kfree(msg);
+//    kfree(state);
 
     return retval;
 }
+
+SYSCALL_DEFINE4(state_save, char*, name, unsigned long, name_size, unsigned long, state_size, const char*, state)
+{
+    ssize_t retval, retlen;
+    u32 len_msg;
+    void* msg;
+    struct common_header* hdr;
+    struct p2m_state_save_payload* payload;
+
+    len_msg = sizeof(*hdr)+sizeof(*payload);
+    msg = kmalloc(len_msg, GFP_KERNEL);
+    if(!msg)
+        return -ENOMEM;
+
+    hdr = (struct common_header *) msg;
+    hdr->opcode = P2M_STATE_SAVE;
+    hdr->src_nid = LEGO_LOCAL_NID;
+    payload = to_payload(msg);
+
+    copy_from_user(payload->name, name, name_size+1);
+    copy_from_user(payload->state, state, state_size+1);
+    payload->state_size = state_size;
+
+    retlen = ibapi_send_reply_imm(current_memory_home_node(), msg, len_msg, &retval, sizeof(retval),false);
+
+    /* check return value */
+    if(retlen == -ETIMEDOUT){
+        kfree(msg);
+        return -1;
+    }
+
+    /* free allocated memory */
+    kfree(msg);
+
+    return retval;
+
+}
+
+SYSCALL_DEFINE4(state_load, char*, name, unsigned long, name_size, unsigned long, state_size, char*, state)
+{
+    struct p2m_state_load_reply retval;
+    ssize_t retlen;
+    u32 len_msg;
+    void *msg;
+    struct common_header* hdr;
+    struct p2m_state_load_payload* payload;
+
+    len_msg = sizeof(*hdr) + sizeof(*payload);
+    msg = kmalloc(len_msg, GFP_KERNEL);
+    if(!msg)
+        return -ENOMEM;
+
+    hdr = (struct common_header *)msg;
+    hdr->opcode = P2M_STATE_LOAD;
+    hdr->src_nid = LEGO_LOCAL_NID;
+    payload = to_payload(msg);
+
+    copy_from_user(payload->name, name, name_size+1);
+
+    retlen = ibapi_send_reply_imm(current_memory_home_node(), msg, len_msg, &retval, sizeof(retval),false);
+
+    /* check return value */
+    if(retlen == -ETIMEDOUT){
+        kfree(msg);
+        return -1;
+    }
+
+
+    /* reply, reply 0 means good */
+    if(retval.retval == 0){
+        /* copy data to user space */
+        if(copy_to_user(state, (void*)retval.state, (unsigned long)strlen(retval.state)+1)){
+            kfree(msg);
+            return -EFAULT;
+        }
+
+
+    }
+
+    /* free allocated memory */
+    kfree(msg);
+
+    return retval.retval;
+
+}
+
+
 
 //#endif /* _LEGO_PROCESSOR_NODE_H_ */
