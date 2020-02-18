@@ -419,8 +419,8 @@ struct p2m_state_load_payload {
 };
 
 struct p2m_state_load_reply {
-    int     retval;
-    char 	state[MAX_STATE_LENGTH];
+    int retval;
+    char state[MAX_STATE_LENGTH];
 };
 void handle_p2m_state_load(struct p2m_state_load_payload * payload, struct thpool_buffer *tb);
 

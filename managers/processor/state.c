@@ -11,7 +11,8 @@ SYSCALL_DEFINE1(dummy_get, long, number)
     pr_info("\n\n\nDummy State Management says:", number, "\n\n\n");
 
 //    TODO: send message to mComponent
-    ssize_t retval, retlen;
+    ssize_t retval;
+    ssize_t retlen;
     u32 len_msg;
     void *msg;
     struct common_header* hdr;
@@ -45,7 +46,8 @@ SYSCALL_DEFINE1(dummy_get, long, number)
 
 SYSCALL_DEFINE4(state_save, char*, name, unsigned long, name_size, unsigned long, state_size, const char*, state)
 {
-    ssize_t retval, retlen;
+    ssize_t retval;
+    ssize_t retlen;
     u32 len_msg;
     void* msg;
     struct common_header* hdr;
