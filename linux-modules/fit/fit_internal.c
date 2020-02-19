@@ -138,28 +138,32 @@ int init_socket_over_ib(struct lego_context *ctx, int port, int rx_depth, int i)
 
 int FIRST_QPN = CONFIG_FIT_FIRST_QPN;
 static int aligned = false;
-static void align_first_qpn(struct ib_pd *pd, struct ib_qp_init_attr *init_attr)
+static int align_first_qpn(struct ib_pd *pd, struct ib_qp_init_attr *init_attr)
 {
 	struct ib_qp *qp;
 
 	if (aligned)
-		return;
+		return 0;
 
 next:
 	qp = ib_create_qp(pd, init_attr);
-	if (IS_ERR_OR_NULL(qp))
-		panic("Fail to create QPs to align first QPN.");
+	if (IS_ERR_OR_NULL(qp)) {
+		WARN_ONCE(1, "Fail to create QPs to align first QPN.");
+		return -1;
+	}
 
 	pr_debug("%s(): created QPN: %d\n", __func__, qp->qp_num);
 
 	if (qp->qp_num == (FIRST_QPN - 1)) {
 		aligned = true;
-		return;
-	} else if (qp->qp_num > (FIRST_QPN - 1))
-		panic("Initial alloc qpn: %d. align qpn: %d",
+		return 0;
+	} else if (qp->qp_num > (FIRST_QPN - 1)) {
+		WARN_ONCE(1, "Initial alloc QPN: %d. (targeted align QPN: %d",
 			qp->qp_num, FIRST_QPN);
-	else
+		return -1;
+	} else
 		goto next;
+	return 0;
 }
 
 struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_device *ib_dev, int mynodeid)
@@ -190,13 +194,24 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 		return NULL;
 	}
 	ctx->channel = NULL;
+
+#ifdef NEW_IB_API
+	ctx->pd = ib_alloc_pd(ib_dev, 0);
+#else
 	ctx->pd = ib_alloc_pd(ib_dev);
+#endif
 	if(!ctx->pd)
 	{
 		printk(KERN_ALERT "Fail to initialize pd / ctx->pd\n");
 		return NULL;
 	}
+
+#ifdef NEW_IB_API
+	ctx->proc = ctx->pd->device->get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
+#else
 	ctx->proc = ib_get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
+#endif
+
 	ctx->send_state = (enum s_state *)kmalloc(num_connections * sizeof(enum s_state), GFP_KERNEL);	
 	ctx->recv_state = (enum r_state *)kmalloc(num_connections * sizeof(enum r_state), GFP_KERNEL);
 
@@ -232,7 +247,16 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	ctx->cq = (struct ib_cq **)kmalloc(NUM_POLLING_THREADS * sizeof(struct ib_cq *), GFP_KERNEL);
 	for(i=0;i<NUM_POLLING_THREADS;i++)
 	{
+#ifdef NEW_IB_API
+		struct ib_cq_init_attr cq_attr = {
+			.cqe = rx_depth * 4 + 1,
+			.comp_vector = 0,
+			.flags = 0,
+		};
+		ctx->cq[i]=ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, &cq_attr);
+#else
 		ctx->cq[i]=ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth*4+1, 0);
+#endif
 		if(!ctx->cq[i])
 		{
 			printk(KERN_ALERT "Fail to create cq at %d/ ctx->cq\n", i);
@@ -287,7 +311,17 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 		ctx->send_state[i] = SS_INIT;
 		ctx->recv_state[i] = RS_INIT;
 
+#ifdef NEW_IB_API
+		struct ib_cq_init_attr cq_attr = {
+			.cqe = rx_depth * 4 + 1,
+			.comp_vector = 0,
+			.flags = 0,
+		};
+		ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, &cq_attr);
+#else
 		ctx->send_cq[i] = ib_create_cq((struct ib_device *)ctx->context, NULL, NULL, NULL, rx_depth+1, 0);
+#endif
+
 		//ctx->send_cq[i] = ctx->send_cq[0];
 		struct ib_qp_attr attr;
 		struct ib_qp_init_attr init_attr = {
@@ -304,7 +338,11 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 			.sq_sig_type = IB_SIGNAL_REQ_WR
 		};
 
-		align_first_qpn(ctx->pd, &init_attr);
+		if (align_first_qpn(ctx->pd, &init_attr)) {
+			pr_err("Fail to align QPNs. Remote will fail to connect.\n");
+			return NULL;
+		}
+
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
 		if(!ctx->qp[i])
 		{
@@ -660,7 +698,6 @@ int connect_sock_qp(struct lego_context *ctx, int connection_id, int port, enum 
 		.ah_attr	= {
 			.dlid		= destlid,
 			.sl		= sl,
-			.src_path_bits	= 0,
 			.port_num	= port
 		}
 	};
@@ -711,12 +748,24 @@ int fit_connect_ctx(struct lego_context *ctx, int connection_id, int port, enum 
 		.rq_psn		= 1,
 		.max_dest_rd_atomic	= 1,
 		.min_rnr_timer	= 12,
+
+#ifdef NEW_IB_API_2
+		.ah_attr	= {
+			.sl		= sl,
+			.port_num	= port,
+			.ib = {
+				.dlid		= destlid,
+				.src_path_bits	= 0,
+			}
+		}
+#else
 		.ah_attr	= {
 			.dlid		= destlid,
 			.sl		= sl,
+			.port_num	= port,
 			.src_path_bits	= 0,
-			.port_num	= port
 		}
+#endif
 	};
 
 	if(ib_modify_qp(ctx->qp[connection_id], &attr, 
@@ -761,7 +810,7 @@ int get_global_qpn(int mynodeid, int remnodeid, int conn)
 	int remote_first_qpn;
 
 	remote_first_qpn = get_node_first_qpn(remnodeid);
-	BUG_ON(!remote_first_qpn);
+	WARN_ON(!remote_first_qpn);
 
 #ifdef CONFIG_SOCKET_O_IB
 	/* +1 for sock_qp */
@@ -927,7 +976,7 @@ inline int fit_find_node_id_by_qpnum(struct lego_context *ctx, uint32_t qp_num)
 
 int fit_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check)
 {
-#if SEPARATE_SEND_POLL_THREAD
+#ifdef SEPARATE_SEND_POLL_THREAD
 	/* 
 	 * using a separate thread to poll send cq
 	 */
@@ -979,7 +1028,104 @@ int fit_internal_poll_sendcq(struct ib_cq *tar_cq, int connection_id, int *check
 #endif
 }
 
-int fit_send_message_with_rdma_write_with_imm_request(struct lego_context *ctx, int connection_id, uint32_t input_mr_rkey, 
+#ifdef NEW_IB_API
+int write_with_imm(struct lego_context *ctx, int connection_id, uint32_t input_mr_rkey, 
+		uintptr_t input_mr_addr, void *addr, int size, int offset, uint32_t imm, enum mode s_mode, 
+		struct imm_message_metadata *header, int userspace_flag)
+{
+	int ret;
+	struct ib_rdma_wr rdma_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
+	struct ib_sge sge[2];
+	uintptr_t temp_addr;
+	uintptr_t temp_header_addr;
+	int poll_status = SEND_REPLY_WAIT;
+	int flag=0;
+
+	memset(&rdma_wr, 0, sizeof(rdma_wr));
+	memset(&sge, 0, sizeof(sge));
+
+	wr = &rdma_wr.wr;
+	wr->sg_list = sge;
+
+	rdma_wr.remote_addr = (u64)(input_mr_addr + offset);
+	rdma_wr.rkey = input_mr_rkey;
+
+	if(s_mode == FIT_SEND_MESSAGE_HEADER_AND_IMM)
+	{
+		wr->wr_id = (uint64_t)ctx->reply_ready_indicators[header->inbox_semaphore];//get the real wait_send_reply_id address from inbox information
+		wr->send_flags = IB_SEND_SIGNALED;
+		wr->num_sge = 2;
+		wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+
+		temp_header_addr = fit_ib_reg_mr_addr(ctx, header, sizeof(struct imm_message_metadata));
+		wr->ex.imm_data = imm;
+		
+		sge[0].addr = temp_header_addr;
+		sge[0].length = sizeof(struct imm_message_metadata);
+		sge[0].lkey = ctx->proc->lkey;
+		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
+		sge[1].addr = temp_addr;
+		sge[1].length = size;
+		sge[1].lkey = ctx->proc->lkey;
+	}
+	else if(s_mode == FIT_SEND_MESSAGE_IMM_ONLY)
+	{
+		wr->wr_id = (uint64_t)&poll_status;
+		wr->send_flags = IB_SEND_SIGNALED;
+
+		wr->num_sge = 1;
+		wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+
+		wr->ex.imm_data = imm;
+		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
+		sge[0].addr = temp_addr;
+		sge[0].length = size;
+		sge[0].lkey = ctx->proc->lkey;
+	}
+	else if(s_mode == FIT_SEND_ACK_IMM_ONLY)
+	{
+		wr->wr_id = (uint64_t)&poll_status;
+		wr->send_flags = IB_SEND_SIGNALED;
+
+		wr->num_sge = 0;
+		wr->opcode = IB_WR_RDMA_WRITE_WITH_IMM;
+
+		wr->ex.imm_data = imm;
+		/*
+		temp_addr = fit_ib_reg_mr_addr(ctx, addr, size);
+		sge[0].addr = temp_addr;
+		sge[0].length = size;
+		sge[0].lkey = ctx->proc->lkey;
+		*/
+	}
+	else
+	{
+		printk(KERN_CRIT "%s: wrong mode %d - testing function\n", __func__, s_mode);
+		return -1;
+	}
+
+	spin_lock(&connection_lock[connection_id]);
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
+	
+	if(!ret)
+	{
+		fit_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
+	}
+	else
+	{
+		printk(KERN_INFO "%s: send fail %d ret %d\n", __func__, connection_id, ret);
+	}
+	spin_unlock(&connection_lock[connection_id]);
+
+	return 0;
+}
+
+#else
+/*
+ * The old version using ib_send_wr.rdma
+ */
+int write_with_imm(struct lego_context *ctx, int connection_id, uint32_t input_mr_rkey, 
 		uintptr_t input_mr_addr, void *addr, int size, int offset, uint32_t imm, enum mode s_mode, 
 		struct imm_message_metadata *header, int userspace_flag)
 {
@@ -1072,6 +1218,7 @@ retry_send_imm_request:
 
 	return 0;
 }
+#endif /* NEW_IB_API */
 
 inline int fit_get_connection_by_atomic_number(struct lego_context *ctx, int target_node, int priority)
 {
@@ -1136,7 +1283,7 @@ int fit_receive_message(struct lego_context *ctx, unsigned int port, void *ret_a
 
 	//Generate descriptor for future reply message
 	descriptor = (struct imm_message_metadata *)kmalloc(sizeof(struct imm_message_metadata), GFP_KERNEL); //kmem_cache_alloc(imm_message_metadata_cache, GFP_KERNEL);
-	BUG_ON(!descriptor);
+	WARN_ON(!descriptor);
 	/*
 	while(!descriptor)
 	{
@@ -1186,7 +1333,7 @@ int fit_reply_message(struct lego_context *ctx, void *addr, int size, uintptr_t 
 	void *real_addr;
 	struct ib_device *ibd = (struct ib_device *)ctx->context;
 
-	fit_send_message_with_rdma_write_with_imm_request(ctx, re_connection_id, tmp->inbox_rkey, 
+	write_with_imm(ctx, re_connection_id, tmp->inbox_rkey, 
 			tmp->inbox_addr, addr, size, 0, tmp->inbox_semaphore | IMM_SEND_REPLY_RECV, 
 			FIT_SEND_MESSAGE_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
 	// XXX kmem_cache_free(imm_message_metadata_cache, tmp);
@@ -1629,10 +1776,10 @@ int waiting_queue_handler(void *in)
 					imm_data = IMM_ACK | offset;
 					//printk(KERN_CRIT "%s sending ack offset %d targetnode %d imm %x\n", __func__, offset, target_node, imm_data);
 #ifdef CONFIG_SOCKET_O_IB					
-					fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * (NUM_PARALLEL_CONNECTION + 1), 
+					write_with_imm(ctx, target_node * (NUM_PARALLEL_CONNECTION + 1), 
 							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
 #else					
-					fit_send_message_with_rdma_write_with_imm_request(ctx, target_node * NUM_PARALLEL_CONNECTION, 
+					write_with_imm(ctx, target_node * NUM_PARALLEL_CONNECTION, 
 							0, 0, 0, 0, 0, offset, FIT_SEND_ACK_IMM_ONLY, NULL, FIT_KERNELSPACE_FLAG);
 #endif					
 					break;
@@ -1697,6 +1844,54 @@ int fit_send_cq_poller(struct lego_context *ctx)
 	return 0;
 }
 
+#ifdef NEW_IB_API
+int fit_send_request(struct lego_context *ctx, int connection_id, enum mode s_mode, struct fit_ibv_mr *input_mr, void *addr, int size, int offset, int userspace_flag)
+{
+	struct ib_rdma_wr rdma_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
+	struct ib_sge sge;
+	int ret;
+	uintptr_t tempaddr;
+	int poll_status = SEND_REPLY_WAIT;
+
+	memset(&rdma_wr, 0, sizeof(rdma_wr));
+	memset(&sge, 0, sizeof(struct ib_sge));
+
+	wr = &rdma_wr.wr;
+
+	wr->wr_id = (uint64_t)&poll_status;
+	wr->opcode = (s_mode == M_WRITE) ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+	wr->send_flags = IB_SEND_SIGNALED;
+
+	rdma_wr.remote_addr = (u64)(input_mr->addr + offset);
+	rdma_wr.rkey = input_mr->rkey;
+
+	if(userspace_flag)
+	{
+		sge.addr = (uintptr_t)addr;
+	}
+	else
+	{
+		tempaddr = fit_ib_reg_mr_addr(ctx, addr, size);
+		sge.addr = tempaddr;
+	}
+	sge.length = size;
+	sge.lkey = ctx->proc->lkey;
+
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
+	if(!ret)
+	{
+		fit_internal_poll_sendcq(ctx->send_cq[connection_id], connection_id, &poll_status);
+	}
+	else
+	{
+		printk(KERN_INFO "%s: send fail %d\n", __func__, connection_id);
+	}
+	return 0;
+}
+#else
 int fit_send_request(struct lego_context *ctx, int connection_id, enum mode s_mode, struct fit_ibv_mr *input_mr, void *addr, int size, int offset, int userspace_flag)
 {
 	struct ib_send_wr wr, *bad_wr = NULL;
@@ -1740,6 +1935,7 @@ int fit_send_request(struct lego_context *ctx, int connection_id, enum mode s_mo
 	}
 	return 0;
 }
+#endif /* NEW_IB_API */
 
 inline int fit_get_inbox_by_addr(struct lego_context *ctx, void *addr)
 {
@@ -1828,7 +2024,7 @@ int fit_send_reply_with_rdma_write_with_imm(struct lego_context *ctx, int target
 	ctx->thread_waiting_for_reply[inbox_id] = get_current();
 	set_current_state(TASK_INTERRUPTIBLE);
 #endif
-	fit_send_message_with_rdma_write_with_imm_request(ctx, connection_id, remote_rkey, 
+	write_with_imm(ctx, connection_id, remote_rkey, 
 			(uintptr_t)remote_addr, addr, size, tar_offset_start, imm_data, 
 			FIT_SEND_MESSAGE_HEADER_AND_IMM, &output_header, FIT_KERNELSPACE_FLAG);
 
@@ -1875,6 +2071,41 @@ int fit_send_reply_with_rdma_write_with_imm(struct lego_context *ctx, int target
 	return wait_send_reply_id;
 }
 
+#ifdef NEW_IB_API
+int fit_send_request_without_polling(struct lego_context *ctx, int connection_id, enum mode s_mode, struct fit_ibv_mr *input_mr, void *addr, int size, int offset, int wr_id)
+{
+	struct ib_rdma_wr rdma_wr;
+	struct ib_send_wr *wr, *bad_wr = NULL;
+	struct ib_sge sge;
+	int ret;
+	uintptr_t tempaddr;
+	
+	memset(&rdma_wr, 0, sizeof(rdma_wr));
+	memset(&sge, 0, sizeof(struct ib_sge));
+
+	wr = &rdma_wr.wr;
+
+	wr->wr_id = wr_id;
+	wr->opcode = (s_mode == M_WRITE) ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
+	wr->sg_list = &sge;
+	wr->num_sge = 1;
+	wr->send_flags = IB_SEND_SIGNALED;
+
+	rdma_wr.remote_addr = (uintptr_t) (input_mr->addr+offset);
+	rdma_wr.rkey = input_mr->rkey;
+
+	tempaddr = fit_ib_reg_mr_addr(ctx, addr, size);
+	sge.addr = tempaddr;
+	sge.length = size;
+	sge.lkey = ctx->proc->lkey;
+	
+	ret = ib_post_send(ctx->qp[connection_id], wr, &bad_wr);
+	if(ret)
+		printk("Error in [%s] ret:%d \n", __func__, ret);
+	
+	return 0;
+}
+#else
 int fit_send_request_without_polling(struct lego_context *ctx, int connection_id, enum mode s_mode, struct fit_ibv_mr *input_mr, void *addr, int size, int offset, int wr_id)
 {
 	struct ib_send_wr wr, *bad_wr = NULL;
@@ -1904,6 +2135,7 @@ int fit_send_request_without_polling(struct lego_context *ctx, int connection_id
 	
 	return 0;
 }
+#endif /* NEW_IB_API */
 
 int fit_send_request_polling_only(struct lego_context *ctx, int connection_id, int polling_num, struct ib_wc *wc)
 {

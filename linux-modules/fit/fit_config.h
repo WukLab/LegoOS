@@ -10,6 +10,10 @@
 #ifndef _LINUX_MODULE_FIT_CONFIG_H_
 #define _LINUX_MODULE_FIT_CONFIG_H_
 
+#define NEW_IB_API
+
+#define NEW_IB_API_2
+
 /* FIT module state */
 #define FIT_MODULE_DOWN			0
 #define FIT_MODULE_UP			1

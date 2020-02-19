@@ -49,7 +49,11 @@ static void ibv_add_one(struct ib_device *device)
 	if (device == NULL)
 		printk(KERN_CRIT "%s device NULL\n", __func__);
 
+#ifdef NEW_IB_API
+	ctx_pd = ib_alloc_pd(device, 0);
+#else
 	ctx_pd = ib_alloc_pd(device);
+#endif
 	if (!ctx_pd) {
 		printk(KERN_ALERT "Couldn't allocate PD\n");
 	}
@@ -207,11 +211,9 @@ int ibapi_establish_conn(int ib_port, int mynodeid)
 	}
 
 	ctx = fit_establish_conn(ibapi_dev, ib_port, mynodeid);
-	
-	if(!ctx)
-	{
+	if(!ctx) {
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
-		return 0;	
+		return -1;	
 	}
 
 	FIT_ctx = ctx;
