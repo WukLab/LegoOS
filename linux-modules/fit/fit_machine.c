@@ -43,12 +43,11 @@ static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
 struct fit_machine_info *lego_cluster[CONFIG_FIT_NR_NODES];
 
 static struct fit_machine_info WUKLAB_CLUSTER[] = {
-[0]	= {	.hostname =	"wuklab00",	.lid =	2,	},
-[1]	= {	.hostname =	"wuklab01",	.lid =	6,	},
-[2]	= {	.hostname =	"wuklab02",	.lid =	8,	},
-[3]	= {	.hostname =	"wuklab03",	.lid =	9,	},
-[4]	= {	.hostname =	"wuklab04",	.lid =	7,	},
-[5]	= {	.hostname =	"wuklab05",	.lid =	3,	},
+[0]	= {	.hostname =	"wuklab00",	.lid =	2,	.first_qpn = CONFIG_FIT_FIRST_QPN, },
+[1]	= {	.hostname =	"wuklab01",	.lid =	6,	.first_qpn = CONFIG_FIT_FIRST_QPN, },
+[2]	= {	.hostname =	"wuklab02",	.lid =	132,	.first_qpn = CONFIG_FIT_FIRST_QPN, },
+[3]	= {	.hostname =	"wuklab03",	.lid =	9,	.first_qpn = CONFIG_FIT_FIRST_QPN, },
+[4]	= {	.hostname =	"wuklab04",	.lid =	7,	.first_qpn = CONFIG_FIT_FIRST_QPN, },
 };
 
 /* Indicate machines that are used by lego */
@@ -66,7 +65,8 @@ unsigned int get_node_global_lid(unsigned int nid)
 
 unsigned int get_node_first_qpn(unsigned int nid)
 {
-	return CONFIG_FIT_FIRST_QPN;
+	BUG_ON(nid >= CONFIG_FIT_NR_NODES);
+	return first_qpn[nid];
 }
 
 /*
@@ -104,7 +104,7 @@ static int assign_fit_machine(unsigned int nid, struct fit_machine_info *machine
 
 	lego_cluster[nid] = machine;
 	global_lid[nid] = lego_cluster[nid]->lid;
-	first_qpn[nid] = get_node_first_qpn(nid);
+	first_qpn[nid] = lego_cluster[nid]->first_qpn;
 
 	return 0;
 }

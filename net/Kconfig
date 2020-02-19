@@ -14,7 +14,7 @@ config FIT
 
 config FIT_FIRST_QPN
 	int "The first QPN"
-	range 80 100
+	range 80 65535
 	default 80
 
 config FIT_MAX_RPC_TIMEOUT_SEC

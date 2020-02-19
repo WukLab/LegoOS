@@ -151,6 +151,8 @@ int mlx4_bitmap_init(struct mlx4_bitmap *bitmap, u32 num, u32 mask,
 
 	bitmap_set(bitmap->table, 0, reserved_bot);
 
+	pr_info("%s(): bitmap nr_bits: %u\n", __func__, bitmap->max);
+
 	return 0;
 }
 

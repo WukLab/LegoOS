@@ -312,6 +312,11 @@ int __mlx4_qp_reserve_range(struct mlx4_dev *dev, int cnt, int align,
 	if (*base == -1)
 		return -ENOMEM;
 
+#if 0
+	pr_info("%s(): dev %p cnt %d align %d base %d\n",
+		__func__, dev, cnt, align, *base);
+#endif
+
 	return 0;
 }
 

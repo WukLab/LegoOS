@@ -10,14 +10,11 @@ cflags += -g
 # It's not good to disable those warnings.
 # Well.
 #
-EXTRA_CFLAGS += -g  -Wno-unused-variable -Wno-declaration-after-statement -Wno-format -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
+EXTRA_CFLAGS += -Wno-unused-variable -Wno-declaration-after-statement -Wno-format -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast \
+		-Wno-error=incompatible-pointer-types
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules
-	@echo -e "\e[00;31m****"
-	@echo "****    WARNING"
-	@echo "****       Compiled with -g option"
-	@echo -e "****\e[00m"
 
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) clean

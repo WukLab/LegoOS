@@ -61,7 +61,7 @@ static void ibv_add_one(struct ib_device *device)
 	return;
 }
 
-static void ibv_remove_one(struct ib_device *device)
+static void ibv_remove_one(struct ib_device *device, void *data)
 {
 	return;
 }
@@ -203,8 +203,6 @@ int ibapi_establish_conn(int ib_port, int mynodeid)
 {
 	struct lego_context *ctx;
 	
-	//printk(KERN_CRIT "Start calling rc_internal to create FIT based on %p\n", ibapi_dev);
-
 	if (!ibapi_dev) {
 		printk(KERN_CRIT "ERROR: %s uninitilized ibapi_dev\n)", __func__);
 		return -1;

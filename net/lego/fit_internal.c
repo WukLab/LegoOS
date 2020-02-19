@@ -30,6 +30,8 @@
 #include <processor/pcache.h>
 #include <memory/thread_pool.h>
 
+#include "../../drivers/infiniband/hw/mlx4/mlx4_ib.h"
+
 #include "fit_internal.h"
 
 #ifdef CONFIG_FIT_DEBUG
@@ -289,36 +291,25 @@ int init_socket_over_ib(struct lego_context *ctx, int port, int rx_depth, int i)
 #endif
 
 int FIRST_QPN = CONFIG_FIT_FIRST_QPN;
-static int qpn_aligned = false;
-
-static void align_first_qpn(struct ib_pd *pd, struct ib_qp_init_attr *init_attr)
+static int align_first_qpn(struct ib_pd *pd)
 {
-	struct ib_qp *qp;
-	int first = true;
+	int base, diff, next_avail;
+	struct mlx4_dev *dev = to_mdev(pd->device)->dev;
 
-	if (qpn_aligned)
-		return;
+	/* QPN base is allocated */
+	mlx4_qp_reserve_range(dev, 1, 1, &base);
 
-next:
-	qp = ib_create_qp(pd, init_attr);
-	if (IS_ERR_OR_NULL(qp))
-		panic("Fail to create QPs to align first QPN.");
+	diff = (FIRST_QPN - 1 - base);
+	mlx4_qp_reserve_range(dev, diff, 1, &base);
 
-	if (first) {
-		pr_debug("To align first QPN, we skipped: #%d", qp->qp_num);
-		first = false;
+	next_avail = base + diff;
+
+	if (next_avail != FIRST_QPN) {
+		pr_err("%s(): ERROR next_avail %d FIRST_QPN %d\n",
+			__func__, next_avail, FIRST_QPN);
+		return -EFAULT;
 	}
-		printk(KERN_CONT " #%d", qp->qp_num);
-
-	if (qp->qp_num == (FIRST_QPN - 1)) {
-		printk(KERN_CONT "\n");
-		qpn_aligned = true;
-		return;
-	} else if (qp->qp_num > (FIRST_QPN - 1))
-		panic("Initial alloc qpn: %d. align qpn: %d",
-			qp->qp_num, FIRST_QPN);
-	else
-		goto next;
+	return 0;
 }
 
 struct lego_context *fit_init_ctx(ppc *ctx, int size, int rx_depth, int port,
@@ -342,6 +333,8 @@ struct lego_context *fit_init_ctx(ppc *ctx, int size, int rx_depth, int port,
 		printk(KERN_ALERT "Fail to initialize pd / ctx->pd\n");
 		return NULL;
 	}
+
+	align_first_qpn(ctx->pd);
 
 	ctx->proc = ib_get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
 	if (IS_ERR_OR_NULL(ctx->proc)) {
@@ -467,8 +460,6 @@ struct lego_context *fit_init_ctx(ppc *ctx, int size, int rx_depth, int port,
                         .qp_type = IB_QPT_RC,
                         .sq_sig_type = IB_SIGNAL_REQ_WR
                 };
-
-		align_first_qpn(ctx->pd, &init_attr);
 
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
 		if (IS_ERR_OR_NULL(ctx->qp[i])) {
@@ -1875,8 +1866,10 @@ static int fit_poll_recv_cq(void *_info)
 
 		for (i = 0; i < ne; i++) {
 			if (unlikely(wc[i].status != IB_WC_SUCCESS)) {
+#if 0
 				fit_err("wc.status: %s, wr_id %d",
 					ib_wc_status_msg(wc[i].status), wc[i].wr_id);
+#endif
 				continue;
 			}
 

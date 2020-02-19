@@ -23,7 +23,9 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 #include <linux/kernel.h>
+#include <linux/dma-direct.h>
 #include <rdma/ib_verbs.h>
+#include <linux/mlx4/device.h>
 
 #include <asm/asm.h>
 #include "fit_internal.h"
@@ -136,33 +138,48 @@ int init_socket_over_ib(struct lego_context *ctx, int port, int rx_depth, int i)
 }
 #endif
 
+struct mlx4_ib_dev {                                                              
+	struct ib_device        ib_dev;    
+	struct mlx4_dev        *dev;
+};
+
+static inline struct mlx4_ib_dev *to_mdev(struct ib_device *ibdev)           
+{                                                
+	return container_of(ibdev, struct mlx4_ib_dev, ib_dev);
+}
+
 int FIRST_QPN = CONFIG_FIT_FIRST_QPN;
-static int aligned = false;
-static int align_first_qpn(struct ib_pd *pd, struct ib_qp_init_attr *init_attr)
+static int align_first_qpn(struct ib_device *ib_dev)
 {
-	struct ib_qp *qp;
+	struct mlx4_dev *dev;
+	int base, stop_qpn, ret;
 
-	if (aligned)
-		return 0;
+	dev = to_mdev(ib_dev)->dev;
 
-next:
-	qp = ib_create_qp(pd, init_attr);
-	if (IS_ERR_OR_NULL(qp)) {
-		WARN_ONCE(1, "Fail to create QPs to align first QPN.");
-		return -1;
+	/*
+	 * If first_qpn is 100, we should
+	 * stop when the returned base is 99;
+	 */
+	stop_qpn = FIRST_QPN - 1;
+	while (1) {
+		ret = mlx4_qp_reserve_range(dev, 1, 1, &base, 0, 0);
+		if (ret)
+			return ret;
+
+		if (base == stop_qpn)
+			break;
+
+		if (unlikely(base >= FIRST_QPN)) {
+			pr_err("%s(): ERROR: This platform's initial QPN (%d) is already "
+			       "larger than our targeted first_qpn. We cannot align QPN. "
+			       "Please enlarge CONFIG_FIT_FIRST_QPN (%d) at all nodes\n",
+				__func__, base, CONFIG_FIT_FIRST_QPN);
+			return -ENOMEM;
+		}
 	}
 
-	pr_debug("%s(): created QPN: %d\n", __func__, qp->qp_num);
-
-	if (qp->qp_num == (FIRST_QPN - 1)) {
-		aligned = true;
-		return 0;
-	} else if (qp->qp_num > (FIRST_QPN - 1)) {
-		WARN_ONCE(1, "Initial alloc QPN: %d. (targeted align QPN: %d",
-			qp->qp_num, FIRST_QPN);
-		return -1;
-	} else
-		goto next;
+	pr_crit("%s(): We havea aligned QPN. Next QPN is: %d\n",
+		__func__, base + 1);
 	return 0;
 }
 
@@ -207,7 +224,8 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 	}
 
 #ifdef NEW_IB_API
-	ctx->proc = ctx->pd->device->get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
+	ctx->proc = ctx->pd->device->ops.get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
+	//ctx->proc = ctx->pd->device->get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
 #else
 	ctx->proc = ib_get_dma_mr(ctx->pd, IB_ACCESS_LOCAL_WRITE | IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ);
 #endif
@@ -338,17 +356,14 @@ struct lego_context *fit_init_ctx(int size, int rx_depth, int port, struct ib_de
 			.sq_sig_type = IB_SIGNAL_REQ_WR
 		};
 
-		if (align_first_qpn(ctx->pd, &init_attr)) {
-			pr_err("Fail to align QPNs. Remote will fail to connect.\n");
-			return NULL;
-		}
-
 		ctx->qp[i] = ib_create_qp(ctx->pd, &init_attr);
-		if(!ctx->qp[i])
-		{
+		if(!ctx->qp[i]) {
 			printk(KERN_ALERT "Fail to create qp[%d]\n", i);
 			return NULL;
 		}
+		pr_info("%s(): connection %d QPN %d\n",
+			__func__, i, ctx->qp[i]->qp_num);
+
 		ib_query_qp(ctx->qp[i], &attr, IB_QP_CAP, &init_attr);
 		if(init_attr.cap.max_inline_data >= size)
 		{
@@ -2334,6 +2349,11 @@ struct lego_context *fit_establish_conn(struct ib_device *ib_dev, int ib_port, i
 	int num_connected_nodes = 0;
 	num_recvd_rdma_ring_mrs = 0;
 
+	if (align_first_qpn(ib_dev)) {
+		pr_err("Fail to align first QPN\n");
+		return NULL;
+	}
+
         temp_ctx_number = atomic_inc_return(&Connected_FIT_Num);
         if(temp_ctx_number>=MAX_FIT_NUM)
         {
@@ -2348,10 +2368,9 @@ struct lego_context *fit_establish_conn(struct ib_device *ib_dev, int ib_port, i
 	print_gloabl_lid();
 
 	ctx = fit_init_interface(ib_port, ib_dev, mynodeid);
-	if(!ctx)
-	{
+	if(!ctx) {
 		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
-		return 0;	
+		return NULL;	
 	}
         
         Connected_Ctx[temp_ctx_number-1] = ctx;
