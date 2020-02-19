@@ -14,7 +14,8 @@ EXTRA_CFLAGS += -Wno-unused-variable -Wno-declaration-after-statement -Wno-forma
 		-Wno-error=incompatible-pointer-types
 
 all:
-	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules
+	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules  2>compile_err.log
 
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) clean
+	rm compile_err.log
