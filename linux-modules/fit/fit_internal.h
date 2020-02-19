@@ -34,26 +34,34 @@
 //#define SEPARATE_SEND_POLL_THREAD
 
 #ifdef CONFIG_SOCKET_O_IB
-struct sock_recved_msg_metadata
-{       
-        uint32_t        source_node_id;
-	uint32_t	offset;
-	uint32_t	size;
-	uint32_t	port;
+struct sock_recved_msg_metadata {
+	uint32_t source_node_id;
+	uint32_t offset;
+	uint32_t size;
+	uint32_t port;
 	struct list_head list;
 };
 #endif
 
 inline void fit_free_recv_buf(void *input_buf);
 
-struct lego_context *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid);
+struct lego_context *fit_establish_conn(struct ib_device *ib_dev, int ib_port,
+					int mynodeid);
 int fit_cleanup_module(void);
 
 //The below functions in ibapi are required to modify based on these four
 //int fit_query_port(struct lego_context *ctx, int target_node, int desigend_port, int requery_flag);
-int fit_send_reply_with_rdma_write_with_imm(struct lego_context *ctx, int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int userspace_flag, int if_use_ret_phys_addr);
-int fit_reply_message(struct lego_context *ctx, void *addr, int size, uintptr_t descriptor, int userspace_flag);
-int fit_receive_message(struct lego_context *ctx, unsigned int port, void *ret_addr, int receive_size, uintptr_t *reply_descriptor, int userspace_flag);
+int fit_send_reply_with_rdma_write_with_imm(struct lego_context *ctx,
+					    int target_node, void *addr,
+					    int size, void *ret_addr,
+					    int max_ret_size,
+					    int userspace_flag,
+					    int if_use_ret_phys_addr);
+int fit_reply_message(struct lego_context *ctx, void *addr, int size,
+		      uintptr_t descriptor, int userspace_flag);
+int fit_receive_message(struct lego_context *ctx, unsigned int port,
+			void *ret_addr, int receive_size,
+			uintptr_t *reply_descriptor, int userspace_flag);
 
 int fit_internal_init(void);
 int fit_internal_cleanup(void);
@@ -68,6 +76,10 @@ void check_current_first_qpn(unsigned int qpn);
 extern unsigned int global_lid[];
 extern unsigned int first_qpn[];
 
-int sock_send_message(struct lego_context *ctx, int targe_node, int port, int if_internal_port, void *buf, int size, unsigned long timeout_sec, int if_userspace);
-int sock_receive_message(struct lego_context *ctx, int *target_node, int port, void *ret_addr, int receive_size, int if_userspace, int sock_type);
+int sock_send_message(struct lego_context *ctx, int targe_node, int port,
+		      int if_internal_port, void *buf, int size,
+		      unsigned long timeout_sec, int if_userspace);
+int sock_receive_message(struct lego_context *ctx, int *target_node, int port,
+			 void *ret_addr, int receive_size, int if_userspace,
+			 int sock_type);
 #endif

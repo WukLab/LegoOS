@@ -25,9 +25,11 @@ MODULE_AUTHOR("yiying");
 
 //#define DEBUG_IBV
 #ifdef TEST_PRINTK
-#define test_printk(x...)	pr_crit(x)
+#define test_printk(x...) pr_crit(x)
 #else
-#define test_printk(x...)	do {} while (0)
+#define test_printk(x...)                                                      \
+	do {                                                                   \
+	} while (0)
 #endif
 
 #define SRCADDR INADDR_ANY
@@ -42,9 +44,10 @@ struct ib_pd *ctx_pd;
 
 static void ibv_add_one(struct ib_device *device)
 {
-	FIT_ctx = (struct lego_context *)kmalloc(sizeof(struct lego_context), GFP_KERNEL);
+	FIT_ctx = (struct lego_context *)kmalloc(sizeof(struct lego_context),
+						 GFP_KERNEL);
 	ibapi_dev = device;
-	
+
 	printk(KERN_CRIT "%s\n", __func__);
 	if (device == NULL)
 		printk(KERN_CRIT "%s device NULL\n", __func__);
@@ -66,12 +69,17 @@ static void ibv_remove_one(struct ib_device *device, void *data)
 	return;
 }
 
-inline int ibapi_send_reply_imm(int target_node, void *addr, int size, void *ret_addr, int max_ret_size, int if_use_ret_phys_addr)
+inline int ibapi_send_reply_imm(int target_node, void *addr, int size,
+				void *ret_addr, int max_ret_size,
+				int if_use_ret_phys_addr)
 {
 	struct lego_context *ctx = FIT_ctx;
 	int ret;
 	//printk("Calling ibapi_send_reply_imm\n");
-	ret = fit_send_reply_with_rdma_write_with_imm(ctx, target_node, addr, size, ret_addr, max_ret_size, 0, if_use_ret_phys_addr);
+	ret = fit_send_reply_with_rdma_write_with_imm(ctx, target_node, addr,
+						      size, ret_addr,
+						      max_ret_size, 0,
+						      if_use_ret_phys_addr);
 	return ret;
 }
 EXPORT_SYMBOL(ibapi_send_reply_imm);
@@ -96,11 +104,13 @@ int ibapi_query_port(int target_node, int designed_port, int requery_flag)
 }
 #endif
 
-inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr, int receive_size, uintptr_t *descriptor)
+inline int ibapi_receive_message(unsigned int designed_port, void *ret_addr,
+				 int receive_size, uintptr_t *descriptor)
 {
 	struct lego_context *ctx = FIT_ctx;
 	//printk("Calling ibapi_receive_message\n");
-	return fit_receive_message(ctx, designed_port, ret_addr, receive_size, descriptor, 0);
+	return fit_receive_message(ctx, designed_port, ret_addr, receive_size,
+				   descriptor, 0);
 }
 EXPORT_SYMBOL(ibapi_receive_message);
 
@@ -180,9 +190,10 @@ int ibapi_reg_send_reply_rdma_imm_handler(int (*input_funptr)(int sender_id, voi
 
 int ibapi_num_connected_nodes(void)
 {
-	if(!FIT_ctx)
-	{	
-		printk(KERN_CRIT "%s: using FIT ctx directly since ctx is NULL\n", __func__);
+	if (!FIT_ctx) {
+		printk(KERN_CRIT
+		       "%s: using FIT ctx directly since ctx is NULL\n",
+		       __func__);
 		return atomic_read(&FIT_ctx->num_alive_nodes);
 	}
 	return atomic_read(&FIT_ctx->num_alive_nodes);
@@ -191,8 +202,7 @@ int ibapi_num_connected_nodes(void)
 int ibapi_get_node_id(void)
 {
 	struct lego_context *ctx;
-	if(FIT_ctx)
-	{
+	if (FIT_ctx) {
 		ctx = FIT_ctx;
 		return ctx->node_id;
 	}
@@ -202,30 +212,32 @@ int ibapi_get_node_id(void)
 int ibapi_establish_conn(int ib_port, int mynodeid)
 {
 	struct lego_context *ctx;
-	
+
 	if (!ibapi_dev) {
-		printk(KERN_CRIT "ERROR: %s uninitilized ibapi_dev\n)", __func__);
+		printk(KERN_CRIT "ERROR: %s uninitilized ibapi_dev\n)",
+		       __func__);
 		return -1;
 	}
 
 	ctx = fit_establish_conn(ibapi_dev, ib_port, mynodeid);
-	if(!ctx) {
-		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n", __func__, (void *)ctx);
-		return -1;	
+	if (!ctx) {
+		printk(KERN_ALERT "%s: ctx %p fail to init_interface \n",
+		       __func__, (void *)ctx);
+		return -1;
 	}
 
 	FIT_ctx = ctx;
 
-	printk(KERN_CRIT "FIT layer done with all initialization on node %d. Ready to go!\n", ctx->node_id);
+	printk(KERN_CRIT
+	       "FIT layer done with all initialization on node %d. Ready to go!\n",
+	       ctx->node_id);
 
 	return ctx->node_id;
 }
 
-static struct ib_client ibv_client = {
-	.name   = "ibv_server",
-	.add    = ibv_add_one,
-	.remove = ibv_remove_one
-};
+static struct ib_client ibv_client = { .name = "ibv_server",
+				       .add = ibv_add_one,
+				       .remove = ibv_remove_one };
 
 //#define FIT_TESTING
 static void lego_ib_test(void)
@@ -240,7 +252,8 @@ static void lego_ib_test(void)
 			ret = ibapi_receive_message(0, buf, 4096, &desc);
 			pr_info("received message ret %d msg [%s]\n", ret, buf);
 			if (ret == SEND_REPLY_SIZE_TOO_BIG) {
-				printk(KERN_CRIT "received msg wrong size %d\n", ret);
+				printk(KERN_CRIT "received msg wrong size %d\n",
+				       ret);
 				return;
 			}
 			retb[0] = '1';

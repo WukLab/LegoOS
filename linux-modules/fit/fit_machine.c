@@ -34,9 +34,9 @@
  * lead to an early panic.
  */
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
-	[0]	=	"wuklab00",
-	[1]	=	"wuklab01",
-	[2]	=	"wuklab02",
+	[0] = "wuklab00",
+	[1] = "wuklab01",
+	[2] = "wuklab02",
 };
 
 /* Built based on node id */
@@ -94,7 +94,8 @@ void check_current_first_qpn(unsigned int qpn)
  * Fill the lego_cluster and global_lid array based on nid.
  * Return 0 on success, return 1 if duplicates
  */
-static int assign_fit_machine(unsigned int nid, struct fit_machine_info *machine)
+static int assign_fit_machine(unsigned int nid,
+			      struct fit_machine_info *machine)
 {
 	unsigned int machine_index;
 
@@ -150,8 +151,8 @@ void init_global_lid_qpn(void)
 
 		machine = find_fit_machine(hostname);
 		if (!machine) {
-			pr_info("    Wrong hostname %s on node %d\n",
-				hostname, nid);
+			pr_info("    Wrong hostname %s on node %d\n", hostname,
+				nid);
 			bug = true;
 			continue;
 		}
@@ -177,13 +178,13 @@ void print_gloabl_lid(void)
 
 	pr_info("***  FIT_LOCAL_ID:            %d\n", CONFIG_FIT_LOCAL_ID);
 	pr_info("***  FIT_FIRST_QPN:           %d\n", CONFIG_FIT_FIRST_QPN);
-	pr_info("***  FIT_NR_QPS_PER_PAIR:     %d\n", CONFIG_FIT_NR_QPS_PER_PAIR);
+	pr_info("***  FIT_NR_QPS_PER_PAIR:     %d\n",
+		CONFIG_FIT_NR_QPS_PER_PAIR);
 	pr_info("***\n");
 	pr_info("***    NodeID    Hostname    LID    QPN\n");
 	for (nid = 0; nid < CONFIG_FIT_NR_NODES; nid++) {
-		pr_info("***    %6d    %s    %3d    %3d",
-			nid, lego_cluster[nid]->hostname,
-			get_node_global_lid(nid),
+		pr_info("***    %6d    %s    %3d    %3d", nid,
+			lego_cluster[nid]->hostname, get_node_global_lid(nid),
 			get_node_first_qpn(nid));
 
 		if (nid == CONFIG_FIT_LOCAL_ID)

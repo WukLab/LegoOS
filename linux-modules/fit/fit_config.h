@@ -15,20 +15,20 @@
 #define NEW_IB_API_2
 
 /* FIT module state */
-#define FIT_MODULE_DOWN			0
-#define FIT_MODULE_UP			1
+#define FIT_MODULE_DOWN 0
+#define FIT_MODULE_UP 1
 
 /* Lego cluster config */
-#define CONFIG_FIT_LOCAL_ID		2
-#define CONFIG_FIT_NR_NODES		3
-#define MAX_NODE			CONFIG_FIT_NR_NODES
+#define CONFIG_FIT_LOCAL_ID 2
+#define CONFIG_FIT_NR_NODES 3
+#define MAX_NODE CONFIG_FIT_NR_NODES
 
 /*
  * These configruations must match the numbers in P and M
  * Otherwise we will fail to connect.
  */
-#define CONFIG_FIT_FIRST_QPN		(1000)
-#define CONFIG_FIT_NR_QPS_PER_PAIR	(12)
+#define CONFIG_FIT_FIRST_QPN (1000)
+#define CONFIG_FIT_NR_QPS_PER_PAIR (12)
 
 //#define CONFIG_SOCKET_O_IB
 
