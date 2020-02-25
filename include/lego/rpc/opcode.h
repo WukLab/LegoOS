@@ -130,7 +130,8 @@
 
 // State Management
 #define P2M_STATE_BASE          ((__u32)0x70000000)
-#define P2M_STATE_DUMMY_GET     (P2M_STATE_BASE + 1)
+//#define P2M_STATE_DUMMY_GET     (P2M_STATE_BASE + 1)
+#define P2M_STATE_DUMMY_GET     (P2M_STATE_BASE + (__u32)__NR_dummy_get)
 
 
 static inline unsigned int ERR_TO_LEGO_RET(long err)
