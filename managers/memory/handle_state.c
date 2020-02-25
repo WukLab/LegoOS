@@ -6,6 +6,7 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
+
 #include <lego/kernel.h>
 #include <lego/comp_common.h>
 #include <lego/printk.h>
@@ -77,21 +78,23 @@ void handle_p2m_state_save(struct p2m_state_save_payload * payload, struct thpoo
 
 
     // kmalloc saved state
-    state = kmalloc(payload->state_size, GFP_KERNEL);
+    char * state = kmalloc(payload->state_size, GFP_KERNEL);
     if (!state){
         printk("[Error] Failed to allocate memory for state data!\n");
         return -ENOMEN;
     }
-    name = kmalloc(payload->name_size, GFP_KERNEL);
+    memcpy(state, payload->state, payload->state_size);
+
+    char * name = kmalloc(payload->name_size, GFP_KERNEL);
     if (!name){
         printk("[Error] Failed to allocate memory for state name!\n");
         return -ENOMEN;
     }
-    memcpy(state, payload->state, payload->state_size);
     memcpy(name, payload->name, payload->name_size);
+
     entry->name = name;
-    entry->data->addr = state;
-    entry->data->size = payload->state_size;
+    entry->data.addr = state;
+    entry->data.size = payload->state_size;
 
     hash_add(*state_md, &state_md->node, state_md->name);
 
@@ -112,6 +115,16 @@ void handle_p2m_state_load(struct p2m_state_load_payload * payload, struct thpoo
 {
     printk("[Function] state_load\n");
 
+    if (!state_md) {
+        printk("[Error] state_md doesn't exist. Nothing to load.\n");
+    }
+
+    char * name = kmalloc(payload->name_size, GFP_KERNEL);
+    if (!name){
+        printk("[Error] Failed to allocate memory for state name!\n");
+        return -ENOMEN;
+    }
+    memcpy(name, payload->name, payload->name_size);
 
     // construct reply
     ssize_t retval = 0;
@@ -121,5 +134,18 @@ void handle_p2m_state_load(struct p2m_state_load_payload * payload, struct thpoo
 
     retbuf->retval = retval;
     strcpy(retbuf->state, "Reply Placeholder");
+
+    // loop over state_md
+    struct md_entry * current;
+//    struct md_entry * tmp;
+
+    hash_for_each_possible(*state_md, current, node, name){
+        printk("[Log] data=%s\n", current->name);
+        if (!strcmp(current->name, name)){
+            printk("[Log] Found a matching state\n");
+            memcpy(retbuf->state, current->data.addr, current->data.size);
+            break;
+        }
+    }
 
 }
