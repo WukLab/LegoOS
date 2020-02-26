@@ -1,5 +1,0 @@
-
-#ifndef _LEGO_MEMORY_STATE_H
-#define _LEGO_MEMORY_STATE_H
-
-#endif //_LEGO_MEMORY_STATE_H
