@@ -1,17 +1,18 @@
-//
-// Created by Yuxuan Liu on 2/16/20.
-//
 #include <lego/kernel.h>
 #include <lego/comp_common.h>
 #include <lego/printk.h>
 
 #include <memory/thread_pool.h>
 
-//TODO: handle_p2m_state_dummy_get
+
 struct p2m_state_reply {
     ssize_t		retval;
 };
 
+//TODO: handle_p2m_state_dummy_get, add comment later
+/*
+ * simple explanation of the function
+ */
 void handle_p2m_state_dummy_get(struct p2m_state_struct *payload, struct thpool_buffer *tb)
 {
     // Print number from payload
