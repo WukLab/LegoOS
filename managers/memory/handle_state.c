@@ -45,12 +45,13 @@ unsigned long hash_func(const char * key, const unsigned int table_size)
     unsigned int h = 0;
     unsigned int o = 31415;
     const unsigned int t = 27183;
+    char * key_copy = key;
     while (*key)
     {
         h = (o * h + *key++) % table_size;
         o = o * t % (table_size - 1);
     }
-    printk ("[Success] hashing {%s} to %d", key, h);
+    printk ("[Success] hashing {%s} to %d\n", key_copy, h);
     return h;
 }
 
@@ -80,7 +81,7 @@ void handle_p2m_state_save(struct p2m_state_save_payload * payload, struct thpoo
     retval = 0;
 
     if (!state_md) {
-        printk("[Warning] state_md doesn't exist. Attempt to initialize.\n");
+        printk("[Warning] state_md doesn't exist. Initializing.\n");
         state_md = kmalloc(STATE_MD_SIZE * sizeof(struct hlist_head), GFP_KERNEL);
         if (!state_md){
             printk("[Error] Failed to create state metadata!\n");
@@ -159,26 +160,26 @@ void handle_p2m_state_load(struct p2m_state_load_payload * payload, struct thpoo
     strcpy(retbuf->state, "Reply Placeholder");
 
     if (!state_md) {
-        printk("[Error] state_md doesn't exist. Nothing to load.\n");
+        printk("[Error] state_md doesn't exist. Stop.\n");
         retval = -EINVAL;
         return;
     }
 
-    char * name = kmalloc(payload->name_size, GFP_KERNEL);
-    if (!name){
-        printk("[Error] Failed to allocate memory for state name!\n");
-        retval = -ENOMEM;
-        return;
-    }
-    memcpy(name, payload->name, payload->name_size);
+//    char * name = kmalloc(payload->name_size, GFP_KERNEL);
+//    if (!name){
+//        printk("[Error] Failed to allocate memory for state name!\n");
+//        retval = -ENOMEM;
+//        return;
+//    }
+//    memcpy(name, payload->name, payload->name_size);
 
     // loop over state_md
     struct md_entry * curr;
 //    struct md_entry * tmp;
 
-    hlist_for_each_entry(curr, &state_md[hash_func(name, STATE_MD_SIZE)], node) {
+    hlist_for_each_entry(curr, &state_md[hash_func(payload->name, STATE_MD_SIZE)], node) {
         printk("[Log] data=%s\n", curr->name);
-        if (!strcmp(curr->name, name)){
+        if (!strcmp(curr->name, payload->name)){
             printk("[Log] Found a matching state\n");
             memcpy(retbuf->state, curr->data.addr, curr->data.size);
             break;
