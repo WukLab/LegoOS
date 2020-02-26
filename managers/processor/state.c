@@ -74,7 +74,8 @@ SYSCALL_DEFINE4(state_save, char*, name, unsigned long, name_size, unsigned long
 
     copy_from_user(payload->name, name, name_size+1);
     copy_from_user(payload->state, state, state_size+1);
-    payload->state_size = state_size;
+    payload->name_size = name_size+1;
+    payload->state_size = state_size+1;
 
     retlen = ibapi_send_reply_imm(current_memory_home_node(), msg, len_msg, &retval, sizeof(retval),false);
 
@@ -111,6 +112,7 @@ SYSCALL_DEFINE4(state_load, char*, name, unsigned long, name_size, unsigned long
     payload = to_payload(msg);
 
     copy_from_user(payload->name, name, name_size+1);
+    payload->name_size = name_size+1;
 
     retlen = ibapi_send_reply_imm(current_memory_home_node(), msg, len_msg, &retval, sizeof(retval),false);
 

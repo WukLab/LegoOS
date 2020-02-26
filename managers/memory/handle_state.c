@@ -50,6 +50,7 @@ unsigned long hash_func(const char * key, const unsigned int table_size)
         h = (o * h + *key++) % table_size;
         o = o * t % (table_size - 1);
     }
+    printk ("[Success] hashing {%s} to %d", key, h);
     return h;
 }
 
@@ -110,7 +111,7 @@ void handle_p2m_state_save(struct p2m_state_save_payload * payload, struct thpoo
     }
 
     memcpy(state, payload->state, payload->state_size);
-    printk("[Success] state initialized.\n");
+    printk("[Success] state initialized. {%s}\n", state);
 
     char * name = kmalloc(payload->name_size, GFP_KERNEL);
     if (!name){
@@ -120,14 +121,13 @@ void handle_p2m_state_save(struct p2m_state_save_payload * payload, struct thpoo
     }
     memcpy(name, payload->name, payload->name_size);
 
-    printk("[Success] name initialized.\n");
+    printk("[Success] name initialized. {%s}\n", name);
 
     entry->name = name;
     entry->data.addr = state;
     entry->data.size = payload->state_size;
 
-//    hash_add(state_md, &(state_md->node), state_md->name);
-    hlist_add_head(&(entry->node), &state_md[hash_func(entry->name, STATE_MD_SIZE)]);
+    hlist_add_head(&(entry->node), &state_md[hash_func(name, STATE_MD_SIZE)]);
     goto out;
 
 free_state:
