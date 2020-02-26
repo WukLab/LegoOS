@@ -167,6 +167,22 @@ static int gpm_handler(void *unused)
 		if (unlikely(retlen >= MAX_RXBUF_SIZE))
 			panic("retlen: %d,maxlen: %lu", retlen, MAX_RXBUF_SIZE);
 
+		//GIAOGIAO
+
+		uintptr_t desc = info->desc;
+		void *payload;
+		struct common_header *hdr;
+
+		hdr = to_common_header(info->msg);
+		payload = to_payload(info->msg);
+
+
+		if (hdr->src_nid == 0 || hdr->src_nid == 1) {
+			panic("~~~~~~~~~~~~~ %d LOVE COCO~~~~~~~~~~\n", hdr->src_nid);
+		}
+
+		//GIAOGIAO
+
 		gm_dispatcher(info);
 	}
 	return 0;
