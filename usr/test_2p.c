@@ -6,7 +6,7 @@
 #include <linux/unistd.h>
 #include "includeme.h"
 
-
+#include <lego/rpc/struct_common.h>
 #include <lego/fit_ibapi.h>
 
 #define TEST_MSG_LEN 20
@@ -20,7 +20,7 @@ int main(void)
 	//SENDER
 	if (my_nid == 0) {
 
-		struct p2m_test_msg *msg;
+		void *msg;
 
 		msg = mallaoc(sizeof(struct common_header) + TEST_MSG_LEN);
 
@@ -31,7 +31,7 @@ int main(void)
 		hdr->src_nid = my_nid;
 
 		void *payload;
-		payload = to_payload(info->msg);
+		payload = to_payload(msg);
 		strcpy(payload, "HELLO FROM NODE 0\n");
 
 
