@@ -100,6 +100,7 @@ void __init kick_off_user(void)
 {
 	pid_t pid;
 
+	pr_info("START TO KICK OFF USER!\n");
 	/*
 	 * Must use kernel_thread instead of global_kthread_run
 	 * because that one will call do_exit inside. So do_execve
@@ -165,6 +166,7 @@ void __init processor_manager_init(void)
 
 	// GIAO
 	msg_handler_init();
+	pr_info("MSG_HANDLER_INIT finished, come back to processor_manager_init\n");
 	// GIAO
 
 	/* Create checkpointing restore thread */
