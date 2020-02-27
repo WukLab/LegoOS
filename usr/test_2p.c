@@ -22,7 +22,7 @@ int main(void)
 
 		void *msg;
 
-		msg = mallaoc(sizeof(struct common_header) + TEST_MSG_LEN);
+		msg = malloc(sizeof(struct common_header) + TEST_MSG_LEN);
 
 		struct common_header *hdr;
 
@@ -42,7 +42,7 @@ int main(void)
 	// RECEIVER
 	else {
 
-		prinft("HI I'm %d", my_nid);
+		printf("HI I'm %d", my_nid);
 	}
 	
 }
