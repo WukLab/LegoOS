@@ -19,6 +19,8 @@ obj-$(CONFIG_REPLICATION_MEMORY) += replication.o
 obj-$(CONFIG_CHECKPOINT) += checkpoint/
 obj-$(CONFIG_STRACE) += strace/
 
+obj-y += msg_handler.o
+
 #
 # Extended Processor Cache Subsystem
 #
