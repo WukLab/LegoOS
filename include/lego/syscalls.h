@@ -255,7 +255,6 @@ asmlinkage long sys_mq_receive(char* mq_name, unsigned long name_size, unsigned 
 asmlinkage long sys_mq_close(char* mq_name, unsigned long name_size);
 
 // State Management
-asmlinkage long sys_dummy_get(long number);
 asmlinkage long sys_state_save(char * name, unsigned long name_size, unsigned long state_size, const char * state);
 asmlinkage long sys_state_load(char * name, unsigned long name_size, unsigned long state_size, char * state);
 

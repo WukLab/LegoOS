@@ -393,13 +393,9 @@ struct p2m_fsync_struct {
 };
 
 
-// State Management
-
-struct p2m_state_struct {
-    long number;
-};
-void handle_p2m_state_dummy_get(struct p2m_state_struct *payload, struct thpool_buffer *tb);
-
+/*
+ * State Management
+ */
 
 #define MAX_STATE_LENGTH 1024
 struct p2m_state_save_payload {
@@ -411,7 +407,7 @@ struct p2m_state_save_payload {
 struct p2m_state_save_reply{
     int retval;
 };
-void handle_p2m_state_save(struct p2m_state_save_payload * payload, struct thpool_buffer *tb);
+void handle_p2m_state_save(struct p2m_state_save_payload * payload, struct common_header *hdr, struct thpool_buffer *tb);
 
 struct p2m_state_load_payload {
     int name_size;
@@ -422,6 +418,6 @@ struct p2m_state_load_reply {
     int retval;
     char state[MAX_STATE_LENGTH];
 };
-void handle_p2m_state_load(struct p2m_state_load_payload * payload, struct thpool_buffer *tb);
+void handle_p2m_state_load(struct p2m_state_load_payload * payload, struct common_header *hdr, struct thpool_buffer *tb);
 
 #endif /* _LEGO_RPC_STRUCT_P2M_H */

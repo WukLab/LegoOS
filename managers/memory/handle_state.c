@@ -14,32 +14,14 @@
 
 #include <memory/thread_pool.h>
 
-
-struct p2m_state_reply {
-    ssize_t		retval;
-};
-
-//TODO: handle_p2m_state_dummy_get, add comment later
 /*
- * simple explanation of the function
+ *
  */
-void handle_p2m_state_dummy_get(struct p2m_state_struct *payload, struct thpool_buffer *tb)
-{
-    // Print number from payload
-    printk("HEYYY! Handling message for state management: %ld\n", payload->number);
-//    pr_info("handling message: %ld\n", payload->number);
-
-    ssize_t retval;
-    void *buf;
-    struct p2m_state_reply *retbuf;
-    retbuf = thpool_buffer_tx(tb);
-    buf = (char *)retbuf;
-    tb_set_tx_size(tb, sizeof(retval));
-
-    retbuf->retval = 6666;
-}
-
-
+/**
+ * hash_func - hash a string to unsigned long given table size
+ * @key: key string to be hashed
+ * @table_size: a positive number specifying table size
+ */
 unsigned long hash_func(const char * key, const unsigned int table_size)
 {
     unsigned int h = 0;
@@ -51,29 +33,35 @@ unsigned long hash_func(const char * key, const unsigned int table_size)
         h = (o * h + *key++) % table_size;
         o = o * t % (table_size - 1);
     }
+    // Verbose debugging info for now
     printk ("[Success] hashing {%s} to %d\n", key_copy, h);
     return h;
 }
 
 
-/*
- *  state_save
- */
 struct hlist_head * state_md; /* Create state_metadata as a hash table */
 #define STATE_MD_BITS 8
 #define STATE_MD_SIZE (1 << STATE_MD_BITS)
 
-
+/*
+ * metadata entry
+ */
 struct md_entry {
-    char * name;
+    char * name; /* state name as the key for hashing */
     struct {
         void * addr;
         size_t size;
-    } data;
-    struct hlist_node node;
+    } data; /* saved state address and size */
+    struct hlist_node node; /* the node linking next entry along the hlist */
 };
 
-void handle_p2m_state_save(struct p2m_state_save_payload * payload, struct thpool_buffer *tb)
+/**
+ * handle_p2m_state_save - create state_md if not exist and save state with name as the key (tentatively)
+ * @payload: payload struct storing name and state data
+ * @hdr: header struct for getting caller identifier
+ * @tb: output buffer for constructing reply
+ */
+void handle_p2m_state_save(struct p2m_state_save_payload * payload, struct common_header *hdr, struct thpool_buffer *tb)
 {
     printk("[Function] state_save\n");
     struct p2m_state_save_reply *retbuf;
@@ -103,7 +91,7 @@ void handle_p2m_state_save(struct p2m_state_save_payload * payload, struct thpoo
     printk("[Success] entry initialized.\n");
 
 
-    // kmalloc saved state
+    // Save state to heap
     char * state = kmalloc(payload->state_size, GFP_KERNEL);
     if (!state){
         printk("[Error] Failed to allocate memory for state data!\n");
@@ -142,11 +130,13 @@ out:
     retbuf->retval = retval;
 }
 
-/*
- *  state_load
+/**
+ * handle_p2m_state_load - load state data to output buffer referenced by name (assume no duplicates, tentatively)
+ * @payload: payload struct storing name
+ * @hdr: header struct for getting caller identifier
+ * @tb: output buffer for constructing reply
  */
-
-void handle_p2m_state_load(struct p2m_state_load_payload * payload, struct thpool_buffer *tb)
+void handle_p2m_state_load(struct p2m_state_load_payload * payload, struct common_header *hdr, truct thpool_buffer *tb)
 {
     printk("[Function] state_load\n");
     // construct reply
@@ -165,17 +155,8 @@ void handle_p2m_state_load(struct p2m_state_load_payload * payload, struct thpoo
         return;
     }
 
-//    char * name = kmalloc(payload->name_size, GFP_KERNEL);
-//    if (!name){
-//        printk("[Error] Failed to allocate memory for state name!\n");
-//        retval = -ENOMEM;
-//        return;
-//    }
-//    memcpy(name, payload->name, payload->name_size);
-
     // loop over state_md
     struct md_entry * curr;
-//    struct md_entry * tmp;
 
     hlist_for_each_entry(curr, &state_md[hash_func(payload->name, STATE_MD_SIZE)], node) {
         printk("[Log] data=%s\n", curr->name);

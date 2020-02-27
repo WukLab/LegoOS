@@ -51,13 +51,6 @@ static void lego_set_tid_address(void)
 	printf("set_tid_address(): return tgid: %u\n", tgid);
 }
 
-static void lego_test_dummy_get(void)
-{
-    printf("Testing syscall dummy_get\n");
-    long retval = syscall(666, 2333);
-    printf("dummy_get returns: %ld\n", retval);
-}
-
 static void lego_test_state_save(void)
 {
     printf("Testing syscall state_save\n");
@@ -88,7 +81,6 @@ int main(void)
 //
 //	lego_time();
 
-    lego_test_dummy_get();
     lego_test_state_save();
     lego_test_state_load();
 }
