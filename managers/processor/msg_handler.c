@@ -20,6 +20,9 @@
 #define MAX_INIT_ARGS	CONFIG_INIT_ENV_ARG_LIMIT
 #define MAX_INIT_ENVS	CONFIG_INIT_ENV_ARG_LIMIT
 
+#define MAX_RXBUF_SIZE	(20 * PAGE_SIZE)
+
+
 // static const char *argv[MAX_INIT_ARGS+2];
 // const char *envp[MAX_INIT_ENVS+2] =
 // {
@@ -126,12 +129,12 @@ static int msg_dispatcher(struct info_struct *info)
 	 */
 	switch (hdr->opcode) {
 	case PM2P_START_PROC:
-		handle_start_proc(payload, desc, hdr);
+		// handle_start_proc(payload, desc, hdr);
 		break;
 
 #ifdef CONFIG_VNODE
 	case PM2P_BROADCAST_VNODE:
-		handle_pm2p_broadcast_vnode((void *)info->msg, desc);
+		// handle_pm2p_broadcast_vnode((void *)info->msg, desc);
 		break;
 #endif
 
@@ -170,10 +173,11 @@ static int msg_handler(void *unused)
 
 		//GIAOGIAO
 
-		uintptr_t desc = info->desc;
+		uintptr_t desc;
 		void *payload;
 		struct common_header *hdr;
 
+		desc = info->desc;
 		hdr = to_common_header(info->msg);
 		payload = to_payload(info->msg);
 
