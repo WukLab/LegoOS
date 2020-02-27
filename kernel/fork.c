@@ -940,6 +940,8 @@ pid_t do_fork(unsigned long clone_flags,
 	if (IS_ERR(p))
 		return PTR_ERR(p);
 
+	prink("~~~~~~~~ Copied Process %d~~~~~~~~\n", current -> pid);
+
 	/*
 	 * Tell remote memory component.
 	 *
@@ -951,6 +953,7 @@ pid_t do_fork(unsigned long clone_flags,
 		void *vmainfo;
 		int ret;
 
+		prink("~~~~~~~~ RPC to mNode Process %d~~~~~~~~\n", current -> pid);
 		vmainfo = p2m_fork(p, clone_flags);
 		if (IS_ERR(vmainfo)) {
 			WARN_ON_ONCE(1);
@@ -980,6 +983,7 @@ pid_t do_fork(unsigned long clone_flags,
 		get_task_struct(p);
 	}
 
+	prink("~~~~~~~~ About to wake_up_new_task %d~~~~~~~~\n", current -> pid);
 	wake_up_new_task(p);
 
 	if (clone_flags & CLONE_VFORK)
