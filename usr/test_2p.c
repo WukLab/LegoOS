@@ -9,34 +9,40 @@
 
 #include <lego/fit_ibapi.h>
 
+#define TEST_MSG_LEN 20
 
 int main(void)
 {
 	printf("nid: %d\n", get_local_nid());
 
-	// int my_nid = get_local_nid();
+	int my_nid = get_local_nid();
 
-	// //SENDER
-	// if (my_nid == 0) {
+	//SENDER
+	if (my_nid == 0) {
 
-	// 	struct p2m_test_msg *msg;
+		struct p2m_test_msg *msg;
+
+		msg = mallaoc(sizeof(struct common_header) + TEST_MSG_LEN);
+
+		struct common_header *hdr;
+
+		hdr = to_common_header(msg);
+		hdr->opcode = 123;
+		hdr->src_nid = my_nid;
+
+		void *payload;
+		payload = to_payload(info->msg);
+		strcpy(payload, "HELLO FROM NODE 0\n");
 
 
-	// 	msg = send_buf;
-	// fill_common_header(msg, P2M_TEST_NOREPLY);
-	// msg->send_len = send_len;
-	// msg->reply_len = reply_len;
 
-	// start_ns = sched_clock();
-	// for (i = 0; i < NR_TESTS; i++) {
-	// 	ibapi_send(dst_nid, msg, msg->send_len);
-	// }
+		ibapi_send(1, msg, sizeof(struct common_header) + TEST_MSG_LEN);
+	}
 
-	// }
+	// RECEIVER
+	else {
 
-	// // RECEIVER
-	// else {
-
-	// }
+		prinft("HI I'm %d", my_nid);
+	}
 	
 }
