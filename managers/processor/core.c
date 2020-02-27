@@ -24,12 +24,15 @@
 
 #include <monitor/gpm_handler.h>
 
-#include <lego/msg_handler.c>
+// #include <lego/msg_handler.c>
 
 #include "processor.h"
 
 #define MAX_INIT_ARGS	CONFIG_INIT_ENV_ARG_LIMIT
 #define MAX_INIT_ENVS	CONFIG_INIT_ENV_ARG_LIMIT
+
+//GIAO
+void msg_handler_init(void);
 
 /* http://c-faq.com/decl/spiral.anderson.html */
 static const char *argv_init[MAX_INIT_ARGS+2];
