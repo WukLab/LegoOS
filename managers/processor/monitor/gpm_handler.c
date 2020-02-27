@@ -125,12 +125,12 @@ static int gm_dispatcher(struct info_struct *info)
 	 */
 	switch (hdr->opcode) {
 	case PM2P_START_PROC:
-		handle_start_proc(payload, desc, hdr);
+		// handle_start_proc(payload, desc, hdr);
 		break;
 
 #ifdef CONFIG_VNODE
 	case PM2P_BROADCAST_VNODE:
-		handle_pm2p_broadcast_vnode((void *)info->msg, desc);
+		// handle_pm2p_broadcast_vnode((void *)info->msg, desc);
 		break;
 #endif
 
@@ -169,7 +169,7 @@ static int gpm_handler(void *unused)
 
 		//GIAOGIAO
 
-		uintptr_t desc = info->desc;
+		// uintptr_t desc = info->desc;
 		void *payload;
 		struct common_header *hdr;
 
@@ -178,7 +178,7 @@ static int gpm_handler(void *unused)
 
 
 		if (hdr->src_nid == 0 || hdr->src_nid == 1) {
-			panic("~~~~~~~~~~~~~ %d LOVE COCO~~~~~~~~~~\n", hdr->src_nid);
+			pr_info("~~~~~~~~~~~~~ %d LOVE COCO~~~~~~~~~~\n", hdr->src_nid);
 		}
 
 		//GIAOGIAO
