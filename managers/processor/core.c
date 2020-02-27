@@ -170,8 +170,9 @@ void __init processor_manager_init(void)
 	gpm_handler_init();
 
 	// GIAO
+	pr_info("~~~~~~~~MSG_HANDLER_INIT START, in processor_manager_init~~~~~\n");
 	msg_handler_init();
-	pr_info("MSG_HANDLER_INIT finished, come back to processor_manager_init\n");
+	pr_info("~~~~~~~~MSG_HANDLER_INIT FINISH, come back to processor_manager_init~~~~~\n");
 	// GIAO
 
 	/* Create checkpointing restore thread */

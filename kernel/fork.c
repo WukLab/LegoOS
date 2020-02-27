@@ -999,6 +999,7 @@ pid_t do_fork(unsigned long clone_flags,
  */
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
+	printk("~~~~~~~~~~~~ KERNEL_THREAD %d~~~~~~~~~~~\n", current -> pid);
 	return do_fork(flags|CLONE_VM, (unsigned long)fn, (unsigned long)arg,
 		       NULL, NULL, 0);
 }
