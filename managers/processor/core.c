@@ -52,6 +52,8 @@ static int procmgmt(void *unused)
 	const char *init_filename;
 	int vid __maybe_unused;
 
+	pr_info("~~~~~~~~~~~~~PROC MGMT STARTS~~~~~~~~~~~~~~\n");
+
 	/*
 	 * Use the correct name if a real storage node is used.
 	 * If CONFIG_USE_RAMFS is set, then filename does not matter anyway.
@@ -89,8 +91,11 @@ static int procmgmt(void *unused)
 	 * It's strace has not been established yet
 	 * Because previously it has PF_KTHREAD set
 	 */
+
+	pr_info("~~~~~~~~~~~~~PROC MGMT FORK STRACE~~~~~~~~~~~~~~\n");
 	__fork_processor_strace(current);
 
+	pr_info("~~~~~~~~~~~~~PROC MGMT DO EXECVE~~~~~~~~~~~~~~\n");
 	return do_execve(init_filename,
 		(const char *const *)argv_init,
 		(const char *const *)envp_init);
@@ -165,8 +170,9 @@ void __init processor_manager_init(void)
 	gpm_handler_init();
 
 	// GIAO
+	pr_info("~~~~~~~~MSG_HANDLER_INIT START, in processor_manager_init~~~~~\n");
 	msg_handler_init();
-	pr_info("MSG_HANDLER_INIT finished, come back to processor_manager_init\n");
+	pr_info("~~~~~~~~MSG_HANDLER_INIT FINISH, come back to processor_manager_init~~~~~\n");
 	// GIAO
 
 	/* Create checkpointing restore thread */
