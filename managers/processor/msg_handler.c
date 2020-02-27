@@ -195,7 +195,7 @@ static int msg_handler(void *unused)
 
 void msg_handler_init(void)
 {
-#ifdef CONFIG_
+#ifdef CONFIG_COMP_PROCESSOR
 	struct task_struct *ret __maybe_unused;
 
 	ret = kthread_run(msg_handler, NULL, "msg_handler");
