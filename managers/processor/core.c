@@ -24,6 +24,8 @@
 
 #include <monitor/gpm_handler.h>
 
+#include <lego/msg_handler.c>
+
 #include "processor.h"
 
 #define MAX_INIT_ARGS	CONFIG_INIT_ENV_ARG_LIMIT
