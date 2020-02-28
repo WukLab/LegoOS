@@ -22,92 +22,21 @@
 
 #define MAX_RXBUF_SIZE	(20 * PAGE_SIZE)
 
-
-// static const char *argv[MAX_INIT_ARGS+2];
-// const char *envp[MAX_INIT_ENVS+2] =
-// {
-// 	"HOME=/",
-// 	"TERM=linux",
-// 	"LANG=en_US.UTF-8",
-// 	"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin",
-// 	"USER=root",
-// 	"PWD=/",
-// 	NULL,
-// };
+const int ECHO_LEN = 5;
+const char* ECHO = "Echo\n";
 
 struct info_struct {
 	uintptr_t desc;
 	char msg[MAX_RXBUF_SIZE];
 };
 
-// static int program_entry(void *arg)
-// {
-// 	const char *file;
-// 	int *homenode = (int *)arg;
-// 	file = argv[0];
-// 	set_memory_home_node(current, *homenode);
-// 	return do_execve(file,	(const char *const *)argv,
-// 				(const char *const *)envp);
-// }
-
-// static int parse_cmd(char* cmd, int buf_len)
-// {
-// 	char *p, *arg;
-// 	int len, i = 0;
-
-// 	pr_info("cmd passed: %s\n", cmd);
-// 	len = strlen(cmd);
-// 	if (unlikely(len >= buf_len)) {
-// 		pr_info("command length exceed maximum buffer size\n");
-// 		return -EINVAL;
-// 	}
-	
-// 	/* skip preceeding space */
-// 	p = skip_spaces(cmd);
-	
-// 	/* prasing arguments */
-// 	i = 0;
-// 	while ((arg = strsep(&p, " ")) != NULL)
-// 		argv[i++] = arg;
-	
-// 	return 0;
-// }
-
-// static char *to_cmd(struct pm2p_start_proc_struct *payload)
-// {
-// 	return (char *)((void *)payload + sizeof(struct pm2p_start_proc_struct));
-// }
-
-// static void handle_start_proc(struct pm2p_start_proc_struct *payload, 
-// 				u64 desc, struct common_header *hdr)
-// {
-// 	/* TODO: vnode need to modify here */
-// 	//int nid = hdr->src_nid; 
-// 	//int vpid = payload->vpid;
-// 	int retbuf = 0;
-// 	int homenode = payload->homenode;
-// 	char *cmd = to_cmd(payload);
-
-// 	retbuf = parse_cmd(cmd, max_cmd_len);
-// 	if (retbuf) {
-// 		pr_info("user command cannot start\n");
-// 		ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
-// 		return;
-// 	}
-
-// 	kernel_thread(program_entry, (void*)&homenode, CLONE_GLOBAL_THREAD); 
-// 	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
-// 	pr_info("new user program starts\n");
-// }
-
-static void handle_bad_request(struct common_header *hdr, u64 desc)
+// TODO: we should consolidate the handlers
+static void handle_echo(struct common_header *hdr, u64 desc)
 {
-	int retbuf = -EPERM;
-
-	pr_warn("Unknown: opcode: %u, from node: %u\n",
+	pr_info("Receiving echo: %u, from node: %u\n",
 		hdr->opcode, hdr->src_nid);
 
-	ibapi_reply_message(&retbuf, sizeof(retbuf), desc);
+	ibapi_reply_message(ECHO, ECHO_LEN, desc);
 }
 
 static int msg_dispatcher(struct info_struct *info)
@@ -119,7 +48,7 @@ static int msg_dispatcher(struct info_struct *info)
 	hdr = to_common_header(info->msg);
 	payload = to_payload(info->msg);
 
-	panic("~~~~~~~~~~All GUD~~~~~~~~~~~~~\n");
+	pr_info("~~~~~~~~~~Within Msg Handler~~~~~~~~~~~~~\n");
 
 	/*
 	 * BIG FAT NOTE:
@@ -128,18 +57,9 @@ static int msg_dispatcher(struct info_struct *info)
 	 * 3) Handler SHOULD NOT call exit()
 	 */
 	switch (hdr->opcode) {
-	case PM2P_START_PROC:
-		// handle_start_proc(payload, desc, hdr);
-		break;
-
-#ifdef CONFIG_VNODE
-	case PM2P_BROADCAST_VNODE:
-		// handle_pm2p_broadcast_vnode((void *)info->msg, desc);
-		break;
-#endif
-
-	default:
-		handle_bad_request(hdr, desc);
+		default:
+			pr_info("~~~~~~~~~~About to handle echo~~~~~~~~~~~~~\n");
+			handle_echo(hdr, desc);
 	}
 
 	return 0;
@@ -171,8 +91,6 @@ static int msg_handler(void *unused)
 		if (unlikely(retlen >= MAX_RXBUF_SIZE))
 			panic("retlen: %d,maxlen: %lu", retlen, MAX_RXBUF_SIZE);
 
-		//GIAOGIAO
-
 		uintptr_t desc;
 		void *payload;
 		struct common_header *hdr;
@@ -183,10 +101,8 @@ static int msg_handler(void *unused)
 
 
 		if (hdr->src_nid == 0 || hdr->src_nid == 1) {
-			panic("~~~~~~~~~~~~~ %d LOVE COCO~~~~~~~~~~\n", hdr->src_nid);
+			pr_info("Reading source nid from header\n", hdr->src_nid);
 		}
-
-		//GIAOGIAO
 
 		msg_dispatcher(info);
 	}
@@ -199,8 +115,9 @@ void msg_handler_init(void)
 	struct task_struct *ret __maybe_unused;
 
 	ret = kthread_run(msg_handler, NULL, "msg_handler");
-	if (IS_ERR(ret))
+	if (IS_ERR(ret)) {
 		panic("Fail to create msg handler thread");
+	}
 	pr_info("processor msg handler is up\n");
 #endif
 }
