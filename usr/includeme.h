@@ -262,3 +262,8 @@ static inline int get_local_nid(void)
 {
 	return syscall(__NR_get_local_nid);
 }
+
+static inline void recho(unsigned int src_id)
+{
+	return syscall(__NR_recho, src_id);
+}

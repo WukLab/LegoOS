@@ -132,3 +132,4 @@
 615	common  mq_close		sys_mq_close
 
 616 	common  get_local_nid		sys_get_local_nid
+617	common	recho		sys_recho	

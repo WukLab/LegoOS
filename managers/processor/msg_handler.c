@@ -57,6 +57,8 @@ static int msg_dispatcher(struct info_struct *info)
 	 * 3) Handler SHOULD NOT call exit()
 	 */
 	switch (hdr->opcode) {
+		case P2P_RECHO:
+			pr_info("Extracted P2P_RECHO opcode. following through to handler\n");
 		default:
 			pr_info("~~~~~~~~~~About to handle echo~~~~~~~~~~~~~\n");
 			handle_echo(hdr, desc);

@@ -256,4 +256,7 @@ asmlinkage long sys_mq_close(char* mq_name, unsigned long name_size);
 
 /* to get the local nid in pComponent*/
 asmlinkage long sys_get_local_nid(void);
+
+/* to send an rpc echo to pComponent */
+asmlinkage long sys_recho(unsigned int dest_nid);
 #endif /* _LEGO_SYSCALLS_H_ */

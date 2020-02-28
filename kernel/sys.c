@@ -9,6 +9,7 @@
 
 #include <lego/stat.h>
 #include <lego/files.h>
+#include <lego/fit_ibapi.h>
 #include <lego/sched.h>
 #include <lego/getcpu.h>
 #include <lego/utsname.h>
@@ -806,4 +807,43 @@ SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
 {
 	BUG();
 }
+
+SYSCALL_DEFINE1(recho, unsigned int, dest_nid) {
+	int ret = 0;
+
+	struct common_header *hdr;
+
+	char retbuf[100];
+	int RETBUF_LEN = sizeof(retbuf);
+
+	memset(retbuf, 0, sizeof(retbuf));
+
+	/* compose message */
+	int len_msg = sizeof(*hdr);
+	void* msg = kmalloc(len_msg, GFP_KERNEL);
+	if (unlikely(!msg)) {
+		WARN(1, "OOM");
+		return -ENOMEM;
+	}
+
+	hdr = to_common_header(msg);
+	hdr->opcode = __NR_recho;
+	hdr->src_nid = LEGO_LOCAL_NID;
+
+	printk("About to make RPC call\n");
+	/* Synchronously send it out */
+	ret = ibapi_send_reply_imm(dest_nid, msg, len_msg, retbuf,
+				   RETBUF_LEN, false);
+	
+	printk("Returned from RPC call\n");
+
+	if (ret == -ETIMEDOUT)
+		pr_info("  %s() CPU:%d PID:%d caller: %pS\n",
+			FUNC, smp_processor_id(), current->pid,
+			__builtin_return_address(0));
+
+	kfree(msg);
+	return ret;
+}
+
 #endif /* CONFIG_EPOLL */

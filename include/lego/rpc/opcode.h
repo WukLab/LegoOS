@@ -38,6 +38,8 @@
 /* 
  * add our own opcode
  */
+#define P2P_RECHO		((__u32)__NR_recho)
+
 #define P2M_MQOPEN		((__u32)__NR_mq_open)		
 #define P2M_MQCLOSE		((__u32)__NR_mq_close)		
 #define P2M_MQSEND		((__u32)__NR_mq_send)
