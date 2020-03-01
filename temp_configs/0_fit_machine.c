@@ -41,6 +41,7 @@ struct fit_machine_info *lego_cluster[CONFIG_FIT_NR_NODES];
 static const char *lego_cluster_hostnames[CONFIG_FIT_NR_NODES] = {
 	[0]	=	"node0",
 	[1]	=	"node1",
+	[2]	=	"node2",
 };
 
 static struct fit_machine_info WUKLAB_CLUSTER[] = {
