@@ -123,19 +123,3 @@ void msg_handler_init(void)
 	pr_info("processor msg handler is up\n");
 #endif
 }
-
-void report_proc_exit(int ret_val)
-{
-#ifdef CONFIG_GPM
-	struct p2pm_exit_proc_struct exit;
-	int reply = 0, ret = 0;
-
-	/* TODO: need vpid */
-	exit.vpid = 0;
-	exit.ret = ret_val;
-	ret = net_send_reply_timeout(CONFIG_GPM_NODEID, P2PM_EXIT_PROC, 
-				&exit, sizeof(struct p2pm_exit_proc_struct), 
-				&reply, sizeof(int), false, FIT_MAX_TIMEOUT_SEC);
-	pr_info("done reporting program exit, IB status: %d, reply: %d\n", ret, reply);
-#endif
-}
