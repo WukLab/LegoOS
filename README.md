@@ -482,7 +482,7 @@ Overall, `1P-1M` can be tested with VM. With `1P-1M-1S` setting, the processor a
 
 ####  5.4.1. <a name='VMSetup'></a>VM Setup
 
-It is recommended to have multiple CPU cores and several GB memory for each VM. The reason is LegoOS need at least two kernel threads which are pinned to cores to do network communication. For processor, if Victim Cache is configured, one more victim flush thread will be created.
+It is recommended to have multiple CPU cores and several GB memory for each VM. The reason is LegoOS need at least two kernel threads which are pinned to cores to do network communication. For processor, if Victim Cache is configured, one more victim flush thread will be created. You must have as least 4 vCPUs for both processor and memory managers. For memory manager, you need to have more vCPUs if you are planning to have multiple worker threads.
 
 For example, a simple basic configuration: 8 vCPUs, and 8GB memory.
 
