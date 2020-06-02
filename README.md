@@ -24,6 +24,8 @@ LegoOS is a disseminated, distributed operating system built for hardware resour
 
 - Jan 2020: LegoOS is able to run on RoCE Mellanox card, and we have tested on [CloudLab R320](https://docs.cloudlab.us/hardware.html) instance. Use CentOS if possible.
 
+Table of Contents:
+
 - [1. <a name='Developers'></a>Developers](#1-a-namedevelopersadevelopers)
 - [2. <a name='CodebaseOrganization'></a>Codebase Organization](#2-a-namecodebaseorganizationacodebase-organization)
 - [3. <a name='PlatformRequirement'></a>Platform Requirement](#3-a-nameplatformrequirementaplatform-requirement)
