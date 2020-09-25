@@ -2878,9 +2878,11 @@ int fit_send_message_sge(ppc *ctx, int connection_id, int type, void *addr,
 		}
 	} while (ne < 1);
 
-	if (wc[i].status!=IB_WC_SUCCESS) {
-		fit_err("wc_status: %s", ib_wc_status_msg(wc[i].status));
-		return -EINVAL;
+	for (i = 0; i < ne; i++) {
+		if (wc[i].status != IB_WC_SUCCESS) {
+			fit_err("wc.status: %s", ib_wc_status_msg(wc[i].status));
+			return -EIO;
+		}
 	}
 	return 0;
 }
