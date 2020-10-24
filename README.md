@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://github.com/WukLab/LegoOS/blob/master/Documentation/logo.png" height="250" width="350">
+<img src="https://github.com/WukLab/LegoOS/blob/master/Documentation/logo.png" height="150" width="300">
 </p>
 
 ![Status](https://img.shields.io/badge/Version-Experimental-blue.svg)
