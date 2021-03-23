@@ -432,7 +432,7 @@ We provid two `.config` and `fit_config.h ` samples for the `1P-1M-1S` setting. 
     - `cp Documentation/configs/1P-1M-1S-Memory .config`
     - `make`
 - Storage
-    - `cp Documentation/configs-1P-1M-1S-fit_config.h linux-modules/fit/fit_config.h`
+    - `cp Documentation/configs-1P-1M-1S/fit_config.h linux-modules/fit/fit_config.h`
     - `cd linux-modules`
     - `make`
 
