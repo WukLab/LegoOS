@@ -90,8 +90,13 @@ void __init pcache_early_init(void)
 	u64 nr_cachelines_per_page, nr_units;
 	u64 unit_size;
 
+#if 1
 	if (pcache_registered_start == 0 || pcache_registered_size == 0)
 		panic("Processor cache not registered, memmap $ needed!");
+#else
+	pcache_registered_start = 0x100000000;
+	pcache_registered_size  = 0x100000000;
+#endif
 
 	nr_cachelines_per_page = PAGE_SIZE / PCACHE_META_SIZE;
 	unit_size = nr_cachelines_per_page * PCACHE_LINE_SIZE;

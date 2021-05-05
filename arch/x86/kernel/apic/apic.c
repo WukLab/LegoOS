@@ -31,7 +31,7 @@
 #include <asm/processor.h>
 #include <asm/irq_vectors.h>
 
-unsigned int apic_verbosity = APIC_QUIET;
+unsigned int apic_verbosity = APIC_DEBUG;
 
 static int __init apic_set_verbosity(char *arg)
 {
@@ -940,6 +940,7 @@ static void __init lapic_cal_handler(struct clock_event_device *dev)
 	if (cpu_has(X86_FEATURE_TSC))
 		tsc = rdtsc();
 
+	pr_info("%s(): lapic_cal_loops %d\n", __func__, lapic_cal_loops);
 	switch (lapic_cal_loops++) {
 	case 0:
 		lapic_cal_t1 = tapic;
@@ -995,14 +996,18 @@ static int __init calibrate_APIC_clock(void)
 	 * There is no way the lapic can underflow in
 	 * the 100ms detection time frame
 	 */
+	pr_info("%s before apic\n", __func__);
 	__setup_APIC_LVTT(0xffffffff, 0, 0);
+	pr_info("%s after apic\n", __func__);
 
 	/* Let the interrupts run */
 	local_irq_enable();
 
 	/* Wait to finish... */
+	pr_info("%s: starting to wait for loop..\n", __func__);
 	while (lapic_cal_loops <= LAPIC_CAL_LOOPS)
 		cpu_relax();
+	pr_info("%s: loop break..\n", __func__);
 
 	local_irq_disable();
 

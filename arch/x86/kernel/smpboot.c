@@ -46,7 +46,7 @@
 			pr_info(s, ##a);		\
 	} while (0)
 
-unsigned int smpboot_verbosity = SMPBOOT_QUIET;
+unsigned int smpboot_verbosity = SMPBOOT_DEBUG;
 
 static int __init smpboot_set_verbosity(char *arg)
 {
@@ -368,6 +368,7 @@ void __init smp_prepare_cpus(unsigned int maxcpus)
 
 	setup_apic_driver();
 	cpu0_logical_apicid = apic_bsp_setup();
+	pr_info("%s: after apic_bsp_setup\n", __func__);
 
 	/* Adjust delay, see comment above */
 	smp_quirk_init_udelay();
