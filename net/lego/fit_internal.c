@@ -2942,7 +2942,7 @@ ppc *fit_establish_conn(struct ib_device *ib_dev, int ib_port, int mynodeid)
 	int	rx_depth = RECV_DEPTH;
 	int	ret;
 
-	mtu = IB_MTU_2048;
+	mtu = IB_MTU_1024;
 	sl = 0;
 
 	ctx = kzalloc(sizeof(struct lego_context), GFP_KERNEL);
@@ -2976,6 +2976,10 @@ retry:
 		goto retry;
 	}
 	pr_info("Query returned LID: %d\n", ctx->portinfo.lid);
+
+	pr_info("Max MTU: %d, Active MTU: %d\n",
+		ib_mtu_enum_to_int(ctx->portinfo.max_mtu),
+		ib_mtu_enum_to_int(ctx->portinfo.active_mtu));
 
 	/*
 	 * Sanity Check...

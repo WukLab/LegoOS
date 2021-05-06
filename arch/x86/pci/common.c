@@ -184,4 +184,5 @@ void __init pci_subsys_init(void)
 
 	printk("PCI: Probing PCI hardware\n");
 	pcibios_scan_root(0);
+	pcibios_scan_root(0x19);
 }

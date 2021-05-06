@@ -167,25 +167,20 @@ profile_case_threads(char *desc, int send_len, int reply_len,
 }
 
 static unsigned int send_size[] = {
-	32,	/* has to be larger than p2m_test_msg */
-	128,
+	64,
 	256,
-	512,
 	1024,
-	2048,
-	4096,
-	4200,	/* pcache_flush send case. reply is 4B */
+	4096
 };
 
 static unsigned int reply_size[] = {
 	4,
+	16,
 	32,
-	128,
+	64,
 	256,
-	512,
 	1024,
-	2048,
-	4096,	/* pcache_miss reply case. send is around 20B */
+	4096
 };
 
 void rpc_profile_node(unsigned int nid)
@@ -216,18 +211,18 @@ void rpc_profile_node(unsigned int nid)
 			snprintf(desc, 128, "s%4d-r%4d", send, reply);
 
 			profile_case_threads(desc, send, reply, nid, 1);
-			profile_case_threads(desc, send, reply, nid, 2);
-			profile_case_threads(desc, send, reply, nid, 4);
+			/* profile_case_threads(desc, send, reply, nid, 2); */
+			/* profile_case_threads(desc, send, reply, nid, 4); */
 		}
 	}
 
-	profile_case("pcache_miss",
-		  sizeof(struct p2m_pcache_miss_msg), PCACHE_LINE_SIZE,
-		  send_buf, reply_buf, nid);
-
-	profile_case("pcache_flush",
-		  sizeof(struct p2m_flush_msg), sizeof(int),
-		  send_buf, reply_buf, nid);
+	/* profile_case("pcache_miss", */
+	/*           sizeof(struct p2m_pcache_miss_msg), PCACHE_LINE_SIZE, */
+	/*           send_buf, reply_buf, nid); */
+        /*  */
+	/* profile_case("pcache_flush", */
+	/*           sizeof(struct p2m_flush_msg), sizeof(int), */
+	/*           send_buf, reply_buf, nid); */
 }
 
 enum _rpc_profile_state {

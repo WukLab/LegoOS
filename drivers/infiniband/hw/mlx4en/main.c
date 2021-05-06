@@ -1100,9 +1100,9 @@ static int mlx4_setup_hca(struct mlx4_dev *dev)
 			}
 
 			if (mlx4_is_mfunc(dev))
-				dev->caps.port_ib_mtu[port] = IB_MTU_2048;
+				dev->caps.port_ib_mtu[port] = IB_MTU_1024;
 			else
-				dev->caps.port_ib_mtu[port] = IB_MTU_4096;
+				dev->caps.port_ib_mtu[port] = IB_MTU_1024;
 
 			err = mlx4_SET_PORT(dev, port, mlx4_is_master(dev) ?
 					    dev->caps.pkey_table_len[port] : -1);
